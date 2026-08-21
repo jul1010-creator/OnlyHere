@@ -243,13 +243,34 @@ export const pickDescription = (html) => {
   return t;
 };
 
+// ── ONE FLATTENING, APPLIED TO BOTH SIDES ───────────────────────────
+// Commons filenames use underscores where the title has spaces, so the two have
+// to be flattened to a common shape before they can be compared at all. The
+// flattening was being applied to the FILENAME ONLY, and it turned every
+// separator into a space:
+//
+//     "The Swing Carousel - Flickr - Stig Nygaard"   <- ObjectName, untouched
+//     "The Swing Carousel   Flickr   Stig Nygaard"   <- filename, hyphens gone
+//
+// Not equal, so the guard concluded the ObjectName was a real title and handed
+// the filename back as the caption. Any Commons filename containing a hyphen
+// defeated it, which is not an edge case: "<subject> - Flickr - <photographer>"
+// is the naming convention Commons' own Flickr import bot uses, on tens of
+// thousands of files, and it is how "The Swing Carousel - Flickr - Stig Nygaard"
+// ended up printed above "Photo: Stig Nygaard / wikimedia" on a live page.
+//
+// Flattened the same way on both sides now. Whitespace goes into the same class
+// as the separators, so " - " and "_" and "  " all collapse to one space and the
+// comparison is about the words rather than the punctuation between them.
+const flatten = (s) => String(s || "").replace(/[_\s-]+/g, " ").trim().toLowerCase();
+
 // ObjectName is Commons' own short title for the file and is usually the
 // cleanest thing available. Ignored when it is just the filename again, which is
 // what it holds for the many files nobody titled.
 export const bestCaption = (objectName, description, title) => {
   const on = strip(objectName).replace(LANG_LABEL, "").trim();
-  const bare = String(title || "").replace(/\.(jpe?g|png|webp)$/i, "").replace(/[_-]+/g, " ").trim();
-  if (on && on.toLowerCase() !== bare.toLowerCase() && on.length <= 120) return on;
+  const bare = String(title || "").replace(/\.(jpe?g|png|webp)$/i, "");
+  if (on && flatten(on) !== flatten(bare) && on.length <= 120) return on;
   return pickDescription(description);
 };
 

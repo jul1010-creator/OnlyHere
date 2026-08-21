@@ -81,7 +81,7 @@ writeFileSync(entry, `
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
-  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, VERIFY_PROMPT, keepMeasured, isPipelineOwned, MEASURED_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, VERIFY_PROMPT, settleVerdict, keepMeasured, isPipelineOwned, MEASURED_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
   export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType, geocodePostcode } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
@@ -99,6 +99,7 @@ writeFileSync(entry, `
   export { ALLOWED_ORIGINS, originOf, isAllowedOrigin, requestIsFromSite, NOT_FROM_SITE, STUDIO_ONLY_ENDPOINTS, resolveUser, isFounder } from ${JSON.stringify(join(root, "src/utils/apiGuard.js"))};
   export { citationUrls } from ${JSON.stringify(join(root, "src/utils/aiClient.js"))};
   export { THEMES, THEME_ORDER, DEFAULT_THEME } from ${JSON.stringify(join(root, "src/utils/theme.js"))};
+  export { layoutBody, trimCaption } from ${JSON.stringify(join(root, "src/utils/articleLayout.js"))};
   export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, briefBlock, MAX_ASKS_AT_ONCE } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { GREETING, openingThread, withTestBrief, withoutTestBrief, threadIsSound, TEST_BRIEF } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { CHAT_REPORT_KIND, CHAT_REPORT_VERSION, buildChatReport, chatReportFilename, turnReport, briefTimeline, intakeReport } from ${JSON.stringify(join(root, "src/utils/chatReport.js"))};
@@ -140,6 +141,7 @@ writeFileSync(entry, `
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { cardLine, cardLineSource, sentencesOf, isOriginSentence, CARD_LINE_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
   export { buildPreviewReport, rowReport, passOf, reportFilename, REPORT_KIND } from ${JSON.stringify(join(root, "src/utils/previewReport.js"))};
+  export { OBSERVED_MIN, OBSERVED_CAP, OBSERVED_FIELDS, cleanLearned, learnedIsEmpty, seenFromTrip, observeTrip, settledObservations, observedForPrompt } from ${JSON.stringify(join(root, "src/utils/profileLearning.js"))};
   export { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, COVERAGE_UNANSWERED, COVERAGE_UNCOUNTED } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
   export { stayRangeIn, stayRangeInBody, stayGlanceDays, stayContradiction, restatesBody, restatementFindings, meaningfulWords, RESTATEMENT } from ${JSON.stringify(join(root, "src/utils/draftShape.js"))};
   export { searchTypeFor } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
@@ -3524,6 +3526,167 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("an ObjectName that is just the filename does not", bestCaption("DSC00575", "<div>Ringkøbing churchyard</div>", "DSC00575.jpg"), "Ringkøbing churchyard");
   is("nor does one that only differs by separators", bestCaption("Amalienborg Palace aerial view", "<div>The palace from above</div>", "Amalienborg_Palace-aerial_view.jpg"), "The palace from above");
   is("with neither, the caption is empty rather than the filename", bestCaption("", "", "DSC00575.jpg"), "");
+  // ── THE HYPHEN THAT DEFEATED THE WHOLE GUARD ─────────────────────
+  // Oliver, 21 Aug 2026, on the Christmas-fair page: a photograph captioned
+  // "The Swing Carousel - Flickr - Stig Nygaard" sitting directly above
+  // "Photo: Stig Nygaard / wikimedia".
+  //
+  // The filename was flattened with [_-]+ -> " " and the ObjectName was not, so
+  // " - " became "   " on one side only and the two could never match. That is
+  // not a rare shape: "<subject> - Flickr - <photographer>" is what Commons'
+  // Flickr import bot names files, on tens of thousands of them.
+  is("a filename echoed back through hyphens is not a caption",
+     bestCaption("The Swing Carousel - Flickr - Stig Nygaard", "", "The Swing Carousel - Flickr - Stig Nygaard.jpg"), "");
+  // Same file, but somebody DID write a description. The caption is theirs.
+  is("and the description is used instead when there is one",
+     bestCaption("The Swing Carousel - Flickr - Stig Nygaard", "<div>Tivoli's swing carousel at night</div>", "The Swing Carousel - Flickr - Stig Nygaard.jpg"),
+     "Tivoli's swing carousel at night");
+  // Underscores and spaces are the same separator to this comparison too, which
+  // is the case the flattening existed for before it was applied to one side.
+  is("underscores still echo", bestCaption("Nyhavn in winter", "", "Nyhavn_in_winter.jpg"), "");
+  // A real title that merely CONTAINS the word is untouched. The guard is about
+  // the filename coming back, not about the word Flickr.
+  is("a real title survives", bestCaption("Flickr HQ at dusk", "", "DSC00575.jpg"), "Flickr HQ at dusk");
+
+// ── HOW AN ARTICLE'S PICTURES ARE ARRANGED ─────────────────────────
+//
+// Oliver, 21 Aug 2026, sending a screenshot of
+// gemlyxtravel.com/#/event/christmasfairintivoligardens: "jeesus".
+//
+// Three photographs at the bottom of the page: one tall, and two collapsed to
+// overlapping slivers of caption text stepping down the left edge. Three
+// separate faults stacked on one screen, and layoutBody had no behavioural test
+// of any kind because it lived in a .jsx file the suite cannot import. It does
+// not any more. That is the point of the move.
+}
+{
+  const { layoutBody, trimCaption } = M;
+  const P = (t) => ({ type: "paragraph", content: t });
+  const H = (t) => ({ type: "heading", content: t });
+  const IMG = (src, caption) => ({ type: "image", src, ...(caption ? { caption } : {}) });
+  const INSTA = { type: "instagram", url: "https://instagram.com/p/x" };
+  const kinds = (out) => out.map(b => b.type || "paragraph");
+
+  // ── FAULT ONE: ONE TRAILING BLOCK SWITCHED THE FEATURE OFF ───────
+  // The dealer walked back from the end while it was looking at an image. The
+  // last block on that page is an Instagram embed, so the walk stopped before
+  // its first step, the stranded run measured zero, and all three photographs
+  // stayed piled where the media panel had appended them.
+  {
+    const out = layoutBody([H("Atmosphere"), P("a"), H("Who"), P("b"), H("Reality"), P("c"),
+                            IMG("/1.jpg"), IMG("/2.jpg"), IMG("/3.jpg"), INSTA]);
+    is("every picture is dealt back into the prose", kinds(out),
+       ["heading", "paragraph", "image", "heading", "paragraph", "image", "heading", "paragraph", "image", "instagram"]);
+    is("and the embed is still the last thing on the page", out[out.length - 1].type, "instagram");
+    is("nothing is lost or duplicated", out.length, 10);
+  }
+  // The shape it always handled: images trailing with nothing after them at all.
+  {
+    const out = layoutBody([P("a"), P("b"), IMG("/1.jpg"), IMG("/2.jpg")]);
+    is("the case that already worked still works", kinds(out), ["paragraph", "image", "paragraph", "image"]);
+  }
+  // More than one trailing non-image, and a bullets block, since both are real.
+  {
+    const out = layoutBody([P("a"), { type: "bullets", items: ["x"] }, IMG("/1.jpg"), INSTA, INSTA]);
+    is("several trailing blocks all stay at the end", kinds(out).slice(-2), ["instagram", "instagram"]);
+    is("and the picture is still placed", kinds(out).indexOf("image") < kinds(out).indexOf("instagram"), true);
+  }
+  // An image the author put INSIDE the prose is theirs, not the dealer's.
+  {
+    const out = layoutBody([P("a"), IMG("/inline.jpg"), P("b"), INSTA]);
+    is("an author-placed picture is left where it is", kinds(out), ["paragraph", "image", "paragraph", "instagram"]);
+  }
+  // Nothing to wrap around: no prose at all, so there is nowhere to deal to and
+  // the order has to survive untouched rather than being rearranged for nothing.
+  {
+    const out = layoutBody([IMG("/1.jpg"), IMG("/2.jpg"), INSTA]);
+    is("with no prose the order is preserved", kinds(out), ["image", "image", "instagram"]);
+  }
+  is("an empty body is empty", layoutBody([]), []);
+  is("and so is a non-array", layoutBody(null), []);
+
+  // Sides alternate counting FIGURES, which is what the CSS nth-of-type this
+  // replaced could not do: it counted every div, and headings are divs.
+  {
+    const out = layoutBody([P("a"), P("b"), P("c"), IMG("/1.jpg"), IMG("/2.jpg"), IMG("/3.jpg")]);
+    is("figures alternate sides", out.filter(b => b.type === "image").map(b => b._side), ["right", "left", "right"]);
+  }
+
+  // ── FAULT TWO: THE SAME CAPTION, TWICE, UNDER TWO PHOTOGRAPHS ────
+  // Commons files 23531145852 and 23011541394 are two different photographs
+  // Maria Eklind took the same evening and gave the same name. Nothing upstream
+  // is wrong; repeating the line verbatim is just uninformative and reads as a
+  // duplicated page.
+  {
+    const out = layoutBody([P("a"), P("b"),
+      IMG("/23531145852.jpg", "Christmas market at Tivoli, Copenhagen"),
+      IMG("/23011541394.jpg", "Christmas market at Tivoli, Copenhagen")]);
+    const pics = out.filter(b => b.type === "image");
+    is("the first of two identical captions is shown", pics[0]._showCaption, true);
+    is("and the second is not", pics[1]._showCaption, false);
+    // Both files are CC BY-SA 2.0. Two works need two attributions however alike
+    // their titles are, so nothing here may be read as suppressing a credit.
+    is("both blocks keep everything the credit is rendered from", pics.filter(b => b.src).length, 2);
+  }
+  {
+    const out = layoutBody([P("a"), P("b"), IMG("/1.jpg", "Nyhavn"), IMG("/2.jpg", "Tivoli")]);
+    is("two different captions are both shown", out.filter(b => b.type === "image").map(b => b._showCaption), [true, true]);
+  }
+  {
+    const out = layoutBody([P("a"), P("b"), IMG("/1.jpg"), IMG("/2.jpg")]);
+    is("having no caption is not a repeat of having no caption",
+       out.filter(b => b.type === "image").map(b => b._showCaption), [true, true]);
+  }
+  {
+    const out = layoutBody([P("a"), P("b"), IMG("/1.jpg", "Tivoli "), IMG("/2.jpg", "tivoli")]);
+    is("the comparison ignores case and spacing",
+       out.filter(b => b.type === "image").map(b => b._showCaption), [true, false]);
+  }
+
+  // ── FAULT THREE: A CAPTION THAT IS ONLY THE CREDIT AGAIN ─────────
+  // api/commons-photo.js no longer hands this over, but rows published before
+  // today already carry it in the database and a reader should not have to wait
+  // for a migration.
+  is("the import bot's tail is not a caption", trimCaption("The Swing Carousel - Flickr - Stig Nygaard"), "The Swing Carousel");
+  is("a normal caption is untouched", trimCaption("Christmas market at Tivoli, Copenhagen"), "Christmas market at Tivoli, Copenhagen");
+  is("and a hyphen that is part of the sentence survives", trimCaption("Nyhavn - the harbour at dusk"), "Nyhavn - the harbour at dusk");
+  is("nothing is nothing", trimCaption(null), "");
+
+  // ── FAULT FOUR: A FIGURE WITH NO HEIGHT UNTIL ITS PICTURE ARRIVES ─
+  // The actual reason the screenshot looked overlapped. Two of the three images
+  // carry loading="lazy", were below the fold, and had never loaded; an <img>
+  // with no dimensions, no CSS ratio and no data reports a height of ZERO, so
+  // each unloaded figure was a 42px box holding only its caption and the floats
+  // packed around a 383px neighbour exactly as the spec requires.
+  const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("a figure's picture owns a height before the network answers", /\.gx-fig img \{[^}]*aspect-ratio: 4 \/ 3;/.test(dp));
+  ok("and fits rather than stretches into it", /\.gx-fig img \{[^}]*object-fit: cover;/.test(dp));
+  // The rule is on a class, so both figure sides have to carry it or it lands on
+  // one of them and the other keeps collapsing.
+  is("both sides are figures", (dp.match(/className=\{`gx-fig gx-fig-\$\{block\._side \|\| "right"\}`\}/g) || []).length, 2);
+  // The inline style must not name width, aspect-ratio or object-fit on the img:
+  // an inline style beats a stylesheet, so naming any of them would silently
+  // switch the rule above off while leaving it in the file looking correct.
+  {
+    const imgTag = dp.slice(dp.indexOf("<img src={block.src}"), dp.indexOf("<img src={block.src}") + 420);
+    ok("and the inline style does not quietly override it", !/width|aspectRatio|objectFit/.test(imgTag));
+  }
+  // A failed image used to hide only itself, stranding its caption and credit in
+  // a box with nothing above them, which is the other half of what the
+  // screenshot showed.
+  // Two columns, not a staircase. A float only has to clear the LINE it lands
+  // on, so a figure one caption-line shorter than its neighbour lets the next
+  // one wedge in partway across the page. Measured in a browser after the
+  // heights were fixed: three consecutive figures still stepped in to x=258 in a
+  // 620px column, and stopped at the right-hand edge once each side cleared its
+  // own.
+  ok("a figure clears the last figure on its own side", /\.gx-fig-right \{ float: right; clear: right;/.test(dp) && /\.gx-fig-left  \{ float: left;  clear: left;/.test(dp));
+  ok("a picture that fails takes its caption and credit with it", /closest\("\.gx-fig"\)/.test(dp));
+  // The credit is NOT gated on _showCaption. CC BY-SA requires attribution
+  // beside the work, and the deduplication above is about the descriptive line.
+  ok("a deduplicated caption never suppresses a licence credit",
+     /\n\s*<PhotoCredit photo=\{block\.src\} credit=\{block\.credit\} style=\{\{ marginTop: 4 \}\} \/>\n/.test(dp));
+
 
   // Wired: shown on the card, saved onto the block, and switchable.
   const app2 = readFileSync(join(root, "src/App.jsx"), "utf8");
@@ -3534,7 +3697,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and it is a choice, not a rule", /setUseCommonsCaption\(e\.target\.checked\)/.test(app2));
   // DetailPage has rendered block.caption all along; assert it still does, or
   // the caption is saved into a field nothing reads.
-  ok("the detail page renders a caption on an image block", /block\.caption && <div/.test(readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8")));
+  ok("the detail page renders a caption on an image block",
+     /_showCaption !== false && trimCaption\(block\.caption\)/.test(readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8")));
 
   // ── THE THREE SILENT MISSES ──────────────────────────────────────
   // Read off the source, because none of this is reachable without a network.
@@ -21495,6 +21659,156 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("and it is the default theme's background", themeColor, M.THEMES[M.DEFAULT_THEME].bg);
 }
 
+// ── WHICH BOXES YOU CAN TYPE INTO ──────────────────────────────────
+//
+// Oliver, 21 Aug 2026, relaying his father, who is in his seventies: "the colors
+// being so similar is making it more difficult to read.. but he wants to be able
+// to know 'what he can write into' and 'what he can't write into'."
+//
+// MEASURED HERE rather than eyeballed, because "looks a bit low" cannot be
+// regression-tested and a contrast ratio can. WCAG 2.1 non-text contrast asks
+// for 3:1 between a user interface component's boundary and what is behind it.
+// Every field in this app drew itself with the same 1px C.border as every
+// decorative card, at 1.19:1 on the default theme, so there was effectively no
+// boundary at all and a man with age-reduced contrast sensitivity hit it first.
+{
+  const th = readFileSync(join(root, "src/utils/theme.js"), "utf8");
+  // sRGB relative luminance, straight from the WCAG definition. Written out
+  // rather than imported so that a mistake in the app's palette cannot be
+  // cancelled out by the same mistake in the thing checking it.
+  const lum = (hex) => {
+    const v = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map(x => (x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)));
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  };
+  const contrast = (a, b) => {
+    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  // The maths itself, on the two ends of the scale, so a broken helper cannot
+  // quietly pass every assertion under it.
+  is("black on white is 21:1", Math.round(contrast("#000000", "#FFFFFF")), 21);
+  is("and a colour against itself is 1:1", Math.round(contrast("#7E7053", "#7E7053")), 1);
+
+  const WCAG_NON_TEXT = 3;
+  for (const key of M.THEME_ORDER) {
+    const t = M.THEMES[key];
+    ok(`${key} has a field border`, typeof t.fieldBorder === "string" && /^#[0-9A-Fa-f]{6}$/.test(t.fieldBorder));
+    ok(`${key} has a focus ring`, typeof t.fieldRing === "string" && /^#[0-9A-Fa-f]{6}$/.test(t.fieldRing));
+    // BOTH, because fields sit on panels and directly on the page background in
+    // roughly equal numbers, and a border that only clears one of them is a
+    // border that disappears on half the forms.
+    ok(`${key} field border clears 3:1 against the panel behind it`, contrast(t.fieldBorder, t.surface) >= WCAG_NON_TEXT);
+    ok(`${key} field border clears 3:1 against the page behind it`, contrast(t.fieldBorder, t.bg) >= WCAG_NON_TEXT);
+    // It is a border, not text. If it outshouts the placeholder inside the box
+    // the eye lands on the frame instead of the words, which helps nobody.
+    ok(`${key} field border does not outshout its own placeholder`, contrast(t.fieldBorder, t.bg) <= contrast(t.muted, t.bg));
+    // The old border stays exactly as it was. The whole signal is the DIFFERENCE
+    // between a typeable box and a decorative one, so raising both would put it
+    // straight back where it started.
+    ok(`${key} still has a quieter border for things you cannot type into`, contrast(t.border, t.surface) < contrast(t.fieldBorder, t.surface));
+  }
+
+  // ── AND IT HAS TO REACH THE 69 FIELDS THAT EXIST ────────────────
+  // One rule keyed on the element type, because there are 69 input, textarea and
+  // select elements across App.jsx and the components and every one carries its
+  // own inline style. `!important` is here for the one reason it is ever
+  // defensible: these ARE inline styles, and nothing else beats them.
+  ok("the rule is applied by stylesheet rather than by 69 edits", /input:not\(\[type="checkbox"\]\)/.test(th));
+  // COUNTED, not merely present. There are two rules, the resting one and the
+  // :focus one, and every selector has to appear in both. Mutation testing on
+  // 21 Aug removed the exclusion from the resting rule only and three separate
+  // assertions written as "is this string in the file" all stayed green, because
+  // the copy in the :focus rule satisfied them on its own.
+  is("textareas are fields in both rules", (th.match(/textarea:not\(\.gx-plain\)/g) || []).length, 2);
+  is("and so are selects", (th.match(/select:not\(\.gx-plain\)/g) || []).length, 2);
+  // 2px, not 1.5px. Chrome floors a 1.5px border to one device pixel at DPR 1,
+  // measured in a real browser, so the thickness half of the fix did nothing at
+  // all on an ordinary desktop monitor.
+  ok("and it beats the inline styles it has to beat", /border: 2px solid var\(--gx-field-border\) !important;/.test(th));
+  ok("at a width that survives a whole device pixel", !/border: 1\.5px solid var\(--gx-field-border\)/.test(th));
+  // A checkbox is not a box you type into, and repainting its native border is
+  // how a tick becomes unreadable.
+  for (const t of ["checkbox", "radio", "range", "file", "button", "submit"]) {
+    is(`a ${t} input is left alone in both rules`, (th.match(new RegExp(`:not\\(\\[type="${t}"\\]\\)`, "g")) || []).length, 2);
+  }
+  // ── AND THE FIELDS THAT ARE NOT <input> ELEMENTS ────────────────
+  // The arrival and departure pickers are <button>s that open a calendar. They
+  // sit under a form label, they say "Select date & time", and they were the
+  // first two controls on the screen his father was looking at. A selector keyed
+  // on element type cannot see that, so they say it themselves.
+  is("a field that is not an input can opt in, in both rules", (th.match(/\.gx-field[,:{ ]/g) || []).length, 2);
+  {
+    const dtp = readFileSync(join(root, "src/components/DateTimePicker.jsx"), "utf8");
+    ok("and the date pickers do", /<button type="button" className="gx-field" onClick=\{\(\) => setOpen/.test(dtp));
+    // ONLY the control. The days inside the calendar are buttons that pick a
+    // value, not boxes you fill in, and framing all 42 of them would be noise.
+    is("only the control itself, not every day in the calendar", (dtp.match(/className="gx-field"/g) || []).length, 1);
+  }
+
+  // The focus ring, which is the other half: seeing the field you are IN, not
+  // only the fields you could use.
+  // WITH !important. Almost every field in this app sets `outline: "none"`
+  // inline, so without it the ring computed to nothing at all and only the
+  // border changed colour, which is half a focus indicator.
+  ok("the focused field is unmistakable", /outline: 2px solid var\(--gx-field-ring\) !important;/.test(th));
+  // Driven by variables, so switching theme repaints every field without the
+  // stylesheet being rewritten, and applyTheme actually does it.
+  ok("the colours are variables the theme writes", /setProperty\("--gx-field-border", palette\.fieldBorder\)/.test(th));
+  // On the STRIPPED source. Commenting the call out left it matching a plain
+  // regex, which is the trap tests/tdz.mjs's stripNonCode exists for and which
+  // this assertion walked straight into.
+  ok("and changing theme repaints the fields", /applyFieldVars\(C\);/.test(stripNonCode(th)));
+  // Injected once. A style tag appended on every theme change is a leak that
+  // only shows up after somebody plays with the picker.
+  ok("the stylesheet is added once, not per theme change", /if \(!document\.getElementById\(FIELD_STYLE_ID\)\)/.test(th));
+
+  // ── THE ONE FIELD THAT WAS ALREADY RIGHT ────────────────────────
+  // The chat composer draws itself in the accent oxblood at 1.5px and is the
+  // single field on the home screen anybody could already identify as typeable.
+  // It is the model this rule was taken FROM, so it opts out rather than being
+  // repainted into the same grey as everything else.
+  {
+    const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
+    const composer = appF.slice(appF.indexOf('placeholder="Tell me about your trip') - 400, appF.indexOf('placeholder="Tell me about your trip'));
+    ok("the composer keeps its own border", /className="gx-plain"/.test(composer));
+    // And it must still HAVE one, or opting out means opting into nothing.
+    const after = appF.slice(appF.indexOf('placeholder="Tell me about your trip'), appF.indexOf('placeholder="Tell me about your trip') + 400);
+    // 2px, matching the rule it opted out of. At 1.5px it floored to one device
+    // pixel and the one deliberately loud field on the page became the thinnest.
+    ok("which is a real one, and no thinner than the rest", /border: `2px solid \$\{C\.accent\}`/.test(after));
+  }
+}
+
+// ── THE NAVIGATION, WHERE A WEBSITE PUTS IT ────────────────────────
+//
+// Oliver, 21 Aug 2026: "Maybe on PC we gotta cut the drop down navigation.
+// Instead make it like other websites where it is on the top", and then, before
+// anything had been built: "On phone it should still be a hamburger though."
+{
+  const appN = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("there is a nav bar in the header", /<nav className="gx-topnav">/.test(appN));
+  // ONE array, rendered twice. The note on TAB_ORDER says the nav and the swipe
+  // order must never drift apart again, and two hand-written lists is exactly
+  // how they drifted the first time.
+  is("both the bar and the menu render the same list", (appN.match(/NAV_ITEMS\.map\(/g) || []).length, 2);
+  ok("the bar is hidden until there is room for it", /\.gx-topnav \{ display: none; \}/.test(appN));
+  // Measured in a browser, not estimated: the bar's content is about 750px and
+  // with the logo, the search field and the menu beside it the row only stops
+  // overflowing at about 1160.
+  ok("and shown only where it fits, which was measured", /@media \(min-width: 1180px\) \{\s*\.gx-topnav \{ display: flex;/.test(appN));
+  // The hamburger stays at every width: on a phone it is the navigation, and on
+  // a desktop it keeps the theme picker, the account, the FAQ, the photo credits
+  // and support, which have no place in a page bar.
+  ok("the menu button is not hidden on desktop", !/className="gemlyx-burger[^"]*desktop|gemlyx-burger[^"]*mobile-only/.test(appN));
+  // But the pages inside it are, or a desktop reader gets two controls for one
+  // thing and no way to tell which is authoritative.
+  ok("the menu's copy of the pages steps aside when the bar appears", /\.gx-nav-in-menu \{ display: none !important; \}/.test(appN));
+  ok("and that block is the one wrapping the pages", /<div className="gx-nav-in-menu">/.test(appN));
+  // The page you are on is marked, or a nav bar is eight buttons and no answer.
+  ok("the current page is marked in the bar", /borderBottom: `2px solid \$\{active === item\.id \? C\.gold : "transparent"\}`/.test(appN));
+}
+
 
 // ── A FACT CARD WITH NO PHOTO IS NOT A BROKEN CARD ─────────────────
 //
@@ -27307,10 +27621,37 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // while the search ran. The code already deleted that bubble afterwards, which
   // is the wrong end of the problem.
   ok("the stream holds back an unfinished sentence", /const shown = holdPartial \? fullText\.slice\(0, completeUpTo\(fullText\)\) : fullText;/.test(app));
-  ok("and flushes when a stream really has ended", /if \(!toolUseBlock\) flush\(data\);/.test(app));
-  ok("including after a search", /data = await streamClaudeChat\(followUpMessages, handleDelta\);\s*\n\s*flush\(data\);/.test(app));
-  ok("and after the retry, so an empty first try cannot swallow the second",
-     /const retryData = await streamClaudeChat\(baseMessages, handleDelta\);\s*\n\s*flush\(retryData\);/.test(app));
+  ok("and flushes when a stream really has ended", /if \(!toolUseBlock\) \{ flush\(out\); return \{ data: out, exhausted: false \}; \}/.test(app));
+  ok("including when the search rounds run out", /flush\(out\);\s*\n\s*return \{ data: out, exhausted:/.test(app));
+
+  // ── 21 AUGUST 2026: "BECAUSE HE WENT FURTHER, IT STOPPED WORKING" ─
+  //
+  // His dad, three messages in a row: "hvad med bonbonland", the same question
+  // again, then "har du det skidt". Every one came back "Hit a snag on my end",
+  // and it never recovered.
+  //
+  // This handled EXACTLY ONE tool call. The model asked to search, the search
+  // ran, and when the follow-up asked to search a SECOND time, which is ordinary
+  // for "what about Bonbon-Land" (is it open, what does it cost, is it for young
+  // children), the reply came back carrying a tool_use block and no text.
+  // replyText was empty, and the retry re-sent the ORIGINAL messages, so it
+  // wanted the same second search and failed identically. Deterministic, and
+  // reported to the traveller as a fault on our side when nothing had broken.
+  ok("the tool handling is a loop, not a single if", /for \(let round = 0; round < TOOL_ROUNDS; round\+\+\)/.test(app));
+  ok("bounded rather than open ended", /const TOOL_ROUNDS = 3;/.test(app));
+  ok("each round carries the previous exchange forward", /\.\.\.msgs,\s*\n\s*\{ role: "assistant", content: out\.content \},/.test(app));
+  ok("and the retry goes through the same loop",
+     /const retry = await runTurn\(baseMessages\);/.test(app));
+  ok("rather than re-running the turn that just failed",
+     !/const retryData = await streamClaudeChat\(baseMessages, handleDelta\)/.test(app));
+  // RUNNING OUT OF ROUNDS IS NOT A FAULT, and saying so is both honest and
+  // actionable. A cap that can be hit has to be able to say it was hit.
+  ok("exhaustion is reported as its own state", /exhausted: !!out\.content\?\.find\(b => b\.type === "tool_use"\)/.test(app));
+  ok("and reads as a question that needed more looking up",
+     /needed more looking up than I can do in one go/.test(app));
+  // AND NO DASHES IN EITHER ERROR LINE, his standing rule, which both broke.
+  ok("the snag line lost its dash", /Hit a snag on my end\. Try sending that again\./.test(app));
+  ok("and so did the connection one", /Could not reach me just now\. Try again\./.test(app));
   // The boundary itself, since a regex that never matches would make all of the
   // above pass while showing nothing at all.
   {
@@ -27551,9 +27892,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── THE FORM SAYS WHAT THE FIELD DOES AND DOES NOT DO ──────────
   // Somebody who ticks United Kingdom and then reads a guide full of kroner
   // should have been told here rather than finding out.
-  ok("the picker exists", /Where you are travelling from/.test(pquest));
-  ok("with an opt out that stores nothing", /Somewhere else, or rather not say/.test(pquest));
-  ok("and says prices stay in DKK", /still price everything in DKK/.test(pquest));
+  // ── HIS LABELS, 21 AUG, AND NOTHING EXPLAINING ITSELF ───────────
+  // "just write 'country of origin'... No reason to explain why we need country
+  // and gender and what not. It's default to always write that on a sign up
+  // page." The currency sentence that used to sit under this field is gone with
+  // the rest of the notes; the rate line in the guide is where that belongs.
+  ok("the picker exists", /Country of origin/.test(pquest));
+  ok("with an opt out that stores nothing", /<option value="">Select<\/option>/.test(pquest));
+  ok("and nothing under it explaining why", !/still price everything in DKK/.test(pquest));
 }
 
 // ── THE ONE CONVERSION, FETCHED AND STAMPED ─────────────────────────
@@ -27850,8 +28196,19 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // ── HIS FIELDS, IN HIS WORDS ────────────────────────────────────
   ok("Name", /<div style=\{legend\}>Name\{star\("name"\)\}/.test(quest));
-  ok("Born", /<div style=\{legend\}>Born\{star\("bornYear"\)\}/.test(quest));
-  ok("Gender", /group\("Gender"/.test(quest));
+  ok("Born", /<div style=\{legend\}>Year of birth\{star\("bornYear"\)\}/.test(quest));
+  ok("Gender", /<div style=\{legend\}>Gender\{star\("sex"\)\}/.test(quest));
+  // ── THREE ON ONE LINE, ALL DROPDOWNS ────────────────────────────
+  // "make gender, year of birth, and country of origin on one line. Make them
+  // all a drop down. This will make page much smaller."
+  ok("they share one row", /const trio = \{ display: "grid", gridTemplateColumns: "repeat\(auto-fit/.test(quest));
+  ok("year of birth is a dropdown", /\{select\("bornYear", BORN_YEARS, "Select"\)\}/.test(quest));
+  ok("gender is a dropdown, not chips", /\{select\("sex", SEX_OPTIONS, "Select"\)\}/.test(quest)
+     && !/group\("Gender"/.test(quest));
+  ok("and country is one too", /COUNTRIES\.map\(c => <option/.test(quest));
+  // NOTHING EXPLAINS ITSELF. A label and a control is what a signup form is.
+  ok("no note under any of the three", !/so we can tell you what DKK is worth/.test(quest));
+  ok("and the name field lost its explainer", !/what should we call you/.test(quest));
   // ── WHICH ONES, AS BEHAVIOUR RATHER THAN AS SOURCE TEXT ─────────
   // The source-text version of this passed happily with missingRequired
   // returning a hard-coded empty array, which is the trap this codebase already
@@ -27876,8 +28233,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      missingRequired({ ...BLANK, bornYear: "1998" }).join(","), "name,sex");
   ok("every required field has a label for the message",
      REQUIRED_PROFILE.every(k => REQUIRED_LABEL[k]));
-  ok("About yourself, as its own heading", /About yourself <span[^>]*>\(optional\)/.test(quest));
-  ok("and marked optional, as his document marked it", /Everything from here down can be skipped/.test(quest));
+  // ── AND THE OPTIONAL HALF IS BEHIND A DOOR ──────────────────────
+  // "Make a dropdown on the 'optional' exactly like with the Gemlyx
+  // finetuning." Same bordered gold button with a chevron, because his dad
+  // taught this codebase once already that a borderless text row reads as a
+  // heading rather than something you can press.
+  ok("the optional half collapses", /const \[moreOpen, setMoreOpen\] = useState\(false\);/.test(quest));
+  ok("closed to start with", /useState\(false\)/.test(quest));
+  ok("headed the way the fine-tune panel is", /✦ Optional: about yourself/.test(quest));
+  ok("with the same chevron", /transform: moreOpen \? "rotate\(180deg\)" : "none"/.test(quest));
+  ok("and the tick groups live inside it",
+     quest.indexOf("moreOpen && (<div>") < quest.indexOf('groupMany("Interests"'));
   ok("and More about yourself at the end", /<div style=\{legend\}>More about yourself</.test(quest));
 
   // ── BORN IS A YEAR, NOT A DATE ──────────────────────────────────
@@ -27925,6 +28291,221 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      appP.indexOf("const held = takeHeldProfile();") < appP.indexOf("const res = await fetchProfile(userSession);"));
   ok("and a missing column is still reported rather than swallowed",
      /if \(wrote\.missingColumn\)/.test(appP));
+}
+
+// ── THE HALF OF THE ACCOUNT THAT LEARNS ─────────────────────────────
+//
+// Oliver, 10 Aug and again 21 Aug 2026: "the more the user communicates, the
+// more it knows him"; "Everytime a user uses the app, it gets to know him more."
+// profile.js has carried the note that this was the missing half since the day
+// the typed profile shipped.
+{
+  const { OBSERVED_MIN, OBSERVED_CAP, cleanLearned, learnedIsEmpty, seenFromTrip, observeTrip, settledObservations, observedForPrompt, EMPTY_PROFILE: BLANK2 } = M;
+  const learnSrc = readFileSync(join(root, "src/utils/profileLearning.js"), "utf8");
+  const appL = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // ── ONE TRIP IS NOT A PREFERENCE ────────────────────────────────
+  // Somebody who plans one castle weekend has not told you they like history.
+  const one = observeTrip(null, seenFromTrip({ themes: new Set(["history"]), modes: ["bike"] }));
+  is("one trip is counted", one.interests.History, 1);
+  is("but settles nothing", Object.keys(settledObservations(one)).length, 0);
+  const two = observeTrip(one, seenFromTrip({ themes: new Set(["history"]), modes: ["bike"] }));
+  is("two trips settle it", settledObservations(two).interests.join(","), "History");
+  is("and the transport with it", settledObservations(two).transport.join(","), "Bike");
+  is("the bar is two", OBSERVED_MIN, 2);
+
+  // ── COUNTED ONCE PER TRIP, WHATEVER WAS SAID ────────────────────
+  // So a chatty trip cannot outweigh a quiet one.
+  const chatty = observeTrip(null, { interests: ["History", "History", "History"] });
+  is("a repeated mention still counts once", chatty.interests.History, 1);
+
+  // ── AND IT CANNOT GROW WITHOUT BOUND ────────────────────────────
+  let many = null;
+  for (let i = 0; i < 20; i++) many = observeTrip(many, { interests: ["Food"] });
+  is("counts are capped", many.interests.Food, OBSERVED_CAP);
+
+  // ── ONLY THE WORDS THE FORM OFFERS ──────────────────────────────
+  // A stored answer nobody was offered is a bug that survives, which is the
+  // rule cleanProfile already runs on.
+  is("an invented value is dropped", Object.keys(observeTrip(null, { interests: ["Skiing"] })).length, 0);
+  is("and so is a junk shape", Object.keys(cleanLearned({ interests: "History" })).length, 0);
+  ok("empty is empty", learnedIsEmpty(null) && learnedIsEmpty({}) && learnedIsEmpty({ interests: {} }));
+
+  // ── A THEME WITH NO EQUIVALENT IS DROPPED, NOT APPROXIMATED ─────
+  // coast, art, design, market and family are real themes and none is one of
+  // the four interests he offered.
+  is("coast has no interest to map to", seenFromTrip({ themes: new Set(["coast", "art"]) }).interests.length, 0);
+  is("history does", seenFromTrip({ themes: new Set(["history"]) }).interests.join(","), "History");
+  is("and the modes translate", seenFromTrip({ modes: ["public transport", "walk"] }).transport.join(","), "Public transport,Walks");
+  // company comes ONLY from the form, never from the conversation, because
+  // readParty's text path returns "said in the conversation" rather than a who.
+  is("company only when the form gave one", seenFromTrip({}).company.length, 0);
+  is("and it is carried when it did", seenFromTrip({ company: "With family" }).company.join(","), "With family");
+
+  // ── TYPED BEATS NOTICED, AND IS NEVER REPEATED BACK ─────────────
+  const typedFood = { ...BLANK2, interests: ["Food"] };
+  const noticedFood = observeTrip(observeTrip(null, { interests: ["Food"] }), { interests: ["Food"] });
+  is("something they typed is not also reported as noticed", observedForPrompt(typedFood, noticedFood), "");
+  const said = observedForPrompt(BLANK2, noticedFood);
+  ok("something only noticed is reported", /planned around food on more than one trip/.test(said));
+  ok("and is labelled as noticed rather than told", /not told to you and not confirmed by them/.test(said));
+  ok("ranked below the typed block", /weaker than anything in the block above/.test(said));
+  ok("and below this conversation", /much weaker than this conversation/.test(said));
+  ok("never repeated back at them", /Do not repeat it back to them as though they had told you/.test(said));
+  is("nothing settled says nothing", observedForPrompt(BLANK2, one), "");
+
+  // ── WRITTEN AFTER A BUILD, FROM HIS TURNS ONLY ──────────────────
+  ok("observed after the guide is built", /const learned = observeTrip\(userProfile\?\.learned, seen\);/.test(appL));
+  ok("from his turns only", /themes: briefThemes\(saidByTravellerForGuide, \[\]\)/.test(appL));
+  ok("and never at the cost of the guide", /catch \{ \/\* never at the cost of the guide \*\//.test(appL));
+  ok("a test profile never teaches it anything", /if \(userSession && !testProfile\)/.test(appL));
+  // The file states its own rules, because the next person to touch it needs
+  // them more than it needs another assertion.
+  ok("the four rules are written down", /ONLY THE TRAVELLER'S OWN TURNS/.test(learnSrc)
+     && /ONE TRIP IS NOT A PREFERENCE/.test(learnSrc)
+     && /TYPED BEATS NOTICED/.test(learnSrc)
+     && /IT HAS TO BE VISIBLE AND REVERSIBLE/.test(learnSrc));
+}
+
+// ── AND THE CLAIM ABOUT COPENHAGEN THAT WAS NOT TRUE ────────────────
+//
+// Oliver, 21 Aug 2026: "I found out that it's false what I've written about most
+// people going to Copenhagen. So we might wanna tell Claude not to say that.
+// It's true for Asians and North Americans, but not for tourists in general."
+//
+// Germany alone is 13.2 million overnight stays and goes to the Jutland coasts;
+// 80 percent of all overnight stays are coastal and nature, 11 percent the major
+// cities. Second frozen fact in this codebase found to be false, after the
+// Rejsekort one on 10 August, and the lesson is the same: a frozen fact is still
+// a claim, and it is where an unverified assertion is hardest to notice.
+{
+  const appM = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the prompt forbids the claim outright",
+     /DO NOT SAY OR IMPLY THAT MOST TOURISTS ONLY SEE COPENHAGEN/.test(appM));
+  ok("and admits it said so for weeks", /This prompt asserted it for weeks and it is false/.test(appM));
+  ok("with the figures that settle it", /13\.2 million overnight stays/.test(appM) && /80 percent of overnight stays are coastal and nature/.test(appM));
+  ok("naming who it IS true of", /77 percent of American stays are in the capital/.test(appM));
+  ok("and forbidding the patronising version", /has already found it, and being told otherwise is both wrong and patronising/.test(appM));
+  // THE MISSION SURVIVES, on a narrower and true reason.
+  ok("the mission is kept but re-reasoned", /because that is the trip that misses most, not because most trips do/.test(appM));
+  // And the two places it leaked into reader-facing copy.
+  ok("the FAQ no longer asserts it", !/most tourists only ever see the capital/.test(appM));
+  ok("nor does the about section", !/the idea that only Copenhagen is worth visiting/.test(appM));
+}
+
+// ── 21 AUGUST 2026: "IT IS VERY POOR IN OTHER LANGUAGES" ────────────
+//
+// His dad, writing to Gemlyx in Danish, was asked "hvor rejser du ca.?" That is
+// not a Danish sentence anybody says. It is tripBrief's own ask text, "Which
+// dates? Even roughly is fine", rendered word for word: "roughly" becomes "ca."
+//
+// So the language SELECTION was working. What was missing is that every
+// instruction about how to write is calibrated on English, and the model read
+// the English example phrasings as a phrasebook to translate rather than as
+// examples of a register.
+{
+  const { answerInLanguage } = M;
+  const da = answerInLanguage({ tag: "da-DK", name: "Danish" });
+
+  // The rule that was already right, and must stay.
+  ok("it still matches the language they wrote in", /MATCH THE TRAVELLER'S OWN LANGUAGE/.test(da));
+  ok("and still never translates a name", /NEVER TRANSLATE A NAME/.test(da));
+
+  // ── AND NOW: WRITE IT, DO NOT TRANSLATE IT ──────────────────────
+  ok("the register rule names the language", /WRITE DANISH, DO NOT TRANSLATE ENGLISH/.test(da));
+  ok("it says the English is what to say, not how to word it",
+     /It does not tell you HOW TO WORD IT in Danish/.test(da));
+  ok("and names the failure it produces",
+     /grammatical and that no native speaker would ever say/.test(da));
+  ok("the banned filler is banned in translation too",
+     /Do not reach for the Danish equivalent of/.test(da));
+  ok("and the good phrases are a register, not a phrasebook",
+     /examples of a REGISTER/.test(da));
+  // HIS DAD'S EXACT SENTENCE, named. "roughly" is the word that became "ca."
+  ok("hedging words are called out by name", /An English "roughly", "a bit", "sort of"/.test(da));
+  ok("with the honest fallback", /ask it plainly instead/.test(da));
+
+  // The English speaker's block must not grow any of this.
+  const en = answerInLanguage({ tag: "en-GB", name: "English" });
+  ok("an English reader gets the language block", /MATCH THE TRAVELLER'S OWN LANGUAGE/.test(en));
+  is("and no language is a block at all", answerInLanguage({}), "");
+}
+
+// ── 21 AUGUST 2026: A VERDICT THAT ARGUED AGAINST ITSELF ────────────
+//
+// Oliver, on a Nationalpark Mols Bjerge correction: it came back "Not applied, a
+// source says otherwise" and then said, in its own next sentence, "the claim
+// that it spans multiple municipalities is not supported by the primary source".
+// The label refused the correction; the reasoning under it made the
+// correction's case. Verified against the park's own site: it lies entirely in
+// Syddjurs Kommune, so the criticism was right and the entry kept a false line.
+//
+// Behaviour, not source text, on this codebase's own 10 August lesson: a
+// source-text assertion survives the rule being switched off.
+{
+  const { settleVerdict } = M;
+
+  // ── HIS CASE ────────────────────────────────────────────────────
+  const molsBjerge = settleVerdict({
+    parsed: { verdict: "rejected", entryIsAlreadyCorrect: false, evidence: "The official site states it is in Syddjurs Municipality." },
+    hasSource: true,
+  });
+  is("a rejection that says the entry is wrong is not a rejection", molsBjerge.verdict, "unresolved");
+  ok("and it is named as a contradiction", molsBjerge.inverted);
+  ok("the reason says which two answers clashed", /returned "rejected" while also saying the entry is wrong/.test(molsBjerge.evidence));
+  ok("says nothing was changed", /Nothing was changed/.test(molsBjerge.evidence));
+  ok("hands it back to him", /Settle this one yourself/.test(molsBjerge.evidence));
+  ok("and keeps what the check found", /Syddjurs Municipality/.test(molsBjerge.evidence));
+
+  // ── THE MIRROR, WHICH IS THE SAME FAULT ─────────────────────────
+  const other = settleVerdict({
+    parsed: { verdict: "confirmed", entryIsAlreadyCorrect: true, evidence: "The entry matches the source." },
+    hasSource: true,
+  });
+  is("a confirmation that says the entry is right is not a confirmation", other.verdict, "unresolved");
+  ok("and says so the other way round", /while also saying the entry is already correct/.test(other.evidence));
+
+  // ── AND AN HONEST VERDICT IS UNTOUCHED ──────────────────────────
+  // The rejection is the protection that caught Gemini's 90-minute ferry. It
+  // must survive, or this fix has broken the thing it was meant to guard.
+  const goodReject = settleVerdict({
+    parsed: { verdict: "rejected", entryIsAlreadyCorrect: true, evidence: "The operator's timetable says 45 minutes." },
+    hasSource: true,
+  });
+  is("an agreeing rejection stands", goodReject.verdict, "rejected");
+  ok("with its evidence unchanged", goodReject.evidence === "The operator's timetable says 45 minutes.");
+  ok("and is not flagged", !goodReject.inverted);
+  const goodConfirm = settleVerdict({
+    parsed: { verdict: "confirmed", entryIsAlreadyCorrect: false, evidence: "The site says 129 kroner." },
+    hasSource: true,
+  });
+  is("an agreeing confirmation stands", goodConfirm.verdict, "confirmed");
+
+  // ── AN ABSENT FIELD IS NOT A DISAGREEMENT ───────────────────────
+  // A reply that never carried it behaves exactly as it did before, so nothing
+  // in flight when this shipped is downgraded for being old.
+  is("no second answer, no downgrade", settleVerdict({ parsed: { verdict: "rejected" }, hasSource: true }).verdict, "rejected");
+  is("nor for a null", settleVerdict({ parsed: { verdict: "rejected", entryIsAlreadyCorrect: null }, hasSource: true }).verdict, "rejected");
+  is("nor for a string that is not a boolean",
+     settleVerdict({ parsed: { verdict: "rejected", entryIsAlreadyCorrect: "false" }, hasSource: true }).verdict, "rejected");
+
+  // ── THE SOURCELESS RULE STILL APPLIES, AND SEPARATELY ───────────
+  const noSource = settleVerdict({ parsed: { verdict: "confirmed", entryIsAlreadyCorrect: false, evidence: "It looks wrong." }, hasSource: false });
+  is("a confirmation with no source is unresolved", noSource.verdict, "unresolved");
+  ok("for the source reason, not the contradiction one", noSource.sourceless && !noSource.inverted);
+  ok("and says which", /gave no primary source/.test(noSource.evidence));
+  // A website claim whose domain is the name is exempt, as it was before.
+  is("a self evident url still confirms",
+     settleVerdict({ parsed: { verdict: "confirmed", entryIsAlreadyCorrect: false }, hasSource: false, selfEvidentUrl: true }).verdict, "confirmed");
+
+  // Unresolved passes through untouched whatever it says about itself.
+  is("unresolved stays unresolved", settleVerdict({ parsed: { verdict: "unresolved", entryIsAlreadyCorrect: null } }).verdict, "unresolved");
+
+  // ── AND THE MODEL IS ASKED FOR BOTH ANSWERS ─────────────────────
+  const vp = M.VERIFY_PROMPT("Nationalpark Mols Bjerge", "the park spans several municipalities", "");
+  ok("the schema carries the second field", /"entryIsAlreadyCorrect": true \| false \| null/.test(vp));
+  ok("asked in the opposite direction", /in the opposite direction from the verdict/.test(vp));
+  ok("and told why it is asked twice", /a verdict and the reasoning under it were coming back saying opposite things/.test(vp));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

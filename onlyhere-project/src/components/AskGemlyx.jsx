@@ -49,7 +49,7 @@ const bubble = (role) => ({
 // account. It changes nothing about how the question is asked or metered; it
 // puts a line on the panel saying the gate is there, because the whole reason
 // he is through it is that he is checking what a reader gets.
-export const AskGemlyx = ({ session, item, kind, onSignIn, founder = false, nearby = [], startOpen = false, onClose = null }) => {
+export const AskGemlyx = ({ session, item, kind, onSignIn, founder = false, nearby = [], traveller = "", startOpen = false, onClose = null }) => {
   const [open, setOpen] = useState(!!startOpen);
   const [input, setInput] = useState("");
   const [log, setLog] = useState([]);
@@ -117,6 +117,23 @@ export const AskGemlyx = ({ session, item, kind, onSignIn, founder = false, near
           // the same-visit radius, computed by the same resolver that draws the
           // NEARBY strip on the page, so the panel and the page cannot disagree.
           nearby: (nearby || []).slice(0, 8),
+          // ── AND WHO IS ASKING ──────────────────────────────────
+          // Oliver, 21 Aug 2026: "the account will also help questions on
+          // attractions and towns... because Gemlyx will be able to answer
+          // quickly that 'this place is probably not for you' or 'it's low
+          // rated, but for you, it's probably a great place to visit'."
+          //
+          // That second sentence is the one worth building for, and the entries
+          // already hold the material: every type ends in a Reality Check whose
+          // whole job is to name the thing somebody would be disappointed by. A
+          // downside that does not apply to this person is exactly "low rated,
+          // but for you it is great", and it is a sentence no rating average and
+          // no search engine can produce.
+          //
+          // Sent as the prose profileForPrompt already writes, rather than the
+          // raw row: one wording, shared with the guide writer, so the two
+          // cannot start describing the same person differently.
+          traveller: String(traveller || "").slice(0, 1200),
         }),
       });
       const data = await res.json();

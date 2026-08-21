@@ -281,6 +281,61 @@ ${criticism}`;
 // never opened the ticket shop, and a real door-to-door figure called incorrect
 // because it was compared against a train's running time. A verifier without
 // those rules repeats the checker's mistake and calls it confirmation.
+// ── A VERDICT THAT ARGUES AGAINST ITSELF ─────────────────────────────
+//
+// Oliver, 21 Aug 2026, reading a Mols Bjerge correction that came back "Not
+// applied, a source says otherwise" and then said, in its own next sentence,
+// "the claim that it spans multiple municipalities is not supported by the
+// primary source". The label refused the correction; the reasoning under it made
+// the correction's case.
+//
+// The verdict and its evidence are two free-text fields from ONE model call and
+// nothing had ever compared them. It matters most on a REJECTION, because of
+// which way that one fails: a wrong "confirmed" is loud, the entry visibly
+// changes and he sees it, while a wrong "rejected" leaves a false claim in a
+// published entry with a confident note beside it saying a source says
+// otherwise. He caught this one only by reading the reasoning as carefully as
+// he did.
+//
+// So the check answers the same question twice, in opposite directions, and this
+// requires the two to agree. A model that has muddled itself often muddles one
+// phrasing and not the other, which is the whole point of asking the second way
+// round.
+//
+// DOWNGRADED, NEVER INVERTED. A disagreement means the check could not keep its
+// own answer straight, which is not evidence for either side. It becomes
+// unresolved, the entry is left exactly as it is, and both halves are shown so
+// he can settle it. Deliberately not "apply the criticism": the reviewer that
+// raised this one was wrong about the other two claims in the same batch.
+//
+// EXTRACTED AS A PREDICATE, on this codebase's own recorded lesson from 10
+// August: a source-text assertion can survive the rule being switched off, so
+// the rule that matters gets a pure function and a behavioural test.
+export const settleVerdict = ({ parsed, hasSource = false, selfEvidentUrl = false } = {}) => {
+  const said = String(parsed?.verdict || "");
+  // Only a real boolean counts. An absent field is not a disagreement, so an
+  // older reply that never carried it behaves exactly as it did before.
+  //
+  // The typeof guard is documentation rather than behaviour, and mutation
+  // testing says so: `?? null` behaves identically here, because only a real
+  // boolean can satisfy the `=== true` and `=== false` comparisons below. It is
+  // written this way so the intent survives somebody reading it later, and it is
+  // recorded as an equivalent mutant so nobody hunts for the missing test.
+  const saysCorrect = typeof parsed?.entryIsAlreadyCorrect === "boolean" ? parsed.entryIsAlreadyCorrect : null;
+  const inverted = (said === "rejected" && saysCorrect === false)
+    || (said === "confirmed" && saysCorrect === true);
+  // A "confirmed" with no source is not confirmed. The whole difference between
+  // a lead and a fact, enforced here rather than hoped for in the prompt.
+  const sourceless = said === "confirmed" && !hasSource && !selfEvidentUrl;
+  const verdict = (inverted || sourceless) ? "unresolved" : said;
+  const evidence = inverted
+    ? `The check contradicted itself: it returned "${said}" while also saying the entry is ${saysCorrect ? "already correct" : "wrong"}. Nothing was changed, because a check that cannot keep its own answer straight is not evidence either way. Settle this one yourself. ${parsed?.evidence || ""}`.trim()
+    : sourceless
+      ? `The check agreed with the criticism but gave no primary source, so nothing was changed. ${parsed?.evidence || ""}`.trim()
+      : (parsed?.evidence || "");
+  return { verdict, evidence, inverted, sourceless };
+};
+
 export const VERIFY_PROMPT = (name, claim, rules) => `Check ONE factual claim about "${name}" in Denmark using real, current web search.
 
 The claim: ${claim.says}${claim.proposed ? `\nThe correction proposed: ${claim.proposed}` : ""}
@@ -291,9 +346,11 @@ Rules for your answer, and they are strict:
 - If you cannot find a primary source, say so plainly. "Could not confirm" is a correct and useful answer here. Do not reason your way to a conclusion.
 
 Respond with ONLY strict JSON:
-{"verdict": "confirmed" | "rejected" | "unresolved", "correctValue": "the real verified value, or an empty string", "evidence": "one or two sentences on what the source actually says", "sourceUrl": "the primary source URL, or an empty string"}
+{"verdict": "confirmed" | "rejected" | "unresolved", "entryIsAlreadyCorrect": true | false | null, "correctValue": "the real verified value, or an empty string", "evidence": "one or two sentences on what the source actually says", "sourceUrl": "the primary source URL, or an empty string"}
 
 "confirmed" means the criticism is right and the entry needs changing. "rejected" means the criticism is wrong and the entry is already correct, and your evidence must say why. "unresolved" means no primary source settled it.
+
+ANSWER THE SAME QUESTION TWICE, DELIBERATELY. The field "entryIsAlreadyCorrect" asks, in the opposite direction from the verdict, whether the entry as it currently stands says the right thing: true when the entry is fine as it is, false when the entry says something the source does not support, null when nothing settled it. It must agree with your verdict, because "rejected" and "the entry is already correct" are the same answer, and so are "confirmed" and "the entry is wrong". Two fields rather than one because a verdict and the reasoning under it were coming back saying opposite things, and nothing could tell.
 
 BOTH THE ENTRY AND THE CRITICISM CAN BE RIGHT AT ONCE, and when that happens the verdict is "rejected", not "confirmed". Two real figures measuring different things are not a disagreement: a door to door journey time and a train's running time are both true and neither corrects the other. Before returning "confirmed", check that the criticism is talking about the SAME measure, the same route, the same ticket and the same variant as the entry. If it is measuring something else, reject it and say what it measured instead.${rules ? `\n${rules}` : ""}`;
 
@@ -738,13 +795,15 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
     // domain is literally the name, which is checked below.
     const hasSource = !!String(parsed.sourceUrl || "").trim();
     const selfEvidentUrl = kind === "website" && hostMatchesName(parsed.correctValue || c.proposed, name);
-    const verdict = parsed.verdict === "confirmed" && !hasSource && !selfEvidentUrl ? "unresolved" : parsed.verdict;
+    // One implementation, in settleVerdict above, so the rule and the test
+    // cannot drift apart the way two copies of a function in this repo have
+    // four times.
+    const settled = settleVerdict({ parsed, hasSource, selfEvidentUrl });
     verified.push({
-      ...c, kind, verdict,
+      ...c, kind,
+      verdict: settled.verdict,
       correctValue: parsed.correctValue || "",
-      evidence: verdict === "unresolved" && parsed.verdict === "confirmed"
-        ? `The check agreed with the criticism but gave no primary source, so nothing was changed. ${parsed.evidence || ""}`.trim()
-        : (parsed.evidence || ""),
+      evidence: settled.evidence,
       sourceUrl: parsed.sourceUrl || (selfEvidentUrl ? (parsed.correctValue || c.proposed) : ""),
     });
   }

@@ -206,7 +206,7 @@ export const cleanProfile = (raw) => ({
 // only for the currency line, and "More about yourself" is the field nobody can
 // be made to fill in usefully.
 export const REQUIRED_PROFILE = ["name", "bornYear", "sex"];
-export const REQUIRED_LABEL = { name: "Name", bornYear: "Born", sex: "Gender" };
+export const REQUIRED_LABEL = { name: "Name", bornYear: "Year of birth", sex: "Gender" };
 
 // The required fields still empty, in the order they are asked, so a form can
 // name the first one rather than saying "something is missing".

@@ -316,7 +316,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             account keeps the guide. It does not keep the guide CURRENT. */}
         <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}`, fontSize: 11, color: C.muted, lineHeight: 1.6 }}>
           A free account saves your guide and nothing more. Keeping it live as your trip
-          approaches, new events worth rerouting for, help while you are actually there,
+          approaches, new events worth rerouting for, help while you are there,
           that is the paid side, and it is not switched on yet.
         </div>
 

@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { C } from "../utils/theme";
-import { BORN_YEARS, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, DESCRIPTION_MAX, REQUIRED_PROFILE } from "../utils/profile";
+import { BORN_YEARS, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, DESCRIPTION_MAX, REQUIRED_PROFILE } from "../utils/profile";
 
 // ── THE QUESTIONS, IN ONE PLACE ──────────────────────────────────────
 //
@@ -31,6 +32,9 @@ import { BORN_YEARS, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_ST
 // worse form.
 export const ProfileQuestions = ({ value, onChange, required = false, showGaps = false }) => {
   const p = value;
+  // Open/closed is pure display state and belongs here rather than in either
+  // caller, which is the whole point of this component owning no data.
+  const [moreOpen, setMoreOpen] = useState(false);
   const set = (k, v) => onChange({ ...p, [k]: v });
   // A chip toggles off when pressed again. Without that there is no way back to
   // "I would rather not say" once something has been tapped by accident.
@@ -102,72 +106,80 @@ export const ProfileQuestions = ({ value, onChange, required = false, showGaps =
     </div>
   );
 
+  // ── THREE ON ONE LINE, ALL DROPDOWNS ──────────────────────────────
+  // Oliver, 21 Aug 2026: "if you can, make gender, year of birth, and country of
+  // origin on one line. Make them all a drop down. This will make page much
+  // smaller, and less need of scrolling."
+  //
+  // Gender was a chip row, which is three lines tall on a phone. auto-fit rather
+  // than three fixed columns, so the same markup is one line on a laptop and
+  // stacks on a narrow phone without a second breakpoint to keep in sync.
+  const trio = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 18 };
+  const select = (k, options, placeholder) => (
+    <select value={p[k]} onChange={e => set(k, e.target.value)}
+      style={{ ...field, appearance: "none", cursor: "pointer", ...ring(k) }}>
+      <option value="">{placeholder}</option>
+      {options.map(o => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+
   return (
     <>
-      <div style={legend}>Name{star("name")}<span style={note}> · what should we call you</span></div>
-      <input value={p.name} onChange={e => set("name", e.target.value.slice(0, 60))} placeholder="First name is plenty"
-        autoComplete="given-name" style={{ ...field, marginBottom: 16, ...ring("name") }} />
+      {/* ── NO EXPLAINING WHY ─────────────────────────────────────
+          "No reason to explain why we need country and gender and what not.
+          It's default to always write that on a sign up page." Every note under
+          every field is gone; a label and a control is what a signup form is. */}
+      <div style={legend}>Name{star("name")}</div>
+      <input value={p.name} onChange={e => set("name", e.target.value.slice(0, 60))} placeholder="Or a nickname"
+        autoComplete="given-name" style={{ ...field, marginBottom: 18, ...ring("name") }} />
 
-      {/* ── BORN, AS A YEAR ───────────────────────────────────────
-          His label, and a year rather than a date. What changes a
-          recommendation is roughly how old somebody is; a full date of birth is
-          a much stronger identifier and buys nothing extra, which is the
-          reasoning profile.js has carried since 10 August. A year satisfies
-          "Born" literally and keeps the liability off a Danish business that
-          would have to protect it. */}
-      <div style={legend}>Born{star("bornYear")}<span style={note}> · the year is plenty</span></div>
-      <select value={p.bornYear} onChange={e => set("bornYear", e.target.value)}
-        style={{ ...field, marginBottom: 16, appearance: "none", cursor: "pointer", ...ring("bornYear") }}>
-        <option value="">{required ? "Choose a year" : "Rather not say"}</option>
-        {BORN_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-      </select>
-
-      {group("Gender", required ? "" : "optional, and it changes very little", SEX_OPTIONS, "sex")}
-
-      {/* ── WHERE THEY ARE COMING FROM ────────────────────────────
-          "In the create an account, ask what country they're from. Because then
-          the guide can probably write in their currency."
-
-          A select rather than chips: two dozen options is a list, not a row, and
-          a row of two dozen gold pills would swamp every real question above it.
-          The note says what the field does and, just as importantly, what it
-          does not do, because somebody who expects pounds in their guide and
-          gets kroner should have been told here rather than finding out. */}
-      <div style={legend}>Where you are travelling from<span style={note}> · so we can tell you what DKK is worth</span></div>
-      <select value={p.country} onChange={e => set("country", e.target.value)}
-        style={{ ...field, marginBottom: 6, appearance: "none", cursor: "pointer" }}>
-        <option value="">Somewhere else, or rather not say</option>
-        {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
-      </select>
-      <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.55, marginBottom: 18 }}>
-        {homeCurrency(p.country)
-          ? `Your guide will still price everything in DKK, because that is what the sign and the ticket app say. It will open with what 100 DKK is worth in ${homeCurrency(p.country)} on the day it was built.`
-          : "Prices are always in DKK, because that is what you will actually be charged. Tell us where you are from and the guide will open with what that is worth to you."}
+      <div style={trio}>
+        <div>
+          <div style={legend}>Year of birth{star("bornYear")}</div>
+          {select("bornYear", BORN_YEARS, "Select")}
+        </div>
+        <div>
+          <div style={legend}>Gender{star("sex")}</div>
+          {select("sex", SEX_OPTIONS, "Select")}
+        </div>
+        <div>
+          <div style={legend}>Country of origin</div>
+          <select value={p.country} onChange={e => set("country", e.target.value)}
+            style={{ ...field, appearance: "none", cursor: "pointer" }}>
+            <option value="">Select</option>
+            {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+          </select>
+        </div>
       </div>
 
-      {/* His own heading, and his own line under it. The tick groups are the
-          optional half and he marked them as such. */}
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text, marginBottom: 3 }}>
-        About yourself <span style={{ fontWeight: 500, color: C.muted }}>(optional)</span>
-      </div>
-      <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.55, marginBottom: 14 }}>
-        Everything from here down can be skipped, and you can pick more than one of each.
-      </div>
+      {/* ── THE OPTIONAL HALF, BEHIND THE SAME DOOR AS FINE-TUNE ───
+          "Make a dropdown on the 'optional' exactly like with the Gemlyx
+          finetuning." Same bordered gold button, same chevron, same rule his dad
+          taught this codebase once already: a borderless text row reads as a
+          heading rather than something you can press. */}
+      <button onClick={() => setMoreOpen(o => !o)}
+        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: moreOpen ? `${C.gold}14` : C.bg, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "12px 14px", marginBottom: moreOpen ? 16 : 4, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left" }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: C.gold }}>✦ Optional: about yourself</span>
+        <span style={{ fontSize: 11, color: C.muted }}>the more Gemlyx knows, the better it plans</span>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: C.gold, transform: moreOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s ease", display: "inline-block" }}>▾</span>
+      </button>
 
-      {groupMany("Interests", "they are weighted, not filters", INTERESTS, "interests")}
-      {groupMany("Preferred transport", "", TRANSPORT, "transport")}
-      {groupMany("Preferred travelling", "", TRAVEL_STYLE, "style")}
+      {moreOpen && (<div>
+        {groupMany("Interests", "", INTERESTS, "interests")}
+        {groupMany("Preferred transport", "", TRANSPORT, "transport")}
+        {groupMany("Preferred travelling", "", TRAVEL_STYLE, "style")}
 
-      {group("Who you usually travel with", "", COMPANY, "company")}
-      {group("Pace", "", PACE, "pace")}
+        {group("Who you usually travel with", "", COMPANY, "company")}
+        {group("Pace", "", PACE, "pace")}
 
-      <div style={legend}>More about yourself</div>
-      <textarea value={p.description} onChange={e => set("description", e.target.value.slice(0, DESCRIPTION_MAX))}
-        rows={4} placeholder="What you actually enjoy, what you would rather avoid, anything that would change what a good friend recommended to you."
-        style={{ ...field, resize: "vertical", lineHeight: 1.6 }} />
-      <div style={{ fontSize: 10.5, color: C.muted, textAlign: "right", marginTop: 5, marginBottom: 14 }}>
-        {p.description.length}/{DESCRIPTION_MAX}
-      </div>
+        <div style={legend}>More about yourself</div>
+        <textarea value={p.description} onChange={e => set("description", e.target.value.slice(0, DESCRIPTION_MAX))}
+          rows={4} placeholder="What you enjoy, what you would rather avoid, anything that would change what a good friend recommended to you."
+          style={{ ...field, resize: "vertical", lineHeight: 1.6 }} />
+        <div style={{ fontSize: 10.5, color: C.muted, textAlign: "right", marginTop: 5, marginBottom: 4 }}>
+          {p.description.length}/{DESCRIPTION_MAX}
+        </div>
+      </div>)}
     </>
   );
 };

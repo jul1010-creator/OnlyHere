@@ -60,7 +60,7 @@ export const readTheDay = (weather, cities) => {
     return { line: `Rain around ${wetCity?.label || "parts of Denmark"} today.`, hint: "Dry elsewhere, so it is worth checking before you commit to a day outside.", mood: "mixed" };
   }
   if (clear === cities.length && warmest >= 18) {
-    return { line: "Clear everywhere, and warm.", hint: "The kind of day the coast and the open-air places are actually for.", mood: "clear" };
+    return { line: "Clear everywhere, and warm.", hint: "The kind of day the coast and the open-air places are for.", mood: "clear" };
   }
   if (clear === cities.length) {
     return { line: "Clear everywhere.", hint: `Bright but only ${warmest} degrees, so take a layer.`, mood: "clear" };

@@ -15,6 +15,9 @@ import { nightlifeStreets } from "./data/nightlifeStreets";
 import { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit } from "./utils/publishedRepair";
 import { blockingCoordProblems, coordProblems, coordAudit, describeCoordAudit } from "./utils/coordCheck";
 import { fetchProfile, saveProfile, takeHeldProfile, profileForPrompt, isBlank as profileIsBlank, homeCurrency } from "./utils/profile";
+// The half of the account that learns rather than being typed. See
+// utils/profileLearning.js for the four rules it has to obey.
+import { seenFromTrip, observeTrip, observedForPrompt } from "./utils/profileLearning";
 import { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, NUDGE_KEY, PROFILE_NUDGE_KEY } from "./utils/accountNudge";
 import { sweepAll, sweepRow, deepCheckPlan, checkAge } from "./utils/factSweep";
 import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filterRows } from "./utils/manageGroups";
@@ -10613,6 +10616,36 @@ If the conversation only covers a single day or a few stops with no explicit day
       const testProfile = randomTestProfileRef.current && convoText.includes(randomTestProfileRef.current.brief) ? randomTestProfileRef.current : null;
       endRun();
       endLog();
+      // ── AND GEMLYX LEARNS ONE THING FROM THIS TRIP ────────────────
+      //
+      // Oliver, 10 Aug and again 21 Aug: "the more the user communicates, the
+      // more it knows him"; "Everytime a user uses the app, it gets to know him
+      // more." profile.js has carried the note that this was the missing half
+      // since the day the typed profile shipped.
+      //
+      // AFTER a successful build, deliberately: a build that failed is not
+      // evidence of anything, and this is the moment a real brief exists.
+      //
+      // From saidByTravellerForGuide and from the mode list already computed
+      // above, both of which are his turns only. Nothing here parses a sentence
+      // itself; a seventh reader of intent in this repo is how they disagree.
+      //
+      // Failure is silence: a profile that does not update is a profile that
+      // does not update, and it must never cost somebody their guide.
+      if (userSession && !testProfile) {
+        try {
+          const seen = seenFromTrip({
+            themes: briefThemes(saidByTravellerForGuide, []),
+            modes: mentionedModes,
+            company: intakeFamilyMode ? "With family" : "",
+          });
+          const learned = observeTrip(userProfile?.learned, seen);
+          const next = { ...(userProfile || {}), learned };
+          const wrote = await saveProfile(userSession, next);
+          if (wrote.ok) setUserProfile(next);
+        } catch { /* never at the cost of the guide */ }
+      }
+
       setGuideModal({ _gid: gid, _fx: fxLine, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
       // A build that failed halfway still spent everything it spent up to that
@@ -12064,11 +12097,11 @@ HIDDEN GEM TOWNS (this is Gemlyx's actual core differentiator — real, lesser-k
 
 ACTIVELY USE THE HIDDEN GEM TOWNS LIST, DON'T JUST DEFAULT TO FAMOUS ATTRACTIONS: when building a multi-day plan, deliberately pull at least one real town from the list above rather than filling every day with only the most famous, most obvious sights — genuinely working a hidden gem into the plan (not just mentioning it exists) is exactly what makes a Gemlyx-built trip different from a generic one. If someone's request sounds like they'd actually prefer a lighter, town-hopping style trip (cycling or driving around and seeing real places, not a packed sightseeing schedule), lean into that — don't force a dense day of attractions onto someone who'd rather just wander through a few real towns.
 
-If asked for a plan or itinerary, structure it day by day using only the above, and factor in the current season. ACTIVELY CROSS-REFERENCE EVENTS AGAINST THE TRAVELER'S DATES: if they've told you when they're visiting (or roughly when — "next week", "in August"), check the UPCOMING EVENTS lists above for anything whose real date range genuinely overlaps with their trip, and proactively mention it as part of the plan rather than waiting to be asked — a real festival happening during someone's actual visit is exactly the kind of specific, useful detail worth surfacing unprompted. Don't force an event in in if nothing genuinely overlaps; a fabricated sense of good timing is worse than no mention at all. If you do suggest an event, ALWAYS pass along its real ticket situation from the [tickets: ...] note next to it — if it says SOLD OUT, say so plainly and don't suggest attending (mention it as a "happening nearby" fact instead, not a plan to join); if it says tickets are limited or sell out fast, tell them to book now, before the trip, not "when they arrive" — that's the single most common way someone misses something they specifically traveled for. Gemlyx's core mission: most tourists only see Copenhagen for 3-4 days and never explore the rest of Denmark, especially Jutland and North Zealand. When someone is staying more than 2 days, actively suggest at least one destination outside Copenhagen — don't just default to city recommendations. If asked about transport, always mention that the physical Rejsekort card was discontinued (28 May 2026) and the current fine for an invalid ticket is 750 DKK — the most common tourist mistakes are forgetting to check out, and assuming an installed app means a purchased ticket. FROZEN TRANSPORT FACT (checked 10 Aug 2026, rejsekort.dk + rejsebillet.dk): never recommend a PHYSICAL Rejsekort, because the card is discontinued. Do NOT claim the Rejsekort app is unavailable to visitors: its own terms ask only for an email, a name, a birthdate, a phone number and a payment card, and reserve MitID and CPR for pensioner and disabled fare types. Steer a short trip to a fixed ticket for the real reason instead, which is that the app is check-in and check-out and forgetting to check out is the most common tourist fine. Visitors buy tickets in the official Rejsebillet app (single tickets and passes for all of Denmark, from Rejsekort & Rejseplan A/S, paid in advance) or the DOT/DSB apps; the Copenhagen Card works as before (activate once, show on request). If unsure about any ticket mechanic, name the official app and point at it rather than describing mechanics.
+If asked for a plan or itinerary, structure it day by day using only the above, and factor in the current season. ACTIVELY CROSS-REFERENCE EVENTS AGAINST THE TRAVELER'S DATES: if they've told you when they're visiting (or roughly when — "next week", "in August"), check the UPCOMING EVENTS lists above for anything whose real date range genuinely overlaps with their trip, and proactively mention it as part of the plan rather than waiting to be asked — a real festival happening during someone's actual visit is exactly the kind of specific, useful detail worth surfacing unprompted. Don't force an event in in if nothing genuinely overlaps; a fabricated sense of good timing is worse than no mention at all. If you do suggest an event, ALWAYS pass along its real ticket situation from the [tickets: ...] note next to it — if it says SOLD OUT, say so plainly and don't suggest attending (mention it as a "happening nearby" fact instead, not a plan to join); if it says tickets are limited or sell out fast, tell them to book now, before the trip, not "when they arrive" — that's the single most common way someone misses something they specifically traveled for. FROZEN FACT, CORRECTED 21 Aug 2026 (VisitDenmark overnight-stay figures via The Local): DO NOT SAY OR IMPLY THAT MOST TOURISTS ONLY SEE COPENHAGEN. This prompt asserted it for weeks and it is false. Germany is by far the largest source of visitors, 13.2 million overnight stays, and they go to the Jutland coasts rather than the capital: Vesterhavet 5 million, Nordvestkysten 2.3 million, South Jutland 1.6 million. Across all visitors, 80 percent of overnight stays are coastal and nature and only 11 percent are the major cities. Around two thirds of Norwegian visits are outside Copenhagen. It IS true of long-haul visitors and of some European city breaks: 77 percent of American stays are in the capital, 63 percent of Dutch and roughly half of Swedish. So never open with the claim as a general fact about tourists, and never tell somebody they are missing the real Denmark before knowing where they are going: a German family heading for a west-coast holiday house has already found it, and being told otherwise is both wrong and patronising. Gemlyx's mission is unchanged and its reason is narrower: when a traveller's OWN brief points only at Copenhagen and they have more than 2 days, suggest at least one destination outside it, because that is the trip that misses most, not because most trips do. If asked about transport, always mention that the physical Rejsekort card was discontinued (28 May 2026) and the current fine for an invalid ticket is 750 DKK — the most common tourist mistakes are forgetting to check out, and assuming an installed app means a purchased ticket. FROZEN TRANSPORT FACT (checked 10 Aug 2026, rejsekort.dk + rejsebillet.dk): never recommend a PHYSICAL Rejsekort, because the card is discontinued. Do NOT claim the Rejsekort app is unavailable to visitors: its own terms ask only for an email, a name, a birthdate, a phone number and a payment card, and reserve MitID and CPR for pensioner and disabled fare types. Steer a short trip to a fixed ticket for the real reason instead, which is that the app is check-in and check-out and forgetting to check out is the most common tourist fine. Visitors buy tickets in the official Rejsebillet app (single tickets and passes for all of Denmark, from Rejsekort & Rejseplan A/S, paid in advance) or the DOT/DSB apps; the Copenhagen Card works as before (activate once, show on request). If unsure about any ticket mechanic, name the official app and point at it rather than describing mechanics.
 
 You also have a web_search tool. Use it whenever someone asks about something that changes over time and isn't in the lists above — current opening hours, whether a specific event is still on, ticket availability, or anything at a museum/castle/attraction not already listed here. Don't use it for things already covered in your lists above.
 
-${profileForPrompt(userProfile)}
+${profileForPrompt(userProfile)}${observedForPrompt(userProfile, userProfile?.learned) ? `\n${observedForPrompt(userProfile, userProfile.learned)}` : ""}
 
 ── HOW A TURN IS SHAPED, WHICH IS NOT THE SAME AS WHICH WORDS ARE BANNED ──
 Oliver, 21 Aug 2026, on the opening of a real conversation: "Gemlyx is a little too much of a robot at start." The vocabulary in that conversation was clean. Every banned phrase above was absent. What made it a robot was the SHAPE of each turn, and these are rules about shape.
@@ -12267,34 +12300,58 @@ ${languageBlock()}`;
         }
       };
 
-      let data = await streamClaudeChat(baseMessages, handleDelta);
-      let toolUseBlock = data.content?.find(b => b.type === "tool_use");
-      // No search coming, so the fragment after the last full stop is the end of
-      // the reply rather than a thought that was interrupted. Show it.
-      if (!toolUseBlock) flush(data);
+      // ── ONE SEARCH WAS NOT ENOUGH ─────────────────────────────────
+      //
+      // Oliver, 21 Aug 2026, with his dad's screen: three messages in a row came
+      // back "Hit a snag on my end", and it never recovered. The messages were
+      // "hvad med bonbonland", the same question again, and then "har du det
+      // skidt", so it was not one bad question.
+      //
+      // This handled EXACTLY ONE tool call. The model asked to search, the
+      // search ran, and if the follow-up asked to search a second time, which is
+      // ordinary for a question like "what about Bonbon-Land" (is it open, what
+      // does it cost, is it right for young children), the reply came back
+      // carrying a tool_use block and NO text. replyText was empty, and the retry
+      // below re-sent the ORIGINAL messages, so it wanted the same second search
+      // and failed the same way. Deterministic, not a blip, and invisible: the
+      // traveller is told there was a problem on our end when nothing had gone
+      // wrong at all.
+      //
+      // A bounded loop rather than a bigger number: three rounds answers any
+      // real question, and a cap that can be hit has to say so rather than being
+      // reported as a fault.
+      const TOOL_ROUNDS = 3;
+      const runTurn = async (messages) => {
+        let msgs = messages;
+        let out = await streamClaudeChat(msgs, handleDelta);
+        for (let round = 0; round < TOOL_ROUNDS; round++) {
+          const toolUseBlock = out.content?.find(b => b.type === "tool_use");
+          // No search coming, so the fragment after the last full stop is the end
+          // of the reply rather than a thought that was interrupted. Show it.
+          if (!toolUseBlock) { flush(out); return { data: out, exhausted: false }; }
+          // Any preamble that streamed in before it decided to search is dropped:
+          // only the real answer should end up on screen.
+          clearStreamedBubble();
+          const { query } = toolUseBlock.input || {};
+          let searchSummary = "No results found.";
+          try {
+            const searchRes = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+            const searchData = await searchRes.json();
+            searchSummary = searchData.answer || (searchData.results || []).map(r => `${r.title}: ${r.snippet}`).join(" | ") || searchSummary;
+          } catch { /* keep fallback summary, don't break the chat */ }
+          msgs = [
+            ...msgs,
+            { role: "assistant", content: out.content },
+            { role: "user", content: [{ type: "tool_result", tool_use_id: toolUseBlock.id, content: searchSummary }] },
+          ];
+          out = await streamClaudeChat(msgs, handleDelta);
+        }
+        flush(out);
+        return { data: out, exhausted: !!out.content?.find(b => b.type === "tool_use") };
+      };
 
-      if (toolUseBlock) {
-        // Model wants to search — if any preamble text streamed in before it
-        // decided to call the tool, drop that bubble; only the real, final
-        // answer (streamed below after the search) should end up on screen.
-        clearStreamedBubble();
-        const { query } = toolUseBlock.input || {};
-        let searchSummary = "No results found.";
-        try {
-          const searchRes = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-          const searchData = await searchRes.json();
-          searchSummary = searchData.answer || (searchData.results || []).map(r => `${r.title}: ${r.snippet}`).join(" | ") || searchSummary;
-        } catch { /* keep fallback summary, don't break the chat */ }
-
-        const followUpMessages = [
-          ...baseMessages,
-          { role: "assistant", content: data.content },
-          { role: "user", content: [{ type: "tool_result", tool_use_id: toolUseBlock.id, content: searchSummary }] },
-        ];
-        data = await streamClaudeChat(followUpMessages, handleDelta);
-        flush(data);
-      }
-
+      let turn = await runTurn(baseMessages);
+      let data = turn.data;
       let replyText = data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
 
       if (!replyText) {
@@ -12310,8 +12367,11 @@ ${languageBlock()}`;
         clearStreamedBubble();
         console.warn("Gemlyx chat: empty reply, retrying once.", { data, stop_reason: data?.stop_reason, error: data?.error });
         try {
-          const retryData = await streamClaudeChat(baseMessages, handleDelta);
-          flush(retryData);
+          // Through the same loop, or the retry re-runs exactly the turn that
+          // just failed and fails identically. That is what made this permanent
+          // rather than transient.
+          const retry = await runTurn(baseMessages);
+          const retryData = retry.data;
           replyText = retryData.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
           if (!replyText) {
             console.warn("Gemlyx chat: retry also empty, giving up.", { retryData, stop_reason: retryData?.stop_reason, error: retryData?.error });
@@ -12354,11 +12414,20 @@ ${languageBlock()}`;
           setAiMessages(prev => [...prev, { role: "assistant", text: replyText }]);
         }
       } else {
-        setAiMessages(prev => [...prev, { role: "assistant", text: data.error ? `Hit a snag: ${data.error}` : "Hit a snag on my end — try sending that again.", isError: true }]);
+        // ── AND "SOMETHING BROKE" IS NOT ALWAYS THE TRUTH ─────────
+        // Running out of search rounds is not a fault, it is a question that
+        // needed more looking up than one turn allows, and saying so is both
+        // honest and actionable. Dashes are banned in this product's copy, his
+        // standing rule, and both of these carried one.
+        setAiMessages(prev => [...prev, { role: "assistant", text: data.error
+          ? `Hit a snag: ${data.error}`
+          : turn.exhausted
+            ? "That one needed more looking up than I can do in one go. Ask me about one part of it and I will get there."
+            : "Hit a snag on my end. Try sending that again.", isError: true }]);
       }
     } catch (err) {
       console.warn("Gemlyx chat: request threw.", err);
-      setAiMessages(prev => [...prev, { role: "assistant", text: "Connection error — try again!", isError: true }]);
+      setAiMessages(prev => [...prev, { role: "assistant", text: "Could not reach me just now. Try again.", isError: true }]);
     }
     setAiLoading(false);
   };
@@ -12763,9 +12832,12 @@ ${languageBlock()}`;
                 )}
 
                 <div style={{ display: "flex", gap: 8 }}>
-                  <input value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendAI()}
+                  {/* gx-plain: this one already draws itself in the accent at 1.5px, and it
+                      is the field the field-affordance rule in theme.js was modelled ON
+                      rather than one it should repaint. See that comment. */}
+                  <input className="gx-plain" value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendAI()}
                     placeholder="Tell me about your trip, and I'll find the Denmark most travelers miss…"
-                    style={{ flex: 1, border: `1.5px solid ${C.accent}`, borderRadius: 100, padding: "11px 16px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
+                    style={{ flex: 1, border: `2px solid ${C.accent}`, borderRadius: 100, padding: "11px 16px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
                   <button onClick={sendAI} disabled={aiLoading} style={{ background: C.accent, border: "none", borderRadius: 100, width: 44, height: 44, cursor: "pointer", fontSize: 16, flexShrink: 0, color: "#fff" }}>↗</button>
                 </div>
                 <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginTop: 8 }}>
@@ -17188,7 +17260,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   { q: "How do I save a find?", a: "Tap the ♡ heart on any business. It gets saved to your Saved tab instantly." },
                   { q: "How do I get my shop listed?", a: "Send us a message on Instagram or email hello@gemlyx.com. Every listing is hand-researched and checked against multiple sources before it goes live." },
                   { q: "Are all finds verified?", a: "Yes — every listing is hand-researched and fact-checked against multiple sources, never invented. We show when each one was last checked." },
-                  { q: "Which cities are covered?", a: "All of Denmark — not just Copenhagen. Gemlyx exists specifically because most tourists only ever see the capital; towns across Jutland, North Zealand and the islands are covered too." },
+                  { q: "Which cities are covered?", a: "All of Denmark, not just Copenhagen. Towns across Jutland, North Zealand and the islands are covered too, along with the coasts most visitors to Denmark are already heading for." },
                 ].map((item, i) => (
                   <div key={i} style={{ background: C.surface, borderRadius: 12, padding: "12px 16px", marginBottom: 8, border: `1px solid ${C.border}` }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>{item.q}</div>
@@ -17358,6 +17430,34 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           .gemlyx-search-icon { left: 12px !important; width: 14px !important; height: 14px !important; }
           .gemlyx-burger { padding: 9px 13px !important; }
           .gemlyx-burger-bar { width: 19px !important; }
+        }
+        /* ── THE NAVIGATION, LAID OUT LIKE A WEBSITE ──────────────
+           Oliver, 21 Aug 2026: "Maybe on PC we gotta cut the drop down
+           navigation. Instead make it like other websites where it is on the
+           top", and immediately after: "On phone it should still be a hamburger
+           though."
+
+           So the same NAV_ITEMS array renders twice and the viewport picks. It
+           is deliberately still one array: the note on TAB_ORDER says the nav
+           and the swipe order must never drift apart again, and two hand-written
+           lists is precisely how they drifted the first time.
+
+           1180px, not the 900px the rest of the file breaks at, and not the
+           1080 this was first written with. 1080 was an estimate and the estimate
+           was wrong: laid out in a real browser the bar's own content is about
+           750px, and with the logo at 128 and the search field and menu at 183 it
+           only stops overflowing its box at about 1160. So 1180, with headroom.
+           A breakpoint is a measurement, not a house style, and this one was
+           measured rather than guessed the second time.
+
+           The menu button stays at every width. On a phone it holds everything;
+           on a desktop the seven pages have moved into the bar and it keeps what
+           has no place there, which is the theme picker, the account, the FAQ,
+           the photo credits and support. That is where a website puts them too. */
+        .gx-topnav { display: none; }
+        @media (min-width: 1180px) {
+          .gx-topnav { display: flex; align-items: center; gap: 2px; margin: 0 14px; flex: 1; min-width: 0; justify-content: center; }
+          .gx-nav-in-menu { display: none !important; }
         }
         .products-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         @media (min-width: 600px) { .products-grid { grid-template-columns: 1fr 1fr 1fr; } }
@@ -17765,7 +17865,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 style={{ maxWidth: 420, maxHeight: "80vh", overflowY: "auto", background: "rgba(15,13,8,0.94)", border: "1px solid rgba(240,239,230,0.22)", borderRadius: 18, padding: "22px 22px 20px", boxShadow: "0 24px 70px -20px rgba(0,0,0,0.85)" }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#D9A441", letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 10 }}>What inspired us to create this app?</div>
                 <div style={{ fontSize: 13, color: "#EFE9D6", lineHeight: 1.7, fontFamily: "'Inter', sans-serif" }}>
-                  Denmark has seen an increase in tourism over the years, and is in fact experiencing overtourism in Copenhagen. It has become the most popular Nordic Country among international visitors, yet people only stay around 3 days, due to both prices and the idea that only Copenhagen is worth visiting. This very idea is what has inspired the Gemlyx team to create this app.
+                  Denmark has seen an increase in tourism over the years, and Copenhagen carries far more of it than its share. It has become the most popular Nordic country among international visitors, and for anyone flying in from further away the trip is short and almost entirely the capital: 77 percent of American overnight stays are in Copenhagen. That is the trip Gemlyx was built for. The rest of the country is not undiscovered, it is where most visitors to Denmark already go, and Gemlyx covers that too.
                   <br /><br />
                   This app is, indeed, AI-powered. However, we have put in work to make sure that blogs, essential knowledge, and even the Gemlyx Guide communicate no different from humans. Knowing that many similar apps are heavily criticized for lack of factual accuracy, we've also been fact-checking every flaw to make sure that you don't get misguided on your travels. We hope to get more support as we try to include other countries!
                 </div>
@@ -17794,7 +17894,30 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             <GemlyxLogo size={22} color={C.text} />
           </div>
 
-          {/* Right: small persistent search pill (always visible, not a toggle) + hamburger */}
+          {/* The pages, along the top, on anything wide enough to hold them.
+              Hidden by .gx-topnav below 1080px, where the menu button carries
+              them instead. */}
+          <nav className="gx-topnav">
+            {NAV_ITEMS.map(item => item.id === "ai" ? (
+              <button key={item.id} onClick={() => goTab("ai")}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#fff", border: "none", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginLeft: 8, whiteSpace: "nowrap", boxShadow: `0 2px 10px ${C.gold}33` }}>
+                {item.label}
+              </button>
+            ) : (
+              /* The page you are on is marked with a rule under it rather than a
+                 filled pill: a pill in the header reads as a button you have not
+                 pressed yet, which is the opposite of what it means. Kept at a
+                 constant 2px, transparent when inactive, so nothing shifts by a
+                 pixel as you move between pages. */
+              <button key={item.id} onClick={() => goTab(item.id)}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", borderBottom: `2px solid ${active === item.id ? C.gold : "transparent"}`, color: active === item.id ? C.text : C.light, padding: "8px 10px 6px", fontSize: 13, fontWeight: active === item.id ? 700 : 500, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>
+                {item.ico && <Ico name={item.ico} size={14} color={active === item.id ? C.gold : C.muted} />}
+                {item.label}
+              </button>
+            ))}
+          </nav>
+
+          {/* Right: small persistent search pill (always visible, not a toggle) + menu */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <div style={{ position: "relative" }}>
               <svg className="gemlyx-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64708C" strokeWidth="2.5" strokeLinecap="round"
@@ -17836,9 +17959,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         )}
       </div>
 
-      {/* Navigation lives only in the hamburger dropdown now — one nav
-          surface for every screen size, instead of duplicating it in a
-          separate always-visible tab row that ate a full extra header row. */}
+      {/* Navigation is in the header bar above at 1080px and up, and in the
+          menu dropdown below that. Superseded the note that used to sit here
+          about there being one nav surface for every screen size: that was true
+          while the only surface was the dropdown, and a phone and a desktop
+          genuinely do want different ones. Both still render the same
+          NAV_ITEMS, which is the part that actually stops them drifting. */}
       </div>
 
       {/* ── DROPDOWN MENU ──────────────────────────────────── */}
@@ -17867,6 +17993,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 );
               })}
             </div>
+            {/* gx-nav-in-menu: at 1080px and up these same pages are in the bar
+                along the top, so repeating them here would be two controls for
+                one thing. Everything BELOW this block stays at every width. */}
+            <div className="gx-nav-in-menu">
             <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", padding: "8px 16px 6px" }}>Navigate</div>
             {NAV_ITEMS.map((item, i) => item.id === "ai" ? (
               <button key={item.id} onClick={() => { setShowMenu(false); goTab("ai"); }}
@@ -17880,6 +18010,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 {item.label}
               </button>
             ))}
+            </div>
             <div style={{ borderTop: `1px solid ${C.border}`, margin: "6px 0" }} />
             {[
               { id: "login", label: userSession ? "Account" : "Sign in", ico: "user", action: "login" },
@@ -18049,8 +18180,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           ].filter(Boolean).join(" · "),
           away: distanceWords(r.km),
         }));
+        // The same two blocks the guide writer gets, joined. An account that
+        // knows somebody is only worth having if it reaches the places they ask
+        // questions in, which is his point: "the account will also help
+        // questions on attractions and towns".
+        const travellerBlock = [profileForPrompt(userProfile), observedForPrompt(userProfile, userProfile?.learned)]
+          .filter(Boolean).join("\n");
         return <AskGemlyx session={readerSession} item={reading} kind={readingKind}
                           nearby={readingNear}
+                          traveller={travellerBlock}
                           founder={!userSession && !!studioSession}
                           onSignIn={() => setAuthOpen(true)} />;
       })()}

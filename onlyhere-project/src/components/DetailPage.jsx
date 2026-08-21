@@ -21,67 +21,11 @@ import { towns, TOWN_COORDS } from "../data/towns";
 import { haversineKm } from "../utils/helpers";
 import { placeCoords, townPointFor } from "../utils/guideEnrichment";
 import { placedLibrary, nearbyPublished, SAME_VISIT_KM, SAME_VISIT_LIMIT } from "../utils/nearbyPlaces";
+import { layoutBody, trimCaption } from "../utils/articleLayout";
 
-// ── WHERE THE PICTURES GO (Oliver, 7 Aug: "I would appreciate if the
-// pictures were put at the sides.. it looks odd") ────────────────────
-//
-// The side-float already existed. It just never had anything to float against,
-// for two separate reasons, both visible in the Copenhagen payload he pasted:
-//
-// 1. EVERY IMAGE SITS AT THE END. The Studio media panel appends to blogBody,
-//    so uploads and Wikimedia finds all land after the last paragraph. Four
-//    images floated with no prose left to wrap them just stack up against each
-//    other in a block, which is exactly the "odd" he is describing.
-// 2. THE ALTERNATION NEVER WORKED. The CSS used .gx-fig:nth-of-type(even), and
-//    nth-of-type counts siblings by TAG, not by class. Paragraphs and headings
-//    are divs too, so the "even" rule was landing on whichever figures happened
-//    to fall on an even div index. Left and right were effectively arbitrary.
-//
-// So the order is decided here instead of being trusted. Images that the author
-// placed inside the prose stay exactly where they are. Images stranded at the
-// end get dealt back in after the paragraphs, spaced out, and every figure is
-// told which side it is on rather than inferring it from its tag position.
-export const layoutBody = (blocks) => {
-  if (!Array.isArray(blocks) || blocks.length === 0) return [];
-  const isImage = (b) => b && (b.type === "image" || b.type === "video");
-  // The trailing run of images, i.e. everything after the last real content.
-  let cut = blocks.length;
-  while (cut > 0 && isImage(blocks[cut - 1])) cut--;
-  const body = blocks.slice(0, cut);
-  const stranded = blocks.slice(cut);
-  // Anchor after paragraphs, never straight after a heading: a photo wedged
-  // between a heading and its first line reads as a mistake.
-  let anchors = [];
-  body.forEach((b, i) => { if (b && (b.type === "paragraph" || b.type === undefined || b.type === "bullets")) anchors.push(i); });
-  // Skip anchors that already have a picture next to them, or an entry whose
-  // author placed photos inline gets a second one dealt on top of the first.
-  const free = anchors.filter(i => !isImage(body[i + 1]));
-  if (free.length) anchors = free;
-  const out = body.map(b => b);
-  if (stranded.length) {
-    if (anchors.length === 0) {
-      out.push(...stranded); // nothing to wrap around, leave them where they were
-    } else {
-      // Spread them across the available anchors, last first so the earlier
-      // insertion indices stay valid as we splice.
-      // Round-robin across the anchors rather than proportional spacing: with
-      // four images and three paragraphs, proportional put two at the end and
-      // left the first paragraph bare. If two do land together they alternate
-      // sides, so they sit one left one right rather than stacking.
-      //
-      // Splice from the HIGHEST anchor down, not in image order. Inserting at a
-      // low index shifts every later index by one, so walking the images in
-      // order silently drops the rest a slot early, which is how the first
-      // version put a photo above the paragraph it was meant to sit beside.
-      const drops = stranded.map((b, n) => ({ at: anchors[n % anchors.length], b, n }));
-      drops.sort((x, y) => y.at - x.at || y.n - x.n);
-      for (const d of drops) out.splice(d.at + 1, 0, d.b);
-    }
-  }
-  // Alternate sides counting FIGURES only, which is what nth-of-type could not do.
-  let fig = 0;
-  return out.map(b => (isImage(b) ? { ...b, _side: (fig++ % 2 === 0) ? "right" : "left" } : b));
-};
+// layoutBody moved to utils/articleLayout.js on 21 Aug 2026 so the suite can
+// actually run it. See the comment there: living in this .jsx file is the
+// reason a bug that switched the whole feature off went unnoticed.
 
 // Which published festivals genuinely belong to this town.
 //
@@ -630,10 +574,49 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             phone a floated image would squeeze the text into an unreadable
             column. The float is cleared after the body so the next section
             cannot ride up beside a tall photo. */}
+        {/* ── THE FIGURE HAS TO OWN A HEIGHT BEFORE THE PICTURE ARRIVES ──
+            Oliver, 21 Aug 2026, screenshotting the Christmas-fair page: "jeesus".
+            Three photographs, one tall and two collapsed into overlapping
+            slivers of caption text at odd offsets down the left edge.
+
+            Nothing was overlapping. Two of the three images had simply never
+            loaded: they carry loading="lazy", they were below the fold, and an
+            <img> that has not loaded, has no width or height attribute and no
+            CSS aspect ratio reports a height of ZERO. So each unloaded figure
+            was a 42px box containing nothing but its own caption, and the floats
+            packed themselves around a 383px-tall neighbour exactly as the spec
+            says they must. Scrolling down then loaded the pictures and reflowed
+            the lot, which is why it looked like it was falling apart live.
+
+            aspect-ratio fixes it before the network is involved: the box is the
+            right size from the first paint, the images load into space already
+            reserved, and nothing moves. The width and height of the file are not
+            stored on the block (studioContent writes src, credit and caption and
+            nothing else), so the ratio cannot be the picture's own and has to be
+            a house one, with object-fit doing the fitting. That is the same
+            bargain PhotoPlate already takes everywhere else in the app.
+
+            Set here rather than inline because these are the only figure rules
+            in the file and they belong together. The inline style on the img is
+            careful not to name width, aspect-ratio or object-fit, or it would
+            win and this would silently do nothing. */}
         <style>{`
+          .gx-fig img {
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            object-fit: cover;
+            background: ${C.surface};
+          }
+          /* clear: a figure starts below the last figure on ITS OWN side, so the
+             two sides read as two columns. Without it a float only has to clear
+             the line it lands on, so a figure one caption-line shorter than its
+             neighbour lets the next one wedge in at an offset partway across the
+             page. That is the stair-step in the screenshot, and it survived
+             fixing the heights: measured in a browser, three consecutive figures
+             still stepped in to x=258 in a 620px column. */
           @media (min-width: 760px) {
-            .gx-fig-right { float: right; width: 44%; margin: 4px 0 16px 22px; }
-            .gx-fig-left  { float: left;  width: 44%; margin: 4px 22px 16px 0; }
+            .gx-fig-right { float: right; clear: right; width: 44%; margin: 4px 0 16px 22px; }
+            .gx-fig-left  { float: left;  clear: left;  width: 44%; margin: 4px 22px 16px 0; }
           }
           .gx-body::after { content: ""; display: block; clear: both; }
         `}</style>
@@ -647,20 +630,33 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               ) : block.type === "instagram" ? (
                 <InstagramEmbed key={i} url={block.url} />
               ) : block.type === "video" ? (
-                <div key={i} className={`gx-fig-${block._side || "right"}`} style={{ marginBottom: 16 }}>
-                  <video src={block.src} controls playsInline preload="metadata" style={{ width: "100%", borderRadius: 14, display: "block", background: "#000" }} />
+                <div key={i} className={`gx-fig gx-fig-${block._side || "right"}`} style={{ marginBottom: 16 }}>
+                  <video src={block.src} controls playsInline preload="metadata" style={{ width: "100%", aspectRatio: "4 / 3", objectFit: "contain", borderRadius: 14, display: "block", background: "#000" }} />
                   {block.caption && <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>{block.caption}</div>}
                 </div>
               ) : block.type === "image" ? (
-                <div key={i} className={`gx-fig-${block._side || "right"}`} style={{ marginBottom: 16 }}>
+                <div key={i} className={`gx-fig gx-fig-${block._side || "right"}`} style={{ marginBottom: 16 }}>
                   {/* referrerPolicy matters for Wikimedia-hosted images: some
                       CDNs refuse a hotlink based on the Referer header, and a
                       refused image is invisible because of the onError below.
                       Sending no referrer is what Wikimedia's own guidance says. */}
-                  <img src={block.src} alt={block.caption || item.name} referrerPolicy="no-referrer" loading="lazy"
-                    onError={e => { e.target.style.display = "none"; }}
-                    style={{ width: "100%", borderRadius: 14, display: "block" }} />
-                  {block.caption && <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>{block.caption}</div>}
+                  {/* THE WHOLE FIGURE GOES, not just the picture. Hiding the img
+                      alone left its caption and its credit behind, floating in a
+                      box with nothing above them, which is half of what the
+                      broken screenshot was showing. A credit is attribution FOR A
+                      DISPLAYED WORK; with nothing displayed there is nothing to
+                      attribute, so removing it with the picture is also the
+                      correct reading of the licence and not a shortcut. */}
+                  <img src={block.src} alt={trimCaption(block.caption) || item.name} referrerPolicy="no-referrer" loading="lazy"
+                    onError={e => { const fig = e.target.closest(".gx-fig"); if (fig) fig.style.display = "none"; else e.target.style.display = "none"; }}
+                    style={{ borderRadius: 14, display: "block" }} />
+                  {/* _showCaption is false on the second file that carries an
+                      identical caption. The credit below is NOT conditional on
+                      it: two different photographs need two attributions however
+                      alike their titles. See utils/articleLayout.js. */}
+                  {block._showCaption !== false && trimCaption(block.caption) && (
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>{trimCaption(block.caption)}</div>
+                  )}
                   <PhotoCredit photo={block.src} credit={block.credit} style={{ marginTop: 4 }} />
                 </div>
               ) : block.type === "heading" ? (

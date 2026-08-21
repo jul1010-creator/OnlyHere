@@ -76,7 +76,7 @@ export default async function handler(req, res) {
   }
   if (!userId) return json(res, 401, { error: "Sign in to ask a question." });
 
-  const { question, entry, entryName, lang, nearby } = req.body || {};
+  const { question, entry, entryName, lang, nearby, traveller } = req.body || {};
   // ── ANSWER IN THE LANGUAGE THEY READ IN ─────────────────────────
   // Oliver, 15 Aug 2026, on somebody who only reads Mandarin. Neither prompt in
   // this file said a word about language, so both answered in English and
@@ -193,6 +193,32 @@ ${near.map(r => `- ${r.name}${r.note ? ` (${r.note})` : ""}: ${r.away || `${r.km
 
 These distances are measured in a straight line between centres. They are not driving or walking times, so never present one as a journey time, and never invent a route between two of them. If somebody asks what is nearby, or what else there is to do, or where to eat, these are the answer and you do not need to look anything up.`;
 
+    // ── AND WHETHER IT IS FOR THEM ───────────────────────────────────
+    //
+    // Oliver, 21 Aug 2026: "the account will also help questions on attractions
+    // and towns... because Gemlyx will be able to answer quickly that 'this
+    // place is probably not for you' or 'it's low rated, but for you, it's
+    // probably a great place to visit'."
+    //
+    // The material is already in the entry. Every content type in this product
+    // ends in a Reality Check, added on 8 August for exactly this reason: a
+    // heading like "Why People Love It" made criticism impossible, so the schema
+    // was changed to demand a reason NOT to come. A stated downside plus a
+    // stated person is enough to answer "is this for me", and that is the one
+    // question a rating average cannot answer at all.
+    //
+    // The rule that keeps it honest is the same one the rest of this endpoint
+    // runs on: FIT is reasoning, FACTS are not. It may weigh what the entry says
+    // against what it knows about them; it may not invent a fact about either.
+    const whoBlock = !String(traveller || "").trim() ? "" : `
+
+WHO IS ASKING:
+${String(traveller).slice(0, 1200)}
+
+You may answer whether this place suits THEM, which is the one question a star rating cannot. Weigh what the entry already says, its downsides above all, against what is written here. Say plainly when it does not suit them, and say so first: "probably not for you" is a useful answer and a short one. When the entry is lukewarm about the place but the thing it warns about is not something they care about, say that too, in those terms.
+
+THIS CHANGES WHAT YOU MAY CONCLUDE, NOT WHAT YOU MAY STATE. Every fact still comes from the material above. Never invent a detail to make a place fit somebody, never invent a preference they have not been recorded as having, and never present a judgement about fit as though it were a fact about the place. If what is written here does not settle whether it suits them, say what the place is like and let them decide.`;
+
     const first = await askClaude(
       `You are Gemlyx's assistant, answering a traveler about ONE place they are reading about.
 
@@ -205,7 +231,7 @@ IF THE MATERIAL DOES NOT CONTAIN THE ANSWER, reply with exactly ${NOT_IN_ENTRY} 
 Be short and plain. No preamble. Never use an em dash or an en dash.${answerIn}
 
 Entry:
-${entryJson}${nearBlock}
+${entryJson}${nearBlock}${whoBlock}
 
 Question:
 ${q}`,

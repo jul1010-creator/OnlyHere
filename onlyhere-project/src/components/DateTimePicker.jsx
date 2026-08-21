@@ -75,7 +75,12 @@ export const DateTimePicker = forwardRef(({ value, onChange, minDate, label, hin
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
       {label && <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>{label} {hint && <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>{hint}</span>}</div>}
-      <button type="button" onClick={() => setOpen(o => !o)}
+      {/* gx-field: a <button> that is a field. It sits under a form label, it
+          says "Select date & time", and it is the first thing on the screen
+          Oliver's father was looking at when he said he could not tell what he
+          could write into. The affordance rule in utils/theme.js is keyed on
+          element type and cannot see that on its own, so this says it. */}
+      <button type="button" className="gx-field" onClick={() => setOpen(o => !o)}
         style={{ width: "100%", textAlign: "left", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: selected ? C.text : C.muted, fontFamily: "'Inter', sans-serif", cursor: "pointer" }}>
         {displayText}
       </button>
