@@ -648,6 +648,16 @@ export const stepWords = (step) => {
     const base = CHECK_STEP_WORDS[why] || (why ? why : "nothing came back");
     return step.status ? `${base} (${step.status}: ${step.detail})` : `${base} (${step.detail})`;
   }
+  // ── AND A REFUSAL THAT KNOWS WHAT THE PAGE IS SAYS SO ────────────
+  // "some of these 'events' have a multitude of events in the event." The
+  // refusal above is correct and, on its own, a dead end: it tells him no date
+  // could be trusted and leaves him to work out why. When the same evidence also
+  // reads as a venue, the sentence carries the reading and the signals behind it,
+  // so the next action is obvious rather than a guess.
+  if (step.asVenue?.venue) {
+    const base = CHECK_STEP_WORDS[why] || "no date could be trusted";
+    return `${base}. This looks like a venue publishing its programme rather than one event, so it belongs in the library as a PLACE with its programme fetched live, not as a dated row: ${step.asVenue.signals.join("; ")}`;
+  }
   if (why.startsWith("refused-")) {
     const key = why.slice("refused-".length);
     const because = DATE_PROPOSITION_WHY[key] || key;
@@ -742,6 +752,104 @@ export const anchoredEdition = (text, today) => {
   // the trace can say what it saw rather than "nothing found": on a venue's
   // concert calendar there was plenty found and none of it was this event.
   return { found: null, why: "many-dates-none-labelled", labelled: false, candidates: future.length };
+};
+
+// ── AND A CALENDAR WITH NO EVENT IS USUALLY A VENUE ─────────────────
+//
+// Oliver, 21 Aug 2026, with byhavenkbh.dk attached: "some of these 'events' have
+// a multitude of events in the event.. like this one. what do we do about that?"
+//
+// Byhaven is not an event. It is a place at Studiestræde 52 with free entry and
+// seventeen separate gigs between 21 August and 17 September, one of which
+// (Kill-Town Death Fest, 3 to 6 September) is a real named festival in its own
+// right and the rest of which are line-ups on a date.
+//
+// anchoredEdition ALREADY refuses this page, correctly, with
+// "many-dates-none-labelled". That refusal is currently a dead end: the trace
+// says nothing was resolvable and the founder is left to work out why. But the
+// refusal is evidence. A page with a pile of future dates and no label saying
+// which one is "the" event is, far more often than not, a venue publishing its
+// programme, and that is a thing worth having in the library. It is simply a
+// different KIND of thing.
+//
+// His call, asked directly: route it to a venue draft. The durable half (where
+// it is, what kind of place, free entry, who it suits) is researched once and
+// stays true for years. The perishable half (what is on this Thursday) is never
+// baked in, and is fetched when somebody looks, which is the living tier the
+// product already sells.
+//
+// DELIBERATELY CONSERVATIVE. Saying "venue" about a real festival would send a
+// founder to write the wrong entry, and a festival page that carries last
+// year's recap alongside this year's dates is the shape this must not catch. So
+// it needs BOTH a real pile of dates and the page talking about itself as a
+// programme, and it reports the signals it used rather than a bare verdict.
+
+// Two future dates is a page with a recap on it. A programme is longer than
+// that, and the gap between 2 and this number is where the false positives live.
+export const PROGRAMME_DATES = 4;
+
+// ── AND THIS COUNTS MENTIONS, NOT PARSED RANGES ─────────────────────
+//
+// The obvious denominator is anchoredEdition's own `candidates`, and it is the
+// wrong one. dateRangesInText answers "which date is this event's", and for that
+// job it deliberately returns AT MOST ONE bare single date: step 3 of it calls
+// lastDateInText, singular. So a venue that lists one date per gig, which is how
+// Byhaven's page is written, yields one or two candidates however many gigs it
+// has, and a threshold built on that number could never fire on the exact page
+// Oliver sent.
+//
+// Different question, different count. This one asks how many times the page
+// says a date at all, deduplicated so a gig repeated in a sidebar is not counted
+// twice. It is intentionally cruder than the parser: it never produces a Date,
+// nothing downstream plans off it, and its only job is to notice a wall of them.
+const DATE_MENTION = new RegExp(
+  `\\b\\d{1,2}\\s*[.]?\\s*(?:${MONTH_WORDS.join("|")})\\b`
+  + `|\\b(?:${MONTH_WORDS.join("|")})\\s+\\d{1,2}\\b`
+  + `|\\b\\d{1,2}[./]\\d{1,2}[./]\\d{2,4}\\b`,
+  "gi",
+);
+export const dateMentions = (text) => new Set(
+  [...String(text || "").matchAll(DATE_MENTION)].map(m => m[0].toLowerCase().replace(/[\s.]+/g, " ").trim()),
+).size;
+
+// What a venue calls its own calendar, in Danish and English. Not "events",
+// which every festival page says about itself too.
+const PROGRAMME_WORDS = /\b(?:programme?t?|kalender|calendar|spillested|spillesteder|line-?ups|kommende\s+(?:arrangementer|koncerter|events)|upcoming\s+(?:events|shows|gigs|concerts)|what'?s\s+on|hvad\s+sker\s+der|se\s+alle\s+(?:arrangementer|events)|forrige\s+arrangementer|past\s+events|alle\s+koncerter|månedens\s+program)\b/i;
+
+// A place that is open on a schedule rather than on dates. Weak on its own,
+// which is why it only ever adds to a verdict the dates already support.
+const OPEN_WORDS = /\b(?:åbningstider|opening\s+hours|gratis\s+entr[ée]|free\s+entry|always\s+free|altid\s+gratis|hver\s+(?:torsdag|fredag|lørdag|uge)|every\s+(?:thursday|friday|saturday|week))\b/i;
+
+// { venue, why, dates, signals } — never a bare boolean, for the reason
+// fitsBrief gives: the trace has to be able to say WHICH signals it saw, and a
+// boolean makes that a second guess at a question already answered here.
+export const venueRatherThanEvent = (text, read) => {
+  const t = String(text || "");
+  // Mentions, not parsed candidates. See dateMentions for why the parser's own
+  // count cannot answer this question.
+  const dates = dateMentions(t);
+  const signals = [];
+  // Only ever from a refusal. A page that named its edition has answered the
+  // question and is not up for reinterpretation, however long its calendar.
+  if (read?.why !== "many-dates-none-labelled") {
+    return { venue: false, why: "the page named its own edition", dates, signals };
+  }
+  if (dates >= PROGRAMME_DATES) signals.push(`${dates} future dates and none of them labelled as the event's`);
+  if (PROGRAMME_WORDS.test(t)) signals.push("the page calls what it lists a programme");
+  if (OPEN_WORDS.test(t)) signals.push("it describes opening or entry as a standing arrangement");
+  // The dates are necessary and never sufficient: a festival archive can carry
+  // four future dates, so something on the page has to talk like a venue too.
+  const venue = dates >= PROGRAMME_DATES && signals.length >= 2;
+  return {
+    venue,
+    why: venue
+      ? "this reads as a venue publishing its programme rather than one event"
+      : dates >= PROGRAMME_DATES
+        ? "a pile of dates, but nothing on the page talks like a venue"
+        : "not enough dates to be a programme",
+    dates,
+    signals,
+  };
 };
 
 // ── AN OFFICE IS NOT WHERE THE FESTIVAL HAPPENS ─────────────────────

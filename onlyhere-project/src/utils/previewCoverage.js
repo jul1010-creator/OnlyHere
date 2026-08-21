@@ -67,6 +67,29 @@ export const COVERAGE_UNANSWERED = "asked-for-nothing-you-have";
 export const COVERAGE_THIN = "no-content-there";
 export const COVERAGE_MATCHER = "matcher-could-not-reach-it";
 export const COVERAGE_OK = "";
+// ── AND "I HAVE NOT COUNTED YET" IS NOT "THERE IS NOTHING" ──────────
+//
+// Oliver, 21 Aug 2026, on a content gap panel that had fired again: "Don't know
+// why it keep saying this." He reported the same complaint on the 19th, in
+// stronger terms: "it keeps saying I don't have any content in South Jutland..
+// while I clearly have some." Two causes were found then and both were real.
+// This is the third and it is the reason it kept coming back.
+//
+// The library reaches this file as `manageItems || []` from App.jsx, and
+// manageItems is NULL until Manage Published has been opened. So on any fresh
+// Studio session the library arrives as an empty array, every target counts
+// zero, `published === 0` is true for wherever the traveller lands, and the
+// verdict is a content gap. Every single run, whatever he has published.
+//
+// The same null-laundered-into-zero shape this codebase has now caught three
+// times: api/ask.js reading a missing content-range header as "they have used
+// none", the "any of your 0 entries" sentence at the bottom of this file, which
+// was fixed in the WORDING while the verdict above it went on being computed
+// from the same empty array, and this.
+//
+// An unknown count is its own state and it says so. It is deliberately NOT a
+// content gap and NOT a matcher gap, because it is not evidence for either.
+export const COVERAGE_UNCOUNTED = "library-not-counted";
 
 // ── THE FINDING ─────────────────────────────────────────────────────
 // `library` is the published rows the Studio already holds (manageItems), which
@@ -100,8 +123,14 @@ export const searchTypeFor = (wanted) => {
   return hit ? hit[1] : null;
 };
 
-export const previewCoverage = ({ matched = [], library = [], convoText = "", themes = null, days = null, wanted = null } = {}) => {
+export const previewCoverage = ({ matched = [], library = null, convoText = "", themes = null, days = null, wanted = null } = {}) => {
   const rows = Array.isArray(matched) ? matched : [];
+  // NULL means nobody has counted, which is different from an empty library and
+  // is the difference this whole finding turns on. Defaulted to null rather than
+  // [] so a caller that forgets to pass one gets "unknown" rather than a
+  // confident zero.
+  const counted = Array.isArray(library);
+  const rowsHeld = counted ? library : [];
 
   // ── "MATCHED PLENTY, ANSWERED NOTHING" ────────────────────────────
   // The Jutland run, 15 Aug 2026. Sixteen rows matched, so this file said
@@ -165,7 +194,7 @@ export const previewCoverage = ({ matched = [], library = [], convoText = "", th
       shown: rows.length,
       towns: townsShown,
       days: Number.isFinite(Number(days)) ? Number(days) : null,
-      total: (Array.isArray(library) ? library : []).length,
+      total: rowsHeld.length,
       searchType: searchTypeFor(wanted),
       searchTarget: anchor ? anchor.id : "anywhere",
     };
@@ -173,11 +202,14 @@ export const previewCoverage = ({ matched = [], library = [], convoText = "", th
 
   const arrival = arrivalPoint(convoText);
   const target = arrival ? targetForCoords(arrival.lat, arrival.lon) : null;
-  const counts = coverageByTarget(library);
+  const counts = coverageByTarget(rowsHeld);
   // null, not zero, for a target that cannot be counted by latitude (the small
   // islands). A count that is quietly false is worse than no count, which is
   // discovery.js's own rule and it holds here too.
-  const published = target ? counts[target.id] : null;
+  // Null when nobody counted, as well as when the target cannot be counted by
+  // latitude. Both are "unknown", and the whole point of this change is that
+  // unknown must never be reported as zero.
+  const published = counted && target ? counts[target.id] : null;
 
   // ── WHICH OF THE TWO PROBLEMS THIS IS ─────────────────────────────
   // The order matters. An empty region is an empty region whatever the matcher
@@ -200,9 +232,13 @@ export const previewCoverage = ({ matched = [], library = [], convoText = "", th
   // which is why geography.js already exports `unplaced` and why Studio has an
   // "Add missing coordinates" action. Telling him to go and write entries he
   // already has is the worst possible advice, and it is what this said.
-  const cannotPlace = unplaced(library).length;
+  const cannotPlace = unplaced(rowsHeld).length;
   let verdict = COVERAGE_NOTHING_SAID;
-  if (target && published === 0) verdict = COVERAGE_THIN;
+  // Nothing counted, nothing claimed. This has to come first: both branches
+  // below read `published`, and on an uncounted library that number is zero for
+  // every target in the country.
+  if (!counted) verdict = COVERAGE_UNCOUNTED;
+  else if (target && published === 0) verdict = COVERAGE_THIN;
   else if (target && published > 0) verdict = COVERAGE_MATCHER;
 
   return {
@@ -216,7 +252,7 @@ export const previewCoverage = ({ matched = [], library = [], convoText = "", th
     unplaced: cannotPlace,
     themes: themes ? [...themes].sort() : [],
     days: Number.isFinite(Number(days)) ? Number(days) : null,
-    total: (Array.isArray(library) ? library : []).length,
+    total: rowsHeld.length,
     // What the button should go and look for, from what they asked for rather
     // than from whatever the Studio dropdown was last left on.
     searchType: searchTypeFor(wanted),
@@ -249,6 +285,13 @@ export const describeCoverage = (f) => {
   if (f.verdict === COVERAGE_UNANSWERED) {
     const where = f.towns.length ? ` across ${f.towns.join(", ")}` : "";
     return `${f.shown} rows matched${where}, and not one of them answers what they asked for. ${said}${trip}, and nothing published satisfies ${listOf(f.unanswered, "or")}. The screen looks full and answers nothing they said.`;
+  }
+  // ── SAID BEFORE ANY CLAIM ABOUT WHAT IS PUBLISHED ────────────────
+  // "Don't know why it keep saying this." It was saying it on every run,
+  // because an unopened Manage Published arrives as an empty library and an
+  // empty library reads as an empty country.
+  if (f.verdict === COVERAGE_UNCOUNTED) {
+    return `Nothing to show, and I cannot tell you whether that is a content gap. Your published library has not been counted in this session, so I do not know what you hold${f.target ? ` in ${f.target.label}` : " anywhere"}. ${said}${trip}${f.arrival ? `, landing at ${f.arrival.name}` : ""}. Open Manage Published once and run this again: an uncounted library reads as an empty one, and telling you to go and research a region you have already covered is the worst advice this panel can give.`;
   }
   if (f.verdict === COVERAGE_THIN) {
     // The hedge is only added when there IS something unplaceable, so an honest

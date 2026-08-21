@@ -101,12 +101,74 @@ export const THEMES_WITHOUT_WORDS = () => PLACE_THEMES.filter(t => !THEME_WORDS[
 // null means they named no interest at all, and null narrows nothing. Same
 // contract as wantedCategories, deliberately, because the two are read side by
 // side and a different empty value in each is how one of them gets forgotten.
+// ── AND HOW THEY GET HERE IS NOT WHAT THEY LIKE ─────────────────────
+//
+// Oliver, 21 Aug 2026, on a Studio pipeline test whose content gap panel read
+// "They asked for Coast and Nature": "Don't know why it keep saying this."
+//
+// The brief was "We arrive by ferry from Germany with a car. We are renting a
+// car... We like cycling... Somewhere away from the obvious tourist places
+// would be ideal." Cycling is a nature interest and that is deliberate, written
+// out at ARRIVAL_WORDS below. COAST came from the word FERRY, which is in the
+// coast list beside beach, dunes and lighthouse, and which in that sentence is
+// how they cross the German border.
+//
+// The asymmetry above already saw half of this. It says THEME_WORDS does two
+// jobs, keeps the full list on the traveller's side and strips access words on
+// the row's side, on the reasoning that "we like cycling" is a preference while
+// "a short cycle from the station" is a distance. True, and it assumed the
+// traveller's side is always preference. It is not: a brief states how they
+// arrive and what they have rented, in the same paragraph and often the same
+// sentence as what they enjoy.
+//
+// So the frame decides, not the word. A mode word inside a travel frame is
+// logistics; the same word anywhere else is still an interest, which is why
+// nothing is removed from any list. "We arrive by ferry" states no interest.
+// "We'd love a ferry out to an island" still asks for coast.
+//
+// Fourth instance tonight of one shape: a word doing a job other than stating a
+// preference, read as a preference. The others were "out of Copenhagen" read as
+// a request for Copenhagen, "starting from Southern Jutland" read as a request
+// for Jutland, and Gemlyx's own question naming bike read as the traveller
+// choosing a bike.
+export const MODE_WORDS = new Set([
+  "ferry", "ferries", "sailing", "bike", "bikes", "biking", "cycle", "cycling",
+  "walk", "walks", "walking",
+]);
+
+// The frames that mean "this is how we move", immediately before the word: "by
+// ferry", "arriving by ferry", "renting a bike", "we have a car and a bike",
+// "got here on foot". Narrow on purpose, because reading a real interest as
+// logistics empties the screen in the other direction, which is the failure the
+// row-side comment above already records once.
+const TRAVEL_FRAME = /\b(?:by|via|aboard|on\s+the|renting|rented|rent|hiring|hired|hire|took|take|taking|catch(?:ing)?|board(?:ing)?)\s+(?:an?\s+|the\s+|our\s+|my\s+)?$/i;
+
+// Does this word, everywhere it appears, sit in a travel frame? One appearance
+// outside one is enough to make it an interest, because somebody who mentions a
+// ferry twice has probably said something about it the second time.
+const onlyLogistics = (hay, word) => {
+  const w = fold(word);
+  if (!MODE_WORDS.has(w)) return false;
+  let from = 0, seen = false;
+  for (;;) {
+    const i = hay.indexOf(w, from);
+    if (i < 0) return seen;
+    const before = hay[i - 1], after = hay[i + w.length];
+    const whole = !/[a-z0-9]/.test(before || " ") && !/[a-z0-9]/.test(after || " ");
+    if (whole) {
+      seen = true;
+      if (!TRAVEL_FRAME.test(hay.slice(Math.max(0, i - 24), i))) return false;
+    }
+    from = i + w.length;
+  }
+};
+
 export const briefThemes = (text, interests = []) => {
   const hay = fold([String(text || ""), ...(Array.isArray(interests) ? interests : [])].join(" "));
   if (!hay.trim()) return null;
   const want = new Set();
   for (const [theme, words] of Object.entries(THEME_WORDS)) {
-    if (words.some(w => saysWord(hay, w))) want.add(theme);
+    if (words.some(w => saysWord(hay, w) && !onlyLogistics(hay, w))) want.add(theme);
   }
   return want.size ? want : null;
 };

@@ -51,7 +51,7 @@ writeFileSync(entry, `
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, dateRangesInText, isoDay, anchoredEdition, labelledAt, CALENDAR_DATES, DATE_LABEL_WINDOW, looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER, OFFICE_CONTEXT_WINDOW, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
+  export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, dateRangesInText, isoDay, anchoredEdition, venueRatherThanEvent, PROGRAMME_DATES, dateMentions, labelledAt, CALENDAR_DATES, DATE_LABEL_WINDOW, looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER, OFFICE_CONTEXT_WINDOW, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES, bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK, linksInMarkdown, ticketLinksFromMarkdown, scoreTicketLinks } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
@@ -137,10 +137,10 @@ writeFileSync(entry, `
   export { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK, CHARACTERISATION_FIELDS, REPORT_FIELDS } from ${JSON.stringify(join(root, "src/utils/checkScope.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
-  export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
+  export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { cardLine, cardLineSource, sentencesOf, isOriginSentence, CARD_LINE_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
   export { buildPreviewReport, rowReport, passOf, reportFilename, REPORT_KIND } from ${JSON.stringify(join(root, "src/utils/previewReport.js"))};
-  export { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, COVERAGE_UNANSWERED } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
+  export { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, COVERAGE_UNANSWERED, COVERAGE_UNCOUNTED } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
   export { stayRangeIn, stayRangeInBody, stayGlanceDays, stayContradiction, restatesBody, restatementFindings, meaningfulWords, RESTATEMENT } from ${JSON.stringify(join(root, "src/utils/draftShape.js"))};
   export { searchTypeFor } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
   export { ENTRY_POINTS, arrivalPoint as arrivalPointRaw, destinationPoint, destinationsNamed, tripAnchor } from ${JSON.stringify(join(root, "src/utils/arrival.js"))};
@@ -6259,7 +6259,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // The geocodes have to be handed IN. They were computed a few lines earlier
   // and thrown away, which is the same shape as the _exactDurations bug.
   ok("and the geocodes are passed to it", /fetchGuideWeather\(parsed\.days, arrivalDate, freshGeo\b/.test(appSrc));
-  ok("the note is told how many days the trip has", /normalsNote\(results, when, days\.length\)/.test(appSrc));
+  ok("the note is told how many days the trip has", /normalsNote\(results, when, days\.length, precise\)/.test(appSrc));
+  // AND WHETHER IT KNOWS THE WEEK. 21 Aug: "I only said October. It didn't know
+  // when in October." The note used to claim "recorded weather for this week"
+  // on a trip whose week nobody had named.
+  ok("and whether it knows which week", /normalsNote\(results, when, days\.length, precise\)/.test(appSrc));
   // GuidePage's refresh-on-open path already resolved the town; asserted so the
   // two paths cannot drift back apart the way the walking estimates did.
   ok("the refresh path resolves the town too", /resolveStopCoords\(x\.name, guide\._geo \|\| \{\}, x\.town\)/.test(guideSrc));
@@ -16973,7 +16977,14 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ok("and on the report, which is where the empty run was least explained",
     /coverage,/.test(readFileSync(join(root, "src/utils/previewReport.js"), "utf8")));
   const appC = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the published library reaches the screen", /library=\{manageItems \|\| \[\]\}/.test(appC));
+  // ── AND IT REACHES IT AS NULL WHEN IT IS NOT LOADED ─────────────
+  // This asserted `manageItems || []` until 21 Aug, which is the line that made
+  // the content gap panel fire on every run: manageItems is null until Manage
+  // Published has been opened, and [] reads as an empty country. Oliver, twice:
+  // "it keeps saying I don't have any content in South Jutland.. while I clearly
+  // have some", then "Don't know why it keep saying this."
+  ok("the published library reaches the screen", /library=\{\/\*[\s\S]*?\*\/ manageItems\}/.test(appC));
+  ok("and is not laundered into an empty one", !/library=\{manageItems \|\| \[\]\}/.test(appC));
   ok("the finding has a button", /🔭 Search for content/.test(prev));
   ok("which aims the discovery at the region it named", /setDiscoverTarget\(finding\.searchTarget\)/.test(appC));
   ok("and searches for the type the brief asked for", /runDiscovery\(finding\?\.searchType \|\| undefined\)/.test(appC));
@@ -21675,7 +21686,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("it is reported as unanswered rather than unknown", askedAlready.declined.slice().sort(), ["interests", "stay", "transport"]);
   ok("nothing asked is still listed as missing",
      !askedAlready.missing.some(k => ["interests", "stay", "transport"].includes(k)));
-  ok("a vague date asked about once is not chased again", !askedAlready.vague.includes("when"));
+  // ── ASKED ONCE, BUT STILL A MONTH ───────────────────────────────
+  // This asserted `!vague.includes("when")`, which conflated two things: that it
+  // must not be CHASED again, and that it is no longer vague. Oliver, 21 Aug:
+  // "I only said October. It didn't know when in October." A month is still a
+  // month after somebody has asked about it, and the guide built off that one
+  // dated eight days and pinned an event to one of them.
+  ok("a vague date asked about once is not chased again", !askedAlready.vagueToAsk.includes("when"));
+  ok("but the brief still knows it is only a month", askedAlready.vague.includes("when"));
   // And the block says so, so the reply does not speak as though it knew.
   const askedBlock = briefBlock(askedAlready);
   ok("the block names them as unanswered", /ALREADY ASKED AND NOT ANSWERED/.test(askedBlock));
@@ -24387,7 +24405,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("and that value is returned rather than computed and dropped",
        !!holds && new RegExp(`return [^;]*\\b${holds}\\b`).test(wxFn));
   }
-  ok("and passes the mode into the weather pass", /fetchGuideWeather\(parsed\.days, arrivalDate, freshGeo, travelMode\)/.test(appSrc));
+  // Read RAW rather than from appSrc: stripNonCode blanks string literals, so
+  // the "day" in `datePrecision === "day"` is not there to match in this block.
+  ok("and passes the mode into the weather pass",
+     /fetchGuideWeather\(parsed\.days, arrivalDate, freshGeo, travelMode, datePrecision === "day"\)/
+       .test(readFileSync(join(root, "src/App.jsx"), "utf8")));
   // THE HOISTED BADGE. Ten copies of `(freshWeather?.[dayIdx] || day.weather)`
   // hid a real crash: one of them read `day.weather.years` instead of the
   // resolved badge's, so a day whose refresh produced a normals badge while the
@@ -27520,6 +27542,209 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the target currency is allow-listed", /if \(!ALLOWED\.has\(to\)\)/.test(fx));
   ok("and DKK to DKK is refused rather than answered", /if \(to === "DKK"\) return res\.status\(400\)/.test(fx));
   ok("the endpoint is behind the same site guard as the others", /requestIsFromSite\(req\.headers\)/.test(fx));
+}
+
+// ── 21 AUGUST 2026: "DON'T KNOW WHY IT KEEP SAYING THIS" ────────────
+//
+// A Studio pipeline test whose content gap panel read "They asked for Coast and
+// Nature on a 4 day trip". The brief was: "We arrive by ferry from Germany with
+// a car. We are renting a car... We like cycling... Somewhere away from the
+// obvious tourist places would be ideal."
+//
+// Cycling IS a nature interest and that is deliberate. Coast came from FERRY,
+// which sits in the coast list beside beach, dunes and lighthouse, and which in
+// that sentence is how they cross the German border.
+{
+  const { briefThemes, MODE_WORDS } = M;
+  const themes = (t) => [...(briefThemes(t) || [])].sort().join(",");
+
+  // HIS EXACT BRIEF.
+  const his = "I'm planning 4 days in Denmark. It is me and my partner. We arrive by ferry from Germany with a car. We are renting a car. We would like one base for the first half and another for the second. We like cycling. We are on a tight budget. We arrive on 8 January Somewhere away from the obvious tourist places would be ideal";
+  is("his brief asks for nature and not coast", themes(his), "nature");
+
+  // ── THE FRAME DECIDES, NOT THE WORD ─────────────────────────────
+  // Nothing is removed from any list, so the same word still reads as an
+  // interest everywhere it is not describing a journey.
+  is("arriving by ferry states no interest", themes("we arrive by ferry from Germany"), "");
+  is("but wanting one still asks for coast", themes("we would love a ferry out to an island"), "coast");
+  is("cycling is still nature", themes("we like cycling"), "nature");
+  is("and one honest mention beats any number of logistics ones",
+     themes("we arrive by ferry, and we want beaches and a ferry trip"), "coast");
+  is("renting a bike is transport", themes("renting a bike for the week"), "");
+  is("liking bikes is not", themes("we love bikes"), "nature");
+
+  // ── AND IT CANNOT EAT A REAL INTEREST ───────────────────────────
+  // Reading a wanted theme as logistics empties the screen in the other
+  // direction, which is the failure the row-side comment already records once.
+  is("subject words are untouched", themes("beaches and dunes please"), "coast");
+  is("history is untouched", themes("history and castles"), "history");
+  is("and a word outside any frame is an interest",
+     themes("long walks and quiet forests"), "nature");
+  ok("only travel-capable words are eligible at all",
+     !MODE_WORDS.has("beach") && !MODE_WORDS.has("castle") && MODE_WORDS.has("ferry"));
+
+  // Nothing said is still nothing said, which narrows nothing downstream.
+  is("an empty brief still returns null", briefThemes(""), null);
+  is("and so does one that names no interest", briefThemes("four days in January"), null);
+}
+
+// ── AN UNCOUNTED LIBRARY IS NOT AN EMPTY COUNTRY ────────────────────
+{
+  const { previewCoverage, describeCoverage, COVERAGE_UNCOUNTED, COVERAGE_THIN, COVERAGE_MATCHER } = M;
+  const cov = readFileSync(join(root, "src/utils/previewCoverage.js"), "utf8");
+  const prevSrc = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  // His pipeline test: two people, four days, arriving by ferry from Germany.
+  const brief = "I'm planning 4 days in Denmark. It is me and my partner. We arrive by ferry from Germany with a car. We like cycling.";
+
+  // NOT COUNTED. The state that fired on every run.
+  const unknown = previewCoverage({ matched: [], library: null, convoText: brief, themes: new Set(["nature"]), days: 4 });
+  is("an uncounted library is its own verdict", unknown.verdict, COVERAGE_UNCOUNTED);
+  ok("and claims no count at all", unknown.published === null || unknown.published === undefined);
+  const saidU = describeCoverage(unknown);
+  ok("it says plainly that it cannot tell", /I cannot tell you whether that is a content gap/.test(saidU));
+  ok("and names the fix", /Open Manage Published once and run this again/.test(saidU));
+  ok("and never calls it a content gap", !/it is a content gap/.test(saidU));
+
+  // GENUINELY EMPTY. Still a content gap, or the fix has eaten the feature.
+  const empty = previewCoverage({ matched: [], library: [], convoText: brief, themes: new Set(["nature"]), days: 4 });
+  is("a counted, empty library is still a content gap", empty.verdict, COVERAGE_THIN);
+  ok("and says so", /it is a content gap/.test(describeCoverage(empty)));
+
+  // COUNTED AND STOCKED. The matcher is the one at fault.
+  const stocked = previewCoverage({
+    matched: [],
+    library: [{ name: "Ribe", __lat: 55.33, __lon: 8.77 }, { name: "Tønder", __lat: 55.04, __lon: 8.86 }],
+    convoText: brief, themes: new Set(["nature"]), days: 4,
+  });
+  is("a stocked region is a matcher gap, not a content gap", stocked.verdict, COVERAGE_MATCHER);
+
+  // THE ORDER IS LOAD BEARING. Both later branches read `published`, which is
+  // zero for every target in the country on an uncounted library.
+  ok("the uncounted check runs before either published check",
+     cov.indexOf("if (!counted) verdict = COVERAGE_UNCOUNTED;") < cov.indexOf("else if (target && published === 0)"));
+  // And a caller that forgets to pass a library gets "unknown", not a zero.
+  is("the default is null, not an empty array", previewCoverage({ matched: [], convoText: brief, themes: new Set(["nature"]) }).verdict, COVERAGE_UNCOUNTED);
+
+  // NO BUTTON ON A VERDICT THAT CANNOT NAME A TARGET WORTH SEARCHING.
+  ok("the search button is suppressed while uncounted",
+     /onSearchArea && coverage\.verdict !== COVERAGE_UNCOUNTED &&/.test(prevSrc));
+  ok("and the panel has a title for it", /\[COVERAGE_UNCOUNTED\]: "Cannot tell yet"/.test(prevSrc));
+}
+
+// ── 21 AUGUST 2026: "I ONLY SAID OCTOBER" ───────────────────────────
+//
+// "I only said October. It didn't know when in October."
+//
+// The cause was not a missing date. `arrivalDate` was parsed with
+// `convoText.match(dateRe)` over BOTH halves, and the assistant's own turn
+// contained "Culture Night falls on Fri 9 Oct". The regex matched a date Gemlyx
+// wrote, made it his arrival, and dated all eight days from it. Day 1 became 9
+// October, Day 4 became the 12th, and Culture Night then sat on Day 4 carrying
+// the warning "Runs Fri 9 Oct, which is not the day this stop falls on". The
+// guide invented a date and then flagged itself for disagreeing with it.
+{
+  const appD = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const { normalsNote } = M;
+
+  // FIFTH READER MOVED OFF BOTH HALVES, after the arrival point, the transport
+  // mode, the plan gate and the interests.
+  ok("the date is read from his turns only", /const dm = saidByTravellerForGuide\.match\(dateRe\);/.test(appD));
+  ok("and no date reader is left on convoText", !/convoText\.match\(dateRe\)/.test(appD));
+
+  // A BARE MONTH IS NOT NOTHING. His call: build, and stop pretending. Without
+  // this branch the fix above would be worse than the bug, because arrivalDate
+  // falls back to TODAY and an October trip would get August weather.
+  ok("a bare month still sets a date", /datePrecision = "month";/.test(appD));
+  ok("sampled mid-month", /monthIdx, 15\)/.test(appD));
+  ok("and the precision travels with it", /datePrecision === "day"/.test(appD));
+
+  // A FIXED POINT NEEDS A DAY TO BE FIXED TO.
+  ok("events are only pinnable on a dated trip", /const eventsArePinnable = datePrecision === "day";/.test(appD));
+  ok("and on a month trip they are carried without a day",
+     /EVENTS THE TRAVELER PICKED, WITH NO TRIP DATES TO PIN THEM TO/.test(appD));
+  ok("with the model forbidden from choosing one", /NEVER write or imply a day number for it/.test(appD));
+
+  // AND THE WEATHER SENTENCE STOPS CLAIMING A WEEK IT WAS NEVER GIVEN.
+  const badges = [{ source: "normals", lowC: 8, highC: 13, risk: "low" }, { source: "normals", lowC: 9, highC: 12, risk: "low" }];
+  const sharp = normalsNote(badges, "October", 2, true);
+  const vague = normalsNote(badges, "October", 2, false);
+  ok("a dated trip still says this week", /recorded weather for this week/.test(sharp));
+  ok("a month trip does not", !/for this week/.test(vague));
+  ok("it names the month instead", /recorded weather for October/.test(vague));
+  ok("says plainly why it is not sharper", /you have not said which days you are travelling/.test(vague));
+  ok("and asks for the dates once", /Name the dates and this gets sharper/.test(vague));
+  // The figures themselves are real either way, so the range must not change.
+  ok("the numbers are the same in both", /8° to 13°/.test(sharp) && /8° to 13°/.test(vague));
+  // Default unchanged, so every existing caller keeps the sentence it had.
+  ok("precise defaults to true", /recorded weather for this week/.test(normalsNote(badges, "October", 2)));
+}
+
+// ── 21 AUGUST 2026: A CALENDAR WITH NO EVENT IN IT ──────────────────
+//
+// Oliver, with byhavenkbh.dk attached: "some of these 'events' have a multitude
+// of events in the event.. like this one. what do we do about that?"
+//
+// Byhaven is a place at Studiestræde 52 with free entry and seventeen separate
+// gigs across four weeks. anchoredEdition already refuses it correctly; the
+// refusal was a dead end. His call: route it to a venue draft.
+{
+  const { venueRatherThanEvent, anchoredEdition, stepWords, PROGRAMME_DATES, dateMentions } = M;
+  const AUG = new Date(2026, 7, 21);
+
+  // A page shaped like Byhaven's: a programme, free entry, many unlabelled dates.
+  // Written the way Byhaven writes it: one date per gig, Danish day-first.
+  const byhaven = [
+    "Byhaven, Studiestræde 52. Altid gratis entré.",
+    "Se alle arrangementer i månedens program:",
+    "21. august: My Little Party x CRINGE",
+    "22. august: Shady Nasty + Skt. DeLarge",
+    "28. august: DJ aften",
+    "3-6 september 2026: Kill-Town Death Fest",
+    "11. september: Koncert",
+    "17. september: Efterårsfest",
+  ].join("\n");
+  // ── THE COUNT THAT MATTERS IS MENTIONS, NOT CANDIDATES ──────────
+  // dateRangesInText returns at most ONE bare single date by design, so a page
+  // of one-date-per-gig yields almost no candidates however long it is. A
+  // threshold built on the parser's count could never fire on this page.
+  ok("the page mentions a pile of dates", dateMentions(byhaven) >= PROGRAMME_DATES);
+  const read = anchoredEdition(byhaven, AUG);
+  is("the page is refused as an event, as it already was", read.why, "many-dates-none-labelled");
+  const v = venueRatherThanEvent(byhaven, read);
+  ok("and reads as a venue", v.venue);
+  ok("naming the signals rather than just asserting", v.signals.length >= 2);
+  ok("the date pile is one of them", v.signals.some(x => /future dates/.test(x)));
+  ok("and the page calling itself a programme is another", v.signals.some(x => /programme/.test(x)));
+
+  // ── AND IT MUST NOT EAT A REAL FESTIVAL ─────────────────────────
+  // A festival page that carries its own history is the shape this must not
+  // catch, and it is the exact page anchoredEdition was written for.
+  const labelled = "Distortion. Datoer: 2-6 June 2027. Sidste år: 3-7 June 2026. Se billetter.";
+  const lread = anchoredEdition(labelled, AUG);
+  is("a labelled edition is still resolved", lread.why, "");
+  ok("so the venue question is never asked of it", !venueRatherThanEvent(labelled, lread).venue);
+
+  // A refusal with a pile of dates and nothing venue-like about it stays a
+  // refusal. Necessary and never sufficient.
+  const bare = "Festival. 4 July 2027, 11 July 2027, 18 July 2027, 25 July 2027. Tickets on sale.";
+  const bread = { why: "many-dates-none-labelled", candidates: 4 };
+  ok("plenty of dates mentioned", dateMentions(bare) >= PROGRAMME_DATES);
+  ok("but not called a venue on dates alone", !venueRatherThanEvent(bare, bread).venue);
+  ok("and it says why not", /nothing on the page talks like a venue/.test(venueRatherThanEvent(bare, bread).why));
+
+  // Two dates is a recap, not a programme.
+  ok("the bar is higher than a recap", PROGRAMME_DATES > 2);
+
+  // ── THE TRACE CARRIES THE READING ───────────────────────────────
+  // The refusal used to end the sentence. Now it names what the page is and what
+  // to do about it, which is the difference between a dead end and a next step.
+  const words = stepWords({ why: "many-dates-none-labelled", asVenue: v });
+  ok("the trace says it looks like a venue", /looks like a venue publishing its programme/.test(words));
+  ok("and says where it belongs instead", /as a PLACE with its programme fetched live/.test(words));
+  ok("carrying the signals into the sentence", /future dates/.test(words));
+  // Unchanged when it is not a venue, so no existing trace sentence moves.
+  ok("an ordinary refusal reads exactly as before",
+     /never says which one is this event's/.test(stepWords({ why: "many-dates-none-labelled" })));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

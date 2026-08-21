@@ -355,11 +355,23 @@ export const readBrief = ({ travellerText = "", intake = {}, today = new Date(),
   const missing = unfilled.filter(k => !wasAsked.has(k));
   // Known, and not precisely enough. Only `when` can be vague today, and it is
   // the one that costs a wrong event.
-  const vague = known.when?.precision === "month" && !wasAsked.has("when") ? ["when"] : [];
+  // ── AND ASKING DOES NOT SHARPEN A MONTH ───────────────────────────
+  // This carried `&& !wasAsked.has("when")`, so a month-precision answer stopped
+  // being reported as vague the moment the question had been asked. Oliver, 21
+  // Aug 2026: "I only said October. It didn't know when in October." A month is
+  // still a month after somebody has asked about it, and the guide built off it
+  // dated eight days and pinned an event to one of them.
+  //
+  // TWO LISTS, because they answer two different questions. `vague` is what is
+  // TRUE about the brief and never stops being true; `vagueToAsk` is what is
+  // still worth a question, which asking once uses up. Folding them into one
+  // was the bug: it let "we asked" quietly mean "it is precise now".
+  const vague = known.when?.precision === "month" ? ["when"] : [];
+  const vagueToAsk = vague.filter(k => !wasAsked.has(k));
   // Asked, unanswered, and required anyway. Kept apart from `missing` so the
   // asking cadence is unchanged and only the BUILD is gated.
   const unanswered = HARD_SLOTS.filter(k => !known[k] && wasAsked.has(k));
-  return { known, missing, declined, vague, unanswered, ready: missing.length === 0 && unanswered.length === 0 };
+  return { known, missing, declined, vague, vagueToAsk, unanswered, ready: missing.length === 0 && unanswered.length === 0 };
 };
 
 export const briefReady = (brief) => !!brief && brief.missing.length === 0 && !(brief.unanswered || []).length;
@@ -392,7 +404,7 @@ export const nextAsks = (brief, { limit = MAX_ASKS_AT_ONCE } = {}) => {
   // Hard slots that were asked and not answered go LAST, so they are raised once
   // everything else is settled rather than blocking the conversation at the point
   // the traveller changed the subject.
-  const pick = [...brief.missing, ...brief.vague, ...(brief.unanswered || [])].filter((k, i, a) => a.indexOf(k) === i);
+  const pick = [...brief.missing, ...(brief.vagueToAsk || []), ...(brief.unanswered || [])].filter((k, i, a) => a.indexOf(k) === i);
   return pick
     .sort((a, b) => order.indexOf(a) - order.indexOf(b))
     .slice(0, Math.max(0, limit))
@@ -444,7 +456,7 @@ export const briefBlock = (brief) => {
     ? "STILL MISSING. Ask for THIS ONE and nothing else in this reply, whatever else is missing:"
     : `STILL MISSING, and you may ask for AT MOST ${MAX_ASKS_AT_ONCE} of them in this reply:`);
   asks.forEach(s => lines.push(`  ${s.label}: ${s.ask}`));
-  if (brief.vague.includes("when")) {
+  if ((brief.vagueToAsk || []).includes("when")) {
     lines.push("They named a month but not a date. That is enough to rule out an event in another month and not enough to place a day, so ask for the dates once and never again.");
   }
   // ── AND ASKING IS NOT THE WHOLE TURN ──────────────────────────────

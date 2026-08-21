@@ -109,7 +109,7 @@ import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, 
 import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
 import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
-import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition } from "./utils/eventDates";
+import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition, venueRatherThanEvent } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
 import { languageBlock, readerLanguage } from "./utils/readerLanguage";
 import { echoInDraft, describeEcho, ECHO_RUN } from "./utils/echoCheck";
@@ -7689,7 +7689,16 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
           // future date has to SAY which one is the event's. See eventDates.js.
           const read = anchoredEdition(text, checkFrom);
           const found = read.found;
-          if (!found) return { found: null, why: read.why, candidates: read.candidates };
+          // ── AND A REFUSAL CAN STILL TELL HIM SOMETHING ────────────
+          // "some of these 'events' have a multitude of events in the event..
+          // what do we do about that?" A page refused for having a pile of
+          // unlabelled dates is usually a venue with a programme, and that is
+          // worth having in the library as a PLACE. The refusal carries the
+          // reading rather than ending the sentence. See venueRatherThanEvent.
+          if (!found) {
+            const asVenue = venueRatherThanEvent(text, read);
+            return { found: null, why: read.why, candidates: read.candidates, asVenue: asVenue.venue ? asVenue : null };
+          }
           // `labelled` rides along to the guard, because it is what separates a
           // festival announcing a genuine move from a number scraped out of a
           // programme grid. See the different-month rule in datePropositionProblem.
@@ -8612,7 +8621,12 @@ ${researchRules("festival", ev)}`
   // wind is a footnote in a car and the entire character of a day on a bike, and
   // the warnings this now builds are mode-aware for exactly that reason. Passing
   // it here rather than reading a ref keeps this function callable from a test.
-  const fetchGuideWeather = async (days, arrivalDate, freshGeo = {}, travelMode = null) => {
+  // `precise` is whether the traveller actually named a DAY. False when they
+  // named only a month, in which case arrivalDate is a mid-month sample and the
+  // note below must not describe it as a week. See datePrecision in
+  // generateGuide, and Oliver on 21 Aug: "I only said October. It didn't know
+  // when in October."
+  const fetchGuideWeather = async (days, arrivalDate, freshGeo = {}, travelMode = null, precise = true) => {
     setWeatherPending(days.length);
     // How many days from today the trip's Day 1 actually starts — 0 if arrivalDate is
     // unknown (falls back to the old assume-it-starts-today behavior) or already today.
@@ -8713,7 +8727,11 @@ ${researchRules("festival", ev)}`
         const when = arrivalDate ? new Date(arrivalDate).toLocaleString("en", { month: "long" }) : "";
         // days.length, not results.filter(Boolean).length: the sentence has to
         // know how many days the TRIP has to be able to say it covered fewer.
-        return normalsNote(results, when, days.length);
+        // ── AND IT MUST NOT SAY "THIS WEEK" WHEN IT MEANS "OCTOBER" ──
+        // "I only said October. It didn't know when in October." The sentence
+        // claimed "ten years of recorded weather for this week", which is a
+        // claim about a week nobody had named.
+        return normalsNote(results, when, days.length, precise);
       }
       // ── THE MEASURED WARNINGS COME FIRST ──────────────────────
       // Oliver, 18 Aug 2026: "it shows the weather forecast, but nothing else.
@@ -9784,8 +9802,31 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       const MONTH_NAMES = { january: 0, february: 1, march: 2, april: 3, may: 4, june: 5, july: 6, august: 7, september: 8, october: 9, november: 10, december: 11 };
       const monthPattern = Object.keys(MONTH_NAMES).join("|");
       const dateRe = new RegExp(`\\b(?:(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${monthPattern})|(${monthPattern})\\s+(\\d{1,2})(?:st|nd|rd|th)?)\\b`, "i");
-      const dm = convoText.match(dateRe);
+      // ── AND THE DATE IS THEIRS TO STATE ─────────────────────────────
+      //
+      // Oliver, 21 Aug 2026, on a guide titled "…in October": "I only said
+      // October. It didn't know when in October."
+      //
+      // He is right, and it is worse than a missing date. This read `convoText`,
+      // both halves, and the assistant's own turn on that trip contained the
+      // sentence "Culture Night falls on Fri 9 Oct". So the regex matched a date
+      // GEMLYX wrote, made it his arrival, and dated all eight days from it.
+      //
+      // That one line explains both of his complaints at once. Day 1 became 9
+      // October, so Day 4 became the 12th, which is why Culture Night sat on Day
+      // 4 carrying a warning that it "Runs Fri 9 Oct, which is not the day this
+      // stop falls on". The guide invented a date and then flagged itself for
+      // disagreeing with it.
+      //
+      // Fifth reader of intent in this file to be moved off both halves, after
+      // the arrival point, the transport mode, the plan gate and the interests.
+      const dm = saidByTravellerForGuide.match(dateRe);
       let arrivalDate = null;
+      // "day" when they named one, "month" when they named only a month, null
+      // when they said nothing datelike at all. Carried rather than inferred
+      // from arrivalDate being set, because the month case sets a date too and
+      // the difference between the two is the whole point.
+      let datePrecision = null;
       if (dm) {
         const day = parseInt(dm[1] || dm[4], 10);
         const monthIdx = MONTH_NAMES[(dm[2] || dm[3]).toLowerCase()];
@@ -9793,6 +9834,28 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
         let candidate = new Date(now.getFullYear(), monthIdx, day);
         if (candidate < new Date(now.toDateString())) candidate = new Date(now.getFullYear() + 1, monthIdx, day); // already passed this year — assume next year
         arrivalDate = candidate;
+        datePrecision = "day";
+      } else {
+        // ── A BARE MONTH IS NOT NOTHING ───────────────────────────
+        // His call, asked directly: build, and stop pretending. A month is
+        // enough to plan a route and to rule out an event in another month, and
+        // it is not enough to place a day. Without this branch the fix above
+        // makes it worse rather than better: arrivalDate falls back to TODAY
+        // further down, so an October trip would have been given August weather.
+        //
+        // The 15th, because weather normals for mid-month are the fairest single
+        // sample of a month, and because any day chosen here is arbitrary and
+        // must never be shown to anybody as the trip's date. datePrecision is
+        // what stops that happening.
+        const bare = saidByTravellerForGuide.match(new RegExp(`\\b(${monthPattern})\\b`, "i"));
+        if (bare) {
+          const monthIdx = MONTH_NAMES[bare[1].toLowerCase()];
+          const now = new Date();
+          let candidate = new Date(now.getFullYear(), monthIdx, 15);
+          if (candidate < new Date(now.toDateString())) candidate = new Date(now.getFullYear() + 1, monthIdx, 15);
+          arrivalDate = candidate;
+          datePrecision = "month";
+        }
       }
       // ── THE EVENTS THE TRAVELLER TICKED ARE FIXED POINTS ────────
       // Oliver, 14 Aug 2026, on the preview screen: "make the person able to
@@ -9811,9 +9874,23 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       const chosenEvents = Array.isArray(pickedEvents) && pickedEvents.length
         ? [...events, ...majorEvents, ...vikingEvents].filter(e => pickedEvents.includes(e.name))
         : [];
-      const chosenEventsBlock = chosenEvents.length
-        ? `\n\nEVENTS THE TRAVELER HAS ALREADY CHOSEN, which are fixed points and not suggestions. Every one MUST appear as a stop, on the day its own dates fall on, and that day's other stops must be near it rather than across the country:\n${chosenEvents.map(e => `- ${e.name} in ${e.town || "Denmark"} (${getEventDate(e.date, e.dateEnd)})`).join("\n")}`
-        : "";
+      // ── AND A FIXED POINT NEEDS A DAY TO BE FIXED TO ────────────
+      //
+      // "Every one MUST appear as a stop, on the day its own dates fall on" is
+      // an instruction that cannot be obeyed when the trip has no days, only a
+      // month. On his October guide it produced a stop on Day 4 wearing the
+      // warning "Runs Fri 9 Oct, which is not the day this stop falls on": the
+      // event was pinned, the pin could not land, and the guide reported its own
+      // contradiction to the reader rather than resolving it.
+      //
+      // So on a month-precision trip a chosen event is still carried, and it is
+      // carried as what it actually is: something worth timing the trip around,
+      // rather than a day that has already been decided.
+      const eventsArePinnable = datePrecision === "day";
+      const chosenEventsBlock = !chosenEvents.length ? ""
+        : eventsArePinnable
+          ? `\n\nEVENTS THE TRAVELER HAS ALREADY CHOSEN, which are fixed points and not suggestions. Every one MUST appear as a stop, on the day its own dates fall on, and that day's other stops must be near it rather than across the country:\n${chosenEvents.map(e => `- ${e.name} in ${e.town || "Denmark"} (${getEventDate(e.date, e.dateEnd)})`).join("\n")}`
+          : `\n\nEVENTS THE TRAVELER PICKED, WITH NO TRIP DATES TO PIN THEM TO. They named a month and not a date, so you do not know which day of this trip any of these falls on and you must not decide. Include each one as a stop, say plainly in its note that it runs on its own fixed date and that the trip should be timed to it, and NEVER write or imply a day number for it:\n${chosenEvents.map(e => `- ${e.name} in ${e.town || "Denmark"} (${getEventDate(e.date, e.dateEnd)})`).join("\n")}`;
       // ── AND THE PLACES THEY ADDED BACK ──────────────────────────
       // Oliver, 15 Aug 2026, on a preview that offered five attractions and two
       // restaurants to somebody whose only stated interest was festivals and
@@ -10397,7 +10474,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       // The forecast, also baked on rather than posted to a component that is
       // about to stop existing. Cheap: one /api/weather call per distinct day.
       buildStage("Checking the forecast", 98);
-      const { weatherByDay, weatherNote } = await fetchGuideWeather(parsed.days, arrivalDate, freshGeo, travelMode);
+      const { weatherByDay, weatherNote } = await fetchGuideWeather(parsed.days, arrivalDate, freshGeo, travelMode, datePrecision === "day");
       parsed.days = parsed.days.map((d, i) => (weatherByDay[i] ? { ...d, weather: weatherByDay[i] } : d));
       // ── "IT SUGGESTS HOSTELS, BUT THEN GIVES A SPECIFIC HOTEL???" ──
       // Runs HERE and not with the other plan checks, because it needs
@@ -18050,7 +18127,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           // content. manageItems is null until Manage Published has been
           // opened, and an empty array then means "unknown", which the finding
           // reports as nothing named rather than as a gap.
-          library={manageItems || []}
+          library={/* NOT `manageItems || []`. manageItems is null until Manage
+              Published has been opened, and an empty array reads as an empty
+              country: every target counts zero, so the pipeline test reported a
+              content gap on every run. Oliver, twice: "it keeps saying I don't
+              have any content in South Jutland.. while I clearly have some" and
+              then "Don't know why it keep saying this." */ manageItems}
           // ── FROM THE GAP TO THE SEARCH, IN ONE CLICK ────────────
           // Oliver, 15 Aug 2026: "I would also like a button for studio, that
           // can click 'search for content in this area'. Because apparently

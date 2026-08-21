@@ -210,7 +210,19 @@ export const weatherBadge = ({ source, forecast, normals, agreement, measured } 
 //   "on the days planned" claimed the whole trip while describing whichever
 //   days resolved to a coordinate. On the guide he was reading that was two
 //   days out of five. `totalDays` lets it say so.
-export const normalsNote = (badges, whenWords, totalDays = null) => {
+// ── AND WHETHER IT KNOWS THE WEEK IT IS TALKING ABOUT ───────────────
+//
+// Oliver, 21 Aug 2026, on a guide titled "…in October": "I only said October.
+// It didn't know when in October."
+//
+// The last sentence of this note said "ten years of recorded weather for this
+// week", which is a precise claim about a week nobody had named. On a
+// month-precision trip the figures ARE real, they are simply normals for a
+// mid-month sample rather than for a week the traveller chose, and saying so
+// costs one clause and keeps the sentence true.
+//
+// Defaulted to true so every existing caller keeps the sentence it had.
+export const normalsNote = (badges, whenWords, totalDays = null, precise = true) => {
   const list = Array.isArray(badges) ? badges : [];
   const real = list.filter(b => b && b.source === NORMALS);
   if (!real.length) return null;
@@ -230,7 +242,10 @@ export const normalsNote = (badges, whenWords, totalDays = null) => {
   const wet = wetDays
     ? `, and ${wetDays === real.length ? "every one of them falls" : `${wetDays} of them fall`} in a stretch that is wet more often than not`
     : "";
-  return `${whenWords ? `In ${whenWords} you` : "You"} can expect ${range} ${scope}${wet}. That is ten years of recorded weather for this week rather than a prediction, because nothing forecasts this far ahead. A real forecast appears here on its own about ${FORECAST_HORIZON_DAYS} days before you leave.`;
+  const basis = precise
+    ? "That is ten years of recorded weather for this week rather than a prediction, because nothing forecasts this far ahead."
+    : `That is ten years of recorded weather for${whenWords ? ` ${whenWords}` : " that time of year"} rather than a prediction, and you have not said which days you are travelling, so it describes the month rather than your week. Name the dates and this gets sharper.`;
+  return `${whenWords ? `In ${whenWords} you` : "You"} can expect ${range} ${scope}${wet}. ${basis} A real forecast appears here on its own about ${FORECAST_HORIZON_DAYS} days before you leave.`;
 };
 
 // ── "BOTH SHOULD BE ABLE TO SERVE A PURPOSE" ────────────────────────

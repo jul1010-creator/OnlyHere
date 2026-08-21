@@ -9,7 +9,7 @@ import { buildPreviewReport, downloadReport, reportFilename } from "../utils/pre
 import { readBrief } from "../utils/tripBrief";
 import { withoutTestBrief } from "../utils/chatThread";
 import { travellerBudget } from "../utils/accommodation";
-import { previewCoverage, describeCoverage, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_UNANSWERED } from "../utils/previewCoverage";
+import { previewCoverage, describeCoverage, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_UNANSWERED, COVERAGE_UNCOUNTED } from "../utils/previewCoverage";
 import { AskGemlyx } from "./AskGemlyx";
 
 // ── THE HEADER ON THE FINDING, FROM THE CONSTANTS ───────────────────
@@ -23,6 +23,8 @@ const COVERAGE_TITLE = {
   [COVERAGE_THIN]: "Content gap",
   [COVERAGE_MATCHER]: "Matcher gap",
   [COVERAGE_UNANSWERED]: "Full screen, nothing they asked for",
+  // Not a gap of any kind. Nothing has been counted, so nothing is claimed.
+  [COVERAGE_UNCOUNTED]: "Cannot tell yet",
 };
 
 // ── "Here's what's coming up" preview screen ────────────────────────
@@ -171,7 +173,10 @@ export const GuidePreviewScreen = ({
   // Everything the Studio has published, so an empty preview can say whether
   // that is a content gap or a matcher that could not reach the content. Only
   // ever passed on the pipeline test path; a real traveller never sees this.
-  library = [],
+  // NULL until Manage Published has been opened, and it must stay null: an
+  // uncounted library defaulted to [] is what made the content gap panel fire on
+  // every run. See previewCoverage.js.
+  library = null,
   // Sends the founder straight from a gap to a discovery run aimed at it.
   // Oliver, 15 Aug 2026: "I would also like a button for studio, that can click
   // 'search for content in this area'. Because apparently here there was
@@ -491,7 +496,11 @@ export const GuidePreviewScreen = ({
                     the content type the brief asked for, so a brief about
                     castles and festivals goes looking for those rather than
                     for whatever the dropdown was last set to. */}
-                {onSearchArea && (
+                {/* No search button on an uncounted library: there is nothing
+                    to send him looking for yet, and a button offering to
+                    research a region he may already cover is the wrong action
+                    attached to the right worry. */}
+                {onSearchArea && coverage.verdict !== COVERAGE_UNCOUNTED && (
                   <button onClick={() => onSearchArea(coverage)}
                     style={{ marginTop: 9, background: "none", border: "1px solid #E5737388", color: "#E57373", borderRadius: 100, padding: "6px 13px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                     🔭 Search for content {coverage.target ? `in ${coverage.target.label}` : "where it is thinnest"}
