@@ -27,6 +27,36 @@ import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 // date of birth is a much stronger identifier that buys no extra usefulness.
 export const AGE_BANDS = ["Under 25", "25-34", "35-49", "50-64", "65+"];
 
+// ── AND HE ASKED FOR "BORN" ─────────────────────────────────────────
+//
+// Oliver's account spec, restated 21 Aug 2026 after testing: "Name: / Born: /
+// Gender:". A YEAR rather than a date, which satisfies the label literally and
+// keeps the reasoning above intact: what changes a recommendation is roughly how
+// old somebody is, and a full date of birth is a much stronger identifier that
+// buys nothing extra and has to be protected once it is held.
+//
+// A hundred and ten years back from a fixed anchor rather than from today,
+// because a list that silently changes length with the calendar is a moving
+// validation target, and cleanProfile validates against exactly this list.
+// Bump BORN_LATEST when it starts to look mean.
+const BORN_LATEST = 2016;
+export const BORN_YEARS = Array.from({ length: 96 }, (_, i) => String(BORN_LATEST - i));
+
+// The band a stored year falls into, so everything that already reasons in bands
+// keeps working and nothing has to know which of the two a row was filled in
+// with. ageOf is deliberately not exported: an age computed from a year is a
+// derived number and there must be one place that derives it.
+export const bandForYear = (year, now = new Date()) => {
+  const y = parseInt(String(year ?? ""), 10);
+  if (!Number.isFinite(y)) return "";
+  const age = now.getFullYear() - y;
+  if (age < 25) return "Under 25";
+  if (age < 35) return "25-34";
+  if (age < 50) return "35-49";
+  if (age < 65) return "50-64";
+  return "65+";
+};
+
 // ── ON THIS FIELD, HONESTLY ─────────────────────────────────────────
 // Included because he asked for it, and left OPTIONAL with a decline option
 // because almost nothing in a Danish travel guide turns on it. What genuinely
@@ -128,7 +158,7 @@ export const homeCurrency = (code) => {
 
 export const DESCRIPTION_MAX = 600;
 
-export const EMPTY_PROFILE = { name: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: [], transport: [], style: [] };
+export const EMPTY_PROFILE = { name: "", bornYear: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: [], transport: [], style: [] };
 
 const str = (v, max = 120) => String(v ?? "").trim().slice(0, max);
 const oneOf = (v, list) => (list.includes(String(v ?? "").trim()) ? String(v).trim() : "");
@@ -146,7 +176,12 @@ const manyOf = (v, list) => {
 // empty strings that later reads as "they filled this in and said nothing".
 export const cleanProfile = (raw) => ({
   name: str(raw?.name, 60),
+  bornYear: oneOf(String(raw?.bornYear ?? ""), BORN_YEARS),
   country: oneOf(String(raw?.country ?? "").toUpperCase(), COUNTRY_CODES),
+  // The band a row was filled in with BEFORE the year field existed. Kept, not
+  // migrated: a stored band is a real answer somebody gave and throwing it away
+  // to tidy up the shape would lose it. A year wins when both are present,
+  // because a year is the more precise of the two and is what the form writes.
   ageBand: oneOf(raw?.ageBand, AGE_BANDS),
   sex: oneOf(raw?.sex, SEX_OPTIONS),
   company: oneOf(raw?.company, COMPANY),
@@ -181,7 +216,8 @@ export const profileForPrompt = (p) => {
   // Named, never converted. What this changes is how expensive things are
   // allowed to sound, not what any figure says.
   if (c.country) bits.push(`They are travelling from ${countryNamed(c.country).name}. Prices stay in DKK whatever this says: never convert a figure, and never add an approximate one in brackets.`);
-  if (c.ageBand) bits.push(`Age band: ${c.ageBand}.`);
+  const band = bandForYear(c.bornYear) || c.ageBand;
+  if (band) bits.push(`Age band: ${band}.`);
   if (c.sex && c.sex !== "Prefer not to say") bits.push(`Sex: ${c.sex}.`);
   if (c.company) bits.push(`Usually travels: ${c.company.toLowerCase()}.`);
   if (c.pace) bits.push(`Preferred pace: ${c.pace.toLowerCase()}.`);
@@ -198,6 +234,37 @@ export const profileForPrompt = (p) => {
   if (c.description) bits.push(`In their own words: "${c.description}"`);
   if (!bits.length) return "";
   return `ABOUT THIS TRAVELLER, given by them and not inferred. Use it to choose what to recommend and how to pitch it. Never repeat it back to them as though it were a discovery, never assume anything it does not say, and if it conflicts with what they ask for in this conversation, what they ask for wins.\n${bits.join(" ")}`;
+};
+
+// ── HELD ON THE DEVICE UNTIL THERE IS A ROW TO PUT IT IN ────────────
+//
+// Oliver, 21 Aug 2026: "creating an account should then change the page into
+// several questions." On the email path signUpWithPassword returns no session,
+// because Supabase waits for the confirmation link, so at the moment the
+// questions are answered there is no user id to write them against.
+//
+// Same shape as gemlyx_pending_guide_save, which exists for exactly this gap on
+// the Google redirect path: hold it locally, claim it on the first session.
+// Answering questions and then losing the answers to an inbox round trip would
+// be worse than never asking.
+export const PENDING_PROFILE_KEY = "gemlyx_pending_profile";
+
+export const holdProfile = (p) => {
+  try { localStorage.setItem(PENDING_PROFILE_KEY, JSON.stringify(cleanProfile(p))); } catch { /* private mode: the answers are lost, the account is not */ }
+};
+
+// Reads and CLEARS in one go, so a held profile can never be written twice or
+// attach itself to a second account on a shared device. Returns null when there
+// is nothing held or when what is held is empty, which is the same thing.
+export const takeHeldProfile = () => {
+  let raw = null;
+  try { raw = localStorage.getItem(PENDING_PROFILE_KEY); } catch { return null; }
+  if (!raw) return null;
+  try { localStorage.removeItem(PENDING_PROFILE_KEY); } catch { /* ignore */ }
+  try {
+    const p = cleanProfile(JSON.parse(raw));
+    return isBlank(p) ? null : p;
+  } catch { return null; }   // unparseable is the same as absent
 };
 
 // ── THE COLUMN HAS TO EXIST, AND SAY SO WHEN IT DOES NOT ─────────────

@@ -1,4 +1,7 @@
 import { useState, useEffect } from "react";
+// The questions themselves live in one place, shared with ProfileSheet.
+import { ProfileQuestions } from "./ProfileQuestions";
+import { EMPTY_PROFILE, cleanProfile, isBlank as profileIsBlank, saveProfile, holdProfile } from "../utils/profile";
 import { C } from "../utils/theme";
 import { signInWithPassword, signUpWithPassword, sendPasswordReset, startGoogleSignIn } from "../utils/auth";
 
@@ -67,6 +70,25 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+  // ── AND THEN IT ASKS ──────────────────────────────────────────────
+  //
+  // Oliver's point 9, restated after he tested it: "And creating an account
+  // should then change the page into several questions."
+  //
+  // Those questions existed and lived only in ProfileSheet, which opens after a
+  // session exists and behind a thirty day cooldown that ends for good after two
+  // skips. On the email path a session does not exist for as long as it takes
+  // somebody to open their inbox, so the sheet said "check your email" and
+  // closed, and the questions were never reached at all. That is what he was
+  // looking at when he wrote "And you still haven't done the account part".
+  //
+  // So the sheet asks them itself, here, the moment the account is made. Held
+  // rather than saved when there is no session yet: same shape as the pending
+  // guide save this file already coordinates with, and written on the first
+  // session by the effect in App.jsx.
+  const [answers, setAnswers] = useState(EMPTY_PROFILE);
+  const [madeSession, setMadeSession] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [wide, setWide] = useState(() => typeof window !== "undefined" && window.innerWidth >= 720);
 
   // The sheet is hidden with an early return rather than unmounted, so its
@@ -101,8 +123,15 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         setNotice("If that email has an account, a reset link is on its way.");
       } else if (mode === "up") {
         const { session, needsConfirmation } = await signUpWithPassword(email, password);
-        if (needsConfirmation) setNotice("Check your email to confirm the account, then come back and sign in. Your guide is being held until you do.");
-        else onSignedIn(session);
+        // THE ACCOUNT EXISTS EITHER WAY. Whether a session came back only
+        // decides where the answers are written, never whether they are asked.
+        setMadeSession(session || null);
+        setNotice(needsConfirmation
+          ? "Account made. Check your email to confirm it, then come back and sign in — your guide is being held until you do. While you are here:"
+          : "Account made. While you are here:");
+        setMode("questions");
+        setBusy(false);
+        return;
       } else {
         onSignedIn(await signInWithPassword(email, password));
       }
@@ -112,9 +141,26 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
     setBusy(false);
   };
 
-  const label = { in: "Sign in", up: "Create account", reset: "Send reset link" }[mode];
+  const label = { in: "Sign in", up: "Create account", reset: "Send reset link", questions: "Save" }[mode];
+
+  // Skip carries the same weight as Save, here as in ProfileSheet: an optional
+  // step whose decline is a grey link is not optional.
+  const finishQuestions = async (save) => {
+    if (!save || profileIsBlank(answers)) {
+      if (madeSession) onSignedIn(madeSession); else onClose();
+      return;
+    }
+    setSaving(true);
+    // A session means it can go straight to the row. No session means the
+    // account is real and unconfirmed, so it waits on the device.
+    if (madeSession) await saveProfile(madeSession, answers);
+    else holdProfile(answers);
+    setSaving(false);
+    if (madeSession) onSignedIn(madeSession); else onClose();
+  };
   // The heading answers "why am I being asked", not "what screen is this".
   const heading = mode === "reset" ? "Reset password"
+    : mode === "questions" ? "Tell Gemlyx who this is for"
     : reason === "guide" ? (mode === "up" ? "Keep this guide" : "Sign in to keep it")
     : mode === "up" ? "Create an account" : "Sign in";
 
@@ -162,6 +208,30 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
           {heading}
         </div>
 
+        {/* ── THE QUESTIONS, ONCE THE ACCOUNT IS MADE ───────────────
+            "And creating an account should then change the page into several
+            questions." The page, not a sheet somewhere else later. */}
+        {mode === "questions" ? (
+          <>
+            {notice && <div style={{ fontSize: 12.5, color: C.gold, lineHeight: 1.55, marginBottom: 16 }}>{notice}</div>}
+            <ProfileQuestions value={answers} onChange={setAnswers} />
+            {error && <div style={{ fontSize: 12, color: "#FF8A80", lineHeight: 1.5, marginBottom: 10 }}>{error}</div>}
+            <div style={{ display: "flex", gap: 9 }}>
+              <button onClick={() => finishQuestions(false)} disabled={saving}
+                style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, color: C.light, borderRadius: 11, padding: "13px", fontSize: 14.5, fontWeight: 600, cursor: saving ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
+                Skip
+              </button>
+              <button onClick={() => finishQuestions(true)} disabled={saving || profileIsBlank(answers)}
+                style={{ flex: 1.6, background: C.gold, border: "none", color: "#0A0F1E", borderRadius: 11, padding: "13px", fontSize: 15, fontWeight: 700, cursor: (saving || profileIsBlank(answers)) ? "default" : "pointer", fontFamily: "'Inter', sans-serif", opacity: (saving || profileIsBlank(answers)) ? 0.45 : 1 }}>
+                {saving ? "Saving…" : "Save"}
+              </button>
+            </div>
+            <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 14 }}>
+              All of it is optional and you can change or clear it whenever you like. It is stored with your account, used only to write your guides, never sold and never used for advertising.
+            </div>
+          </>
+        ) : (
+        <>
         {/* ── WHAT IT BUYS, AND WHAT IT DOES NOT ──────────────────── */}
         <div style={{ fontSize: 13, color: C.light, lineHeight: 1.62, marginBottom: 14 }}>
           {reason === "guide"
@@ -222,8 +292,10 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         </div>
 
         <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 12 }}>
-          We store your email and your saved list. Afterwards you can add a few optional details about yourself, which only ever shape what Gemlyx suggests to you. No tracking, no marketing email, nothing sold. You can delete your account and everything in it from this menu at any time.
+          We store your email and your saved list. Next you can add a few optional details about yourself, which only ever shape what Gemlyx suggests to you. No tracking, no marketing email, nothing sold. You can delete your account and everything in it from this menu at any time.
         </div>
+        </>
+        )}
       </div>
     </div>
   );

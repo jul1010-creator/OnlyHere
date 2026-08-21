@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
 import { C } from "../utils/theme";
-import { AGE_BANDS, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, DESCRIPTION_MAX, EMPTY_PROFILE, cleanProfile, isBlank, saveProfile, SETUP_SQL } from "../utils/profile";
+import { EMPTY_PROFILE, cleanProfile, isBlank, saveProfile, SETUP_SQL } from "../utils/profile";
+// One form, two callers. See ProfileQuestions.jsx: a second copy of these
+// fields is how the signup version and this one drift apart.
+import { ProfileQuestions } from "./ProfileQuestions";
 
 // ── TELLING GEMLYX WHO YOU ARE ───────────────────────────────────────
 //
@@ -44,11 +47,6 @@ export const ProfileSheet = ({ open, session, initial, onDone, onNeedsSetup }) =
 
   if (!open) return null;
 
-  const set = (k, v) => setP(prev => ({ ...prev, [k]: v }));
-  // A chip toggles off when pressed again. Without that there is no way back to
-  // "I would rather not say" once something has been tapped by accident.
-  const pick = (k, v) => set(k, p[k] === v ? "" : v);
-
   const finish = async (save) => {
     if (!save) { onDone(null); return; }
     setBusy(true); setError(null);
@@ -58,65 +56,6 @@ export const ProfileSheet = ({ open, session, initial, onDone, onNeedsSetup }) =
     if (res.missingColumn) { onNeedsSetup?.(SETUP_SQL); setError("Gemlyx could not store this yet: the profile column is missing from the database. Nothing you typed has been lost, and the setup step is now shown in Studio."); return; }
     setError(res.error || "Could not save that. Your account is fine, this just did not go through.");
   };
-
-  const chip = (active) => ({
-    background: active ? C.gold : "transparent",
-    border: `1px solid ${active ? C.gold : C.border}`,
-    color: active ? "#0A0F1E" : C.light,
-    borderRadius: 100, padding: "7px 13px", fontSize: 12.5,
-    fontWeight: active ? 700 : 500, cursor: "pointer",
-    fontFamily: "'Inter', sans-serif", transition: "all .14s ease",
-  });
-  const row = { display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 16 };
-  const legend = { fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 };
-  const field = { width: "100%", boxSizing: "border-box", background: C.bg, border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px 13px", fontSize: 14, fontFamily: "'Inter', sans-serif" };
-
-  // ── NOT A COMPONENT DECLARED IN THE RENDER BODY ──────────────────
-  // `const Group = ({...}) => ...` inside the body creates a new component TYPE
-  // on every render, so React unmounts and remounts the entire chip subtree
-  // rather than updating it. Every keystroke in the name field or the
-  // description box destroyed and rebuilt all four groups and their twenty
-  // buttons, and any chip holding keyboard focus lost it. A plain function that
-  // returns elements is inlined into this render instead, so there is no
-  // component identity to change.
-  const group = (label, note, options, k) => (
-    <div key={k}>
-      <div style={legend}>{label}{note ? <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, color: C.muted }}> · {note}</span> : null}</div>
-      <div style={row}>
-        {options.map(o => <button key={o} onClick={() => pick(k, o)} style={chip(p[k] === o)}>{o}</button>)}
-      </div>
-    </div>
-  );
-
-  // ── THE SAME THING, TICKABLE ──────────────────────────────────────
-  // "MAKE TICKBOXES HERE! So you can click multiple!" Same chips, same styling,
-  // so the difference a reader has to notice is stated in words under the label
-  // rather than left to be discovered by tapping twice.
-  //
-  // "A mix" is not a fourth thing to like, it is "no strong preference", so it
-  // clears the others and the others clear it. Without that rule the commonest
-  // accidental answer is "hidden gems, and also no preference", which is not an
-  // answer and would reach the prompt as one.
-  const pickMany = (k, option) => {
-    const now = Array.isArray(p[k]) ? p[k] : [];
-    const on = now.includes(option);
-    let next;
-    if (option === TRAVEL_STYLE_MIX) next = on ? [] : [TRAVEL_STYLE_MIX];
-    else next = (on ? now.filter(x => x !== option) : [...now, option]).filter(x => x !== TRAVEL_STYLE_MIX);
-    set(k, next);
-  };
-  const groupMany = (label, note, options, k) => (
-    <div key={k}>
-      <div style={legend}>{label}<span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, color: C.muted }}> · pick as many as you like{note ? `, ${note}` : ""}</span></div>
-      <div style={row}>
-        {options.map(o => (
-          <button key={o} onClick={() => pickMany(k, o)} style={chip((p[k] || []).includes(o))}>
-            {(p[k] || []).includes(o) ? "✓ " : ""}{o}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 985, display: "flex", justifyContent: "center", alignItems: wide ? "center" : "flex-end", padding: wide ? 24 : 0, boxSizing: "border-box", backdropFilter: "blur(3px)", WebkitBackdropFilter: "blur(3px)" }}>
@@ -134,48 +73,7 @@ export const ProfileSheet = ({ open, session, initial, onDone, onNeedsSetup }) =
           Anything you put here shapes what Gemlyx suggests and how it talks to you. All of it is optional, you can change or clear it whenever you like, and skipping costs you nothing.
         </div>
 
-        <div style={legend}>What should we call you</div>
-        <input value={p.name} onChange={e => set("name", e.target.value.slice(0, 60))} placeholder="First name is plenty"
-          autoComplete="given-name" style={{ ...field, marginBottom: 16 }} />
-
-        {/* ── WHERE THEY ARE COMING FROM ────────────────────────────
-            "In the create an account, ask what country they're from. Because
-            then the guide can probably write in their currency."
-
-            A select rather than chips: two dozen options is a list, not a row,
-            and a row of two dozen gold pills would swamp every real question
-            above it. The note under it says what the field does and, just as
-            importantly, what it does not do, because a reader who expects to
-            see pounds in their guide and gets kroner should have been told
-            here. */}
-        <div style={legend}>Where you are travelling from<span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, color: C.muted }}> · so we can tell you what DKK is worth</span></div>
-        <select value={p.country} onChange={e => set("country", e.target.value)}
-          style={{ ...field, marginBottom: 6, appearance: "none", cursor: "pointer" }}>
-          <option value="">Somewhere else, or rather not say</option>
-          {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
-        </select>
-        <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.55, marginBottom: 16 }}>
-          {homeCurrency(p.country)
-            ? `Your guide will still price everything in DKK, because that is what the sign and the ticket app say. It will open with what 100 DKK is worth in ${homeCurrency(p.country)} on the day it was built.`
-            : "Prices are always in DKK, because that is what you will actually be charged. Tell us where you are from and the guide will open with what that is worth to you."}
-        </div>
-
-        {group("Age", "it changes what is worth recommending", AGE_BANDS, "ageBand")}
-        {group("Who you usually travel with", "", COMPANY, "company")}
-        {group("Pace", "", PACE, "pace")}
-        {group("Sex", "optional, and it changes very little", SEX_OPTIONS, "sex")}
-
-        {groupMany("Interests", "they are weighted, not filters", INTERESTS, "interests")}
-        {groupMany("How you like to get around", "", TRANSPORT, "transport")}
-        {groupMany("What a trip is for", "", TRAVEL_STYLE, "style")}
-
-        <div style={legend}>Anything else worth knowing</div>
-        <textarea value={p.description} onChange={e => set("description", e.target.value.slice(0, DESCRIPTION_MAX))}
-          rows={4} placeholder="What you actually enjoy, what you would rather avoid, anything that would change what a good friend recommended to you."
-          style={{ ...field, resize: "vertical", lineHeight: 1.6 }} />
-        <div style={{ fontSize: 10.5, color: C.muted, textAlign: "right", marginTop: 5, marginBottom: 14 }}>
-          {p.description.length}/{DESCRIPTION_MAX}
-        </div>
+        <ProfileQuestions value={p} onChange={setP} />
 
         {error && <div style={{ fontSize: 12, color: "#FF8A80", lineHeight: 1.55, marginBottom: 12 }}>{error}</div>}
 

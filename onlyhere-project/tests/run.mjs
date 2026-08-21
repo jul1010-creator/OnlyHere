@@ -91,7 +91,7 @@ writeFileSync(entry, `
   export { directionsEndpoint, collapsedRoute } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { upgradeWorthIt, onFootMinutes, MIN_UPGRADE_SAVING, COLLAPSE_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
-  export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, AGE_BANDS, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
+  export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, AGE_BANDS, BORN_YEARS, bandForYear, holdProfile, takeHeldProfile, PENDING_PROFILE_KEY, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
   export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
@@ -1322,7 +1322,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 
     // A component type declared in a render body remounts its whole subtree on
     // every keystroke.
-    const ps = readFileSync(join(root, "src/components/ProfileSheet.jsx"), "utf8");
+    const ps = readFileSync(join(root, "src/components/ProfileQuestions.jsx"), "utf8");
     ok("no component type is declared in the render body", !/const Group = \(\{/.test(stripNonCode(ps)));
 
     // A lone gold star on every published event, because shapeForLive's
@@ -9752,11 +9752,32 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // the extra tap on the returning person rather than on the one who was just
   // told they need an account.
   ok("a visitor lands on Sign in, not Create", /const \[mode, setMode\] = useState\(initialMode \|\| "in"\)/.test(sheet));
+  // ── AND THE FALLBACK ALONE PROVES NOTHING ───────────────────────
+  // This test used to end at the line above, and the line above is DEAD CODE:
+  // App.jsx passes initialMode on every render, so the prop always wins and the
+  // sheet went on opening on Create with the assertion passing. Oliver, having
+  // tested it: "And you still haven't done the account part!!!!!"
+  //
+  // The lesson is bigger than the fix. An assertion on a default is worthless
+  // unless something also asserts that the default is what gets used.
+  {
+    const appA = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the state that actually feeds it starts on Sign in",
+       /const \[authMode, setAuthMode\] = useState\("in"\);/.test(appA));
+    ok("and it is the thing passed in", /initialMode=\{authMode\}/.test(appA));
+    // A button that NAMES an action still opens on that action.
+    ok("the Sign up button still opens Create",
+       /setAuthMode\("up"\); setAuthOpen\(true\); \}\}[\s\S]{0,400}?Sign up/.test(appA));
+    ok("and the Log in button opens Sign in",
+       /setAuthMode\("in"\); setAuthOpen\(true\); \}\}[\s\S]{0,400}?Log in/.test(appA));
+    // Nothing that opens the sheet without naming an action forces Create.
+    is("no unnamed opener sets Create", (appA.match(/setAuthMode\("up"\)/g) || []).length, 1);
+  }
   ok("and the secondary line offers creating one, in his words", />or create an account</.test(sheet));
   // The big button reads off `mode`, so flipping the default flips the label
   // rather than needing a second edit that could be forgotten.
   ok("the primary button is labelled from the mode",
-     /const label = \{ in: "Sign in", up: "Create account", reset: "Send reset link" \}\[mode\]/.test(sheet));
+     /const label = \{ in: "Sign in", up: "Create account", reset: "Send reset link", questions: "Save" \}\[mode\]/.test(sheet));
   // The bottom sheet buried the hero on desktop. One breakpoint, both shapes.
   ok("desktop centres the dialog", /alignItems: wide \? "center" : "flex-end"/.test(sheet));
   ok("and rounds all four corners there", /borderRadius: wide \? 20 :/.test(sheet));
@@ -9812,6 +9833,13 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
   const code = stripNonCode(appSrc);
   const psheet = readFileSync(join(root, "src/components/ProfileSheet.jsx"), "utf8");
+  // ── THE FIELDS MOVED OUT ON 21 AUG ────────────────────────────────
+  // "And creating an account should then change the page into several
+  // questions." They had to be renderable from AuthSheet too, and a second copy
+  // of them is the drift this codebase has already found four times. So the
+  // SHEET (its chrome, its Skip button, its save path) is psheet, and the FORM
+  // is pquest, and each assertion below reads whichever one it is really about.
+  const pquest = readFileSync(join(root, "src/components/ProfileQuestions.jsx"), "utf8");
   const asheet = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
 
   // ── EVERY FIELD OPTIONAL, INCLUDING ALL OF THEM ───────────────────
@@ -9896,7 +9924,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("skip is offered", /Skip/.test(psheet));
   ok("and calls finish with save false", /onClick=\{\(\) => finish\(false\)\}/.test(psheet));
   ok("saving nothing is not offered at all", /disabled=\{busy \|\| isBlank\(p\)\}/.test(psheet));
-  ok("a chip toggles back off", /const pick = \(k, v\) => set\(k, p\[k\] === v \? "" : v\);/.test(psheet));
+  ok("a chip toggles back off", /const pick = \(k, v\) => set\(k, p\[k\] === v \? "" : v\);/.test(pquest));
   ok("and there is a way back in to edit it", /Edit what Gemlyx knows about you/.test(appSrc));
 
   // ── IT ADOPTS THE THEME ───────────────────────────────────────────
@@ -27299,6 +27327,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 {
   const prof = readFileSync(join(root, "src/utils/profile.js"), "utf8");
   const psheet = readFileSync(join(root, "src/components/ProfileSheet.jsx"), "utf8");
+  // ── THE FIELDS MOVED OUT ON 21 AUG ────────────────────────────────
+  // "And creating an account should then change the page into several
+  // questions." They had to be renderable from AuthSheet too, and a second copy
+  // of them is the drift this codebase has already found four times. So the
+  // SHEET (its chrome, its Skip button, its save path) is psheet, and the FORM
+  // is pquest, and each assertion below reads whichever one it is really about.
+  const pquest = readFileSync(join(root, "src/components/ProfileQuestions.jsx"), "utf8");
   const { cleanProfile, isBlank, profileForPrompt, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX } = M;
 
   is("interests are his four", INTERESTS.join(","), "History,Nature,Nightlife,Food");
@@ -27336,20 +27371,22 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("a mix on its own reads as no strong preference",
      /no strong preference/.test(profileForPrompt({ style: [TRAVEL_STYLE_MIX] })), true);
   ok("and the picker clears the others when it is chosen",
-     /if \(option === TRAVEL_STYLE_MIX\) next = on \? \[\] : \[TRAVEL_STYLE_MIX\];/.test(psheet));
+     /if \(option === TRAVEL_STYLE_MIX\) next = on \? \[\] : \[TRAVEL_STYLE_MIX\];/.test(pquest));
   ok("and clears it when another is chosen",
-     /\.filter\(x => x !== TRAVEL_STYLE_MIX\)/.test(psheet));
+     /\.filter\(x => x !== TRAVEL_STYLE_MIX\)/.test(pquest));
 
   // ── TICKBOXES, AND SAID TO BE TICKBOXES ───────────────────────────
-  ok("the three groups are multi-select", /groupMany\("Interests"/.test(psheet)
-     && /groupMany\("How you like to get around"/.test(psheet)
-     && /groupMany\("What a trip is for"/.test(psheet));
+  // HIS OWN LABELS, from the document: "Interests / Prefered transport /
+  // Prefered travelling". Spelled correctly, named as he named them.
+  ok("the three groups are multi-select", /groupMany\("Interests"/.test(pquest)
+     && /groupMany\("Preferred transport"/.test(pquest)
+     && /groupMany\("Preferred travelling"/.test(pquest));
   ok("and the label says so rather than leaving it to be discovered",
-     /pick as many as you like/.test(psheet));
+     /pick as many as you like/.test(pquest));
   // Not a component declared in the render body, for the reason written above
   // `group`: a new component type per render remounts every chip and drops focus.
   ok("groupMany is a function returning elements, not a component",
-     /const groupMany = \(label, note, options, k\) => \(/.test(psheet));
+     /const groupMany = \(label, hint, options, k\) => \(/.test(pquest));
 
   // ── AND A DATE OF BIRTH IS STILL NOT COLLECTED ────────────────────
   // He wrote "Born:". The file's own reasoning, from 10 Aug, is that a band is
@@ -27363,7 +27400,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and no birthdate field was added",
      !/(birthdate|dateOfBirth|dob|born)\s*:/i.test(prof.replace(/\/\/.*$/gm, "")));
   ok("the stored shape is the one the form fills",
-     /EMPTY_PROFILE = \{ name: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: \[\], transport: \[\], style: \[\] \}/.test(prof));
+     /EMPTY_PROFILE = \{ name: "", bornYear: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: \[\], transport: \[\], style: \[\] \}/.test(prof));
 }
 
 // ── 21 AUGUST 2026: "IT CANNOT MAKE A BUILD WITHOUT DATES" ──────────
@@ -27463,6 +27500,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 {
   const appC = readFileSync(join(root, "src/App.jsx"), "utf8");
   const psheet = readFileSync(join(root, "src/components/ProfileSheet.jsx"), "utf8");
+  // ── THE FIELDS MOVED OUT ON 21 AUG ────────────────────────────────
+  // "And creating an account should then change the page into several
+  // questions." They had to be renderable from AuthSheet too, and a second copy
+  // of them is the drift this codebase has already found four times. So the
+  // SHEET (its chrome, its Skip button, its save path) is psheet, and the FORM
+  // is pquest, and each assertion below reads whichever one it is really about.
+  const pquest = readFileSync(join(root, "src/components/ProfileQuestions.jsx"), "utf8");
   const { cleanProfile, profileForPrompt, homeCurrency, countryNamed, COUNTRIES } = M;
 
   // ── BOTH PROMPTS, BECAUSE THEY ARE TWO CALLS ───────────────────
@@ -27504,9 +27548,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── THE FORM SAYS WHAT THE FIELD DOES AND DOES NOT DO ──────────
   // Somebody who ticks United Kingdom and then reads a guide full of kroner
   // should have been told here rather than finding out.
-  ok("the picker exists", /Where you are travelling from/.test(psheet));
-  ok("with an opt out that stores nothing", /Somewhere else, or rather not say/.test(psheet));
-  ok("and says prices stay in DKK", /still price everything in DKK/.test(psheet));
+  ok("the picker exists", /Where you are travelling from/.test(pquest));
+  ok("with an opt out that stores nothing", /Somewhere else, or rather not say/.test(pquest));
+  ok("and says prices stay in DKK", /still price everything in DKK/.test(pquest));
 }
 
 // ── THE ONE CONVERSION, FETCHED AND STAMPED ─────────────────────────
@@ -27745,6 +27789,91 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Unchanged when it is not a venue, so no existing trace sentence moves.
   ok("an ordinary refusal reads exactly as before",
      /never says which one is this event's/.test(stepWords({ why: "many-dates-none-labelled" })));
+}
+
+// ── 21 AUGUST 2026: "AND YOU STILL HAVEN'T DONE THE ACCOUNT PART!!!!!"
+//
+// He was right, and not because it was undeployed. The FIELDS were live; the
+// FLOW never reached them. ProfileSheet opens only once a session exists, behind
+// a thirty day cooldown that ends for good after two skips, and on the email
+// path signUpWithPassword returns NO session, so the sheet said "check your
+// email" and closed. His spec was one sentence: "creating an account should then
+// change the page into several questions."
+{
+  const auth = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
+  const quest = readFileSync(join(root, "src/components/ProfileQuestions.jsx"), "utf8");
+  const sheet2 = readFileSync(join(root, "src/components/ProfileSheet.jsx"), "utf8");
+  const appP = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const { cleanProfile, BORN_YEARS, bandForYear, holdProfile, takeHeldProfile, EMPTY_PROFILE } = M;
+
+  // ── THE SIGNUP FLOW ASKS THEM ITSELF ────────────────────────────
+  ok("creating an account moves to the questions", /setMode\("questions"\);/.test(auth));
+  ok("and does so whether or not a session came back",
+     /setMadeSession\(session \|\| null\);/.test(auth));
+  ok("the sheet renders the shared form", /<ProfileQuestions value=\{answers\} onChange=\{setAnswers\} \/>/.test(auth));
+  ok("with its own heading", /Tell Gemlyx who this is for/.test(auth));
+  // Skip has the same weight as Save here as it does in ProfileSheet.
+  ok("skip is a real answer", /finishQuestions\(false\)/.test(auth) && /Skip/.test(auth));
+
+  // ── ONE FORM, TWO CALLERS ───────────────────────────────────────
+  // A second copy of these fields is how they drift. This codebase has found
+  // four duplicated functions the hard way already.
+  ok("ProfileSheet renders the same component", /<ProfileQuestions value=\{p\} onChange=\{setP\} \/>/.test(sheet2));
+  ok("and no longer defines the fields itself", !/groupMany\("Interests"/.test(sheet2));
+  ok("the form owns no save path", !/saveProfile/.test(quest));
+
+  // ── HIS FIELDS, IN HIS WORDS ────────────────────────────────────
+  ok("Name", /<div style=\{legend\}>Name</.test(quest));
+  ok("Born", /<div style=\{legend\}>Born</.test(quest));
+  ok("Gender", /group\("Gender"/.test(quest));
+  ok("About yourself, as its own heading", />About yourself</.test(quest));
+  ok("and More about yourself at the end", /<div style=\{legend\}>More about yourself</.test(quest));
+
+  // ── BORN IS A YEAR, NOT A DATE ──────────────────────────────────
+  // Satisfies his label literally and keeps profile.js's own 10 Aug reasoning:
+  // a full date of birth is a much stronger identifier that buys nothing extra.
+  ok("years are offered", BORN_YEARS.length > 50 && BORN_YEARS.includes("1998"));
+  ok("and no month or day is collected", !/birth\s*day|dateOfBirth|month/i.test(quest.replace(/\/\/.*$/gm, "")));
+  is("a stored year is stored", cleanProfile({ bornYear: "1998" }).bornYear, "1998");
+  is("and something that is not a year is dropped", cleanProfile({ bornYear: "yes" }).bornYear, "");
+  // The band everything already reasons in is derived, so nothing downstream
+  // needs to know which of the two a row was filled in with.
+  is("a year becomes a band", bandForYear("1998", new Date(2026, 7, 21)), "25-34");
+  is("an older one too", bandForYear("1950", new Date(2026, 7, 21)), "65+");
+  is("and an empty year is no band", bandForYear(""), "");
+  // Rows filled in before the year existed keep their band.
+  is("a stored band survives", cleanProfile({ ageBand: "50-64" }).ageBand, "50-64");
+
+  // ── HELD ON THE DEVICE UNTIL THERE IS A ROW ─────────────────────
+  // Same gap as the pending guide save on the Google redirect: the account is
+  // real and unconfirmed, so there is no user id to write against yet.
+  const store = {};
+  global.localStorage = {
+    getItem: k => (k in store ? store[k] : null),
+    setItem: (k, v) => { store[k] = String(v); },
+    removeItem: k => { delete store[k]; },
+  };
+  holdProfile({ ...EMPTY_PROFILE, name: "Oliver", interests: ["Food"] });
+  const taken = takeHeldProfile();
+  is("what was held comes back", taken?.name, "Oliver");
+  is("with the ticks intact", taken?.interests.join(","), "Food");
+  // READ AND CLEARED IN ONE GO, so it cannot attach to a second account on a
+  // shared device or be written twice.
+  is("and it is gone afterwards", takeHeldProfile(), null);
+  holdProfile(EMPTY_PROFILE);
+  is("an empty answer set is not worth holding", takeHeldProfile(), null);
+  store["gemlyx_pending_profile"] = "{not json";
+  is("and unparseable is the same as absent", takeHeldProfile(), null);
+  delete global.localStorage;
+
+  // ── CLAIMED ON THE FIRST SESSION ────────────────────────────────
+  ok("App claims it when a session appears", /const held = takeHeldProfile\(\);/.test(appP));
+  // BEFORE fetchProfile: reading first would let the "they already have one"
+  // branch return and strand the held answers.
+  ok("before it reads the stored one",
+     appP.indexOf("const held = takeHeldProfile();") < appP.indexOf("const res = await fetchProfile(userSession);"));
+  ok("and a missing column is still reported rather than swallowed",
+     /if \(wrote\.missingColumn\)/.test(appP));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

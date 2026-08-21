@@ -14,7 +14,7 @@ import { nightlifeTowns } from "./data/nightlifeTowns";
 import { nightlifeStreets } from "./data/nightlifeStreets";
 import { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit } from "./utils/publishedRepair";
 import { blockingCoordProblems, coordProblems, coordAudit, describeCoordAudit } from "./utils/coordCheck";
-import { fetchProfile, profileForPrompt, isBlank as profileIsBlank, homeCurrency } from "./utils/profile";
+import { fetchProfile, saveProfile, takeHeldProfile, profileForPrompt, isBlank as profileIsBlank, homeCurrency } from "./utils/profile";
 import { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, NUDGE_KEY, PROFILE_NUDGE_KEY } from "./utils/accountNudge";
 import { sweepAll, sweepRow, deepCheckPlan, checkAge } from "./utils/factSweep";
 import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filterRows } from "./utils/manageGroups";
@@ -8904,7 +8904,24 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   // Which tab the sheet opens on. "Log in" and "Sign up" are two different
   // promises to the person clicking them, and landing both on the same screen
   // is the kind of small dishonesty that makes a product feel careless.
-  const [authMode, setAuthMode] = useState("up");
+  // ── AND THE DEFAULT HAD TO MOVE HERE, NOT IN THE SHEET ──────────
+  //
+  // Point 9 was applied to AuthSheet's own fallback, `initialMode || "in"`, and
+  // that fallback is dead: this state is passed in as initialMode on every
+  // render, so the prop always wins and the sheet went on opening on Create.
+  // Oliver, 21 Aug 2026, having tested it: "And you still haven't done the
+  // account part!!!!!"
+  //
+  // He was right twice over. The change was in the wrong place, and it had not
+  // been deployed either.
+  //
+  // "in", because his instruction was about which action is the big yellow
+  // button: "the big yellow button should be login, while the 'understreget'
+  // part shall be 'or create an account'." The two landing buttons below still
+  // set their own mode explicitly, because a button that says Sign up must open
+  // on Sign up; everything that opens this sheet WITHOUT naming an action now
+  // opens on Sign in.
+  const [authMode, setAuthMode] = useState("in");
   // ── WHAT GEMLYX KNOWS ABOUT THE PERSON ───────────────────────────
   // Asked for AFTER the account exists, never during signup: his friend's
   // whole complaint was being asked things before being given anything, and
@@ -9079,6 +9096,24 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     if (!userSession || profileAskedRef.current) return;
     profileAskedRef.current = true;
     (async () => {
+      // ── THE ANSWERS THEY GAVE AT SIGNUP, CLAIMED ────────────────
+      //
+      // "And creating an account should then change the page into several
+      // questions." AuthSheet asks them now, and on the email path there was no
+      // session to write them against, so they were held on the device. This is
+      // the first moment a row exists.
+      //
+      // Before fetchProfile deliberately: a held profile is newer than anything
+      // stored, and reading first would let the "they already have one" branch
+      // below return and strand it. takeHeldProfile clears as it reads, so a
+      // failed write loses the answers rather than attaching them to whoever
+      // signs in next on a shared device, which is the safer of the two.
+      const held = takeHeldProfile();
+      if (held) {
+        const wrote = await saveProfile(userSession, held);
+        if (wrote.ok) { setUserProfile(held); return; }
+        if (wrote.missingColumn) { setProfileSetupSql("alter table gemlyx_user_data add column if not exists profile jsonb;"); return; }
+      }
       const res = await fetchProfile(userSession);
       // A missing column is reported, not swallowed. gemlyx_research shipped
       // weeks ago and did nothing because both calls sat in catch blocks and
@@ -15620,7 +15655,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, marginBottom: 4 }}>{copy.headline}</div>
                     <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: 12 }}>{copy.detail}</div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <button onClick={() => { setAuthReason(null); setAuthMode("up"); setAuthOpen(true); }}
+                      {/* The account nudge does not name an action, so it
+                          follows the rule rather than forcing Create. See
+                          authMode's declaration. */}
+                      <button onClick={() => { setAuthReason(null); setAuthMode("in"); setAuthOpen(true); }}
                         style={{ background: C.gold, border: "none", color: "#12100B", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                         {copy.accept}
                       </button>
