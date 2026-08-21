@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { C } from "../utils/theme";
-import { AGE_BANDS, SEX_OPTIONS, COMPANY, PACE, DESCRIPTION_MAX, EMPTY_PROFILE, cleanProfile, isBlank, saveProfile, SETUP_SQL } from "../utils/profile";
+import { AGE_BANDS, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, DESCRIPTION_MAX, EMPTY_PROFILE, cleanProfile, isBlank, saveProfile, SETUP_SQL } from "../utils/profile";
 
 // ── TELLING GEMLYX WHO YOU ARE ───────────────────────────────────────
 //
@@ -88,6 +88,36 @@ export const ProfileSheet = ({ open, session, initial, onDone, onNeedsSetup }) =
     </div>
   );
 
+  // ── THE SAME THING, TICKABLE ──────────────────────────────────────
+  // "MAKE TICKBOXES HERE! So you can click multiple!" Same chips, same styling,
+  // so the difference a reader has to notice is stated in words under the label
+  // rather than left to be discovered by tapping twice.
+  //
+  // "A mix" is not a fourth thing to like, it is "no strong preference", so it
+  // clears the others and the others clear it. Without that rule the commonest
+  // accidental answer is "hidden gems, and also no preference", which is not an
+  // answer and would reach the prompt as one.
+  const pickMany = (k, option) => {
+    const now = Array.isArray(p[k]) ? p[k] : [];
+    const on = now.includes(option);
+    let next;
+    if (option === TRAVEL_STYLE_MIX) next = on ? [] : [TRAVEL_STYLE_MIX];
+    else next = (on ? now.filter(x => x !== option) : [...now, option]).filter(x => x !== TRAVEL_STYLE_MIX);
+    set(k, next);
+  };
+  const groupMany = (label, note, options, k) => (
+    <div key={k}>
+      <div style={legend}>{label}<span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, color: C.muted }}> · pick as many as you like{note ? `, ${note}` : ""}</span></div>
+      <div style={row}>
+        {options.map(o => (
+          <button key={o} onClick={() => pickMany(k, o)} style={chip((p[k] || []).includes(o))}>
+            {(p[k] || []).includes(o) ? "✓ " : ""}{o}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 985, display: "flex", justifyContent: "center", alignItems: wide ? "center" : "flex-end", padding: wide ? 24 : 0, boxSizing: "border-box", backdropFilter: "blur(3px)", WebkitBackdropFilter: "blur(3px)" }}>
       <div style={{ background: C.surface, width: "100%", maxWidth: wide ? 470 : 520, maxHeight: wide ? "92vh" : "90vh", overflowY: "auto", border: `1px solid ${C.border}`, borderRadius: wide ? 20 : "20px 20px 0 0", borderBottom: wide ? `1px solid ${C.border}` : "none", padding: wide ? "26px 26px 22px" : "22px 20px calc(26px + env(safe-area-inset-bottom))", boxShadow: wide ? "0 24px 70px rgba(0,0,0,0.55)" : "none", boxSizing: "border-box" }}>
@@ -108,10 +138,36 @@ export const ProfileSheet = ({ open, session, initial, onDone, onNeedsSetup }) =
         <input value={p.name} onChange={e => set("name", e.target.value.slice(0, 60))} placeholder="First name is plenty"
           autoComplete="given-name" style={{ ...field, marginBottom: 16 }} />
 
+        {/* ── WHERE THEY ARE COMING FROM ────────────────────────────
+            "In the create an account, ask what country they're from. Because
+            then the guide can probably write in their currency."
+
+            A select rather than chips: two dozen options is a list, not a row,
+            and a row of two dozen gold pills would swamp every real question
+            above it. The note under it says what the field does and, just as
+            importantly, what it does not do, because a reader who expects to
+            see pounds in their guide and gets kroner should have been told
+            here. */}
+        <div style={legend}>Where you are travelling from<span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, color: C.muted }}> · so we can tell you what DKK is worth</span></div>
+        <select value={p.country} onChange={e => set("country", e.target.value)}
+          style={{ ...field, marginBottom: 6, appearance: "none", cursor: "pointer" }}>
+          <option value="">Somewhere else, or rather not say</option>
+          {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+        </select>
+        <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.55, marginBottom: 16 }}>
+          {homeCurrency(p.country)
+            ? `Your guide will still price everything in DKK, because that is what the sign and the ticket app say. It will open with what 100 DKK is worth in ${homeCurrency(p.country)} on the day it was built.`
+            : "Prices are always in DKK, because that is what you will actually be charged. Tell us where you are from and the guide will open with what that is worth to you."}
+        </div>
+
         {group("Age", "it changes what is worth recommending", AGE_BANDS, "ageBand")}
         {group("Who you usually travel with", "", COMPANY, "company")}
         {group("Pace", "", PACE, "pace")}
         {group("Sex", "optional, and it changes very little", SEX_OPTIONS, "sex")}
+
+        {groupMany("Interests", "they are weighted, not filters", INTERESTS, "interests")}
+        {groupMany("How you like to get around", "", TRANSPORT, "transport")}
+        {groupMany("What a trip is for", "", TRAVEL_STYLE, "style")}
 
         <div style={legend}>Anything else worth knowing</div>
         <textarea value={p.description} onChange={e => set("description", e.target.value.slice(0, DESCRIPTION_MAX))}

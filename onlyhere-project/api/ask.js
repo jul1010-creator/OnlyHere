@@ -76,7 +76,7 @@ export default async function handler(req, res) {
   }
   if (!userId) return json(res, 401, { error: "Sign in to ask a question." });
 
-  const { question, entry, entryName, lang } = req.body || {};
+  const { question, entry, entryName, lang, nearby } = req.body || {};
   // ── ANSWER IN THE LANGUAGE THEY READ IN ─────────────────────────
   // Oliver, 15 Aug 2026, on somebody who only reads Mandarin. Neither prompt in
   // this file said a word about language, so both answered in English and
@@ -163,17 +163,49 @@ export default async function handler(req, res) {
     // 1. THE ENTRY FIRST. It is the only text here that has been fact-checked,
     // so it outranks anything a model happens to know about Denmark.
     const entryJson = JSON.stringify(entry || {}, null, 2).slice(0, 24000);
+
+    // ── AND THE LIBRARY SECOND, BEFORE ANY SEARCH ────────────────────
+    //
+    // Oliver, 21 Aug 2026: "it pretty much just answers exactly what the page
+    // says really.. and is a poor version of google."
+    //
+    // He asked what was near Bybjerg. This route had one row, that row does not
+    // list its neighbours, so it went straight past the library to Perplexity
+    // and reported that it could not confirm anywhere nearby. Roskilde Festival
+    // at 23 km and Køge Festuge at 42 km were on his screen at the time, in
+    // Gemlyx's own strip, put there by the same coordinates this block now
+    // receives.
+    //
+    // In the SAME call rather than a second tier, for three reasons: both blocks
+    // are Gemlyx's own checked material and neither outranks the other on
+    // trustworthiness, one call is one call's latency and one call's money, and
+    // an answer built from them is still an answer that needed no search, which
+    // is what the "looked up just now" badge on the client claims.
+    //
+    // The distances are straight line and the prompt has to say so, because the
+    // page says so under its own strip and an assistant quietly implying driving
+    // time would contradict the page a reader is looking at.
+    const near = Array.isArray(nearby) ? nearby.slice(0, 8) : [];
+    const nearBlock = !near.length ? "" : `
+
+OTHER GEMLYX ENTRIES NEAR THIS ONE, which are checked in exactly the same way and are yours to answer from:
+${near.map(r => `- ${r.name}${r.note ? ` (${r.note})` : ""}: ${r.away || `${r.km} km`} away, straight line`).join("\n")}
+
+These distances are measured in a straight line between centres. They are not driving or walking times, so never present one as a journey time, and never invent a route between two of them. If somebody asks what is nearby, or what else there is to do, or where to eat, these are the answer and you do not need to look anything up.`;
+
     const first = await askClaude(
       `You are Gemlyx's assistant, answering a traveler about ONE place they are reading about.
 
-Answer ONLY from the entry below. Never add a Danish fact the entry does not contain, and never fill a gap from general knowledge: this guide's whole value is that what it says has been checked.
+Answer ONLY from the material below. Never add a Danish fact it does not contain, and never fill a gap from general knowledge: this guide's whole value is that what it says has been checked.
 
-IF THE ENTRY DOES NOT CONTAIN THE ANSWER, reply with exactly ${NOT_IN_ENTRY} and one short sentence naming what is missing, and nothing else. Something else will go and look it up. Answering from memory instead is the one mistake that matters here.
+ANSWER THE QUESTION, DO NOT RECITE THE PAGE. They are looking at this entry while they type, so quoting a paragraph of it back is worth nothing to them. Give the part that answers what they asked, in a sentence or two.
+
+IF THE MATERIAL DOES NOT CONTAIN THE ANSWER, reply with exactly ${NOT_IN_ENTRY} and one short sentence naming what is missing, and nothing else. Something else will go and look it up. Answering from memory instead is the one mistake that matters here.
 
 Be short and plain. No preamble. Never use an em dash or an en dash.${answerIn}
 
 Entry:
-${entryJson}
+${entryJson}${nearBlock}
 
 Question:
 ${q}`,

@@ -14,7 +14,7 @@ import { nightlifeTowns } from "./data/nightlifeTowns";
 import { nightlifeStreets } from "./data/nightlifeStreets";
 import { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit } from "./utils/publishedRepair";
 import { blockingCoordProblems, coordProblems, coordAudit, describeCoordAudit } from "./utils/coordCheck";
-import { fetchProfile, profileForPrompt, isBlank as profileIsBlank } from "./utils/profile";
+import { fetchProfile, profileForPrompt, isBlank as profileIsBlank, homeCurrency } from "./utils/profile";
 import { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, NUDGE_KEY, PROFILE_NUDGE_KEY } from "./utils/accountNudge";
 import { sweepAll, sweepRow, deepCheckPlan, checkAge } from "./utils/factSweep";
 import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filterRows } from "./utils/manageGroups";
@@ -50,7 +50,10 @@ import { checkNightTransport, geocodePlace, findRealNearestStation, geocodePostc
 import { runOnce } from "./utils/inFlight";
 import { Pill } from "./components/Pill";
 
-import { DetailPage } from "./components/DetailPage";
+import { DetailPage, detailPoint } from "./components/DetailPage";
+// The same resolution DetailPage uses for the map pin and the dots beside it,
+// so what Ask Gemlyx is told is near an entry is what the page shows as near it.
+import { placedLibrary, nearbyPublished, SAME_VISIT_KM, distanceWords } from "./utils/nearbyPlaces";
 import { WeatherStrip } from "./components/WeatherStrip";
 import { DKLocator } from "./components/DKLocator";
 import { LeafletMap } from "./components/LeafletMap";
@@ -8788,8 +8791,15 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
         // per-leg how-texts, and it previously got exactly one attempt — one
         // transient API blip silently cost the whole day its accommodation.
         // Two retries via the same withRetry the Studio pipeline uses.
+        // ── AND THIS IS WHERE THE DOLLARS CAME FROM ─────────────────
+        // The accommodation sentence is written here, one call per day, in
+        // parallel. Oliver's guide got "$45/night" on day 1, "$182 per night"
+        // on day 3, and on day 4 "hostels here run around DKK 600/night while
+        // central hotels start near $200", which is both currencies in one
+        // sentence. Same rule as the writer prompt, stated again here because
+        // this call has its own prompt and never sees that one.
         const enrichResult = await withRetry(() => askClaude(
-          `${enrichPrompt}\n\nRespond with ONLY the raw JSON object, no markdown code fences.\n\n${context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks."}`,
+          `${enrichPrompt}\nEVERY PRICE YOU WRITE IS IN DKK. Never dollars, euros or pounds, and never a conversion in brackets: a traveller in Denmark is charged kroner and a converted figure matches nothing they will see. A price you can only give by converting is a price you do not have, so describe the place without one.\n\nRespond with ONLY the raw JSON object, no markdown code fences.\n\n${context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks."}`,
           // TOKEN BUMP 350 → 900 (Oliver: "why does the accommodation/booking
           // affiliation keep getting removed"): 350 max_tokens was genuinely too
           // tight for this response — a 5-stop day needs 4 leg objects PLUS the
@@ -9883,7 +9893,9 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
             // travelModeKey rather than the regexes further down this function,
             // because those are declared hundreds of lines below this point and
             // this is the same TDZ shape that has already bitten enrichGuideDays.
-            const gateMode = travelModeKey(convoText);
+            // Their words only, for the reason written at the mode block below: the
+      // assistant's own question names three modes and would answer the gate.
+      const gateMode = travelModeKey(saidByTravellerForGuide);
             let verdict = checkPlan(skeleton.days, gateCoords, { isPublished, mode: gateMode });
             let planDays = skeleton.days;
 
@@ -10008,6 +10020,30 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // which is what the match reads. See essentialsForTrip in utils/interestFit.js.
       const essentialsPicked = essentialsForTrip(essentials, { convoText, interests: intakeInterest });
       const essentialsFacts = essentialsBlock(essentialsPicked);
+      // ── EVERY FIGURE IN A DANISH GUIDE IS IN KRONER ─────────────────
+      //
+      // Oliver, 21 Aug 2026, on a line in his own built guide: "Stay near
+      // Nyhavn in central Copenhagen at a budget hostel, since hostels here run
+      // around DKK 600/night while central hotels start near $200." His verdict:
+      // "That's just not true at all.."
+      //
+      // Three faults in one sentence, and the currency is the one that made the
+      // other two possible. Two currencies in a Danish guide, and the dollar
+      // figure is a number a model produced out of nothing: no page states it,
+      // nothing checked it, and it cannot be checked, because it is a conversion
+      // of a figure that was itself unsourced. The same guide priced a Ribe
+      // hotel at "$45/night" and a Christianshavn one at "$182 per night".
+      //
+      // Two currencies is also the tell. A model quoting dollars in a Denmark
+      // guide is not reading a Danish page, and that had gone unnoticed for as
+      // long as it has been happening. This makes the wrong thing look wrong.
+      //
+      // Not a new rule so much as the one already written for the language
+      // feature, applied where the money is actually written. api/ask.js:
+      // "Prices stay in DKK with the figure unchanged." Everything a traveller
+      // pays here is priced in kroner, on the sign and in the app, and a figure
+      // they cannot match against either is worse than no figure.
+      const CURRENCY_RULE = "\nEVERY PRICE IN THIS GUIDE IS IN DKK, WITH NO EXCEPTIONS. Never write a figure in dollars, euros, pounds or any other currency, and never put an approximate conversion in brackets after a price. That is not a formatting preference: what a traveller is charged in Denmark is kroner, on the sign and in the ticket app, and a converted figure matches nothing they will ever see. A conversion is also a number you worked out rather than read, which is the one kind of number this guide does not carry. If the only figure you have for something is in another currency, you do not have a figure for it: say what it is like without pricing it.";
       if (essentialsPicked.length) {
         note("Published essentials chosen for this trip", {
           provider: "fetch",
@@ -10054,7 +10090,7 @@ CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stop
 CRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE ROUTE, NOT JUST EACH DAY INTERNALLY: this applies across the whole trip, not just within one day — Copenhagen/Zealand and Jutland are genuinely different regions connected only by a long bridge/ferry crossing or a flight, never a short hop. Don't send the trip deeper into one region for several days and then jump straight to the other with no bridging day (e.g. Day 1-2 further into Jutland, Day 3 suddenly Copenhagen). If a planning skeleton is provided below, its day-to-day order already accounts for this — follow it. If you're structuring the trip yourself (no skeleton, or it's missing this), order the days to move in one general direction across the country and minimize total region-crossings over the whole trip.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a genuine buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a genuine buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, genuinely adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything genuinely inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${chosenEventsBlock}${chosenExtrasBlock}${essentialsFacts}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's genuinely missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}`;
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${chosenEventsBlock}${chosenExtrasBlock}${essentialsFacts}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's genuinely missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}`;
       // Guide-building is genuine multi-step reasoning (timing, geography, avoiding
       // duplicates, family-mode adjustments) — this is the one call in Detour worth
       // Opus's extra reasoning depth, and it already has a loading screen the person
@@ -10237,7 +10273,34 @@ If the conversation only covers a single day or a few stops with no explicit day
       // and then thrown away by the renderer's own plausibility cap. The reader
       // got "Too far to walk, check the route" in place of the journey that had
       // already been paid for.
-      const lc = convoText.toLowerCase();
+      // ── AND THE MODE IS THEIRS TO STATE, TOO ──────────────────────
+      //
+      // Oliver, 21 Aug 2026: "I said public transport, but it put bike.."
+      //
+      // He did say public transport, and the chat heard him: the reply he got
+      // was about the Rejsekort app and the 750 DKK fine, which is public
+      // transport advice. The BUILD then planned the trip around a bike.
+      //
+      // Because every line below read `convoText`, which is both halves, and
+      // GEMLYX'S OWN QUESTION IS "How are you getting around once you're here?
+      // Car, bike, trains and buses, or a mix of them." The question contains
+      // the words bike and car. travelModeKey ranks slowest-first and puts bike
+      // above public transport, deliberately and correctly for one traveller
+      // sentence, so the question answered itself before his reply was read.
+      //
+      // Reproduced on his transcript: travelModeKey -> "bike", mentionedModes ->
+      // [bike, car, public transport], so mixedModes then told the writer he
+      // "explicitly wants a MIX of BIKE AND CAR AND PUBLIC TRANSPORT" when he
+      // named one thing and the other two were Gemlyx's. This fired on EVERY
+      // trip where the transport slot was ever asked, whatever the answer.
+      //
+      // saidByTravellerForGuide is the variable the arrival fix already
+      // introduced twenty lines above, for the identical fault: the guide's
+      // arrival point came out of Gemlyx's own sentence "I'll assume you're
+      // landing at Copenhagen Airport." Same rule, second reader. tripBrief.js
+      // and previewMatch.js already read traveller turns only; this was the last
+      // reader of intent in the app still reading both halves.
+      const lc = saidByTravellerForGuide.toLowerCase();
       const modeText = withoutNonModes(lc);
       const mentionsTransit = /public transport|by train|by bus|trains? and buses?|offentlig transport|\btog\b/.test(modeText);
       const mentionsCar = /\b(car|driving|drive|bil|camper ?van|rv\b)\b/.test(modeText);
@@ -10261,9 +10324,31 @@ If the conversation only covers a single day or a few stops with no explicit day
       // whenever it can, and keeps the old answer for the modes travelModeKey can
       // return that this list has never carried (walk, tent, camper), so nothing
       // downstream meets a mode string it has not seen before.
-      const primaryKey = travelModeKey(convoText);
+      const primaryKey = travelModeKey(saidByTravellerForGuide);
       const travelMode = mentionedModes.includes(primaryKey) ? primaryKey : (mentionedModes[0] || null);
       const mixedModes = mentionedModes.length > 1 ? mentionedModes : null;
+
+      // ── AND ONE RATE, FOR THE WHOLE GUIDE ─────────────────────────
+      // Fetched here rather than written by a model, and fetched ONCE rather
+      // than per price. See api/fx.js for the argument; the short version is
+      // that every converted figure in his last guide was a number nothing had
+      // read, and this is the one number that is read.
+      //
+      // Failure is silence. A guide with no rate line is still entirely correct,
+      // because every price in it is in kroner, so this never blocks a build and
+      // never falls back to a stored rate: a hardcoded rate is wrong by a little
+      // at first and by a lot later, without ever saying so.
+      let fxLine = null;
+      const wantFx = homeCurrency(userProfile?.country);
+      if (wantFx) {
+        try {
+          const fxRes = await fetch(`/api/fx?to=${encodeURIComponent(wantFx)}`);
+          if (fxRes.ok) {
+            const fxData = await fxRes.json();
+            if (Number(fxData?.amount) > 0) fxLine = fxData;
+          }
+        } catch { /* no rate, no line, no harm */ }
+      }
 
       buildStage("Working out where to stay and how you get around", 90);
       // ── AND WHAT THEY SAID ABOUT MONEY REACHES IT ─────────────────
@@ -10416,7 +10501,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const testProfile = randomTestProfileRef.current && convoText.includes(randomTestProfileRef.current.brief) ? randomTestProfileRef.current : null;
       endRun();
       endLog();
-      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
+      setGuideModal({ _gid: gid, _fx: fxLine, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
       // A build that failed halfway still spent everything it spent up to that
       // point, and a meter that only counts successes reports a cost per guide
@@ -17803,7 +17888,54 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         // experience, and a gate he cannot see is a gate he will forget exists.
         const readerSession = userSession
           || (studioSession?.access_token ? { token: studioSession.access_token, email: studioSession.email } : null);
+        // ── AND A POOR VERSION OF GOOGLE IS NOT WORTH ASKING ──────
+        //
+        // Oliver, 21 Aug 2026, on a screenshot of this widget: "it pretty much
+        // just answers exactly what the page says really.. and is a poor version
+        // of google."
+        //
+        // The screenshot is worse than the complaint. He asked "Hvad med tæt
+        // på?" about Bybjerg, it ran a live Perplexity search, and it answered
+        // that it could not confirm any concrete places nearby. Roskilde
+        // Festival at 23 km and Køge Festuge at 42 km were on screen at that
+        // moment, in Gemlyx's own NEARBY strip, a few hundred pixels to the left
+        // of the answer.
+        //
+        // It could not see them. api/ask.js is handed ONE row and nothing else,
+        // so a question about anything beyond that row's own text can only fall
+        // through to a web search, and a web search is the thing he can already
+        // do himself. The library is the only part of this it cannot: hundreds of
+        // published rows, each fact-checked, each with a coordinate.
+        //
+        // SAME_VISIT_KM and the same resolver as DetailPage, deliberately: the
+        // strip on the page and the answer in the panel disagreeing about what is
+        // near would be a worse failure than either being sparse.
+        const readingPoint = detailPoint(reading, readingKind);
+        const readingNear = !readingPoint ? [] : nearbyPublished(
+          readingPoint,
+          placedLibrary({
+            town: towns,
+            event: [...events, ...majorEvents, ...vikingEvents],
+            free: freeEntrance,
+            food: foodSpots,
+            nightlife: nightlifeSpots,
+          }, { includeTowns: true }),
+          { maxKm: SAME_VISIT_KM, limit: 8, exclude: reading.name }
+        ).map(r => ({
+          name: r.name,
+          kind: r.kind,
+          km: Math.round(r.km * 10) / 10,
+          // Built here rather than on the server, because the row shapes live in
+          // this bundle and api/ask.js deploys without it.
+          note: [
+            r.kind === "event" ? getEventDate(r.row?.date, r.row?.dateEnd) : "",
+            r.row?.town || r.row?.location || r.row?.city || r.row?.region || "",
+            r.type || "",
+          ].filter(Boolean).join(" · "),
+          away: distanceWords(r.km),
+        }));
         return <AskGemlyx session={readerSession} item={reading} kind={readingKind}
+                          nearby={readingNear}
                           founder={!userSession && !!studioSession}
                           onSignIn={() => setAuthOpen(true)} />;
       })()}

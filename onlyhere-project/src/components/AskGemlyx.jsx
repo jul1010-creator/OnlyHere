@@ -49,7 +49,7 @@ const bubble = (role) => ({
 // account. It changes nothing about how the question is asked or metered; it
 // puts a line on the panel saying the gate is there, because the whole reason
 // he is through it is that he is checking what a reader gets.
-export const AskGemlyx = ({ session, item, kind, onSignIn, founder = false, startOpen = false, onClose = null }) => {
+export const AskGemlyx = ({ session, item, kind, onSignIn, founder = false, nearby = [], startOpen = false, onClose = null }) => {
   const [open, setOpen] = useState(!!startOpen);
   const [input, setInput] = useState("");
   const [log, setLog] = useState([]);
@@ -109,6 +109,14 @@ export const AskGemlyx = ({ session, item, kind, onSignIn, founder = false, star
           lang: readerLanguage(),
           // The stored entry, minus the internals a reader has no use for.
           entry: Object.fromEntries(Object.entries(item).filter(([k]) => !k.startsWith("_") && k !== "photo")),
+          // ── AND WHAT GEMLYX HOLDS AROUND IT ────────────────────
+          // "it pretty much just answers exactly what the page says really.. and
+          // is a poor version of google." One row was all this endpoint ever
+          // had, so every question reaching past that row's own text fell
+          // through to a web search. These are other published entries within
+          // the same-visit radius, computed by the same resolver that draws the
+          // NEARBY strip on the page, so the panel and the page cannot disagree.
+          nearby: (nearby || []).slice(0, 8),
         }),
       });
       const data = await res.json();

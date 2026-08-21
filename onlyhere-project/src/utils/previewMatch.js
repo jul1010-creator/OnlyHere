@@ -472,6 +472,54 @@ export const isRejectedPlace = (convoText, name) => {
 // Every part of the country and every named region, as one list to test the
 // conversation against. REGION_NAMES is the specific tier ("Sønderjylland"),
 // PARTS_OF_COUNTRY the wide one ("Jutland"); both are things a traveller says.
+// ── A COMPASS QUALIFIER MAKES IT A DIFFERENT PLACE ──────────────────
+//
+// Oliver, 21 Aug 2026: "I never said Billund and Aarhus.. that's odd to put on
+// the review." He said "I'm starting from Southern Jutland".
+//
+// "Jutland" is a whole word inside "Southern Jutland", so the wide tier matched
+// and every town in Jutland became a wanted town. Aarhus (Østjylland) and
+// Billund (Sydvestjylland) both passed, and both arrived badged IN JUTLAND,
+// which is the app honestly reporting an input it had invented.
+//
+// Worse, the region he DID name was lost on the way: "Southern Jutland" is a
+// REGION_ALIASES spelling of Sønderjylland and this function reads PLACE_NAMES,
+// which only carries "South Jutland". So the narrow request vanished and the
+// wide one containing it took its place, which is the exact move the comment on
+// placeIsInRegion forbids: "Containment runs ONE WAY: asking for the whole of
+// Jutland reaches every region in it, asking for one region does not reach its
+// neighbours." That discipline was enforced one step too late, after the
+// widening had already happened here.
+//
+// Same shape as the New Zealand guard below, and it lives beside it on purpose.
+const COMPASS_QUALIFIER = /\b(?:south|southern|north|northern|east|eastern|west|western|mid|middle|central|syd|sønder|sonder|nord|øst|ost|vest|midt)(?:ern)?[\s-]*$/i;
+
+// ── AND ONLY WHERE A QUALIFIED VERSION IS A REAL PLACE ──────────────
+// REGION_NAMES carries compass sub-regions for exactly two of the five parts:
+// Jutland (Nordjylland, Vestjylland, Midtjylland, Østjylland, Sydvestjylland,
+// Sydøstjylland, Sønderjylland) and Zealand (Nordsjælland, Midt- og
+// Vestsjælland, Sydsjælland og Møn). Funen, Lolland-Falster and Bornholm have
+// none, so "southern Funen" is a DESCRIPTION of Funen rather than the name of
+// somewhere else, and suppressing it would throw away a real request to fix a
+// problem that part does not have. Caught by the test that asked for southern
+// Funen and got nothing back.
+const QUALIFIABLE_PARTS = ["Jutland", "Zealand"];
+
+// ── AND A PLACE YOU ARE LEAVING IS NOT A PLACE YOU ASKED FOR ────────
+//
+// isDeparturePlace has known since it was written that "out of Copenhagen" is
+// not a request for Copenhagen. It is called on TOWN rows only, and its verb
+// list is out of / outside / away from / leave / escape, so neither half of
+// "I'm starting from Southern Jutland" reaches it: wrong tier, and no origin
+// preposition in the vocabulary.
+//
+// This is the third instance of that hole. The first was towns, the second was
+// "steer well clear of X" one tier down (isRejectedPlace), and this is regions,
+// one tier up. Narrow on purpose: an origin preposition immediately before the
+// name, nothing cleverer, because reading a wanted region as unwanted empties
+// the screen in the other direction.
+const FROM_ORIGIN = /\b(?:start(?:ing)?|com(?:e|ing)|mov(?:e|ing)|driv(?:e|ing)|travell?(?:ing)?|head(?:ing)?|arriv(?:e|ing)|set\s+off|depart(?:ing)?)\s+(?:up\s+|down\s+|over\s+|across\s+|out\s+)?from\s*$/i;
+
 export const regionsNamed = (convoText) => {
   const text = String(convoText || "");
   const out = [];
@@ -489,7 +537,19 @@ export const regionsNamed = (convoText) => {
     // real request while blocking the false one is worse than no guard.
     const named = variantsOf(r).some(v => {
       const { hay, at } = foundAt(text, v);
-      return at.some(i => !/\b(?:new|nya|nieuw|nouvelle)\s*$/i.test(hay.slice(Math.max(0, i - 12), i)));
+      return at.some(i => {
+        const before = hay.slice(Math.max(0, i - 24), i);
+        if (/\b(?:new|nya|nieuw|nouvelle)\s*$/i.test(before)) return false;
+        // "Southern Jutland" is Sønderjylland, not Jutland. Only the wide tier
+        // can be qualified this way: "North Jutland" and "South Jutland" are
+        // regions in their own right, while a REGION_NAME is already specific
+        // and "southern Funen" is still Funen.
+        if (QUALIFIABLE_PARTS.includes(r) && COMPASS_QUALIFIER.test(before)) return false;
+        // "I'm starting from Southern Jutland" is where they began, not where
+        // they want to be taken.
+        if (FROM_ORIGIN.test(before)) return false;
+        return true;
+      });
     });
     if (named) out.push(r);
   }

@@ -49,9 +49,19 @@ import { signInWithPassword, signUpWithPassword, sendPasswordReset, startGoogleS
 // somebody who wanted a guide, not an account. "Logging in with google should
 // be easy" is a requirement about how long the interruption lasts.
 export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, initialMode }) => {
-  // Defaults to CREATE, not sign in. There are no returning users yet, and the
-  // person hitting this has just been told they need an account.
-  const [mode, setMode] = useState(initialMode || "up");   // "up" | "in" | "reset"
+  // ── AND NOW IT DEFAULTS TO SIGNING IN ─────────────────────────────
+  //
+  // Oliver, 21 Aug 2026, point 9: "The create account gotta change… the big
+  // yellow button should be login, while the 'understreget' part shall be 'or
+  // create an account'."
+  //
+  // This used to default to CREATE, on the reasoning that there are no
+  // returning users yet. That reasoning expires the day there are, and it gets
+  // the cost backwards in the meantime: a returning person shown a signup form
+  // has to notice a small underlined line to get to the thing they came for,
+  // while somebody new is here BECAUSE they were just told they need an
+  // account, so the one extra tap lands on the person who already expects one.
+  const [mode, setMode] = useState(initialMode || "in");   // "up" | "in" | "reset"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -196,7 +206,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         </button>
 
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-          {mode !== "up" && <button style={linkBtn} onClick={() => { setMode("up"); setError(null); setNotice(null); }}>Create an account</button>}
+          {mode !== "up" && <button style={linkBtn} onClick={() => { setMode("up"); setError(null); setNotice(null); }}>or create an account</button>}
           {mode !== "in" && <button style={linkBtn} onClick={() => { setMode("in"); setError(null); setNotice(null); }}>I already have one</button>}
           {mode === "in" && <button style={linkBtn} onClick={() => { setMode("reset"); setError(null); setNotice(null); }}>Forgot password</button>}
         </div>

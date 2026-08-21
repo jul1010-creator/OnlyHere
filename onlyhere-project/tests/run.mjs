@@ -91,7 +91,7 @@ writeFileSync(entry, `
   export { directionsEndpoint, collapsedRoute } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { upgradeWorthIt, onFootMinutes, MIN_UPGRADE_SAVING, COLLAPSE_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
-  export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, AGE_BANDS, SEX_OPTIONS, COMPANY, PACE, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
+  export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, AGE_BANDS, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
   export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
@@ -99,7 +99,7 @@ writeFileSync(entry, `
   export { ALLOWED_ORIGINS, originOf, isAllowedOrigin, requestIsFromSite, NOT_FROM_SITE, STUDIO_ONLY_ENDPOINTS, resolveUser, isFounder } from ${JSON.stringify(join(root, "src/utils/apiGuard.js"))};
   export { citationUrls } from ${JSON.stringify(join(root, "src/utils/aiClient.js"))};
   export { THEMES, THEME_ORDER, DEFAULT_THEME } from ${JSON.stringify(join(root, "src/utils/theme.js"))};
-  export { BRIEF_SLOTS, BLOCKING_SLOTS, readBrief, briefReady, nextAsks, briefBlock, MAX_ASKS_AT_ONCE } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
+  export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, briefBlock, MAX_ASKS_AT_ONCE } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { GREETING, openingThread, withTestBrief, withoutTestBrief, threadIsSound, TEST_BRIEF } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { CHAT_REPORT_KIND, CHAT_REPORT_VERSION, buildChatReport, chatReportFilename, turnReport, briefTimeline, intakeReport } from ${JSON.stringify(join(root, "src/utils/chatReport.js"))};
   export { RIGHTS_HOLDER, copyrightLine, GUIDE_RIGHTS_SHORT, GUIDE_RIGHTS_FULL, TDM_RESERVATION } from ${JSON.stringify(join(root, "src/utils/rights.js"))};
@@ -1049,7 +1049,10 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // travelModeKey rather than the mode regexes further down that function: those
     // are declared hundreds of lines below the gate, which is the TDZ shape that has
     // already bitten enrichGuideDays in this same file.
-    ok("the mode is read with the folded resolver", /const gateMode = travelModeKey\(convoText\)/.test(appG));
+    // AND OVER HIS WORDS, NOT BOTH HALVES. 21 Aug: "I said public transport, but
+    // it put bike.." Gemlyx's own question names car and bike, and travelModeKey
+    // ranks bike above public transport, so the question answered the gate.
+    ok("the mode is read with the folded resolver", /const gateMode = travelModeKey\(saidByTravellerForGuide\)/.test(appG));
     // And what could not be judged reaches the run report, or "we could not check"
     // and "we checked" stay indistinguishable to the only person who can fix it.
     ok("unjudged days are recorded for him to see", /verdict\.unjudged\?\.length/.test(appG));
@@ -7058,7 +7061,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const blockAt = appSrc.indexOf("const chosenEventsBlock");
   ok("the block is built before the planner runs", blockAt > 0 && blockAt < plannerAt);
   ok("the planner prompt carries it", /not just within each single day\.\$\{chosenEventsBlock\}/.test(appSrc));
-  ok("the writer prompt carries it too", /atmosphere and experience instead\.\$\{chosenEventsBlock\}/.test(appSrc));
+  ok("the writer prompt carries it too", /atmosphere and experience instead\.\$\{CURRENCY_RULE\}\$\{chosenEventsBlock\}/.test(appSrc));
   // And the deterministic half, because a prompt has a failure rate.
   ok("a ticked event that never made the plan is a plan problem",
     /was added to this trip on the preview screen and no day contains it/.test(appSrc));
@@ -9738,7 +9741,18 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and changes the heading", /"Keep this guide"/.test(sheet));
 
   // ── AND THE THINGS HE POINTED AT ──────────────────────────────────
-  ok("a new visitor lands on Create, not Sign in", /const \[mode, setMode\] = useState\(initialMode \|\| "up"\)/.test(sheet));
+  // ── AND THEN HE TURNED IT ROUND, 21 AUG 2026 ────────────────────
+  // Point 9: "the big yellow button should be login, while the 'understreget'
+  // part shall be 'or create an account'." The old default assumed there are no
+  // returning users yet, which expires the day there are, and meanwhile it puts
+  // the extra tap on the returning person rather than on the one who was just
+  // told they need an account.
+  ok("a visitor lands on Sign in, not Create", /const \[mode, setMode\] = useState\(initialMode \|\| "in"\)/.test(sheet));
+  ok("and the secondary line offers creating one, in his words", />or create an account</.test(sheet));
+  // The big button reads off `mode`, so flipping the default flips the label
+  // rather than needing a second edit that could be forgotten.
+  ok("the primary button is labelled from the mode",
+     /const label = \{ in: "Sign in", up: "Create account", reset: "Send reset link" \}\[mode\]/.test(sheet));
   // The bottom sheet buried the hero on desktop. One breakpoint, both shapes.
   ok("desktop centres the dialog", /alignItems: wide \? "center" : "flex-end"/.test(sheet));
   ok("and rounds all four corners there", /borderRadius: wide \? 20 :/.test(sheet));
@@ -15052,6 +15066,47 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
 
   // A6: containsName sees the whole word Zealand inside New Zealand.
   is("New Zealand is not Zealand", regionsNamed("we loved our trip around New Zealand last year"), []);
+
+  // ── AND SOUTHERN JUTLAND IS NOT JUTLAND ─────────────────────────
+  //
+  // Oliver, 21 Aug 2026: "I never said Billund and Aarhus.. that's odd to put on
+  // the review." What he said was "I'm starting from Southern Jutland". The bare
+  // word Jutland is a whole word inside it, so the wide tier matched and every
+  // town in Jutland became wanted: Aarhus (Østjylland) and Billund
+  // (Sydvestjylland) both passed placeIsInRegion and arrived badged IN JUTLAND.
+  //
+  // Two independent faults in one sentence, so two guards, and each is checked
+  // on its own below.
+  is("a compass qualifier makes it a different region",
+     regionsNamed("I'm starting from Southern Jutland.. been on a trip from Germany"), []);
+  // And the NARROW one is still found, which is the better half of the fix: the
+  // wide match is dropped and the region he actually named survives.
+  is("north resolves to the real region, not the whole peninsula",
+     regionsNamed("a week in North Jutland"), ["Nordjylland"]);
+  is("and the Danish spelling of his own", regionsNamed("vi skal til Sønderjylland"), ["Sønderjylland"]);
+  // The plain word still works, or the guard has eaten the feature.
+  is("asking for Jutland still asks for Jutland", regionsNamed("we want to see Jutland"), ["Jutland"]);
+  is("and Funen", regionsNamed("a few days on Funen"), ["Funen"]);
+  // A REGION_NAME is already specific, so a qualifier in front of one is a
+  // description rather than a different place.
+  // Only Jutland and Zealand have compass sub-regions. Funen has none, so a
+  // compass word in front of it describes Funen rather than naming somewhere
+  // else, and suppressing it would lose a real request.
+  ok("southern Funen is still Funen", regionsNamed("southern Funen").includes("Funen"));
+  ok("and northern Bornholm is still Bornholm", regionsNamed("northern Bornholm").includes("Bornholm"));
+
+  // ── AND A REGION YOU ARE LEAVING IS NOT ONE YOU ASKED FOR ───────
+  // isDeparturePlace has known since it was written that "out of Copenhagen" is
+  // not a request for Copenhagen. It is called on town rows only, and its verbs
+  // are out of / away from / leave / escape, so "starting from" reached it
+  // through neither door. Third instance of the same hole: towns, then "steer
+  // well clear of X", now regions.
+  is("starting from Jutland is where they began", regionsNamed("I'm starting from Jutland"), []);
+  is("so is driving up from it", regionsNamed("driving up from Jutland to see the north"), []);
+  is("and coming from it", regionsNamed("coming from Funen originally"), []);
+  // Not everything with "from" in it is an origin.
+  ok("but a request is still a request",
+     regionsNamed("anything worth seeing in Jutland, away from the crowds").includes("Jutland"));
   ok("but Zealand on its own still counts", regionsNamed("a few days on Zealand").includes("Zealand"));
 
   // A5: Edit and Open were live during a run, so a row could be opened mid-draft
@@ -16161,8 +16216,18 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // ONE ANSWER FOR "WHICH MODE", shared with the plan gate rather than decided by
   // the order the array literal happens to be typed in.
   ok("and the primary mode agrees with the gate's when it can",
-     /const primaryKey = travelModeKey\(convoText\);/.test(appK)
+     /const primaryKey = travelModeKey\(saidByTravellerForGuide\);/.test(appK)
      && /mentionedModes\.includes\(primaryKey\) \? primaryKey/.test(appK));
+  // ── AND NONE OF IT READS GEMLYX'S OWN QUESTION ──────────────────
+  // "I said public transport, but it put bike.." The ask text at tripBrief.js:70
+  // is "Car, bike, trains and buses, or a mix of them", so every transcript in
+  // which the transport slot was ever asked contains the words car and bike.
+  // Reproduced on his: travelModeKey -> bike, mentionedModes -> all three, and
+  // mixedModes then told the writer he "explicitly wants a MIX of BIKE AND CAR
+  // AND PUBLIC TRANSPORT" when he had named one thing.
+  ok("the mode text is his turns only", /const lc = saidByTravellerForGuide\.toLowerCase\(\);/.test(appK));
+  ok("and convoText no longer feeds any mode reader",
+     !/travelModeKey\(convoText\)/.test(appK) && !/const lc = convoText\.toLowerCase\(\)/.test(appK));
 
   // ── 3. AND A BLANK TIER, WHICH NOTHING GATED UNTIL 19 AUG 2026 ───
   // studioContent.js removed the `t.tier || "Worth Considering"` default with the
@@ -17884,8 +17949,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // answer changes per day. The same ticket link under all seven days is the
   // same link seven times, and a reader learns to scroll past it.
   is("the ticket link is rendered once", (guideSrc.match(/tiqetsBrowseUrl\(\)/g) || []).length, 1);
+  // The bound is a proxy for "inside the same block" and it went from 4000 to
+  // 6000 on 21 Aug, when the DKK rate line was added to this block with its
+  // reasoning attached. Still a real assertion: the nearest day card is about
+  // 49,000 characters further on, so nothing outside this block can satisfy it.
   ok("and it sits in the guide's own essentials block, not in a day card",
-    /Before you go[\s\S]{0,4000}tiqetsBrowseUrl\(\)/.test(guideSrc));
+    /Before you go[\s\S]{0,6000}tiqetsBrowseUrl\(\)/.test(guideSrc));
   // It goes to Tiqets and not to any one attraction, so it must not promise one.
   ok("a browse link says browse", /Browse Danish attraction tickets/.test(guideSrc));
 }
@@ -27200,6 +27269,257 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
        'He said "go north." Then'.slice(0, upTo('He said "go north." Then')), 'He said "go north."');
     is("and a decimal is not a sentence end", upTo("It costs 40.50 kroner"), 0);
   }
+}
+
+// ── POINT 9: THE QUESTIONS AFTER THE ACCOUNT ────────────────────────
+// "And creating an account should then change the page into several questions:
+// Name / Born / Gender / MAKE TICKBOXES HERE! So you can click multiple!"
+{
+  const prof = readFileSync(join(root, "src/utils/profile.js"), "utf8");
+  const psheet = readFileSync(join(root, "src/components/ProfileSheet.jsx"), "utf8");
+  const { cleanProfile, isBlank, profileForPrompt, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX } = M;
+
+  is("interests are his four", INTERESTS.join(","), "History,Nature,Nightlife,Food");
+  is("transport is his six", TRANSPORT.join(","), "Car,Bike,Public transport,Walks,Ship,Plane");
+  ok("and a mix is one of the travel styles", TRAVEL_STYLE.includes(TRAVEL_STYLE_MIX));
+
+  // ── STORED IN OPTION ORDER, NOT TAP ORDER ─────────────────────────
+  // So two people who ticked the same things produce the same stored value and
+  // the same sentence in the prompt.
+  is("ticks are stored in the order they are offered",
+     cleanProfile({ interests: ["Food", "History"] }).interests.join(","), "History,Food");
+  is("and something nobody was offered is dropped",
+     cleanProfile({ interests: ["History", "Skiing"] }).interests.join(","), "History");
+  is("a missing array is an empty one", cleanProfile({}).interests.length, 0);
+
+  // ── AND AN EMPTY PROFILE IS STILL EMPTY ───────────────────────────
+  // isBlank compared every value against "", and [] !== "", so the day these
+  // three fields existed a completely untouched profile started reporting as
+  // filled in. That is the exact thing cleanProfile's own comment forbids.
+  ok("an untouched profile is blank", isBlank({}));
+  ok("and stays blank once the tick fields exist", isBlank({ interests: [], transport: [], style: [] }));
+  ok("but a single tick is not blank", !isBlank({ interests: ["Food"] }));
+
+  // ── THE PROMPT SAYS WEIGHT, NOT FILTER ────────────────────────────
+  // A guide that refuses to name the one good restaurant in a town because food
+  // went unticked is obeying a box the traveller treated as a hint.
+  const said = profileForPrompt({ interests: ["History"], transport: ["Bike"] });
+  ok("interests reach the prompt", /Leans towards: history/.test(said));
+  ok("as a weighting rather than a whitelist", /not a list of the only things allowed in/.test(said));
+  ok("transport reaches it too", /Happy to travel by: bike/.test(said));
+  ok("and says not to plan around a mode they left out", /do not build a day that needs a mode they left out/.test(said));
+  is("an empty profile still contributes nothing", profileForPrompt({}), "");
+
+  // ── "A MIX" IS NOT A FOURTH THING TO LIKE ─────────────────────────
+  is("a mix on its own reads as no strong preference",
+     /no strong preference/.test(profileForPrompt({ style: [TRAVEL_STYLE_MIX] })), true);
+  ok("and the picker clears the others when it is chosen",
+     /if \(option === TRAVEL_STYLE_MIX\) next = on \? \[\] : \[TRAVEL_STYLE_MIX\];/.test(psheet));
+  ok("and clears it when another is chosen",
+     /\.filter\(x => x !== TRAVEL_STYLE_MIX\)/.test(psheet));
+
+  // ── TICKBOXES, AND SAID TO BE TICKBOXES ───────────────────────────
+  ok("the three groups are multi-select", /groupMany\("Interests"/.test(psheet)
+     && /groupMany\("How you like to get around"/.test(psheet)
+     && /groupMany\("What a trip is for"/.test(psheet));
+  ok("and the label says so rather than leaving it to be discovered",
+     /pick as many as you like/.test(psheet));
+  // Not a component declared in the render body, for the reason written above
+  // `group`: a new component type per render remounts every chip and drops focus.
+  ok("groupMany is a function returning elements, not a component",
+     /const groupMany = \(label, note, options, k\) => \(/.test(psheet));
+
+  // ── AND A DATE OF BIRTH IS STILL NOT COLLECTED ────────────────────
+  // He wrote "Born:". The file's own reasoning, from 10 Aug, is that a band is
+  // what changes a recommendation and a birthdate is a much stronger identifier
+  // that buys nothing extra. Left as a band pending his call, not silently
+  // upgraded.
+  ok("age is still a band", /export const AGE_BANDS/.test(prof));
+  // A FIELD, not the word: the file argues against a birthdate in prose, so
+  // matching the bare word here would fail on the very comment that explains
+  // why there is none.
+  ok("and no birthdate field was added",
+     !/(birthdate|dateOfBirth|dob|born)\s*:/i.test(prof.replace(/\/\/.*$/gm, "")));
+  ok("the stored shape is the one the form fills",
+     /EMPTY_PROFILE = \{ name: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: \[\], transport: \[\], style: \[\] \}/.test(prof));
+}
+
+// ── 21 AUGUST 2026: "IT CANNOT MAKE A BUILD WITHOUT DATES" ──────────
+//
+// He was handed a finished guide carrying a per-day weather forecast and an
+// event dated 9 October, for a trip whose dates he never gave. Gemlyx had asked;
+// he answered a different question; `declined` recorded the slot as asked, and
+// asked-and-unanswered stopped blocking.
+{
+  const { readBrief, briefReady, nextAsks, briefBlock, HARD_SLOTS } = M;
+  const AUG = new Date(2026, 7, 21);
+  // His actual turns, minus the dates he never gave.
+  const said = [
+    "I'm starting from Southern Jutland.. been on a trip from Germany. So now I'm moving from Germany into Copenhagen!",
+    "I think it'll be like 4 days",
+    "Imma check out Ribe and then go for some nightlife in Copenhagen!",
+    "Public transport",
+  ].join("\n");
+
+  is("the two hard slots are dates and party", HARD_SLOTS.join(","), "when,party");
+
+  const asked = readBrief({ travellerText: said, today: AUG, asked: ["when", "party"] });
+  ok("neither was actually answered", !asked.known.when && !asked.known.party);
+  is("both are reported unanswered", (asked.unanswered || []).join(","), "when,party");
+  ok("and the brief is NOT ready", !asked.ready);
+  ok("briefReady agrees, which is what gates the build", !briefReady(asked));
+
+  // ── AND THE ASKING CADENCE IS UNCHANGED ─────────────────────────
+  // The reason `declined` exists is real: a slot that blocks forever is the
+  // worse bug, and he reported that one too. So a hard slot goes to the BACK of
+  // the queue, raised once everything else is settled, never a door he cannot
+  // get past.
+  is("still only one question per turn", nextAsks(asked).length, 1);
+  const block = briefBlock(asked);
+  ok("the prompt says they are still required", /ASKED, NOT ANSWERED, AND STILL REQUIRED/.test(block));
+  ok("and forbids assuming a value", /do not assume a value, do not pick a likely one/.test(block));
+  ok("and forbids claiming readiness", /never say you are ready to build/.test(block));
+  ok("a hard slot is NOT listed as a safe assumption",
+     !/ALREADY ASKED AND NOT ANSWERED[\s\S]*?\n  when\b/.test(block));
+
+  // ── ANSWERED, AND IT BUILDS ─────────────────────────────────────
+  const full = readBrief({
+    travellerText: said + "\n2 of us, 10 to 14 September",
+    today: AUG,
+    asked: ["when", "party"],
+  });
+  ok("dates now known", !!full.known.when);
+  ok("party now known", !!full.known.party);
+  is("nothing left unanswered", (full.unanswered || []).length, 0);
+
+  // ── AND A SOFT SLOT STILL BEHAVES AS IT DID ─────────────────────
+  // A plan is still worth having when nobody said whether a hotel is booked.
+  const soft = readBrief({
+    travellerText: said + "\n2 of us, 10 to 14 September",
+    today: AUG,
+    asked: ["when", "party", "stay"],
+  });
+  ok("an unanswered soft slot does not block the build", briefReady(soft));
+  ok("and is still offered to the writer as an assumption",
+     /ALREADY ASKED AND NOT ANSWERED/.test(briefBlock(soft)));
+}
+
+// ── 21 AUGUST 2026: "IT SHOULDN'T BE AUTO-CLICKED" ──────────────────
+//
+// "why did it add the event automatically? Have it in the preview, but people
+// should be able to click it themselves."
+//
+// A ticked event is not a suggestion downstream: App.jsx hands it to the planner
+// as "EVENTS THE TRAVELER HAS ALREADY CHOSEN, which are fixed points and not
+// suggestions", and the rest of that day is arranged around it. Culture Night on
+// 9 October shaped his trip because a checkbox arrived pre-ticked.
+{
+  const prev = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  const appE = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("untouched means nothing is ticked", /const picked = pickedEvents === null \? \[\] : pickedEvents;/.test(prev));
+  ok("and the first tap starts from empty too", /const list = prev === null \? \[\] : prev;/.test(prev));
+  ok("the ticks are no longer seeded from Gemlyx's picks",
+     !/setPickedEvents\(eventPlan\.picks\)/.test(prev));
+  // GEMLYX STILL SAYS WHAT IT THINKS. The badge is computed from eventPlan.picks
+  // and is untouched by this: a recommendation he acts on, rather than one he
+  // has to notice and undo.
+  ok("but it still marks what it recommends", /row\.recommended && \(/.test(prev));
+  // And nothing reaches the planner unless he ticked it.
+  ok("the planner only sees a non-empty picked list",
+     /Array\.isArray\(pickedEvents\) && pickedEvents\.length/.test(appE));
+}
+
+// ── 21 AUGUST 2026: "THAT'S JUST NOT TRUE AT ALL.." ─────────────────
+//
+// The line he read in his own guide: "Stay near Nyhavn in central Copenhagen at
+// a budget hostel, since hostels here run around DKK 600/night while central
+// hotels start near $200." Two currencies in one sentence, and the dollar figure
+// is a number a model produced rather than read. Same guide: "$45/night" in Ribe
+// and "$182 per night" in Christianshavn. He then asked for the country field so
+// the guide could speak in the reader's currency, and the answer to that is a
+// dated rate line, not converted prices.
+{
+  const appC = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const psheet = readFileSync(join(root, "src/components/ProfileSheet.jsx"), "utf8");
+  const { cleanProfile, profileForPrompt, homeCurrency, countryNamed, COUNTRIES } = M;
+
+  // ── BOTH PROMPTS, BECAUSE THEY ARE TWO CALLS ───────────────────
+  // The itinerary writer and the per-day enrichment call have separate prompts
+  // and neither sees the other. The accommodation sentence he quoted comes from
+  // the second one.
+  ok("the writer is told every price is DKK", /EVERY PRICE IN THIS GUIDE IS IN DKK, WITH NO EXCEPTIONS/.test(appC));
+  ok("and the day enrichment call is told separately", /EVERY PRICE YOU WRITE IS IN DKK/.test(appC));
+  ok("both forbid a bracketed conversion",
+     /never put an approximate conversion in brackets after a price/.test(appC)
+     && /never a conversion in brackets/.test(appC));
+  // AND THE REASON, not just the rule: a converted figure is a number nothing
+  // read off a page, which is the one kind this guide does not carry.
+  ok("with the reason attached, so nobody softens it later",
+     /A conversion is also a number you worked out rather than read/.test(appC));
+  ok("and an honest way out when there is no DKK figure",
+     /you do not have a figure for it: say what it is like without pricing it/.test(appC));
+
+  // ── THE COUNTRY FIELD ──────────────────────────────────────────
+  is("stored as an ISO code, uppercased", cleanProfile({ country: "gb" }).country, "GB");
+  is("and something that is not a country is dropped", cleanProfile({ country: "Wakanda" }).country, "");
+  ok("every country carries a currency", COUNTRIES.every(c => /^[A-Z]{3}$/.test(c.currency)));
+  ok("and a unique code", new Set(COUNTRIES.map(c => c.code)).size === COUNTRIES.length);
+
+  // A Dane reading kroner needs no conversion, and neither does somebody who
+  // did not answer.
+  is("Denmark needs no comparison", homeCurrency("DK"), null);
+  is("nor does an unanswered field", homeCurrency(""), null);
+  is("Britain does", homeCurrency("GB"), "GBP");
+  is("and the euro countries share one", homeCurrency("DE"), "EUR");
+  is("the name is there for the prompt", countryNamed("SE").name, "Sweden");
+
+  // ── AND IT REACHES THE PROMPT AS ORIGIN, NEVER AS A CONVERSION ──
+  const said = profileForPrompt({ country: "US" });
+  ok("the country is named", /travelling from United States/.test(said));
+  ok("and the DKK rule travels with it", /Prices stay in DKK whatever this says/.test(said));
+  ok("forbidding conversion at the point of use too", /never add an approximate one in brackets/.test(said));
+
+  // ── THE FORM SAYS WHAT THE FIELD DOES AND DOES NOT DO ──────────
+  // Somebody who ticks United Kingdom and then reads a guide full of kroner
+  // should have been told here rather than finding out.
+  ok("the picker exists", /Where you are travelling from/.test(psheet));
+  ok("with an opt out that stores nothing", /Somewhere else, or rather not say/.test(psheet));
+  ok("and says prices stay in DKK", /still price everything in DKK/.test(psheet));
+}
+
+// ── THE ONE CONVERSION, FETCHED AND STAMPED ─────────────────────────
+{
+  const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const guideF = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  const fx = readFileSync(join(root, "api/fx.js"), "utf8");
+
+  // FETCHED, NOT REASONED. The whole point: every converted figure in his last
+  // guide was a number a model produced. This one is read off the ECB.
+  ok("the rate is fetched once per guide", /await fetch\(`\/api\/fx\?to=\$\{encodeURIComponent\(wantFx\)\}`\)/.test(appF));
+  ok("only when they said where they are from", /const wantFx = homeCurrency\(userProfile\?\.country\);/.test(appF));
+  ok("and it is stamped onto the guide", /_fx: fxLine,/.test(appF));
+
+  // FAILURE IS SILENCE, NEVER A GUESS. api/ask.js's rule, applied here: a thing
+  // that cannot be read must not become a thing that does not apply.
+  ok("a failed fetch leaves no line", /catch \{ \/\* no rate, no line, no harm \*\//.test(appF));
+  ok("and nothing renders without a real number", /guide\._fx\?\.amount > 0 && \(/.test(guideF));
+  ok("there is no hardcoded fallback rate",
+     !/FALLBACK_RATE|DEFAULT_RATE/.test(fx) && /There is no fallback table and there must never be one/.test(fx));
+
+  // THE DATE IS THE ECB'S, NOT OURS. A guide saved tonight and read in March
+  // must say which day its number came from, and "today" would make it lie the
+  // moment it was saved.
+  ok("the published date is what gets stamped", /on: String\(data\?\.date \|\| ""\)\.slice\(0, 10\)/.test(fx));
+  ok("and the line says so to the reader", /guide\._fx\.on \? ` on \$\{guide\._fx\.on\}`/.test(guideF));
+  ok("and warns the rate will have moved", /rates will have moved a little by the time you travel/.test(guideF));
+
+  // AND IT STILL SAYS PRICES ARE IN KRONER, which is the load-bearing half.
+  ok("the line leads with DKK", /Everything here is priced in DKK, which is what you will actually be charged/.test(guideF));
+
+  // A currency going into a URL is checked against a list, not passed through.
+  ok("the target currency is allow-listed", /if \(!ALLOWED\.has\(to\)\)/.test(fx));
+  ok("and DKK to DKK is refused rather than answered", /if \(to === "DKK"\) return res\.status\(400\)/.test(fx));
+  ok("the endpoint is behind the same site guard as the others", /requestIsFromSite\(req\.headers\)/.test(fx));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

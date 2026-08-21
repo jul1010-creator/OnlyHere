@@ -1048,6 +1048,32 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 18px", marginBottom: 30, maxWidth: 640 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 10 }}>Before you go</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {/* ── WHAT A HUNDRED KRONER IS WORTH, ONCE ──────────
+                  Oliver, 21 Aug 2026: "In the create an account, ask what
+                  country they're from. Because then the guide can probably
+                  write in their currency."
+
+                  He asked for that immediately after reading "hostels here run
+                  around DKK 600/night while central hotels start near $200" in
+                  one of his own guides and judging it "just not true at all".
+                  Every price in this guide is in DKK and stays that way, because
+                  that is what he will be charged at the desk. This is the one
+                  conversion, given once, so he can calibrate the rest himself.
+
+                  STAMPED, NOT LIVE. The rate and the date it was published are
+                  baked onto the guide at build time, so a guide saved tonight
+                  and opened in March still says which day its number is from
+                  instead of quietly showing March's rate under tonight's trip.
+                  Absent whenever the rate could not be fetched, and a guide with
+                  no rate line is still completely correct. */}
+              {guide._fx?.amount > 0 && (
+                <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>Kroner</span>
+                  <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>
+                    Everything here is priced in DKK, which is what you will actually be charged. {guide._fx.baseAmount} DKK was about {guide._fx.amount} {guide._fx.to}{guide._fx.on ? ` on ${guide._fx.on}` : ""}, so rates will have moved a little by the time you travel.
+                  </span>
+                </div>
+              )}
               {[["Money", guide.essentials.budgetReality], ["Getting around", guide.essentials.transportTip], ["Keep in mind", guide.essentials.keepInMind], ["Weather", guide.essentials.weatherNote]].filter(([, v]) => v).map(([label, v]) => (
                 <div key={label} style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>{label}</span>

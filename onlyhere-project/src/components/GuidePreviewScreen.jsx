@@ -356,19 +356,29 @@ export const GuidePreviewScreen = ({
     named: e => mentions(e.name),
     reachOf: where.length ? (e) => eventReachBand(e, where, mode) : null,
   });
-  // Gemlyx's own picks are the starting ticks, so somebody who taps straight
-  // through still gets the event that was running that week. Written once,
-  // then it is the traveller's list: `pickedEvents` null means untouched.
-  useEffect(() => {
-    if (pickedEvents === null) setPickedEvents(eventPlan.picks);
-    // eventPlan.picks is derived from props that cannot change while this
-    // overlay is open, so its identity changing per render is not a signal.
-  }, [pickedEvents === null, eventPlan.picks.join("|")]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const picked = pickedEvents === null ? eventPlan.picks : pickedEvents;
+  // ── NOTHING IS TICKED FOR THEM ────────────────────────────────────
+  //
+  // Oliver, 21 Aug 2026: "why did it add the event automatically? Have it in the
+  // preview, but people should be able to click it themselves." And again, so
+  // there is no reading of it as a preference: "It shouldn't be auto-clicked."
+  //
+  // This used to seed the ticks from `eventPlan.picks`, on the reasoning that
+  // somebody who taps straight through should still get the event running that
+  // week. What that actually did is put a fixed point into his itinerary that he
+  // never agreed to: a ticked event is passed to the planner as EVENTS THE
+  // TRAVELER HAS ALREADY CHOSEN, "fixed points and not suggestions", and every
+  // other stop that day is then arranged around it. Culture Night on 9 October
+  // shaped his trip because a checkbox arrived pre-ticked.
+  //
+  // Gemlyx still says what it thinks: `row.recommended` is computed from
+  // eventPlan.picks and renders as the RECOMMENDED badge, untouched by this. The
+  // difference is that a recommendation is now something he acts on rather than
+  // something he has to notice and undo.
+  const picked = pickedEvents === null ? [] : pickedEvents;
   const atLimit = picked.length >= eventPlan.limit;
   const toggleEvent = (name) => {
     setPickedEvents(prev => {
-      const list = prev === null ? eventPlan.picks : prev;
+      const list = prev === null ? [] : prev;
       if (list.includes(name)) return list.filter(n => n !== name);
       if (list.length >= eventPlan.limit) return list;
       return [...list, name];

@@ -60,9 +60,9 @@ export const BRIEF_SLOTS = [
     ask: "Where are you flying into, or starting from?" },
   { key: "days", label: "how long", tier: "blocking",
     ask: "How many days have you got?" },
-  { key: "when", label: "when", tier: "blocking",
+  { key: "when", label: "when", tier: "blocking", hard: true,
     ask: "Which dates? Even roughly is fine, it decides which events are actually on." },
-  { key: "party", label: "who is coming", tier: "blocking",
+  { key: "party", label: "who is coming", tier: "blocking", hard: true,
     ask: "Who is coming? Ages of any kids matter more than you would think." },
   { key: "interests", label: "what kind of trip", tier: "blocking",
     ask: "What kind of trip is this? Food, history, design, nature, nightlife, or something else entirely." },
@@ -75,6 +75,32 @@ export const BRIEF_SLOTS = [
 ];
 
 export const BLOCKING_SLOTS = BRIEF_SLOTS.filter(s => s.tier === "blocking").map(s => s.key);
+
+// ── AND TWO OF THEM ARE NOT SATISFIED BY HAVING BEEN ASKED ───────────
+//
+// Oliver, 21 Aug 2026, on a guide that had just been built: "I never said the
+// dates to it. Despite it asking me. It assumed October. It cannot make a build
+// without dates."
+//
+// He is describing `declined` below working exactly as written. Gemlyx asked for
+// the dates, he answered a different question, the slot was recorded as ASKED,
+// and asked-and-unanswered stops blocking. The guide then went out with a real
+// weather forecast per day and an event on 9 October in it.
+//
+// This is the second time he has said it. 20 Aug, on the party slot: "it asked
+// how many people we were, but I only answered arrival. It NEEDS to know how
+// many and who they are. It cannot build a guide around a trip without knowing
+// the people."
+//
+// So these two are HARD. Being asked does not satisfy them, and nothing builds
+// until they are answered. The rest keep the old behaviour, which is right for
+// them: a plan is still worth having when nobody said whether a hotel is booked.
+//
+// The reason `declined` exists is still real and is preserved: a hard slot that
+// went unanswered does not get asked again immediately, it goes to the BACK of
+// the queue (see nextAsks), so it is raised once everything else is settled
+// rather than becoming a door the traveller cannot get past.
+export const HARD_SLOTS = BRIEF_SLOTS.filter(s => s.hard).map(s => s.key);
 
 // ── READERS, ONE PER SLOT ───────────────────────────────────────────
 // Each returns a value or null. Every one of them is a fact about what was
@@ -330,10 +356,13 @@ export const readBrief = ({ travellerText = "", intake = {}, today = new Date(),
   // Known, and not precisely enough. Only `when` can be vague today, and it is
   // the one that costs a wrong event.
   const vague = known.when?.precision === "month" && !wasAsked.has("when") ? ["when"] : [];
-  return { known, missing, declined, vague, ready: missing.length === 0 };
+  // Asked, unanswered, and required anyway. Kept apart from `missing` so the
+  // asking cadence is unchanged and only the BUILD is gated.
+  const unanswered = HARD_SLOTS.filter(k => !known[k] && wasAsked.has(k));
+  return { known, missing, declined, vague, unanswered, ready: missing.length === 0 && unanswered.length === 0 };
 };
 
-export const briefReady = (brief) => !!brief && brief.missing.length === 0;
+export const briefReady = (brief) => !!brief && brief.missing.length === 0 && !(brief.unanswered || []).length;
 
 // ── WHAT TO ASK NEXT, AND HOW MANY ──────────────────────────────────
 // Two at a time, hard. The conversation he read asked three things in one
@@ -360,7 +389,10 @@ export const MAX_ASKS_AT_ONCE = 1;
 export const nextAsks = (brief, { limit = MAX_ASKS_AT_ONCE } = {}) => {
   if (!brief) return [];
   const order = BRIEF_SLOTS.map(s => s.key);
-  const pick = [...brief.missing, ...brief.vague].filter((k, i, a) => a.indexOf(k) === i);
+  // Hard slots that were asked and not answered go LAST, so they are raised once
+  // everything else is settled rather than blocking the conversation at the point
+  // the traveller changed the subject.
+  const pick = [...brief.missing, ...brief.vague, ...(brief.unanswered || [])].filter((k, i, a) => a.indexOf(k) === i);
   return pick
     .sort((a, b) => order.indexOf(a) - order.indexOf(b))
     .slice(0, Math.max(0, limit))
@@ -385,10 +417,23 @@ export const briefBlock = (brief) => {
   }
   // Asked, and they did not answer. Named so it is not asked again, and named as
   // an assumption so the reply does not speak as if it knew.
-  const declinedSlots = BRIEF_SLOTS.filter(s => (brief.declined || []).includes(s.key));
+  // The hard ones are pulled out first: they are asked and unanswered too, and
+  // the line above tells the model to assume, which is the one thing it must not
+  // do with these.
+  const hardOpen = BRIEF_SLOTS.filter(s => (brief.unanswered || []).includes(s.key));
+  const declinedSlots = BRIEF_SLOTS.filter(s => (brief.declined || []).includes(s.key) && !(brief.unanswered || []).includes(s.key));
   if (declinedSlots.length) {
     lines.push("ALREADY ASKED AND NOT ANSWERED. Do not ask about these again. If one of them changes what you would plan, say out loud what you are assuming:");
     declinedSlots.forEach(s => lines.push(`  ${s.label}`));
+  }
+  // ── AND THESE TWO ARE NOT ASSUMED, EVER ───────────────────────────
+  // "I never said the dates to it. Despite it asking me. It assumed October. It
+  // cannot make a build without dates." The guide that came out of that carried
+  // a weather forecast for every day and an event dated 9 October.
+  if (hardOpen.length) {
+    lines.push("ASKED, NOT ANSWERED, AND STILL REQUIRED. Nothing can be built until you have these, so do not assume a value, do not pick a likely one, and never say you are ready to build:");
+    hardOpen.forEach(s => lines.push(`  ${s.label}: ${s.ask}`));
+    lines.push("They changed the subject rather than refusing, so this is not a decline. Answer whatever they did ask, then come back to it once, plainly.");
   }
   const asks = nextAsks(brief);
   if (!asks.length) {
