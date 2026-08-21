@@ -192,6 +192,29 @@ export const cleanProfile = (raw) => ({
   style: manyOf(raw?.style, TRAVEL_STYLE),
 });
 
+// ── WHAT HE MARKED AS HAVING TO BE ANSWERED ─────────────────────────
+//
+// Oliver, 21 Aug 2026: "Remember to have '*' on parts that is mandatory to
+// answer."
+//
+// Which parts is answered by his own document rather than guessed. He listed
+// "Name: / Born: / Gender:" plainly, and then headed the three tick groups
+// "(Optional) About yourself". Only one half of that list carries the word
+// optional, so the other half is the required one.
+//
+// The free text and the country stay optional: the country he added later and
+// only for the currency line, and "More about yourself" is the field nobody can
+// be made to fill in usefully.
+export const REQUIRED_PROFILE = ["name", "bornYear", "sex"];
+export const REQUIRED_LABEL = { name: "Name", bornYear: "Born", sex: "Gender" };
+
+// The required fields still empty, in the order they are asked, so a form can
+// name the first one rather than saying "something is missing".
+export const missingRequired = (p) => {
+  const c = cleanProfile(p);
+  return REQUIRED_PROFILE.filter(k => !String(c[k] ?? "").trim());
+};
+
 export const isBlank = (p) => {
   const c = cleanProfile(p);
   // Arrays now, as well as strings. `[] !== ""` is true, so the old line called

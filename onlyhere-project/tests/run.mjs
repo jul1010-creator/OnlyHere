@@ -91,7 +91,7 @@ writeFileSync(entry, `
   export { directionsEndpoint, collapsedRoute } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { upgradeWorthIt, onFootMinutes, MIN_UPGRADE_SAVING, COLLAPSE_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
-  export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, AGE_BANDS, BORN_YEARS, bandForYear, holdProfile, takeHeldProfile, PENDING_PROFILE_KEY, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
+  export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, missingRequired, REQUIRED_PROFILE, REQUIRED_LABEL, AGE_BANDS, BORN_YEARS, bandForYear, holdProfile, takeHeldProfile, PENDING_PROFILE_KEY, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
   export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
@@ -9773,11 +9773,12 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // Nothing that opens the sheet without naming an action forces Create.
     is("no unnamed opener sets Create", (appA.match(/setAuthMode\("up"\)/g) || []).length, 1);
   }
-  ok("and the secondary line offers creating one, in his words", />or create an account</.test(sheet));
+  // His words changed on 21 Aug from "or create an account" to this.
+  ok("and the secondary line offers creating one, in his words", />New User\? Sign up here!</.test(sheet));
   // The big button reads off `mode`, so flipping the default flips the label
   // rather than needing a second edit that could be forgotten.
   ok("the primary button is labelled from the mode",
-     /const label = \{ in: "Sign in", up: "Create account", reset: "Send reset link", questions: "Save" \}\[mode\]/.test(sheet));
+     /const label = \{ in: "Sign in", up: "Create account", reset: "Send reset link" \}\[mode\]/.test(sheet));
   // The bottom sheet buried the hero on desktop. One breakpoint, both shapes.
   ok("desktop centres the dialog", /alignItems: wide \? "center" : "flex-end"/.test(sheet));
   ok("and rounds all four corners there", /borderRadius: wide \? 20 :/.test(sheet));
@@ -9813,7 +9814,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // survives a close: without a reset, pressing Sign up after once choosing
   // Sign in hands back the login form, and the Save gate greets a brand new
   // visitor with it too.
-  ok("the mode is reset every time it opens", /setMode\(initialMode \|\| "up"\);/.test(sheet));
+  // "Default should be login page." Reopening must land on Sign in, not on
+  // whichever screen the last person left it on.
+  ok("the mode is reset every time it opens", /setMode\(initialMode \|\| "in"\);/.test(sheet));
   ok("and stale errors are cleared with it", /if \(!open\) return;[\s\S]{0,160}setError\(null\); setNotice\(null\);/.test(sheet));
 }
 
@@ -27807,13 +27810,36 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   const { cleanProfile, BORN_YEARS, bandForYear, holdProfile, takeHeldProfile, EMPTY_PROFILE } = M;
 
   // ── THE SIGNUP FLOW ASKS THEM ITSELF ────────────────────────────
-  ok("creating an account moves to the questions", /setMode\("questions"\);/.test(auth));
-  ok("and does so whether or not a session came back",
-     /setMadeSession\(session \|\| null\);/.test(auth));
-  ok("the sheet renders the shared form", /<ProfileQuestions value=\{answers\} onChange=\{setAnswers\} \/>/.test(auth));
-  ok("with its own heading", /Tell Gemlyx who this is for/.test(auth));
-  // Skip has the same weight as Save here as it does in ProfileSheet.
-  ok("skip is a real answer", /finishQuestions\(false\)/.test(auth) && /Skip/.test(auth));
+  // ── ONE PAGE, NOT TWO STEPS ─────────────────────────────────────
+  // Revised 21 Aug: "Default should be login page. The small part should be
+  // 'New User? Sign up here!' And then you get onto a page where you enter mail,
+  // password, and the rest of the information." The two step version made the
+  // account first and asked afterwards, which is two decisions where he asked
+  // for one, and left a way to end up with an account and no answers.
+  ok("the signup page carries the questions itself",
+     /<ProfileQuestions value=\{answers\} onChange=\{setAnswers\} required showGaps=\{showGaps\} \/>/.test(auth));
+  ok("and there is no separate questions step left", !/setMode\("questions"\)/.test(auth));
+  ok("the answers are in hand before the account is made",
+     auth.indexOf("const gaps = missingRequired(answers);") < auth.indexOf("await signUpWithPassword(email, password)"));
+  ok("a session writes them straight to the row", /if \(session\) await saveProfile\(session, answers\);/.test(auth));
+  ok("and no session holds them on the device", /else holdProfile\(answers\);/.test(auth));
+
+  // ── CONFIRM PASSWORD, CHECKED BEFORE THE ACCOUNT EXISTS ─────────
+  // "And make a confirm password section too." A typo caught afterwards is an
+  // account somebody cannot get back into without the reset flow.
+  ok("there is a confirm field", /Confirm password/.test(auth));
+  ok("checked against the password", /if \(password !== confirm\)/.test(auth));
+  ok("before signUpWithPassword is called",
+     auth.indexOf("if (password !== confirm)") < auth.indexOf("await signUpWithPassword(email, password)"));
+
+  // ── THE MANDATORY MARKS ─────────────────────────────────────────
+  // "Remember to have '*' on parts that is mandatory to answer."
+  ok("required fields are starred", /required showGaps=\{showGaps\}/.test(auth));
+  ok("email carries one", /Email<span style=\{\{ color: showGaps && !email\.trim\(\)/.test(auth));
+  ok("password carries one", /Password<span style=\{\{ color: showGaps && password\.length < 6/.test(auth));
+  ok("and the gaps only show after a press", /const \[showGaps, setShowGaps\] = useState\(false\);/.test(auth)
+     && /setShowGaps\(true\);/.test(auth));
+  ok("the missing ones are named rather than counted", /Still needed: \$\{gaps\.map/.test(auth));
 
   // ── ONE FORM, TWO CALLERS ───────────────────────────────────────
   // A second copy of these fields is how they drift. This codebase has found
@@ -27823,10 +27849,35 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the form owns no save path", !/saveProfile/.test(quest));
 
   // ── HIS FIELDS, IN HIS WORDS ────────────────────────────────────
-  ok("Name", /<div style=\{legend\}>Name</.test(quest));
-  ok("Born", /<div style=\{legend\}>Born</.test(quest));
+  ok("Name", /<div style=\{legend\}>Name\{star\("name"\)\}/.test(quest));
+  ok("Born", /<div style=\{legend\}>Born\{star\("bornYear"\)\}/.test(quest));
   ok("Gender", /group\("Gender"/.test(quest));
-  ok("About yourself, as its own heading", />About yourself</.test(quest));
+  // ── WHICH ONES, AS BEHAVIOUR RATHER THAN AS SOURCE TEXT ─────────
+  // The source-text version of this passed happily with missingRequired
+  // returning a hard-coded empty array, which is the trap this codebase already
+  // has written down: an assertion that reads code can survive the rule being
+  // switched off. Mutation-checked.
+  const { missingRequired, REQUIRED_PROFILE, REQUIRED_LABEL, EMPTY_PROFILE: BLANK } = M;
+  is("the required ones are the three he did not call optional",
+     REQUIRED_PROFILE.join(","), "name,bornYear,sex");
+  is("an empty form is missing all three", missingRequired(BLANK).join(","), "name,bornYear,sex");
+  is("filling one leaves the other two",
+     missingRequired({ ...BLANK, name: "Oliver" }).join(","), "bornYear,sex");
+  is("all three answered leaves nothing",
+     missingRequired({ ...BLANK, name: "Oliver", bornYear: "1998", sex: "Man" }).length, 0);
+  // Whitespace is not an answer.
+  is("a name of spaces is still missing", missingRequired({ ...BLANK, name: "   " }).join(","), "name,bornYear,sex");
+  // The OPTIONAL half never blocks, whatever is in it.
+  is("the tick groups never block",
+     missingRequired({ ...BLANK, name: "O", bornYear: "1998", sex: "Man", interests: [], country: "", description: "" }).length, 0);
+  // Reported in the order they are asked, so the message names the first gap
+  // rather than an arbitrary one.
+  is("and they come back in the order the form asks them",
+     missingRequired({ ...BLANK, bornYear: "1998" }).join(","), "name,sex");
+  ok("every required field has a label for the message",
+     REQUIRED_PROFILE.every(k => REQUIRED_LABEL[k]));
+  ok("About yourself, as its own heading", /About yourself <span[^>]*>\(optional\)/.test(quest));
+  ok("and marked optional, as his document marked it", /Everything from here down can be skipped/.test(quest));
   ok("and More about yourself at the end", /<div style=\{legend\}>More about yourself</.test(quest));
 
   // ── BORN IS A YEAR, NOT A DATE ──────────────────────────────────

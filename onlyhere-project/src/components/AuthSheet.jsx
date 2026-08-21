@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 // The questions themselves live in one place, shared with ProfileSheet.
 import { ProfileQuestions } from "./ProfileQuestions";
-import { EMPTY_PROFILE, cleanProfile, isBlank as profileIsBlank, saveProfile, holdProfile } from "../utils/profile";
+import { EMPTY_PROFILE, saveProfile, holdProfile, missingRequired, REQUIRED_LABEL } from "../utils/profile";
 import { C } from "../utils/theme";
 import { signInWithPassword, signUpWithPassword, sendPasswordReset, startGoogleSignIn } from "../utils/auth";
 
@@ -87,8 +87,10 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   // guide save this file already coordinates with, and written on the first
   // session by the effect in App.jsx.
   const [answers, setAnswers] = useState(EMPTY_PROFILE);
-  const [madeSession, setMadeSession] = useState(null);
-  const [saving, setSaving] = useState(false);
+  // Turns the asterisks red, and only after somebody has actually pressed the
+  // button. A form that scolds before you have typed anything is a worse form.
+  const [showGaps, setShowGaps] = useState(false);
+  const [confirm, setConfirm] = useState("");
   const [wide, setWide] = useState(() => typeof window !== "undefined" && window.innerWidth >= 720);
 
   // The sheet is hidden with an early return rather than unmounted, so its
@@ -98,8 +100,8 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   // with a login form. Reset on every opening, from whichever door was used.
   useEffect(() => {
     if (!open) return;
-    setMode(initialMode || "up");
-    setError(null); setNotice(null);
+    setMode(initialMode || "in");
+    setError(null); setNotice(null); setShowGaps(false); setConfirm("");
   }, [open, initialMode]);
 
   // Declared BEFORE the early return, because a hook that only sometimes runs
@@ -113,9 +115,33 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
 
   if (!open) return null;
 
+  // ── ONE PAGE, NOT TWO STEPS ───────────────────────────────────────
+  //
+  // Oliver, 21 Aug 2026, after seeing the two step version: "Default should be
+  // login page. The small part should be 'New User? Sign up here!' And then you
+  // get onto a page where you enter mail, password, and the rest of the
+  // information."
+  //
+  // So signing up is ONE form: credentials and the questions together, filled in
+  // and submitted once. The previous version made the account first and then
+  // asked, which is two decisions where he asked for one, and it also meant
+  // somebody could end up with an account and no answers by closing the sheet.
   const submit = async () => {
+    setShowGaps(true);
     if (!email.trim()) { setError("Enter your email."); return; }
     if (mode !== "reset" && password.length < 6) { setError("Passwords need at least 6 characters."); return; }
+    if (mode === "up") {
+      // ── AND A CONFIRM FIELD THAT MEANS SOMETHING ────────────────
+      // "And make a confirm password section too." Checked before the account
+      // is made, because a typo caught afterwards is an account somebody cannot
+      // get back into without the reset flow.
+      if (password !== confirm) { setError("The two passwords do not match."); return; }
+      const gaps = missingRequired(answers);
+      if (gaps.length) {
+        setError(`Still needed: ${gaps.map(k => REQUIRED_LABEL[k]).join(", ")}.`);
+        return;
+      }
+    }
     setBusy(true); setError(null); setNotice(null);
     try {
       if (mode === "reset") {
@@ -123,15 +149,17 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         setNotice("If that email has an account, a reset link is on its way.");
       } else if (mode === "up") {
         const { session, needsConfirmation } = await signUpWithPassword(email, password);
-        // THE ACCOUNT EXISTS EITHER WAY. Whether a session came back only
-        // decides where the answers are written, never whether they are asked.
-        setMadeSession(session || null);
-        setNotice(needsConfirmation
-          ? "Account made. Check your email to confirm it, then come back and sign in — your guide is being held until you do. While you are here:"
-          : "Account made. While you are here:");
-        setMode("questions");
-        setBusy(false);
-        return;
+        // THE ANSWERS ARE ALREADY IN HAND. Whether a session came back decides
+        // only WHERE they go: straight to the row, or held on the device until
+        // the confirmation link turns into a session. See takeHeldProfile.
+        if (session) await saveProfile(session, answers);
+        else holdProfile(answers);
+        if (needsConfirmation) {
+          setNotice("Account made, and your answers are saved. Check your email to confirm the account, then come back and sign in.");
+          setBusy(false);
+          return;
+        }
+        onSignedIn(session);
       } else {
         onSignedIn(await signInWithPassword(email, password));
       }
@@ -141,26 +169,9 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
     setBusy(false);
   };
 
-  const label = { in: "Sign in", up: "Create account", reset: "Send reset link", questions: "Save" }[mode];
-
-  // Skip carries the same weight as Save, here as in ProfileSheet: an optional
-  // step whose decline is a grey link is not optional.
-  const finishQuestions = async (save) => {
-    if (!save || profileIsBlank(answers)) {
-      if (madeSession) onSignedIn(madeSession); else onClose();
-      return;
-    }
-    setSaving(true);
-    // A session means it can go straight to the row. No session means the
-    // account is real and unconfirmed, so it waits on the device.
-    if (madeSession) await saveProfile(madeSession, answers);
-    else holdProfile(answers);
-    setSaving(false);
-    if (madeSession) onSignedIn(madeSession); else onClose();
-  };
+  const label = { in: "Sign in", up: "Create account", reset: "Send reset link" }[mode];
   // The heading answers "why am I being asked", not "what screen is this".
   const heading = mode === "reset" ? "Reset password"
-    : mode === "questions" ? "Tell Gemlyx who this is for"
     : reason === "guide" ? (mode === "up" ? "Keep this guide" : "Sign in to keep it")
     : mode === "up" ? "Create an account" : "Sign in";
 
@@ -208,30 +219,6 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
           {heading}
         </div>
 
-        {/* ── THE QUESTIONS, ONCE THE ACCOUNT IS MADE ───────────────
-            "And creating an account should then change the page into several
-            questions." The page, not a sheet somewhere else later. */}
-        {mode === "questions" ? (
-          <>
-            {notice && <div style={{ fontSize: 12.5, color: C.gold, lineHeight: 1.55, marginBottom: 16 }}>{notice}</div>}
-            <ProfileQuestions value={answers} onChange={setAnswers} />
-            {error && <div style={{ fontSize: 12, color: "#FF8A80", lineHeight: 1.5, marginBottom: 10 }}>{error}</div>}
-            <div style={{ display: "flex", gap: 9 }}>
-              <button onClick={() => finishQuestions(false)} disabled={saving}
-                style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, color: C.light, borderRadius: 11, padding: "13px", fontSize: 14.5, fontWeight: 600, cursor: saving ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
-                Skip
-              </button>
-              <button onClick={() => finishQuestions(true)} disabled={saving || profileIsBlank(answers)}
-                style={{ flex: 1.6, background: C.gold, border: "none", color: "#0A0F1E", borderRadius: 11, padding: "13px", fontSize: 15, fontWeight: 700, cursor: (saving || profileIsBlank(answers)) ? "default" : "pointer", fontFamily: "'Inter', sans-serif", opacity: (saving || profileIsBlank(answers)) ? 0.45 : 1 }}>
-                {saving ? "Saving…" : "Save"}
-              </button>
-            </div>
-            <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 14 }}>
-              All of it is optional and you can change or clear it whenever you like. It is stored with your account, used only to write your guides, never sold and never used for advertising.
-            </div>
-          </>
-        ) : (
-        <>
         {/* ── WHAT IT BUYS, AND WHAT IT DOES NOT ──────────────────── */}
         <div style={{ fontSize: 13, color: C.light, lineHeight: 1.62, marginBottom: 14 }}>
           {reason === "guide"
@@ -259,12 +246,53 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
           <div style={{ flex: 1, height: 1, background: C.border }} />
         </div>
 
+        {/* ── THE MANDATORY MARKS ───────────────────────────────────
+            "Remember to have '*' on parts that is mandatory to answer." Gold
+            until somebody presses the button with one empty, then red on the
+            ones actually missing, so the same mark that says "this is needed"
+            also says "this one". */}
+        {mode === "up" && (
+          <div style={{ fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 }}>
+            Email<span style={{ color: showGaps && !email.trim() ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
+          </div>
+        )}
         <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"
-          autoComplete="email" style={field} />
+          autoComplete="email" style={{ ...field, ...(mode === "up" && showGaps && !email.trim() ? { borderColor: "#FF8A80" } : null) }} />
         {mode !== "reset" && (
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password"
-            autoComplete={mode === "up" ? "new-password" : "current-password"}
-            onKeyDown={e => { if (e.key === "Enter") submit(); }} style={field} />
+          <>
+            {mode === "up" && (
+              <div style={{ fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 }}>
+                Password<span style={{ color: showGaps && password.length < 6 ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
+                <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, color: C.muted }}> · at least 6 characters</span>
+              </div>
+            )}
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password"
+              autoComplete={mode === "up" ? "new-password" : "current-password"}
+              onKeyDown={e => { if (e.key === "Enter") submit(); }}
+              style={{ ...field, ...(mode === "up" && showGaps && password.length < 6 ? { borderColor: "#FF8A80" } : null) }} />
+          </>
+        )}
+        {/* ── CONFIRM, AND CHECKED BEFORE THE ACCOUNT IS MADE ───────
+            "And make a confirm password section too." A typo caught afterwards
+            is an account somebody cannot get back into without the reset flow. */}
+        {mode === "up" && (
+          <>
+            <div style={{ fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 }}>
+              Confirm password<span style={{ color: showGaps && (!confirm || confirm !== password) ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
+            </div>
+            <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Type it again"
+              autoComplete="new-password" onKeyDown={e => { if (e.key === "Enter") submit(); }}
+              style={{ ...field, ...(showGaps && (!confirm || confirm !== password) ? { borderColor: "#FF8A80" } : null) }} />
+            {confirm && confirm !== password && (
+              <div style={{ fontSize: 11.5, color: "#FF8A80", marginTop: -3, marginBottom: 10 }}>These do not match yet.</div>
+            )}
+
+            {/* ── AND THE REST OF THE INFORMATION, ON THE SAME PAGE ──
+                "And then you get onto a page where you enter mail, password,
+                and the rest of the information." One form, submitted once. */}
+            <div style={{ height: 1, background: C.border, margin: "16px 0 18px" }} />
+            <ProfileQuestions value={answers} onChange={setAnswers} required showGaps={showGaps} />
+          </>
         )}
 
         {error && <div style={{ fontSize: 12, color: "#FF8A80", lineHeight: 1.5, marginBottom: 10 }}>{error}</div>}
@@ -276,8 +304,9 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         </button>
 
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-          {mode !== "up" && <button style={linkBtn} onClick={() => { setMode("up"); setError(null); setNotice(null); }}>or create an account</button>}
-          {mode !== "in" && <button style={linkBtn} onClick={() => { setMode("in"); setError(null); setNotice(null); }}>I already have one</button>}
+          {/* His words: "The small part should be 'New User? Sign up here!'" */}
+          {mode !== "up" && <button style={linkBtn} onClick={() => { setMode("up"); setError(null); setNotice(null); setShowGaps(false); }}>New User? Sign up here!</button>}
+          {mode !== "in" && <button style={linkBtn} onClick={() => { setMode("in"); setError(null); setNotice(null); setShowGaps(false); }}>I already have one</button>}
           {mode === "in" && <button style={linkBtn} onClick={() => { setMode("reset"); setError(null); setNotice(null); }}>Forgot password</button>}
         </div>
 
@@ -294,8 +323,6 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 12 }}>
           We store your email and your saved list. Next you can add a few optional details about yourself, which only ever shape what Gemlyx suggests to you. No tracking, no marketing email, nothing sold. You can delete your account and everything in it from this menu at any time.
         </div>
-        </>
-        )}
       </div>
     </div>
   );

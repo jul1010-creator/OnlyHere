@@ -1,5 +1,5 @@
 import { C } from "../utils/theme";
-import { BORN_YEARS, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, DESCRIPTION_MAX } from "../utils/profile";
+import { BORN_YEARS, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, DESCRIPTION_MAX, REQUIRED_PROFILE } from "../utils/profile";
 
 // ── THE QUESTIONS, IN ONE PLACE ──────────────────────────────────────
 //
@@ -25,7 +25,11 @@ import { BORN_YEARS, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_ST
 // ProfileSheet writes them to Supabase immediately; AuthSheet holds them on the
 // device until a session exists, because on the email path there is no session
 // for as long as it takes somebody to open their inbox.
-export const ProfileQuestions = ({ value, onChange }) => {
+// `required` marks the fields his document did not call optional, and `showGaps`
+// turns those marks red once somebody has pressed the button with one empty. Off
+// until then, because a form that scolds you before you have typed anything is a
+// worse form.
+export const ProfileQuestions = ({ value, onChange, required = false, showGaps = false }) => {
   const p = value;
   const set = (k, v) => onChange({ ...p, [k]: v });
   // A chip toggles off when pressed again. Without that there is no way back to
@@ -44,6 +48,13 @@ export const ProfileQuestions = ({ value, onChange }) => {
   const legend = { fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 };
   const field = { width: "100%", boxSizing: "border-box", background: C.bg, border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px 13px", fontSize: 14, fontFamily: "'Inter', sans-serif" };
   const note = { textTransform: "none", letterSpacing: 0, fontWeight: 500, color: C.muted };
+  // The asterisk itself. Gold normally, red once the gap has been pointed out,
+  // so the mark that says "this is needed" is the same mark that says "this one".
+  const gap = (k) => required && showGaps && REQUIRED_PROFILE.includes(k) && !String(p[k] ?? "").trim();
+  const star = (k) => required && REQUIRED_PROFILE.includes(k)
+    ? <span style={{ color: gap(k) ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
+    : null;
+  const ring = (k) => (gap(k) ? { borderColor: "#FF8A80" } : null);
 
   // ── NOT A COMPONENT DECLARED IN THE RENDER BODY ──────────────────
   // `const Group = ({...}) => ...` inside the body creates a new component TYPE
@@ -54,7 +65,7 @@ export const ProfileQuestions = ({ value, onChange }) => {
   // instead, so there is no component identity to change.
   const group = (label, hint, options, k) => (
     <div key={k}>
-      <div style={legend}>{label}{hint ? <span style={note}> · {hint}</span> : null}</div>
+      <div style={legend}>{label}{star(k)}{hint ? <span style={note}> · {hint}</span> : null}</div>
       <div style={row}>
         {options.map(o => <button key={o} onClick={() => pick(k, o)} style={chip(p[k] === o)}>{o}</button>)}
       </div>
@@ -93,9 +104,9 @@ export const ProfileQuestions = ({ value, onChange }) => {
 
   return (
     <>
-      <div style={legend}>Name<span style={note}> · what should we call you</span></div>
+      <div style={legend}>Name{star("name")}<span style={note}> · what should we call you</span></div>
       <input value={p.name} onChange={e => set("name", e.target.value.slice(0, 60))} placeholder="First name is plenty"
-        autoComplete="given-name" style={{ ...field, marginBottom: 16 }} />
+        autoComplete="given-name" style={{ ...field, marginBottom: 16, ...ring("name") }} />
 
       {/* ── BORN, AS A YEAR ───────────────────────────────────────
           His label, and a year rather than a date. What changes a
@@ -104,14 +115,14 @@ export const ProfileQuestions = ({ value, onChange }) => {
           reasoning profile.js has carried since 10 August. A year satisfies
           "Born" literally and keeps the liability off a Danish business that
           would have to protect it. */}
-      <div style={legend}>Born<span style={note}> · the year is plenty</span></div>
+      <div style={legend}>Born{star("bornYear")}<span style={note}> · the year is plenty</span></div>
       <select value={p.bornYear} onChange={e => set("bornYear", e.target.value)}
-        style={{ ...field, marginBottom: 16, appearance: "none", cursor: "pointer" }}>
-        <option value="">Rather not say</option>
+        style={{ ...field, marginBottom: 16, appearance: "none", cursor: "pointer", ...ring("bornYear") }}>
+        <option value="">{required ? "Choose a year" : "Rather not say"}</option>
         {BORN_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
       </select>
 
-      {group("Gender", "optional, and it changes very little", SEX_OPTIONS, "sex")}
+      {group("Gender", required ? "" : "optional, and it changes very little", SEX_OPTIONS, "sex")}
 
       {/* ── WHERE THEY ARE COMING FROM ────────────────────────────
           "In the create an account, ask what country they're from. Because then
@@ -136,9 +147,11 @@ export const ProfileQuestions = ({ value, onChange }) => {
 
       {/* His own heading, and his own line under it. The tick groups are the
           optional half and he marked them as such. */}
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text, marginBottom: 3 }}>About yourself</div>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text, marginBottom: 3 }}>
+        About yourself <span style={{ fontWeight: 500, color: C.muted }}>(optional)</span>
+      </div>
       <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.55, marginBottom: 14 }}>
-        All optional, and you can pick more than one of each.
+        Everything from here down can be skipped, and you can pick more than one of each.
       </div>
 
       {groupMany("Interests", "they are weighted, not filters", INTERESTS, "interests")}
