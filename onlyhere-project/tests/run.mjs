@@ -51,7 +51,7 @@ writeFileSync(entry, `
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, dateRangesInText, isoDay, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
+  export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, dateRangesInText, isoDay, anchoredEdition, labelledAt, CALENDAR_DATES, DATE_LABEL_WINDOW, looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER, OFFICE_CONTEXT_WINDOW, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES, bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK, linksInMarkdown, ticketLinksFromMarkdown, scoreTicketLinks } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
@@ -143,7 +143,11 @@ writeFileSync(entry, `
   export { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, COVERAGE_UNANSWERED } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
   export { stayRangeIn, stayRangeInBody, stayGlanceDays, stayContradiction, restatesBody, restatementFindings, meaningfulWords, RESTATEMENT } from ${JSON.stringify(join(root, "src/utils/draftShape.js"))};
   export { searchTypeFor } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
-  export { ENTRY_POINTS, arrivalPoint as arrivalPointRaw } from ${JSON.stringify(join(root, "src/utils/arrival.js"))};
+  export { ENTRY_POINTS, arrivalPoint as arrivalPointRaw, destinationPoint, destinationsNamed, tripAnchor } from ${JSON.stringify(join(root, "src/utils/arrival.js"))};
+  export { tripAnchorFor, eventReachBand, eventPoint, placePoint, tripPoints, CONSIDER_CAP } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
+  export { beyondHorizon, isMajorEvent, EVENT_HORIZON_MONTHS, MANY_EVENTS_IN_A_TOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
+  export { vehicleMismatches, guideRides } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
+  export { factCheckCopy } from ${JSON.stringify(join(root, "src/utils/factCheckCopy.js"))};
   export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn, travelModeKey, modeReachKm, MODE_DAY_KM, preferReachable, preferPassing, overnightMove, describeOvernightMove } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dayCountIn, daysBetween, describePicks, monthOnlyIn, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED, isRegionCrossing } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
@@ -6908,7 +6912,32 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // AN EVENT NOBODY NAMED, IN THE RIGHT TOWN, IN THE WRONG MONTH, IS GONE.
   ok("Distortion is not offered for a trip in March", !names(run({ window: march, named: () => false })).includes("Distortion"));
   // AND ONE ALREADY OVER IS GONE EVEN WHEN THE DATES ARE UNKNOWN.
-  ok("a finished event is not offered", !names(run({ window: null, named: () => false })).includes("Kulturnatten"));
+  // Its own event, not Kulturnatten. Kulturnatten is 9 Oct 2026 against a fixed
+  // today of 14 Aug 2026, so it is not finished at all: it used to be absent
+  // from this list because the undated case shows ONE suggestion and a 2027
+  // festival outscored it. The horizon added on 21 Aug 2026 refuses everything
+  // in 2027 when the trip has no dates, so Kulturnatten now wins that slot,
+  // which is the right answer and leaves this assertion testing nothing. A
+  // genuinely finished event, so hasEnded is what is under test.
+  const OVER = [...POOL, ev("Aalborg Karneval", "2026-05-30", "2026-05-30", { tier: "Can't Miss Out", type: "Culture" })];
+  ok("a finished event is not offered",
+     !tripEvents(OVER, { today: TODAY, window: null, named: () => false }).rows.map(r => r.event.name).includes("Aalborg Karneval"));
+
+  // ── AND NOTHING FURTHER OUT THAN TWO MONTHS, UNDATED ────────────
+  // Oliver, 21 Aug 2026: "they shouldn't be showing events happening later than
+  // 2 months ahead." From the trip's dates when we know them, and from today
+  // when we do not, which is his answer to "two months from when".
+  const noDates = names(run({ window: null, named: () => false }));
+  is("an undated trip is offered the one inside the horizon", noDates, ["Kulturnatten"]);
+  ok("and nothing in 2027 at all", !noDates.some(n => /Light Festival|CPH:DOX|Jazz|Distortion/.test(n)));
+  // A NAMED EVENT IS EXEMPT, exactly as it is exempt from the cap and from the
+  // overlap test. The horizon is a rule about what Gemlyx VOLUNTEERS.
+  ok("but an event they named by hand survives the horizon",
+     names(run({ window: null, named: e => e.name === "Copenhagen Jazz Festival" })).includes("Copenhagen Jazz Festival"));
+  // AND A DATED TRIP IS BOUNDED BY ITS OWN DATES, not by the constant: a trip in
+  // March 2027 is seven months out and still gets the festival that is on.
+  ok("a dated trip in 2027 still gets its own events",
+     names(run({ window: marchLong, named: () => false })).includes("CPH:DOX"));
   ok("hasEnded reads the LAST day, not the first",
     hasEnded({ date: "2026-08-10", dateEnd: "2026-08-20" }, TODAY) === false && hasEnded({ date: "2026-08-01", dateEnd: "2026-08-03" }, TODAY) === true);
 
@@ -7185,7 +7214,17 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // The wait estimate. The CTA promised seconds over a screen that admits to
   // minutes, on the exact screen where somebody decides whether to wait.
   ok("the CTA no longer promises seconds", !/Takes a few seconds/.test(appSrc));
-  ok("it says minutes, like the loading screen does", /Takes a few minutes\. Real places, real routes, checked\./.test(appSrc));
+  // ── AND THEN IT SAID NOTHING, BECAUSE NOTHING IS TRUE ─────────
+  // Oliver, 21 Aug 2026: "Takes a few minutes. Real places, real routes,
+  // checked. -> remove it. Because clearly it is instant to open." The preview
+  // opens from data already in the browser; the promise of a wait was inherited
+  // from the guide build that used to sit behind this button. Both halves are
+  // asserted, so nobody reinstates either wording.
+  // stripNonCode, because the comment that RECORDS his instruction quotes the
+  // sentence it removed, which is the house style here and would otherwise make
+  // this assertion fail on the very edit that satisfies it.
+  ok("and it does not promise minutes either, because the preview is instant",
+     !/Takes a few (?:seconds|minutes)/.test(stripNonCode(appSrc)));
 }
 
 // ── MINIMIZE THE WAIT, KEEP THE BUILD ───────────────────────────────
@@ -15303,7 +15342,14 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // ── AND WHAT THEY SAID ABOUT MONEY ──────────────────────────────
   // "geranium is NOT mid-range.. so remember to make food places include in
   // budget." Nothing in the matcher had ever read a price.
-  ok("the budget reaches the matcher too", /mode, budget \}\)/.test(preview));
+  ok("the budget reaches the matcher too", /mode, budget, saidByTraveller \}\)/.test(preview));
+  // ── AND SO DOES WHAT THEY THEMSELVES SAID ───────────────────────
+  // The last option, and the one that stops the region pass opening on a region
+  // GEMLYX named. Oliver's Aalborg brief named no region; Gemlyx's own reply
+  // said "proper North Jutland arrival", regionsNamed read Jutland out of it,
+  // and Ribe, three hundred kilometres away, became a legal candidate.
+  ok("and the traveller's own turns reach it, for the region pass",
+     /saidByTraveller \}\);/.test(preview));
   ok("and it is read from the budget box and their own words",
      /travellerBudget\(\[intakeBudgetText, saidByTraveller\]\.filter\(Boolean\)\.join\("\\n"\)\)/.test(preview));
   ok("the budget box is a prop", /intakeBudgetText = "",/.test(preview));
@@ -17597,8 +17643,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // by both of them dropping something.
   ["days", "wanted", "themes", "mode", "budget"].forEach(k =>
     ok(`${k} is part of that narrowing`, (lineOpts || []).includes(k)));
+  // ── AND FROM THEIR OWN TURNS, WHICH IS WHAT "AS THE SCREEN DOES"
+  //     ALWAYS MEANT ────────────────────────────────────────────────
+  // This asserted briefThemes(forMatch, ...), and forMatch is BOTH halves of the
+  // conversation while the screen reads the traveller's turns alone. So the two
+  // were reading different material and this assertion was holding the
+  // difference in place: the italic line could promise an interest Gemlyx had
+  // suggested to itself, over a list that refused it. Same source in both files
+  // now, which is what the equality assertion above is for.
   ok("and it reads the intake interests, as the screen does",
-    /briefThemes\(forMatch, intakeInterest\)/.test(appSrc));
+    /briefThemes\(saidByTravellerOnly, intakeInterest\)/.test(appSrc));
+  ok("and never from Gemlyx's own replies", !/briefThemes\(forMatch/.test(appSrc));
 
   // ── PHOTOS WHILE DRAFTING ───────────────────────────────────────
   // Oliver, 15 Aug 2026: "when making the draft, I'd like to be able to put in
@@ -19105,13 +19160,29 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Aalborg, so the two screens disagreed about whether the trip had a start.
   //
   // Airport arrivals were unaffected, which is why nothing looked broken.
+  // ── AND FROM THEIR OWN TURNS, NOT FROM OURS ────────────────────
+  // Both of these read the whole transcript until 21 Aug 2026, and on Oliver's
+  // Aalborg brief that produced an arrival point of COPENHAGEN AIRPORT, 240 km
+  // from the only town he had named, out of a sentence Gemlyx wrote about
+  // itself: "Since you haven't mentioned a starting point, I'll assume you're
+  // landing at Copenhagen Airport." An assumption the app announces is not a
+  // fact the app may then read back.
   ok("the build bakes the arrival point onto the guide",
-     /_arrivalPoint: arrivalPoint\(convoText, \{ townPoint: townPointFor \}\)/.test(appR));
+     /_arrivalPoint: arrivalPoint\(saidByTravellerForGuide, \{ townPoint: townPointFor \}\)/.test(appR));
+  ok("and the guide reads it from the traveller's turns, or from a composed brief",
+     /const saidByTravellerForGuide = overrideConvoText\s*\n\s*\|\| aiMessages\.slice\(1\)\.filter\(m => m\.role === "user"\)/.test(appR));
   // Both callers, one rule. Asserted together so a fix to one is not mistaken
   // for a fix to the pair.
   {
     const pm = readFileSync(join(root, "src/utils/previewMatch.js"), "utf8");
-    ok("and the preview passes the same resolver", /arrivalPoint\(convoText, \{ townPoint: townPointFor \}\)/.test(pm));
+    ok("and the preview passes the same resolver", /arrivalPoint\(ownWords, \{ townPoint: townPointFor \}\)/.test(pm));
+    // ── AND THE DESTINATION, WHICH IS A DIFFERENT QUESTION ────────
+    // "I am going to Aalborg" is not an arrival in any of arrivalPoint's three
+    // senses, so the trip had no anchor at all, the distance term scored a flat
+    // 1 for every candidate in the country, and ranking collapsed to editorial
+    // tier. See destinationPoint in utils/arrival.js.
+    ok("and reads the destination when no arrival was stated",
+       /destinationPoint\(ownWords, \{ townPoint: townPointFor \}\)/.test(pm));
   }
   // ── AND THE LOCAL SAVE NOW CARRIES IT ───────────────────────────
   // These two assertions used to say the opposite, and they were right at the
@@ -21473,12 +21544,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // November, not enough to place a day.
   is("the month is known and flagged as imprecise", brief.vague, ["when"]);
 
-  // Asking is capped, because three questions in one paragraph is what made it a
-  // wall of text.
-  is("at most two questions at a time", MAX_ASKS_AT_ONCE, 2);
-  is("and that is what it asks for", nextAsks(brief).length, 2);
+  // ── ONE, AND WHY IT CAME DOWN FROM TWO ──────────────────────────
+  // Oliver, 21 Aug 2026, on a turn that asked when he was going and who was
+  // coming: "notice how it asked how many people we were, but I only answered
+  // arrival." That is what a person does with two questions in one paragraph,
+  // and the half they did not answer is then recorded as ASKED, which stops it
+  // blocking and hands it to the writer as an assumption. Two per turn is a
+  // machine for turning one honest answer into one wrong assumption.
+  is("one question at a time", MAX_ASKS_AT_ONCE, 1);
+  is("and that is what it asks for", nextAsks(brief).length, 1);
   ok("in slot order, so the trip's shape comes before its budget",
-     nextAsks(brief).map(s => s.key).join(",") === "when,interests");
+     nextAsks(brief).map(s => s.key).join(",") === "when");
 
   const block = briefBlock(brief);
   ok("the block tells it never to ask twice", /Never ask about any of these again/.test(block));
@@ -21713,8 +21789,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Two at a time, so the "two more things" that were three cannot recur.
   const three = readBrief({ travellerText: "I want to go to Denmark", today: AUG });
   ok("a bare request fills nothing blocking", three.missing.length >= 4);
-  is("and it may still only ask two things", nextAsks(three).length, 2);
-  ok("the block says how many it may ask", /AT MOST 2 of them/.test(briefBlock(three)));
+  is("and it may still only ask one thing", nextAsks(three).length, 1);
+  ok("the block says so in words, not as a number to be negotiated with",
+     /Ask for THIS ONE and nothing else in this reply/.test(briefBlock(three)));
+  // ── AND THE TURN IS NOT ALL ASKING ──────────────────────────────
+  // The old instruction ended "then the question or questions", which describes
+  // a turn made entirely of asking. That is the intake form he read back.
+  ok("the turn gives something before it asks",
+     /Give one real thing first, then ask, then stop/.test(briefBlock(three)));
+  ok("and no longer describes a turn that is only questions",
+     !/then the question or questions/.test(briefBlock(three)));
 }
 
 
@@ -22390,7 +22474,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Wired, at all three sites, because the bug was three copies of one wrong guess.
   const sa = readFileSync(join(root, "src/components/StudioAssistant.jsx"), "utf8");
   ok("the argue answer carries the block",
-     /say\("gemlyx", `\$\{answer\}\\n\\n\$\{describeProvenance\(target, \{ answeredFrom: "entry" \}\)\}`/.test(sa));
+     /describeProvenance\(target, \{ answeredFrom: "entry", audience: studioMode \? "studio" : "reader" \}\)/.test(sa));
+  // ── AND A READER IS NOT THE FOUNDER ────────────────────────────
+  // This panel is the reader's assistant on a published page and the founder's
+  // on a draft, told apart by studioMode, and it was handing both of them the
+  // verification trace: three shouted headings, seven raw URLs, and a line that
+  // can read "asserted by the founder, not source-verified". Oliver, 21 Aug
+  // 2026, sending the screenshot: "I don't think I need to say much to this
+  // picture..."
+  ok("and both call sites say which audience they are answering",
+     (sa.match(/audience: studioMode \? "studio" : "reader"/g) || []).length === 2);
   ok("the lookup answer carries it too", /answeredFrom: "lookup", lookupUrls: cites/.test(sa));
   ok("and the assistant uses the shared reader", /const cites = citationUrls\(research, \{ limit: 5 \}\);/.test(sa));
   // Through stripNonCode, because the comment explaining the fix quotes the
@@ -25711,7 +25804,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and follows the ticket link when it does not", /const ticket = \(first\.data\.tickets \|\| \[\]\)\[0\]/.test(appN));
   ok("one link, not a crawl", !/tickets\.slice\(0, [2-9]\)/.test(appN));
   ok("and asks it when the next edition is", /const e = editionFrom\(d\.text\);/.test(appN));
-  ok("through the one parser", /const editionFrom = \(text\) => \{\s*\n\s*const found = nextEdition\(text, checkFrom\);/.test(appN));
+  // ── AND IT ASKS WHICH DATE, NOT WHETHER THERE IS ONE ────────────
+  // nextEdition takes the earliest future date ANYWHERE in the text, which on a
+  // venue's concert calendar is whoever is playing next. See anchoredEdition.
+  ok("through the one parser", /const read = anchoredEdition\(text, checkFrom\);/.test(appN));
+  ok("and no longer takes the first future date it can find",
+     !/const found = nextEdition\(text, checkFrom\);/.test(appN));
   // The saving: a site that agrees costs nothing and never reaches the model.
   ok("a site that agrees ends the check with no paid call",
      /if \(fromSite\) \{[\s\S]{0,700}?continue;\s*\n\s*\}/.test(appN));
@@ -25729,7 +25827,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Still guarded. A page's own history could otherwise walk a date backwards,
   // which is the Rock under broen failure arriving by a different route.
   ok("a date read off a page goes through the same backwards guard",
-     /datePropositionProblem\(isoDay\(found\.start\), ev\.date, checkFrom\)/.test(appN));
+     /datePropositionProblem\(isoDay\(found\.start\), ev\.date, checkFrom, \{ labelled: read\.labelled \}\)/.test(appN));
   // The broken rows first, so a cap can never again spend itself on rows that
   // were already right.
   ok("undated rows are checked before correct ones", /const brokenFirst = \[\.\.\.allUpcoming\]\.sort/.test(appN));
@@ -26347,7 +26445,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // brief that needs ranking most, and Skagen ranks beside Roskilde.
   const pm = readFileSync(join(root, "src/utils/previewMatch.js"), "utf8");
   ok("the departure town is used as the origin when no arrival was stated",
-     /const from = arrivedAt \|\| \(leavingTowns\.length \? townPointFor\(leavingTowns\[0\]\.name\) : null\);/.test(pm));
+     /const from = anchor \|\| \(leavingTowns\.length \? townPointFor\(leavingTowns\[0\]\.name\) : null\);/.test(pm));
+  // The anchor is where they land OR where they are going, in that order, and it
+  // is computed before the first pass because the first pass needs it: a town
+  // that appears only in Gemlyx's replies and is out of honest reach is not in
+  // this trip, and it used to arrive with its whole inventory behind it.
+  ok("and the anchor is the arrival, then the destination",
+     /const anchor = arrivedAt \|\| goingTo;/.test(pm));
   // The gate, written out in full: matching the fill alone would survive a
   // mutation opening it on every brief, because the fill is still there.
   ok("and the second door opens only when every named town is one they are leaving",
@@ -26411,6 +26515,691 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // asked for opening hours would answer, and it would answer badly.
   ok("it calls the transcriber, not the date reader", /const shot = await readPosterText\(banner\.url, name\);/.test(appR));
   ok("and both readers are imported", /readDatesFromImage, readPosterText \} from "\.\/utils\/aiClient"/.test(appR));
+}
+
+// ── WHICH OF THE DATES ON THIS PAGE IS THE EVENT'S ──────────────────
+//
+// Oliver, 20 Aug 2026, on a run that fixed two events and broke two others:
+//
+//   Sommer på Tobakken, Esbjerg     none        -> 2026-10-29
+//   Skanderborg Festival            2026-08-02  -> 2026-11-04
+//
+// Both read off the operator's own site, and both wrong. A summer season
+// proposed for late October, and a festival that has run in the first week of
+// August for forty years proposed for November. nextEdition takes the earliest
+// FUTURE date anywhere in the text, and on a venue's concert calendar that is
+// whoever is playing next. The parser was right about every date it found and
+// wrong about which one it was looking for.
+//
+// "And don't assume a date. If you have found a date, make sure it's actually
+// the right date."
+{
+  const { anchoredEdition, labelledAt, isoDay, datePropositionProblem, DATE_PROPOSITION_WHY, CALENDAR_DATES } = M;
+  const today = new Date(2026, 7, 20);
+
+  // ── THE TWO IT BROKE ────────────────────────────────────────────
+  // A venue front page: a list of what is on, none of it labelled as the season's
+  // own dates.
+  const venue = "Tobakken Esbjerg. Kommende koncerter: 29.10.26 Efterårsjam. 14.11.26 Nordisk Aften. 03.12.26 Julekoncert. 21.01.27 Vinterscene.";
+  const fromVenue = anchoredEdition(venue, today);
+  is("a concert calendar yields no edition", fromVenue.found, null);
+  is("and says so as a calendar rather than an empty page", fromVenue.why, "many-dates-none-labelled");
+  ok("carrying what it actually saw", fromVenue.candidates >= 3);
+  // NOT reported as "the page states no date". There was plenty found, and
+  // sending him to check a site that is working perfectly is its own failure.
+  ok("which is a different sentence from finding nothing",
+     M.CHECK_STEP_WORDS["many-dates-none-labelled"] !== M.CHECK_STEP_WORDS["no-date-in-text"]);
+  ok("and it says several dates were there", /several future dates/.test(M.CHECK_STEP_WORDS["many-dates-none-labelled"]));
+
+  // A festival site with news and ticket releases on it.
+  const festivalPage = "Smukfest i Skanderborg. Billetsalget åbner 04.11.26. Nyheder fra bøgeskoven. Fanklub-forsalg 12.12.26. Se programmet for 2027.";
+  const fromFestival = anchoredEdition(festivalPage, today);
+  is("unlabelled news dates are not the festival's date", fromFestival.found, null);
+  // A page carrying only ONE unlabelled date is a different case, and this
+  // function deliberately accepts it: most festival pages look like that, and
+  // refusing them would trade two wrong rows for forty missing ones. The month
+  // rule below is what catches Skanderborg, and it is the reason there are two
+  // nets rather than one.
+  ok("a lone unlabelled date is still read, because most pages are that",
+     !!anchoredEdition("Smukfest. Billetsalget åbner 04.11.26.", today).found);
+  // AND THE SECOND NET, which catches it even if a page did label the wrong one.
+  // An annual festival keeps its slot in the year.
+  is("a November date for an August festival is refused",
+     datePropositionProblem("2026-11-04", "2026-08-02", today), "a-different-month-from-the-one-on-file");
+  ok("and the refusal explains itself", /different month/.test(DATE_PROPOSITION_WHY["a-different-month-from-the-one-on-file"]));
+  // Unless the page says in words that it moved. A genuine change is announced.
+  is("but a labelled move is allowed through",
+     datePropositionProblem("2026-11-04", "2026-08-02", today, { labelled: true }), "");
+  // The slot rule needs a slot: an undated event has none, which is the whole
+  // reason it is being looked up.
+  is("an undated event is not held to a month it never had",
+     datePropositionProblem("2026-11-04", "", today), "");
+
+  // ── THE TWO IT GOT RIGHT, WHICH MUST STILL WORK ─────────────────
+  // Distortion: a labelled date on a page that also carries last year's recap.
+  const distortion = "Distortion 3-7 June 2026 was the last one. Tickets. Dates: 2-6 June 2027. Festival Pass is valid all week.";
+  const d = anchoredEdition(distortion, today);
+  is("a labelled date wins however many others are on the page", isoDay(d.found?.start), "2027-06-02");
+  ok("and is marked as labelled, which is what the guard needs", d.labelled === true);
+  // German, because wikingertage.de is in the library and resolved correctly.
+  const german = "Schleswiger Wikingertage. Termin: 06.08.27-08.08.27. Programm folgt.";
+  is("a German label counts too", isoDay(anchoredEdition(german, today).found?.start), "2027-08-06");
+  is("and Danish", isoDay(anchoredEdition("Bornholms Kulturuge. Datoer: 04.09.26-06.09.26.", today).found?.start), "2026-09-04");
+  ok("and 'afholdes'", !!anchoredEdition("Festivalen afholdes 12.06.27-14.06.27.", today).found);
+
+  // ── ONE DATE AND NOTHING TO CONFUSE IT WITH ─────────────────────
+  // Most festival pages. The rule must not refuse those.
+  const simple = "Sommermarked på havnen, 12.06.27.";
+  ok("a page with a single future date still answers", !!anchoredEdition(simple, today).found);
+  ok("without pretending it was labelled", anchoredEdition(simple, today).labelled === false);
+  is("and the threshold is stated rather than buried", CALENDAR_DATES, 2);
+
+  // ── THE LABEL HAS TO BE NEAR THE DATE ───────────────────────────
+  // A window wide enough to reach the previous sentence would let any label
+  // vouch for any date on the page, which is the same unbounded matching this
+  // codebase keeps fixing.
+  const far = `Datoer for sidste år.${" ".repeat(120)}Kommende: 29.10.26 Efterårsjam. 14.11.26 Nordisk Aften.`;
+  is("a label two sentences away vouches for nothing", anchoredEdition(far, today).found, null);
+  // The anchor, which is what actually bounds this: a label separated from the
+  // date by other WORDS vouches for nothing, however near it sits.
+  ok("a label with a sentence between it and the date does not count",
+     !labelledAt("Datoer for 2025 er slut, kommende koncerter er 29.10.26", "Datoer for 2025 er slut, kommende koncerter er ".length));
+  ok("while one sitting right against it does",
+     labelledAt("Datoer: 29.10.26", "Datoer: ".length));
+  ok("labelledAt is false for an unlocatable date", !labelledAt("Datoer: 04.09.26", -1));
+  ok("and true right beside one", labelledAt("Datoer: 04.09.26", "Datoer: ".length));
+
+  // A past date is still not an edition, whatever labels it.
+  is("a labelled date in the past is still refused",
+     anchoredEdition("Datoer: 03.06.26-07.06.26.", today).found, null);
+
+  // ── AND EVERY MONTH-NAME RANGE ON THE PAGE, NOT THE FIRST ───────
+  // dateRangesInText used a non-global regex and `String.match`, which returns
+  // the FIRST match and stops. A festival page that opens with last year's recap
+  // and states this year's dates further down lost the real answer to the recap,
+  // every time, and invisibly: one date came back and looked like the only one
+  // there. Found while writing the Distortion fixture above, which is exactly
+  // that shape.
+  const both = M.dateRangesInText("Distortion 3-7 June 2026 was the last one. Dates: 2-6 June 2027.");
+  const byName = both.filter(r => r.via === "month-name").map(r => isoDay(r.start)).sort();
+  is("both month-name ranges are found, not just the first", byName, ["2026-06-03", "2027-06-02"]);
+  ok("and each one knows where it was", both.filter(r => r.via === "month-name").every(r => r.at >= 0));
+  // The single-date path cannot be located, so it must never be treated as if it
+  // had been found beside a label.
+  ok("a date whose position is unknown is never labelled",
+     M.dateRangesInText("8 June 2027").filter(r => r.via === "single").every(r => r.at === -1));
+}
+
+// ── AN OFFICE IS NOT WHERE THE FESTIVAL HAPPENS ─────────────────────
+//
+// Oliver, 20 Aug 2026, with a Danish fact-check of a Copenhagen Cooking draft:
+// the pipeline read the FOOTER of copenhagencooking.dk, found Vigerslev Allé 18,
+// 2500 Valby, and used it as the festival's location. That is the secretariat.
+// No public activity happens there. Everything downstream then behaved perfectly
+// on a wrong input: nearestStation "Sjælør Boulevard", travelTime "15min", both
+// correctly measured, both to an office nobody is going to.
+//
+// His instruction: "MAKE SURE that the location is never the Office.. but the
+// actual event." And: "If anything indicates an 'office', then DO NOT consider
+// it the event location."
+{
+  const { looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER } = M;
+
+  // THE REAL ONE. The street line itself says nothing; the giveaway is the
+  // company registration sitting beside it in the footer.
+  const footer = "Copenhagen Cooking & Food Festival. Sekretariat: Vigerslev Allé 18, 2500 Valby. CVR 12345678. Kontakt os.";
+  ok("the address in that footer is read as an office", looksLikeOffice("Vigerslev Allé 18, 2500 Valby", footer));
+  // And the venue is not, on the same page.
+  ok("while the festival square is not", !looksLikeOffice("Flæsketorvet 45, 1711 København V", footer));
+
+  ok("an address that says so itself needs no context", looksLikeOffice("Kontoradresse: Vigerslev Allé 18"));
+  ok("a postbox is an office", looksLikeOffice("Postboks 210, 8100 Aarhus C"));
+  ok("so is c/o", looksLikeOffice("c/o Foreningen Smag, Vestergade 5"));
+  ok("and an English one", looksLikeOffice("Head office, 12 Bridge Street"));
+
+  // ── AND IT MUST NOT REFUSE REAL VENUES ──────────────────────────
+  // Refusing a good address empties the field just as thoroughly as accepting a
+  // bad one fills it wrongly, and this rule fires on ordinary Danish words.
+  ok("a harbour park is not an office", !looksLikeOffice("Marselisborg Havnevej 2, 8000 Aarhus"));
+  ok("nor a beach", !looksLikeOffice("Lakolk Strand, 6792 Rømø"));
+  ok("nor a street with 'kontor' inside a longer word",
+     !looksLikeOffice("Kontorhotellet 4, 5000 Odense C"));
+  ok("nor a press photographer's street", !looksLikeOffice("Pressefotografvej 2, 2300 København S"));
+  ok("an empty address is not an office, it is nothing", !looksLikeOffice(""));
+  // The context test only reads AROUND the address. A site that has a contact
+  // page somewhere is not thereby an office.
+  const wholeSite = `Program. Festivalpladsen ligger på Flæsketorvet 45, 1711 København V.${" ".repeat(400)}Sekretariat: Vigerslev Allé 18. CVR 12345678.`;
+  ok("a footer far down the page does not condemn the venue",
+     !looksLikeOffice("Flæsketorvet 45, 1711 København V", wholeSite));
+
+  // ── THE ORDER HE ASKED FOR ──────────────────────────────────────
+  // "The official leak of the location is the prioritised here. Places API
+  // should be second priority."
+  is("the order is stated once", EVENT_LOCATION_ORDER, ["official-site", "places", "none"]);
+  is("the site wins when it names a venue",
+     eventLocation({ fromSite: "Flæsketorvet 45", fromPlaces: "Vigerslev Allé 18" }).from, "official-site");
+  is("Places answers only when the site did not",
+     eventLocation({ fromSite: "", fromPlaces: "Flæsketorvet 45" }).from, "places");
+
+  // THE COPENHAGEN COOKING CASE, END TO END.
+  const cc = eventLocation({ fromSite: "Vigerslev Allé 18, 2500 Valby", siteText: footer, fromPlaces: "Flæsketorvet 45, 1711 København V" });
+  is("an office on the site hands over to Places rather than being published", cc.from, "places");
+  is("and the venue is what comes out", cc.address, "Flæsketorvet 45, 1711 København V");
+  ok("with the refusal said out loud", /reads as an office/.test(cc.why));
+
+  // Places is refused too, because it will happily return the secretariat when
+  // that is what is registered under the festival's name.
+  const bothOffices = eventLocation({
+    fromSite: "Vigerslev Allé 18", siteText: footer,
+    fromPlaces: "Sekretariat, Vigerslev Allé 18",
+  });
+  is("an office at both tiers publishes nothing", bothOffices.address, "");
+  is("and says so", bothOffices.from, "none");
+  ok("naming both", /both the site and Places/.test(bothOffices.why));
+  // An unconfirmed location is a state this product already handles honestly. A
+  // wrong one is published as a fact and sends somebody to Valby.
+  is("no address at all is not dressed up as one", eventLocation({}).address, "");
+  is("and explains itself", eventLocation({}).why, "no address was found");
+  ok("the word list is not empty, which would make every test above vacuous", OFFICE_WORDS.length > 10);
+
+  // ── AND THE DRAFT PROMPT SAYS IT BEFORE THE MISTAKE IS MADE ─────
+  // The gate above catches an office that reached the draft. This stops it being
+  // written, which is cheaper and is where his instruction was aimed: "make
+  // OpenAI structure the research so the official website/ticket place, is
+  // immediately found. And put in their location."
+  const sp = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
+  ok("the festival prompt separates the venue from the organisation",
+     /THE VENUE IS WHERE THE EVENT HAPPENS, NEVER WHERE THE ORGANISATION SITS/.test(sp));
+  ok("and names the words that give an office away",
+     /kontor, sekretariat, postadresse, postboks, c\/o or att\./.test(sp));
+  ok("and tells it that empty is the correct answer, not a guess",
+     /Empty is correct and expected; an administrative address published as a venue/.test(sp));
+  // The real case, so a later edit cannot quietly drop the reason.
+  ok("with the failure it came from written down", /secretariat in Valby/.test(sp));
+}
+
+// ── 21 AUGUST 2026: THE PREVIEW THAT HAD NOTHING TO DO WITH THE CHAT ─
+//
+// Oliver's report, on a preview built from a chat whose only traveller sentence
+// was "I am going to Aalborg, and I have 7 days to play with":
+//
+//   "Clearly the preview has NOTHING to do with the chat, at all. Because the
+//    chat sounds somewhat reasonable. However the preview? Absolute made up
+//    chaos."
+//
+// It offered Ribe, three hundred kilometres away, and a Copenhagen Comic Con.
+// Three separate causes, all of them the same shape: something the APP said
+// being read back as something the TRAVELLER said.
+{
+  const { destinationPoint, destinationsNamed, arrivalPointRaw: arrivalPoint,
+          matchedPlaces, previewPools, tripAnchorFor, eventReachBand, eventPoint, placePoint, tripPoints,
+          tripEvents, beyondHorizon, isMajorEvent, EVENT_HORIZON_MONTHS, MANY_EVENTS_IN_A_TOWN,
+          briefThemes, townPointFor, vehicleMismatches, factCheckCopy, describeProvenance, tripWindow } = M;
+
+  // ── ONE: A DESTINATION IS NOT AN ARRIVAL ────────────────────────
+  // arrivalPoint reads three things and his sentence is none of them: which
+  // airport, which foreign city they came from, which Danish port the ferry
+  // docked at. So the trip had no anchor, and with no anchor the distance term
+  // in the town ranking is a constant.
+  const tp = { townPoint: townPointFor };
+  is("going to a town is a destination", destinationPoint("I am going to Aalborg, and I have 7 days to play with.", tp)?.name, "Aalborg");
+  is("and so is a length of time in one", destinationPoint("7 days in Aalborg", tp)?.name, "Aalborg");
+  is("and staying in one", destinationPoint("We are staying in Aarhus", tp)?.name, "Aarhus");
+  is("and being in one, adverb and all", destinationPoint("We are already in Copenhagen and want to get out of the city", tp)?.name, "Copenhagen");
+  is("and visiting one", destinationPoint("visiting Aalborg in June", tp)?.name, "Aalborg");
+  // THE TRAP utils/arrival.js ALREADY DOCUMENTS, one reader along: "to" is how
+  // people describe a leg INSIDE a trip, and half of those sentences come out of
+  // Gemlyx's own mouth.
+  is("a bus to a town is a leg, not a destination", destinationPoint("On day 3 we will take the bus to Skagen", tp), null);
+  is("and neither is a train to one", destinationPoint("you could take the train to Ribe", tp), null);
+  is("a town remembered fondly is not a destination", destinationPoint("We loved Ribe last year", tp), null);
+  is("nor is one being asked about", destinationPoint("Is Skagen worth it?", tp), null);
+  // A COORDINATE IS LOOKED UP, NEVER INVENTED, exactly as in the ferry pass.
+  is("a country is not a town", destinationPoint("going to Denmark", tp), null);
+  is("and no resolver means no destination", destinationPoint("going to Aalborg"), null);
+  is("two bases are both read, in the order they were said",
+     destinationsNamed("I'm going to Aalborg then three days in Skagen", tp).map(d => d.name), ["Aalborg", "Skagen"]);
+
+  // ── TWO: THE REGION CAME OUT OF GEMLYX'S OWN REPLY ──────────────
+  // He named no region. Gemlyx did: "that's proper North Jutland arrival".
+  // regionsNamed read Jutland out of the app's own sentence and Ribe, which is
+  // in Jutland and tiered "Can't Miss Out", became a legal candidate.
+  const CHAT = [
+    "gemlyx: Hej hej! Where are you headed in Denmark, and how many days have you got?",
+    "user: I am going to Aalborg, and I have 7 days to play with.",
+    "gemlyx: Nice, Aalborg's a great pick. Since you haven't mentioned a starting point, I'll assume you're landing at Copenhagen Airport and making your way north. There's a couple of real events up in Jutland worth timing around.",
+  ].join("\n");
+  const OWN = "I am going to Aalborg, and I have 7 days to play with.";
+  const town = (name, tier, themes, region, extra = {}) =>
+    ({ id: name, name, _src: "town", tier, themes, region, desc: `${name} is a place. It suits people who like old things.`,
+       __lat: townPointFor(name)?.lat, __lon: townPointFor(name)?.lon, ...extra });
+  const TOWNS = [
+    town("Aalborg", "Can't Miss Out", ["history", "nightlife"], "North Jutland"),
+    town("Skagen", "Highly Recommended", ["coast"], "North Jutland"),
+    town("Ribe", "Can't Miss Out", ["history"], "South Jutland"),
+    town("Copenhagen", "Can't Miss Out", ["history"], "Zealand", { isMajorCity: true }),
+  ];
+  const namesOf = (rows) => rows.filter(p => p._src === "town").map(p => p.name);
+  const withOwn = matchedPlaces(CHAT, previewPools({ towns: TOWNS }), { days: 7, saidByTraveller: OWN });
+  ok("Ribe is not offered for a chat that never named a region", !namesOf(withOwn).includes("Ribe"));
+  ok("and the town he actually named is", namesOf(withOwn).includes("Aalborg"));
+  ok("and it is marked as his, not ours", withOwn.find(p => p.name === "Aalborg")?._saidByThem === true);
+  // THE ASSERTION THAT MAKES THE ONE ABOVE MEAN ANYTHING: read the whole
+  // transcript, as this did until today, and Ribe comes straight back. The pair
+  // cannot both pass on a matcher that reads one source.
+  ok("and reading Gemlyx's replies as well puts it back",
+     namesOf(matchedPlaces(CHAT, previewPools({ towns: TOWNS }), { days: 7 })).includes("Ribe"));
+
+  // ── AND THE ANCHOR IS HIS TOWN, NOT THE ONE GEMLYX GUESSED ──────
+  // "I'll assume you're landing at Copenhagen Airport" is the app saying out
+  // loud that nobody told it, and arrivalPoint read that back as a fact.
+  is("the anchor is where he said he is going", tripAnchorFor(CHAT, OWN)?.name, "Aalborg");
+  is("and reading both halves gives Gemlyx's guess instead", arrivalPoint(CHAT, tp)?.name, "Copenhagen Airport");
+
+  // ── THREE: AN EVENT IS A PLACE AND A DAY ────────────────────────
+  // tripEvents scored on named, interest, tier and date overlap. Not one term
+  // was geographic, so nothing ever asked where the Comic Con was.
+  const TODAY_A = new Date(2026, 7, 21);
+  const evt = (name, twn, date, dateEnd, extra = {}) =>
+    ({ name, town: twn, date, dateEnd, type: "Festival", tier: "Highly Recommended", ...extra });
+  const EVENTS = [
+    evt("Comic Con Denmark", "Copenhagen", "2026-09-12", "2026-09-13"),
+    evt("Aalborg Karneval", "Aalborg", "2026-09-05", "2026-09-05"),
+  ];
+  const aalborg = townPointFor("Aalborg");
+  const plan = tripEvents(EVENTS, {
+    window: null, named: () => false, today: TODAY_A,
+    reachOf: (e) => eventReachBand(e, aalborg, null),
+  });
+  const rec = plan.rows.filter(r => r.recommended).map(r => r.event.name);
+  ok("the convention across the country is not the recommendation", !rec.includes("Comic Con Denmark"));
+  ok("the one in the town he named is", rec.includes("Aalborg Karneval"));
+  // NOT DELETED. A stretch is a real option and stays tickable; what it loses is
+  // Gemlyx's own badge. "And Comic Con? Really?" was a complaint about the word
+  // RECOMMENDED, not about the row existing. Shown on a DATED trip, because the
+  // undated case deliberately offers one suggestion and no more, so a second row
+  // there would be absent for a reason that has nothing to do with distance.
+  const datedPlan = tripEvents(EVENTS, {
+    window: tripWindow({ arrival: "2026-09-05", departure: "2026-09-14" }),
+    named: () => false, today: TODAY_A, reachOf: (e) => eventReachBand(e, aalborg, null),
+  });
+  ok("but it is still on the screen", datedPlan.rows.map(r => r.event.name).includes("Comic Con Denmark"));
+  ok("and still tickable, because a four hour train is the traveller's call",
+     datedPlan.rows.find(r => r.event.name === "Comic Con Denmark")?.tickable === true);
+  ok("and still not the recommendation",
+     datedPlan.rows.find(r => r.event.name === "Comic Con Denmark")?.recommended !== true);
+  // AND AN EVENT IS ONE DAY, NOT A TRIP. reachBand widens with trip length,
+  // which is right for a town you sleep in and wrong for a convention you have
+  // to get back from.
+  ok("an event 223 km away is not comfortable, however long the holiday",
+     eventReachBand(EVENTS[0], aalborg, null) < 2);
+  is("an event with no placeable location is unknown, not far",
+     eventReachBand({ name: "Somewhere", town: "Nowhershavn" }, aalborg, null), null);
+  is("and with no anchor there is nothing to measure from",
+     eventReachBand(EVENTS[0], null, null), null);
+  is("an event's own coordinate wins over its town's",
+     JSON.stringify(eventPoint({ town: "Aalborg", __lat: 1, __lon: 2 })), JSON.stringify({ lat: 1, lon: 2 }));
+  // A ROW WITHOUT A COORDINATE IS NOT A ROW WITHOUT A PLACE. coordsOf reads
+  // __lat/__lon and nothing else, so every reach test quietly stood down for a
+  // town whose coordinates were never filled.
+  is("a town with no coordinate is placed by name",
+     JSON.stringify(placePoint({ name: "Aalborg" })), JSON.stringify(townPointFor("Aalborg")));
+  // AND THE REACH IS MEASURED FROM EVERYWHERE THE TRIP IS, but only from towns
+  // the TRAVELLER named. Widening it with a town Gemlyx proposed would hand the
+  // refusal straight back.
+  is("the trip's points are the anchor plus the towns he named",
+     tripPoints(aalborg, withOwn).length, 2);
+  is("and a town only Gemlyx named is not one of them",
+     tripPoints(null, [{ _src: "town", name: "Copenhagen" }]).length, 0);
+
+  // ── THE HORIZON, AND THAT IT ONLY BINDS THE UNDATED CASE ────────
+  is("two months is the horizon", EVENT_HORIZON_MONTHS, 2);
+  ok("an event three months out is beyond it", beyondHorizon({ date: "2026-12-01" }, TODAY_A));
+  ok("one three weeks out is not", !beyondHorizon({ date: "2026-09-10" }, TODAY_A));
+  ok("and an undated event is not refused for a date it does not have",
+     !beyondHorizon({ name: "no dates" }, TODAY_A));
+
+  // ── AND IN A CROWDED TOWN, ONLY THE BIG ONES ────────────────────
+  // The field existed and nothing read it: __scale is written on every published
+  // festival and majorEvents is a separate array, and previewPools flattened
+  // both in with the same _src.
+  ok("a major event is one by either name",
+     isMajorEvent({ _major: true }) && isMajorEvent({ __scale: "Major" }) && !isMajorEvent({ __scale: "Local" }));
+  ok("previewPools marks the major array as major",
+     previewPools({ majorEvents: [{ name: "X" }] })[0]._major === true);
+  const many = Array.from({ length: MANY_EVENTS_IN_A_TOWN + 2 }, (_, i) =>
+    evt(`Small thing ${i}`, "Copenhagen", "2026-09-0" + ((i % 8) + 1), null));
+  const crowdedNames = tripEvents([...many, evt("The Big One", "Copenhagen", "2026-09-04", null, { _major: true })],
+    { window: null, named: () => false, today: TODAY_A }).rows.map(r => r.event.name);
+  ok("a crowded town keeps its major event", crowdedNames.includes("The Big One"));
+  ok("and drops the small ones", !crowdedNames.some(n => /Small thing/.test(n)));
+  // THINNING IS NOT EMPTYING. A town whose events are ALL local has nothing to
+  // thin to, and a rule about having too many must not take the section away.
+  const allLocal = tripEvents(many, { window: null, named: () => false, today: TODAY_A }).rows;
+  ok("a crowded town with no major event keeps what it has", allLocal.length > 0);
+
+  // ── AND OUT OF REACH IS A DIFFERENT LIST, NOT A LOWER RANK ──────
+  // "If they REALLY love Vikings, then put it into a 'consider' section."
+  //
+  // ON A BICYCLE, so the band is genuinely FAR rather than merely last. Without
+  // a stated mode, reachBand calls 204 km a stretch on two days and comfortable
+  // on seven, which is worth knowing about this fix: what kept Ribe off his
+  // screen was the region source, not the distance. See the handoff.
+  const VIKINGS = "I am going to Aalborg for 2 days on a bike. I really love vikings and old history. I want to see some of Jutland.";
+  const near = { id: "Nibe", name: "Nibe", _src: "town", tier: "Worth Considering", themes: ["coast"],
+                 region: "North Jutland", desc: "Nibe is a place.", __lat: 56.983, __lon: 9.639 };
+  const twoDays = matchedPlaces(`user: ${VIKINGS}`, previewPools({ towns: [...TOWNS, near] }),
+    { days: 2, mode: "bike", themes: briefThemes(VIKINGS, []), saidByTraveller: VIKINGS });
+  ok("the town within cycling reach is offered normally",
+     twoDays.some(p => p.name === "Nibe" && !p._consider));
+  const detour = twoDays.find(p => p._consider);
+  ok("a far town that answers a stated interest becomes a detour", !!detour);
+  ok("and it is not counted among the towns of the trip", !!detour && detour._consider === true);
+  ok("and the card can say what it costs", !!detour && detour._considerKm > 100 && !!detour._considerFrom);
+  // The app's own label, not the theme id, because the card renders it into a
+  // sentence a traveller reads.
+  ok("and why it is there at all", !!detour && detour._considerWhy.includes("History"));
+  // AND SILENCE IS NOT AN INTEREST. fitsBrief answers `fits: true` for a brief
+  // that named nothing, which is right everywhere else on this screen and would
+  // mean the opposite of what he asked for here.
+  const NOTHING = "I am going to Aalborg for 2 days on a bike. I want to see some of Jutland.";
+  const saidNothing = matchedPlaces(`user: ${NOTHING}`, previewPools({ towns: [...TOWNS, near] }),
+    { days: 2, mode: "bike", themes: null, saidByTraveller: NOTHING });
+  ok("a traveller who has said nothing is offered no detour", !saidNothing.some(p => p._consider));
+
+  // ── AND THE SCREEN HAS TO SHOW ALL OF IT ────────────────────────
+  // An unrendered flag is this codebase's signature defect.
+  const gps = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  ok("the detour block is rendered", /Worth considering, but a long way/.test(gps));
+  ok("and a detour is not one of the items", /!p\._notAsked && !p\._consider/.test(gps));
+  ok("and the events are asked how far away they are", /reachOf: where\.length/.test(gps));
+  // "Every attraction should have the area it is located in above it."
+  ok("an attraction card names the area it sits in",
+     /place\._src !== "town" && parentTownOf\(place\)/.test(gps));
+
+  // ── THE VEHICLE, AGAINST THE LEG WE MEASURED ────────────────────
+  // Gilleleje, 20 Aug 2026. The prose said "bus 950R" and the draft's own
+  // __journey said {"vehicle":"train","line":"950R"}, four hundred characters
+  // apart in one file, and nothing compared them.
+  const LEGS = [
+    { vehicle: "metro", line: "M3", from: "Rådhuspladsen", to: "Østerport", mins: 5 },
+    { vehicle: "train", line: "A", from: "Østerport St.", to: "Hillerød", mins: 33 },
+    { vehicle: "train", line: "950R", from: "Hillerød", to: "Gilleleje Øst", mins: 32 },
+  ];
+  is("the bus that was a train is one finding",
+     vehicleMismatches("then bus 950R into Gilleleje Øst, a five-minute walk from the centre.", LEGS).length, 1);
+  ok("and it names the measurement", /measured that leg as a train/.test(
+     vehicleMismatches("then bus 950R into Gilleleje Øst.", LEGS)[0] || ""));
+  is("the corrected sentence is clean",
+     vehicleMismatches("then the Lokaltog 950R train into Gilleleje Øst.", LEGS).length, 0);
+  // CALLING A METRO A TRAIN IS HOW PEOPLE SPEAK. Calling a train a bus sends
+  // them to the wrong platform. Families, not words.
+  is("a metro called a train is not a finding", vehicleMismatches("Take the train M3 into town.", LEGS).length, 0);
+  is("a bus called a metro is", vehicleMismatches("Hop on the bus M3 to Østerport.", LEGS).length, 1);
+  is("a line named with no vehicle beside it is not", vehicleMismatches("The 950R runs hourly.", LEGS).length, 0);
+  // LINE A OF THE S-TOG IS A REAL LINE AND "A" IS THE COMMONEST WORD THERE IS.
+  // Skipping a leg costs nothing; matching the wrong word costs a false
+  // accusation, and a gate that cries wolf gets switched off.
+  is("a one letter line is never matched", vehicleMismatches("Take a bus. A is fine.", LEGS).length, 0);
+  is("and no legs means no accusations", vehicleMismatches("then bus 950R", []).length, 0);
+  {
+    const jr = readFileSync(join(root, "src/utils/journey.js"), "utf8");
+    ok("the guide checks the vehicle as well as the duration", /vehicleMismatches\(text, rides\)/.test(jr));
+    // ── AND AGAINST THE RIGHT SHAPE ────────────────────────────────
+    // The first version passed `legs` through with an Array.isArray guard, and
+    // `legs` in the guide is a MAP keyed "origin|dest|mode" whose values carry
+    // steps. The guard made it silently hand over [] on every guide ever built:
+    // the gate existed, ran, and could not fire. legMinutesIn two lines above it
+    // already knew the shape, which is what made the mistake invisible.
+    ok("and the rides are flattened out of the leg map first",
+       /const rides = guideRides\(legs\);/.test(jr));
+    ok("through journeyParts, so both pipelines read a leg the same way",
+       /journeyParts\(d\?\.steps\)\?\.legs/.test(jr));
+    const appV = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("and so does the draft, against its own stored journey",
+       /vehicleMismatches\(readerText\(t\), t\?\.__journey\?\.legs \|\| \[\]\)/.test(appV));
+  }
+
+  {
+    const { guideLogisticsProblems, guideRides } = M;
+    // The real shape: a map keyed "origin|dest|mode", values carrying Google's
+    // steps. Taken from legMinutesIn, which has read this shape all along.
+    const LEGMAP = {
+      "Hillerød|Gilleleje|transit": {
+        durationMinutes: 32, modeUsed: "transit",
+        steps: [{ mode: "transit", mins: 32, vehicle: "HEAVY_RAIL", line: "950R", from: "Hillerød", to: "Gilleleje Øst" }],
+      },
+    };
+    is("the leg map flattens to one ride", guideRides(LEGMAP).length, 1);
+    is("with the vehicle in a traveller's words", guideRides(LEGMAP)[0].vehicle, "train");
+    const found = guideLogisticsProblems(
+      [{ id: "day1", text: "From Hillerød take the bus 950R to Gilleleje Øst, about 32 minutes." }], LEGMAP);
+    ok("and the guide gate fires on a bus that Google measured as a train",
+       found.some(f => /THE VEHICLE DOES NOT MATCH/.test(f)));
+    ok("and says nothing when the guide gets it right",
+       !guideLogisticsProblems(
+         [{ id: "day1", text: "From Hillerød take the 950R train to Gilleleje Øst, about 32 minutes." }], LEGMAP)
+         .some(f => /THE VEHICLE DOES NOT MATCH/.test(f)));
+  }
+
+  // ── THE PASTE HE SENDS TO GEMINI ────────────────────────────────
+  // "then make a 'copy' option. So I only copy what I need to have fact-checked
+  // by Gemini." And, on what he does today: "Because I usually copy the whole
+  // draft." Less is not the same as blind: a checker with no idea which figures
+  // are measured argues with the measured ones, which is his 16 Aug report.
+  const DRAFT = {
+    name: "Gilleleje", region: "North Zealand", emoji: "🐟", themes: ["coast"], lat: 56.1244, lon: 12.3124,
+    tag: "Working harbour", characterAndFit: "Gilleleje sits at the northernmost point of Zealand.",
+    gettingThereReality: "then bus 950R into Gilleleje Øst, a five-minute walk from the centre.",
+    thingsToKnow: ["The beach holds Blue Flag status."], travelTime: "1h 32min 🚆",
+    __journey: { total: 92, onBoard: 70, onFoot: 9, waiting: 13, drivingMins: 58, from: "Copenhagen", legs: LEGS },
+    __sources: ["https://www.visitdenmark.dk/a", "https://museumns.dk/b"],
+    __priceSource: { url: "https://museumns.dk/billetter/", host: "museumns.dk", price: "40-40" },
+    __notes: ["THE CORRECTION DID NOT LAND."],
+  };
+  const paste = factCheckCopy(DRAFT, { type: "town", now: "20 Aug 2026" });
+  ok("the claims are in it", /Character and fit: Gilleleje sits/.test(paste));
+  ok("and the measured block says not to argue with it", /DO NOT CORRECT ANYTHING BELOW THIS LINE/.test(paste));
+  // THE WHOLE POINT: the contradiction is three lines apart instead of four
+  // hundred characters, so a checker can see it without knowing Danish rail.
+  ok("the prose calling it a bus is in the paste", /bus 950R/.test(paste));
+  ok("and the leg measured as a train is too", /train 950R: Hillerød to Gilleleje Øst/.test(paste));
+  ok("what our own gates already flagged is stated", /THE CORRECTION DID NOT LAND/.test(paste));
+  ok("sources are named hosts, not raw urls", /Read while drafting: visitdenmark\.dk, museumns\.dk/.test(paste));
+  ok("and the plumbing is not", !/__journey|__sources|"emoji"|🐟/.test(paste));
+  ok("nor is the closed vocabulary a checker cannot check", !/coast/.test(paste));
+  ok("it says what a useful answer looks like", /WHAT A USEFUL ANSWER LOOKS LIKE/.test(paste));
+  is("an empty draft does not throw", typeof factCheckCopy(null), "string");
+  {
+    const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("and Studio has the button", /🔍 Copy for a fact-check/.test(appF));
+    ok("which copies the EDITED draft, not the original code",
+       /factCheckCopy\(parsed, \{ type: studioType/.test(appF));
+  }
+
+  // ── AND WHAT AN ADVERSARIAL PASS FOUND IN ALL OF THAT ───────────
+  // Every one of these is a defect the fixes above introduced and a review
+  // caught before it shipped. They are the assertions that stop each one coming
+  // back, and each names the failure rather than the rule.
+  {
+    // 1. THE THINNING RULE DELETED THE EVENTS SECTION. It ran before the date
+    //    tests, so publishing one Major festival in Copenhagen dropped the local
+    //    one that was actually ON that week, and the Major was then dropped for
+    //    not overlapping. Empty screen on a trip that had an event in it.
+    const march = tripWindow({ arrival: "2027-03-02", departure: "2027-03-06" });
+    const cph = (name, date, dateEnd, extra = {}) =>
+      ({ name, town: "Copenhagen", date, dateEnd, type: "Culture", tier: "Highly Recommended", ...extra });
+    const SIX = [
+      cph("Light Festival", "2027-02-01", "2027-03-04"),
+      cph("Winter Jazz", "2027-01-05", "2027-01-20"),
+      cph("Fashion Week", "2027-01-27", "2027-01-31"),
+      cph("Documentary Days", "2027-04-01", "2027-04-10"),
+      cph("Beer Week", "2027-05-01", "2027-05-08"),
+      cph("Summer Jazz", "2027-07-02", "2027-07-11", { _major: true }),
+    ];
+    const shown = tripEvents(SIX, { window: march, named: () => false, today: TODAY_A }).rows.map(r => r.event.name);
+    ok("a major festival in July does not delete the one running in March", shown.includes("Light Festival"));
+    // 2. THE PASS ONE REACH FILTER EMPTIED THE TOWNS SECTION. A traveller whose
+    //    own town has no published row, and three that only Gemlyx named, all
+    //    far, left nothing at all.
+    const FAR_ONLY = [
+      town("Ribe", "Can't Miss Out", ["history"], "South Jutland"),
+      town("Copenhagen", "Can't Miss Out", ["history"], "Zealand"),
+    ];
+    const onlyFar = matchedPlaces(
+      "user: I am going to Nibe for 2 days on a bike.\ngemlyx: You could look at Ribe or Copenhagen.",
+      previewPools({ towns: FAR_ONLY }),
+      { days: 2, mode: "bike", saidByTraveller: "I am going to Nibe for 2 days on a bike." });
+    ok("the far towns are kept when they are the only towns there are",
+       onlyFar.filter(p => p._src === "town").length > 0);
+    ok("and nothing is left marked as held back", !onlyFar.some(p => p._farFromTrip));
+    // 3. AND A TOWN GEMLYX NAMED WAS WORSE OFF THAN ONE IT NEVER MENTIONED.
+    //    `seen` was written before the skip, so a far town it happened to
+    //    mention was blacklisted from the region pass and the detour list too.
+    const MENTIONS_RIBE = "gemlyx: You could look at Ribe while you are there.";
+    const VIK5 = "I am going to Aalborg for 2 days on a bike. I really love vikings and old history. I want to see some of Jutland.";
+    const withMention = matchedPlaces(`user: ${VIK5}\n${MENTIONS_RIBE}`, previewPools({ towns: [...TOWNS, near] }),
+      { days: 2, mode: "bike", themes: briefThemes(VIK5, []), saidByTraveller: VIK5 });
+    ok("a far town Gemlyx mentioned can still become a detour",
+       withMention.some(p => p.name === "Ribe" && p._consider));
+    // 4. THE SINGLE TOWN BADGE READ "0 KM FROM AALBORG" on the Aalborg card,
+    //    which is now the commonest screen there is.
+    const alone = matchedPlaces("user: I am going to Aalborg.", previewPools({ towns: [TOWNS[0]] }),
+      { days: 3, saidByTraveller: "I am going to Aalborg." });
+    ok("a town does not report the distance to itself", !alone.some(p => p._legKm === 0));
+    // 5. Æ, Ø AND Å AT THE START OF A NAME. Without the `u` flag, \b is defined
+    //    by ASCII \w, so there is no boundary between a space and Æ.
+    is("a destination starting with Æ is read", destinationPoint("we are going to Ærøskøbing for a week", tp)?.name, "Ærøskøbing");
+    is("and a capital inside a word is still not a name", destinationPoint("going to the McDonalds", tp), null);
+    // 6. THE HORIZON EDGE ROLLED OVER. 31 December plus two months is 31
+    //    February, which JS turns into 3 March.
+    ok("two months from new year's eve does not reach into March",
+       beyondHorizon({ date: "2027-03-02" }, new Date(2026, 11, 31)));
+    ok("and 28 February still fits", !beyondHorizon({ date: "2027-02-28" }, new Date(2026, 11, 31)));
+    // 7. THE PASTE VOUCHED FOR FIGURES NOBODY MEASURED. App.jsx keeps the
+    //    model's travelTime when no route lookup returned one, and says so in
+    //    its own run log: "This number is WRITTEN, not measured."
+    const NO_JOURNEY = { name: "Somewhere", travelTime: "2h 15min 🚂", lat: 55.1, lon: 9.1, nearestStation: "Somewhere St." };
+    const bare = factCheckCopy(NO_JOURNEY, { type: "town" });
+    ok("a travel time with no journey behind it is not called measured",
+       !/DO NOT CORRECT[\s\S]*2h 15min/.test(bare));
+    ok("and says plainly that nothing records where it came from",
+       /NOTHING RECORDS THIS AS MEASURED/.test(bare));
+    ok("a coordinate is stated, not vouched for",
+       /ALSO ON THE ENTRY, with no record of where it came from/.test(bare) && /Coordinates on the entry/.test(bare));
+    ok("and with a journey, the travel time is measured after all",
+       /DO NOT CORRECT[\s\S]*Travel time as published/.test(paste));
+  }
+
+  // ── AND THE READER NEVER SEES THE VERIFICATION TRACE ────────────
+  // "I don't think I need to say much to this picture..."
+  const READER_LOOKUP = describeProvenance(DRAFT, {
+    answeredFrom: "lookup", lookupUrls: ["https://www.tripadvisor.com/x", "https://dac.dk/y"], audience: "reader",
+  });
+  is("the reader gets one sentence", READER_LOOKUP.split("\n").length, 1);
+  ok("naming the hosts, not the urls", /tripadvisor\.com, dac\.dk/.test(READER_LOOKUP) && !/https:\/\//.test(READER_LOOKUP));
+  ok("and no shouted heading", !/WHERE THIS ANSWER CAME FROM|CHANGED AFTER DRAFTING|NO RECORDED SOURCE/.test(READER_LOOKUP));
+  const READER_ENTRY = describeProvenance(DRAFT, { answeredFrom: "entry", audience: "reader" });
+  is("an answer out of the entry is one sentence too", READER_ENTRY.split("\n").length, 1);
+  ok("and says which kind it is", /from the entry itself/.test(READER_ENTRY));
+  // THE FOUNDER LOSES NOTHING, which is the half that makes this safe to ship.
+  const STUDIO = describeProvenance(DRAFT, { answeredFrom: "lookup", lookupUrls: ["https://a.dk/x"] });
+  ok("the studio block is still the full trace", /WHERE THIS ANSWER CAME FROM/.test(STUDIO));
+  ok("and still carries the pages", /https:\/\/a\.dk\/x/.test(STUDIO));
+  ok("one per line, not run together", /Pages the search returned:\n/.test(STUDIO));
+}
+
+// ── 21 AUGUST 2026: "A LITTLE TOO MUCH OF A ROBOT AT START" ─────────
+//
+// Oliver, on the opening turns of a real conversation. The vocabulary in it was
+// clean: every phrase the prompt hard-bans was absent. What made it a robot was
+// the SHAPE of each turn, so these assert shapes.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const { briefBlock, readBrief, nextAsks, MAX_ASKS_AT_ONCE } = M;
+
+  // Each of these is a sentence from his screenshot, and each is now named in
+  // the prompt as the thing not to do.
+  ok("the prompt forbids narrating its own process", /NEVER NARRATE YOUR OWN PROCESS/.test(app));
+  ok("with his actual sentences quoted, so nobody softens it later",
+     /before I map out 7 days properly/.test(app) && /once I know that I can start pulling together something good/.test(app));
+  ok("it forbids justifying a question", /NEVER JUSTIFY A QUESTION/.test(app));
+  ok("and announcing an assumption for approval", /NEVER ANNOUNCE AN ASSUMPTION FOR APPROVAL/.test(app));
+  ok("and complimenting the traveller's choice", /DO NOT COMPLIMENT THEIR CHOICE/.test(app));
+  ok("naming the exact compliment it made", /way underrated/.test(app));
+  ok("and it requires something given before anything is asked", /GIVE BEFORE YOU ASK/.test(app));
+  ok("one question per turn, in the prompt as well as in the code", /ONE QUESTION PER TURN/.test(app));
+
+  // ── AND THE THING IT GIVES IS ONE WE ALREADY CHECKED ────────────
+  // His call, asked directly: off the published row, never off the model's own
+  // knowledge. This is the one place in the chat where an unverified sentence
+  // would reach a traveller.
+  ok("the give block is built from published entries", /WHAT GEMLYX ALREADY HOLDS ON THE PLACES THEY NAMED/.test(app));
+  ok("and only for towns the TRAVELLER named",
+     /mentionsPlace\(travellerTurns\.join\("\\n"\), t\.name\)/.test(app));
+  ok("read through cardLine, not the first hundred characters",
+     /import \{ cardLine \} from "\.\/utils\/cardLine"/.test(app));
+  ok("and bounded, so the prompt does not grow with the library",
+     /HELD_TOWNS_IN_A_PROMPT = 3/.test(app));
+
+  // ── ONE QUESTION, AND THE BLOCK SAYS SO IN WORDS ────────────────
+  const bare = readBrief({ travellerText: "I want to go to Denmark", today: new Date(2026, 7, 21) });
+  is("the cap is one", MAX_ASKS_AT_ONCE, 1);
+  is("and only one is offered however much is missing", nextAsks(bare).length, 1);
+  ok("the turn gives before it asks", /Give one real thing first, then ask, then stop/.test(briefBlock(bare)));
+  // AND THE ONE REAL THING IS NOT A PRICE. His 17 Aug report was a chat that
+  // "volunteered a price band nobody asked for", and a give-before-you-ask rule
+  // with no fence around it is an invitation to do exactly that first.
+  ok("and money is still not a gift", /no volunteering prices or opening dates nobody asked for/.test(briefBlock(bare)));
+  ok("said again where the new rule could be read as licence",
+     /not a price band and not a budget/.test(briefBlock(bare)));
+
+  // ── AND THE FOUNDER IS ALREADY SIGNED IN, ELSEWHERE ─────────────
+  // "So I can chat with the AI without it saying 'login'. But still show me
+  // that it's a part that needs account login." Two sessions, and nothing had
+  // connected them: Studio signs in as studioSession, the reader widget reads
+  // userSession, so he could be logged into Studio, looking at his own
+  // published entry, and be told to sign in to ask about it.
+  {
+    const ask = readFileSync(join(root, "src/components/AskGemlyx.jsx"), "utf8");
+    ok("the studio login is accepted by the reader widget",
+       /studioSession\?\.access_token \? \{ token: studioSession\.access_token/.test(app));
+    ok("and only when there is no reader account of his own",
+       /founder=\{!userSession && !!studioSession\}/.test(app));
+    ok("the widget takes a founder flag", /founder = false/.test(ask));
+    ok("and says the gate is there rather than hiding it",
+       /a traveller needs an account here/.test(ask));
+    // THE GATE IS NOT WEAKENED. api/ask.js resolves whatever token it is handed
+    // against Supabase and meters the answer against that account, so nothing
+    // here lets an anonymous visitor through.
+    const askApi = readFileSync(join(root, "api/ask.js"), "utf8");
+    ok("the server still resolves the token against Supabase",
+       /auth\/v1\/user/.test(askApi) && /Your session has expired/.test(askApi));
+    ok("and still refuses a request with no token at all",
+       /if \(!token\) return json\(res, 401/.test(askApi));
+  }
+
+  // ── AND IT NEVER SHOWS HALF A SENTENCE ──────────────────────────
+  // "You can see that Gemlyx still tends to stop." It had not stopped: that is a
+  // preamble written before the model decided to call web_search, left on screen
+  // while the search ran. The code already deleted that bubble afterwards, which
+  // is the wrong end of the problem.
+  ok("the stream holds back an unfinished sentence", /const shown = holdPartial \? fullText\.slice\(0, completeUpTo\(fullText\)\) : fullText;/.test(app));
+  ok("and flushes when a stream really has ended", /if \(!toolUseBlock\) flush\(data\);/.test(app));
+  ok("including after a search", /data = await streamClaudeChat\(followUpMessages, handleDelta\);\s*\n\s*flush\(data\);/.test(app));
+  ok("and after the retry, so an empty first try cannot swallow the second",
+     /const retryData = await streamClaudeChat\(baseMessages, handleDelta\);\s*\n\s*flush\(retryData\);/.test(app));
+  // The boundary itself, since a regex that never matches would make all of the
+  // above pass while showing nothing at all.
+  {
+    const END = /[.!?…]+["'”’)\]]*(?=\s|$)/g;
+    const upTo = (t) => { let e = 0; for (const m of String(t || "").matchAll(END)) e = m.index + m[0].length; return e; };
+    is("a finished sentence is shown whole", "Aalborg is worth it. And then".slice(0, upTo("Aalborg is worth it. And then")), "Aalborg is worth it.");
+    is("a fragment on its own shows nothing", upTo("forgetting to check out at the end of"), 0);
+    is("a closing quote counts as part of the sentence",
+       'He said "go north." Then'.slice(0, upTo('He said "go north." Then')), 'He said "go north."');
+    is("and a decimal is not a sentence end", upTo("It costs 40.50 kroner"), 0);
+  }
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

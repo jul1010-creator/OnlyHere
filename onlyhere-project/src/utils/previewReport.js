@@ -128,6 +128,10 @@ export const buildPreviewReport = ({
       src: cat.src,
       shown: (cat.items || []).map(p => p.name),
       offeredAll: (cat.offered || []).map(p => p.name),
+      // A detour is on the screen and was not in this report, so a screenshot of
+      // one could not be traced to the rule that produced it. Same reason
+      // `offeredAll` is here.
+      consider: (cat.consider || []).map(p => ({ name: p.name, km: p._considerKm ?? null, from: p._considerFrom || "", why: p._considerWhy || [] })),
       offeredShown: (cat.picks || []).map(e => ({ name: e.place?.name, reason: e.reason, score: e.score })),
     })),
     events: !eventPlan ? null : {

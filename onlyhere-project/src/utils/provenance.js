@@ -331,15 +331,61 @@ export const untracedFields = (payload) => {
 // one thing he most needs: an answer read out of the entry and an answer from a
 // live search that happened ten seconds ago are different objects, and they look
 // identical once they are both text in a chat panel.
-export const describeProvenance = (payload, { answeredFrom = "entry", lookupUrls = [] } = {}) => {
+// ── AND A READER IS NOT THE FOUNDER ─────────────────────────────────
+//
+// Oliver, 21 Aug 2026, sending a screenshot of the reader-facing assistant on a
+// published Aalborg page answering "Why is it only worth a look?" with three
+// shouted headings and seven raw tripadvisor URLs: "I don't think I need to say
+// much to this picture…"
+//
+// This block was built for HIM, on 17 Aug, from his own request: "Can you make
+// the '✦ Argue with this draft' tell me what sources it used?" This file says so
+// in its opening lines, and one hundred and fifty lines further down it has a
+// heading reading WHAT A READER MAY BE SHOWN, WHICH IS NOT THIS, above four
+// reader-safe functions written for exactly this distinction.
+//
+// The distinction existed everywhere except in the one place that decides. The
+// panel is the same component in both roles: `studioMode` is true when a draft
+// is open and false when somebody is reading a published page, and this
+// function was appended to the answer either way. So the founder's verification
+// trace, including a line that can print "asserted by the founder, not
+// source-verified", was shipping to a paying visitor.
+//
+// audience defaults to "studio", so every existing caller keeps the full text
+// and no verbosity is lost anywhere it was wanted.
+//
+// ── AND THE READER LINE SAYS LESS BECAUSE THE UI ALREADY SAYS IT ────
+// AskGemlyx.jsx already renders a one line badge and the sources as named host
+// chips. The wall of text was a second, worse copy of information the chrome
+// was showing properly two pixels below it. So the reader gets the one fact the
+// chrome cannot show, which is whether this answer was looked up or read out of
+// the entry, and nothing else.
+const READER = "reader";
+
+const readerProvenance = (answeredFrom, fresh) => {
+  const named = [...new Set(fresh.map(u => hostOf(u)).filter(Boolean))].slice(0, 3);
+  if (answeredFrom !== "lookup") return "This comes from the entry itself, and from the checks run on it when it was written.";
+  return named.length
+    ? `This was not in the entry, so I checked just now, on ${named.join(", ")}.`
+    : "This was not in the entry, so I checked just now.";
+};
+
+export const describeProvenance = (payload, { answeredFrom = "entry", lookupUrls = [], audience = "studio" } = {}) => {
   const lines = [];
+  {
+    const fresh = (Array.isArray(lookupUrls) ? lookupUrls : []).map(clean).filter(u => /^https?:\/\//i.test(u));
+    if (audience === READER) return readerProvenance(answeredFrom, fresh);
+  }
   lines.push(answeredFrom === "lookup"
     ? "WHERE THIS ANSWER CAME FROM: a live search run just now, because the entry did not contain it."
     : "WHERE THIS ANSWER CAME FROM: this entry's own stored text and the automated checks on it. No new search was run, and no page was opened to answer you.");
 
   const fresh = (Array.isArray(lookupUrls) ? lookupUrls : []).map(clean).filter(u => /^https?:\/\//i.test(u));
   if (answeredFrom === "lookup" && fresh.length) {
-    lines.push(`Pages the search returned: ${fresh.join("  ")}`);
+    // One per line. The sibling block at the bottom of this function already
+    // does it this way, and joining URLs with two spaces produced a single
+    // unwrappable run-on that was most of what made the screenshot unreadable.
+    lines.push(`Pages the search returned:\n  ${fresh.join("\n  ")}`);
   }
 
   const fields = fieldProvenance(payload);

@@ -45,7 +45,11 @@ const bubble = (role) => ({
 // lifetime is the host's `askItem` and a panel that hid itself while the host
 // still held the item could never be reopened. Both default to the behaviour
 // every other caller has always had.
-export const AskGemlyx = ({ session, item, kind, onSignIn, startOpen = false, onClose = null }) => {
+// `founder` means the session in hand is the Studio one rather than a reader
+// account. It changes nothing about how the question is asked or metered; it
+// puts a line on the panel saying the gate is there, because the whole reason
+// he is through it is that he is checking what a reader gets.
+export const AskGemlyx = ({ session, item, kind, onSignIn, founder = false, startOpen = false, onClose = null }) => {
   const [open, setOpen] = useState(!!startOpen);
   const [input, setInput] = useState("");
   const [log, setLog] = useState([]);
@@ -165,6 +169,15 @@ export const AskGemlyx = ({ session, item, kind, onSignIn, startOpen = false, on
             {session?.token
               ? `Anything I can help you with about ${item.name}? Ask away.`
               : `Sign in and I will happily answer anything about ${item.name}.`}
+          </div>
+        )}
+        {/* ── THE GATE HE IS STANDING THROUGH ──────────────────────
+            "But still show me that it's a part that needs account login."
+            Every turn, not once at the top, because this panel scrolls and a
+            notice that has scrolled away is a notice he does not have. */}
+        {founder && (
+          <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 0.6, textTransform: "uppercase", border: `1px dashed ${C.gold}55`, borderRadius: 8, padding: "6px 8px" }}>
+            Reader gate: a traveller needs an account here. You are through it on your Studio login.
           </div>
         )}
         {log.map((l, i) => (

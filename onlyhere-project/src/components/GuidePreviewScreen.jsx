@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { C } from "../utils/theme";
 import { testTravelerLine, getEventDate } from "../utils/helpers";
-import { matchedPlaces, previewPools, mentionsPlace, wantedCategories, groupKeyOf } from "../utils/previewMatch";
+import { matchedPlaces, previewPools, mentionsPlace, wantedCategories, groupKeyOf, parentTownOf, tripAnchorFor, eventReachBand, tripPoints } from "../utils/previewMatch";
 import { tripWindow, tripEvents, describePicks } from "../utils/tripEvents";
 import { briefThemes, rankOffers, offerReason, OFFER_LIMIT } from "../utils/interestFit";
 import { cardLine } from "../utils/cardLine";
@@ -273,7 +273,11 @@ export const GuidePreviewScreen = ({
   // rule as everything else on this screen. Null when they have not said, and null
   // rules nothing out.
   const budget = travellerBudget([intakeBudgetText, saidByTraveller].filter(Boolean).join("\n"));
-  const matched = matchedPlaces(convoText, previewPools({ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted, themes, mode, budget });
+  // `saidByTraveller` goes in beside the rest, and it is what stops the region
+  // pass opening on a region GEMLYX named. See matchedPlaces: his Aalborg brief
+  // named no region at all, and Ribe arrived through the word "Jutland" in the
+  // app's own reply.
+  const matched = matchedPlaces(convoText, previewPools({ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted, themes, mode, budget, saidByTraveller });
   // Group into the fixed category order above, each capped independently.
   // Two sections ("Major Cities"/"Towns") now share src:"town" and are
   // told apart by their own `match` predicate — apply it on top of the
@@ -310,10 +314,15 @@ export const GuidePreviewScreen = ({
       // The section below already says how many non-matching rows are being held
       // back. It never said how many MATCHING ones were cut, which is the worse
       // of the two omissions: those are rows the traveller asked for.
-      const matching = mine.filter(p => !p._notAsked);
+      // A detour is not one of the items. It is a separate answer to a
+      // separate question, rendered under its own heading below. See the
+      // consider block in utils/previewMatch.js for why it exists at all.
+      const matching = mine.filter(p => !p._notAsked && !p._consider);
+      const consider = mine.filter(p => p._consider);
       return {
         ...cat,
         items: matching.slice(0, MAX_PER_SECTION),
+        consider,
         // The real number, so the line under the section can be honest about the
         // difference rather than the reader discovering it in the finished guide.
         itemsTotal: matching.length,
@@ -322,17 +331,30 @@ export const GuidePreviewScreen = ({
           .map(entry => ({ ...entry, reason: offerReason(entry) })),
       };
     })
-    .filter(cat => cat.items.length > 0 || cat.offered.length > 0);
+    .filter(cat => cat.items.length > 0 || cat.offered.length > 0 || cat.consider.length > 0);
   const toggleExtra = (name) =>
     setPickedExtras(prev => (prev || []).includes(name) ? (prev || []).filter(n => n !== name) : [...(prev || []), name]);
   // ── THE EVENTS, DATE TESTED AND TICKABLE ──────────────────────────
   // `named` is the first pass's own answer rather than a second guess at it:
   // an event is named exactly when the traveller wrote it, which is the same
   // question mentions() already answered above.
+  // ── AND HOW FAR EACH EVENT IS FROM WHERE THIS TRIP IS ─────────────
+  // Oliver, 21 Aug 2026, on a Copenhagen convention badged RECOMMENDED for a
+  // seven day trip to Aalborg: "And Comic Con? Really?"
+  //
+  // The anchor comes from previewMatch rather than being read again here, so
+  // the towns section and the events section cannot end up measuring from two
+  // different places. Null when the traveller has said neither where they land
+  // nor where they are going, and null leaves this exactly as it was.
+  const anchor = tripAnchorFor(convoText, saidByTraveller);
+  // Measured from everywhere this trip actually is: where they land or are
+  // going, plus every town they named themselves. See tripPoints.
+  const where = tripPoints(anchor, matched);
   const eventPlan = tripEvents(matched.filter(p => p._src === "event"), {
     window: win,
     interests: intakeInterest,
     named: e => mentions(e.name),
+    reachOf: where.length ? (e) => eventReachBand(e, where, mode) : null,
   });
   // Gemlyx's own picks are the starting ticks, so somebody who taps straight
   // through still gets the event that was running that week. Written once,
@@ -529,6 +551,27 @@ export const GuidePreviewScreen = ({
                     )}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
+                    {/* ── WHERE THIS ONE IS ────────────────────────────
+                        Oliver, 21 Aug 2026, with a red line drawn over four
+                        attraction names on his own screenshot: "every attraction
+                        should have the area it is located in above it".
+
+                        He is right, and the card had no way to answer it. Four
+                        rows read Rundetaarn, Amalienborg Slot, Kobenhavns Museum
+                        and Ny Carlsberg Glyptotek, one under the other, and
+                        nothing on any of them said Copenhagen. The town is
+                        already on the row, under five different field names
+                        depending on the content type, which is why nothing had
+                        ever printed it: parentTownOf is the function that knows
+                        all five (see utils/previewMatch.js).
+
+                        Towns are excluded because a town card naming its own
+                        town is a card that says Aalborg twice. */}
+                    {place._src !== "town" && parentTownOf(place) && (
+                      <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 2 }}>
+                        {parentTownOf(place)}
+                      </div>
+                    )}
                     <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
                       <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{place.name}</div>
                       {/* ── WHY THIS ROW IS HERE ────────────────────────
@@ -590,6 +633,40 @@ export const GuidePreviewScreen = ({
                 </div>
               ))}
             </div>
+            {/* ── "IF THEY REALLY LOVE VIKINGS, THEN PUT IT INTO A
+                    CONSIDER SECTION" ──────────────────────────────────
+                Oliver, 21 Aug 2026, deciding what should happen to a town that
+                answers exactly what somebody said they love and is too far to
+                honestly plan around. Not deleted, not mixed into the list, and
+                not quietly ranked last, which is what put Ribe on a screen for
+                a trip to Aalborg with nothing saying what it would cost.
+
+                The distance is the whole point of the block, so it is in the
+                sentence rather than in a badge underneath. */}
+            {cat.consider.length > 0 && (
+              <div style={{ marginTop: 12, borderTop: `1px dashed ${C.border}`, paddingTop: 12 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>
+                  Worth considering, but a long way
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {cat.consider.map(place => (
+                    <div key={`consider-${place._src}-${place.id}`} style={{ display: "flex", gap: 10, alignItems: "center", background: "none", border: `1px dashed ${C.border}`, borderRadius: 12, padding: 10 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{place.name}</div>
+                        <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 2 }}>
+                          About {place._considerKm} km from {place._considerFrom}, so it is most of a day each way.
+                          {(place._considerWhy || []).length > 0 && ` Here because you said ${(place._considerWhy || []).join(" and ")}.`}
+                        </div>
+                      </div>
+                      <button onClick={() => openStopDetail(place)}
+                        style={{ flexShrink: 0, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        Read more
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* ── THE SECTION NOBODY ASKED FOR ──────────────────────
                 Oliver, 15 Aug 2026, on a brief whose only stated interest was
                 festivals and live events, which came back holding Københavns

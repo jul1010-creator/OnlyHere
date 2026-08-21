@@ -479,6 +479,90 @@ export const lastLegProblems = (prose, { stop, walkMinutes } = {}) => {
   return [...new Set(out)];
 };
 
+// ── AND THE VEHICLE STANDING NEXT TO A LINE WE MEASURED ─────────────
+//
+// Oliver's Gilleleje draft, 20 Aug 2026. The prose reads:
+//
+//   "...the A-line to Hillerod, then bus 950R into Gilleleje Ost"
+//
+// and four hundred characters further down the same file, in the draft's own
+// __journey, sits the leg it is describing:
+//
+//   { "vehicle": "train", "line": "950R", "from": "Hillerod",
+//     "to": "Gilleleje Ost", "mins": 32 }
+//
+// travelTime was even overruled from a bus emoji to a train one by that same
+// measurement. So the pipeline knew. Gemini caught it off its own knowledge of
+// Danish local rail and he wrote it up as Gemini being right about transport,
+// which it was, and it is worth being exact about what that means: it did not
+// know something we lacked. It compared two things we had and nothing here was
+// comparing them.
+//
+// Every gate above reads ONE field at a time, which is this codebase's oldest
+// recurring shape. lastLegProblems compares the prose to the WALK. absenceClaims
+// compares the prose to nothing. guideLogisticsProblems compares DURATIONS to
+// the legs. Not one of them looks at the vehicle, and the vehicle is the part a
+// traveller acts on: somebody who reads "bus" stands at a bus stop.
+//
+// No model, no network. Two strings and a comparison.
+//
+// ── AND ONLY WHERE BEING WRONG IS REALLY BEING WRONG ────────────────
+// Calling a metro a train is how people speak. Calling a train a bus sends them
+// to the wrong platform. So the families are what is compared, and a
+// disagreement inside a family is not a finding.
+const VEHICLE_FAMILY = [
+  [/\b(?:bus(?:sen|ser|es)?|coach|shuttle|rutebil)\b/i, "road"],
+  [/\b(?:train|rail|s-?train|s-?tog|lokaltog|letbane|metro(?:en)?|tram|tog(?:et|ene)?|lyntog|intercity)\b/i, "rail"],
+  [/\b(?:ferry|ferries|f[æa]erge[nr]?|færge[nr]?)\b/i, "water"],
+];
+
+const familyOf = (word) => (VEHICLE_FAMILY.find(([re]) => re.test(String(word || ""))) || [])[1] || "";
+
+// How far in front of the line number a vehicle word may sit and still be
+// describing it. "then bus 950R" is four characters; "the replacement bus
+// service 950R" is twenty six. Past that it is a different clause.
+const VEHICLE_NEAR = 28;
+
+// A line is only usable here if it can be found in prose without matching
+// something else. Line A of the S-tog is a real line and a bare "A" is the
+// commonest word in English, so a line needs a digit in it or two characters
+// that are not both letters. Skipping a leg costs nothing; matching the wrong
+// word costs a false accusation, and a gate that cries wolf gets switched off.
+const usableLine = (line) => {
+  const l = String(line || "").trim();
+  return l.length >= 2 && /\d/.test(l);
+};
+
+// Takes the prose and the MEASURED legs, so it is testable without a network
+// and without a draft. Returns one finding per contradicted leg, never more.
+export const vehicleMismatches = (prose, legs) => {
+  const text = String(prose || "");
+  if (!text.trim()) return [];
+  const out = [];
+  for (const leg of Array.isArray(legs) ? legs : []) {
+    const line = String(leg?.line || "").trim();
+    const measured = familyOf(leg?.vehicle);
+    if (!measured || !usableLine(line)) continue;
+    const re = new RegExp(`\\b${line.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
+    for (const m of text.matchAll(re)) {
+      const before = text.slice(Math.max(0, m.index - VEHICLE_NEAR), m.index);
+      // Every word in the window, not only the one immediately in front,
+      // because "then the replacement bus 950R" puts two words between them.
+      // The LAST vehicle word wins, since that is the nearest one.
+      const words = (before.match(/\b[\wÆØÅæøå-]+\b/g) || []).slice(-4);
+      const claimed = words.map(familyOf).filter(Boolean).slice(-1)[0] || "";
+      if (!claimed || claimed === measured) continue;
+      out.push(
+        `THE VEHICLE DOES NOT MATCH THE MEASUREMENT. The draft calls ${line} a ${claimed === "road" ? "bus" : claimed === "water" ? "ferry" : "train"}`
+        + `, and Google measured that leg as a ${leg.vehicle}${leg.from ? ` from ${leg.from}` : ""}${leg.to ? ` to ${leg.to}` : ""}.`
+        + ` The measurement is in this draft's own __journey. Use the vehicle it names, or name no vehicle.`,
+      );
+      break;
+    }
+  }
+  return [...new Set(out)];
+};
+
 // ── AND ALL OF IT AGAIN, ON THE PIPELINE PEOPLE ACTUALLY READ ───────
 //
 // Oliver, 12 Aug 2026: "Have you put this rule on everything? Also the guide?"
@@ -507,9 +591,23 @@ export const legMinutesIn = (legs) => {
   return out;
 };
 
+// Every named ride in the guide's leg map, flattened, so the vehicle check has
+// the same shape it gets from a draft's stored __journey. journeyParts is what
+// turns Google's steps into rides with a vehicle word and a line, and it is
+// already the function both pipelines use; reading the steps a second way here
+// is how the two would come to disagree.
+export const guideRides = (legs) => {
+  const out = [];
+  for (const d of Object.values(legs || {})) {
+    for (const leg of journeyParts(d?.steps)?.legs || []) out.push(leg);
+  }
+  return out;
+};
+
 export const guideLogisticsProblems = (fields, legs) => {
   const measured = legMinutesIn(legs);
   const minutes = measured.map(l => l.mins);
+  const rides = guideRides(legs);
   const out = [];
   for (const f of Array.isArray(fields) ? fields : []) {
     const id = f?.id || "field";
@@ -533,6 +631,19 @@ export const guideLogisticsProblems = (fields, legs) => {
         }
       }
     }
+
+    // 3b. AND THE VEHICLE, against the leg it names. A different question from
+    //     rule 2: that one asks whether a NUMBER matches a leg, this asks
+    //     whether the VEHICLE does. See vehicleMismatches.
+    //
+    //     `rides`, not `legs`. An adversarial pass found the first version
+    //     passing `legs` straight through with an Array.isArray guard, and
+    //     `legs` here is a MAP keyed "origin|dest|mode" whose values carry
+    //     steps, not a list of rides. The guard made it silently pass [] on
+    //     every guide ever built: the gate existed, ran, and could not fire.
+    //     legMinutesIn two lines up already knew the shape, which is what made
+    //     the mistake invisible.
+    for (const v of vehicleMismatches(text, rides)) out.push(`${id}: ${v}`);
 
     // 3. HIS TEN MINUTE RULE, per leg. A leg Google routed as a walk of ten
     //    minutes or less may not be answered with a bus, a taxi or a planner.

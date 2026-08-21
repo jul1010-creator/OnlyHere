@@ -1,21 +1,21 @@
 import { fold, variantsOf, matchVariantsOf, samePlaceName, containsName, foundAt } from "./danishNames";
 import { townOfLocation } from "./nightlife";
 import { canonicalRegion, regionPart, regionOf, REGION_NAMES } from "./regions";
-import { tierOf } from "./placeThemes";
+import { tierOf, THEME_LABEL } from "./placeThemes";
 import { PARTS_OF_COUNTRY } from "./sourcePolicy";
 // The whole word test and the row level fit test both live in interestFit.js.
 // saysWord was defined in this file and is imported now for one reason: this
 // file and that one both have to agree on what "the traveller said this word"
 // means, and two copies of a word boundary check drift the first time either
 // one of them is touched.
-import { saysWord, fitsBrief } from "./interestFit";
+import { saysWord, fitsBrief, FIT_STRONG } from "./interestFit";
 // Where they land, and how to order a list of towns from it. See routeOrder.js
 // for the measurement that prompted both: 416 km shown against 279 km possible,
 // on a brief that had asked for two bases.
-import { arrivalPoint } from "./arrival";
+import { arrivalPoint, destinationPoint } from "./arrival";
 import { townPointFor } from "./guideEnrichment";
 import { outOfBudget, budgetWarning } from "./budgetFit";
-import { routeOrder, reachBand, kmBetween, preferReachable, REACH_STRETCH } from "./routeOrder";
+import { routeOrder, reachBand, kmBetween, preferReachable, REACH_STRETCH, REACH_FAR } from "./routeOrder";
 
 // ── WHAT THE PREVIEW SCREEN ACTUALLY HOLDS ON A CONVERSATION ────────
 //
@@ -67,8 +67,101 @@ export const previewPools = ({ towns = [], freeEntrance = [], foodSpots = [], ni
   ...nightlifeSpots.map(p => ({ ...p, _src: "nightlife" })),
   ...craftItemsFallback.map(p => ({ ...p, _src: "craft" })),
   ...events.map(p => ({ ...p, _src: "event" })),
-  ...majorEvents.map(p => ({ ...p, _src: "event" })),
+  // `_major` so the thinning rule in tripEvents can tell the two arrays apart
+  // after this flattens them. They arrive with the same `_src` on purpose, since
+  // everything downstream treats an event as an event, and that is exactly why
+  // "this one came out of majorEvents" had no way of surviving the join. See
+  // isMajorEvent, which reads this or the `__scale` a published festival carries.
+  ...majorEvents.map(p => ({ ...p, _src: "event", _major: true })),
 ];
+
+// ── WHERE THIS TRIP IS, FOR CALLERS OUTSIDE THIS FILE ───────────────
+// The preview screen needs the same anchor matchedPlaces uses, to ask how far
+// an event is. Exported from here rather than recomputed there, because two
+// answers to "where is this trip" is how the towns section and the events
+// section end up planning different holidays.
+export const tripAnchorFor = (convoText, saidByTraveller = "") => {
+  // Their own turns for both halves, and the fallback to the whole text only
+  // when the caller has not got them, which keeps an old call site working
+  // rather than silently returning nothing.
+  const own = String(saidByTraveller || "") || String(convoText || "");
+  return arrivalPoint(own, { townPoint: townPointFor })
+    || destinationPoint(own, { townPoint: townPointFor });
+};
+
+// ── AND A ROW WITHOUT A COORDINATE IS NOT A ROW WITHOUT A PLACE ─────
+// coordsOf in routeOrder.js reads __lat/__lon off the row and nothing else, so
+// every reach test in this file quietly stood down for any town whose
+// coordinates were never filled: kmBetween returned null, reachBand answered
+// STRETCH, and the distance term became the same number for every candidate.
+// The same shape as the arrival that was never read, one field along.
+//
+// townPointFor is the library the rest of the app already uses to place a town
+// by name, and asking it is free. The row's own coordinate still wins, because
+// a row that carries one is more specific than a town centre.
+export const placePoint = (p) => {
+  const la = Number(p?.__lat ?? p?.lat), lo = Number(p?.__lon ?? p?.lon);
+  if (Number.isFinite(la) && Number.isFinite(lo)) return { lat: la, lon: lo };
+  return p?.name ? townPointFor(p.name) : null;
+};
+
+// The point an event actually happens at: its own coordinate when it has one,
+// otherwise its town's. Null when neither resolves, and null is honest here in
+// the same way `km == null` is honest inside reachBand. An event whose location
+// nobody can place is not a far event, it is an unknown one, and refusing it
+// would delete rows for a missing coordinate rather than for a real distance.
+export const eventPoint = (e) => {
+  const lat = Number(e?.__lat ?? e?.lat);
+  const lon = Number(e?.__lon ?? e?.lon);
+  if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
+  const town = parentTownOf(e);
+  return (town && townPointFor(town)) || (e?.name ? townPointFor(e.name) : null);
+};
+
+// ── AN EVENT IS A DAY, NOT A TRIP ───────────────────────────────────
+// reachBand widens with the trip's length, which is right for a town: seven
+// days can honestly hold a town two hundred kilometres away, because you sleep
+// there. An event cannot be slept in. It is one day, and the day has to include
+// getting back, so the budget passed here is one day no matter how long the
+// holiday is.
+//
+// That single line is the difference between "Aalborg to Copenhagen is 240 km,
+// which is comfortable across a week" and "Aalborg to Copenhagen is 240 km,
+// which is most of a day each way for a convention". The second one is the
+// question the traveller is actually being asked.
+const EVENT_IS_ONE_DAY = 1;
+
+// `from` is a point or a list of them, and the band is the BEST one: a trip
+// with two bases is near everything either base is near, and measuring only
+// from the first would refuse the whole second half of the holiday.
+//
+// Null when there is nothing to measure from or nothing to measure to, and null
+// is honest in the same way `km == null` is honest inside reachBand. An event
+// whose location nobody can place is not a far event, it is an unknown one.
+export const eventReachBand = (e, from, mode = null) => {
+  const points = (Array.isArray(from) ? from : [from]).filter(Boolean);
+  if (!points.length) return null;
+  const at = eventPoint(e);
+  if (!at) return null;
+  const bands = points.map(pt => reachBand(kmBetween(pt, at), EVENT_IS_ONE_DAY, mode));
+  return Math.max(...bands);
+};
+
+// ── AND WHICH PLACES COUNT AS "WHERE THIS TRIP IS" ──────────────────
+// The anchor, plus every town the TRAVELLER named. Not the towns Gemlyx named:
+// that is the door the Comic Con came through, and letting a town the app
+// proposed to itself widen the reach test would hand the refusal straight back.
+// Takes the output of matchedPlaces, so the screen does not have to know how a
+// town gets its coordinate.
+export const tripPoints = (anchor, matched) => {
+  const out = anchor ? [anchor] : [];
+  for (const p of Array.isArray(matched) ? matched : []) {
+    if (p?._src !== "town" || !p._saidByThem || p._consider) continue;
+    const pt = placePoint(p);
+    if (pt) out.push(pt);
+  }
+  return out;
+};
 
 // Craft is DISPLAYED under Attractions but keeps its own _src for click
 // routing, so the display grouping is a second, separate question. It lived in
@@ -461,6 +554,18 @@ export const regionPickLimit = (days) => {
 // twice. A traveller who is already nearby finds it by browsing.
 const TOO_WEAK_FOR_A_REGION_PICK = "nearby";
 
+// ── AND WHAT IS WORTH A DAY EACH WAY ────────────────────────────────
+// The tiers that may appear in the consider list, and two is the whole of it.
+// "Worth Considering" is Gemlyx's way of saying it is fine if you are passing;
+// crossing the country for one is the opposite of what the tier means. The cap
+// is two because this is a footnote to a shortlist, and a footnote as long as
+// the list it hangs off is a second list.
+const WORTH_A_DETOUR = new Set(["must", "high"]);
+export const CONSIDER_CAP = 2;
+
+// One wording, because two of them on one screen reads as two different places.
+const ANCHOR_FALLBACK_NAME = "where you are";
+
 // `themes` is the second half of `wanted` and arrives beside it rather than
 // being derived here, for the same reason the trip window is computed by the
 // screen: the italic line, the cards and the report all have to be describing
@@ -474,7 +579,32 @@ const TOO_WEAK_FOR_A_REGION_PICK = "nearby";
 // deriving it separately is how one part of the app ends up planning a bicycle
 // trip while another plans a drive. Null means unknown, and unknown changes
 // nothing about today's behaviour.
-export const matchedPlaces = (convoText, pools, { days = null, wanted = null, themes = null, mode = null, budget = null } = {}) => {
+// `saidByTraveller` is THEIR turns only, and it is the fix for the failure
+// this file has now had three times in three different readers. The whole
+// transcript is still the right material for a place NAME, for the reason
+// written above: a place Gemlyx named and the traveller kept talking about is a
+// place in this trip. It is the wrong material for every question about what
+// they WANT, because Gemlyx suggests things and its own suggestion must never
+// become the evidence that it was asked for.
+//
+// Oliver, 21 Aug 2026, on a preview for "I am going to Aalborg, and I have 7
+// days to play with" that came back holding Ribe, three hundred kilometres
+// away: "Clearly the preview has NOTHING to do with the chat, at all."
+//
+// The region pass is how Ribe got in, and this is how the region pass opened.
+// He named no region. GEMLYX did, in the sentence right after his:
+//
+//   "Aalborg's a great pick, way underrated compared to what most tourists see."
+//   "Ferry into Aalborg, nice, that's proper North Jutland arrival"
+//
+// regionsNamed then read "Jutland" out of the app's own reply, and Ribe is in
+// Jutland. The app suggested a region to itself and then filled half the screen
+// from it. Same shape as the interest reader in tripBrief and the theme reader
+// on the preview screen, both already fixed, both for this reason.
+//
+// It falls back to the whole text when the caller does not pass it, so every
+// existing call site keeps today's behaviour rather than silently narrowing.
+export const matchedPlaces = (convoText, pools, { days = null, wanted = null, themes = null, mode = null, budget = null, saidByTraveller = "" } = {}) => {
   // ── WHERE THEY LAND ─────────────────────────────────────────────
   // Read once, at the top, because two things below need it: the region pass
   // ranks by how reachable a town is from here, and the towns are handed back
@@ -485,8 +615,48 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
   // at all, and every piece of reasoning that starts from where they land — the
   // route order, the reach band, the return leg — quietly stood down. See the
   // Danish-arrival pass in utils/arrival.js.
-  const arrivedAt = arrivalPoint(convoText, { townPoint: townPointFor });
   const text = String(convoText || "");
+  const ownWords = String(saidByTraveller || "") || text;
+  // ── AND THE ARRIVAL IS THEIRS TO STATE TOO ──────────────────────
+  //
+  // This read the whole transcript, and on his Aalborg brief that produced an
+  // anchor of COPENHAGEN AIRPORT, 240 km from the only town he had named. The
+  // sentence it came from is Gemlyx's:
+  //
+  //   "Since you haven't mentioned a starting point, I'll assume you're landing
+  //    at Copenhagen Airport and making your way north from there."
+  //
+  // Which is honest of it. It says out loud that nobody told it, and then
+  // arrivalPoint read its own guess back as a fact, anchored the reach filter
+  // and the route order on it, and the towns near Copenhagen were suddenly the
+  // near ones. utils/arrival.js already documents this exact failure for the
+  // preposition rule and calls the case that came out of Gemlyx's reply "worse
+  // than the first one".
+  //
+  // So arrivals join interests, themes, transport, budget and regions: read
+  // from the traveller's own turns. Place NAMES are still read from the whole
+  // conversation, because that is a different question, and the comment on
+  // `saidByTraveller` above says which is which.
+  const arrivedAt = arrivalPoint(ownWords, { townPoint: townPointFor });
+  // ── AND WHERE THE TRIP IS, WHICH IS NOT WHERE IT STARTS ─────────
+  // arrivalPoint answers "how do you get into Denmark". His sentence answered a
+  // different question: where the trip IS. Nothing read it, so `from` below was
+  // null, reachBand was never called, and the distance term in the town score
+  // was a flat 1 for every candidate in the country. Ranking collapsed to
+  // editorial tier and a "Can't Miss Out" town wins from anywhere. See
+  // destinationPoint in utils/arrival.js for the reader and the cue rules.
+  //
+  // Traveller's own words only, and for the sharper version of the reason
+  // above: Gemlyx writes "you could spend three days in Ribe" constantly, and
+  // that sentence would otherwise anchor the entire trip on a town the app
+  // proposed to itself.
+  const goingTo = destinationPoint(ownWords, { townPoint: townPointFor });
+  // Known before the first pass runs, because the first pass needs it: a town
+  // that appears ONLY in Gemlyx's replies and is out of honest reach is not in
+  // this trip, and until now it went on the screen and took its whole inventory
+  // with it. `from` further down is this, or the town they said they are
+  // leaving, which pass one has to run before it can know.
+  const anchor = arrivedAt || goingTo;
   const seen = new Set();
   const matched = [];
   const list = Array.isArray(pools) ? pools : [];
@@ -498,15 +668,68 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
     // starting point, and hiding it would make the screen look like it missed
     // the one town in the brief. What it does not get is its contents.
     if (mentionsPlace(text, p.name)) {
-      seen.add(key);
       // ── A REJECTED PLACE IS DROPPED, NOT BADGED ─────────────────
       // Unlike `_leaving`, which stays on the screen because it is where the
       // traveller starts and hiding it would look like a miss. A place the
       // answer told them to avoid has no such claim: showing it at all is the
       // bug, and a badge saying "we said not to" is a card that still puts the
       // wrong bar in front of somebody skimming.
-      if (isRejectedPlace(text, p.name)) continue;
-      matched.push(isDeparturePlace(text, p.name) ? { ...p, _leaving: true } : p);
+      if (isRejectedPlace(text, p.name)) { seen.add(key); continue; }
+      // ── AND A TOWN ONLY GEMLYX NAMED, 400 KM AWAY ───────────────
+      // Oliver, 21 Aug 2026: "And Comic Con? Really?" A Copenhagen convention,
+      // badged RECOMMENDED, on a seven day trip to Aalborg.
+      //
+      // Copenhagen reached that screen through this line. He never typed it.
+      // Gemlyx did, once, in an assumption he never confirmed: "Since you
+      // haven't mentioned a starting point, I'll assume you're landing at
+      // Copenhagen Airport." That put Copenhagen in `matched`, the expansion
+      // pass below then took every Copenhagen row Gemlyx holds, and tripEvents
+      // scores events on named, interest, tier and dates with no geographic
+      // term at all. The convention was never asked whether it was near him.
+      //
+      // A town the TRAVELLER named stays whatever the distance: they asked, and
+      // refusing it would be the app arguing with the brief. A town only the app
+      // named has no such claim, and out of honest reach is the honest answer.
+      // Both halves are required, so this can only ever drop a row nobody asked
+      // for. With no anchor it drops nothing, which is every brief before today.
+      //
+      // ── AND IT IS A PREFERENCE, NOT A DELETION ──────────────────
+      // An adversarial pass found the first version emptying the screen: a
+      // traveller whose own town has no published row, and three that Gemlyx
+      // named and that are all far, left NO towns at all. Every other reach
+      // decision in this app is a preference with a floor under it
+      // (preferReachable in routeOrder.js, the reach partition below, the
+      // thinning rule in tripEvents.js), and this one was a straight cut.
+      //
+      // Marked here, decided after the loop, when it is knowable whether
+      // anything else survived. `seen` is not written for these either, so a
+      // town that does get dropped is still free to come back through the
+      // region pass on its merits rather than being blacklisted by a rule that
+      // was only ever about pass one.
+      const saidByThem = mentionsPlace(ownWords, p.name);
+      const farFromTrip = !saidByThem && p._src === "town" && !!anchor
+        && reachBand(kmBetween(anchor, placePoint(p)), days, mode) === REACH_FAR;
+      const base = { ...p, ...(saidByThem ? { _saidByThem: true } : {}), ...(farFromTrip ? { _farFromTrip: true } : {}) };
+      seen.add(key);
+      matched.push(isDeparturePlace(text, p.name) ? { ...base, _leaving: true } : base);
+    }
+  }
+  // ── AND NOW IT IS KNOWABLE WHETHER ANYTHING ELSE SURVIVED ────────
+  // The far ones go only if the screen still has a town on it without them. The
+  // floor is the rule this file has been given twice in his own words: a
+  // preview with nothing on it is a worse product than one honest stretch.
+  {
+    const townRows = matched.filter(p => p._src === "town");
+    if (townRows.some(p => !p._farFromTrip)) {
+      for (let i = matched.length - 1; i >= 0; i--) {
+        if (!matched[i]._farFromTrip) continue;
+        seen.delete(fold(matched[i].name));
+        matched.splice(i, 1);
+      }
+    } else {
+      // Kept, and the marker goes with them: nothing downstream should treat a
+      // town that is on the screen as though it were held back.
+      matched.forEach(p => { delete p._farFromTrip; });
     }
   }
   // ── AND THE REGION THEY ACTUALLY ASKED FOR ────────────────────────
@@ -515,7 +738,7 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
   // a town and no row is called that. Towns in a named region are added here,
   // marked `_viaRegion` so the screen can say why they are on it, and capped
   // because Jutland is half the country.
-  const wantedRegions = regionsNamed(text);
+  const wantedRegions = regionsNamed(ownWords);
   // ── AND "OUT OF THE CITY" NAMES NOWHERE TO GO ─────────────────────
   //
   // Oliver, 20 Aug 2026, on this brief: "6 days, arriving 26 December, just me,
@@ -554,7 +777,7 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
   // that needs it most, and every distance band collapses to the same value.
   // Their own words put them in a town; that town has a coordinate; it is the
   // most reliable origin on the screen and it was being ignored.
-  const from = arrivedAt || (leavingTowns.length ? townPointFor(leavingTowns[0].name) : null);
+  const from = anchor || (leavingTowns.length ? townPointFor(leavingTowns[0].name) : null);
   if (wantedRegions.length || fillFromReach) {
     // ── AND WHICH SIX, WHICH IS THE WHOLE QUESTION ────────────────
     // Oliver's screenshot, 15 Aug 2026. The region pass worked, and for a two
@@ -654,8 +877,12 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
       // around, so it is never offered to somebody choosing where to go.
       if (tierOf(p)?.id === TOO_WEAK_FOR_A_REGION_PICK) continue;
       const held = heldFor(p.name);
+      // Kept on the candidate rather than recomputed below, because the reach
+      // partition needs the same answer the score used and two calls to the
+      // same function is how two parts of one decision drift apart.
+      const fit = fitsBrief(p, themes);
       candidates.push({
-        p, hit, key, held,
+        p, hit, key, held, fit,
         // Held content sits SECOND, under the editorial tier: a "Can't miss"
         // town with nothing under it yet is still the better recommendation
         // than a "Worth a look" one with three restaurants.
@@ -676,7 +903,7 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
         // km is nothing on seven days and most of a day on two.
         score: [
           TIER_RANK[tierOf(p)?.id] ?? 0,
-          from ? reachBand(kmBetween(from, p), days, mode) : 1,
+          from ? reachBand(kmBetween(from, placePoint(p)), days, mode) : 1,
           Math.min(held, 5),
           interestHit(p),
           p.isMajorCity ? 1 : 0,
@@ -699,11 +926,31 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
     // with nothing on it is a worse product than one honest stretch. See
     // preferReachable in routeOrder.js.
     const limit = regionPickLimit(days);
-    const reachable = preferReachable(candidates, {
-      keepAtLeast: limit,
-      bandOf: (c) => (from ? reachBand(kmBetween(from, c.p), days, mode) : REACH_STRETCH),
-    });
-    for (const c of reachable.slice(0, limit)) {
+    const bandOf = (c) => (from ? reachBand(kmBetween(from, placePoint(c.p)), days, mode) : REACH_STRETCH);
+    // ── AND OUT OF REACH IS NOT A LOWER RANK, IT IS A DIFFERENT LIST ─
+    //
+    // Oliver, 21 Aug 2026, on Ribe offered for a seven day trip to Aalborg:
+    // "Ribe? Easy to access through public transport? It's manageable. But
+    // easy? Takes longer than just taking a train all the way to Copenhagen. So
+    // not exactly great for a tourist."
+    //
+    // preferReachable was already here and already correct about its own job:
+    // reachable ones first, far ones only to top up so the screen is never
+    // empty. The trouble is that "never empty" and "fill the limit" are not the
+    // same promise, and it was keeping the second one. Three slots to fill and
+    // two reachable towns meant a third was taken from the far pile every time,
+    // for no reason except that the number said three.
+    //
+    // So the top-up now only happens when there would otherwise be NOTHING.
+    // That keeps the rule this file was given in his own words on 15 Aug, "a
+    // preview with nothing on it is a worse product than one honest stretch",
+    // and stops the arithmetic reaching four hundred kilometres to satisfy a
+    // count.
+    const inReach = candidates.filter(c => bandOf(c) !== REACH_FAR);
+    const picked = inReach.length
+      ? inReach.slice(0, limit)
+      : preferReachable(candidates, { keepAtLeast: limit, bandOf }).slice(0, limit);
+    for (const c of picked) {
       seen.add(c.key);
       // `_holds` so the card can say what is under it rather than looking like
       // a bare name, and so a screen that is all towns is visibly all towns.
@@ -712,11 +959,66 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
       // you are" are different claims and only one of them was ever asked for.
       matched.push({ ...c.p, ...(c.hit ? { _viaRegion: c.hit } : { _viaReach: true }), _holds: c.held });
     }
+    // ── "IF THEY REALLY LOVE VIKINGS, THEN PUT IT INTO A CONSIDER
+    //     SECTION" ─────────────────────────────────────────────────
+    //
+    // His answer, 21 Aug 2026, when asked what should happen to a "Can't Miss
+    // Out" town that is out of reach. Not deleted and not mixed in: a third
+    // state, on the screen, saying what it costs.
+    //
+    // The bar is deliberately the row's OWN tags against what the traveller
+    // said, not a word that happens to appear in both. "viking" is a history
+    // word (see THEME_WORDS in interestFit.js), so somebody who writes that they
+    // love Vikings gets fit.fits on a history-tagged town, and somebody who
+    // wrote nothing about it does not. Tier on top of that, because a long trip
+    // has to be worth the day it takes, and Gemlyx's own "Worth Considering" is
+    // not a reason to cross the country.
+    //
+    // Only when there is a real list to sit beside. A screen whose entire
+    // content is a detour is not a shortlist with a footnote, it is the far
+    // pile with a nicer heading, and that is the bug this block sits under.
+    if (from && inReach.length) {
+      const detours = candidates
+        .filter(c => bandOf(c) === REACH_FAR)
+        // FIT_STRONG, not `fits`. fitsBrief answers `{ fits: true, why: [],
+        // via: "nothing stated" }` for a brief that named no interest at all,
+        // which is right everywhere else on this screen: silence narrows
+        // nothing. Here it would have meant the opposite of what he asked for.
+        // A traveller who has said nothing yet would get a detour across the
+        // country offered on the strength of having said nothing, and the
+        // suite caught exactly that: Copenhagen came back for a two day
+        // bicycle trip out of Aalborg, through the feature written to keep it
+        // out. FIT_STRONG is the row's OWN tags answering an interest they
+        // actually stated, which is "if they REALLY love vikings" in code.
+        .filter(c => c.fit?.via === FIT_STRONG && WORTH_A_DETOUR.has(tierOf(c.p)?.id))
+        .slice(0, CONSIDER_CAP);
+      for (const c of detours) {
+        seen.add(c.key);
+        matched.push({
+          ...c.p, ...(c.hit ? { _viaRegion: c.hit } : { _viaReach: true }), _holds: c.held,
+          // The card says the cost in its own badge rather than being quietly
+          // ranked last, which is what the whole of this block is about.
+          _consider: true,
+          _considerKm: Math.round(kmBetween(from, placePoint(c.p))),
+          _considerFrom: from.name || from.said || ANCHOR_FALLBACK_NAME,
+          // Labels, not theme ids. The card renders this into a sentence and
+          // "you said history" is the app's own vocabulary read out loud.
+          _considerWhy: c.fit.why.slice(0, 2).map(t => THEME_LABEL[t] || t),
+        });
+      }
+    }
   }
   // A town they are LEAVING does not get expanded. This is the whole of the
   // Copenhagen report: ten Copenhagen rows on a screen for somebody whose brief
   // was "we are already in Copenhagen and want to get out of the city".
-  const matchedTowns = new Set(matched.filter(p => p._src === "town" && !p._leaving).map(p => fold(p.name)));
+  // ── AND A DETOUR DOES NOT BRING ITS INVENTORY WITH IT ───────────
+  // A town in the consider list is a suggestion the traveller has not accepted.
+  // Expanding it would put its restaurants and its events into the sections
+  // above as though the detour were already in the plan, which is the Comic Con
+  // failure wearing the new feature's clothes.
+  const matchedTowns = new Set(
+    matched.filter(p => p._src === "town" && !p._leaving && !p._consider).map(p => fold(p.name)),
+  );
   if (matchedTowns.size) {
     for (const p of list) {
       if (!p?.name || p._src === "town") continue;
@@ -795,6 +1097,28 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
   // No arrival means no anchor, and routeOrder leaves the order untouched
   // rather than inventing a start point.
   const towns = matched.filter(p => p._src === "town");
+  // ── AND ONE TOWN HAS A DISTANCE TOO ─────────────────────────────
+  // routeOrder answers "what order do these go in", which needs two of them.
+  // "How far is this from where I am" needs one, and it is the question a
+  // traveller looking at a single card is actually asking. The badge existed
+  // and was gated behind the ordering, so the commonest screen of all, one town
+  // and the things inside it, never said a distance at all.
+  //
+  // It matters more now than it did yesterday: `from` used to resolve only for
+  // somebody who said how they were flying in, and it now resolves for anybody
+  // who said where they are going, which is almost everybody.
+  if (from && towns.length === 1) {
+    const only = towns[0];
+    const km = kmBetween(from, placePoint(only));
+    // Zero is the commonest case now, not a rare one: the anchor IS the town
+    // they named, so "0 km from Aalborg" on the Aalborg card is what a naive
+    // version of this prints on almost every screen. Under a kilometre is the
+    // same place by any reading.
+    if (km != null && Math.round(km) > 0) {
+      const rest = matched.filter(p => p._src !== "town");
+      return [{ ...only, _legKm: Math.round(km), _legFrom: from.name || from.said || ANCHOR_FALLBACK_NAME }, ...rest];
+    }
+  }
   if (from && towns.length > 1) {
     const { ordered, legs } = routeOrder(towns, { from });
     const byName = new Map(legs.map(l => [l.to, l]));

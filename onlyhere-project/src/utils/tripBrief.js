@@ -338,7 +338,24 @@ export const briefReady = (brief) => !!brief && brief.missing.length === 0;
 // ── WHAT TO ASK NEXT, AND HOW MANY ──────────────────────────────────
 // Two at a time, hard. The conversation he read asked three things in one
 // paragraph twice, which is what made it a wall.
-export const MAX_ASKS_AT_ONCE = 2;
+//
+// ── AND THEN ONE, BECAUSE TWO IS STILL A FORM ───────────────────────
+// Oliver, 21 Aug 2026, on a turn that asked when he was going and who was
+// coming: "notice how it asked how many people we were, but I only answered
+// arrival."
+//
+// That is what a person does with two questions in one paragraph. They answer
+// the one they have an answer to. And the cost is not only the missing answer:
+// the half they did not answer is recorded as ASKED (see `asked` below), so it
+// stops blocking and is handed to the writer as an assumption. Two questions
+// per turn is therefore a machine for turning one honest answer into one wrong
+// assumption.
+//
+// One is also the shape of the conversation he wants. Asking one thing leaves
+// room in the turn for something to be given back, which is the other half of
+// the rule the chat prompt now carries: a turn that only asks is an intake
+// form. Two questions fill a turn on their own and leave no room for it.
+export const MAX_ASKS_AT_ONCE = 1;
 
 export const nextAsks = (brief, { limit = MAX_ASKS_AT_ONCE } = {}) => {
   if (!brief) return [];
@@ -378,12 +395,20 @@ export const briefBlock = (brief) => {
     lines.push("YOU HAVE EVERYTHING YOU NEED. Do not ask another question. Say in one short line what you are about to plan, and offer to build it.");
     return lines.join("\n");
   }
-  lines.push(`STILL MISSING, and you may ask for AT MOST ${MAX_ASKS_AT_ONCE} of them in this reply:`);
+  lines.push(asks.length === 1
+    ? "STILL MISSING. Ask for THIS ONE and nothing else in this reply, whatever else is missing:"
+    : `STILL MISSING, and you may ask for AT MOST ${MAX_ASKS_AT_ONCE} of them in this reply:`);
   asks.forEach(s => lines.push(`  ${s.label}: ${s.ask}`));
   if (brief.vague.includes("when")) {
     lines.push("They named a month but not a date. That is enough to rule out an event in another month and not enough to place a day, so ask for the dates once and never again.");
   }
-  lines.push("ASK, DO NOT LECTURE. No preamble, no restating what they told you, no volunteering prices or opening dates nobody asked for. One short paragraph, then the question or questions.");
+  // ── AND ASKING IS NOT THE WHOLE TURN ──────────────────────────────
+  // The old line ended "One short paragraph, then the question or questions",
+  // which describes a turn made entirely of asking. That is the intake form
+  // Oliver read back on 21 August, and no ban on preamble fixes it, because the
+  // problem is what the turn is FOR rather than how it is padded. See the turn
+  // shape block in the chat prompt: one thing given, then one thing asked.
+  lines.push("ASK, DO NOT LECTURE. No preamble, no restating what they told you, no explaining why you need the answer, and no volunteering prices or opening dates nobody asked for. Give one real thing first, then ask, then stop. The one real thing is about a PLACE they named, not a price band and not a budget: volunteering money at somebody who has not raised it is the lecture this rule exists to stop, and it does not become a gift by being first.");
   // ── AND DO NOT DECIDE THE THING YOU ARE ABOUT TO ASK ABOUT ────────
   //
   // Oliver, 20 Aug 2026, on a Copenhagen nightlife answer. It recommended the

@@ -78,7 +78,7 @@ import { studioPrompts } from "./utils/studioPrompts";
 import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow } from "./utils/liveContent";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
-import { journeyParts, journeyBlock, transitProblems, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, closedButPlanned, arrivalStop } from "./utils/journey";
+import { journeyParts, journeyBlock, transitProblems, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, closedButPlanned, arrivalStop, vehicleMismatches } from "./utils/journey";
 import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS } from "./utils/correction";
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance, staleUncertainties, describeStale } from "./utils/glanceExtract";
 import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive, isNeverOwnSite, isNeverASource } from "./utils/sourcePolicy";
@@ -87,7 +87,12 @@ import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords
 import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoice";
 import { cityFromLocation } from "./utils/guideEnrichment";
 import { readBrief, briefBlock, nextAsks } from "./utils/tripBrief";
-import { matchedPlaces, previewPools, wantedCategories } from "./utils/previewMatch";
+import { factCheckCopy } from "./utils/factCheckCopy";
+import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
+// The sentence an entry already has about who it suits, rather than the first
+// hundred characters of it, which on a town is always the founding date. See
+// utils/cardLine.js.
+import { cardLine } from "./utils/cardLine";
 import { travelModeKey, withoutNonModes } from "./utils/routeOrder";
 import { buildChatReport, chatReportFilename } from "./utils/chatReport";
 import { openingThread, withTestBrief, withoutTestBrief } from "./utils/chatThread";
@@ -101,7 +106,7 @@ import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, 
 import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
 import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
-import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces } from "./utils/eventDates";
+import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
 import { languageBlock, readerLanguage } from "./utils/readerLanguage";
 import { echoInDraft, describeEcho, ECHO_RUN } from "./utils/echoCheck";
@@ -5529,6 +5534,13 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             ...repairGlance(t),
             ...curatedFindProblems(t),
             ...lastLegProblems(readerText(t), { stop: frozenGeo?.station, walkMinutes: frozenGeo?.walkMinutes }),
+            // ── AND THE VEHICLE, AGAINST THE LEG THIS DRAFT MEASURED ──
+            // Gilleleje, 20 Aug 2026: the prose said "bus 950R" and this
+            // draft's own __journey said {"vehicle":"train","line":"950R"}.
+            // Every gate in this block reads one field at a time, so nothing
+            // put those two side by side. See vehicleMismatches in
+            // utils/journey.js. No model call and no network: two strings.
+            ...vehicleMismatches(readerText(t), t?.__journey?.legs || []),
             // Runs on BOTH passes, and the second is the one that matters: it
             // is the correction's job to have deleted these, and this is how
             // anyone finds out whether it did.
@@ -7662,16 +7674,30 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         // date that arrived as pixels is not more trustworthy for having been
         // harder to get.
         const editionFrom = (text) => {
-          const found = nextEdition(text, checkFrom);
-          if (!found) return { found: null, why: "no-date-in-text" };
-          const problem = datePropositionProblem(isoDay(found.start), ev.date, checkFrom);
+          // ── WHICH OF THE DATES ON THIS PAGE IS THE EVENT'S ──────
+          //
+          // This asked nextEdition, which takes the earliest future date
+          // ANYWHERE in the text. On tobakken.dk, a venue whose front page is a
+          // concert calendar, that is whoever is playing next; on smukfest.dk it
+          // was a November item on a page about an August festival. Both were
+          // published as corrections on 20 Aug 2026 and both were wrong.
+          //
+          // anchoredEdition asks the harder question: a page with more than one
+          // future date has to SAY which one is the event's. See eventDates.js.
+          const read = anchoredEdition(text, checkFrom);
+          const found = read.found;
+          if (!found) return { found: null, why: read.why, candidates: read.candidates };
+          // `labelled` rides along to the guard, because it is what separates a
+          // festival announcing a genuine move from a number scraped out of a
+          // programme grid. See the different-month rule in datePropositionProblem.
+          const problem = datePropositionProblem(isoDay(found.start), ev.date, checkFrom, { labelled: read.labelled });
           // A festival page carries its own history, so the edition named on it
           // still has to be one that has not already happened and is not earlier
           // than what we hold. Refusals are NAMED rather than dropped: "the page
           // said 3 June 2026 and that is in the past" is the sentence that would
           // have explained Distortion the first time he asked.
           if (problem) return { found: null, why: `refused-${problem}`, refused: isoDay(found.start) };
-          return { found, why: "" };
+          return { found, why: "", labelled: read.labelled };
         };
         const readForEdition = async (url) => {
           const r = await studioFetch(`/api/scan-source?url=${encodeURIComponent(url)}`);
@@ -9658,6 +9684,19 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   // other caller that doesn't pass one keeps the old full-detail behavior.
   const generateGuide = async (overrideConvoText, modeOverride) => {
     const convoText = overrideConvoText || aiMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
+    // ── AND THE ARRIVAL IS THEIRS TO STATE ──────────────────────────
+    // The line that bakes _arrivalPoint onto the guide read `convoText`, which
+    // is both halves of the conversation. On Oliver's Aalborg brief, 21 Aug
+    // 2026, that made the guide's arrival point COPENHAGEN AIRPORT, out of a
+    // sentence Gemlyx wrote about itself: "Since you haven't mentioned a
+    // starting point, I'll assume you're landing at Copenhagen Airport."
+    //
+    // An override is a composed brief with no assistant turns in it, so it is
+    // used whole. Everything else is their turns only, which is the rule every
+    // other reader of intent in this app already follows. previewMatch.js was
+    // fixed in the same edit: both callers, one rule.
+    const saidByTravellerForGuide = overrideConvoText
+      || aiMessages.slice(1).filter(m => m.role === "user").map(m => m.text || "").join("\n");
     if (!convoText.trim()) return;
     const mode = modeOverride === "plain" ? "plain" : "map";
     // Reopen instantly if this exact conversation already built a guide — avoids
@@ -10377,7 +10416,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const testProfile = randomTestProfileRef.current && convoText.includes(randomTestProfileRef.current.brief) ? randomTestProfileRef.current : null;
       endRun();
       endLog();
-      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(convoText, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
+      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
       // A build that failed halfway still spent everything it spent up to that
       // point, and a meter that only counts successes reports a cost per guide
@@ -11293,20 +11332,37 @@ If the conversation only covers a single day or a few stops with no explicit day
     // planned only when it is explicitly asked for: one Gemlyx sentence with the
     // word "restaurant" in it would have re-opened the door his new rule closes,
     // and it would have looked like the traveller's own request.
+    // ── ONE STRING, BUILT ONCE ──────────────────────────────────
+    // This block built the traveller's own turns THREE separate times under
+    // three names, and the copies had already drifted: `themes` below was read
+    // from `forMatch`, the whole transcript, while the screen reads it from
+    // their turns alone. So the italic line could promise an interest Gemlyx
+    // had suggested to itself and the list underneath, reading the stricter
+    // source, would not hold it. That is the exact line-versus-list
+    // contradiction the comment above this one says it closed.
     const saidByTravellerOnly = aiMessages.slice(1).filter(m => m.role === "user").map(m => m.text || "").join("\n");
     const wanted = wantedCategories(saidByTravellerOnly);
-    const themes = briefThemes(forMatch, intakeInterest);
+    const themes = briefThemes(saidByTravellerOnly, intakeInterest);
     // `mode` too, and for the reason this whole comment block is about: the line
     // and the list have to be describing one trip. The preview screen filters
     // towns by what is reachable on a bicycle now, so a line written without the
     // mode would go back to promising places the list no longer holds.
-    const modeForWhy = travelModeKey((intakeTransport || []).join(", "))
-      || travelModeKey(aiMessages.slice(1).filter(m => m.role === "user").map(m => m.text || "").join("\n"));
-    const saidByTravellerForWhy = aiMessages.slice(1).filter(m => m.role === "user").map(m => m.text || "").join("\n");
-    const budgetForWhy = travellerBudget([intakeBudgetText, saidByTravellerForWhy].filter(Boolean).join("\n"));
+    //
+    // Through readBrief, exactly as the screen does it. travelModeKey over the
+    // whole of somebody's turns tests the modes in speed order, so "we are
+    // renting a car and we love hiking" comes back "walk" and caps the line at
+    // fifteen kilometres a day for a driving trip. The brief slot reads the mode
+    // off the SENTENCE that stated it. Two ways of answering one question is how
+    // the two halves of this screen disagree, which is what this block exists to
+    // stop.
+    const modeForWhy = readBrief({
+      travellerText: saidByTravellerOnly,
+      intake: { transport: intakeTransport },
+    }).known.transport?.mode || null;
+    const budgetForWhy = travellerBudget([intakeBudgetText, saidByTravellerOnly].filter(Boolean).join("\n"));
     const matchedForWhy = matchedPlaces(forMatch, previewPools({
       towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
-    }), { days, wanted, themes, mode: modeForWhy, budget: budgetForWhy });
+    }), { days, wanted, themes, mode: modeForWhy, budget: budgetForWhy, saidByTraveller: saidByTravellerOnly });
     // _notAsked as well as _leaving. A row held back is a row not on the
     // screen, and naming one of those is the same failure as naming one they
     // told you they are leaving.
@@ -11732,6 +11788,42 @@ If the conversation only covers a single day or a few stops with no explicit day
         },
       });
       const askedThisTurn = nextAsks(brief).map(s => s.key);
+      // ── SOMETHING TO GIVE BEFORE IT ASKS ──────────────────────────
+      //
+      // Oliver, 21 Aug 2026, on the first three turns of his own conversation:
+      // "Gemlyx is a little too much of a robot at start."
+      //
+      // Read those turns and count what changes hands. It asks where he is
+      // going. He says Aalborg and seven days. It says Aalborg is a great pick,
+      // announces an assumption about his airport, and asks two more questions
+      // with a reason attached to each. Four questions in, and not one true
+      // thing about Denmark has been said. "Aalborg's a great pick, way
+      // underrated" is not content, it is a compliment on his choice, which is
+      // the banned "Great!" wearing a jacket.
+      //
+      // A person who knows Aalborg would have told him something about Aalborg
+      // by then. So the rule below is give-before-you-ask, and this is the
+      // material it gives from: the entry Gemlyx has already researched,
+      // fact-checked and published for the town they named. His call, asked
+      // directly: off the published row, never off the model's own knowledge,
+      // because this is the one place in the chat where an unverified sentence
+      // would reach a traveller and everything else in this app is built on it
+      // not doing that.
+      //
+      // Their own turns, for the reason every other reader in this app reads
+      // their own turns: a town GEMLYX named is not a town they asked about, and
+      // building the give block from its own suggestion would have it telling
+      // them about a place they never mentioned.
+      const HELD_TOWNS_IN_A_PROMPT = 3;
+      const namedByThem = towns
+        .filter(t => t?.name && mentionsPlace(travellerTurns.join("\n"), t.name))
+        .slice(0, HELD_TOWNS_IN_A_PROMPT);
+      const heldBlock = !namedByThem.length ? "" : `\n── WHAT GEMLYX ALREADY HOLDS ON THE PLACES THEY NAMED ──\nEvery line below is off a published, fact-checked entry. It is the material for the give-before-you-ask rule: say ONE of these things, in your own words, and never more than one.\n\n${namedByThem.map(t => [
+        `${t.name}:`,
+        cardLine(t),
+        t.highlight ? `Worth knowing: ${t.highlight}` : "",
+        t.gemlyxFind ? `Gemlyx's own find: ${t.gemlyxFind}` : "",
+      ].filter(Boolean).join(" ")).join("\n")}\n`;
 
       const sysPrompt = `You are Gemlyx — Denmark's insider guide: a genuine local expert who knows this country inside out, and who's warm, friendly, and genuinely eager to help someone have a great trip — like a well-travelled Danish friend, never like a generic AI assistant or customer support script. Never call yourself an AI or a language model. You're a genuinely happy, upbeat guy who loves helping people discover Denmark — let real enthusiasm for a good find show through. A few fitting emojis are welcome where they add warmth (one or two per reply, like a 🚲 next to a bike tip or a 🌊 for a coastal stop) — never a wall of them, never one in every sentence. VARY HOW YOU OPEN AND STRUCTURE EACH REPLY — someone using Gemlyx repeatedly (or across sessions) should never feel like they're getting the same template with different words swapped in; don't default to the same opening phrase, sentence rhythm, or structure every time (e.g. don't always start with "Here's your plan" or always end with the identical closing line) — let your actual personality and enthusiasm come through differently each time, the way a real person would. NEVER USE THESE FILLER PHRASES, THEY ARE HARD BANNED — "Great!", "Certainly!", "Absolutely!", "I'd be happy to help", "You're in for a delightful time", "Let me know if you need anything else", or any close variant of them: they read as generic AI customer-service filler, not a knowledgeable local. Use natural, grounded language instead — "Perfect.", "Got it.", "That's enough to work with.", "I'd actually skip that and do X instead." HAVE REAL OPINIONS, DON'T JUST PLEASE EVERYONE: a real local travel planner recommends things and steers people away from others — say "I'd go with Kronborg over that other museum, it's an easy train ride and fits what you're into" rather than listing three neutral options and letting them pick. If somewhere is genuinely overrated, too far, or not worth the detour for what they want, say so plainly instead of building it into the plan anyway. GET TO THE POINT — most replies should be short and concrete, skip the long preamble before a recommendation. NEVER OFFLOAD YOUR OWN RESEARCH BACK ONTO THE TRAVELER: you have real search results available — never say things like "check if any events align with your dates" or "see what's on while you're there" as a way of avoiding doing that lookup yourself. If something like a seasonal event, festival, or opening-hours detail is genuinely relevant, search it and state the real answer plainly; if nothing specific turns up, just don't mention it at all rather than turning it into homework for the traveler. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
 
@@ -11781,6 +11873,21 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
 ${profileForPrompt(userProfile)}
 
+── HOW A TURN IS SHAPED, WHICH IS NOT THE SAME AS WHICH WORDS ARE BANNED ──
+Oliver, 21 Aug 2026, on the opening of a real conversation: "Gemlyx is a little too much of a robot at start." The vocabulary in that conversation was clean. Every banned phrase above was absent. What made it a robot was the SHAPE of each turn, and these are rules about shape.
+
+NEVER NARRATE YOUR OWN PROCESS. Not "before I map out 7 days properly", not "once I know that I can start pulling together something good", not "let me put this together". A person does the thing; they do not announce that they are about to do the thing. Every one of those sentences is a form telling you which field it is on.
+
+NEVER JUSTIFY A QUESTION. Ask it and stop. "Dates matter because there's a couple of real events worth timing around" is a form explaining why it needs a field. A person asks "when are you going?" and waits.
+
+NEVER ANNOUNCE AN ASSUMPTION FOR APPROVAL. "Since you haven't mentioned a starting point, I'll assume you're landing at Copenhagen Airport, let me know if that's wrong" is a checkbox with a paragraph around it. If it matters, ask it as your one question. If it does not, say nothing and leave it.
+
+ONE QUESTION PER TURN. Not two, whatever else is missing. Somebody asked two things answers one, and then the half they did not answer looks like a refusal.
+
+DO NOT COMPLIMENT THEIR CHOICE. "Great pick", "excellent choice", "you'll love it", "way underrated" said about a place they just named is the banned filler in a different costume: it is a sentence with no information in it, spent on making them feel approved of.
+
+GIVE BEFORE YOU ASK. Every turn puts one real thing on the table before its question: a fact about the place they named, an opinion about it, or a warning worth having. One thing, not three, and off the block below when there is one. A conversation where one side only asks is an intake form, and it puts the whole weight of the trip on somebody who came here so they would not have to carry it. This is also what makes a short answer workable: a traveller who types four words at a time is normal, and a turn that gives something is still a real turn when their half is thin.
+${heldBlock}
 ── THE TRIP BRIEF, AS MEASURED RATHER THAN AS YOU FEEL IT ──
 This block is computed from what the traveller has actually typed and from the form they filled in. It is not your impression of the conversation and it overrides your impression of the conversation. Never say you have everything you need unless this block says so, and never say a traveller has already told you something that is not listed as known here.
 
@@ -11912,16 +12019,50 @@ ${languageBlock()}`;
       // Claude is only deciding whether to call web_search (which normally
       // produces no visible text), then a bubble appears and grows in place
       // once the real answer starts streaming.
+      // ── AND IT NEVER SHOWS HALF A SENTENCE ────────────────────────
+      //
+      // Oliver, 21 Aug 2026, with a screenshot: "You can see that Gemlyx still
+      // tends to stop." The reply on it ends "...forgetting to check out at the
+      // end of" with the thinking dots spinning underneath, and he had typed
+      // "end of??" at it.
+      //
+      // It had not stopped. That is the model writing a preamble, then deciding
+      // to call web_search, and the search taking a few seconds. The code twelve
+      // lines below already knows this happens and deletes the bubble when it
+      // does, which is the wrong end of the problem: by then he has read the
+      // half sentence, asked it what happened, and formed the view that the
+      // product breaks off mid-thought.
+      //
+      // So a partial sentence is never rendered in the first place. Streaming
+      // stays REAL, per his own ask for it ("Like on this software. This
+      // level."): every finished sentence appears the moment it finishes. What
+      // does not appear is the fragment after the last full stop, which is the
+      // only part that can ever be a lie about what Gemlyx is doing.
+      //
+      // Flushed explicitly when a stream ends, so a reply that legitimately ends
+      // without punctuation is not silently truncated.
+      const SENTENCE_END_WHILE_STREAMING = /[.!?…]+["'”’)\]]*(?=\s|$)/g;
+      const completeUpTo = (t) => {
+        let end = 0;
+        for (const m of String(t || "").matchAll(SENTENCE_END_WHILE_STREAMING)) end = m.index + m[0].length;
+        return end;
+      };
       let msgId = null;
+      let holdPartial = true;
       const handleDelta = (fullText) => {
         if (!fullText) return;
+        const shown = holdPartial ? fullText.slice(0, completeUpTo(fullText)) : fullText;
+        if (!shown) return;
         if (msgId === null) {
           msgId = `ai-${Math.random().toString(36).slice(2)}`;
-          setAiMessages(prev => [...prev, { id: msgId, role: "assistant", text: fullText, streaming: true }]);
+          setAiMessages(prev => [...prev, { id: msgId, role: "assistant", text: shown, streaming: true }]);
         } else {
-          setAiMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: fullText } : m));
+          setAiMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: shown } : m));
         }
       };
+      // The whole of what a finished stream said, held back fragment included.
+      const textOf = (d) => (d?.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+      const flush = (d) => { holdPartial = false; handleDelta(textOf(d)); holdPartial = true; };
       const clearStreamedBubble = () => {
         if (msgId !== null) {
           setAiMessages(prev => prev.filter(m => m.id !== msgId));
@@ -11931,6 +12072,9 @@ ${languageBlock()}`;
 
       let data = await streamClaudeChat(baseMessages, handleDelta);
       let toolUseBlock = data.content?.find(b => b.type === "tool_use");
+      // No search coming, so the fragment after the last full stop is the end of
+      // the reply rather than a thought that was interrupted. Show it.
+      if (!toolUseBlock) flush(data);
 
       if (toolUseBlock) {
         // Model wants to search — if any preamble text streamed in before it
@@ -11951,6 +12095,7 @@ ${languageBlock()}`;
           { role: "user", content: [{ type: "tool_result", tool_use_id: toolUseBlock.id, content: searchSummary }] },
         ];
         data = await streamClaudeChat(followUpMessages, handleDelta);
+        flush(data);
       }
 
       let replyText = data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
@@ -11969,6 +12114,7 @@ ${languageBlock()}`;
         console.warn("Gemlyx chat: empty reply, retrying once.", { data, stop_reason: data?.stop_reason, error: data?.error });
         try {
           const retryData = await streamClaudeChat(baseMessages, handleDelta);
+          flush(retryData);
           replyText = retryData.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
           if (!replyText) {
             console.warn("Gemlyx chat: retry also empty, giving up.", { retryData, stop_reason: retryData?.stop_reason, error: retryData?.error });
@@ -12393,14 +12539,26 @@ ${languageBlock()}`;
                       style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", background: `linear-gradient(135deg, ${C.gold}33, ${C.accent}33)`, border: `1.5px solid ${C.gold}`, borderRadius: 12, padding: "15px 12px", fontSize: 14.5, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 4, boxShadow: `0 2px 14px ${C.gold}22` }}>
                       📖 Turn this into a guide
                     </button>
-                    {/* THIS LINE USED TO PROMISE SECONDS. The screen it opens
-                        says "can take a few minutes", which is the true one: the
-                        pipeline runs a planner, two research passes, the writer,
-                        a rewrite pass and a fact-check. Promising seconds and
-                        then showing minutes is the one place in this app that
-                        states a figure nothing stood up, on the screen where a
-                        traveler decides whether to wait. */}
-                    <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginBottom: 12 }}>Takes a few minutes. Real places, real routes, checked.</div>
+                    {/* ── AND THEN IT SAID NOTHING AT ALL ──────────────
+                        A line lived here twice. First it promised SECONDS, and
+                        the screen it opens promised minutes, which is the one
+                        place in this app that stated a figure nothing stood up,
+                        on the screen where a traveler decides whether to wait.
+                        So it was corrected to minutes.
+
+                        Both versions were wrong about which screen this button
+                        opens. Oliver, 21 Aug 2026: "Takes a few minutes. Real
+                        places, real routes, checked. -> remove it. Because
+                        clearly it is instant to open."
+
+                        He is right. This button opens the PREVIEW, which is
+                        built from data already in the browser; the minutes
+                        belong to the guide build that used to sit behind it. A
+                        reassurance about a delay that does not happen teaches a
+                        reader that the reassurances are decoration, which is
+                        exactly what the sourcing panel is fighting. The suite
+                        refuses both wordings, on the stripped source, because
+                        this comment quotes the sentence it removed. */}
                   </>
                 )}
                 {guideError && (
@@ -14884,6 +15042,35 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             {publishErrorDetail && <div style={{ marginTop: 4, fontFamily: "monospace", fontSize: 10, color: C.muted, wordBreak: "break-word" }}>{publishErrorDetail}</div>}
                           </div>
                         )}
+                        {/* ── "SO I ONLY COPY WHAT I NEED TO HAVE FACT-CHECKED" ──
+                            Oliver, 21 Aug 2026, on what he does with a finished
+                            draft: "Because I usually copy the whole draft." The
+                            button under this one copies the JSON, and the JSON
+                            is mostly our own bookkeeping. See
+                            utils/factCheckCopy.js for what this one sends
+                            instead and, more to the point, for why it still
+                            sends the measured figures.
+
+                            Reads the EDITED text, not studioResult, because a
+                            checker should be arguing with the draft as it now
+                            stands rather than with the one the pipeline first
+                            produced. The fallback is the parsed draft, so a box
+                            mid-edit and momentarily unparseable still copies
+                            something true. */}
+                        <button onClick={() => {
+                          try {
+                            const parsed = (() => { try { return JSON.parse(studioDraftText) || {}; } catch { return studioDraft || {}; } })();
+                            navigator.clipboard.writeText(factCheckCopy(parsed, { type: studioType, now: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) }));
+                            setToast("📋 Copied, claims and measurements only");
+                            setTimeout(() => setToast(null), 2200);
+                          } catch { /* ignore */ }
+                        }}
+                          style={{ width: "100%", background: "none", border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "9px", fontSize: 11.5, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 6 }}>
+                          🔍 Copy for a fact-check
+                        </button>
+                        <div style={{ fontSize: 9.5, color: C.muted, textAlign: "center", marginBottom: 10 }}>
+                          The written claims, then the measured figures marked as settled, then what our own gates already flagged. Not the plumbing.
+                        </div>
                         <div style={{ fontSize: 9.5, color: C.muted, textAlign: "center", marginBottom: 6 }}>Copy code below reflects the original draft, not your edits above</div>
                         <button onClick={() => { try { navigator.clipboard.writeText(studioResult); setToast("📋 Copied"); setTimeout(() => setToast(null), 1800); } catch { /* ignore */ } }}
                           style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px", fontSize: 11.5, fontWeight: 700, color: C.muted, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
@@ -17593,7 +17780,32 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         const reading = eventDetail || townDetail || nightlifeDetail || freeDetail || foodDetail || craftDetail;
         const readingKind = eventDetail ? "event" : townDetail ? "town" : nightlifeDetail ? "nightlife" : freeDetail ? "free" : foodDetail ? "food" : craftDetail ? "craft" : null;
         if (!reading) return null;
-        return <AskGemlyx session={userSession} item={reading} kind={readingKind} onSignIn={() => setAuthOpen(true)} />;
+        // ── AND THE FOUNDER IS ALREADY SIGNED IN, ELSEWHERE ─────────
+        //
+        // Oliver, 21 Aug 2026: "I'd appreciate if you can make #studio go
+        // through paywalls... So I can chat with the AI without it saying
+        // 'login'. But still show me that it's a part that needs account login."
+        //
+        // Two different sessions, and nothing had ever connected them. Studio
+        // signs in as `studioSession`; this widget reads `userSession`, which is
+        // the traveller's reader account. So he could be logged into Studio,
+        // looking at his own published entry, and be told to sign in to ask a
+        // question about it.
+        //
+        // Not a hole in the gate. `api/ask.js` resolves whatever token it is
+        // given against Supabase and meters the answer against that account, so
+        // this is his own session doing his own asking, counted against him. The
+        // client was the only thing insisting on one particular way of holding
+        // the same credential.
+        //
+        // `founder` rather than silently letting him through, because the second
+        // half of his sentence is the important half: he is testing the reader's
+        // experience, and a gate he cannot see is a gate he will forget exists.
+        const readerSession = userSession
+          || (studioSession?.access_token ? { token: studioSession.access_token, email: studioSession.email } : null);
+        return <AskGemlyx session={readerSession} item={reading} kind={readingKind}
+                          founder={!userSession && !!studioSession}
+                          onSignIn={() => setAuthOpen(true)} />;
       })()}
 
       {studioSession && (() => {

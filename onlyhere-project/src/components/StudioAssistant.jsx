@@ -288,7 +288,10 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
       // the __sources array in front of it and has opened none of those pages,
       // so asking it to attribute would produce "according to visitaarhus.com",
       // which is a guess wearing a citation's clothes. See utils/provenance.js.
-      say("gemlyx", `${answer}\n\n${describeProvenance(target, { answeredFrom: "entry" })}`,
+      // audience, and it is the whole of the fix: this panel is the reader's
+      // assistant on a published page and the founder's on a draft, and it was
+      // handing both of them the verification trace. See describeProvenance.
+      say("gemlyx", `${answer}\n\n${describeProvenance(target, { answeredFrom: "entry", audience: studioMode ? "studio" : "reader" })}`,
           (studioMode && offersCorrection(message)) ? { retryAs: message } : {});
       return;
     }
@@ -310,7 +313,7 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
     // that it went and looked. Both shapes accepted now.
     const cites = citationUrls(research, { limit: 5 });
     say("gemlyx", `Not in the entry, so I looked it up just now.\n\n${written.error ? research.text : written.text}`
-      + `\n\n${describeProvenance(target, { answeredFrom: "lookup", lookupUrls: cites })}`);
+      + `\n\n${describeProvenance(target, { answeredFrom: "lookup", lookupUrls: cites, audience: studioMode ? "studio" : "reader" })}`);
   };
 
   // ── "OR TALKING TO AN AI THAT ARE ABLE TO DO TINY CHANGES WITH THEM ALL" ──

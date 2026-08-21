@@ -1,9 +1,40 @@
 # Gemlyx, 20 August
 
-Everything below is on disk in `onlyhere-project/`. **8148 assertions passing**
+Everything below is on disk in `onlyhere-project/`. **8239 assertions passing**
 across four timezones (UTC, Europe/Copenhagen, Pacific/Kiritimati, Pacific/Niue).
-`npx vite build` clean. 36 mutants run across seven rounds, one survivor and it is
-an equivalent mutant, explained in place. **Nothing is committed to git.**
+`npx vite build` clean. **65 mutants, 0 survivors**, reproducible with
+`node tools/mutate-20aug.mjs` (see below). **Nothing is committed to git.**
+
+## The mutation runner is now in the repo
+
+`tools/mutate-20aug.mjs`, 65 mutants over everything built today, 0 survivors.
+Run it in slices, it takes about ten minutes end to end:
+
+    node tools/mutate-20aug.mjs --from 0 --to 22
+    node tools/mutate-20aug.mjs --from 22 --to 43
+    node tools/mutate-20aug.mjs --from 43 --to 65
+
+**Read this before you run any mutation script in this repo.** Every one of them
+says at the top that its SIGTERM/SIGINT handlers protect the working tree. They
+do not. `execFileSync` blocks the event loop, so a signal arriving while the test
+suite is running is never delivered, and the first run of this file proved it: a
+tool timeout killed it mid-mutant and left `readPosterText` swapped for
+`readDatesFromImage` in App.jsx, four bytes different, with the suite red and
+nothing saying why.
+
+So this one keeps its protection ON DISK. It writes
+`tools/.mutate-20aug.restore.json` before the first mutant and deletes it after
+the last, and finding one at startup means a previous run died: it restores from
+it before doing anything else. It also takes `--from` and `--to`, because the
+honest answer to a ten minute cap is to run in slices rather than to hope. The
+older `mutate-*.mjs` files still have the hole and are worth the same treatment.
+
+Two mutants are deliberately NOT in the list: widening `DATE_LABEL_WINDOW` or
+`REJECT_WINDOW_BEFORE` survives, and both are equivalent mutants rather than
+gaps. What bounds those rules is the regex anchor, not the window, so the window
+can be any size and nothing changes. Both are written up in place.
+
+---
 
 ## Do this first
 
@@ -161,9 +192,106 @@ places and the screen has to show the ones it named.
 
 ---
 
+## Two corrected, two broken, same fault (evening)
+
+    Sommer på Tobakken, Esbjerg     none        ->  2026-10-29
+    Skanderborg Festival            2026-08-02  ->  2026-11-04
+
+A summer season proposed for late October, and a festival that has run in the
+first week of August for forty years proposed for November. Both read off the
+operator's own site.
+
+`nextEdition` takes the earliest FUTURE date anywhere in the text. tobakken.dk is
+a VENUE: its front page is a concert calendar, so the first future date is
+whoever is playing next. smukfest.dk carries a programme, ticket releases and
+news, all dated. The parser was right about every date it found and wrong about
+which one it was looking for, which is the same shape as the unbounded matching
+this codebase has now fixed seven times: a rule answering "is there one" when the
+question is "is it this one".
+
+**Two nets, because one is not enough.**
+
+1. `anchoredEdition`: a page with more than one future date has to SAY which one
+   is the event's. A label wins outright (Danish, English and German: `Datoer`,
+   `afholdes`, `finder sted`, `Dates`, `takes place`, `Termin`, `findet statt`).
+   A page with exactly one future date is accepted, because most festival pages
+   are that and refusing them trades two wrong rows for forty missing ones.
+   Otherwise it refuses, and the trace says "the page lists several future dates
+   and never says which one is this event's" — which is a different sentence from
+   finding nothing, and it matters: on a concert calendar there was plenty found.
+2. An annual festival keeps its slot. A proposal in a different month from the
+   one on file is refused unless the page LABELS it, because a site announcing a
+   genuine move says so in words. Only applies when there is a date on file; an
+   undated event has no slot to keep.
+
+**And a third bug found writing the fixture.** `dateRangesInText` used
+`t.match(DAY_RANGE)` on a non-global regex, which returns the FIRST match and
+stops. A festival page that opens with last year's recap and states this year's
+dates further down lost the real answer to the recap, every time, invisibly: one
+date came back and looked like the only one on the page. That is precisely the
+Distortion page's shape. Every month-name range is read now.
+
+---
+
+## The office, from your three files
+
+Your Danish fact-check names it exactly: the pipeline read the FOOTER of
+copenhagencooking.dk, found Vigerslev Allé 18 in Valby, and used the secretariat
+as the festival's location. Everything downstream then behaved perfectly on a
+wrong input — `nearestStation` "Sjælør Boulevard", `travelTime` "15min", both
+correctly measured, both to an office nobody is going to. The real hub is
+Festivalpladsen in Kødbyen; the real stations are København H and Dybbølsbro.
+
+The fact-checker's own explanation is the right one: *"Fordi en computeralgoritme
+ikke automatisk ved, at man ikke kan holde en stor madfestival for 80.000
+mennesker inde på et administrativt kontor."* A footer address is the cheapest
+address on a website to find and the least likely to be the venue.
+
+Built, in your order:
+
+- `looksLikeOffice(address, context)` — refuses on the address itself
+  (`kontor`, `sekretariat`, `postboks`, `c/o`, `att.`, `CVR`, `head office`,
+  `Geschäftsstelle`) or on the 160 characters around it, which is what catches
+  Valby: the giveaway was the CVR number beside it, not the street. Folded and
+  bounded, so `Kontorhotellet 4` and `Pressefotografvej 2` are not refused.
+- `eventLocation({ fromSite, fromPlaces, ... })` — the site first, Places second,
+  and an office refused at BOTH tiers, because Places will happily return the
+  secretariat when that is what is registered under the festival's name. When
+  both are offices it publishes NOTHING and says why. An unconfirmed location is
+  a state this product already handles honestly; a wrong one sends somebody to
+  Valby.
+- The festival draft prompt now separates the venue from the organisation before
+  the mistake is made, names the words that give an office away, and says empty
+  is the correct answer.
+
+**Not yet wired into the draft's own location resolution**, and I have not
+pretended otherwise. `mapHint` comes straight off the model's draft today, so the
+prompt rule is what is live; `eventLocation` is tested and exported but the
+pipeline does not call it yet. Wiring it needs the festival research step to
+return the site's stated venue as its own field, which is the rest of your
+"make OpenAI structure the research so the official website/ticket place is
+immediately found". That is the next task and it is the one I would do first.
+
+**The other two findings in those files I have NOT acted on yet:**
+
+- **The invented 1,990 DKK.** eurotravelo.com published "$35 to $250", something
+  converted 250 at about 7.9, and the figure was then attributed to the official
+  site. Third-party travel-slop domains (eurotravelo.com, carnifest.com) recycle
+  old data — the Israels Plads hub is 2017 — and are currently treated as
+  ordinary sources. They should be demoted the way LISTING_DOMAINS are, and a
+  price that came from one must never be logged as the official site's.
+- **"Even the fact-checker defended the draft against Gemini."** Worth taking
+  seriously on its own; I have not looked into it.
+
+---
+
 ## Still open
 
 1. **Commit.** Nothing is in git. `.git` sits at `OnlyHere\`, one level above.
+2. **Wire `eventLocation` into the festival research step** (see above). Tested,
+   exported, deliberately not called yet.
+3. **Demote the travel-slop domains** and stop a price from one being credited to
+   the official site.
 2. The Perplexity half above, which the next run will name.
 3. Must-see ordering for towns, attractions and events. Agreed, not built.
 4. The Danish dish content type. You write the dishes, I build the mechanism.

@@ -219,7 +219,7 @@ export const eventMonths = (e) => eventMonthsShort(e?.date ?? e?.dateStart, e?.d
 // something instead of quietly dropping it. A silent refusal here would be the
 // same fault as the silent slice on the review screen: he would have no way to
 // tell a checked event from an unchecked one.
-export const datePropositionProblem = (proposed, onFile, today) => {
+export const datePropositionProblem = (proposed, onFile, today, { labelled = false } = {}) => {
   const next = parseEventDate(proposed);
   if (!next) return "unreadable";
   const now = parseEventDate(today) || (today instanceof Date ? today : null);
@@ -228,6 +228,25 @@ export const datePropositionProblem = (proposed, onFile, today) => {
   }
   const have = parseEventDate(onFile);
   if (have && next.getTime() < have.getTime()) return "earlier-than-the-one-on-file";
+  // ── AN ANNUAL FESTIVAL KEEPS ITS SLOT IN THE YEAR ─────────────────
+  //
+  // Oliver, 20 Aug 2026, on a run that fixed two events and broke two others:
+  // Skanderborg Festival, on file as 2026-08-02, proposed as 2026-11-04, read
+  // off smukfest.dk. Smukfest is the first week of August and has been for forty
+  // years. A November date is not that festival moving; it is some other dated
+  // thing on the same page.
+  //
+  // So a proposal that lands in a different month from the one on file has to be
+  // LABELLED as the event's dates on the page it came from. A site announcing a
+  // genuine move says so in words: "Datoer", "afholdes", "finder sted". A number
+  // scraped from a programme grid says nothing at all, and that is the difference
+  // between a change and a coincidence.
+  //
+  // Only ever applies when there IS a date on file. An undated event has no slot
+  // to keep, which is the whole reason it is being looked up.
+  if (have && !labelled && (next.getMonth() !== have.getMonth() || next.getFullYear() - have.getFullYear() > 1)) {
+    return "a-different-month-from-the-one-on-file";
+  }
   return "";
 };
 
@@ -235,6 +254,7 @@ export const DATE_PROPOSITION_WHY = {
   "unreadable": "the suggested date could not be read as a date",
   "in-the-past": "the suggested date is in the past, so it is not the next edition",
   "earlier-than-the-one-on-file": "the suggested date is earlier than the one already on file, which means it came from an older page",
+  "a-different-month-from-the-one-on-file": "the suggested date is in a different month from the one on file and the page never says it is the event's own date, so it is far more likely to be another date printed on the same page",
 };
 
 export const isUndated = (v) => parseEventDate(v) === null;
@@ -497,7 +517,7 @@ const fullYear = (y) => { const n = Number(y); return n >= 100 ? n : 2000 + n; }
 // en dash and silently read an em-dashed range as a single date, which is the
 // end of the festival presented as the whole of it.
 const DASHES = "\\u002d\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015";
-const DAY_RANGE = new RegExp(`\\b(\\d{1,2})\\s*[.]?\\s*(?:[${DASHES}]|til|to)\\s*(\\d{1,2})\\s*[.]?\\s*(?:${MONTH_WORDS.map(a => a).join("|")})\\b[^0-9]{0,12}((?:19|20)\\d{2})`, "i");
+const DAY_RANGE = new RegExp(`\\b(\\d{1,2})\\s*[.]?\\s*(?:[${DASHES}]|til|to)\\s*(\\d{1,2})\\s*[.]?\\s*(?:${MONTH_WORDS.map(a => a).join("|")})\\b[^0-9]{0,12}((?:19|20)\\d{2})`, "gi");
 
 export const dateRangesInText = (text) => {
   const t = String(text || "");
@@ -515,26 +535,36 @@ export const dateRangesInText = (text) => {
     // Further away it is a different fact on the page and not this event's end.
     const near = b && b.at - (a.at + a.raw.length) <= 3;
     const end = near ? new Date(b.y, b.mo - 1, b.d) : null;
-    if (end && end.getTime() >= start.getTime()) { out.push({ start, end, via: "numeric" }); i++; }
-    else out.push({ start, end: start, via: "numeric" });
+    if (end && end.getTime() >= start.getTime()) { out.push({ start, end, via: "numeric", at: a.at }); i++; }
+    else out.push({ start, end: start, via: "numeric", at: a.at });
   }
-  // 2. A day range against a month name, which is how a festival writes it in prose.
-  const m = t.match(DAY_RANGE);
-  if (m) {
+  // 2. A day range against a month name, which is how a festival writes it in
+  //    prose. EVERY one of them, not the first.
+  //
+  //    This was `t.match(DAY_RANGE)` on a non-global regex, which returns the
+  //    FIRST match and stops. A festival page that opens with last year's recap
+  //    and states this year's dates further down therefore lost the real answer
+  //    to the recap, every time, and the loss was invisible: one date came back
+  //    and it looked like the only one on the page. Found 20 Aug 2026 while
+  //    writing a fixture for the Distortion page, which is exactly that shape:
+  //    "Distortion 3-7 June 2026 was the last one ... Dates: 2-6 June 2027".
+  DAY_RANGE.lastIndex = 0;
+  for (const m of t.matchAll(DAY_RANGE)) {
     const monthIdx = MONTH_RE.findIndex(([re]) => re.test(m[0]));
-    if (monthIdx >= 0) {
-      const y = Number(m[3]);
-      const d1 = Number(m[1]), d2 = Number(m[2]);
-      if (d1 >= 1 && d1 <= 31 && d2 >= 1 && d2 <= 31) {
-        out.push({ start: new Date(y, monthIdx, Math.min(d1, d2)), end: new Date(y, monthIdx, Math.max(d1, d2)), via: "month-name" });
-      }
-    }
+    if (monthIdx < 0) continue;
+    const y = Number(m[3]);
+    const d1 = Number(m[1]), d2 = Number(m[2]);
+    if (d1 < 1 || d1 > 31 || d2 < 1 || d2 > 31) continue;
+    out.push({ start: new Date(y, monthIdx, Math.min(d1, d2)), end: new Date(y, monthIdx, Math.max(d1, d2)), via: "month-name", at: m.index });
   }
   // 3. And the single date lastDateInText already knows how to read, which
   //    covers "8 June 2026" and the bare-month case. Reused rather than
   //    re-parsed: a seventh date parser in this repo is how they disagree.
+  // at: -1, because lastDateInText answers WHICH date and not WHERE, and an
+  // invented position would let the anchoring below treat a date it cannot
+  // locate as if it had been found beside a label.
   const single = lastDateInText(t);
-  if (single) out.push({ start: single, end: single, via: "single" });
+  if (single) out.push({ start: single, end: single, via: "single", at: -1 });
   return out;
 };
 
@@ -576,6 +606,10 @@ export const CHECK_STEP_WORDS = {
   "no-website-on-file": "no website is stored on this entry, so there was nothing of its own to read",
   "no-ticket-link": "its page carried no ticket link to follow",
   "no-date-in-text": "the page was read and states no date a parser can see",
+  // NOT "nothing found". On a venue's concert calendar there was plenty found
+  // and none of it was this event, and reporting that as an empty page sends
+  // somebody to check a site that is working perfectly.
+  "many-dates-none-labelled": "the page lists several future dates and never says which one is this event's, so none of them was used",
   "no-text": "the page returned almost no readable text",
   "unreadable": "the page could not be read",
   // NOT A PAGE PROBLEM AT ALL. This one is our own endpoint refusing the request
@@ -631,3 +665,176 @@ export const STEP_LABELS = { site: "Its own site", ticket: "Ticket page", poster
 // rendering "Dates not confirmed" to a reader right now.
 export const unresolvedTraces = (traces, today) =>
   (Array.isArray(traces) ? traces : []).filter(t => !t?.resolved && (isUndated(t?.date) || isPastDate(t?.date, today)));
+
+// ── WHICH OF THE DATES ON THIS PAGE IS THE EVENT'S ──────────────────
+//
+// Oliver, 20 Aug 2026, on a run that fixed two events and broke two others:
+//
+//   Sommer på Tobakken, Esbjerg     none        -> 2026-10-29
+//   Skanderborg Festival            2026-08-02  -> 2026-11-04
+//
+// Both read off the operator's own site, and both wrong. A summer season
+// proposed for late October, and a festival that has run in the first week of
+// August for forty years proposed for November.
+//
+// nextEdition takes the EARLIEST FUTURE date range anywhere in the text, and on
+// these two pages that is not the event. tobakken.dk is a venue: its front page
+// is a concert calendar, so the first future date is whoever is playing next.
+// smukfest.dk carries a programme, ticket releases and news, all dated. The
+// parser was right about every date it found and wrong about which one it was
+// looking for, which is the same shape as the unbounded matching this codebase
+// has now fixed seven times: a rule that answers "is there one" when the
+// question is "is it this one".
+//
+// His instruction, verbatim: "And don't assume a date. If you have found a
+// date, make sure it's actually the right date."
+//
+// So a page with more than one future date has to SAY which one is the event's,
+// and a page with exactly one has nothing to be confused with.
+
+// The words a page uses when it is telling you the event's own dates, in the
+// three languages this app reads: Danish, English and German. Ordinary prose
+// about a date does not use these; a programme grid never does.
+const DATE_LABEL = /(?:datoer?|dato|hvorn[aå]r|afholdes|finder\s+sted|l[oø]ber\s+af\s+stablen|foreg[aå]r|dates?|takes?\s+place|running\s+from|held\s+(?:on|from)|when|termin(?:e)?|findet\s+statt|stattfinden|vom)\W{0,12}$/i;
+
+// How far before a date the label may sit. What actually bounds this is the
+// ANCHOR: DATE_LABEL ends in `\W{0,12}$`, so the label word has to sit within a
+// dozen punctuation characters of the date and cannot be separated from it by
+// any other words. The window only keeps the slice cheap over a long page, and
+// widening it changes nothing, which is worth knowing before somebody tunes it
+// expecting it to.
+export const DATE_LABEL_WINDOW = 40;
+
+// A page with this many future dates is a calendar, whatever else it is.
+export const CALENDAR_DATES = 2;
+
+export const labelledAt = (text, at) => {
+  if (!Number.isFinite(at) || at < 0) return false;
+  const t = String(text || "");
+  return DATE_LABEL.test(t.slice(Math.max(0, at - DATE_LABEL_WINDOW), at));
+};
+
+// Returns the same shape nextEdition does, plus WHY, because a refusal that
+// cannot explain itself is the sentence this whole trace was built to replace.
+//
+// `onFile` is passed through rather than checked here: one guard, in
+// datePropositionProblem, for whoever proposes a date. Two functions refusing
+// dates by different rules is exactly the fault above wearing a different hat.
+export const anchoredEdition = (text, today) => {
+  const t = String(text || "");
+  const now = parseEventDate(today) || (today instanceof Date ? today : null);
+  const floor = now ? new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() : -Infinity;
+  const future = dateRangesInText(t)
+    .filter(r => r.end.getTime() >= floor)
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+  if (!future.length) return { found: null, why: "no-date-in-text", labelled: false, candidates: 0 };
+
+  const labelled = future.filter(r => labelledAt(t, r.at));
+  // A labelled date wins outright, however many others are on the page. This is
+  // the Distortion case: cphdistortion.dk/tickets says "Dates: 2-6 June 2027"
+  // in the middle of a page that also carries last year's recap.
+  if (labelled.length) return { found: labelled[0], why: "", labelled: true, candidates: future.length };
+
+  // One future date and nothing to confuse it with. Most festival pages.
+  if (future.length < CALENDAR_DATES) return { found: future[0], why: "", labelled: false, candidates: 1 };
+
+  // Several, and the page never says which. REFUSED, and the count is carried so
+  // the trace can say what it saw rather than "nothing found": on a venue's
+  // concert calendar there was plenty found and none of it was this event.
+  return { found: null, why: "many-dates-none-labelled", labelled: false, candidates: future.length };
+};
+
+// ── AN OFFICE IS NOT WHERE THE FESTIVAL HAPPENS ─────────────────────
+//
+// Oliver, 20 Aug 2026, with a Danish fact-check of a Copenhagen Cooking draft
+// attached, and his own instruction beside it:
+//
+//   "make OpenAI structure the research so the official website/ticket place,
+//    is immediately found. And put in their location. Because places API might
+//    be less reliable here. However, MAKE SURE that the location is never the
+//    Office.. but the actual event."
+//
+// What went wrong, in the fact-checker's words: the pipeline read the FOOTER of
+// copenhagencooking.dk, found Vigerslev Allé 18, 2500 Valby, and used it as the
+// festival's location. That is the secretariat. No public activity happens
+// there. Everything downstream then behaved perfectly on a wrong input:
+// nearestStation came back "Sjælør Boulevard" and travelTime "15min", both
+// correctly measured, both to an office nobody is going to. The real hub is
+// Festivalpladsen in Kødbyen, and the real stations are København H and
+// Dybbølsbro.
+//
+// The fact-checker's own summary of why: "Fordi en computeralgoritme ikke
+// automatisk ved, at man ikke kan holde en stor madfestival for 80.000
+// mennesker inde på et administrativt kontor." A footer address is the cheapest
+// address on a website to find and the least likely to be the venue.
+//
+// So this is a REFUSAL, not a ranking. His words: "If anything indicates an
+// 'office', then DO NOT consider it the event location." A refused address
+// leaves the field empty and the entry says the location is unconfirmed, which
+// is a state this product already handles honestly. A wrong address is
+// published as a fact and sends somebody to Valby.
+export const OFFICE_WORDS = [
+  "kontor", "kontoradresse", "hovedkontor", "sekretariat", "sekretariatet",
+  "administration", "administrativ", "administrative", "adm.",
+  "postadresse", "postboks", "att.", "c/o",
+  "cvr", "cvr-nr", "ean", "ean-nr", "faktura", "fakturaadresse", "regnskab",
+  "office", "head office", "headquarters", "hq", "registered office",
+  "press office", "presse", "pressekontakt",
+  "büro", "geschäftsstelle",
+];
+
+// Folded and bounded, because "kontor" sits inside "kontorhotel" and "presse"
+// inside "pressefotograf", and an unbounded test here would refuse addresses
+// that are perfectly good. Same discipline as every other matcher in this repo.
+const OFFICE_RE = new RegExp(`(?:^|[^a-z0-9æøå])(?:${OFFICE_WORDS.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+")).join("|")})(?:[^a-z0-9æøå]|$)`, "i");
+
+// How much text around an address counts as its context. An address stated in a
+// footer beside a CVR number is an office whether or not the word "kontor"
+// appears in the address line itself, and that is the Copenhagen Cooking case
+// exactly: the giveaway was the company registration beside it, not the street.
+export const OFFICE_CONTEXT_WINDOW = 160;
+
+export const looksLikeOffice = (address, context = "") => {
+  const a = String(address || "");
+  if (!a.trim()) return false;
+  if (OFFICE_RE.test(a)) return true;
+  const c = String(context || "");
+  if (!c) return false;
+  // Only the text AROUND this address, not the whole page: a site with a contact
+  // page somewhere is not thereby an office, and testing the whole document
+  // would refuse every address on every site that has a footer.
+  const at = c.indexOf(a);
+  if (at < 0) return false;
+  const near = c.slice(Math.max(0, at - OFFICE_CONTEXT_WINDOW), at + a.length + OFFICE_CONTEXT_WINDOW);
+  return OFFICE_RE.test(near);
+};
+
+// The order he asked for, stated once so nothing has to guess it again:
+//
+//   1. what the event's OWN site says the venue is
+//   2. Places, second, and only when the site said nothing
+//
+// and an office is refused at BOTH tiers rather than only the first, because
+// Places will happily return the secretariat too when that is what is
+// registered under the festival's name.
+export const EVENT_LOCATION_ORDER = ["official-site", "places", "none"];
+
+export const eventLocation = ({ fromSite = "", fromPlaces = "", siteText = "", placesText = "" } = {}) => {
+  const site = String(fromSite || "").trim();
+  if (site && !looksLikeOffice(site, siteText)) return { address: site, from: "official-site", why: "" };
+  const refusedSite = site ? "the address on the event's own site reads as an office rather than a venue" : "";
+  const places = String(fromPlaces || "").trim();
+  if (places && !looksLikeOffice(places, placesText)) {
+    return { address: places, from: "places", why: refusedSite ? `${refusedSite}, so Places answered instead` : "" };
+  }
+  // Nothing usable. Said plainly rather than falling back to the office, because
+  // an unconfirmed location is a state this product handles and a wrong one is
+  // not.
+  return {
+    address: "", from: "none",
+    why: refusedSite && places ? "both the site and Places gave an administrative address"
+      : refusedSite ? refusedSite
+      : places ? "the address Places returned reads as an office rather than a venue"
+      : "no address was found",
+  };
+};
