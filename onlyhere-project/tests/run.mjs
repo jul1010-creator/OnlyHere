@@ -13386,10 +13386,25 @@ rmSync(dir, { recursive: true, force: true });
   // api/ask.js instructs the model twice, in both prompts, and an instruction
   // is not a filter: App.jsx says so in its own words a screen away.
   const askUi = readFileSync(join(root, "src/components/AskGemlyx.jsx"), "utf8");
+  // ── PINNED TO THE RULE, NOT TO THE CALL SHAPE ───────────────────
+  // These read `stripDashes(String(text ?? ""))` and `import { stripDashes }`
+  // literally, so wrapping the same call in stripMarkdown on 22 Aug broke both
+  // while the behaviour they exist to protect was untouched and improved. What
+  // matters is that the ASSISTANT branch is filtered and that the filter is the
+  // shared helper rather than a copy. Composition is allowed.
   ok("the traveler's assistant strips dashes off the answer",
-     /stripDashes\(String\(text \?\? ""\)\)/.test(askUi));
+     /role === "you" \? text : stripDashes\(/.test(askUi));
   ok("and imports the same one everything else uses, not a copy",
-     /import \{ stripDashes \} from "\.\.\/utils\/helpers"/.test(askUi));
+     /import \{[^}]*\bstripDashes\b[^}]*\} from "\.\.\/utils\/helpers"/.test(askUi));
+  // ── AND THE MARKDOWN, ADDED 22 AUG ──────────────────────────────
+  // Read off the live site: the answer arrived as markdown and was rendered as
+  // characters, so every reader saw "**Glasmuseet Ebeltoft**" with the stars in
+  // it. Same helper the Detour chat uses, so the two AI surfaces cannot format
+  // the same reply differently.
+  ok("and the markdown markers, so nobody is shown the asterisks",
+     /stripMarkdown\(/.test(askUi));
+  ok("using the same helper for that too",
+     /import \{[^}]*\bstripMarkdown\b[^}]*\} from "\.\.\/utils\/helpers"/.test(askUi));
   // The reader's OWN words are not rewritten. His rule is about generated text.
   ok("but never rewrites what the traveler typed",
      /role === "you" \? text :/.test(askUi));
@@ -28956,8 +28971,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // Gemlyx should now be asking him for instead of going quiet.
     ok("who is coming is still the open question", !dad.known.party);
     ok("so the brief is still not ready, correctly", !briefReady(dad));
-    ok("and the note asks for exactly that",
-       buildBlockedNote(dad).includes("Who is coming?"));
+    // He never gave a starting point either, and origin comes first in
+    // BRIEF_SLOTS, so that is what one question at a time means here. Asserted
+    // through nextAsks rather than against a hardcoded sentence, because the
+    // rule is "ask for the first thing still missing", not "ask this string".
+    const asked = M.nextAsks(dad)[0];
+    ok("the note asks for the first thing still missing", !!asked && buildBlockedNote(dad).includes(asked.ask));
+    ok("and that thing is genuinely not known yet", !dad.known[asked.key]);
   }
 
   // ── AND THE MODEL IS TOLD NOT TO NAME BUTTONS ───────────────────
