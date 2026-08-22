@@ -76,8 +76,29 @@ export const getSession = async () => {
 
 export const getStoredSession = readStored;   // synchronous, for first paint only
 
-export const signUpWithPassword = async (email, password) => {
-  const data = await post("signup", { email: email.trim(), password });
+// ── THE NAME TRAVELS WITH THE SIGNUP, FOR THE EMAIL ─────────────────
+//
+// Oliver, 22 Aug 2026, wanting the confirmation mail to open "Hi [Name],".
+//
+// Supabase's confirm-signup template can only interpolate what the auth row
+// itself holds: {{ .Email }}, {{ .ConfirmationURL }}, {{ .SiteURL }} and
+// {{ .Data }}, which is the user metadata sent at signup. Nothing else is
+// reachable from there. The profile answers go to gemlyx_user_data, a table the
+// email templating cannot see and will never be able to see, so a name that only
+// lives there can never appear in the mail.
+//
+// So the name is passed here as well. DUPLICATED ON PURPOSE, which this codebase
+// normally treats as a fault: the copy in gemlyx_user_data is the one the app
+// reads and the one somebody can edit, and this copy exists solely so the
+// greeting has something to greet. It is written once, at signup, and never
+// updated, because an email template is the only thing that reads it.
+//
+// Trimmed and capped at the same 60 characters the form allows, and omitted
+// entirely when empty rather than sent as "", so the template's own
+// {{ if .Data.name }} check has something honest to test.
+export const signUpWithPassword = async (email, password, name = "") => {
+  const clean = String(name || "").trim().slice(0, 60);
+  const data = await post("signup", { email: email.trim(), password, ...(clean ? { data: { name: clean } } : {}) });
   // With email confirmation ON in Supabase, signup returns a user but no token.
   // That is not an error, it means "go and check your inbox", and the caller
   // needs to be able to tell the two apart.
@@ -270,6 +291,26 @@ export const updatePassword = async (session, password) => {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error_description || data.msg || data.message || `Could not set the new password (${res.status})`);
   return true;
+};
+
+// ── SENDING THE CONFIRMATION AGAIN ──────────────────────────────────
+//
+// Needed the moment there is a screen that waits for an email, because the
+// commonest thing that happens to a confirmation mail is nothing: it lands in
+// spam, or the address had a typo, or it is simply slow.
+//
+// NOT a second signUpWithPassword call, which is what this is easy to reach for.
+// That path creates or re-touches an account and returns a shape the caller then
+// has to interpret; /auth/v1/resend does exactly one thing and says whether it
+// worked.
+//
+// AND IT WILL BE REFUSED SOMETIMES, WHICH IS NOT A BUG. Supabase's built-in
+// email service allows TWO messages an hour, and only a custom SMTP provider
+// raises that. So "email rate limit exceeded" is the expected answer to an
+// impatient third press, and the error has to reach the screen rather than being
+// swallowed into a spinner that stops.
+export const resendConfirmation = async (email) => {
+  await post("resend", { type: "signup", email: String(email || "").trim() });
 };
 
 export const sendPasswordReset = async (email) => {

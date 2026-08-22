@@ -21787,6 +21787,73 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   }
 }
 
+// ── MAKING AN ACCOUNT IS A STEP THAT ENDS ──────────────────────────
+//
+// Oliver, 22 Aug 2026: "this is truly 2005. Create account. Open new page. Like
+// that. Of course make it our theme and polish it. But we're creating a
+// professional product."
+//
+// What it did was print a sentence in gold above the Create account button and
+// leave the whole form standing underneath it, every field still filled in, the
+// button still saying Create account. So the one moment where somebody has to
+// leave and go and do something arrived as a line of text in the middle of a
+// form that looked like it had not been submitted.
+{
+  const sheetS = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
+  const authS = readFileSync(join(root, "src/utils/auth.js"), "utf8");
+
+  // The form is REPLACED, not annotated. That is the whole change.
+  ok("a confirmation screen exists", /\{sentTo \? \(/.test(sheetS));
+  ok("and the form is the other branch of it", /\) : \(<>/.test(sheetS));
+  ok("it is entered when the signup needs confirming", /if \(needsConfirmation\) \{[\s\S]{0,320}setSentTo\(email\.trim\(\)\);/.test(sheetS));
+  // The old inline sentence must not come back alongside it, or there are two
+  // ways of saying the same thing and one of them is the thing he called 2005.
+  ok("the sentence wedged into the form is gone", !/Account made, and your answers are kept on this device/.test(stripNonCode(sheetS)));
+
+  // ── THE ADDRESS IS THE POINT OF THE SCREEN ──────────────────────
+  // Held as the address rather than a boolean deliberately: a typo is invisible
+  // in a field somebody has stopped looking at, and obvious on a screen that
+  // spells it out.
+  ok("the address is shown back to them", /\{sentTo\}\s*<\/div>/.test(sheetS));
+  ok("in the gold, on its own line", /fontWeight: 700, color: C\.gold, marginBottom: 16, wordBreak: "break-all"/.test(sheetS));
+  ok("and there is a way to fix it", /Wrong address\? Go back/.test(sheetS));
+  ok("which clears back to the form with the answers still in it",
+     /onClick=\{\(\) => \{ setSentTo\(""\); setError\(null\); setNotice\(null\); \}\}/.test(sheetS));
+
+  // ── SENDING IT AGAIN ────────────────────────────────────────────
+  ok("there is a resend", /export const resendConfirmation = async \(email\) => \{/.test(authS));
+  // The dedicated endpoint, not a second signup call: that path creates or
+  // re-touches an account and returns a shape the caller has to interpret.
+  ok("through the endpoint that does only that", /await post\("resend", \{ type: "signup", email/.test(authS));
+  ok("and the button calls it", /<button onClick=\{resend\}/.test(sheetS));
+
+  // ── THE COOLDOWN IS THERE TO PROTECT THEM ───────────────────────
+  // Supabase's built-in email service allows TWO messages an hour, and only a
+  // custom SMTP provider raises that. A resend with no cooldown invites somebody
+  // to spend both in ten seconds and then be locked out of their own
+  // confirmation for the rest of the hour.
+  ok("a cooldown exists", /const RESEND_COOLDOWN_MS = 60000;/.test(sheetS));
+  ok("the button respects it", /disabled=\{busy \|\| now < resendAt\}/.test(sheetS));
+  ok("and the handler does too, not only the button", /if \(busy \|\| Date\.now\(\) < resendAt\) return;/.test(sheetS));
+  // COUNTED DOWN ON SCREEN. A disabled button with no reason is just broken.
+  ok("it says how long is left", /Send it again in \$\{Math\.ceil\(\(resendAt - now\) \/ 1000\)\}s/.test(sheetS));
+  // The ticker runs ONLY while a cooldown is running, or an idle sheet
+  // re-renders once a second for as long as it is open.
+  ok("the ticker stops when there is nothing to count", /if \(!sentTo \|\| resendAt <= Date\.now\(\)\) return;/.test(sheetS));
+  ok("and is cleared on unmount", /return \(\) => clearInterval\(t\);/.test(sheetS));
+
+  // A refusal is the EXPECTED answer to an impatient third press. Somebody told
+  // nothing will simply press it again.
+  ok("a refused resend reaches the screen", /catch \(e\) \{[\s\S]{0,420}setError\(String\(e\.message \|\| e\)\);\s*\}\s*setBusy\(false\);\s*\};/.test(sheetS));
+  ok("and the screen can show an error at all", /\{error && <div style=\{\{ fontSize: 12, color: "#FF8A80", lineHeight: 1\.5, marginBottom: 12 \}\}>/.test(sheetS));
+
+  // ── DRAWN, NOT AN ILLUSTRATION ──────────────────────────────────
+  // A stock envelope graphic would be the only thing in the app that did not
+  // come from the same hand.
+  ok("the mark is drawn in the theme", /<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke=\{C\.gold\}/.test(sheetS));
+  ok("with no image file behind it", !/<img/.test(sheetS));
+}
+
 // ── THE TWO CLAIMS ON THE LANDING PAGE ─────────────────────────────
 //
 // Oliver, 22 Aug 2026, of the "Why Gemlyx exists" block: "this I found out is
@@ -28673,8 +28740,24 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the signup page carries the questions itself",
      /<ProfileQuestions value=\{answers\} onChange=\{setAnswers\} required showGaps=\{showGaps\} \/>/.test(auth));
   ok("and there is no separate questions step left", !/setMode\("questions"\)/.test(auth));
+  // BOTH PRESENT, THEN ORDERED. indexOf returns -1 for a missing string and -1
+  // is less than everything, so these two assertions passed loudest when the
+  // call they anchor on had been renamed out from under them. That is exactly
+  // what happened on 22 Aug when the signature grew a third argument.
+  const signupCall = auth.indexOf("await signUpWithPassword(email, password, answers.name)");
+  ok("the signup call was found at all", signupCall >= 0);
   ok("the answers are in hand before the account is made",
-     auth.indexOf("const gaps = missingRequired(answers);") < auth.indexOf("await signUpWithPassword(email, password)"));
+     auth.indexOf("const gaps = missingRequired(answers);") >= 0 && auth.indexOf("const gaps = missingRequired(answers);") < signupCall);
+  // AND THE NAME GOES WITH IT. Supabase's confirm-signup template can only read
+  // the auth row, so a name that lives only in gemlyx_user_data can never reach
+  // the greeting in the email.
+  ok("the name travels to Supabase as metadata", /export const signUpWithPassword = async \(email, password, name = ""\) => \{/.test(readFileSync(join(root, "src/utils/auth.js"), "utf8")));
+  ok("as user metadata, which is the only thing the template can see",
+     /\.\.\.\(clean \? \{ data: \{ name: clean \} \} : \{\}\)/.test(readFileSync(join(root, "src/utils/auth.js"), "utf8")));
+  // Omitted rather than sent empty, so the template's {{ if .Data.name }} has
+  // something honest to test.
+  ok("and an empty name is left out rather than sent blank",
+     /const clean = String\(name \|\| ""\)\.trim\(\)\.slice\(0, 60\);/.test(readFileSync(join(root, "src/utils/auth.js"), "utf8")));
   ok("a session writes them straight to the row", /if \(session\) await saveProfile\(session, answers\);/.test(auth));
   ok("and no session holds them on the device", /else holdProfile\(answers\);/.test(auth));
 
@@ -28684,7 +28767,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("there is a confirm field", /Confirm password/.test(auth));
   ok("checked against the password", /if \(password !== confirm\)/.test(auth));
   ok("before signUpWithPassword is called",
-     auth.indexOf("if (password !== confirm)") < auth.indexOf("await signUpWithPassword(email, password)"));
+     auth.indexOf("if (password !== confirm)") >= 0 && auth.indexOf("if (password !== confirm)") < signupCall);
 
   // ── THE MANDATORY MARKS ─────────────────────────────────────────
   // "Remember to have '*' on parts that is mandatory to answer."

@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { ProfileQuestions } from "./ProfileQuestions";
 import { EMPTY_PROFILE, saveProfile, holdProfile, missingRequired, REQUIRED_LABEL } from "../utils/profile";
 import { C } from "../utils/theme";
-import { signInWithPassword, signUpWithPassword, sendPasswordReset, startGoogleSignIn, updatePassword } from "../utils/auth";
+import { signInWithPassword, signUpWithPassword, sendPasswordReset, startGoogleSignIn, updatePassword, resendConfirmation } from "../utils/auth";
 import { GOOGLE_SIGN_IN } from "../config";
 
 // ── WHERE AN ACCOUNT IS ASKED FOR, AND WHAT IT HONESTLY BUYS ─────────
@@ -56,6 +56,12 @@ import { GOOGLE_SIGN_IN } from "../config";
 // real, authenticated session, which is what made this flow so easy to leave
 // half-built: the app signed them in and everything looked fine, except the one
 // thing they came to do. See updatePassword in utils/auth.js.
+// Sixty seconds. Long enough that nobody spends both of the hour's two emails in
+// one impatient burst, short enough that a genuinely lost message is not a
+// punishment. Counted down on screen rather than hidden, so the button is never
+// just mysteriously dead.
+const RESEND_COOLDOWN_MS = 60000;
+
 export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, initialMode, recoverySession = null }) => {
   // ── AND NOW IT DEFAULTS TO SIGNING IN ─────────────────────────────
   //
@@ -70,6 +76,26 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   // while somebody new is here BECAUSE they were just told they need an
   // account, so the one extra tap lands on the person who already expects one.
   const [mode, setMode] = useState(initialMode || "in");   // "up" | "in" | "reset" | "newpass"
+  // ── THE SCREEN THAT WAITS FOR THE EMAIL ───────────────────────────
+  //
+  // Oliver, 22 Aug 2026, of the old behaviour: "this is truly 2005. Create
+  // account. Open new page. Like that."
+  //
+  // What it did was print a sentence in gold above the Create account button and
+  // leave the entire form standing underneath it, every field still filled in,
+  // the button still saying Create account. So the one moment where the person
+  // has to go and DO something arrived as a line of text in the middle of a form
+  // that looked like it had not been submitted.
+  //
+  // Making an account is a step that ENDS. It gets its own screen.
+  //
+  // Held as the address rather than a boolean, because the address is the whole
+  // content of that screen: the single most useful thing it can show somebody is
+  // exactly which mailbox to go and look in, spelled out, so a typo is visible
+  // rather than mysterious.
+  const [sentTo, setSentTo] = useState("");
+  const [resendAt, setResendAt] = useState(0);   // epoch ms the resend unlocks
+  const [now, setNow] = useState(() => Date.now());
   // The other deliberate way out, since the backdrop is no longer one. Bound
   // only while the sheet is open, so it cannot swallow Escape from anything else.
   useEffect(() => {
@@ -120,6 +146,18 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   // Declared BEFORE the early return, because a hook that only sometimes runs
   // is a hooks-order crash on the render where `open` flips. Cleaned up on
   // unmount so opening the sheet five times does not leave five listeners.
+  // ── A COOLDOWN THAT IS THERE TO PROTECT THEM ──────────────────────
+  // Supabase's built-in email service allows TWO messages an hour. A resend
+  // button with no cooldown invites somebody to spend both of them in ten
+  // seconds and then be locked out of their own confirmation for the rest of the
+  // hour. Ticks only while a cooldown is actually running, so an idle sheet is
+  // not re-rendering once a second forever.
+  useEffect(() => {
+    if (!sentTo || resendAt <= Date.now()) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [sentTo, resendAt]);
+
   useEffect(() => {
     const onResize = () => setWide(window.innerWidth >= 720);
     window.addEventListener("resize", onResize);
@@ -139,6 +177,27 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   // and submitted once. The previous version made the account first and then
   // asked, which is two decisions where he asked for one, and it also meant
   // somebody could end up with an account and no answers by closing the sheet.
+  // ── AND SENDING IT AGAIN ──────────────────────────────────────────
+  // Its own function rather than a branch of submit(), because submit() is four
+  // flows deep already and this shares none of them: no validation, no profile,
+  // no session, one call and a cooldown.
+  const resend = async () => {
+    if (busy || Date.now() < resendAt) return;
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      await resendConfirmation(sentTo);
+      setNotice("Sent again. Check your spam folder too.");
+      setResendAt(Date.now() + RESEND_COOLDOWN_MS);
+      setNow(Date.now());
+    } catch (e) {
+      // SURFACED, not swallowed. "email rate limit exceeded" is the expected
+      // answer to an impatient third press, since the built-in sender allows two
+      // an hour, and a person told nothing will simply press it again.
+      setError(String(e.message || e));
+    }
+    setBusy(false);
+  };
+
   const submit = async () => {
     setShowGaps(true);
     // ── SETTING A NEW ONE NEEDS NO EMAIL ────────────────────────
@@ -176,19 +235,21 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         await sendPasswordReset(email);
         setNotice("If that email has an account, a reset link is on its way.");
       } else if (mode === "up") {
-        const { session, needsConfirmation } = await signUpWithPassword(email, password);
+        // The name goes to Supabase as user metadata as well as into the
+        // profile row, because the confirmation email template can only read
+        // the auth row. See signUpWithPassword.
+        const { session, needsConfirmation } = await signUpWithPassword(email, password, answers.name);
         // THE ANSWERS ARE ALREADY IN HAND. Whether a session came back decides
         // only WHERE they go: straight to the row, or held on the device until
         // the confirmation link turns into a session. See takeHeldProfile.
         if (session) await saveProfile(session, answers);
         else holdProfile(answers);
         if (needsConfirmation) {
-          // "saved" was not true on this branch. There is no session yet, so the
-          // answers are on THIS DEVICE waiting for one, and holdProfile does
-          // nothing at all in private mode. Saying so is the difference between
-          // somebody confirming on the same phone and somebody confirming on a
-          // laptop and wondering where their answers went.
-          setNotice("Account made, and your answers are kept on this device. Confirm through the email, then sign in here on this same browser and they will be attached to your account.");
+          // A SCREEN, not a sentence wedged into the form they just filled in.
+          // See the note on sentTo above.
+          setSentTo(email.trim());
+          setResendAt(Date.now() + RESEND_COOLDOWN_MS);
+          setNow(Date.now());
           setBusy(false);
           return;
         }
@@ -263,6 +324,70 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
           <span style={{ color: C.gold, fontSize: 15 }}>✦</span>
           <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, letterSpacing: 3, color: C.light, fontWeight: 600 }}>GEMLYX</span>
         </div>
+
+        {/* ── THE STEP THAT ENDS ────────────────────────────────────
+            Everything below this branch is the FORM. Once an account exists and
+            is waiting on an email, the form is finished and showing it again,
+            still filled in, still offering a Create account button, is what made
+            the old version read as 2005. */}
+        {sentTo ? (
+          <div style={{ textAlign: "center", paddingTop: 4 }}>
+            {/* Drawn, not an illustration. A stock envelope graphic would be the
+                only thing in the app that did not come from the same hand, and
+                the whole sheet is otherwise line work in the gold. The flap is a
+                separate open stroke so it reads as a letter going out rather
+                than a closed rectangle. */}
+            <div style={{ width: 74, height: 74, margin: "6px auto 20px", borderRadius: "50%", background: `${C.gold}14`, border: `1px solid ${C.gold}44`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={C.gold} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
+                <path d="M3 7l8.1 5.6a1.6 1.6 0 0 0 1.8 0L21 7" />
+              </svg>
+            </div>
+
+            <div style={{ fontSize: wide ? 26 : 23, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.2, marginBottom: 10 }}>
+              Check your email
+            </div>
+
+            {/* THE ADDRESS IS THE POINT OF THIS SCREEN. Spelled out in the gold
+                on its own line, because a typo is invisible in a form field
+                somebody has already stopped looking at, and obvious here. */}
+            <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.65, marginBottom: 6 }}>
+              A confirmation link is on its way to
+            </div>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: C.gold, marginBottom: 16, wordBreak: "break-all", fontFamily: "'Inter', sans-serif" }}>
+              {sentTo}
+            </div>
+            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.7, marginBottom: 20, maxWidth: 340, marginLeft: "auto", marginRight: "auto" }}>
+              Open it and you are in. It can take a minute or two, and it does sometimes land in spam.
+              {/* Said here as well as in the old notice, because this is the
+                  screen somebody is looking at when they decide which device to
+                  open the mail on, and that decision is the one that costs them
+                  their answers. */}
+              <br /><br />
+              The answers you just gave are kept on this device. Confirm in this same browser and they come with you.
+            </div>
+
+            {error && <div style={{ fontSize: 12, color: "#FF8A80", lineHeight: 1.5, marginBottom: 12 }}>{error}</div>}
+            {notice && <div style={{ fontSize: 12, color: C.gold, lineHeight: 1.5, marginBottom: 12 }}>{notice}</div>}
+
+            {/* Secondary, deliberately. The action this screen wants is for
+                somebody to leave and go to their inbox, not to press a button
+                here, so the button that keeps them here does not look like the
+                thing to do. */}
+            <button onClick={resend} disabled={busy || now < resendAt}
+              style={{ width: "100%", background: "transparent", border: `1px solid ${C.border}`, color: now < resendAt ? C.muted : C.light, borderRadius: 11, padding: "12px", fontSize: 13.5, fontWeight: 600, cursor: (busy || now < resendAt) ? "default" : "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 12 }}>
+              {busy ? "Sending…" : now < resendAt ? `Send it again in ${Math.ceil((resendAt - now) / 1000)}s` : "Send it again"}
+            </button>
+
+            {/* The other half of showing the address: a way to fix it. Clears
+                the screen back to the form with everything still in it, so a
+                mistyped address is a two-character repair rather than filling
+                the whole thing in again. */}
+            <button style={linkBtn} onClick={() => { setSentTo(""); setError(null); setNotice(null); }}>
+              Wrong address? Go back
+            </button>
+          </div>
+        ) : (<>
 
         <div style={{ fontSize: wide ? 27 : 24, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.15, marginBottom: 8 }}>
           {heading}
@@ -436,6 +561,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 12 }}>
           We store your email and your saved list. Next you can add a few optional details about yourself, which only ever shape what Gemlyx suggests to you. No tracking, no marketing email, nothing sold. You can delete your account and everything in it from this menu at any time.
         </div>
+        </>)}
       </div>
     </div>
   );
