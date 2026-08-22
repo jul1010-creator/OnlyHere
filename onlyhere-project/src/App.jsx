@@ -12066,7 +12066,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     } catch { setCraftStatus("fallback"); }
   };
 
-  const craftMailto = () => craftModal ? `mailto:hello@gemlyx.com?subject=${encodeURIComponent("Craft request — " + craftModal.name)}&body=${encodeURIComponent("Name: " + craftForm.name + "\nEmail: " + craftForm.email + "\nInterested in: " + craftForm.interest + "\nVisiting: " + craftForm.visit)}` : "#";
+  const craftMailto = () => craftModal ? `mailto:hello@gemlyxtravel.com?subject=${encodeURIComponent("Craft request: " + craftModal.name)}&body=${encodeURIComponent("Name: " + craftForm.name + "\nEmail: " + craftForm.email + "\nInterested in: " + craftForm.interest + "\nVisiting: " + craftForm.visit)}` : "#";
 
   const sendAI = async (forcedMsg, opts = {}) => {
     const forced = typeof forcedMsg === "string" ? forcedMsg.trim() : null;
@@ -15935,12 +15935,18 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     <div style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>Be the first to know when new cities launch. No spam.</div>
                   </div>
                 ) : (
-                  <div style={{ fontSize: 13, color: "#4CAF50", fontWeight: 700, marginBottom: 28 }}>✓ You're on the list — we'll be in touch.</div>
+                  <div style={{ fontSize: 13, color: "#4CAF50", fontWeight: 700, marginBottom: 28 }}>✓ You're on the list. We'll be in touch.</div>
                 )}
                 <GemlyxLogo size={18} color={C.text} style={{ marginBottom: 6 }} />
                 <div style={{ fontSize: 11, color: C.muted, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>Every find personally verified · Denmark <FlagDK height={10} /></div>
-                <div onClick={() => setShowPrivacy(true)} style={{ fontSize: 11, color: C.muted, marginTop: 8, textDecoration: "underline", cursor: "pointer" }}>Privacy & Data</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.87 — Jul 2026</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
+                  <span onClick={() => setShowPrivacy(true)} style={{ textDecoration: "underline", cursor: "pointer" }}>Privacy & Data</span>
+                  <span style={{ opacity: 0.5 }}>·</span>
+                  <a href="/privacy.html" style={{ color: C.muted, textDecoration: "underline" }}>Privacy Policy</a>
+                  <span style={{ opacity: 0.5 }}>·</span>
+                  <a href="/terms.html" style={{ color: C.muted, textDecoration: "underline" }}>Terms of Service</a>
+                </div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.87 · Aug 2026</div>
               </div>
             </div>
           )}
@@ -17415,7 +17421,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 {[
                   { q: "Is Gemlyx free?", a: "Yes — completely free for travelers. Browse, save, use the map and discover hidden finds at no cost." },
                   { q: "How do I save a find?", a: "Tap the ♡ heart on any business. It gets saved to your Saved tab instantly." },
-                  { q: "How do I get my shop listed?", a: "Send us a message on Instagram or email hello@gemlyx.com. Every listing is hand-researched and checked against multiple sources before it goes live." },
+                  { q: "How do I get my shop listed?", a: "Send us a message on Instagram or email hello@gemlyxtravel.com. Every listing is hand-researched and checked against multiple sources before it goes live." },
                   { q: "Are all finds verified?", a: "Yes — every listing is hand-researched and fact-checked against multiple sources, never invented. We show when each one was last checked." },
                   { q: "Which cities are covered?", a: "All of Denmark, not just Copenhagen. Towns across Jutland, North Zealand and the islands are covered too, along with the coasts most visitors to Denmark are already heading for." },
                 ].map((item, i) => (
@@ -17426,7 +17432,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 ))}
                 <div style={{ background: C.surface, borderRadius: 12, padding: "12px 16px", border: `1px solid ${C.border}` }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>Still need help?</div>
-                  <a href="mailto:hello@gemlyx.com" style={{ display: "inline-block", background: C.accent, color: "#fff", borderRadius: 100, padding: "6px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none", marginTop: 6 }}>✉ hello@gemlyx.com</a>
+                  <a href="mailto:hello@gemlyxtravel.com" style={{ display: "inline-block", background: C.accent, color: "#fff", borderRadius: 100, padding: "6px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none", marginTop: 6 }}>✉ hello@gemlyxtravel.com</a>
                 </div>
               </div>
             </div>
@@ -18036,7 +18042,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
           {/* bottom: customer support — same introFlightDone-driven opacity as the top bar, so both real-logo-adjacent elements appear together the moment the flight lands. */}
           <div className="gxa-topbar" style={{ position: "absolute", bottom: "calc(12px + env(safe-area-inset-bottom))", left: 0, right: 0, display: "flex", justifyContent: "center", pointerEvents: "none", opacity: introFlightDone ? 1 : 0 }}>
-            <button onClick={() => window.open("mailto:hello@gemlyx.com?subject=" + encodeURIComponent("Gemlyx support"))}
+            <button onClick={() => window.open("mailto:hello@gemlyxtravel.com?subject=" + encodeURIComponent("Gemlyx support"))}
               style={{ pointerEvents: "auto", display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(12,11,7,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.22)", color: "#EFE9D6", borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
               <Ico name="mail" size={13} /> Customer Support
             </button>
@@ -18180,7 +18186,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   setShowMenu(false);
                   if (item.action === "faq") setActive("essentials");
                   else if (item.action === "credits") setShowCredits(true);
-                  else if (item.action === "mail") window.open("mailto:hello@gemlyx.com");
+                  else if (item.action === "mail") window.open("mailto:hello@gemlyxtravel.com");
                   // authMode is shared state, so opening the sheet without
                   // setting it reopens on whatever screen it was last left on.
                   // Press "Sign up" in the header, close it, then press
@@ -18860,7 +18866,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               {accountBusy ? "Deleting…" : "Delete my saved data"}
             </button>
             <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 12 }}>
-              This deletes everything we hold for you: your saved places, your guides, and anything you told Gemlyx about yourself. To also remove the sign-in record itself, email hello@gemlyx.com and it will be done.
+              This deletes everything we hold for you: your saved places, your guides, and anything you told Gemlyx about yourself. To also remove the sign-in record itself, email hello@gemlyxtravel.com and it will be done.
             </div>
           </div>
         </div>
@@ -18919,17 +18925,30 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <div style={{ fontSize: 24, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text }}>Privacy & Data</div>
               <button onClick={() => setShowPrivacy(false)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Close</button>
             </div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>Last updated August 2026 · Gemlyx is built in Denmark and designed to collect as little as possible. Accounts are optional, and there are no ads, no tracking cookies and no analytics.</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>Privacy Policy v2.0, in force 22 August 2026 · Gemlyx is built in Denmark and collects as little as it can. You never need an account, and there are no ads, no tracking cookies and no analytics.</div>
+
+            {/* ── ONE SOURCE OF TRUTH, AND THIS IS NOT IT ──────────────
+                This modal is the only privacy link anywhere in the app, so for
+                most readers it IS the privacy policy, and it was the most wrong
+                of the three copies: it said an account holds "your email address
+                and your saved list, and nothing else: no profile", eleven days
+                after the profile shipped, and it named hello@gemlyx.com three
+                times, a domain that is not his. It is now a summary that defers
+                to public/privacy.html, which is the document that gets updated.
+                Anything added here must be added there in the same change. */}
+            <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.65, marginBottom: 18, padding: "12px 14px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10 }}>
+              The short version is below. The full <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>Privacy Policy</a> and <a href="/terms.html" target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>Terms of Service</a> are the documents that count, and they are kept current.
+            </div>
 
             {[
-              ["📍 Your location", "Only requested when you tap the location button — never in the background. Your coordinates are used directly in your browser to calculate distances to towns and events. They are not stored on any server and are not sent to anyone. You can revoke access anytime in your browser's site settings."],
-              ["✦ AI chats (Gemlyx Detour & Route Builder)", "When you use the AI Guide, your messages are sent to Anthropic (Claude), which writes the answer, and to OpenAI, which only plans and organises the research behind it. Both are US companies. In some cases your messages also go to Tavily and Perplexity to search for live information like opening status. Please don't include personal details in your messages, as the AI doesn't need your name or contact information to plan a great trip. We don't store your chats on our servers."],
-              ["💾 Saved routes & guides", "Without an account, everything you save stays only in your browser's local storage, on your own device, and we never see it. If you create an account, your saved places and guides are also stored on our database (Supabase) so they follow you between your phone and laptop. Nothing else about your activity is stored. Delete them in the app, by deleting your account, or by clearing your browser data for this site."],
-              ["👤 Accounts", "An account is entirely optional. You can browse, plan and build a guide without one. If you create an account we store your email address and your saved list, and nothing else: no profile, no location history, no record of what you looked at. Sign in is handled by Supabase Auth, and if you use Google sign in, Google will know you signed in to Gemlyx. We do not send marketing email. \"Delete my saved data\" in the account menu removes everything we hold for you, and emailing hello@gemlyx.com also removes the sign-in record itself."],
-              ["◈ Booking requests", "If you send a booking or craft request, the details you enter (name, email, message) are stored in our database (Supabase) so the maker can get back to you. We use them for nothing else. Email hello@gemlyx.com to have a request deleted."],
-              ["💡 Suggestions", "If you suggest a place via 'Suggest a Place', what you type is stored so we can review it. We don't ask for your name or contact details — suggestions are anonymous."],
-              ["🌦 Weather & maps", "Weather comes from Yr.no (Norwegian Meteorological Institute) and map tiles from OpenStreetMap. Like any website loading content, these services can see your IP address when data loads. Neither is used to track you."],
-              ["🇪🇺 Your rights", "Under GDPR you can ask what data we hold about you, and have it corrected or deleted. Without an account almost everything lives on your own device, so this usually means booking requests; with an account it also covers your email address and saved list, which you can delete yourself at any time from the account menu. Contact: hello@gemlyx.com. Data controller: Gemlyx, Denmark."],
+              ["📍 Your location", "Only requested when you tap the location button, never in the background. Your coordinates are used in your own browser to work out distances to towns and events. They are not stored on any server and are not sent to anyone. You can revoke access at any time in your browser's site settings."],
+              ["✦ AI chats and guides", "When you use the AI guide, your messages go to Anthropic, which writes the answer, and to OpenAI, which plans and organises the research behind it. Both are US companies. Your messages may also go to Tavily and Perplexity to look up live information such as whether a place is open. Please do not put personal details in your messages: the AI does not need your name or your contact details to plan a good trip. We do not store your chats on our servers."],
+              ["💾 Saved routes and guides", "Without an account, everything you save stays in your browser's local storage on your own device, and we never see it. With an account, your saved places and guides are also stored in our database at Supabase so they follow you between your phone and your laptop. Delete them in the app, by deleting your account, or by clearing your browser data for this site."],
+              ["👤 What an account holds", "Your email address, and the answers you give when you register: a name or nickname, a date of birth, a gender, and anything you choose to add after that, such as country, interests, preferred transport and a short description of yourself. Only an age band is derived from the date of birth and sent to the AI, never the date itself. All of it shapes what Gemlyx suggests to you and nothing else. Sign in is handled by Supabase Auth. We send no marketing email. Deleting your account removes everything we hold for you."],
+              ["◈ What Gemlyx notices", "When a guide is built, Gemlyx records what that trip was about: its themes and the ways of travelling it used. Nothing else, and never anything Gemlyx said back to you. One trip is not a preference, so nothing counts until it has happened twice, and what you typed always beats what was noticed. The screen for seeing and clearing this yourself is still being built. Until it is here, write to privacy@gemlyxtravel.com and it will be sent to you or deleted."],
+              ["💡 Suggestions and requests", "If you send a suggestion or a booking request, what you type is stored so it can be read and acted on, and it is used for nothing else. Write to hello@gemlyxtravel.com to have one deleted."],
+              ["🌦 Weather, maps and photographs", "Weather comes from the Norwegian Meteorological Institute, map tiles from OpenStreetMap and its tile providers, and photographs from Wikimedia Commons. As with any website loading content, those services can see your IP address when the data loads. Neither they nor we use it to track you."],
+              ["🇪🇺 Your rights", "Under the GDPR you can ask for a copy of what we hold about you, correct it, delete it, take it elsewhere, restrict it, or object to anything based on our legitimate interests, including the section above. Write to privacy@gemlyxtravel.com and we answer within a month. You can complain to Datatilsynet at datatilsynet.dk. Data controller: Oliver Verhein Hoffmann, Lindholm Brygge 35, 9400 Nørresundby, Denmark."],
             ].map(([h, body]) => (
               <div key={h} style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: C.gold, letterSpacing: 0.5, marginBottom: 5 }}>{h}</div>

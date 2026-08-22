@@ -135,7 +135,7 @@ export default async function handler(req, res) {
       { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, Prefer: "count=exact", Range: "0-0" } }
     );
     if (!countRes.ok) {
-      console.warn(`ask: quota read failed (${countRes.status}). A 404 or PGRST205 means gemlyx_ask_log does not exist. create table gemlyx_ask_log (id bigserial primary key, user_id uuid not null, day date not null, created_at timestamptz default now()); create index on gemlyx_ask_log (user_id, day);`);
+      console.warn(`ask: quota read failed (${countRes.status}). A 404 or PGRST205 means gemlyx_ask_log does not exist. The SQL that creates it correctly, with the columns this file inserts and the cascade the privacy policy relies on, is in SETUP_ASK.md. Do not hand-write it from this message: the schema that used to be quoted here was missing question, place and looked_up.`);
       return json(res, 503, { error: "Could not check your question allowance just now. Try again in a moment." });
     }
     // No header is not zero. It means the answer carried no count, and the only

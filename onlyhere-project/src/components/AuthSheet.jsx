@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 // The questions themselves live in one place, shared with ProfileSheet.
 import { ProfileQuestions } from "./ProfileQuestions";
-import { EMPTY_PROFILE, saveProfile, holdProfile, missingRequired, REQUIRED_LABEL } from "../utils/profile";
+import { EMPTY_PROFILE, saveProfile, holdProfile, missingRequired, REQUIRED_LABEL, underMinimumAge, MIN_ACCOUNT_AGE, TERMS_VERSION } from "../utils/profile";
 import { C } from "../utils/theme";
 import { signInWithPassword, signUpWithPassword, sendPasswordReset, startGoogleSignIn, updatePassword, resendConfirmation } from "../utils/auth";
 import { GOOGLE_SIGN_IN } from "../config";
@@ -227,6 +227,9 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
     setBusy(false);
   };
 
+  // The answers, plus the record of what was agreed to at the instant it was.
+  const acceptedNow = (a) => ({ ...a, termsVersion: TERMS_VERSION, termsAcceptedAt: new Date().toISOString() });
+
   const submit = async () => {
     setShowGaps(true);
     // ── SETTING A NEW ONE NEEDS NO EMAIL ────────────────────────
@@ -268,6 +271,16 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         setError(`Still needed: ${gaps.map(k => REQUIRED_LABEL[k]).join(", ")}.`);
         return;
       }
+      // ── THE AGE THE TERMS PROMISE ─────────────────────────────
+      // terms.html clause 5.1 and privacy.html section 16 both state a minimum
+      // of 15, and until now nothing anywhere checked it. Runs AFTER the gaps
+      // check so an empty date box is reported as missing rather than as an age
+      // failure. See underMinimumAge, which returns false for a date it cannot
+      // read for exactly that reason.
+      if (underMinimumAge(answers.bornDate || answers.bornYear)) {
+        setError(`You have to be at least ${MIN_ACCOUNT_AGE} to make an account.`);
+        return;
+      }
     }
     setBusy(true); setError(null); setNotice(null);
     try {
@@ -278,12 +291,18 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         // The name goes to Supabase as user metadata as well as into the
         // profile row, because the confirmation email template can only read
         // the auth row. See signUpWithPassword.
+        // Clause 3.3 of the terms says the accepted version is recorded
+        // against the Account. Stamped here, at the one moment acceptance
+        // happens, rather than defaulted inside the profile cleaner, because a
+        // default would claim every row had agreed to whatever version happens
+        // to be current when it was next read.
+        const accepted = acceptedNow(answers);
         const { session, needsConfirmation } = await signUpWithPassword(email, password, answers.name);
         // THE ANSWERS ARE ALREADY IN HAND. Whether a session came back decides
         // only WHERE they go: straight to the row, or held on the device until
         // the confirmation link turns into a session. See takeHeldProfile.
-        if (session) await saveProfile(session, answers);
-        else holdProfile(answers);
+        if (session) await saveProfile(session, accepted);
+        else holdProfile(accepted);
         if (needsConfirmation) {
           // A SCREEN, not a sentence wedged into the form they just filled in.
           // See the note on sentTo above.
@@ -500,7 +519,14 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
               setError(`Still needed: ${gaps.map(k => REQUIRED_LABEL[k]).join(", ")}.`);
               return;
             }
-            holdProfile(answers);
+            // The email path has the same two checks in submit(). A gate on one
+            // route only is not a gate, and this is the route that leaves the
+            // site, so a miss here is an underage account made on the way back.
+            if (underMinimumAge(answers.bornDate || answers.bornYear)) {
+              setError(`You have to be at least ${MIN_ACCOUNT_AGE} to make an account.`);
+              return;
+            }
+            holdProfile(acceptedNow(answers));
           }
           startGoogleSignIn();
         }} disabled={busy}
@@ -587,6 +613,24 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
           {busy ? "Working…" : label}
         </button>
 
+        {/* ── ACCEPTANCE, AT THE MOMENT OF ACCEPTANCE ──────────────
+            A line under the button rather than a tick box. For a free account a
+            linked line is the ordinary pattern, and a box would be one more
+            thing to argue with on a form he has already asked to be shorter.
+            Revisit when there is money involved and evidence of acceptance is
+            worth the friction. Which version was agreed to is written to the
+            row by acceptedNow, so the line and the record cannot drift.
+
+            target="_blank" on purpose: these open beside a half filled form.
+            Navigating away from it would lose every answer, which is the same
+            fault the Google button had. */}
+        {mode === "up" && <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.55, marginTop: -2, marginBottom: 12 }}>
+          By creating an account you agree to the{" "}
+          <a href="/terms.html" target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>Terms of Service</a>
+          {" "}and the{" "}
+          <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>Privacy Policy</a>.
+        </div>}
+
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
           {/* Nothing to switch to mid-recovery: they are here holding a token
               that expires, and every other screen throws it away. */}
@@ -606,8 +650,18 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
           that is the paid side, and it is not switched on yet.
         </div>}
 
+        {/* ── THIS LINE HAS TO MOVE WITH THE PRODUCT ───────────────
+            It used to read "We store your email and your saved list. Next you
+            can add a few optional details about yourself", which described the
+            product as it was on 10 August. Since then the details moved into
+            signup, three of them became mandatory, and profileLearning started
+            noticing things nobody typed. A promise that quietly turns out to
+            have been smaller than it sounded is the one failure his own rule
+            for entries forbids, and it applies to his own signup form.
+            Anything added to what an account holds gets added here in the same
+            change, and to public/privacy.html on the same day. */}
         <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 12 }}>
-          We store your email and your saved list. Next you can add a few optional details about yourself, which only ever shape what Gemlyx suggests to you. No tracking, no marketing email, nothing sold. You can delete your account and everything in it from this menu at any time.
+          We store your email, what you fill in here, and your saved list. Gemlyx also notices which kinds of trip you build, so the next guide lands closer. No tracking, no marketing email, nothing sold. You can delete your account and everything in it from this menu at any time, and the <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: C.muted, textDecoration: "underline" }}>Privacy Policy</a> is the long version.
         </div>
         </>)}
       </div>

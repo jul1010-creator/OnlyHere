@@ -115,11 +115,20 @@ export const birthYear = (profile) => {
 //
 // Takes a date OR a year. A bare year has no birthday to check, so it keeps the
 // old calendar-year arithmetic and is honest about being a year.
-export const bandForYear = (yearOrDate, now = new Date()) => {
+// ── ONE AGE CALCULATION, READ TWICE ─────────────────────────────────
+// The band and the minimum age gate must never disagree about how old somebody
+// is, so neither of them does the arithmetic. Both call this. It returns null
+// rather than a number when there is nothing to read, because "we do not know"
+// and "they are 0" are different answers and the gate below has to tell them
+// apart.
+//
+// Takes a full ISO date or a bare year. A bare year has no birthday to check,
+// so it keeps the calendar-year subtraction and is knowingly up to a year out.
+export const ageFrom = (yearOrDate, now = new Date()) => {
   const t = String(yearOrDate ?? "").trim();
   const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
   const y = parseInt(iso ? iso[1] : t, 10);
-  if (!Number.isFinite(y)) return "";
+  if (!Number.isFinite(y)) return null;
   let age = now.getFullYear() - y;
   if (iso) {
     const m = Number(iso[2]), d = Number(iso[3]);
@@ -127,6 +136,29 @@ export const bandForYear = (yearOrDate, now = new Date()) => {
     const beforeBirthday = (now.getMonth() + 1) < m || ((now.getMonth() + 1) === m && now.getDate() < d);
     if (beforeBirthday) age -= 1;
   }
+  return age;
+};
+
+// ── THE AGE THE TERMS PROMISE, ENFORCED ─────────────────────────────
+// public/terms.html clause 5.1 and public/privacy.html section 16 both say an
+// account may not be created by anyone under 15. Nothing checked it, so the
+// promise was decoration. Denmark's own floor for a service like this one is
+// 13; 15 is Gemlyx's stricter line and the number the documents commit to, so
+// the documents are what this reads.
+//
+// FALSE when the date cannot be read, deliberately. Missing is missing, and
+// missingRequired already answers that question. This one answers only "is this
+// person too young", so the two checks cannot fight over one empty box and
+// produce two different errors for it.
+export const MIN_ACCOUNT_AGE = 15;
+export const underMinimumAge = (yearOrDate, now = new Date()) => {
+  const age = ageFrom(yearOrDate, now);
+  return age !== null && age < MIN_ACCOUNT_AGE;
+};
+
+export const bandForYear = (yearOrDate, now = new Date()) => {
+  const age = ageFrom(yearOrDate, now);
+  if (age === null) return "";
   if (age < 25) return "Under 25";
   if (age < 35) return "25-34";
   if (age < 50) return "35-49";
@@ -235,12 +267,20 @@ export const homeCurrency = (code) => {
 
 export const DESCRIPTION_MAX = 600;
 
+// ── WHICH TERMS THEY AGREED TO ──────────────────────────────────────
+// public/terms.html clause 3.3 states that the version accepted at the point of
+// account creation is recorded against the Account. A clause promising a record
+// that does not exist is worse than no clause, so here is the record. Bumped
+// whenever the version number at the head of terms.html moves.
+export const TERMS_VERSION = "2.0";
+
 // KEY ORDER MATTERS HERE, and only because the suite compares this against
 // cleanProfile({}) with JSON.stringify, which is order sensitive. That test is
 // worth keeping exactly as it is: the two literals drifting apart is how a field
 // gets added to one and not the other, which is the bug that made `learned`
-// disappear on every save. So `learned` goes last, where cleanProfile puts it.
-export const EMPTY_PROFILE = { name: "", bornDate: "", bornYear: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: [], transport: [], style: [], learned: {} };
+// disappear on every save. So `learned` goes last, where cleanProfile puts it,
+// and the two terms fields go immediately before it in both.
+export const EMPTY_PROFILE = { name: "", bornDate: "", bornYear: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: [], transport: [], style: [], termsVersion: "", termsAcceptedAt: "", learned: {} };
 
 const str = (v, max = 120) => String(v ?? "").trim().slice(0, max);
 const oneOf = (v, list) => (list.includes(String(v ?? "").trim()) ? String(v).trim() : "");
@@ -251,6 +291,16 @@ const oneOf = (v, list) => (list.includes(String(v ?? "").trim()) ? String(v).tr
 const manyOf = (v, list) => {
   const picked = new Set((Array.isArray(v) ? v : []).map(x => String(x ?? "").trim()));
   return list.filter(o => picked.has(o));
+};
+
+// An ISO 8601 instant or nothing. Date.parse accepts a great deal of loose
+// input, so the shape is checked first: a stored "yes" must not become a
+// timestamp, and a value that cannot be read must not reach a jsonb column as
+// NaN.
+const cleanTimestamp = (v) => {
+  const t = String(v ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(t)) return "";
+  return Number.isFinite(Date.parse(t)) ? t : "";
 };
 
 // Everything is optional, including all of it. A profile that is entirely blank
@@ -313,6 +363,12 @@ export const cleanProfile = (raw) => ({
   interests: manyOf(raw?.interests, INTERESTS),
   transport: manyOf(raw?.transport, TRANSPORT),
   style: manyOf(raw?.style, TRAVEL_STYLE),
+  // Neither of these is an answer to a question. They are the record of an
+  // agreement, kept because clause 3.3 of the terms says it is kept. An
+  // unreadable timestamp becomes "" rather than being passed through, for the
+  // same reason oneOf drops an option nobody was offered.
+  termsVersion: str(raw?.termsVersion, 12),
+  termsAcceptedAt: cleanTimestamp(raw?.termsAcceptedAt),
   // NOT a typed answer, and never merged with one. See cleanLearned above and
   // rule 3 in utils/profileLearning.js: typed beats noticed, always, and they are
   // brought together only at the point of writing a prompt.
@@ -356,7 +412,12 @@ export const isBlank = (p) => {
   // something nobody told us. Left in and it would be worse than wrong: `learned`
   // is an OBJECT, `{} !== ""` is true, and every profile in the app would have
   // reported itself as filled in from the moment the field existed.
-  const { learned: _noticed, ...typed } = c;
+  // ── AND NEITHER IS THE TERMS STAMP ────────────────────────────────
+  // The same trap as `learned`, one field later. Every account carries a terms
+  // version from the moment it is created, so leaving these in would report
+  // every profile in the app as filled in, which is the exact failure the
+  // paragraph above this one was written about.
+  const { learned: _noticed, termsVersion: _tv, termsAcceptedAt: _ta, ...typed } = c;
   return !Object.values(typed).some(v => (Array.isArray(v) ? v.length > 0 : v !== ""));
 };
 

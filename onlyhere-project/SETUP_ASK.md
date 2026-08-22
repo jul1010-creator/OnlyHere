@@ -13,7 +13,13 @@ Run this in Supabase, SQL editor:
 ```sql
 create table if not exists public.gemlyx_ask_log (
   id         bigserial primary key,
-  user_id    uuid not null,
+  -- ON DELETE CASCADE IS NOT DECORATION. public/privacy.html section 11 says a
+  -- traveller's questions are deleted with their account, and section 6 says the
+  -- same. Without this reference, deleting the account leaves every question
+  -- behind under an orphaned uuid, and the promise on that page is false the day
+  -- somebody first exercises it. Add it now: the table does not exist yet, so it
+  -- costs nothing, and after the first row it is a migration.
+  user_id    uuid not null references auth.users (id) on delete cascade,
   day        date not null,
   question   text not null,
   place      text,
@@ -31,6 +37,20 @@ create index if not exists gemlyx_ask_log_user_day on public.gemlyx_ask_log (use
 -- unlimited allowance. Only the service role reaches this table, and the service
 -- role bypasses RLS, so /api/ask keeps working while the browser cannot touch it.
 alter table public.gemlyx_ask_log enable row level security;
+```
+
+### Retention
+
+Nothing above expires a row on its own. Questions go when the account goes, by
+the cascade, and that is what the privacy policy currently promises and all it
+promises. If you would rather they aged out on their own as well, this is the
+job to schedule, and the policy has to say the number before it runs:
+
+```sql
+-- Optional. Pick a number, put the same number in public/privacy.html section 11,
+-- then schedule it with pg_cron. A retention promise nobody enforces is worse
+-- than no promise at all.
+delete from public.gemlyx_ask_log where created_at < now() - interval '90 days';
 ```
 
 ## 2. One environment variable, in Vercel
