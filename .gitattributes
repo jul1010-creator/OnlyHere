@@ -1,2 +1,11 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# ── SHELL SCRIPTS STAY LF, INCLUDING ON WINDOWS ─────────────────────
+# `* text=auto` above converts to CRLF on checkout on Windows, which is right
+# for source and wrong for anything with a shebang. A hook checked out with
+# CRLF fails on its first line with "/bin/sh^M: bad interpreter", and it fails
+# that way on a fresh clone rather than on the machine that wrote it, so it
+# looks like the hook was never installed.
+*.sh text eol=lf
+.githooks/** text eol=lf
