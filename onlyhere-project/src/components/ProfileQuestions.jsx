@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
-import { BORN_YEARS, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, DESCRIPTION_MAX, REQUIRED_PROFILE } from "../utils/profile";
+import { BORN_DATE_MIN, BORN_DATE_MAX, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, DESCRIPTION_MAX, REQUIRED_PROFILE } from "../utils/profile";
 
 // ── THE QUESTIONS, IN ONE PLACE ──────────────────────────────────────
 //
@@ -129,14 +129,29 @@ export const ProfileQuestions = ({ value, onChange, required = false, showGaps =
           "No reason to explain why we need country and gender and what not.
           It's default to always write that on a sign up page." Every note under
           every field is gone; a label and a control is what a signup form is. */}
-      <div style={legend}>Name{star("name")}</div>
-      <input value={p.name} onChange={e => set("name", e.target.value.slice(0, 60))} placeholder="Or a nickname"
+      {/* ── ONE LABEL, BOTH WORDS ─────────────────────────────────
+          Oliver, 22 Aug 2026: "remove the 'or nickname'. What I meant was that
+          you could either write 'name' or 'nickname'." The first version put
+          "Name" on the label and "Or a nickname" in the box as a placeholder,
+          which reads as an instruction to choose the second one. The label says
+          what the field accepts, and the box says nothing, which is his own rule
+          about forms: a label and a control, and no notes. */}
+      <div style={legend}>Name or nickname{star("name")}</div>
+      <input value={p.name} onChange={e => set("name", e.target.value.slice(0, 60))}
         autoComplete="given-name" style={{ ...field, marginBottom: 18, ...ring("name") }} />
 
       <div style={trio}>
         <div>
-          <div style={legend}>Year of birth{star("bornYear")}</div>
-          {select("bornYear", BORN_YEARS, "Select")}
+          {/* ── ONE CONTROL, NOT THREE ────────────────────────────
+              "year of birth should obviously include month and day as well."
+              A native date input rather than three dropdowns, because three
+              dropdowns can hold 31 February and this cell has to stay one of
+              three on a line. min and max stop the calendar being a way to
+              claim 1823 or next week. */}
+          <div style={legend}>Date of birth{star("bornDate")}</div>
+          <input type="date" value={p.bornDate || ""} min={BORN_DATE_MIN} max={BORN_DATE_MAX}
+            onChange={e => set("bornDate", e.target.value)}
+            style={{ ...field, cursor: "pointer", ...ring("bornDate") }} />
         </div>
         <div>
           <div style={legend}>Gender{star("sex")}</div>

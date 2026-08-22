@@ -87,8 +87,17 @@ export default async function handler(req, res) {
   //
   // Deliberately inlined rather than imported from src/: api/ deploys as
   // separate serverless functions and does not share the client bundle.
+  // ── AND THE ORDERING BUG WAS STILL IN HERE ────────────────────────
+  // readerLanguage.js found and fixed this on 17 August, for the chat only: the
+  // block opened with "ANSWER IN DANISH." in capitals and put "match the
+  // language they used" in a trailing clause, so the browser setting won a
+  // fight it was never meant to be in. A Danish phone typing English got Danish
+  // back. That is half of Denmark's phones. The identical arrangement survived
+  // here because this string is deliberately a separate copy, which is the cost
+  // of not being able to import from src/. Reordered to match: the typed
+  // language leads, in capitals, and the tag is named as the hint it is.
   const answerIn = (!lang?.name || /^en/i.test(String(lang.tag || ""))) ? "" :
-    `\n\nANSWER IN ${String(lang.name).toUpperCase()}. Write your reply in ${lang.name}. If the question is written in a different language, match the language the question used instead.\nNEVER TRANSLATE A NAME. Place names, station and stop names, street names, ferry routes and the names of festivals and venues stay exactly as the entry writes them, because the traveller has to match them against a sign or a departure board that will not be translated. Prices stay in DKK with the figure unchanged.`;
+    `\n\nMATCH THE LANGUAGE OF THE QUESTION. Read the question below and reply in the language it was written in. That rule outranks everything else in this paragraph. Their browser is set to ${lang.tag}, which suggests ${lang.name}: that is a hint about a device, not a statement about the person, so use it only when the question itself gives you nothing to go on.\nNEVER TRANSLATE A NAME. Place names, station and stop names, street names, ferry routes and the names of festivals and venues stay exactly as the entry writes them, because the traveller has to match them against a sign or a departure board that will not be translated. Prices stay in DKK with the figure unchanged.`;
   const q = String(question || "").trim().slice(0, MAX_QUESTION);
   if (!q) return json(res, 400, { error: "Ask me something first." });
 
@@ -227,6 +236,7 @@ Answer ONLY from the material below. Never add a Danish fact it does not contain
 ANSWER THE QUESTION, DO NOT RECITE THE PAGE. They are looking at this entry while they type, so quoting a paragraph of it back is worth nothing to them. Give the part that answers what they asked, in a sentence or two.
 
 IF THE MATERIAL DOES NOT CONTAIN THE ANSWER, reply with exactly ${NOT_IN_ENTRY} and one short sentence naming what is missing, and nothing else. Something else will go and look it up. Answering from memory instead is the one mistake that matters here.
+${NOT_IN_ENTRY} IS A CODE, NOT A PHRASE. It is read by a machine and it must come back byte for byte, in capitals, as the very first thing in your reply, whatever language the rest of the sentence is in. Do not translate it, do not put a word in front of it, do not wrap it in quotes or bold. The sentence AFTER it is prose and follows the language rule below like everything else.
 
 Be short and plain. No preamble. Never use an em dash or an en dash.${answerIn}
 
@@ -243,7 +253,20 @@ ${q}`,
     let lookedUp = false;
 
     // 2. ONLY IF IT GENUINELY IS NOT THERE.
-    if (first.startsWith(NOT_IN_ENTRY)) {
+    // ── AND THE CHECK STOPPED BEING BYTE EXACT ──────────────────────
+    // startsWith is the strictest possible reading of a token produced by a
+    // model, and it silently fails open: a stray quote, a bold marker or a
+    // leading word means the branch never fires, the lookup never happens, and
+    // the reader gets "the entry does not say" with no attempt made and nothing
+    // in any log saying why. Under a capitalised instruction to answer in
+    // another language the risk was worse, because a model asked to write
+    // Danish will translate a bare English token given half a chance.
+    //
+    // Still anchored at the START, so a normal answer that merely mentions the
+    // words cannot trigger a needless Perplexity call. Only the wrapping is
+    // forgiven, never the position.
+    const saysNotHere = new RegExp(`^[\\s"'*_\\[(]{0,4}${NOT_IN_ENTRY}\\b`, "i").test(first);
+    if (saysNotHere) {
       const PPLX = process.env.PERPLEXITY_API_KEY;
       if (!PPLX) {
         answer = `The entry does not say, and I cannot look it up right now.`;

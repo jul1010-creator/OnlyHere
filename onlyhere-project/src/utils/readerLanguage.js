@@ -142,3 +142,43 @@ And hedging words do not survive translation. An English "roughly", "a bit", "so
 // One call, for a prompt builder that has a language and wants the block or
 // nothing. Keeps every call site from repeating the same empty check.
 export const languageBlock = (nav) => answerInLanguage(readerLanguage(nav));
+
+// ── AND THE GUIDE ITSELF, WHICH WAS NEVER TRANSLATED AT ALL ─────────
+//
+// Oliver, 22 Aug 2026: "just get the language working for now."
+//
+// This file has carried the admission since 17 August, in its own words: "the
+// app built him an English guide, because this block is attached to one prompt
+// and the guide is not translated at all." Traced on 22 August, the whole repo
+// had exactly TWO call sites, the Detour chat and Ask Gemlyx. The guide build,
+// the enrichment pass that writes the legs and the accommodation sentence, the
+// rewrite passes and the saved-guide assistant had nothing at all. So a Danish
+// traveller had a Danish conversation and was handed an English document.
+//
+// ── WHY THIS IS A SEPARATE BLOCK AND NOT answerInLanguage ───────────
+//
+// The chat block is written for a REPLY: "read their most recent message and
+// reply in the language THEY wrote it in". A guide is not a reply. There is no
+// most recent message at the moment it is written, there is a whole conversation
+// behind it, and the output is a JSON document rather than a sentence.
+//
+// That last part is the one that would break something rather than merely read
+// badly. The guide is parsed by code: `days`, `stops`, `arrivalTime`,
+// `suggestedStay`, `essentials`, `budgetReality`. A model told in capitals to
+// write in Danish will cheerfully return "dage" and "stop", and the parse then
+// finds no days and the build fails with "empty". Structure and prose have to be
+// separated in the instruction, loudly, or this makes the product worse in a new
+// language rather than better.
+export const writeInLanguage = (lang) => {
+  if (!lang?.name) return "";
+  return `
+LANGUAGE OF THIS GUIDE. Write every piece of PROSE in the language the traveller used in the conversation below. That is the rule, and it outranks everything else in this paragraph. Their browser is set to ${lang.tag}, which suggests ${lang.name}: treat that as a hint and nothing more, because it says where a device is configured and not which language the person chose to type in. If they wrote to you in English, the guide is in English. If the only thing they ever sent was a form of ticked options with no sentence of their own, use ${lang.name}.
+THE JSON KEYS AND THE STRUCTURE STAY IN ENGLISH, ALWAYS, WITHOUT EXCEPTION. Every field name in the shape above is read by code: title, essentials, budgetReality, transportTip, keepInMind, days, day, title, stops, name, town, arrivalTime, suggestedStay, note. Translating one of them does not make the guide friendlier, it makes the guide fail to load. The same goes for the format of a value the code parses rather than displays: arrivalTime stays as a clock time like "9:00", and the day numbers stay as numbers.
+NEVER TRANSLATE A NAME. Place names, town names, station and stop names, street names, ferry routes, and the names of festivals, museums and venues stay exactly as they are written in Danish or English, because the traveller has to match them against a road sign, a departure board or a ticket machine that will not be translated. "Nørreport Station" is never "Nordtor Station". The "town" field in particular is used to look the place up, so it must stay in its real spelling whatever language the note around it is in.
+PRICES STAY IN DKK with the figure unchanged. Write the sentence around the number in ${lang.name}; do not convert the number.
+WRITE ${lang.name.toUpperCase()}, DO NOT TRANSLATE ENGLISH. Everything you have been given above is written in English because that is the language these instructions happen to be in. It says WHAT to write, not how to word it. A sentence rendered word for word out of English is grammatical and reads like nothing a native speaker would ever write. Compose in ${lang.name} from scratch, in the register a well-travelled friend from that country would use.
+The banned filler above is banned in every language, not only in English. "Charming", "vibrant", "nestled" and the rest have direct equivalents in ${lang.name} and reaching for those is the same fault, not a way around the rule.`;
+};
+
+// Same convenience wrapper, for the guide side.
+export const guideLanguageBlock = (nav) => writeInLanguage(readerLanguage(nav));

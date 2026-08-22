@@ -30,10 +30,26 @@ export const AGE_BANDS = ["Under 25", "25-34", "35-49", "50-64", "65+"];
 // ── AND HE ASKED FOR "BORN" ─────────────────────────────────────────
 //
 // Oliver's account spec, restated 21 Aug 2026 after testing: "Name: / Born: /
-// Gender:". A YEAR rather than a date, which satisfies the label literally and
-// keeps the reasoning above intact: what changes a recommendation is roughly how
-// old somebody is, and a full date of birth is a much stronger identifier that
-// buys nothing extra and has to be protected once it is held.
+// Gender:". Read as a YEAR rather than a date, which satisfied the label
+// literally and kept the reasoning above intact: what changes a recommendation
+// is roughly how old somebody is, and a full date of birth is a much stronger
+// identifier that buys nothing extra and has to be protected once it is held.
+//
+// ── REVERSED BY HIM, 22 AUG 2026 ────────────────────────────────────
+//
+// "year of birth should obviously include month and day as well." So the field
+// is a full date now, and the reasoning above is left standing rather than
+// deleted, because it is the argument against and he should not have to
+// rediscover it if he ever wants the year back. In short: a date of birth is
+// one of the classic pieces of a stolen identity, it is the field that turns a
+// leak of this table from embarrassing into serious, and nothing in the app
+// reads anything from it except the year. Going back is deleting one column and
+// one control, since bornYear was never removed and birthYear below already
+// reads whichever a row carries.
+//
+// The privacy copy in the sheet still says the account holds "your email and
+// your saved list" plus optional details, which is now less than the truth.
+// Flagged rather than quietly reworded: it is his sentence.
 //
 // A hundred and ten years back from a fixed anchor rather than from today,
 // because a list that silently changes length with the calendar is a moving
@@ -41,6 +57,45 @@ export const AGE_BANDS = ["Under 25", "25-34", "35-49", "50-64", "65+"];
 // Bump BORN_LATEST when it starts to look mean.
 const BORN_LATEST = 2016;
 export const BORN_YEARS = Array.from({ length: 96 }, (_, i) => String(BORN_LATEST - i));
+const BORN_EARLIEST = BORN_LATEST - 95;
+
+// ── AND THE DAY AND MONTH, NOT ONLY THE YEAR ─────────────────────────
+//
+// Oliver, 22 Aug 2026: "year of birth should obviously include month and day as
+// well."
+//
+// Stored as one ISO string rather than three fields, because a day, a month and
+// a year that can disagree with each other is three chances to hold 31 February
+// and nowhere that owns the answer.
+//
+// bornYear STAYS in the shape and is not migrated. Every row filled in before
+// today has a year and no date, exactly as ageBand rows kept working when the
+// year field arrived, and for the same reason: a stored answer somebody actually
+// gave is not thrown away to tidy up a schema. birthYear below reads whichever
+// is there, so nothing downstream needs to know which kind of row it has.
+export const BORN_DATE_MIN = `${BORN_EARLIEST}-01-01`;
+export const BORN_DATE_MAX = `${BORN_LATEST}-12-31`;
+
+// A date is only a date if the calendar agrees. new Date("2025-02-31") does not
+// throw, it rolls over to 3 March, so the round trip back to a string is the
+// check: a value that comes back different was never a real day.
+export const cleanBornDate = (raw) => {
+  const t = String(raw ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return "";
+  const d = new Date(`${t}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== t) return "";
+  if (t < BORN_DATE_MIN || t > BORN_DATE_MAX) return "";
+  return t;
+};
+
+// The year, from whichever of the two a row happens to carry. One place derives
+// it, so a row filled in last week and a row filled in today answer the same
+// question the same way.
+export const birthYear = (profile) => {
+  const fromDate = cleanBornDate(profile?.bornDate).slice(0, 4);
+  if (fromDate) return fromDate;
+  return oneOf(String(profile?.bornYear ?? ""), BORN_YEARS);
+};
 
 // The band a stored year falls into, so everything that already reasons in bands
 // keeps working and nothing has to know which of the two a row was filled in
@@ -158,7 +213,7 @@ export const homeCurrency = (code) => {
 
 export const DESCRIPTION_MAX = 600;
 
-export const EMPTY_PROFILE = { name: "", bornYear: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: [], transport: [], style: [] };
+export const EMPTY_PROFILE = { name: "", bornDate: "", bornYear: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: [], transport: [], style: [] };
 
 const str = (v, max = 120) => String(v ?? "").trim().slice(0, max);
 const oneOf = (v, list) => (list.includes(String(v ?? "").trim()) ? String(v).trim() : "");
@@ -176,6 +231,7 @@ const manyOf = (v, list) => {
 // empty strings that later reads as "they filled this in and said nothing".
 export const cleanProfile = (raw) => ({
   name: str(raw?.name, 60),
+  bornDate: cleanBornDate(raw?.bornDate),
   bornYear: oneOf(String(raw?.bornYear ?? ""), BORN_YEARS),
   country: oneOf(String(raw?.country ?? "").toUpperCase(), COUNTRY_CODES),
   // The band a row was filled in with BEFORE the year field existed. Kept, not
@@ -205,14 +261,17 @@ export const cleanProfile = (raw) => ({
 // The free text and the country stay optional: the country he added later and
 // only for the currency line, and "More about yourself" is the field nobody can
 // be made to fill in usefully.
-export const REQUIRED_PROFILE = ["name", "bornYear", "sex"];
-export const REQUIRED_LABEL = { name: "Name", bornYear: "Year of birth", sex: "Gender" };
+export const REQUIRED_PROFILE = ["name", "bornDate", "sex"];
+export const REQUIRED_LABEL = { name: "Name or nickname", bornDate: "Date of birth", sex: "Gender" };
 
 // The required fields still empty, in the order they are asked, so a form can
 // name the first one rather than saying "something is missing".
 export const missingRequired = (p) => {
   const c = cleanProfile(p);
-  return REQUIRED_PROFILE.filter(k => !String(c[k] ?? "").trim());
+  // bornDate is satisfied by a bornYear on any row filled in before the date
+  // field existed. Marking those people incomplete would be asking them to
+  // answer again because the form changed, which is not a gap in their profile.
+  return REQUIRED_PROFILE.filter(k => (k === "bornDate" ? !birthYear(c) : !String(c[k] ?? "").trim()));
 };
 
 export const isBlank = (p) => {
@@ -239,7 +298,7 @@ export const profileForPrompt = (p) => {
   // Named, never converted. What this changes is how expensive things are
   // allowed to sound, not what any figure says.
   if (c.country) bits.push(`They are travelling from ${countryNamed(c.country).name}. Prices stay in DKK whatever this says: never convert a figure, and never add an approximate one in brackets.`);
-  const band = bandForYear(c.bornYear) || c.ageBand;
+  const band = bandForYear(birthYear(c)) || c.ageBand;
   if (band) bits.push(`Age band: ${band}.`);
   if (c.sex && c.sex !== "Prefer not to say") bits.push(`Sex: ${c.sex}.`);
   if (c.company) bits.push(`Usually travels: ${c.company.toLowerCase()}.`);

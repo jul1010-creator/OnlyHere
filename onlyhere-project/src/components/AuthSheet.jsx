@@ -70,6 +70,14 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   // while somebody new is here BECAUSE they were just told they need an
   // account, so the one extra tap lands on the person who already expects one.
   const [mode, setMode] = useState(initialMode || "in");   // "up" | "in" | "reset" | "newpass"
+  // The other deliberate way out, since the backdrop is no longer one. Bound
+  // only while the sheet is open, so it cannot swallow Escape from anything else.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -228,7 +236,22 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   };
 
   return (
-    <div onClick={onClose} style={overlay}>
+    // ── CLICKING BESIDE THE SHEET USED TO THROW THE FORM AWAY ────────
+    //
+    // Oliver, 22 Aug 2026: "when you accidently click off the 'sign up' or
+    // 'login' page. You fly out of it, instead of clicking the cross button.
+    // That is quite annoying when you're trying to create an account."
+    //
+    // Tap-outside-to-dismiss is right for a sheet you are READING and wrong for
+    // one you are FILLING IN. The signup form is a name, a year, a gender, an
+    // email and two passwords, and the miss target is the whole page: every
+    // pixel outside a 430px card, including the strip beside a field you were
+    // aiming at. One slip and all of it is gone, with no undo and no warning.
+    //
+    // So the backdrop no longer closes it. The cross does, and Escape does,
+    // which are both deliberate acts. Nothing here is destructive enough to need
+    // a confirm on the way out; it just needs to not happen by accident.
+    <div style={overlay}>
       <div onClick={e => e.stopPropagation()} style={card}>
         {/* A plain dismiss, not a form control. The old "Close" pill was the
             same weight as the buttons that do something. */}

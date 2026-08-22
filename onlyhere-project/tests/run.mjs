@@ -91,7 +91,7 @@ writeFileSync(entry, `
   export { directionsEndpoint, collapsedRoute } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { upgradeWorthIt, onFootMinutes, MIN_UPGRADE_SAVING, COLLAPSE_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
-  export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, missingRequired, REQUIRED_PROFILE, REQUIRED_LABEL, AGE_BANDS, BORN_YEARS, bandForYear, holdProfile, takeHeldProfile, PENDING_PROFILE_KEY, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
+  export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, missingRequired, cleanBornDate, birthYear, BORN_DATE_MIN, BORN_DATE_MAX, REQUIRED_PROFILE, REQUIRED_LABEL, AGE_BANDS, BORN_YEARS, bandForYear, holdProfile, takeHeldProfile, PENDING_PROFILE_KEY, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
   export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
@@ -103,6 +103,7 @@ writeFileSync(entry, `
   export { instagramTarget, isEmbeddablePost } from ${JSON.stringify(join(root, "src/components/InstagramEmbed.jsx"))};
   export { isOwnRoute, RETURN_PARAM, captureRedirectSession, startGoogleSignIn } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
   export { GOOGLE_SIGN_IN } from ${JSON.stringify(join(root, "src/config.js"))};
+  export { writeInLanguage, guideLanguageBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, briefBlock, MAX_ASKS_AT_ONCE } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { GREETING, openingThread, withTestBrief, withoutTestBrief, threadIsSound, TEST_BRIEF } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { CHAT_REPORT_KIND, CHAT_REPORT_VERSION, buildChatReport, chatReportFilename, turnReport, briefTimeline, intakeReport } from ${JSON.stringify(join(root, "src/utils/chatReport.js"))};
@@ -21786,6 +21787,101 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   }
 }
 
+// ── THE GUIDE WAS NEVER TRANSLATED ─────────────────────────────────
+//
+// Oliver, 22 Aug 2026: "just get the language working for now." His father used
+// the chat in Danish and got poor Danish, and then an English guide.
+//
+// readerLanguage.js has carried the admission since 17 August in its own words:
+// "the app built him an English guide, because this block is attached to one
+// prompt and the guide is not translated at all." Traced 22 August: the whole
+// repo had exactly TWO call sites. The guide build, its day-count retry, the
+// enrichment pass that writes the legs and the accommodation sentence, and the
+// saved-guide assistant all had nothing.
+{
+  const { writeInLanguage } = M;
+  const appL = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const da = writeInLanguage({ tag: "da-DK", name: "Danish" });
+
+  // ── THE PART THAT WOULD BREAK RATHER THAN READ BADLY ─────────────
+  // The guide is JSON that code parses. A model told in capitals to write Danish
+  // will happily return "dage" for "days", and the parse then finds none and the
+  // build throws "empty". Structure and prose have to be separated in the
+  // instruction, loudly, or this makes the product worse in a new language.
+  ok("the keys are protected in capitals", /THE JSON KEYS AND THE STRUCTURE STAY IN ENGLISH, ALWAYS, WITHOUT EXCEPTION/.test(da));
+  // Named one by one rather than described, because "the field names" is exactly
+  // the kind of instruction a model satisfies loosely.
+  for (const k of ["title", "essentials", "budgetReality", "transportTip", "keepInMind", "days", "stops", "arrivalTime", "suggestedStay", "note", "town"])
+    ok(`${k} is named as a key that stays English`, da.includes(k));
+  // A value the code reads is structure too, not prose.
+  ok("and a parsed value keeps its format", /arrivalTime stays as a clock time/.test(da));
+
+  // The rule that makes a translated guide usable rather than dangerous.
+  ok("names are never translated", /NEVER TRANSLATE A NAME/.test(da));
+  ok("with the reason, not just the rule", /road sign, a departure board or a ticket machine/.test(da));
+  ok("the town field especially, since it is looked up", /"town" field in particular is used to look the place up/.test(da));
+  ok("prices stay in kroner", /PRICES STAY IN DKK/.test(da));
+  // THE ORDERING. A browser tag says where a device is configured, not which
+  // language the person chose to type in. This is the 17 Aug bug and the block
+  // must not reintroduce it.
+  // BOTH PRESENT, THEN ORDERED. indexOf returns -1 for a missing string and -1
+  // is less than everything, so an ordering assertion on its own passes loudest
+  // when the leading sentence has been deleted entirely. Caught by mutation.
+  {
+    const lead = da.indexOf("Write every piece of PROSE in the language the traveller used");
+    const hint = da.indexOf("Their browser is set to");
+    ok("the leading rule is there at all", lead >= 0);
+    ok("so is the hint", hint >= 0);
+    ok("and the typed language leads", lead < hint);
+  }
+  ok("and the tag is named as a hint", /treat that as a hint and nothing more/.test(da));
+  // Not a phrasebook: the English instructions say WHAT, not HOW to word it.
+  ok("it forbids translating the instructions themselves", /WRITE DANISH, DO NOT TRANSLATE ENGLISH/.test(da));
+  is("English gets no block at all", writeInLanguage(null), "");
+  is("nor does an unrecognised tag", writeInLanguage({ tag: "qq", name: "" }), "");
+
+  // ── AND IT HAS TO REACH ALL FOUR PLACES THAT WRITE READER PROSE ──
+  is("the guide build and its retry both get it", (appL.match(/\$\{guideLanguageBlock\(\)\}/g) || []).length, 3);
+  // The enrichment call is the one that writes "Where to stay" and every leg,
+  // which are two of the most-read lines on the page, and it has its own prompt
+  // that never sees the writer's.
+  ok("including the enrichment pass",
+     /EVERY PRICE YOU WRITE IS IN DKK[\s\S]{0,400}\$\{guideLanguageBlock\(\)\}/.test(appL));
+  ok("and the saved-guide assistant", /Respond to the traveler's last message\.\$\{languageBlock\(\)\}/.test(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8")));
+
+  // ── THE TWO DEFECTS INSIDE THE ONE ROUTE THAT DID HANDLE IT ──────
+  const ask = readFileSync(join(root, "api/ask.js"), "utf8");
+  // ONE: the 17 Aug ordering bug survived here, because this string is a
+  // deliberate separate copy (api/ cannot import from src/). A Danish phone
+  // typing English got Danish back, which is half of Denmark's phones.
+  ok("Ask Gemlyx leads with the question's own language", /MATCH THE LANGUAGE OF THE QUESTION\. Read the question below/.test(ask));
+  ok("and no longer shouts the browser tag", !/ANSWER IN \$\{String\(lang\.name\)\.toUpperCase\(\)\}/.test(stripNonCode(ask)));
+  ok("the tag is demoted to a hint", /a hint about a device, not a statement about the person/.test(ask));
+  // TWO: the sentinel gates the entire web-lookup path and was matched with
+  // startsWith, which fails OPEN. A stray quote, a bold marker, or a model
+  // translating a bare English token means the branch never fires, no lookup
+  // happens, and the reader is told the entry does not say with nothing tried.
+  ok("the code word is described as one", /IS A CODE, NOT A PHRASE/.test(ask));
+  ok("and the check forgives wrapping", /const saysNotHere = new RegExp\(/.test(ask));
+  ok("the brittle byte-exact check is gone", !/if \(first\.startsWith\(NOT_IN_ENTRY\)\)/.test(stripNonCode(ask)));
+  {
+    // Run the real regex, since a regex that looks right and matches nothing is
+    // the failure mode this replaces.
+    const TOKEN = "NOT_IN_ENTRY";
+    const re = new RegExp(`^[\\s"'*_\\[(]{0,4}${TOKEN}\\b`, "i");
+    for (const [text, want] of [
+      ["NOT_IN_ENTRY the hours are missing", true],
+      ["**NOT_IN_ENTRY** the hours are missing", true],
+      ['"NOT_IN_ENTRY" the hours are missing', true],
+      ["  NOT_IN_ENTRY hours missing", true],
+      // ANCHORED AT THE START still, so a normal answer that happens to mention
+      // the words cannot trigger a needless Perplexity call.
+      ["The entry mentions NOT_IN_ENTRY further down", false],
+      ["Ja, den åbner klokken 10.", false],
+    ]) is(`sentinel: ${text.slice(0, 34)}`, re.test(text), want);
+  }
+}
+
 // ── SIGNING IN WITH GOOGLE, WHICH DID NOT WORK ─────────────────────
 //
 // Oliver, 21 Aug 2026: "let's fix the login auth now."
@@ -21984,6 +22080,29 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // screen they followed the link to reach off the screen entirely.
     ok("and the sheet is allowed to open while signed in", /open=\{\(authOpen && !userSession\) \|\| !!recoverySession\}/.test(appR));
     ok("closing it clears the recovery too", /setAuthOpen\(false\); setAuthReason\(null\); setRecoverySession\(null\);/.test(appR));
+  }
+
+  // ── CLICKING BESIDE THE SHEET USED TO THROW THE FORM AWAY ────────
+  //
+  // Oliver, 22 Aug 2026: "when you accidently click off the 'sign up' or 'login'
+  // page. You fly out of it, instead of clicking the cross button. That is quite
+  // annoying when you're trying to create an account."
+  //
+  // Tap-outside-to-dismiss is right for a sheet you are READING and wrong for
+  // one you are FILLING IN. The miss target was every pixel outside a 430px
+  // card, and one slip took a name, a date, a gender, an email and two
+  // passwords with no undo and no warning.
+  {
+    const sheetB = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
+    ok("the backdrop no longer closes the form", /\n    <div style=\{overlay\}>/.test(sheetB));
+    ok("and the old handler is gone", !/<div onClick=\{onClose\} style=\{overlay\}>/.test(stripNonCode(sheetB)));
+    // The cross still does, or there is no way out at all.
+    ok("the cross still closes it", /<button onClick=\{onClose\} aria-label="Close"/.test(sheetB));
+    // And so does Escape, which is the other deliberate act. Bound only while
+    // open, so it cannot swallow Escape from anything else on the page.
+    ok("so does Escape", /if \(e\.key === "Escape"\) onClose\(\);/.test(sheetB));
+    ok("only while the sheet is open", /if \(!open\) return;\s*const onKey/.test(sheetB));
+    ok("and the listener is removed again", /return \(\) => window\.removeEventListener\("keydown", onKey\);/.test(sheetB));
   }
 
   // ── GOOGLE, SWITCHED OFF UNTIL THE POLICIES EXIST ────────────────
@@ -28045,13 +28164,21 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // that buys nothing extra. Left as a band pending his call, not silently
   // upgraded.
   ok("age is still a band", /export const AGE_BANDS/.test(prof));
-  // A FIELD, not the word: the file argues against a birthdate in prose, so
-  // matching the bare word here would fail on the very comment that explains
-  // why there is none.
-  ok("and no birthdate field was added",
-     !/(birthdate|dateOfBirth|dob|born)\s*:/i.test(prof.replace(/\/\/.*$/gm, "")));
+  // ── AND A BIRTHDATE WAS ADDED, ON 22 AUG, HIS CALL ──────────────
+  // This block used to assert the opposite, on the 10 Aug reasoning that a date
+  // of birth is a much stronger identifier buying nothing extra. He overrode it:
+  // "year of birth should obviously include month and day as well." The old
+  // assertion is replaced rather than kept, because a test defending a reversed
+  // decision is how a reversal gets quietly undone. The ARGUMENT is kept, in
+  // prose, at the top of profile.js, so going back is a decision rather than an
+  // archaeology exercise.
+  ok("the birthdate field exists", /bornDate: cleanBornDate\(raw\?\.bornDate\),/.test(prof));
+  // The old field is NOT removed. Every row filled in before today has a year
+  // and no date, exactly as ageBand rows survived the year arriving.
+  ok("and the old year field is still carried", /bornYear: oneOf\(String\(raw\?\.bornYear \?\? ""\), BORN_YEARS\),/.test(prof));
+  ok("with one place deriving the year from either", /export const birthYear = \(profile\) => \{/.test(prof));
   ok("the stored shape is the one the form fills",
-     /EMPTY_PROFILE = \{ name: "", bornYear: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: \[\], transport: \[\], style: \[\] \}/.test(prof));
+     /EMPTY_PROFILE = \{ name: "", bornDate: "", bornYear: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: \[\], transport: \[\], style: \[\] \}/.test(prof));
 }
 
 // ── 21 AUGUST 2026: "IT CANNOT MAKE A BUILD WITHOUT DATES" ──────────
@@ -28506,14 +28633,23 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the form owns no save path", !/saveProfile/.test(quest));
 
   // ── HIS FIELDS, IN HIS WORDS ────────────────────────────────────
-  ok("Name", /<div style=\{legend\}>Name\{star\("name"\)\}/.test(quest));
-  ok("Born", /<div style=\{legend\}>Year of birth\{star\("bornYear"\)\}/.test(quest));
+  // "remove the 'or nickname'. What I meant was that you could either write
+  // 'name' or 'nickname'." It was a label saying Name over a box whose
+  // placeholder said "Or a nickname", which reads as being told to pick the
+  // second one. The label carries both words and the box says nothing.
+  ok("Name", /<div style=\{legend\}>Name or nickname\{star\("name"\)\}/.test(quest));
+  // Stripped, because the comment above the field quotes the placeholder it
+  // removed, which is the trap this suite has walked into twice already.
+  ok("and the placeholder that confused it is gone", !/Or a nickname/.test(stripNonCode(quest)));
+  ok("Born", /<div style=\{legend\}>Date of birth\{star\("bornDate"\)\}/.test(quest));
   ok("Gender", /<div style=\{legend\}>Gender\{star\("sex"\)\}/.test(quest));
   // ── THREE ON ONE LINE, ALL DROPDOWNS ────────────────────────────
   // "make gender, year of birth, and country of origin on one line. Make them
   // all a drop down. This will make page much smaller."
   ok("they share one row", /const trio = \{ display: "grid", gridTemplateColumns: "repeat\(auto-fit/.test(quest));
-  ok("year of birth is a dropdown", /\{select\("bornYear", BORN_YEARS, "Select"\)\}/.test(quest));
+  // Still one cell of the three, which is what the row was for, even though it
+  // is a date input rather than a dropdown now.
+  ok("date of birth is one control", /<input type="date" value=\{p\.bornDate/.test(quest));
   ok("gender is a dropdown, not chips", /\{select\("sex", SEX_OPTIONS, "Select"\)\}/.test(quest)
      && !/group\("Gender"/.test(quest));
   ok("and country is one too", /COUNTRIES\.map\(c => <option/.test(quest));
@@ -28526,18 +28662,20 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // has written down: an assertion that reads code can survive the rule being
   // switched off. Mutation-checked.
   const { missingRequired, REQUIRED_PROFILE, REQUIRED_LABEL, EMPTY_PROFILE: BLANK } = M;
+  // bornYear became bornDate on 22 Aug, his call. A row carrying only the old
+  // field still counts as answered, which is asserted at the date block below.
   is("the required ones are the three he did not call optional",
-     REQUIRED_PROFILE.join(","), "name,bornYear,sex");
-  is("an empty form is missing all three", missingRequired(BLANK).join(","), "name,bornYear,sex");
+     REQUIRED_PROFILE.join(","), "name,bornDate,sex");
+  is("an empty form is missing all three", missingRequired(BLANK).join(","), "name,bornDate,sex");
   is("filling one leaves the other two",
-     missingRequired({ ...BLANK, name: "Oliver" }).join(","), "bornYear,sex");
+     missingRequired({ ...BLANK, name: "Oliver" }).join(","), "bornDate,sex");
   is("all three answered leaves nothing",
-     missingRequired({ ...BLANK, name: "Oliver", bornYear: "1998", sex: "Man" }).length, 0);
+     missingRequired({ ...BLANK, name: "Oliver", bornDate: "1998-03-14", sex: "Man" }).length, 0);
   // Whitespace is not an answer.
-  is("a name of spaces is still missing", missingRequired({ ...BLANK, name: "   " }).join(","), "name,bornYear,sex");
+  is("a name of spaces is still missing", missingRequired({ ...BLANK, name: "   " }).join(","), "name,bornDate,sex");
   // The OPTIONAL half never blocks, whatever is in it.
   is("the tick groups never block",
-     missingRequired({ ...BLANK, name: "O", bornYear: "1998", sex: "Man", interests: [], country: "", description: "" }).length, 0);
+     missingRequired({ ...BLANK, name: "O", bornDate: "1998-03-14", sex: "Man", interests: [], country: "", description: "" }).length, 0);
   // Reported in the order they are asked, so the message names the first gap
   // rather than an arbitrary one.
   is("and they come back in the order the form asks them",
@@ -28557,11 +28695,41 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      quest.indexOf("moreOpen && (<div>") < quest.indexOf('groupMany("Interests"'));
   ok("and More about yourself at the end", /<div style=\{legend\}>More about yourself</.test(quest));
 
-  // ── BORN IS A YEAR, NOT A DATE ──────────────────────────────────
-  // Satisfies his label literally and keeps profile.js's own 10 Aug reasoning:
-  // a full date of birth is a much stronger identifier that buys nothing extra.
-  ok("years are offered", BORN_YEARS.length > 50 && BORN_YEARS.includes("1998"));
-  ok("and no month or day is collected", !/birth\s*day|dateOfBirth|month/i.test(quest.replace(/\/\/.*$/gm, "")));
+  // ── BORN IS A FULL DATE NOW ─────────────────────────────────────
+  //
+  // It was a year, deliberately, on the 10 Aug reasoning that a date of birth is
+  // a much stronger identifier buying nothing extra. Oliver reversed that on
+  // 22 Aug: "year of birth should obviously include month and day as well."
+  //
+  // The old assertions are REPLACED rather than kept alongside, on this file's
+  // own rule: a test defending a reversed decision is how a reversal gets
+  // quietly undone. What replaces them is the harder half, which is that a date
+  // has to be a real day and an old row must not become invalid.
+  ok("one control, not three", /<input type="date" value=\{p\.bornDate/.test(quest));
+  ok("bounded at both ends", /min=\{BORN_DATE_MIN\} max=\{BORN_DATE_MAX\}/.test(quest));
+  is("a real day survives", M.cleanBornDate("1998-03-14"), "1998-03-14");
+  // new Date("2000-02-31") does not throw, it rolls over to 2 March, so the
+  // round trip back to a string is the only check that catches it.
+  //
+  // INSIDE THE ALLOWED RANGE deliberately. The first version of this used
+  // "2025-02-31", which the birth-year bounds reject anyway, so it passed with
+  // the round-trip check removed and proved nothing. Mutation testing caught it.
+  is("31 February does not", M.cleanBornDate("2000-02-31"), "");
+  is("nor 31 April", M.cleanBornDate("1990-04-31"), "");
+  is("nor month 13", M.cleanBornDate("1990-13-01"), "");
+  is("but a real leap day does", M.cleanBornDate("1996-02-29"), "1996-02-29");
+  is("and a fake one does not", M.cleanBornDate("1995-02-29"), "");
+  is("nor does a future one", M.cleanBornDate("2030-01-01"), "");
+  is("nor 1823", M.cleanBornDate("1823-01-01"), "");
+  is("nor a year on its own", M.cleanBornDate("1998"), "");
+  is("nor rubbish", M.cleanBornDate("not a date"), "");
+  // BACKWARD COMPATIBILITY IS THE POINT. Every row filled in before today has a
+  // year and no date, and marking those people incomplete would be asking them
+  // to answer again because the form changed.
+  is("the year is read off a date when there is one", M.birthYear({ bornDate: "1998-03-14", bornYear: "1970" }), "1998");
+  is("and off the old field when there is not", M.birthYear({ bornYear: "1970" }), "1970");
+  is("an old row is not suddenly incomplete", M.missingRequired({ name: "Oliver", bornYear: "1998", sex: "Man" }), []);
+  is("and a row with neither still is", M.missingRequired({ name: "Oliver", sex: "Man" }), ["bornDate"]);
   is("a stored year is stored", cleanProfile({ bornYear: "1998" }).bornYear, "1998");
   is("and something that is not a year is dropped", cleanProfile({ bornYear: "yes" }).bornYear, "");
   // The band everything already reasons in is derived, so nothing downstream
