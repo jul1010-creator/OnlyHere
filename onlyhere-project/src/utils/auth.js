@@ -257,7 +257,14 @@ export const captureRedirectSession = async () => {
   if (!full.userId) {
     // Signed in, and nothing that matters would work. Said out loud rather than
     // left to show up later as saves that quietly never sync.
-    return { session: full, recovery: false, error: "Signed in, but your account could not be identified. Reload the page and try again." };
+    // ── recovery IS KNOWN FROM THE FRAGMENT, NOT FROM THE LOOKUP ──
+    // This hardcoded false, and withUser swallows every failure, so one flaky
+    // moment on mobile data turned a password reset into an ordinary sign in:
+    // the new-password screen never opened, the one-use token had already been
+    // spent, and the person was left "signed in" with a session every cloud call
+    // refuses. They then need a second reset link, from a sender that allows two
+    // an hour. `type` said what this was before the network was involved.
+    return { session: full, recovery: type === "recovery", error: "Signed in, but your account could not be identified. Reload the page and try again." };
   }
   // RECOVERY IS NOT A SIGN IN, even though it arrives as one. The token is real
   // and the person is authenticated, but they got here by saying they had

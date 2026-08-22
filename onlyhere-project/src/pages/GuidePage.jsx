@@ -29,7 +29,7 @@ import { BOOKING_AFFILIATE_ID } from "../config";
 import { tiqetsBrowseUrl, partnerDisclosure } from "../utils/affiliates";
 import { dayStart, dayKey, dayPlus } from "../utils/calendarDay";
 import { shareMessage, shareTitle } from "../utils/share";
-import { returnLeg, describeReturn, REACH_FAR, overnightMove, describeOvernightMove } from "../utils/routeOrder";
+import { returnLeg, describeReturn, REACH_FAR, overnightMove, describeOvernightMove, sameMode, howForReader } from "../utils/routeOrder";
 import { stayTextProblem } from "../utils/accommodation";
 import { GUIDE_RIGHTS_SHORT, copyrightLine } from "../utils/rights";
 import { guideHero, heroCaption } from "../utils/guideHero";
@@ -1749,6 +1749,26 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                       {stop.arrivalTime && (
                         <div style={{ position: "absolute", top: 10, left: 10, background: C.scrim || "rgba(10,15,30,0.78)", backdropFilter: "blur(6px)", color: C.gold, fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, border: `1px solid ${C.gold}44` }}>{stop.arrivalTime}</div>
                       )}
+                      {/* ── AND THE NUMBER, WHICH ONLY THIS VARIANT LOST ──
+                          Guide scyek6rypzn numbered its stops 1, 2, 3, 4, 5,
+                          then Amalienborg with no badge at all, then 7. Later:
+                          10, 11, Culture Night with no badge, 13. Both of the
+                          unnumbered ones were photo cards.
+
+                          The plate that prints it lives in the OTHER branch of
+                          this ternary, so a stop with a photo consumed a pin
+                          number on the map and printed none on its card, and the
+                          map's own caption promises that every stop below is
+                          numbered in order. A reader counting cards against pins
+                          finds two missing and no explanation.
+
+                          Top RIGHT, because the arrival time already has the
+                          left corner. Same gold, same scrim, same rule about a
+                          stop that is not on the map: it keeps its letter rather
+                          than being given a number it has not earned. */}
+                      <div style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: C.scrim || "rgba(10,15,30,0.78)", backdropFilter: "blur(6px)", border: `1px solid ${C.gold}44` }}>
+                        <span style={{ fontFamily: "'Fraunces', serif", fontStyle: pinNumber(stop) ? "normal" : "italic", fontSize: 15, fontWeight: pinNumber(stop) ? 800 : 500, color: C.gold }}>{pinNumber(stop) || (stop.name || "◆").slice(0, 1)}</span>
+                      </div>
                     </div>
                     <div style={{ padding: "12px 14px 14px" }}>{titleRow}</div>
                   </div>
@@ -1918,6 +1938,27 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
               if (!lastHere || !firstThere) return null;
               const fromT = stopTown(lastHere, lookupRealPlace(lastHere.name));
               const toT = stopTown(firstThere, lookupRealPlace(firstThere.name));
+              // ── TWO DAYS IN THE SAME TOWN IS NOT A JOURNEY ──────────
+              //
+              // Guide scyek6rypzn printed "About 1 km to Copenhagen, roughly
+              // under an hour and a half on a bike" between two days both spent
+              // in Copenhagen, and "About 2 km to Aarhus" between two days both
+              // in Aarhus. Three of its seven overnight moves were not journeys
+              // at all.
+              //
+              // fromT and toT were already computed on the two lines above and
+              // nothing compared them. overnightMove's own guard is a distance
+              // one (km < 1), which cannot catch a two kilometre hop across the
+              // same city, because that IS a real distance. The question is not
+              // how far apart they are, it is whether the traveller changes town
+              // overnight, and the town is the thing that answers it.
+              //
+              // The intra-day renderer already has the right sentence for this
+              // case and has had it for weeks: "Same place, nothing to travel."
+              // Here the honest thing is to print nothing at all, because there
+              // is no gap between the days to describe.
+              const sameTown = fromT && toT && fromT.trim().toLowerCase() === toT.trim().toLowerCase();
+              if (sameTown) return null;
               const a = resolveStopCoords(lastHere.name, geo, fromT);
               const b = resolveStopCoords(firstThere.name, geo, toT);
               if (!a || !b) return null;
@@ -1925,7 +1966,32 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                 from: a, to: b, fromName: lastHere.name, toName: toT || firstThere.name,
                 days: days.length, mode: guide._mode,
               });
-              const line = describeOvernightMove(move);
+              // ── AND THE MEASURED ANSWER, IF THERE IS ONE ────────────
+              // fetchExactDurations now routes every cross-day pair, not only
+              // the ones whose next day had a single stop, so this leg usually
+              // has a real Directions result. Looked up under the same key shape
+              // the intra-day chips use, under the leg's OWN resolved mode:
+              // a bike trip whose Copenhagen to Aarhus leg was re-routed as
+              // transit is stored under transit, which is the honest answer and
+              // the one worth printing.
+              const overnightMode = resolveLegMode(null, guide._mode, lastHere.name, firstThere.name, guide._onlyWalking, geo);
+              // ONE KEY. The second lookup here used `guide._mode`, which is the
+              // app's vocabulary ("bike", "car"), while every key in
+              // _exactDurations is written with Google's ("bicycling",
+              // "driving"). Two disjoint sets, so that fallback could never
+              // match, and with _mode null it built the literal key "A|B|null".
+              // It read as a safety net and was not one. Deleted rather than
+              // repaired: overnightMode is resolved exactly as the fetch side
+              // resolves it, so if the two ever disagree the fix belongs there.
+              const measuredMove = (guide._exactDurations || {})[`${lastHere.name}|${firstThere.name}|${overnightMode}`] || null;
+              // THE MODE THE CALL WAS MADE WITH travels with the measurement.
+              // Without it describeOvernightMove fell back to the mode the
+              // traveller ASKED for, and a Great Belt crossing re-routed to
+              // transit came back as "3h 5m on a bike".
+              const usableMeasure = measuredMove && measuredMove.durationMinutes >= 1
+                ? { ...measuredMove, mode: measuredMove.modeUsed || overnightMode }
+                : null;
+              const line = describeOvernightMove(move, usableMeasure);
               if (!line) return null;
               const heavy = move.eatsTheDay || move.band === REACH_FAR;
               return (
@@ -1939,8 +2005,21 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                     {/* Same honesty as Getting back, and for the same reason:
                         every other distance on this page is a measured road
                         journey and this one is not. */}
+                    {/* The note has to match what was actually done. Saying
+                        "straight line, not a measured route" under a measured
+                        route is the same class of error as the estimate it
+                        replaced, in the opposite direction: it throws away
+                        credibility the number has earned. */}
                     <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
-                      Straight line distance, not a measured route, so treat it as the shape of the day rather than as a timetable.
+                      {usableMeasure
+                        // sameMode, not !==. This compared Google's word against
+                        // the app's, "driving" against "car", which can never be
+                        // equal, so an ordinary car trip announced "routed as
+                        // driving" and exposed API jargon to a reader. The note
+                        // is only worth printing when the leg genuinely was NOT
+                        // done the way they asked, which is the Great Belt case.
+                        ? `Measured with Google Maps${usableMeasure.mode && !sameMode(usableMeasure.mode, guide._mode) ? `, routed as ${howForReader(usableMeasure.mode)}` : ""}. The distance is straight line, the time is the real route.`
+                        : "Straight line distance, not a measured route, so treat it as the shape of the day rather than as a timetable."}
                     </div>
                   </div>
                 </div>

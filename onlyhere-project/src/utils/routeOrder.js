@@ -482,19 +482,186 @@ export const overnightMove = ({ from = null, to = null, fromName = "", toName = 
 // here against 8.9 there. straightLineHours applies the circuity factor too, which
 // this never did while dividing a great-circle distance.
 
-export const describeOvernightMove = (move) => {
+// ── HOW LONG, IN WORDS SOMEBODY WOULD SAY ───────────────────────────
+//
+// The old version was `hours < 1.5 ? "under an hour and a half" : N hours`, and
+// the first half of that is a FLOOR, not a rounding. Applied to the 1 km hop
+// between two days both spent in Copenhagen it produced "About 1 km to
+// Copenhagen, roughly under an hour and a half on a bike", which at this file's
+// own cycling pace is a six minute ride described as ninety minutes. Oliver's
+// audit of guide scyek6rypzn put it plainly: it makes the guide look like it
+// cannot do arithmetic.
+//
+// Minutes below an hour, because a twenty minute journey is a twenty minute
+// journey and there is nothing imprecise about saying so. Hours and a half above
+// it. Never minutes-past-the-hour on an unmeasured figure: "2 hours 47" from a
+// great circle is a false precision, and the caller marks whether it is measured.
+export const spokenDuration = (minutes, { precise = false } = {}) => {
+  const m = Math.round(Number(minutes));
+  if (!Number.isFinite(m) || m <= 0) return "";
+  // Rounded to five, because a great circle does not know the difference between
+  // 23 and 25 minutes. The `< 60` guard is on the ROUNDED value, not the raw one:
+  // 59 minutes rounds to 60 and "60 minutes" is not something anybody says.
+  // A MEASURED figure keeps its minutes at every scale. This branch ran before
+  // the precise check and snapped to five, so a real 23 minute Directions answer
+  // printed as 25. Rounding is for the great circle, which does not know the
+  // difference; a measurement does.
+  if (precise && m < 60) return `${m} ${m === 1 ? "minute" : "minutes"}`;
+  if (m < 60) {
+    const to5 = Math.max(5, Math.round(m / 5) * 5);
+    if (to5 < 60) return `${to5} minutes`;
+    return "1 hour";
+  }
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  if (precise) return rem ? `${h}h ${rem}m` : `${h} ${h === 1 ? "hour" : "hours"}`;
+  // "an hour and a half", not "1 and a half hour". The half makes it plural, and
+  // the first version got both halves of that wrong at once.
+  if (rem >= 20 && rem <= 40) return h === 1 ? "an hour and a half" : `${h} and a half hours`;
+  const rounded = rem > 40 ? h + 1 : h;
+  return `${rounded} ${rounded === 1 ? "hour" : "hours"}`;
+};
+
+// ── TWO VOCABULARIES, AND THIS READS BOTH ───────────────────────────
+//
+// The app's own mode keys are "bike", "car", "walk", "public transport". GOOGLE'S
+// are "bicycling", "driving", "walking", "transit", and a measured leg carries
+// Google's, because that is what the Directions call was made with.
+//
+// The first version of this only knew the app's, so a measured leg printed "by
+// driving", "by transit" and "by bicycling" straight out of the API. Found by an
+// adversarial review the same night it shipped. There is exactly one place the
+// two vocabularies meet and it is here.
+const HOW_WORD = {
+  "public transport": "by train and bus", transit: "by train and bus",
+  bike: "on a bike", bicycling: "on a bike",
+  walk: "on foot", walking: "on foot",
+  car: "by car", driving: "by car",
+  camper: "by camper", tent: "on foot",
+  ship: "by ferry", plane: "by plane",
+};
+const howWord = (key) => {
+  const k = String(key || "").trim().toLowerCase();
+  if (!k) return "";
+  return HOW_WORD[k] || `by ${k}`;
+};
+
+// The same crossing, in the app's own words, so a caller can compare a measured
+// mode against the trip's mode without comparing "driving" to "car" and always
+// getting false.
+// The reader-facing name for a mode, in either vocabulary, with the preposition
+// off. "transit" and "public transport" both come back as "train and bus", which
+// is the thing to put in a sentence.
+export const howForReader = (key) => howWord(key).replace(/^(?:by|on) /, "");
+
+export const sameMode = (a, b) => {
+  const w = (x) => howWord(x);
+  const wa = w(a), wb = w(b);
+  return !!wa && wa === wb;
+};
+
+// ── AND THE ONE THAT WAS NOT A SLOW ESTIMATE BUT AN IMPOSSIBLE ONE ──
+//
+// Guide scyek6rypzn, live, told a reader: "About 156 km to Aarhus, roughly 15
+// hours on a bike." Copenhagen to Aarhus crosses the Great Belt, and cyclists are
+// not allowed on the bridge: VisitNyborg states it plainly, and a bike has to go
+// on a DSB train. So that was not a slow estimate of a real journey. There is no
+// such journey. The same page said "about 3 hours" by train in three other
+// places, which is what makes it indefensible rather than merely wrong.
+//
+// The guard is deliberately NOT a list of bridges. A bridge table is a thing that
+// goes stale silently and only ever covers the crossings somebody remembered.
+// What is true generally is simpler: MODE_DAY_KM already records what each mode
+// covers in a DAY, and a leg longer than that is not a leg by that mode whatever
+// the geography. Nobody cycles 156 km between two days of a holiday, on any
+// route, bridge or no bridge. So beyond a day's range the duration is not
+// stated and the reader is told what the leg actually needs.
+// Four hours. Two thirds of a nine-to-five day of daylight travel, which is the
+// same fraction eatsTheDay uses on the distance side, expressed in the unit a
+// measurement actually gives you.
+export const EATS_THE_DAY_MINUTES = 240;
+
+const OVER_A_DAY_MODES = ["walk", "bike", "tent"];
+
+// TWICE a comfortable day, not one. The first version used MODE_DAY_KM straight
+// and it was wrong in a way the suite caught immediately: the Aalborg to Skagen
+// leg this file was built around is 85 km on a bicycle, which is a hard day's
+// riding and a real thing people do, and it started printing "further than a day
+// on a bike". MODE_DAY_KM records what a mode covers COMFORTABLY, eatsTheDay
+// already fires at two thirds of it, and the line this guard is for is somewhere
+// else entirely: not "this will be tiring" but "nobody does this at all".
+//
+// At 2x: a bike stops at 120 km, so 92 km to Skagen is still a hard ride and the
+// 156 km Great Belt crossing is not a ride. Walking stops at 30 km. Those are the
+// right places for the line to sit.
+export const BEYOND_DAY_FACTOR = 2;
+export const beyondModeRange = (km, mode) => {
+  const perDay = MODE_DAY_KM[mode];
+  if (!perDay || !OVER_A_DAY_MODES.includes(mode)) return false;
+  return Number(km) > perDay * BEYOND_DAY_FACTOR;
+};
+
+// `measured` is a real Directions result for this exact pair, when one exists:
+// { durationMinutes, durationText, modeUsed }. It always wins. Everything below
+// it is the estimate, and the estimate says so.
+export const describeOvernightMove = (move, measured = null) => {
   if (!move || !move.km) return "";
   const where = move.toName ? `to ${move.toName}` : "to the next day's first stop";
   const head = `About ${move.km} km ${where}`;
   const key = move.mode;
+
+  // ── MEASURED BEATS EVERYTHING ───────────────────────────────────
+  // The whole trip's other legs are measured road journeys from the Directions
+  // API. This was the one gap nothing measured, and the fix is not a cleverer
+  // estimate, it is asking the same question about this pair that gets asked
+  // about every other pair. See fetchExactDurations in App.jsx.
+  const mins = Number(measured?.durationMinutes);
+  if (Number.isFinite(mins) && mins > 0) {
+    // ── THE MODE THAT WAS MEASURED, NOT THE ONE THEY ASKED FOR ────
+    //
+    // This said `measured.modeUsed || key`, and the fallback is the trap. A
+    // Copenhagen to Aarhus leg on a bike trip is re-routed to transit before it
+    // is sent to Google, precisely because a bike cannot cross the Great Belt,
+    // and api/directions.js does not echo a modeUsed back on the ordinary path.
+    // So the fallback fired, and the sentence became "About 156 km to Aarhus,
+    // 3h 5m on a bike" — the exact claim the guard below this exists to prevent,
+    // reissued with a MEASURED-looking number, which is worse than the fifteen
+    // hours it replaced because a reader cannot tell it came from a train
+    // timetable. Found by an adversarial review the night it shipped.
+    //
+    // So the caller passes the mode the call was actually made with, and if it
+    // did not, the mode is not stated at all. A duration with no mode is honest;
+    // a duration attached to the wrong mode is not.
+    const how = howWord(measured.modeUsed || measured.mode || "");
+    const spoken = spokenDuration(mins, { precise: true });
+    // ── AND THE TAIL IS ABOUT THE MEASUREMENT TOO ─────────────────
+    // move.eatsTheDay is `km >= MODE_DAY_KM[mode] * 2/3`, computed from the
+    // straight line at the mode they ASKED for: 40 km on a bike. Applied to a
+    // measured 50 minute train it produced "50 minutes by train and bus. That is
+    // most of a day of travelling." Once there is a real duration, whether it
+    // eats the day is a question about the duration.
+    const eats = mins >= EATS_THE_DAY_MINUTES;
+    const tail = eats
+      ? "That is most of a day of travelling, so this is the day rather than a transfer inside it."
+      : "Worth starting early enough that the first stop is not a rush.";
+    return `${head}, ${spoken}${how ? ` ${how}` : ""}. ${tail}`;
+  }
+
   const hours = straightLineHours(move.km, key);
   if (hours == null) {
     // No mode stated, so no duration is invented. The distance alone is still the
     // thing the page was missing.
     return `${head}. Worth planning the morning around, and worth knowing before you book anything.`;
   }
-  const spoken = hours < 1.5 ? "under an hour and a half" : `${Math.round(hours)} hours`;
-  const how = key === "public transport" ? "by train and bus" : key === "bike" ? "on a bike" : `by ${key}`;
+
+  // Further than the mode goes in a day. Say what it needs instead of how long
+  // it would take, because how long it would take is not a real number.
+  if (beyondModeRange(move.km, key)) {
+    return `${head}, which is further than a day ${howWord(key)}. This leg needs a train or a car, and a bike goes on the train with you. Check the real connection before you plan the morning.`;
+  }
+
+  const spoken = spokenDuration(hours * 60);
+  const how = howWord(key);
   if (move.eatsTheDay) {
     return `${head}, roughly ${spoken} ${how}. That is most of a day of travelling, so this is the day rather than a transfer inside it.`;
   }

@@ -42,42 +42,40 @@
 //      Gemlyx thinks it has noticed and clear it. A profile that grows silently
 //      from behaviour and cannot be inspected is the thing people mean when
 //      they say they do not want to be profiled, and this is a Danish business.
-import { INTERESTS, TRANSPORT, COMPANY, cleanProfile } from "./profile";
+import { INTERESTS, TRANSPORT, COMPANY, cleanProfile, cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS } from "./profile";
+
+// ── cleanLearned AND ITS TWO CONSTANTS NOW LIVE IN profile.js ───────
+//
+// Not a tidy-up. The whole of this file was dead code until 22 Aug 2026 because
+// cleanProfile returns a literal of exactly the fields it names, saveProfile
+// writes cleanProfile(profile), and `learned` was not one of them. Every count
+// was dropped on the way to Supabase and again on the way back.
+//
+// Fixing that meant cleanProfile had to know how to clean this shape, and this
+// file already imports from profile.js, so the cleaner moved rather than the
+// import going both ways. Re-exported here so every existing importer still
+// works and so this file still reads as the place the idea lives.
+export { cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS };
 
 // Two trips. One is a trip; two is a pattern, and the gap between them is where
 // every false reading lives.
 export const OBSERVED_MIN = 2;
 
 // A ceiling, so a preference from a year ago cannot outvote what somebody is
-// doing now, and so the stored object cannot grow without bound.
-export const OBSERVED_CAP = 6;
+// doing now, and so the stored object cannot grow without bound. Defined in
+// profile.js and re-exported above; see the note there.
 
 // The fields worth carrying between trips. Deliberately short: `when`, `days`,
 // `origin`, `stay` and `budget` are all things tripBrief measures well and none
 // of them is true of the NEXT trip, so learning them would be learning noise.
-export const OBSERVED_FIELDS = ["interests", "transport", "company"];
-
-const VOCAB = { interests: INTERESTS, transport: TRANSPORT, company: COMPANY };
+// Also defined in profile.js, re-exported above.
 
 const clampCount = (n) => Math.max(0, Math.min(OBSERVED_CAP, Math.round(Number(n) || 0)));
 
-// { interests: {History: 2}, transport: {...}, company: {...} }, with anything
-// outside the offered vocabulary dropped for the reason cleanProfile drops it:
-// a stored answer nobody was offered is a bug that survives.
-export const cleanLearned = (raw) => {
-  const out = {};
-  for (const f of OBSERVED_FIELDS) {
-    const src = raw?.[f];
-    if (!src || typeof src !== "object") continue;
-    const kept = {};
-    for (const option of VOCAB[f]) {
-      const n = clampCount(src[option]);
-      if (n > 0) kept[option] = n;
-    }
-    if (Object.keys(kept).length) out[f] = kept;
-  }
-  return out;
-};
+// The same three vocabularies cleanLearned validates against, named here too
+// because observeTrip has to refuse an option nobody was offered on the way IN,
+// not only on the way to storage.
+const LEARNABLE = { interests: INTERESTS, transport: TRANSPORT, company: COMPANY };
 
 export const learnedIsEmpty = (learned) => !Object.keys(cleanLearned(learned)).length;
 
@@ -123,7 +121,7 @@ export const observeTrip = (learned, seen) => {
   const out = { ...base };
   for (const f of OBSERVED_FIELDS) {
     const values = Array.isArray(seen?.[f]) ? seen[f] : (seen?.[f] ? [seen[f]] : []);
-    const allowed = values.map(v => String(v ?? "").trim()).filter(v => VOCAB[f].includes(v));
+    const allowed = values.map(v => String(v ?? "").trim()).filter(v => LEARNABLE[f].includes(v));
     if (!allowed.length) continue;
     const next = { ...(out[f] || {}) };
     for (const v of new Set(allowed)) next[v] = clampCount((next[v] || 0) + 1);

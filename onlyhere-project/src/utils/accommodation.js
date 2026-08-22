@@ -446,21 +446,97 @@ export const dayTripHonest = ({ kmFromBase = null, mode = null } = {}) => {
 // clause with a truer-sounding one would be this file inventing travel advice,
 // which is the whole thing this product refuses to do. A shorter honest sentence
 // beats a longer plausible one.
+// ── THE STUMP THE CUT LEAVES, AND ONLY THAT STUMP ───────────────────
+//
+// The first version of this searched for the FIRST comma in the sentence and
+// treated whatever came before it as the stump. An adversarial review the same
+// night showed what that does to ordinary English, on real accommodation
+// sentences with a day-trip claim at the end:
+//
+//   "The two areas worth paying for are, in order, Indre By and Nyhavn, with
+//    easy day trips from Copenhagen."   ->   "In order, Indre By and Nyhavn."
+//   "Stay somewhere with parking in, or right beside, the old town, with easy
+//    day trips from Ribe."              ->   "Or right beside, the old town."
+//
+// Both leads end on a STUMP_TAIL word as perfectly good English ("are", "in"),
+// both had their subject amputated, and both cleared the word count and shipped.
+// That is a worse fault than the fragment it was written to fix, because it
+// silently rewrites sentences that were never broken.
+//
+// The repair: a stump is only ever created AT THE POINT THE CLAIM WAS CUT OUT.
+// So the caller says where that was, and this looks at that seam and nowhere
+// else. A comma somewhere else in the sentence is somebody's ordinary
+// punctuation and none of this function's business.
+const STUMP_TAIL = /\b(?:are|is|was|were|be|been|being|within|from|to|into|near|with|of|in|at|by|for|on|about|around|all|both|either|toward|towards)$/i;
+
+// `seam` is the index in `cut` where the removed clause used to start. Text
+// before it is the lead that has just lost its predicate; text after it is what
+// survives. A negative seam means nothing was cut, so nothing is a stump.
+export const withoutStump = (text, seam = -1) => {
+  const t = String(text || "").trim();
+  if (!(seam >= 0)) return t;
+  // The separator immediately BEFORE the seam is the one the claim hung off.
+  const before = t.slice(0, Math.min(seam, t.length));
+  const brk = Math.max(before.lastIndexOf(","), before.lastIndexOf(";"));
+  // Nothing before the seam but the lead itself: the claim opened the sentence,
+  // so there is no stump, only a shorter sentence.
+  const lead = (brk >= 0 ? before.slice(brk + 1) : before).trim();
+  if (!lead || !STUMP_TAIL.test(lead)) return t;
+  // Everything from the start of that lead onwards goes, and the conjunction
+  // that used to join it to the rest goes with it.
+  const rest = t.slice(brk >= 0 ? brk + 1 : 0).replace(/^[^,;]*/, "").replace(/^[,;]\s*/, "").trim()
+    || t.slice(seam).replace(/^[,;]\s*/, "").trim();
+  const cleaned = rest.replace(/^(?:so|and|but|then|yet)\s+/i, "").trim();
+  if (!cleaned) return "";
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+};
+
 export const withoutDayTripClaim = (text) => {
   const raw = String(text || "");
   if (!dayTripClaim(raw)) return raw;
+  // WHERE the claim was, not only that it went. withoutStump needs the seam, or
+  // it has to guess which comma matters and guesses wrong on ordinary English.
+  const CLAIM = /[,;]?\s*(?:and\s+|with\s+)?(?:easy\s+|simple\s+|straightforward\s+)?day[\s-]?trips?\s+(?:from|out of)\s+[^,.;]*/i;
+  const at = raw.search(CLAIM);
   const cut = raw
     // ", with easy day trips from Copenhagen" and " and take day trips out of X"
-    .replace(/[,;]?\s*(?:and\s+|with\s+)?(?:easy\s+|simple\s+|straightforward\s+)?day[\s-]?trips?\s+(?:from|out of)\s+[^,.;]*/i, "")
+    .replace(CLAIM, "")
     .replace(/\s{2,}/g, " ")
     .replace(/\s+([,.;])/g, "$1")
     .replace(/[,;]\s*\./g, ".")
     .trim();
-  // If the cut leaves nothing a reader can act on, the whole sentence goes: an
-  // accommodation card with no card is better than a fragment.
-  const words = cut.replace(/[^\wÆØÅæøå\s]/g, " ").trim().split(/\s+/).filter(Boolean);
+  // ── AND THE STUMP THE CUT LEAVES BEHIND ──────────────────────────
+  //
+  // Live on guide scyek6rypzn, Day 3, at the top of the Where to stay box:
+  //
+  //     "These are, so base yourself near central Copenhagen with the
+  //      Copenhagen Card..."
+  //
+  // The word count below waved it through, because the sentence still had
+  // twenty-eight words in it. Counting words asks how MUCH is left, and the
+  // question is whether what is left is a sentence. Run against the real string
+  // this reproduces byte for byte: the claim comes out of the middle and
+  // "These are all within" stays at the front with nothing to be within.
+  //
+  // The leading clause is the claim's own subject, and once the claim is gone it
+  // has no predicate. It is detectable without parsing English, because the give
+  // away is the word it now ends on: a clause cannot end on "within", "from",
+  // "are" or "all". So a lead ending in one is dropped along with the separator
+  // after it, the conjunction that used to join the two halves goes with it, and
+  // the remainder is capitalised. "so base yourself near..." becomes "Base
+  // yourself near...", which is the sentence the writer was always making.
+    // `at` is an index into RAW, and it is a valid index into CUT as well: the
+  // claim is removed from the middle, so every character before it is unmoved.
+  // The seam is where the claim used to start.
+  // If what is left is still nothing a reader can act on, the whole sentence
+  // goes: an accommodation card with no card is better than a fragment.
+  // `at` is an index into RAW, and it is a valid index into CUT as well: the
+  // claim is removed from the middle, so every character before it is unmoved.
+  // The seam is where the claim used to start.
+  const stumped = withoutStump(cut, at);
+  const words = stumped.replace(/[^\wÆØÅæøå\s]/g, " ").trim().split(/\s+/).filter(Boolean);
   if (words.length < 4) return "";
-  return /[.!?]$/.test(cut) ? cut : `${cut}.`;
+  return /[.!?]$/.test(stumped) ? stumped : `${stumped}.`;
 };
 
 // What to tell him in Studio rather than silently repairing behind his back. The

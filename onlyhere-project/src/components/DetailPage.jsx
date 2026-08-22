@@ -601,10 +601,23 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             careful not to name width, aspect-ratio or object-fit, or it would
             win and this would silently do nothing. */}
         <style>{`
+          /* CONTAIN, NOT COVER. The first version cropped every figure into a
+             landscape box, which loses roughly 44% of a 2:3 event poster, top
+             and bottom. Oliver has already made exactly that complaint once, on
+             the guide's own stop photos: "avoid the horizontal pictures, you
+             can't see the whole castle." Recreating it on the article side would
+             have been the same mistake in a new file, and the video in this same
+             layout was already using contain, so the two disagreed as well.
+
+             The box is still reserved, which is the whole point of the ratio:
+             the height exists before the network answers, nothing collapses, and
+             nothing reflows. Contain only changes what happens INSIDE the box,
+             and a letterboxed picture on a themed background is a smaller cost
+             than a cropped one. */
           .gx-fig img {
             width: 100%;
             aspect-ratio: 4 / 3;
-            object-fit: cover;
+            object-fit: contain;
             background: ${C.surface};
           }
           /* clear: a figure starts below the last figure on ITS OWN side, so the
@@ -632,7 +645,16 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               ) : block.type === "video" ? (
                 <div key={i} className={`gx-fig gx-fig-${block._side || "right"}`} style={{ marginBottom: 16 }}>
                   <video src={block.src} controls playsInline preload="metadata" style={{ width: "100%", aspectRatio: "4 / 3", objectFit: "contain", borderRadius: 14, display: "block", background: "#000" }} />
-                  {block.caption && <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>{block.caption}</div>}
+                  {/* SAME RULES AS AN IMAGE. layoutBody counts a video as a
+                      figure and shares one `seen` set across both, so a video
+                      was being given a _showCaption it then ignored, and a video
+                      carrying the "- Flickr - <name>" tail printed the credit
+                      twice. Found by an adversarial review on 22 Aug: the two
+                      branches of one ternary disagreeing about what a caption
+                      is. */}
+                  {block._showCaption !== false && trimCaption(block.caption) && (
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>{trimCaption(block.caption)}</div>
+                  )}
                 </div>
               ) : block.type === "image" ? (
                 <div key={i} className={`gx-fig gx-fig-${block._side || "right"}`} style={{ marginBottom: 16 }}>

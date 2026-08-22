@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
-import { BORN_DATE_MIN, BORN_DATE_MAX, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, DESCRIPTION_MAX, REQUIRED_PROFILE } from "../utils/profile";
+import { BORN_DATE_MIN, BORN_DATE_MAX, cleanBornDate, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, DESCRIPTION_MAX, REQUIRED_PROFILE } from "../utils/profile";
 
 // ── THE QUESTIONS, IN ONE PLACE ──────────────────────────────────────
 //
@@ -54,7 +54,20 @@ export const ProfileQuestions = ({ value, onChange, required = false, showGaps =
   const note = { textTransform: "none", letterSpacing: 0, fontWeight: 500, color: C.muted };
   // The asterisk itself. Gold normally, red once the gap has been pointed out,
   // so the mark that says "this is needed" is the same mark that says "this one".
-  const gap = (k) => required && showGaps && REQUIRED_PROFILE.includes(k) && !String(p[k] ?? "").trim();
+  // ── THE MARK AND THE VALIDATOR HAVE TO AGREE ──────────────────────
+  //
+  // This tested raw non-emptiness while missingRequired tests cleanBornDate,
+  // which returns "" for a date outside the allowed range. min and max on an
+  // <input type="date"> do not clamp a TYPED value, they only set
+  // validity.rangeUnderflow, and nothing reads that. So somebody typing 1900, or
+  // a grandparent entering a genuinely pre-1921 date, pressed Create account and
+  // got "Still needed: Date of birth." pointing at nothing, while the one field
+  // that was actually wrong kept its gold asterisk and no red ring.
+  //
+  // Found by an adversarial review on 22 Aug. A form that says something is
+  // missing has to be able to show which one.
+  const filled = (k) => (k === "bornDate" ? !!cleanBornDate(p.bornDate) : !!String(p[k] ?? "").trim());
+  const gap = (k) => required && showGaps && REQUIRED_PROFILE.includes(k) && !filled(k);
   const star = (k) => required && REQUIRED_PROFILE.includes(k)
     ? <span style={{ color: gap(k) ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
     : null;

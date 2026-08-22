@@ -137,10 +137,32 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   // to Sign in and closed it would be handed the Sign in screen the next time
   // they pressed Sign up, and the Save gate would greet a brand new visitor
   // with a login form. Reset on every opening, from whichever door was used.
+  // ── EVERY FIELD, NOT FIVE OF THEM ─────────────────────────────────
+  //
+  // This reset mode, error, notice, showGaps and confirm, and left `sentTo`,
+  // `email`, `password`, `answers` and `resendAt` alone. An adversarial review on
+  // 22 Aug found what that costs, and the component is mounted permanently
+  // (App.jsx renders it unconditionally), so nothing else ever clears them.
+  //
+  //   sentTo:  sign up, close the sheet, later press "Log in". mode is "in" and
+  //            `sentTo` still short-circuits the whole form, so a returning
+  //            person gets "Check your email" with no sign-in form and no way
+  //            back except a button labelled "Wrong address".
+  //   email,
+  //   password: person A signs in on a shared laptop and signs out. Person B
+  //            presses Sign up and gets A's address rendered in the field and
+  //            A's password still in the masked one, a devtools inspection away.
+  //   answers: and A's name, date of birth and gender still in the form under it.
+  //
+  // A sheet that opens is a sheet that starts again. The only thing deliberately
+  // kept is nothing.
   useEffect(() => {
     if (!open) return;
     setMode(initialMode || "in");
-    setError(null); setNotice(null); setShowGaps(false); setConfirm("");
+    setError(null); setNotice(null); setShowGaps(false);
+    setEmail(""); setPassword(""); setConfirm("");
+    setAnswers(EMPTY_PROFILE);
+    setSentTo(""); setResendAt(0);
   }, [open, initialMode]);
 
   // Declared BEFORE the early return, because a hook that only sometimes runs
@@ -152,11 +174,18 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   // seconds and then be locked out of their own confirmation for the rest of the
   // hour. Ticks only while a cooldown is actually running, so an idle sheet is
   // not re-rendering once a second forever.
+  // ── AND IT HAS TO STOP TICKING WHEN THE COOLDOWN ENDS ─────────────
+  // The guard was evaluated once per effect run against Date.now(), and neither
+  // dependency changes when the sixty seconds elapse, so nothing re-ran the
+  // effect and the interval fired forever: on a closed sheet, for the rest of the
+  // page's life, once a second, on a component returning null. The comment above
+  // claimed the opposite. `now` in the deps is what makes the guard re-checked,
+  // and the effect then tears its own interval down on the tick that passes it.
   useEffect(() => {
-    if (!sentTo || resendAt <= Date.now()) return;
+    if (!open || !sentTo || resendAt <= now) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [sentTo, resendAt]);
+  }, [open, sentTo, resendAt, now]);
 
   useEffect(() => {
     const onResize = () => setWide(window.innerWidth >= 720);
@@ -211,7 +240,18 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         await updatePassword(recoverySession, password);
         setNotice("Password changed. You are signed in.");
         setBusy(false);
-        onSignedIn(recoverySession);
+        // ── AND THE SHEET HAS TO BE ABLE TO LEAVE ─────────────────
+        // onSignedIn closes the sheet by clearing authOpen, but the recovery
+        // sheet is held open by `recoverySession` and not by authOpen, so the
+        // modal stayed up on the new-password screen with both fields filled and
+        // "Password changed" underneath them. Worse, nothing reset authMode, so
+        // the NEXT opening from any door came back as "newpass": no email field,
+        // no mode links, and a Set new password button calling updatePassword
+        // with a null session. A dead end reachable from a successful action.
+        //
+        // onDone is the sheet saying it is finished, which is the caller's job to
+        // act on. See handleSignedIn in App.jsx.
+        onSignedIn(recoverySession, { done: true });
         return;
       } catch (e) { setError(String(e.message || e)); setBusy(false); return; }
     }
@@ -255,7 +295,15 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         }
         onSignedIn(session);
       } else {
-        onSignedIn(await signInWithPassword(email, password));
+        // ── A 200 WITH NO TOKEN IS NOT A SIGN IN ──────────────────
+        // shape() returns null whenever the body carries no access_token, and
+        // signInWithPassword then writes null to storage. Passing that straight
+        // to onSignedIn set userSession to null and closed the sheet: signed
+        // out, no error, nothing on screen. Exactly the silent failure the OAuth
+        // path was rewritten to stop, on the other door.
+        const signedIn = await signInWithPassword(email, password);
+        if (!signedIn) { setError("That sign in did not come back with a session. Try again in a moment."); setBusy(false); return; }
+        onSignedIn(signedIn);
       }
     } catch (e) {
       setError(String(e.message || e));

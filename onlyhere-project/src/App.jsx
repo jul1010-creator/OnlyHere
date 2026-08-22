@@ -9099,6 +9099,22 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     syncedOnceRef.current = false;   // a new session must re-merge
     setUserSession(session);
     setAuthOpen(false);
+    // ── AND THE RECOVERY SHEET HAS TO BE ABLE TO LEAVE ──────────────
+    //
+    // The sheet is open when `authOpen && !userSession` OR when there is a
+    // recoverySession, and only the second condition holds during a password
+    // reset. So clearing authOpen closed nothing: the modal stayed up on the
+    // new-password screen with both fields filled and "Password changed" printed
+    // underneath, after a successful action.
+    //
+    // authMode goes back to "in" for the same reason. Nothing reset it, so the
+    // next opening from any door came back as "newpass", which has no email
+    // field, no mode links and a button that calls updatePassword with a null
+    // session. A dead end you could only leave through the menu or a reload,
+    // reached by successfully resetting your password. Found by an adversarial
+    // review on 22 Aug.
+    setRecoverySession(null);
+    setAuthMode("in");
   };
 
   // ── CLAIM THE TRIP THEY SIGNED IN TO KEEP ───────────────────────────
@@ -9254,16 +9270,55 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     // "Ærøskøbing to Ærøskøbing, 1 min on foot" got onto a published guide.
     const samePlace = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
     days.forEach((day, di) => {
-      if (day.stops.length === 1 && di > 0) {
-        const prevLast = days[di - 1].stops[days[di - 1].stops.length - 1];
-        if (!samePlace(prevLast.name, day.stops[0].name)) legs.push([prevLast.name, day.stops[0].name, day.glance?.legs?.[0]?.how || ""]);
+      // ── EVERY CROSS-DAY LEG, NOT ONLY THE SINGLE-STOP ONES ────────
+      //
+      // This was gated on `day.stops.length === 1`, so the journey between the
+      // end of one day and the start of the next was measured only when the next
+      // day had exactly one stop. Every other overnight move fell through to
+      // routeOrder's straight-line estimate, which is where "About 156 km to
+      // Aarhus, roughly 15 hours on a bike" came from on guide scyek6rypzn: a
+      // crossing of the Great Belt, on a bridge where cyclists are not allowed,
+      // while three other places on that same page correctly said three hours by
+      // train.
+      //
+      // There is no reason the condition was ever there. The leg is a real
+      // journey a real person makes whatever tomorrow's shape is, and the cost of
+      // measuring it is one more Directions call per day. Whether it RENDERS is
+      // still GuidePage's decision; this only makes sure the number exists when
+      // it does.
+      if (di > 0) {
+        const prevDay = days[di - 1];
+        const prevLast = (prevDay.stops || [])[prevDay.stops.length - 1];
+        const firstHere = (day.stops || [])[0];
+        if (prevLast?.name && firstHere?.name && !samePlace(prevLast.name, firstHere.name)) {
+          // ── NO how-TEXT, BECAUSE THERE ISN'T ONE FOR THIS LEG ─────
+          //
+          // This passed `day.glance.legs[0].how`, which is the description of the
+          // journey from the next day's FIRST stop to its SECOND. A different
+          // journey entirely. Under the old `stops.length === 1` gate it was
+          // harmless, because a one-stop day has no legs[0] and the value was
+          // always "". Removing the gate made it live, and it did two things:
+          // resolved the mode from the wrong leg's text, and made the FETCH key
+          // disagree with the RENDER key, since GuidePage looks this up with
+          // how = null. The leg was then fetched, paid for, and never read.
+          //
+          // Empty is the honest input: nothing describes this leg yet, so
+          // resolveLegMode decides from the trip mode and the distance, which is
+          // exactly what the render side does.
+          legs.push([prevLast.name, firstHere.name, "", Math.max(0, (Number(day.day) || di + 1) - 1)]);
+        }
       }
       for (let i = 0; i < day.stops.length - 1; i++) {
         if (samePlace(day.stops[i].name, day.stops[i + 1].name)) continue;
         // Day number carried so each leg is routed on ITS OWN date: a five-day
         // trip crosses a weekend, and day four's Sunday bus is a different
         // question from day one's Wednesday train.
-        legs.push([day.stops[i].name, day.stops[i + 1].name, day.glance?.legs?.[i]?.how || "", Math.max(0, (Number(day.day) || 1) - 1)]);
+        // `di + 1` rather than `1` when day.day is missing. The cross-day push
+        // above already had it right and this one did not, so on a guide whose
+        // days carry no `day` number every intra-day leg was routed as day one:
+        // a Sunday bus priced as a Wednesday one, which is the exact bug
+        // transitDepartureAnchor exists to prevent.
+        legs.push([day.stops[i].name, day.stops[i + 1].name, day.glance?.legs?.[i]?.how || "", Math.max(0, (Number(day.day) || di + 1) - 1)]);
       }
     });
     // Resolves BOTH already-known coords (towns/landmarks/prior geocodes) and this
@@ -10698,10 +10753,31 @@ If the conversation only covers a single day or a few stops with no explicit day
             modes: mentionedModes,
             company: intakeFamilyMode ? "With family" : "",
           });
-          const learned = observeTrip(userProfile?.learned, seen);
-          const next = { ...(userProfile || {}), learned };
-          const wrote = await saveProfile(userSession, next);
-          if (wrote.ok) setUserProfile(next);
+          // ── NEVER WRITE A PROFILE WE NEVER SUCCESSFULLY READ ──────
+          //
+          // Found by an adversarial review on 22 Aug, and it is data loss rather
+          // than a cosmetic fault. saveProfile writes `profile: cleanProfile(next)`,
+          // and cleanProfile emits the WHOLE object literal, so the jsonb column
+          // is replaced rather than merged. With userProfile still null, `next`
+          // is `{ learned }` and every other field goes out as "" or [].
+          //
+          // userProfile stays null on two reachable paths in the profile effect
+          // above, both of which set profileAskedRef BEFORE the await so they are
+          // never retried in that tab: fetchProfile returning null on a network
+          // or parse error, and the missing-column branch. So a signed-in
+          // traveller with a filled-in profile, on one flaky load, builds one
+          // guide and has their name, date of birth, gender, country, pace,
+          // interests, transport, style and description destroyed on the server
+          // and on every other device, inside a catch that shows them nothing.
+          //
+          // The read is the permission to write. Observations are worth having
+          // and they are not worth that.
+          if (userProfile) {
+            const learned = observeTrip(userProfile.learned, seen);
+            const next = { ...userProfile, learned };
+            const wrote = await saveProfile(userSession, next);
+            if (wrote.ok) setUserProfile(next);
+          }
         } catch { /* never at the cost of the guide */ }
       }
 
@@ -18276,7 +18352,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           nearby={readingNear}
                           traveller={travellerBlock}
                           founder={!userSession && !!studioSession}
-                          onSignIn={() => setAuthOpen(true)} />;
+                          onSignIn={() => { setAuthMode("in"); setAuthOpen(true); }} />;
       })()}
 
       {studioSession && (() => {
@@ -18376,7 +18452,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           pickedExtras={pickedExtras}
           setPickedExtras={setPickedExtras}
           session={userSession}
-          onSignIn={() => setAuthOpen(true)}
+          onSignIn={() => { setAuthMode("in"); setAuthOpen(true); }}
           // Oliver, 15 Aug 2026: "If the person has an account, then Gemlyx and
           // the cards should be able to recommend even easier." The typed
           // profile already reaches every PROMPT (profileForPrompt, in the

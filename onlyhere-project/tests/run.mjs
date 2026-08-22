@@ -91,7 +91,7 @@ writeFileSync(entry, `
   export { directionsEndpoint, collapsedRoute } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { upgradeWorthIt, onFootMinutes, MIN_UPGRADE_SAVING, COLLAPSE_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
-  export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, missingRequired, cleanBornDate, birthYear, BORN_DATE_MIN, BORN_DATE_MAX, REQUIRED_PROFILE, REQUIRED_LABEL, AGE_BANDS, BORN_YEARS, bandForYear, holdProfile, takeHeldProfile, PENDING_PROFILE_KEY, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
+  export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, missingRequired, cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS, cleanBornDate, birthYear, BORN_DATE_MIN, BORN_DATE_MAX, REQUIRED_PROFILE, REQUIRED_LABEL, AGE_BANDS, BORN_YEARS, bandForYear, holdProfile, takeHeldProfile, PENDING_PROFILE_KEY, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
   export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
@@ -110,7 +110,7 @@ writeFileSync(entry, `
   export { RIGHTS_HOLDER, copyrightLine, GUIDE_RIGHTS_SHORT, GUIDE_RIGHTS_FULL, TDM_RESERVATION } from ${JSON.stringify(join(root, "src/utils/rights.js"))};
   export { guideHero, heroCaption } from ${JSON.stringify(join(root, "src/utils/guideHero.js"))};
   export { nameFit, describeNameFit } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
-  export { stayTextProblem, stayTextForReader } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
+  export { stayTextProblem, stayTextForReader, withoutStump, withoutDayTripClaim as wdtc } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { offerReason as offerReasonFn, rowThemeWords, ARRIVAL_WORDS } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { outOfBudget, budgetWarning, BUDGET_RULES_OUT, PRICED_KINDS } from ${JSON.stringify(join(root, "src/utils/budgetFit.js"))};
   export { MAX_STOPS_ARRIVAL_DAY, namedIn, ISLAND_KOMMUNE_NAMES } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
@@ -145,7 +145,7 @@ writeFileSync(entry, `
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { cardLine, cardLineSource, sentencesOf, isOriginSentence, CARD_LINE_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
   export { buildPreviewReport, rowReport, passOf, reportFilename, REPORT_KIND } from ${JSON.stringify(join(root, "src/utils/previewReport.js"))};
-  export { OBSERVED_MIN, OBSERVED_CAP, OBSERVED_FIELDS, cleanLearned, learnedIsEmpty, seenFromTrip, observeTrip, settledObservations, observedForPrompt } from ${JSON.stringify(join(root, "src/utils/profileLearning.js"))};
+  export { OBSERVED_MIN, learnedIsEmpty, seenFromTrip, observeTrip, settledObservations, observedForPrompt } from ${JSON.stringify(join(root, "src/utils/profileLearning.js"))};
   export { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, COVERAGE_UNANSWERED, COVERAGE_UNCOUNTED } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
   export { stayRangeIn, stayRangeInBody, stayGlanceDays, stayContradiction, restatesBody, restatementFindings, meaningfulWords, RESTATEMENT } from ${JSON.stringify(join(root, "src/utils/draftShape.js"))};
   export { searchTypeFor } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
@@ -154,7 +154,7 @@ writeFileSync(entry, `
   export { beyondHorizon, isMajorEvent, EVENT_HORIZON_MONTHS, MANY_EVENTS_IN_A_TOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { vehicleMismatches, guideRides } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { factCheckCopy } from ${JSON.stringify(join(root, "src/utils/factCheckCopy.js"))};
-  export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn, travelModeKey, modeReachKm, MODE_DAY_KM, preferReachable, preferPassing, overnightMove, describeOvernightMove } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
+  export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn, travelModeKey, modeReachKm, MODE_DAY_KM, preferReachable, preferPassing, overnightMove, describeOvernightMove, spokenDuration, beyondModeRange, BEYOND_DAY_FACTOR, sameMode, howForReader, EATS_THE_DAY_MINUTES } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dayCountIn, daysBetween, describePicks, monthOnlyIn, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED, isRegionCrossing } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
@@ -1998,7 +1998,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     const app6 = readFileSync(join(root, "src/App.jsx"), "utf8");
     ok("the router takes the trip's real date", /const fetchExactDurations = async \(days, primaryMode, freshGeo = \{\}, onlyWalking = false, tripDate = null\)/.test(app6));
     ok("and the caller actually passes it", /fetchExactDurations\(parsed\.days, travelMode, freshGeo, onlyWalking, arrivalDate\)/.test(app6));
-    ok("each leg carries its own day number", /legs\.push\(\[day\.stops\[i\]\.name, day\.stops\[i \+ 1\]\.name, day\.glance\?\.legs\?\.\[i\]\?\.how \|\| "", Math\.max\(0, \(Number\(day\.day\) \|\| 1\) - 1\)\]\);/.test(app6));
+    // `di + 1` rather than `1` when day.day is missing, corrected 22 Aug: the
+    // cross-day push added that day had the right fallback and this one did not,
+    // so on a guide whose days carry no number every intra-day leg was routed as
+    // day one and a Sunday bus was priced as a Wednesday one.
+    ok("each leg carries its own day number", /legs\.push\(\[day\.stops\[i\]\.name, day\.stops\[i \+ 1\]\.name, day\.glance\?\.legs\?\.\[i\]\?\.how \|\| "", Math\.max\(0, \(Number\(day\.day\) \|\| di \+ 1\) - 1\)\]\);/.test(app6));
     ok("and both routing calls use it", (app6.match(/departureParam\((?:legMode|upgrade), tripDate, dayOffset\)/g) || []).length === 2);
     // The bug in one line: no transit call may anchor to nothing any more.
     ok("no transit call is left on the generic anchor", !/departureParam\(legMode\)|departureParam\(upgrade\)/.test(app6));
@@ -3628,6 +3632,20 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     const pics = out.filter(b => b.type === "image");
     is("the first of two identical captions is shown", pics[0]._showCaption, true);
     is("and the second is not", pics[1]._showCaption, false);
+  }
+  {
+    // ── KEYED ON WHAT THE PAGE PRINTS, NOT ON WHAT WAS STORED ──────
+    // DetailPage renders trimCaption(caption), and this keyed on the raw string,
+    // so two Commons files whose captions differ only by the Flickr import bot's
+    // tail hashed differently, both kept their caption, and both then printed
+    // the identical trimmed line one under the other. The exact fault the dedupe
+    // was written for, in the same file, on the same day. Found by an
+    // adversarial review.
+    const out = layoutBody([P("a"), P("b"),
+      IMG("/1.jpg", "Tivoli at night"),
+      IMG("/2.jpg", "Tivoli at night - Flickr - Maria Eklind")]);
+    const pics = out.filter(b => b.type === "image");
+    is("two captions that render the same are one caption", pics.map(b => b._showCaption), [true, false]);
     // Both files are CC BY-SA 2.0. Two works need two attributions however alike
     // their titles are, so nothing here may be read as suppressing a credit.
     is("both blocks keep everything the credit is rendered from", pics.filter(b => b.src).length, 2);
@@ -3664,7 +3682,21 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // packed around a 383px neighbour exactly as the spec requires.
   const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   ok("a figure's picture owns a height before the network answers", /\.gx-fig img \{[^}]*aspect-ratio: 4 \/ 3;/.test(dp));
-  ok("and fits rather than stretches into it", /\.gx-fig img \{[^}]*object-fit: cover;/.test(dp));
+  // CONTAIN, not cover. Cropping every figure into a landscape box loses about
+  // 44% of a 2:3 event poster, and Oliver has already made exactly that
+  // complaint once about the guide's stop photos: "avoid the horizontal
+  // pictures, you can't see the whole castle." The box is still reserved, which
+  // is the whole point of the ratio; contain only changes what happens inside it.
+  ok("and fits rather than crops into it", /\.gx-fig img \{[^}]*object-fit: contain;/.test(dp));
+  ok("nothing in the figure layout crops", !/\.gx-fig img \{[^}]*object-fit: cover;/.test(dp));
+  // The video in this same layout was already using contain, so the two branches
+  // of one layout disagreed about whether a picture may be cut.
+  ok("and the video agrees with it", /<video src=\{block\.src\}[^>]*objectFit: "contain"/.test(dp));
+  // A video is a figure to layoutBody, shares the caption dedupe set with the
+  // images, and was ignoring both the flag and the trim: a video whose caption
+  // repeated an image's still printed, and one carrying the "- Flickr - <name>"
+  // tail printed the credit twice.
+  is("both figure kinds obey the caption rules", (dp.match(/block\._showCaption !== false && trimCaption\(block\.caption\)/g) || []).length, 2);
   // The rule is on a class, so both figure sides have to carry it or it lands on
   // one of them and the other keeps collapsing.
   is("both sides are figures", (dp.match(/className=\{`gx-fig gx-fig-\$\{block\._side \|\| "right"\}`\}/g) || []).length, 2);
@@ -21839,7 +21871,26 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("it says how long is left", /Send it again in \$\{Math\.ceil\(\(resendAt - now\) \/ 1000\)\}s/.test(sheetS));
   // The ticker runs ONLY while a cooldown is running, or an idle sheet
   // re-renders once a second for as long as it is open.
-  ok("the ticker stops when there is nothing to count", /if \(!sentTo \|\| resendAt <= Date\.now\(\)\) return;/.test(sheetS));
+  // ── AND IT ACTUALLY STOPS ────────────────────────────────────────
+  // The first version guarded on Date.now() with only [sentTo, resendAt] as
+  // dependencies. Neither changes when the sixty seconds elapse, so nothing
+  // re-ran the effect and the interval fired forever: on a CLOSED sheet, for the
+  // rest of the page's life, once a second, on a component returning null. The
+  // comment above it claimed the opposite. `now` in the deps is what makes the
+  // guard get re-checked, so the effect tears its own interval down on the tick
+  // that passes it. Found by an adversarial review on 22 Aug.
+  ok("the ticker stops when there is nothing to count", /if \(!open \|\| !sentTo \|\| resendAt <= now\) return;/.test(sheetS));
+  ok("and the guard is re-evaluated, not frozen at mount", /\}, \[open, sentTo, resendAt, now\]\);/.test(sheetS));
+
+  // ── A SHEET THAT OPENS IS A SHEET THAT STARTS AGAIN ──────────────
+  // The reset effect cleared five fields and left five: sentTo, email, password,
+  // answers and resendAt. The component is mounted permanently, so nothing else
+  // ever cleared them. Sign up, close, press "Log in" and the stale sentTo
+  // short-circuited the whole form back to "Check your email". And on a shared
+  // laptop, person A's address and password were still in the fields for
+  // person B, one devtools inspection away.
+  for (const field of ['setEmail\\(""\\)', 'setPassword\\(""\\)', 'setConfirm\\(""\\)', 'setAnswers\\(EMPTY_PROFILE\\)', 'setSentTo\\(""\\)', 'setResendAt\\(0\\)'])
+    ok(`the reset clears ${field.replace(/\\\\|\(|\)|"/g, "")}`, new RegExp(field).test(sheetS));
   ok("and is cleared on unmount", /return \(\) => clearInterval\(t\);/.test(sheetS));
 
   // A refusal is the EXPECTED answer to an impatient third press. Somebody told
@@ -22051,7 +22102,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the capture asks Supabase for the user id", /const full = await withUser\(session\);/.test(auth));
   ok("and the old floating write is gone", !/\.then\(u => \{ if \(u\?\.email\) write/.test(stripNonCode(auth)));
   ok("a session that still has no id is reported rather than returned quietly",
-     /if \(!full\.userId\) \{[\s\S]{0,400}error: "Signed in, but your account could not be identified/.test(auth));
+     /if \(!full\.userId\) \{[\s\S]{0,1200}error: "Signed in, but your account could not be identified/.test(auth));
+  // ── AND recovery IS KNOWN BEFORE THE NETWORK IS INVOLVED ─────────
+  // This path hardcoded `recovery: false`, and withUser swallows every failure,
+  // so one flaky moment on mobile data turned a password reset into an ordinary
+  // sign in: the new-password screen never opened, the one-use token had already
+  // been spent, and the person was left signed in with a session every cloud
+  // call refuses. `type` said what this was from the fragment alone.
+  is("the recovery flag is never hardcoded false on a real recovery",
+     (auth.match(/recovery: type === "recovery"/g) || []).length, 2);
   // And the same repair runs for anybody already carrying a broken session from
   // before the fix, so they do not have to work out that signing out mends it.
   ok("an existing broken session is repaired on load", /if \(!stored\.userId && Date\.now\(\) < stored\.expiresAt - 120000\) return await withUser\(stored\);/.test(auth));
@@ -22203,7 +22262,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // And it does not fall through into the email path afterwards, which would
     // try to sign them in with a password they have only just set.
     ok("and that branch returns rather than falling through",
-       /await updatePassword\(recoverySession, password\);[\s\S]{0,320}onSignedIn\(recoverySession\);\s*return;/.test(sheetR));
+       /await updatePassword\(recoverySession, password\);[\s\S]{0,1400}onSignedIn\(recoverySession, \{ done: true \}\);\s*return;/.test(sheetR));
     // No email field: they arrived holding a token, so who they are is settled
     // and asking again is asking them to prove what they just proved.
     ok("which does not ask who they are again", /\{mode !== "newpass" && \(\s*<input type="email"/.test(sheetR));
@@ -22245,6 +22304,35 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("only while the sheet is open", /if \(!open\) return;\s*const onKey/.test(sheetB));
     ok("and the listener is removed again", /return \(\) => window\.removeEventListener\("keydown", onKey\);/.test(sheetB));
   }
+
+  // ── A SUCCESSFUL RESET USED TO BE A DEAD END ─────────────────────
+  //
+  // onSignedIn closes the sheet by clearing authOpen, but the recovery sheet is
+  // held open by `recoverySession`, not by authOpen. So finishing a password
+  // reset left the modal up on the new-password screen with both fields filled
+  // and "Password changed" underneath. And nothing reset authMode, so the NEXT
+  // opening from any door came back as "newpass": no email field, no mode links,
+  // and a Set new password button calling updatePassword with a null session.
+  // A dead end reachable by succeeding, with no way out but the menu or a reload.
+  {
+    const appD = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("finishing a reset clears the thing holding the sheet open", /setRecoverySession\(null\);\s*\n\s*setAuthMode\("in"\);/.test(appD));
+    ok("and it happens where every sign-in lands", /const handleSignedIn = \(session\) => \{[\s\S]{0,1400}setAuthMode\("in"\);/.test(appD));
+    // The two entry points that opened the sheet without choosing a screen. Every
+    // door has to pick, or the sheet reopens on whatever it was last left on.
+    is("no entry point opens the sheet without choosing a screen",
+       (appD.match(/onSignIn=\{\(\) => setAuthOpen\(true\)\}/g) || []).length, 0);
+    // Five doors: the header Log in, the menu entry, the AskGemlyx panel, the
+    // guide screen, and the account nudge. Every one of them names the screen it
+    // wants before opening.
+    is("all of them set the mode first", (appD.match(/setAuthMode\("in"\); setAuthOpen\(true\);/g) || []).length, 5);
+  }
+  // A 200 with no token is not a sign in. shape() returns null for a body with no
+  // access_token and signInWithPassword then writes null to storage, so passing
+  // it straight through set userSession to null and closed the sheet: signed out,
+  // no error, nothing on screen.
+  ok("an empty sign in is reported rather than closing the sheet",
+     /if \(!signedIn\) \{ setError\("That sign in did not come back with a session/.test(readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8")));
 
   // ── GOOGLE, SWITCHED OFF UNTIL THE POLICIES EXIST ────────────────
   //
@@ -22344,6 +22432,168 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("publish refuses a link that cannot be embedded", /if \(!isEmbeddablePost\(studioInstagramUrl\)\) \{/.test(appI));
     ok("and says so through the same channel as every other publish refusal",
        /isEmbeddablePost\(studioInstagramUrl\)\) \{\s*setPublishStatus\(null\);\s*setDraftEditError\(/.test(appI));
+  }
+}
+
+// ── "THESE ARE," AND THE STOP NUMBERS THAT SKIPPED ─────────────────
+//
+// Two faults from the audit of guide scyek6rypzn, both visible on a page a
+// reader had already been given.
+{
+  const { withoutStump, wdtc: withoutDayTripClaim } = M;
+
+  // THE REAL SENTENCE off the live page, not an invented one. It printed
+  // "These are, so base yourself near central Copenhagen..." at the top of the
+  // Where to stay box, which is the first thing the eye lands on in there.
+  const real = "These are all within easy day trips from Copenhagen, so base yourself near central Copenhagen with the Copenhagen Card (~450 DKK for 48 hours) and let the trains do the work each morning.";
+  const fixed = withoutDayTripClaim(real);
+  ok("the stump is gone", !/^These are/.test(fixed));
+  ok("and what is left is a sentence", /^Base yourself near central Copenhagen/.test(fixed));
+  ok("with the rest of it intact", /Copenhagen Card \(~450 DKK for 48 hours\)/.test(fixed));
+  ok("and the claim itself still removed", !/day trips? from/i.test(fixed));
+
+  // The guard that let it through counted WORDS. That asks how much is left,
+  // and the question is whether what is left is a sentence: this one still had
+  // twenty-eight words in it.
+  {
+    const words = real.replace(/[^\w\s]/g, " ").trim().split(/\s+/).length;
+    ok("the old word-count guard could never have caught it", words > 20);
+  }
+
+  // ── AND THE FIRST FIX FOR IT WAS WORSE THAN THE FAULT ────────────
+  //
+  // withoutStump originally searched for the FIRST comma in the sentence and
+  // treated everything before it as the stump. An adversarial review the same
+  // night ran it against real accommodation sentences and it amputated the
+  // subject of every one of them, because ordinary English leads DO end on
+  // "are" and "in":
+  //
+  //   "The two areas worth paying for are, in order, Indre By and Nyhavn, with
+  //    easy day trips from Copenhagen."   ->   "In order, Indre By and Nyhavn."
+  //
+  // All of them cleared the word count and shipped. Silently rewriting sentences
+  // that were never broken is a worse fault than the fragment it was fixing, so
+  // the caller now says WHERE the claim was cut out and this looks at that seam
+  // and nowhere else. A comma anywhere else is somebody's punctuation.
+  const SEAM = (raw) => raw.search(/[,;]?\s*(?:and\s+|with\s+)?(?:easy\s+|simple\s+|straightforward\s+)?day[\s-]?trips?\s+(?:from|out of)\s+[^,.;]*/i);
+  for (const real2 of [
+    "The two areas worth paying for are, in order, Indre By and Nyhavn, with easy day trips from Copenhagen.",
+    "Prices are, frankly, high in July, but a room in Nørrebro is cheaper and day trips from Copenhagen are easy.",
+    "Stay somewhere with parking in, or right beside, the old town, with easy day trips from Ribe.",
+    "Stay near Køge harbour, so you can ride out early, with easy day trips from Copenhagen.",
+  ]) {
+    const out = withoutDayTripClaim(real2);
+    ok(`the subject survives: ${real2.slice(0, 34)}`, out.startsWith(real2.slice(0, 20)));
+    ok(`and the claim still goes: ${real2.slice(0, 24)}`, !/day trips?/i.test(out));
+  }
+  // withoutStump on its own, given the seam. A clause cannot end on "within",
+  // "from", "are" or "all", and that is the whole detector: no grammar, and it
+  // only ever looks at the one seam a known cut created.
+  {
+    const one = "These are all within, so base yourself in Aarhus";
+    is("a lead ending in a preposition goes", withoutStump(one, one.indexOf(",")), "Base yourself in Aarhus");
+  }
+  // NO SEAM, NO STUMP. Called with nothing cut, it must not touch the sentence:
+  // this is the guard that makes the whole-sentence cases above safe.
+  // NO SEAM MEANS NO CUT MEANS NO STUMP. The default is -1 and the guard is what
+  // makes it mean "do nothing": without it, `t.slice(0, -1)` drops the final
+  // character and the detector then reads the sentence's LAST clause as a stump,
+  // which on any sentence whose last clause ends in a copula destroys everything
+  // but the full stop. Two earlier versions of this test used sentences the
+  // detector would not have fired on anyway, so the mutant lived twice.
+  for (const whole of [
+    "Rooms in Nyhavn are dear, and in July they are.",
+    "The old town is walkable, the harbour is.",
+    "Stay in Nyhavn, or anywhere within.",
+  ]) is(`untouched with no seam: ${whole.slice(0, 26)}`, withoutStump(whole), whole);
+  is("and one whose comma follows a real preposition", withoutStump("Stay near Køge harbour, so you can ride out early"), "Stay near Køge harbour, so you can ride out early");
+  is("and one with no comma at all", withoutStump("Stay near Køge harbour", 5), "Stay near Køge harbour");
+  is("nothing is nothing", withoutStump("", 0), "");
+  // A stump with nothing after it is not repaired into a fragment.
+  {
+    const bare = "These are all within,";
+    is("a stump with nothing behind it goes entirely", withoutStump(bare, bare.indexOf(",")), "");
+  }
+
+  // ── THE NUMBERS THAT SKIPPED 6 AND 12 ────────────────────────────
+  // The guide numbered 1, 2, 3, 4, 5, then Amalienborg with no badge, then 7.
+  // Later 10, 11, Culture Night with no badge, 13. Both unnumbered stops were
+  // PHOTO cards, and the plate that prints the number lives in the other branch
+  // of that ternary, so a photo stop consumed a pin number on the map and
+  // printed none on its card, against a map caption that promises every stop
+  // below is numbered in order.
+  {
+    const gpN = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+    is("both card variants print the pin number", (gpN.match(/pinNumber\(stop\) \|\| \(stop\.name \|\| "◆"\)\.slice\(0, 1\)/g) || []).length, 2);
+    // ANCHORED INSIDE THE PHOTO BRANCH, between the image and the title row, so
+    // the badge cannot be moved out of the variant it was added for while the
+    // count above still reads 2. A count says how many exist, not where they are.
+    {
+      const photoBranch = gpN.slice(gpN.indexOf('<img src={real.photo}'), gpN.indexOf('<div style={{ padding: "12px 14px 14px" }}>{titleRow}</div>'));
+      ok("the photo branch was found", photoBranch.length > 200 && photoBranch.length < 3000);
+      ok("and the number is inside it", /pinNumber\(stop\) \|\| \(stop\.name/.test(photoBranch));
+      // Not hidden, not zero-sized, not behind the image: it is a rendered badge.
+      ok("as something actually rendered", !/hidden|display: "none"|opacity: 0/.test(photoBranch));
+    }
+    // On the image, where the photo card's content is, and not colliding with
+    // the arrival time that already owns the left corner.
+    ok("the photo card's number sits opposite its time", /position: "absolute", top: 10, right: 10, width: 30, height: 30/.test(gpN));
+    ok("and the time is still on the left", /position: "absolute", top: 10, left: 10[\s\S]{0,220}\{stop\.arrivalTime\}/.test(gpN));
+    // A stop that is not on the map keeps its letter in BOTH variants: giving it
+    // a number would be the same promise breaking in the other direction.
+    is("an unplaced stop keeps its letter either way", (gpN.match(/fontStyle: pinNumber\(stop\) \? "normal" : "italic"/g) || []).length, 2);
+  }
+}
+
+// ── THE PROFILE LEARNING WAS DEAD CODE ─────────────────────────────
+//
+// Built 21 Aug on Oliver's "this account is also so the AI knows the person.
+// Everytime a user uses the app, it gets to know him more." It never worked once.
+//
+// cleanProfile returns an object literal of exactly the fields it names,
+// saveProfile writes `profile: cleanProfile(profile)`, and `learned` was not one
+// of the names. So every observation was dropped on the way to Supabase and
+// dropped again on the way back, and since an observation must happen TWICE
+// before it is used, the only way to see the feature work at all was to build two
+// guides in one tab without reloading. Opening the profile sheet reset the
+// counter as well, because ProfileSheet sends back a cleaned object.
+{
+  const { cleanProfile, cleanLearned, isBlank, EMPTY_PROFILE: BLANK2 } = M;
+  const twoTrips = { interests: { History: 2, Nature: 1 }, transport: { Car: 2 } };
+
+  // THE ONE ASSERTION THE WHOLE FEATURE RESTED ON, and nothing had it.
+  is("a save keeps what was noticed", JSON.stringify(cleanProfile({ name: "Oliver", learned: twoTrips }).learned), JSON.stringify(twoTrips));
+  is("and a fetch does too, since both go through the same cleaner",
+     JSON.stringify(cleanProfile(cleanProfile({ learned: twoTrips })).learned), JSON.stringify(twoTrips));
+
+  // The cleaner itself. An option nobody was offered is dropped, for the reason
+  // cleanProfile drops one: a stored answer that cannot have been given is a bug
+  // that survives a reload.
+  is("an option nobody was offered is dropped", JSON.stringify(cleanLearned({ interests: { History: 2, Parkour: 4 } })), JSON.stringify({ interests: { History: 2 } }));
+  is("a count of zero is not kept", JSON.stringify(cleanLearned({ interests: { History: 0 } })), "{}");
+  is("and a count is capped", cleanLearned({ interests: { History: 99 } }).interests.History, 6);
+  is("rubbish in the slot is ignored", JSON.stringify(cleanLearned({ interests: "History" })), "{}");
+  is("and so is nothing at all", JSON.stringify(cleanLearned(null)), "{}");
+
+  // ── AND IT IS NOT AN ANSWER THEY GAVE ───────────────────────────
+  // isBlank asks whether they told us anything, and an observation is by
+  // definition something nobody told us. Left in the check it would be worse
+  // than wrong: `learned` is an OBJECT, `{} !== ""` is true, and every profile in
+  // the app would report itself filled in from the moment the field existed.
+  is("an empty profile is still blank", isBlank(BLANK2), true);
+  is("and one that has only been NOTICED is still blank", isBlank({ learned: twoTrips }), true);
+  is("while one typed answer is not", isBlank({ name: "Oliver" }), false);
+
+  // No import cycle: profileLearning already imports from profile, so the cleaner
+  // moved rather than the import going both ways.
+  {
+    const pl = readFileSync(join(root, "src/utils/profileLearning.js"), "utf8");
+    const pf = readFileSync(join(root, "src/utils/profile.js"), "utf8");
+    ok("the cleaner lives in profile.js", /export const cleanLearned = \(raw\) => \{/.test(pf));
+    ok("and profileLearning re-exports it rather than redefining it",
+       /export \{ cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS \};/.test(pl));
+    ok("with no second definition left behind", !/export const cleanLearned/.test(stripNonCode(pl)));
+    ok("and profile.js does not import from profileLearning", !/from "\.\/profileLearning"/.test(pf));
   }
 }
 
@@ -23999,7 +24249,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // leg, two screens, six hours against eight. There is one model now.
   ok("and the hours are a bicycle's hours", /roughly 8 hours/.test(said));
   const byCarSaid = describeOvernightMove(overnightMove({ from: AALBORG, to: SKAGEN, toName: "Skagen", days: 2, mode: "car" }));
-  ok("a car covers the same ground in a fraction of that", /roughly 2 hours/.test(byCarSaid));
+  // "an hour and a half", not "2 hours". 85 km by car is 85 x 1.25 / 70 = 1.52
+  // hours, which is 91 minutes, and Math.round on the hours turned that into two.
+  // spokenDuration replaced the rounding on 22 Aug because the same line rounded
+  // a SIX MINUTE hop up to "under an hour and a half" at the other end of the
+  // scale. Being right about 91 minutes is the same fix as being right about six.
+  ok("a car covers the same ground in a fraction of that", /roughly an hour and a half by car/.test(byCarSaid));
   // AND THE RELATIONSHIP, not only the two numbers. A literal pins today's answer;
   // this pins the thing that must stay true whatever the speeds become, which is
   // what would catch a car's pace being pasted into the bicycle row.
@@ -24097,7 +24352,205 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // that guard being inverted, and mutation testing proved it: flipping `!line` to
   // `line` hides the block on every guide that has one and changed no assertion.
   ok("and it renders when there IS a line, not when there is not",
-     /const line = describeOvernightMove\(move\);\s*\n\s*if \(!line\) return null;/.test(gpSrc));
+     /const line = describeOvernightMove\(move, usableMeasure\);\s*\n\s*if \(!line\) return null;/.test(gpSrc));
+  // ── THE FIFTEEN HOUR BICYCLE RIDE ────────────────────────────────
+  //
+  // Guide scyek6rypzn, live, on 21 Aug: "About 156 km to Aarhus, roughly 15 hours
+  // on a bike." Copenhagen to Aarhus crosses the Great Belt and CYCLISTS ARE NOT
+  // ALLOWED ON THE BRIDGE (VisitNyborg states it plainly: a bike goes on a DSB
+  // train). So that was not a slow estimate of a real journey, there is no such
+  // journey. The same page said "about 3 hours" by train in three other places,
+  // which is what made it indefensible rather than merely wrong.
+  {
+    const { spokenDuration, beyondModeRange, BEYOND_DAY_FACTOR } = M;
+    const CPH = { lat: 55.6761, lon: 12.5683 }, AAR = { lat: 56.1629, lon: 10.2039 };
+    const far = overnightMove({ from: CPH, to: AAR, toName: "Aarhus", days: 8, mode: "bike" });
+    const farSaid = describeOvernightMove(far);
+    ok("a distance no cyclist rides is not given a cycling time", !/hours on a bike/.test(farSaid));
+    ok("it says what the leg actually needs instead", /needs a train or a car/.test(farSaid));
+    // And it names the thing a cyclist most needs to know, which is that the bike
+    // is not left behind.
+    ok("and that the bike comes too", /a bike goes on the train with you/.test(farSaid));
+
+    // ── THE GUARD IS A DISTANCE RULE, NOT A BRIDGE TABLE ───────────
+    // A list of bridges goes stale silently and only ever covers the crossings
+    // somebody remembered. What is true generally is that a leg longer than a
+    // mode covers is not a leg by that mode, bridge or no bridge.
+    is("the line sits at twice a comfortable day", BEYOND_DAY_FACTOR, 2);
+    is("120 km on a bike is beyond it", beyondModeRange(121, "bike"), true);
+    // AND A HARD DAY IS STILL A DAY. The Aalborg to Skagen leg this whole block
+    // was built around is 85 km on a bicycle, which people genuinely do. The
+    // first version of this guard used MODE_DAY_KM straight and started calling
+    // that impossible, which is the opposite error and the suite caught it.
+    is("but 92 km is a hard ride, not an impossible one", beyondModeRange(92, "bike"), false);
+    is("walking stops at 30 km", beyondModeRange(31, "walk"), true);
+    // A car and a train have no such ceiling AT ANY DISTANCE. Tested with an
+    // absurd number rather than a plausible one: at 500 km this passed even with
+    // car and transit wrongly added to the list, because MODE_DAY_KM.car is 300
+    // and twice that is 600. A guard that must never fire has to be tested past
+    // where it could. Mutation testing caught it.
+    is("a car is never out of range", beyondModeRange(5000, "car"), false);
+    is("nor is public transport", beyondModeRange(5000, "public transport"), false);
+    is("nor a camper", beyondModeRange(5000, "camper"), false);
+    is("and an unknown mode is not guessed at", beyondModeRange(500, ""), false);
+
+    // ── THE NINETY MINUTE KILOMETRE ────────────────────────────────
+    // The same guide: "About 1 km to Copenhagen, roughly under an hour and a half
+    // on a bike." That was a FLOOR, not a rounding: `hours < 1.5` printed the
+    // same words for six minutes as for eighty-nine. At this file's own cycling
+    // pace 1 km is a six minute ride.
+    const hop = describeOvernightMove(overnightMove({ from: CPH, to: { lat: 55.685, lon: 12.57 }, toName: "Copenhagen", days: 8, mode: "bike" }));
+    ok("a one kilometre hop is not an hour and a half", !/under an hour and a half/.test(hop));
+    ok("it is a handful of minutes", /roughly \d+ minutes on a bike/.test(hop));
+
+    // spokenDuration itself, at every band, because the words are the whole point.
+    is("six minutes", spokenDuration(6), "5 minutes");
+    is("twenty three minutes rounds to five", spokenDuration(23), "25 minutes");
+    // 59 rounds to 60, and "60 minutes" is not something anybody says.
+    is("fifty nine minutes is an hour", spokenDuration(59), "1 hour");
+    is("ninety one minutes", spokenDuration(91), "an hour and a half");
+    is("and it is plural after the half", spokenDuration(150), "2 and a half hours");
+    is("ten past two rounds down", spokenDuration(130), "2 hours");
+    is("ten to three rounds up", spokenDuration(170), "3 hours");
+    is("nothing is nothing", spokenDuration(0), "");
+    is("and so is rubbish", spokenDuration("later"), "");
+    // A MEASURED figure keeps its minutes. Rounding a real Directions answer to
+    // the nearest half hour throws away the thing that makes it worth more than
+    // the estimate.
+    is("a measured duration is exact", spokenDuration(187, { precise: true }), "3h 7m");
+    is("and says hours when it lands on one", spokenDuration(180, { precise: true }), "3 hours");
+
+    // ── MEASURED BEATS THE ESTIMATE ────────────────────────────────
+    const measured = describeOvernightMove(far, { durationMinutes: 187, modeUsed: "public transport" });
+    ok("a real route is printed instead of the estimate", /3h 7m by train and bus/.test(measured));
+    ok("and the impossible-mode line steps aside for it", !/needs a train or a car/.test(measured));
+    // A zero or missing measurement is not a measurement.
+    ok("a zero measurement falls back to the estimate", /needs a train or a car/.test(describeOvernightMove(far, { durationMinutes: 0 })));
+  }
+
+  // ── AND THREE OF THE SEVEN WERE NOT JOURNEYS AT ALL ──────────────
+  //
+  // The same guide printed "About 1 km to Copenhagen" between two days both spent
+  // in Copenhagen, and "About 2 km to Aarhus" between two days both in Aarhus.
+  // overnightMove's own guard is a DISTANCE one, and a distance guard cannot
+  // catch a two kilometre hop across the same city, because that is a real
+  // distance. The question was never how far apart the two points are, it is
+  // whether the traveller changes town overnight.
+  //
+  // fromT and toT were already computed on the two lines above it and nothing
+  // compared them.
+  ok("two days in the same town print nothing at all",
+     /const sameTown = fromT && toT && fromT\.trim\(\)\.toLowerCase\(\) === toT\.trim\(\)\.toLowerCase\(\);\s*\n\s*if \(sameTown\) return null;/.test(gpSrc));
+  // BEFORE the coordinates are resolved, or it does the geocoding work to answer
+  // a question it has already answered.
+  ok("and it decides that before resolving anything",
+     gpSrc.indexOf("const sameTown = fromT && toT") < gpSrc.indexOf("const a = resolveStopCoords(lastHere.name"));
+
+  // ── THE MEASURED LEG, WHICH NOTHING WAS ASKING FOR ───────────────
+  // fetchExactDurations routed the cross-day pair only when the NEXT day had
+  // exactly one stop. Every other overnight move fell through to the straight
+  // line, which is where the fifteen hour bicycle ride came from.
+  {
+    const appO = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("every cross-day leg is measured now, not only the single-stop ones",
+       !/if \(day\.stops\.length === 1 && di > 0\) \{/.test(stripNonCode(appO)));
+    ok("the pair is built for every day after the first", /if \(di > 0\) \{[\s\S]{0,1600}legs\.push\(\[prevLast\.name, firstHere\.name/.test(appO));
+    // ── AND IT CARRIES NO how-TEXT, BECAUSE THERE IS NONE FOR IT ───
+    // It passed `day.glance.legs[0].how`, which describes the journey from the
+    // NEXT day's first stop to its second: a different journey. Harmless under
+    // the old single-stop gate (a one-stop day has no legs[0]), live the moment
+    // the gate came off. It resolved the mode from the wrong leg's text, and it
+    // made the FETCH key disagree with the RENDER key, which looks this up with
+    // how = null, so the leg was fetched, paid for and never read.
+    ok("with no borrowed description from the next day's own legs",
+       /legs\.push\(\[prevLast\.name, firstHere\.name, "", Math\.max/.test(appO));
+    // Both pushes date their leg the same way. The intra-day one fell back to
+    // day 1 for a guide whose days carry no number, pricing a Sunday leg as a
+    // Wednesday one.
+    is("both leg builders date a leg the same way", (appO.match(/Math\.max\(0, \(Number\(day\.day\) \|\| di \+ 1\) - 1\)/g) || []).length, 2);
+    // A stop repeated as a base is still not a journey, and that guard predates
+    // this change and must survive it.
+    ok("a day that starts where the last one ended is still skipped", /!samePlace\(prevLast\.name, firstHere\.name\)/.test(appO));
+    // Routed on its OWN date, like every intra-day leg, or a Sunday crossing is
+    // priced as a Wednesday one.
+    ok("and routed on the day it actually happens", /Math\.max\(0, \(Number\(day\.day\) \|\| di \+ 1\) - 1\)/.test(appO));
+  }
+  ok("the render looks the measured leg up", /const measuredMove = \(guide\._exactDurations \|\| \{\}\)\[`\$\{lastHere\.name\}\|\$\{firstThere\.name\}\|\$\{overnightMode\}`\]/.test(gpSrc));
+  // Under the leg's OWN resolved mode, resolved exactly as the fetch side
+  // resolves it. There was a second lookup under `guide._mode` as a fallback and
+  // it has gone: see the vocabulary note below, it could never have matched.
+  ok("under the leg's own resolved mode", /\$\{firstThere\.name\}\|\$\{overnightMode\}`\]/.test(gpSrc));
+  ok("a zero-length measurement is not treated as a measurement", /measuredMove && measuredMove\.durationMinutes >= 1\s*\n?\s*\? \{ \.\.\.measuredMove, mode:/.test(gpSrc));
+  // AND THE NOTE UNDERNEATH HAS TO MATCH WHAT WAS DONE. Saying "straight line,
+  // not a measured route" under a measured route is the same class of error in
+  // the opposite direction: it throws away credibility the number earned.
+  ok("the honesty note follows the method", /\? `Measured with Google Maps/.test(gpSrc));
+  // ── AND IT SPEAKS ONE VOCABULARY, NOT TWO ────────────────────────
+  // Found by an adversarial review on 22 Aug. The app's mode keys are "bike",
+  // "car", "walk", "public transport"; a MEASURED leg carries Google's, which
+  // are "bicycling", "driving", "walking", "transit", because that is what the
+  // Directions call was made with. Two disjoint sets meeting in three places,
+  // all three wrong:
+  //
+  //   1. `measured.modeUsed || key` fell back to the mode they ASKED for, so a
+  //      Great Belt crossing re-routed to transit printed "3h 5m on a bike" —
+  //      the exact claim beyondModeRange exists to stop, with a measured-looking
+  //      number attached, which is worse than the fifteen hours it replaced.
+  //   2. howWord only knew the app's words, so a measured leg said "by driving".
+  //   3. The note compared `modeUsed !== guide._mode`, "driving" against "car",
+  //      which can never be equal, so every car trip announced "routed as
+  //      driving".
+  ok("the note compares modes rather than spellings", /!sameMode\(usableMeasure\.mode, guide\._mode\)/.test(gpSrc));
+  ok("and names the mode in a reader's words", /howForReader\(usableMeasure\.mode\)/.test(gpSrc));
+  ok("the measurement carries the mode it was made with", /mode: measuredMove\.modeUsed \|\| overnightMode/.test(gpSrc));
+  // The dead fallback key is gone: it was written in the app's vocabulary
+  // against a store keyed in Google's, so it could never match, and with _mode
+  // null it built the literal key "A|B|null".
+  ok("and the key that could never match is gone", !/\$\{firstThere\.name\}\|\$\{guide\._mode\}/.test(stripNonCode(gpSrc)));
+  {
+    const { spokenDuration: sd, sameMode, howForReader, describeOvernightMove: dom, overnightMove: om } = M;
+    is("Google's word and ours are the same mode", sameMode("driving", "car"), true);
+    is("so are these", sameMode("transit", "public transport"), true);
+    is("and these", sameMode("bicycling", "bike"), true);
+    is("but not these", sameMode("driving", "bike"), false);
+    is("and nothing matches nothing", sameMode("", ""), false);
+    is("a reader is told train and bus", howForReader("transit"), "train and bus");
+    is("and a car is a car", howForReader("driving"), "car");
+    // THE SENTENCE ITSELF, on the exact leg that produced the fault.
+    {
+      const CPH2 = { lat: 55.6761, lon: 12.5683 }, AAR2 = { lat: 56.1629, lon: 10.2039 };
+      const bikeMove = om({ from: CPH2, to: AAR2, toName: "Aarhus", days: 8, mode: "bike" });
+      const said = dom(bikeMove, { durationMinutes: 185, modeUsed: "transit" });
+      ok("a train timetable is never called a bike ride", !/on a bike/.test(said));
+      ok("it says what it was measured as", /by train and bus/.test(said));
+      // AND THE TAIL IS ABOUT THE MEASUREMENT. eatsTheDay is computed from the
+      // straight line at the mode they asked for (40 km on a bike), so a
+      // measured 50 minute train was announcing itself as most of a day.
+      // THE LEG HAS TO SIT IN THE BAND WHERE THE TWO RULES DISAGREE.
+      // eatsTheDay is `km >= MODE_DAY_KM * 2/3`, which for a bike is 40 km, and
+      // beyondModeRange is twice a day, which is 120. So the window is 40 to 120,
+      // and Aalborg to Skagen at 85 km sits in it: a hard but real ride, called
+      // heavy by the straight line. Mutation testing caught that the first
+      // version of this test used a 27 km hop, which both rules call light and
+      // which therefore proved nothing.
+      const heavyByLine = om({ from: { lat: 57.0488, lon: 9.9217 }, to: { lat: 57.7241, lon: 10.5806 }, toName: "Skagen", days: 8, mode: "bike" });
+      is("the straight line calls this leg heavy", heavyByLine.eatsTheDay, true);
+      const shortish = dom(heavyByLine, { durationMinutes: 50, modeUsed: "transit" });
+      ok("fifty measured minutes is not most of a day", !/most of a day/.test(shortish));
+      // And the unmeasured sentence for the same leg still is, so the two are
+      // genuinely being decided by different things.
+      ok("while the estimate for the same leg still is", /most of a day/.test(dom(heavyByLine)));
+      ok("but four hours is", /most of a day/.test(dom(bikeMove, { durationMinutes: 260, modeUsed: "transit" })));
+      // A measurement with no mode at all states the time and nothing else,
+      // rather than borrowing the one they asked for.
+      ok("a measurement with no mode names no mode", !/on a bike|by /.test(dom(bikeMove, { durationMinutes: 185 })));
+    }
+    is("a measured 23 minutes is 23 minutes", sd(23, { precise: true }), "23 minutes");
+    is("and one minute is singular", sd(1, { precise: true }), "1 minute");
+    is("while an estimate still rounds", sd(23), "25 minutes");
+  }
+  ok("and still says straight line when it is one", /: "Straight line distance, not a measured route/.test(gpSrc));
+
   ok("a missing coordinate bails out rather than guessing one",
      /if \(!a \|\| !b\) return null;/.test(gpSrc));
   ok("the trip's own mode is what it uses", /mode: guide\._mode,/.test(gpSrc));
@@ -28318,8 +28771,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // and no date, exactly as ageBand rows survived the year arriving.
   ok("and the old year field is still carried", /bornYear: oneOf\(String\(raw\?\.bornYear \?\? ""\), BORN_YEARS\),/.test(prof));
   ok("with one place deriving the year from either", /export const birthYear = \(profile\) => \{/.test(prof));
+  // `learned` joined the shape on 22 Aug, which is what made the whole
+  // profileLearning feature stop being dead code. It is NOT a field the form
+  // fills and never appears in it: see the isBlank assertions below.
   ok("the stored shape is the one the form fills",
-     /EMPTY_PROFILE = \{ name: "", bornDate: "", bornYear: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: \[\], transport: \[\], style: \[\] \}/.test(prof));
+     /EMPTY_PROFILE = \{ name: "", bornDate: "", bornYear: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: \[\], transport: \[\], style: \[\], learned: \{\} \}/.test(prof));
 }
 
 // ── 21 AUGUST 2026: "IT CANNOT MAKE A BUILD WITHOUT DATES" ──────────
@@ -28890,6 +29346,46 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("nor 1823", M.cleanBornDate("1823-01-01"), "");
   is("nor a year on its own", M.cleanBornDate("1998"), "");
   is("nor rubbish", M.cleanBornDate("not a date"), "");
+  // ── AND THE MONTH AND DAY ARE ACTUALLY USED ──────────────────────
+  //
+  // bandForYear subtracted calendar years, which is not an age, and it is the ONE
+  // place the value is consumed. So the whole of "year of birth should obviously
+  // include month and day as well" was collected and then thrown away on the way
+  // to the prompt. Found by an adversarial review on 22 Aug.
+  {
+    const { bandForYear } = M;
+    const AUG22 = new Date("2026-08-22T12:00:00Z");
+    // Born 31 December 2001: 24 on this date, and calendar-year subtraction says
+    // 25. Wrong for roughly a third of the year, and only ever at a boundary,
+    // which is exactly where the band changes what the model is told.
+    is("a birthday still to come counts as the younger age", bandForYear("2001-12-31", AUG22), "Under 25");
+    is("and one already passed counts as the older", bandForYear("2001-01-31", AUG22), "25-34");
+    is("the birthday itself has already happened", bandForYear("2001-08-22", AUG22), "25-34");
+    is("and the day before it has not", bandForYear("2001-08-23", AUG22), "Under 25");
+    // A bare year has no birthday to check, so it keeps the old arithmetic: this
+    // is every row filled in before the date field existed.
+    is("a bare year still bands", bandForYear("2001", AUG22), "25-34");
+    is("rubbish bands to nothing", bandForYear("nope", AUG22), "");
+    // And the prompt reads the DATE when there is one.
+    {
+      const pf2 = readFileSync(join(root, "src/utils/profile.js"), "utf8");
+      ok("the prompt bands from the full date", /bandForYear\(cleanBornDate\(c\.bornDate\) \|\| birthYear\(c\)\)/.test(pf2));
+    }
+  }
+
+  // ── THE MARK AND THE VALIDATOR HAVE TO AGREE ─────────────────────
+  // gap() tested raw non-emptiness while missingRequired tests cleanBornDate,
+  // which rejects a date outside the allowed range. min and max on a date input
+  // do not clamp a TYPED value. So 1900 produced "Still needed: Date of birth."
+  // pointing at nothing, with the one wrong field still marked as satisfied.
+  {
+    const pq2 = readFileSync(join(root, "src/components/ProfileQuestions.jsx"), "utf8");
+    ok("the red ring asks the same question the button does", /const filled = \(k\) => \(k === "bornDate" \? !!cleanBornDate\(p\.bornDate\) : !!String\(p\[k\] \?\? ""\)\.trim\(\)\);/.test(pq2));
+    ok("and gap is built on it", /const gap = \(k\) => required && showGaps && REQUIRED_PROFILE\.includes\(k\) && !filled\(k\);/.test(pq2));
+    // The pair that proves they agree: an out-of-range date is missing to both.
+    is("an out of range date is missing", M.missingRequired({ name: "O", sex: "Man", bornDate: "1900-05-05" }), ["bornDate"]);
+  }
+
   // BACKWARD COMPATIBILITY IS THE POINT. Every row filled in before today has a
   // year and no date, and marking those people incomplete would be asking them
   // to answer again because the form changed.
@@ -29001,7 +29497,23 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("nothing settled says nothing", observedForPrompt(BLANK2, one), "");
 
   // ── WRITTEN AFTER A BUILD, FROM HIS TURNS ONLY ──────────────────
-  ok("observed after the guide is built", /const learned = observeTrip\(userProfile\?\.learned, seen\);/.test(appL));
+  ok("observed after the guide is built", /const learned = observeTrip\(userProfile\.learned, seen\);/.test(appL));
+  // ── AND NEVER WRITTEN OVER A PROFILE WE NEVER READ ──────────────
+  //
+  // Found by an adversarial review on 22 Aug. saveProfile writes
+  // `profile: cleanProfile(next)`, and cleanProfile emits the whole literal, so
+  // the jsonb column is REPLACED rather than merged. With userProfile still null
+  // (fetchProfile hit a network error, or the missing-column branch, both of
+  // which set profileAskedRef before the await so they never retry in that tab),
+  // `next` was `{ learned }` and every other field went out blank.
+  //
+  // A signed-in traveller with a filled-in profile, one flaky load, one guide
+  // built: name, date of birth, gender, country, pace, interests, transport,
+  // style and description destroyed on the server and every other device, inside
+  // a catch that shows them nothing. The read is the permission to write.
+  ok("but only when there was a profile to add to", /if \(userProfile\) \{\s*\n\s*const learned = observeTrip/.test(appL));
+  ok("and it spreads the one it read, not an empty object", /const next = \{ \.\.\.userProfile, learned \};/.test(appL));
+  ok("the null-tolerant spread that caused it is gone", !/\{ \.\.\.\(userProfile \|\| \{\}\), learned \}/.test(stripNonCode(appL)));
   ok("from his turns only", /themes: briefThemes\(saidByTravellerForGuide, \[\]\)/.test(appL));
   ok("and never at the cost of the guide", /catch \{ \/\* never at the cost of the guide \*\//.test(appL));
   ok("a test profile never teaches it anything", /if \(userSession && !testProfile\)/.test(appL));

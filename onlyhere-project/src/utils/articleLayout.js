@@ -58,6 +58,26 @@ const isProse = (b) => b && (b.type === "paragraph" || b.type === undefined || b
 // heading and its first line reads as a mistake.
 const isAnchor = (b) => b && (b.type === "paragraph" || b.type === undefined || b.type === "bullets");
 
+// ── A CAPTION THAT IS ONLY THE CREDIT AGAIN ──────────────────────────
+//
+// Third fault on the same page. The carousel photograph was captioned "The Swing
+// Carousel - Flickr - Stig Nygaard", with "Photo: Stig Nygaard / wikimedia · CC
+// BY-SA 2.0" printed directly underneath it.
+//
+// "- Flickr - <name>" is the naming convention Commons' Flickr import bot uses,
+// on tens of thousands of files. It is provenance, and provenance is the
+// credit's job. api/commons-photo.js is fixed not to hand this over as a caption
+// in the first place, but rows published before today already carry it in the
+// database, so the rendering side trims it too. Belt and braces on purpose: the
+// database is not migrateable in one pass and a reader should not wait for it.
+export const trimCaption = (caption) => {
+  const t = String(caption || "").trim();
+  if (!t) return "";
+  // Only the bot's own tail, anchored at the end, so a photograph genuinely
+  // called something with "Flickr" in the middle of it is left alone.
+  return t.replace(/\s*-\s*Flickr\s*-\s*.+$/i, "").trim();
+};
+
 export const layoutBody = (blocks) => {
   if (!Array.isArray(blocks) || blocks.length === 0) return [];
 
@@ -127,29 +147,16 @@ export const layoutBody = (blocks) => {
   let fig = 0;
   return out.map(b => {
     if (!isImage(b)) return b;
-    const key = String(b.caption || "").trim().toLowerCase();
+    // TRIMMED FIRST, because that is the string the page renders. Keying on the
+    // raw caption while DetailPage prints trimCaption(caption) meant two Commons
+    // files captioned "Christmas market at Tivoli, Copenhagen" and "Christmas
+    // market at Tivoli, Copenhagen - Flickr - Maria Eklind" hashed differently,
+    // both kept their caption, and both then printed the identical trimmed line
+    // one under the other: the exact fault this dedupe was written for, shipped
+    // in the same file on the same day. Found by an adversarial review.
+    const key = trimCaption(b.caption).toLowerCase();
     const repeat = key.length > 0 && seen.has(key);
     if (key) seen.add(key);
     return { ...b, _side: (fig++ % 2 === 0) ? "right" : "left", _showCaption: !repeat };
   });
-};
-
-// ── A CAPTION THAT IS ONLY THE CREDIT AGAIN ──────────────────────────
-//
-// Third fault on the same page. The carousel photograph was captioned "The Swing
-// Carousel - Flickr - Stig Nygaard", with "Photo: Stig Nygaard / wikimedia · CC
-// BY-SA 2.0" printed directly underneath it.
-//
-// "- Flickr - <name>" is the naming convention Commons' Flickr import bot uses,
-// on tens of thousands of files. It is provenance, and provenance is the
-// credit's job. api/commons-photo.js is fixed not to hand this over as a caption
-// in the first place, but rows published before today already carry it in the
-// database, so the rendering side trims it too. Belt and braces on purpose: the
-// database is not migrateable in one pass and a reader should not wait for it.
-export const trimCaption = (caption) => {
-  const t = String(caption || "").trim();
-  if (!t) return "";
-  // Only the bot's own tail, anchored at the end, so a photograph genuinely
-  // called something with "Flickr" in the middle of it is left alone.
-  return t.replace(/\s*-\s*Flickr\s*-\s*.+$/i, "").trim();
 };

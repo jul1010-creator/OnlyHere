@@ -101,10 +101,32 @@ export const birthYear = (profile) => {
 // keeps working and nothing has to know which of the two a row was filled in
 // with. ageOf is deliberately not exported: an age computed from a year is a
 // derived number and there must be one place that derives it.
-export const bandForYear = (year, now = new Date()) => {
-  const y = parseInt(String(year ?? ""), 10);
+// ── AND THE MONTH AND DAY ARE USED, NOT COLLECTED AND DISCARDED ─────
+//
+// This subtracted calendar years, which is not an age: somebody born on 31
+// December 2001 was reported as 25 on 22 August 2026, when they are 24. That is
+// wrong for roughly a third of the year for anyone sitting on a band boundary,
+// which is 24/25, 34/35, 49/50 and 64/65 — the four places the band actually
+// changes what the model is told.
+//
+// It also made the whole of Oliver's 22 August change pointless at the one place
+// the value is consumed: "year of birth should obviously include month and day as
+// well", and then the month and day were thrown away on the way to the prompt.
+//
+// Takes a date OR a year. A bare year has no birthday to check, so it keeps the
+// old calendar-year arithmetic and is honest about being a year.
+export const bandForYear = (yearOrDate, now = new Date()) => {
+  const t = String(yearOrDate ?? "").trim();
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  const y = parseInt(iso ? iso[1] : t, 10);
   if (!Number.isFinite(y)) return "";
-  const age = now.getFullYear() - y;
+  let age = now.getFullYear() - y;
+  if (iso) {
+    const m = Number(iso[2]), d = Number(iso[3]);
+    // getMonth() is zero based, so +1 to compare against the ISO month.
+    const beforeBirthday = (now.getMonth() + 1) < m || ((now.getMonth() + 1) === m && now.getDate() < d);
+    if (beforeBirthday) age -= 1;
+  }
   if (age < 25) return "Under 25";
   if (age < 35) return "25-34";
   if (age < 50) return "35-49";
@@ -213,7 +235,12 @@ export const homeCurrency = (code) => {
 
 export const DESCRIPTION_MAX = 600;
 
-export const EMPTY_PROFILE = { name: "", bornDate: "", bornYear: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: [], transport: [], style: [] };
+// KEY ORDER MATTERS HERE, and only because the suite compares this against
+// cleanProfile({}) with JSON.stringify, which is order sensitive. That test is
+// worth keeping exactly as it is: the two literals drifting apart is how a field
+// gets added to one and not the other, which is the bug that made `learned`
+// disappear on every save. So `learned` goes last, where cleanProfile puts it.
+export const EMPTY_PROFILE = { name: "", bornDate: "", bornYear: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: [], transport: [], style: [], learned: {} };
 
 const str = (v, max = 120) => String(v ?? "").trim().slice(0, max);
 const oneOf = (v, list) => (list.includes(String(v ?? "").trim()) ? String(v).trim() : "");
@@ -229,6 +256,46 @@ const manyOf = (v, list) => {
 // Everything is optional, including all of it. A profile that is entirely blank
 // is a valid answer and must round-trip as one rather than becoming a row of
 // empty strings that later reads as "they filled this in and said nothing".
+// ── WHAT GEMLYX NOTICED, WHICH ALSO HAS TO SURVIVE A SAVE ───────────
+//
+// This lived in utils/profileLearning.js and the whole feature was inert because
+// of it. cleanProfile returns an object literal of exactly the fields it names,
+// saveProfile writes `profile: cleanProfile(profile)`, and `learned` was not one
+// of the names. So every observation was dropped on the way to Supabase and
+// dropped again on the way back, the counts existed only in React state, and
+// since an observation needs to happen TWICE before it is used, the only way to
+// see the feature work at all was to build two guides in one tab without
+// reloading. Opening the profile sheet reset the counter as well.
+//
+// MOVED HERE rather than imported from profileLearning, because profileLearning
+// already imports from this file and the other direction would be a cycle. This
+// is the right home anyway: it is a cleaner for a field of the profile, and it
+// belongs beside the cleaner for the rest of it. profileLearning re-exports it,
+// so nothing that already imported it from there had to change.
+//
+// The vocabularies are the same ones the form offers. An option nobody was
+// offered is dropped for the same reason cleanProfile drops one: a stored answer
+// that cannot have been given is a bug that survives.
+export const OBSERVED_CAP = 6;
+export const OBSERVED_FIELDS = ["interests", "transport", "company"];
+const OBSERVED_VOCAB = { interests: INTERESTS, transport: TRANSPORT, company: COMPANY };
+const clampObserved = (n) => Math.max(0, Math.min(OBSERVED_CAP, Math.round(Number(n) || 0)));
+
+export const cleanLearned = (raw) => {
+  const out = {};
+  for (const f of OBSERVED_FIELDS) {
+    const src = raw?.[f];
+    if (!src || typeof src !== "object") continue;
+    const kept = {};
+    for (const option of OBSERVED_VOCAB[f]) {
+      const n = clampObserved(src[option]);
+      if (n > 0) kept[option] = n;
+    }
+    if (Object.keys(kept).length) out[f] = kept;
+  }
+  return out;
+};
+
 export const cleanProfile = (raw) => ({
   name: str(raw?.name, 60),
   bornDate: cleanBornDate(raw?.bornDate),
@@ -246,6 +313,10 @@ export const cleanProfile = (raw) => ({
   interests: manyOf(raw?.interests, INTERESTS),
   transport: manyOf(raw?.transport, TRANSPORT),
   style: manyOf(raw?.style, TRAVEL_STYLE),
+  // NOT a typed answer, and never merged with one. See cleanLearned above and
+  // rule 3 in utils/profileLearning.js: typed beats noticed, always, and they are
+  // brought together only at the point of writing a prompt.
+  learned: cleanLearned(raw?.learned),
 });
 
 // ── WHAT HE MARKED AS HAVING TO BE ANSWERED ─────────────────────────
@@ -280,7 +351,13 @@ export const isBlank = (p) => {
   // a completely empty profile filled in the moment the three tick fields
   // existed, and "they filled this in and said nothing" is exactly what the
   // comment above cleanProfile says must not happen.
-  return !Object.values(c).some(v => (Array.isArray(v) ? v.length > 0 : v !== ""));
+  // ── AND `learned` IS NOT AN ANSWER THEY GAVE ──────────────────────
+  // This asks whether they told us anything, and an observation is by definition
+  // something nobody told us. Left in and it would be worse than wrong: `learned`
+  // is an OBJECT, `{} !== ""` is true, and every profile in the app would have
+  // reported itself as filled in from the moment the field existed.
+  const { learned: _noticed, ...typed } = c;
+  return !Object.values(typed).some(v => (Array.isArray(v) ? v.length > 0 : v !== ""));
 };
 
 // ── WHAT THE MODEL ACTUALLY SEES ────────────────────────────────────
@@ -298,7 +375,10 @@ export const profileForPrompt = (p) => {
   // Named, never converted. What this changes is how expensive things are
   // allowed to sound, not what any figure says.
   if (c.country) bits.push(`They are travelling from ${countryNamed(c.country).name}. Prices stay in DKK whatever this says: never convert a figure, and never add an approximate one in brackets.`);
-  const band = bandForYear(birthYear(c)) || c.ageBand;
+  // The full date when there is one, so the band is an age rather than a
+  // subtraction of calendar years. birthYear stays the fallback for every row
+  // filled in before the date field existed.
+  const band = bandForYear(cleanBornDate(c.bornDate) || birthYear(c)) || c.ageBand;
   if (band) bits.push(`Age band: ${band}.`);
   if (c.sex && c.sex !== "Prefer not to say") bits.push(`Sex: ${c.sex}.`);
   if (c.company) bits.push(`Usually travels: ${c.company.toLowerCase()}.`);
