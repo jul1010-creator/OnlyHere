@@ -21787,6 +21787,80 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   }
 }
 
+// ── THE TWO CLAIMS ON THE LANDING PAGE ─────────────────────────────
+//
+// Oliver, 22 Aug 2026, of the "Why Gemlyx exists" block: "this I found out is
+// not true for Europeans, but entirely true for non-Europeans."
+//
+// He is right, and it was the most prominent sentence on his own front page.
+// 77 percent of American overnight stays are in Copenhagen and 63 percent of
+// British ones, but Germans are the largest group by a distance and go to the
+// coast, with 80 percent of all overnight stays being coastal and nature rather
+// than city. "Most tourists" was the word doing the damage.
+{
+  const appC = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the false claim is gone", !/Most tourists see Denmark for/.test(stripNonCode(appC)));
+  ok("and nothing generalises about tourists in its place", !/All of it in Copenhagen/.test(stripNonCode(appC)));
+  ok("the replacement is a measured distance, not a claim about people",
+     /Aarhus is about three hours from Copenhagen by train/.test(appC));
+
+  // ── THE NORDIC SUPERLATIVE, AND A CORRECTION OF MY OWN ───────────
+  //
+  // His draft said Denmark "has become the most popular Nordic country among
+  // international visitors". I called that false on 22 Aug, on two measures that
+  // put Denmark third: international arrivals to registered accommodation in
+  // 2024 (Sweden 8.4m, Norway 6.7m, Denmark 6.3m) and total guest nights in 2023
+  // (Sweden 47m, Norway 25m, Denmark 24m).
+  //
+  // He sent Statista's Denmark page back, and it says the opposite: 45 percent
+  // of ALL overnight stays in the Nordics since 2008 were spent in Denmark, and
+  // Denmark took 56.1 million overnight stays in 2019.
+  //
+  // THE TWO ARE NOT MEASURING THE SAME THING, and the gap is the interesting
+  // part. Statistics Denmark counts hotels, holiday houses, campsites AND
+  // marinas: that is where 56.1m and the 26.1m half-year record come from. The
+  // Nordic guest-nights table that put Denmark at 24m cannot be counting holiday
+  // homes, because Denmark's own statistics office counts more than twice that.
+  // And Danish tourism is unusually holiday-home shaped: 42 percent of visitors
+  // stay in a rented holiday home and 23 percent camp. So Denmark leads on
+  // overnight stays and Sweden leads on arrivals to commercial accommodation,
+  // and both are true.
+  //
+  // I was wrong to call his sentence false. It was measure-dependent, and on the
+  // measure Denmark's own statistics office publishes he was right. What the
+  // copy says now names the measure, so it cannot be read against the other one:
+  // "more overnight stays than any other Nordic country" rather than "most
+  // popular among international visitors", which points at arrivals.
+  ok("the claim names its measure", /takes more overnight stays than any other Nordic country/.test(appC));
+  ok("and gives the figure behind it", /45 percent of every night spent in the Nordics since 2008/.test(appC));
+  // The vaguer wording stays out: "popular among international visitors" reads
+  // as arrivals, which is the measure Denmark does not lead.
+  ok("the ambiguous version is not what ships", !/most popular Nordic country/.test(stripNonCode(appC)));
+  ok("and the current record is still there too", /Statistics Denmark counting a record 26\.1 million overnight stays in the first half of 2026/.test(appC));
+  // THE ONE THAT WOULD HAVE BEEN EMBARRASSING. His draft read "the founders of
+  // Denmark decided to create Gemlyx".
+  ok("Gemlyx has founders, Denmark does not", /the founders of Gemlyx built it/.test(appC));
+  ok("and the country does not", !/founders of Denmark/.test(appC));
+
+  // ── HIS OWN DASH RULE, ON HIS OWN LANDING PAGE ──────────────────
+  // The old copy carried an en dash in "3-4 days" and an em dash before "the
+  // rest of the country". Asserted on the two blocks specifically rather than
+  // the file, because App.jsx is 1.5MB and a whole-file dash sweep is a
+  // different job with 130 known hits.
+  {
+    const start = appC.indexOf("Why Gemlyx exists");
+    const heroBlock = appC.slice(start, appC.indexOf("See a Road Trip", start));
+    ok("the why block was found", heroBlock.length > 200);
+    ok("and carries no dash of any kind", !/[\u2013\u2014]/.test(heroBlock));
+  }
+  {
+    const start = appC.indexOf("Denmark has seen an increase in tourism");
+    const card = appC.slice(start, start + 1400);
+    ok("the inspiration card was found", card.length > 400);
+    ok("and carries none either", !/[\u2013\u2014]/.test(card));
+  }
+}
+
 // ── THE GUIDE WAS NEVER TRANSLATED ─────────────────────────────────
 //
 // Oliver, 22 Aug 2026: "just get the language working for now." His father used
@@ -28633,14 +28707,24 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the form owns no save path", !/saveProfile/.test(quest));
 
   // ── HIS FIELDS, IN HIS WORDS ────────────────────────────────────
-  // "remove the 'or nickname'. What I meant was that you could either write
-  // 'name' or 'nickname'." It was a label saying Name over a box whose
-  // placeholder said "Or a nickname", which reads as being told to pick the
-  // second one. The label carries both words and the box says nothing.
-  ok("Name", /<div style=\{legend\}>Name or nickname\{star\("name"\)\}/.test(quest));
+  // Three passes. "Name" over a placeholder reading "Or a nickname" told people
+  // to pick the second option; "Name or nickname" as a label made a simple field
+  // look like a decision. His third and final wording, 22 Aug: "just write
+  // 'name'... and have something like 'eg. John Smith.'" A placeholder that
+  // EXAMPLES an answer is not one that instructs.
+  ok("Name", /<div style=\{legend\}>Name\{star\("name"\)\}/.test(quest));
+  ok("with an example, not an instruction", /placeholder="e\.g\. John Smith"/.test(quest));
+  // Same fault, same fix, in the free-text box. Oliver: "Not sure what 'anything
+  // that would change what a good friend recommended'." It explained the field's
+  // PURPOSE in the abstract and landed as a riddle. Four unlike examples make the
+  // range obvious instead: a dislike, a diet, a preference and an enthusiasm all
+  // count, and nobody has to work that out.
+  ok("the riddle in the free-text box is gone", !/what a good friend recommended/.test(stripNonCode(quest)));
+  ok("and it shows the range instead", /placeholder="e\.g\. I hate crowds, no seafood/.test(quest));
   // Stripped, because the comment above the field quotes the placeholder it
   // removed, which is the trap this suite has walked into twice already.
   ok("and the placeholder that confused it is gone", !/Or a nickname/.test(stripNonCode(quest)));
+  ok("and the label does not offer a choice either", !/Name or nickname/.test(stripNonCode(quest)));
   ok("Born", /<div style=\{legend\}>Date of birth\{star\("bornDate"\)\}/.test(quest));
   ok("Gender", /<div style=\{legend\}>Gender\{star\("sex"\)\}/.test(quest));
   // ── THREE ON ONE LINE, ALL DROPDOWNS ────────────────────────────

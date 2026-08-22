@@ -15747,8 +15747,30 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   app exists — told as a story, not a callout box. */}
               <div style={{ padding: "56px 24px", background: C.surface, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, textAlign: "center" }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 10 }}>Why Gemlyx exists</div>
-                <div style={{ fontSize: "clamp(24px, 4vw, 30px)", fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 14, lineHeight: 1.25, maxWidth: 560, marginLeft: "auto", marginRight: "auto" }}>Most tourists see Denmark for 3–4 days. All of it in Copenhagen.</div>
-                <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.75, maxWidth: 480, margin: "0 auto 22px" }}>Even the Danish press writes about it — the rest of the country, especially Jutland and North Zealand, hardly gets visited. Gemlyx exists to change that: real places, real routes, worth the extra hour outside the capital.</div>
+                {/* ── THIS BLOCK USED TO STATE SOMETHING FALSE ──────────────
+                    It read "Most tourists see Denmark for 3-4 days. All of it in
+                    Copenhagen." Oliver, 22 Aug 2026: "this I found out is not
+                    true for Europeans, but entirely true for non-Europeans."
+                    He is right. 77 percent of American overnight stays are in
+                    the capital and 63 percent of British ones, but Germans are
+                    the largest group by a distance and go to the coast instead,
+                    with 80 percent of all overnight stays being coastal and
+                    nature rather than city. "Most tourists" was the word doing
+                    the damage.
+
+                    The nuance now lives in the "What inspired us" card, where
+                    there is room for it. This block does a different job: it
+                    answers the objection the old headline accidentally raised,
+                    which is that a short trip has no room for anything but the
+                    capital. Three hours is the whole argument, and it is a
+                    measured figure rather than a claim about tourists.
+
+                    No dashes anywhere in either string. His standing rule, and
+                    the two the old copy carried (an en dash in "3-4" and an em
+                    dash before "the rest of the country") were on the landing
+                    page of his own product. */}
+                <div style={{ fontSize: "clamp(24px, 4vw, 30px)", fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 14, lineHeight: 1.25, maxWidth: 560, marginLeft: "auto", marginRight: "auto" }}>Four days is enough for more than one city.</div>
+                <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.75, maxWidth: 480, margin: "0 auto 22px" }}>Aarhus is about three hours from Copenhagen by train. Seeing only the capital is a choice, not a distance problem. Gemlyx builds the other trip: real towns, routes measured rather than guessed, and what is genuinely on while you are there.</div>
                 <button onClick={() => { setDetourTab("roadtrip"); goTab("ai"); }}
                   style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", borderRadius: 100, padding: "12px 24px", fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 4px 16px rgba(226,59,78,0.26)" }}>
                   See a Road Trip →
@@ -17924,7 +17946,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 style={{ maxWidth: 420, maxHeight: "80vh", overflowY: "auto", background: "rgba(15,13,8,0.94)", border: "1px solid rgba(240,239,230,0.22)", borderRadius: 18, padding: "22px 22px 20px", boxShadow: "0 24px 70px -20px rgba(0,0,0,0.85)" }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#D9A441", letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 10 }}>What inspired us to create this app?</div>
                 <div style={{ fontSize: 13, color: "#EFE9D6", lineHeight: 1.7, fontFamily: "'Inter', sans-serif" }}>
-                  Denmark has seen an increase in tourism over the years, and Copenhagen carries far more of it than its share. It has become the most popular Nordic country among international visitors, and for anyone flying in from further away the trip is short and almost entirely the capital: 77 percent of American overnight stays are in Copenhagen. That is the trip Gemlyx was built for. The rest of the country is not undiscovered, it is where most visitors to Denmark already go, and Gemlyx covers that too.
+                  Denmark has seen an increase in tourism over the years, and it takes more overnight stays than any other Nordic country: 45 percent of every night spent in the Nordics since 2008. Interest has never been higher either, with Statistics Denmark counting a record 26.1 million overnight stays in the first half of 2026 alone. Europeans spread themselves across the whole country, and Germans in particular head for the coast. However, anyone flying in from further away spends their time almost entirely in the capital. Realizing that Denmark has done a poor job of advertising the rest of itself on the global stage, the founders of Gemlyx built it as your tour guide, giving you every advantage over the average traveller. That means villages, events, nature, and a lot of money saved on transport and nightlife.
                   <br /><br />
                   This app is, indeed, AI-powered. However, we have put in work to make sure that blogs, essential knowledge, and even the Gemlyx Guide communicate no different from humans. Knowing that many similar apps are heavily criticized for lack of factual accuracy, we've also been fact-checking every flaw to make sure that you don't get misguided on your travels. We hope to get more support as we try to include other countries!
                 </div>

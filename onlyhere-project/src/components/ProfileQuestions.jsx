@@ -129,15 +129,17 @@ export const ProfileQuestions = ({ value, onChange, required = false, showGaps =
           "No reason to explain why we need country and gender and what not.
           It's default to always write that on a sign up page." Every note under
           every field is gone; a label and a control is what a signup form is. */}
-      {/* ── ONE LABEL, BOTH WORDS ─────────────────────────────────
-          Oliver, 22 Aug 2026: "remove the 'or nickname'. What I meant was that
-          you could either write 'name' or 'nickname'." The first version put
-          "Name" on the label and "Or a nickname" in the box as a placeholder,
-          which reads as an instruction to choose the second one. The label says
-          what the field accepts, and the box says nothing, which is his own rule
-          about forms: a label and a control, and no notes. */}
-      <div style={legend}>Name or nickname{star("name")}</div>
-      <input value={p.name} onChange={e => set("name", e.target.value.slice(0, 60))}
+      {/* ── THE LABEL SAYS WHAT IT IS, THE BOX SHOWS THE SHAPE ────
+          Three passes to land this, and the last one is the right one.
+          "Name" over a placeholder reading "Or a nickname" told people to pick
+          the second option. "Name or nickname" as a label made a simple field
+          look like a decision. Oliver, 22 Aug 2026: "just write 'name'... and
+          have something like 'eg. John Smith.'"
+          A placeholder that EXAMPLES the answer is not the same thing as a
+          placeholder that instructs: it shows the shape and disappears the
+          moment anybody types, which is what a placeholder is for. */}
+      <div style={legend}>Name{star("name")}</div>
+      <input value={p.name} onChange={e => set("name", e.target.value.slice(0, 60))} placeholder="e.g. John Smith"
         autoComplete="given-name" style={{ ...field, marginBottom: 18, ...ring("name") }} />
 
       <div style={trio}>
@@ -187,9 +189,22 @@ export const ProfileQuestions = ({ value, onChange, required = false, showGaps =
         {group("Who you usually travel with", "", COMPANY, "company")}
         {group("Pace", "", PACE, "pace")}
 
+        {/* ── SAME RULE AS THE NAME BOX ─────────────────────────────
+            Oliver, 22 Aug 2026: "Not sure what 'anything that would change what
+            a good friend recommended'." Fair. It was trying to explain the
+            PURPOSE of the field, in the abstract, and landed as a riddle
+            somebody has to solve before they can type.
+
+            An example answers the same question by showing rather than
+            explaining, and it does one more thing a definition cannot: four
+            unlike items make the RANGE obvious, so nobody has to guess whether a
+            dislike, a physical limit, a diet or an enthusiasm counts. All four
+            do. It is also the same rule the name box just landed on, and the
+            same rule he set for the signup form generally: a label and a
+            control, no notes explaining themselves. */}
         <div style={legend}>More about yourself</div>
         <textarea value={p.description} onChange={e => set("description", e.target.value.slice(0, DESCRIPTION_MAX))}
-          rows={4} placeholder="What you enjoy, what you would rather avoid, anything that would change what a good friend recommended to you."
+          rows={4} placeholder="e.g. I hate crowds, no seafood, I would rather walk than drive, and I will always stop for a good bakery"
           style={{ ...field, resize: "vertical", lineHeight: 1.6 }} />
         <div style={{ fontSize: 10.5, color: C.muted, textAlign: "right", marginTop: 5, marginBottom: 4 }}>
           {p.description.length}/{DESCRIPTION_MAX}
