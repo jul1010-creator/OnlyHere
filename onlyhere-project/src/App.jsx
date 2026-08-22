@@ -64,7 +64,7 @@ import { GuideRouteMap } from "./components/GuideRouteMap";
 import { AtAGlanceCard } from "./components/AtAGlanceCard";
 import { GemlyxFindCard } from "./components/GemlyxFindCard";
 import { ReviewsSection } from "./components/ReviewsSection";
-import { InstagramEmbed } from "./components/InstagramEmbed";
+import { InstagramEmbed, isEmbeddablePost } from "./components/InstagramEmbed";
 import { Ico, EmojiIcon, FlagDK } from "./components/Icon";
 import { GemlyxLogo, GemlyxMark, GemlyxWordmark, GemlyxLoader, GemlyxIntro } from "./components/GemlyxLogo";
 import { TypewriterText } from "./components/TypewriterText";
@@ -8490,6 +8490,23 @@ ${researchRules("festival", ev)}`
       // back only if a URL is present.
       if (Array.isArray(shaped.blogBody)) shaped.blogBody = shaped.blogBody.filter(b => b.type !== "instagram");
       if (studioInstagramUrl.trim()) {
+        // CHECKED HERE TOO. The Media panel's own reel field has always checked
+        // the link (addReelToRow, "Paste a full Instagram link"), and this path,
+        // which is the one a published event actually goes through, checked
+        // nothing at all. Instagram's embed library can only render a post,
+        // reel or tv permalink; a profile URL, a /share/ redirect or a bare
+        // instagram.com produces an empty card on a live page with nothing
+        // anywhere saying why. Refused at the only moment it can still be fixed.
+        if (!isEmbeddablePost(studioInstagramUrl)) {
+          setPublishStatus(null);
+          setDraftEditError(
+            "Not published. That Instagram link cannot be embedded: Instagram's embed library only renders a post, reel or tv permalink, "
+            + "like instagram.com/reel/XXXXXXXXX/ or instagram.com/p/XXXXXXXXX/. "
+            + "A profile link, a /share/ redirect or a bare instagram.com address renders as an empty card on the live page with nothing saying why. "
+            + "Open the post itself on Instagram and copy the address from the browser bar."
+          );
+          return;
+        }
         if (!Array.isArray(shaped.blogBody)) shaped.blogBody = [];
         shaped.blogBody.push({ type: "instagram", url: studioInstagramUrl.trim() });
       }
@@ -8925,6 +8942,10 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   // on Sign up; everything that opens this sheet WITHOUT naming an action now
   // opens on Sign in.
   const [authMode, setAuthMode] = useState("in");
+  // A password reset link comes back as a signed-in session, so the sheet's
+  // usual "open only when signed out" condition would hide the one screen the
+  // person followed the link to reach. Held separately for that reason.
+  const [recoverySession, setRecoverySession] = useState(null);
   // ── WHAT GEMLYX KNOWS ABOUT THE PERSON ───────────────────────────
   // Asked for AFTER the account exists, never during signup: his friend's
   // whole complaint was being asked things before being given anything, and
@@ -8959,12 +8980,45 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
 
   // Google returns through a full page redirect with tokens in the URL fragment.
   // Caught on mount, before anything else reads the session.
+  //
+  // AWAITED NOW. The fragment carries no user id, so the capture has to ask
+  // Supabase for one before this session is worth putting into state: every
+  // cloud read and write refuses a session without it, which is why signing in
+  // with Google left somebody signed in with nothing syncing. See the long note
+  // in utils/auth.js.
+  //
+  // And a FAILED sign in is now a message rather than silence. A disabled
+  // provider, a redirect URL that is not on the allow list, or somebody pressing
+  // Cancel on Google's own screen all used to land them back here with no
+  // account and nothing on screen.
   useEffect(() => {
-    const fromRedirect = captureRedirectSession();
-    if (fromRedirect) { setUserSession(fromRedirect); return; }
-    // Refreshes an expiring token, or clears a dead one, so the UI never shows
-    // someone as signed in while their saves have silently stopped syncing.
-    getSession().then(s => setUserSession(s)).catch(() => setUserSession(null));
+    let alive = true;
+    (async () => {
+      const { session: fromRedirect, error: redirectError, recovery } = await captureRedirectSession();
+      if (!alive) return;
+      if (redirectError) {
+        setToast(redirectError);
+        setTimeout(() => { setToast(null); }, 7000);
+      }
+      if (fromRedirect) {
+        setUserSession(fromRedirect);
+        // ── AND A RESET LINK FINALLY FINISHES ──────────────────────
+        // "Forgot password" has existed since August and could never complete:
+        // Supabase sent them back with a real session, this read it as an
+        // ordinary sign in, and they landed on the home page signed in with the
+        // same password they could not remember. Nothing in src/ mentioned
+        // recovery at all. It mattered less while Google was the easy path; with
+        // email and password the only path, it was the single way back into a
+        // locked account and it was a button that did nothing.
+        if (recovery) { setRecoverySession(fromRedirect); setAuthMode("newpass"); }
+        return;
+      }
+      // Refreshes an expiring token, or clears a dead one, so the UI never shows
+      // someone as signed in while their saves have silently stopped syncing.
+      try { const s = await getSession(); if (alive) setUserSession(s); }
+      catch { if (alive) setUserSession(null); }
+    })();
+    return () => { alive = false; };
   }, []);
 
   // FIRST SYNC AFTER SIGN IN: merge, never overwrite.
@@ -18024,7 +18078,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   if (item.action === "faq") setActive("essentials");
                   else if (item.action === "credits") setShowCredits(true);
                   else if (item.action === "mail") window.open("mailto:hello@gemlyx.com");
-                  else if (item.action === "login") setAuthOpen(true);
+                  // authMode is shared state, so opening the sheet without
+                  // setting it reopens on whatever screen it was last left on.
+                  // Press "Sign up" in the header, close it, then press
+                  // "Sign in" in the menu, and you got the signup form. Every
+                  // other entry point already sets it; this one did not.
+                  else if (item.action === "login") { setAuthMode("in"); setAuthOpen(true); }
                 }}
                 style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "transparent", color: C.light, border: "none", borderRadius: 10, padding: "13px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${(i + 11) * 0.04}s both` }}>
                 <Ico name={item.ico} size={15} color={C.muted} />
@@ -18633,9 +18692,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           dropped, because a save that was declined is not a save that is
           waiting: leaving it in localStorage would silently add the trip to
           their account the next time they signed in for any other reason. */}
-      <AuthSheet open={authOpen && !userSession} onSignedIn={handleSignedIn}
+      <AuthSheet open={(authOpen && !userSession) || !!recoverySession} onSignedIn={handleSignedIn}
+        recoverySession={recoverySession}
         onClose={() => {
-          setAuthOpen(false); setAuthReason(null);
+          setAuthOpen(false); setAuthReason(null); setRecoverySession(null);
           // The "declining is not deferring" cleanup that used to live here is
           // gone with the gate. Nothing writes a pending save any more, and the
           // one-time rescue on mount has already emptied the key before this

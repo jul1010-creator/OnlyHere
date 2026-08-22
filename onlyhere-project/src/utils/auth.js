@@ -53,13 +53,24 @@ const post = async (path, body) => {
 export const getSession = async () => {
   const stored = readStored();
   if (!stored) return null;
+  // ── AND IT REPAIRS WHAT THE OLD BUG LEFT BEHIND ─────────────────
+  // Anybody who signed in with Google before the fix above has a stored session
+  // with a valid token and an empty userId, so every cloud call refuses it
+  // forever and no amount of reloading helps. Filled in here rather than making
+  // them sign out and back in to mend something they cannot see.
+  if (!stored.userId && Date.now() < stored.expiresAt - 120000) return await withUser(stored);
   if (Date.now() < stored.expiresAt - 120000) return stored;
   if (!stored.refreshToken) { write(null); return null; }
   try {
     const data = await post("token?grant_type=refresh_token", { refresh_token: stored.refreshToken });
-    const next = shape(data);
+    // The refresh response may or may not carry a user object. Keeping what we
+    // already knew means an hour-old Google session does not lose its id at the
+    // exact moment it renews.
+    const fresh = shape(data);
+    if (!fresh) { write(null); return null; }
+    const next = { ...fresh, userId: fresh.userId || stored.userId, email: fresh.email || stored.email };
     write(next);
-    return next;
+    return next.userId ? next : await withUser(next);
   } catch { write(null); return null; }
 };
 
@@ -82,35 +93,183 @@ export const signInWithPassword = async (email, password) => {
   return session;
 };
 
+// ── SIGNING IN WITH GOOGLE DID NOT WORK, AND SAID NOTHING ────────────
+//
+// Oliver, 21 Aug 2026: "let's fix the login auth now."
+//
+// Three separate faults, and the first one made the account useless rather than
+// merely awkward.
+//
+// ONE: THE SESSION CAME BACK WITHOUT A USER ID. Supabase returns OAuth tokens
+// in the URL fragment and the fragment carries NO user object, so shape() set
+// `userId: ""`. The old code filled it in from /auth/v1/user in a floating
+// promise that called write() and nothing else, so localStorage was eventually
+// right and React state was wrong for the whole visit.
+//
+// Every single cloud call is gated on that field:
+//
+//     userSaves.js:25   if (!session?.token || !session?.userId) return null;
+//     userSaves.js:43   if (!session?.token || !session?.userId) return false;
+//     profile.js:327    if (!session?.token || !session?.userId) return null;
+//     profile.js:343    if (!session?.token || !session?.userId) return { ok: false };
+//
+// So somebody who signed in with Google was signed in, saw their email, and had
+// no saves sync, no profile load and no profile save until they reloaded the
+// page. The one visible symptom was the "Signed in, but your saves could not
+// sync right now" toast, which reads as a passing network problem rather than
+// as the account not working.
+//
+// It is the same shape as the bug in the Instagram embed fixed an hour earlier:
+// something was awaited in the wrong place, so a later step ran against a value
+// that was not there yet.
+//
+// TWO: A FAILED SIGN IN WAS COMPLETELY SILENT. When a provider is disabled, a
+// redirect URL is not on the allow list, or somebody presses Cancel on Google's
+// own screen, Supabase sends them back with #error=...&error_description=... and
+// no token. The old capture checked only for access_token, found none, returned
+// null, and the person landed on the home page with no account and nothing on
+// screen saying why. Read and surfaced now, because "nothing happened" is the
+// least debuggable failure there is.
+//
+// THREE: IT THREW AWAY WHERE YOU WERE. redirect_to was origin + pathname, and
+// this is a hash router, so signing in from #/guide/abc returned you to the
+// landing page. The route is carried across in a QUERY parameter rather than the
+// fragment, because the fragment is where Supabase puts the tokens and a URL has
+// only one of those.
+
+// Only a route of ours, never anything else that might be sitting in the bar.
+// An open redirect is a real risk here even when the destination is same-origin:
+// the value survives a round trip through a third party.
+export const RETURN_PARAM = "gx_return";
+export const isOwnRoute = (h) => /^#(\/[a-z0-9/-]*|studio)$/i.test(String(h || ""));
+
 // Google goes through a full page redirect, so there is no promise to await:
 // the browser leaves and comes back with tokens in the URL fragment, which
 // captureRedirectSession picks up on the next load.
 export const startGoogleSignIn = () => {
-  const redirect = `${window.location.origin}${window.location.pathname}`;
-  window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirect)}`;
+  const url = new URL(`${window.location.origin}${window.location.pathname}`);
+  const back = window.location.hash;
+  if (isOwnRoute(back)) url.searchParams.set(RETURN_PARAM, back);
+  window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(url.toString())}`;
+};
+
+// Fills in the half of the session the fragment cannot carry. Separate and
+// exported because it is also the repair path in getSession: anybody who signed
+// in with Google BEFORE this fix has a stored session with an empty userId, and
+// they should not have to work out that signing out and back in is what mends
+// it.
+const withUser = async (session) => {
+  if (!session?.token || session.userId) return session;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${session.token}` },
+    });
+    if (!r.ok) return session;
+    const u = await r.json();
+    if (!u?.id) return session;
+    const full = { ...session, email: u.email || session.email || "", userId: u.id };
+    write(full);
+    return full;
+  } catch { return session; }
 };
 
 // Supabase returns OAuth tokens in the URL HASH (#access_token=...), never as a
 // query string, so they are not sent to any server. Read once, store, then
 // scrub the address bar so the token is not sitting in a shareable URL or in
 // browser history.
-export const captureRedirectSession = () => {
-  if (typeof window === "undefined" || !window.location.hash.includes("access_token")) return null;
-  const params = new URLSearchParams(window.location.hash.slice(1));
+//
+// ASYNC NOW, and the caller must await it. See fault one above: returning before
+// the user id has arrived is what broke every cloud call for the whole visit.
+export const captureRedirectSession = async () => {
+  if (typeof window === "undefined") return { session: null, error: null, recovery: false };
+  const hash = window.location.hash || "";
+  const isToken = hash.includes("access_token");
+  const isError = hash.includes("error=") || hash.includes("error_description=");
+  if (!isToken && !isError) return { session: null, error: null, recovery: false };
+
+  const params = new URLSearchParams(hash.slice(1));
+  // ── AND IT IS NOT ONLY GOOGLE THAT COMES BACK THIS WAY ───────────
+  // Written as the Google return path and named after it, but nothing in here
+  // is provider specific: it reads a fragment. Supabase sends somebody back
+  // through exactly the same shape after they confirm a signup email and after
+  // they follow a password reset link, tagging which is which in `type`. So the
+  // missing user id fixed above was never a Google-only fault; it broke email
+  // confirmation too, on the only sign-in path that exists today.
+  const type = params.get("type") || "";
+
+  // The address bar is cleaned in both cases, success and failure, so a token
+  // never sits in history and an error never survives a refresh.
+  const search = new URLSearchParams(window.location.search);
+  const back = search.get(RETURN_PARAM) || "";
+  search.delete(RETURN_PARAM);
+  const q = search.toString();
+  const restore = isOwnRoute(back) ? back : "";
+  history.replaceState(null, "", window.location.pathname + (q ? `?${q}` : "") + restore);
+
+  if (isError) {
+    const desc = params.get("error_description") || params.get("error") || "";
+    // A reset link that has already been used or has expired is the commonest
+    // error anybody will see here, and "otp_expired" is not a sentence.
+    if (/expired|invalid/i.test(desc) && /recovery/i.test(type + desc)) {
+      return { session: null, recovery: false, error: "That password reset link has expired or has already been used. Ask for a new one." };
+    }
+    // Supabase sends these URL-encoded with plus signs for spaces.
+    const said = desc.replace(/\+/g, " ").trim();
+    return {
+      session: null,
+      recovery: false,
+      error: said
+        ? `Google sign in did not complete: ${said}`
+        : "Google sign in did not complete. Nothing was changed on your account.",
+    };
+  }
+
   const session = shape({
     access_token: params.get("access_token"),
     refresh_token: params.get("refresh_token"),
     expires_in: params.get("expires_in"),
   });
-  if (!session) return null;
+  if (!session) return { session: null, recovery: false, error: "That sign in link came back without a usable session." };
   write(session);
-  history.replaceState(null, "", window.location.pathname + window.location.search);
-  // The fragment carries no email, so fill it in from the user endpoint.
-  fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${session.token}` } })
-    .then(r => r.json())
-    .then(u => { if (u?.email) write({ ...session, email: u.email, userId: u.id }); })
-    .catch(() => { /* signed in fine, just no email shown until next load */ });
-  return session;
+
+  const full = await withUser(session);
+  if (!full.userId) {
+    // Signed in, and nothing that matters would work. Said out loud rather than
+    // left to show up later as saves that quietly never sync.
+    return { session: full, recovery: false, error: "Signed in, but your account could not be identified. Reload the page and try again." };
+  }
+  // RECOVERY IS NOT A SIGN IN, even though it arrives as one. The token is real
+  // and the person is authenticated, but they got here by saying they had
+  // forgotten their password, so handing them a signed-in home page and nothing
+  // else leaves the thing they came to do undone. Flagged for the caller to open
+  // the set-a-new-password screen.
+  return { session: full, recovery: type === "recovery", error: null };
+};
+
+// ── AND THEN ACTUALLY SETTING ONE ───────────────────────────────────
+//
+// "Forgot password" has existed since the account work in August and has never
+// been able to finish. It sent the email, Supabase sent the person back with a
+// real session in the fragment, captureRedirectSession read it as an ordinary
+// sign in, and they landed on the home page signed in with the same password
+// they could not remember. Nothing in src/ mentioned recovery at all.
+//
+// That was survivable while Google was the easy path. It is not survivable now
+// that email and password is the ONLY path: the one way back into a locked
+// account was a button that promised something the app could not do.
+//
+// PUT /auth/v1/user is the whole of it. The recovery token authorises exactly
+// this, which is why the flow hands one over.
+export const updatePassword = async (session, password) => {
+  if (!session?.token) throw new Error("That reset link is no longer valid. Ask for a new one.");
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    method: "PUT",
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${session.token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error_description || data.msg || data.message || `Could not set the new password (${res.status})`);
+  return true;
 };
 
 export const sendPasswordReset = async (email) => {

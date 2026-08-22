@@ -100,6 +100,9 @@ writeFileSync(entry, `
   export { citationUrls } from ${JSON.stringify(join(root, "src/utils/aiClient.js"))};
   export { THEMES, THEME_ORDER, DEFAULT_THEME } from ${JSON.stringify(join(root, "src/utils/theme.js"))};
   export { layoutBody, trimCaption } from ${JSON.stringify(join(root, "src/utils/articleLayout.js"))};
+  export { instagramTarget, isEmbeddablePost } from ${JSON.stringify(join(root, "src/components/InstagramEmbed.jsx"))};
+  export { isOwnRoute, RETURN_PARAM, captureRedirectSession, startGoogleSignIn } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
+  export { GOOGLE_SIGN_IN } from ${JSON.stringify(join(root, "src/config.js"))};
   export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, briefBlock, MAX_ASKS_AT_ONCE } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { GREETING, openingThread, withTestBrief, withoutTestBrief, threadIsSound, TEST_BRIEF } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { CHAT_REPORT_KIND, CHAT_REPORT_VERSION, buildChatReport, chatReportFilename, turnReport, briefTimeline, intakeReport } from ${JSON.stringify(join(root, "src/utils/chatReport.js"))};
@@ -9941,8 +9944,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and the secondary line offers creating one, in his words", />New User\? Sign up here!</.test(sheet));
   // The big button reads off `mode`, so flipping the default flips the label
   // rather than needing a second edit that could be forgotten.
+  // A fourth mode joined on 22 Aug: "newpass", the screen a password reset link
+  // lands on. Asserted as the whole map rather than as three entries, so a mode
+  // added without a label shows up here rather than as a blank button.
   ok("the primary button is labelled from the mode",
-     /const label = \{ in: "Sign in", up: "Create account", reset: "Send reset link" \}\[mode\]/.test(sheet));
+     /const label = \{ in: "Sign in", up: "Create account", reset: "Send reset link", newpass: "Set new password" \}\[mode\]/.test(sheet));
   // The bottom sheet buried the hero on desktop. One breakpoint, both shapes.
   ok("desktop centres the dialog", /alignItems: wide \? "center" : "flex-end"/.test(sheet));
   ok("and rounds all four corners there", /borderRadius: wide \? 20 :/.test(sheet));
@@ -21780,6 +21786,307 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   }
 }
 
+// ── SIGNING IN WITH GOOGLE, WHICH DID NOT WORK ─────────────────────
+//
+// Oliver, 21 Aug 2026: "let's fix the login auth now."
+//
+// Three faults, and the first made the account useless rather than awkward: the
+// OAuth fragment carries no user object, so the session came back with
+// userId: "", and EVERY cloud call is gated on that field. Somebody signed in
+// with Google was signed in, saw their email, and had nothing sync until they
+// reloaded the page.
+{
+  const { isOwnRoute, RETURN_PARAM, captureRedirectSession } = M;
+  const auth = readFileSync(join(root, "src/utils/auth.js"), "utf8");
+
+  // ── THE GATE THAT MADE IT ALL FAIL ───────────────────────────────
+  // Named here so the assertions below have something to be about: four call
+  // sites, all refusing a session with no id, none of them shouting.
+  for (const [file, needle] of [
+    ["src/utils/userSaves.js", "if (!session?.token || !session?.userId) return null;"],
+    ["src/utils/userSaves.js", "if (!session?.token || !session?.userId) return false;"],
+    ["src/utils/profile.js", "if (!session?.token || !session?.userId) return null;"],
+    ["src/utils/profile.js", "if (!session?.token || !session?.userId) return { ok: false };"],
+  ]) ok(`${file} still refuses a session with no id`, readFileSync(join(root, file), "utf8").includes(needle));
+
+  // So the capture has to have one BEFORE it hands the session over. Awaited,
+  // not fired and forgotten into a floating promise that only wrote localStorage.
+  ok("the capture asks Supabase for the user id", /const full = await withUser\(session\);/.test(auth));
+  ok("and the old floating write is gone", !/\.then\(u => \{ if \(u\?\.email\) write/.test(stripNonCode(auth)));
+  ok("a session that still has no id is reported rather than returned quietly",
+     /if \(!full\.userId\) \{[\s\S]{0,400}error: "Signed in, but your account could not be identified/.test(auth));
+  // And the same repair runs for anybody already carrying a broken session from
+  // before the fix, so they do not have to work out that signing out mends it.
+  ok("an existing broken session is repaired on load", /if \(!stored\.userId && Date\.now\(\) < stored\.expiresAt - 120000\) return await withUser\(stored\);/.test(auth));
+  // A refresh must not lose the id it already had, or the account breaks again
+  // one hour in.
+  ok("a token refresh keeps the id", /userId: fresh\.userId \|\| stored\.userId/.test(auth));
+  // The caller has to actually await it, or none of the above matters.
+  {
+    const appA = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("and the app awaits the capture", /const \{ session: fromRedirect, error: redirectError, recovery \} = await captureRedirectSession\(\);/.test(appA));
+  }
+
+  // ── A FAILED SIGN IN USED TO BE SILENT ───────────────────────────
+  // A disabled provider, a redirect URL not on the allow list, or Cancel on
+  // Google's own screen all return #error=...&error_description=... and no
+  // token. The old capture checked only for access_token and returned null, so
+  // the person landed on the home page with no account and no message.
+  const withWindow = async (href, fetchImpl) => {
+    const url = new URL(href);
+    const store = {};
+    const prior = { w: globalThis.window, h: globalThis.history, f: globalThis.fetch, l: globalThis.localStorage };
+    globalThis.window = { location: { hash: url.hash, search: url.search, pathname: url.pathname, origin: url.origin } };
+    globalThis.history = { replaceState: (a, b, next) => { globalThis.history.last = next; } };
+    globalThis.localStorage = { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; }, removeItem: k => { delete store[k]; } };
+    globalThis.fetch = fetchImpl || (async () => ({ ok: false, json: async () => ({}) }));
+    try { return { out: await captureRedirectSession(), url: globalThis.history.last }; }
+    finally { globalThis.window = prior.w; globalThis.history = prior.h; globalThis.fetch = prior.f; globalThis.localStorage = prior.l; }
+  };
+  const okUser = async () => ({ ok: true, json: async () => ({ id: "u-123", email: "o@example.com" }) });
+
+  {
+    const { out, url } = await withWindow("https://x.dk/#error=server_error&error_description=Unsupported+provider");
+    is("a refused sign in returns no session", out.session, null);
+    ok("and says what happened", /Unsupported provider/.test(out.error || ""));
+    ok("in a sentence a person can read", /did not complete/.test(out.error || ""));
+    is("and the error is scrubbed from the address bar", url, "/");
+  }
+  {
+    const { out } = await withWindow("https://x.dk/#access_token=abc&refresh_token=r&expires_in=3600", okUser);
+    is("a good sign in carries the id", out.session?.userId, "u-123");
+    is("and the email the fragment could not", out.session?.email, "o@example.com");
+    is("with nothing to report", out.error, null);
+  }
+  {
+    // The lookup failing is the case that used to be invisible.
+    const { out } = await withWindow("https://x.dk/#access_token=abc&refresh_token=r&expires_in=3600");
+    is("a session with no id is still handed back", out.session?.token, "abc");
+    ok("but it is not called fine", /could not be identified/.test(out.error || ""));
+  }
+  {
+    const { out } = await withWindow("https://x.dk/");
+    is("an ordinary load captures nothing", out.session, null);
+    is("and reports nothing", out.error, null);
+  }
+
+  // ── AND IT USED TO THROW AWAY WHERE YOU WERE ─────────────────────
+  // redirect_to was origin + pathname, and this is a hash router, so signing in
+  // from #/guide/abc returned you to the landing page. Carried in a QUERY
+  // parameter, because the fragment is where Supabase puts the tokens and a URL
+  // has only one of those.
+  ok("the route is carried across the redirect", new RegExp(`url\\.searchParams\\.set\\(RETURN_PARAM, back\\)`).test(auth));
+  is("and the parameter is a query one", RETURN_PARAM, "gx_return");
+  {
+    const { url } = await withWindow(`https://x.dk/?${RETURN_PARAM}=%23%2Fevent%2Fchristmasfair#access_token=abc&refresh_token=r&expires_in=3600`, okUser);
+    is("so you come back where you left", url, "/#/event/christmasfair");
+  }
+  {
+    // OPEN REDIRECT. The value survives a round trip through a third party, so
+    // it is checked on the way back rather than trusted because we wrote it.
+    const { url } = await withWindow(`https://x.dk/?${RETURN_PARAM}=https%3A%2F%2Fevil.example%2Fx#access_token=abc&refresh_token=r&expires_in=3600`, okUser);
+    is("and nowhere else", url, "/");
+  }
+  is("our own routes pass", [isOwnRoute("#/event/x"), isOwnRoute("#studio"), isOwnRoute("#/")], [true, true, true]);
+  is("and everything else does not",
+     ["https://evil.example", "#//evil.example", "#access_token=abc", "javascript:alert(1)", "", null].map(isOwnRoute),
+     [false, false, false, false, false, false]);
+
+  // ── THE GOOGLE BUTTON USED TO EAT THE SIGNUP FORM ────────────────
+  // It was onClick={startGoogleSignIn} with the profile questions rendering
+  // directly underneath it, so name, year of birth and gender went to the
+  // redirect. The mandatory check lives inside submit(), so it never ran either.
+  {
+    const sheetA = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
+    // SCOPED TO THE BUTTON'S OWN HANDLER. Both `missingRequired` and
+    // `holdProfile` also appear inside submit(), which sits earlier in the file,
+    // so a whole-file indexOf comparison would be measuring the email path and
+    // passing whatever the Google button did.
+    const gbtn = sheetA.slice(sheetA.indexOf("<button onClick={() => {"), sheetA.indexOf("}} disabled={busy}"));
+    ok("the Google handler was found", gbtn.length > 80 && gbtn.includes("startGoogleSignIn()"));
+    ok("the answers are held before the redirect", /holdProfile\(answers\);\s*\}\s*startGoogleSignIn\(\);/.test(gbtn));
+    // ORDER MATTERS: holding an incomplete profile and redirecting anyway is
+    // the same data loss with an extra step, since missingRequired would then
+    // never be consulted again on this device.
+    ok("and the mandatory fields are checked first",
+       gbtn.indexOf("missingRequired(answers)") >= 0 && gbtn.indexOf("missingRequired(answers)") < gbtn.indexOf("holdProfile(answers)"));
+    ok("an incomplete form stops the redirect rather than warning past it",
+       /if \(gaps\.length\) \{[\s\S]{0,180}return;\s*\}/.test(gbtn));
+    ok("the bare handler is gone", !/onClick=\{startGoogleSignIn\}/.test(stripNonCode(sheetA)));
+    // Only on the signup screen. Somebody signing IN has nothing to hold and
+    // must not be stopped by a form they were never shown.
+    ok("and none of it happens when signing in", /if \(mode === "up"\) \{\s*setShowGaps\(true\);/.test(sheetA));
+    // takeHeldProfile is the other end and was already keyed on userSession for
+    // exactly this cold load. Nothing was putting anything into it.
+    ok("the claim on the far side still exists", /const held = takeHeldProfile\(\);/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+    // And the promise made on the email branch matched what happened.
+    ok("the notice no longer says saved when it means held", !/your answers are saved/.test(sheetA));
+    ok("it says where they are", /kept on this device/.test(sheetA));
+  }
+
+  // ── A RESET LINK THAT FINALLY FINISHES ───────────────────────────
+  //
+  // Oliver, 22 Aug 2026: "creating an account that is not google should be fine,
+  // no?" Yes, and that made this the whole way back into a locked account.
+  //
+  // "Forgot password" had existed since August and could never complete.
+  // Supabase sends the person back with a REAL session in the fragment, tagged
+  // type=recovery. The capture read it as an ordinary sign in, so they landed on
+  // the home page signed in with the same password they had forgotten, and the
+  // word "recovery" appeared nowhere in src/ at all.
+  {
+    const { out } = await withWindow("https://x.dk/#access_token=abc&refresh_token=r&expires_in=3600&type=recovery", okUser);
+    is("a reset link is flagged as one", out.recovery, true);
+    is("and still carries a usable session", out.session?.userId, "u-123");
+  }
+  {
+    const { out } = await withWindow("https://x.dk/#access_token=abc&refresh_token=r&expires_in=3600", okUser);
+    is("an ordinary sign in is not a recovery", out.recovery, false);
+  }
+  {
+    // The commonest thing anybody will actually see, because a reset link is
+    // one use and people click them twice. "otp_expired" is not a sentence.
+    const { out } = await withWindow("https://x.dk/#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired&type=recovery");
+    ok("an expired reset link says so in words", /expired or has already been used/i.test(out.error || ""));
+    ok("and tells them what to do", /Ask for a new one/i.test(out.error || ""));
+  }
+  // The endpoint that sets it. The recovery token authorises exactly this,
+  // which is why the flow hands one over.
+  ok("there is a way to set the new password", /export const updatePassword = async \(session, password\) => \{/.test(auth));
+  ok("through the endpoint that does it", /method: "PUT"[\s\S]{0,220}JSON\.stringify\(\{ password \}\)/.test(auth));
+  ok("and a dead link is refused rather than sent", /if \(!session\?\.token\) throw new Error\("That reset link is no longer valid/.test(auth));
+  {
+    const sheetR = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
+    // NOT "does the string appear". It appears in the label map, the heading and
+    // three field conditions, so a bare search passed even with the submit
+    // branch stubbed out to `if (false)`, which is the branch that does the
+    // work. Caught by mutation testing on 22 Aug.
+    ok("the sheet has a screen for it",
+       /if \(mode === "newpass"\) \{[\s\S]{0,700}await updatePassword\(recoverySession, password\);/.test(sheetR));
+    // And it does not fall through into the email path afterwards, which would
+    // try to sign them in with a password they have only just set.
+    ok("and that branch returns rather than falling through",
+       /await updatePassword\(recoverySession, password\);[\s\S]{0,320}onSignedIn\(recoverySession\);\s*return;/.test(sheetR));
+    // No email field: they arrived holding a token, so who they are is settled
+    // and asking again is asking them to prove what they just proved.
+    ok("which does not ask who they are again", /\{mode !== "newpass" && \(\s*<input type="email"/.test(sheetR));
+    ok("but does ask twice, like signup does", /\{\(mode === "up" \|\| mode === "newpass"\) && \(/.test(sheetR));
+    ok("and does not reopen the whole profile form", /\{mode === "up" && <>\s*<div style=\{\{ height: 1[\s\S]{0,220}<ProfileQuestions/.test(sheetR));
+    // Mid-recovery there is nothing to switch to: the token expires and every
+    // other screen throws it away.
+    ok("the screen switchers step aside", (sheetR.match(/mode !== "newpass" && <button style=\{linkBtn\}/g) || []).length === 2);
+  }
+  {
+    const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the app opens that screen on a reset link", /if \(recovery\) \{ setRecoverySession\(fromRedirect\); setAuthMode\("newpass"\); \}/.test(appR));
+    // THE CONDITION THAT WOULD HAVE HIDDEN IT. A recovery session IS a session,
+    // so the sheet's usual "open only when signed out" test would keep the one
+    // screen they followed the link to reach off the screen entirely.
+    ok("and the sheet is allowed to open while signed in", /open=\{\(authOpen && !userSession\) \|\| !!recoverySession\}/.test(appR));
+    ok("closing it clears the recovery too", /setAuthOpen\(false\); setAuthReason\(null\); setRecoverySession\(null\);/.test(appR));
+  }
+
+  // ── GOOGLE, SWITCHED OFF UNTIL THE POLICIES EXIST ────────────────
+  //
+  // Oliver, 22 Aug 2026: "the google provider won't be available before I have a
+  // terms of use and privacy policy written." A consent screen cannot be
+  // published without both URLs, so the button would be the most prominent
+  // control on the sheet doing nothing but bouncing people back with an error.
+  is("it is off", M.GOOGLE_SIGN_IN, false);
+  {
+    const sheetG = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
+    ok("the button is behind the switch", /\{GOOGLE_SIGN_IN && <>/.test(sheetG));
+    // The divider goes with it. A divider separating one thing from nothing is
+    // the tell that a button used to be there.
+    ok("and so is the divider under it", /letterSpacing: 1\.5 \}\}>or<\/span>[\s\S]{0,160}<\/>\}/.test(sheetG));
+    // KEPT, NOT DELETED. Deleting it would mean writing the redirect handling,
+    // the profile hold and the return-route guard again from scratch one day,
+    // and those are precisely the parts that were wrong for weeks. Switched off,
+    // they stay under test.
+    ok("the machinery behind it is still there", /startGoogleSignIn\(\);/.test(sheetG) && /holdProfile\(answers\);/.test(sheetG));
+  }
+
+  // The menu entry opened the sheet without setting the mode, so it reopened on
+  // whatever screen it was last left on.
+  ok("every entry point picks its own screen",
+     /item\.action === "login"\) \{ setAuthMode\("in"\); setAuthOpen\(true\); \}/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+}
+
+// ── THE INSTAGRAM CARD YOU COULD NOT CLICK ─────────────────────────
+//
+// Oliver, 21 Aug 2026, on the Christmas fair event page: "why can I not click
+// the instagram video? Where does it take me into instagram?"
+{
+  const { instagramTarget, isEmbeddablePost } = M;
+  const ig = readFileSync(join(root, "src/components/InstagramEmbed.jsx"), "utf8");
+
+  // ── THE RACE THAT COULD LEAVE A CARD PERMANENTLY EMPTY ───────────
+  // The old effect returned early when the script TAG existed and called
+  // process() against window.instgrm, which does not exist until the script has
+  // downloaded and run. An embed mounting inside that window did nothing, added
+  // no onload of its own, and never retried, so the blockquote stayed a raw
+  // quote forever. Same shape as several bugs already found here: a check that
+  // answers a NEARBY question. "Is the tag in the document" is not "is the
+  // library ready".
+  ok("the embed waits for the library, not for the script tag", /window\.instgrm\?\.Embeds\?\.process/.test(ig));
+  ok("and it retries rather than giving up on the first miss", /setTimeout\(tick, READY_POLL_MS\)/.test(ig));
+  // ON THE STRIPPED SOURCE. The comment above the effect quotes the old code
+  // verbatim, on purpose, because the bug is worth being able to read later. A
+  // plain regex therefore matches the documentation and passes forever.
+  ok("the early return on the tag alone is gone",
+     !/if \(document\.getElementById\("ig-embed-script"\)\) \{ process\(\); return; \}/.test(stripNonCode(ig)));
+  // A poll with no ceiling on a page nobody is looking at is a leak, and so is
+  // one that outlives its component.
+  ok("the wait has a ceiling", /Date\.now\(\) - started > READY_TIMEOUT_MS/.test(ig));
+  ok("and the timer dies with the component", /return \(\) => \{ alive = false; if \(timer\.current\) clearTimeout\(timer\.current\); \};/.test(ig));
+  // Two states, not one. With only `ready`, the "your browser is blocking
+  // instagram.com" line renders from the first paint, so every reader sees a
+  // failure message during the second the script legitimately takes to arrive.
+  ok("the failure line waits for the failure", /\{gaveUp && !ready && \(/.test(ig));
+  ok("and something actually sets it", /setGaveUp\(true\)/.test(ig));
+
+  // ── WHERE IT GOES, WHICH THE CARD NEVER SAID ─────────────────────
+  is("a reel is read off the URL", instagramTarget("https://www.instagram.com/reel/C1a2b3C4d5/")?.kind, "reel");
+  is("so is a post", instagramTarget("https://www.instagram.com/p/C1a2b3C4d5/")?.kind, "post");
+  is("and an account when the permalink carries one", instagramTarget("https://www.instagram.com/visitcopenhagen/reel/C1a2b3C4d5/")?.handle, "@visitcopenhagen");
+  is("absent rather than invented when it does not", instagramTarget("https://www.instagram.com/reel/C1a2b3C4d5/")?.handle, null);
+  // IGTV keeps its own word. Calling it a "post" tells a reader to expect a
+  // picture, and the label is the only thing on the card that says what is
+  // behind the link.
+  is("and IGTV is a video, not a post", instagramTarget("https://www.instagram.com/tv/C1a2b3C4d5/")?.kind, "video");
+  is("while /reels/ plural is still a reel", instagramTarget("https://www.instagram.com/reels/C1a2b3C4d5/")?.kind, "reel");
+  // Tracking parameters are how a link is shared from the app, so the commonest
+  // real-world shape must not defeat it.
+  is("a share parameter does not defeat it", instagramTarget("https://www.instagram.com/reel/C1a2b3C4d5/?igsh=MXY2")?.id, "C1a2b3C4d5");
+
+  // ── AND THE LINKS THAT CAN NEVER RENDER ──────────────────────────
+  // Instagram's library only embeds a post, reel or tv permalink. The publish
+  // path checked nothing at all, so any of these produced an empty card on a
+  // live page with nothing anywhere saying why.
+  for (const bad of [
+    "https://www.instagram.com/visitcopenhagen/",
+    "https://www.instagram.com/share/BAbC123/",
+    "https://www.instagram.com/",
+    "https://example.com/reel/C1a2b3C4d5/",
+    "",
+  ]) is(`refused: ${bad || "(empty)"}`, isEmbeddablePost(bad), false);
+  for (const good of [
+    "https://www.instagram.com/reel/C1a2b3C4d5/",
+    "https://instagram.com/p/C1a2b3C4d5",
+    "https://www.instagram.com/tv/C1a2b3C4d5/",
+  ]) is(`accepted: ${good}`, isEmbeddablePost(good), true);
+
+  // Refused at the only moment it can still be fixed: publish. The Media panel
+  // has always checked its own reel field and this path, which is the one a
+  // published event goes through, checked nothing.
+  {
+    const appI = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("publish refuses a link that cannot be embedded", /if \(!isEmbeddablePost\(studioInstagramUrl\)\) \{/.test(appI));
+    ok("and says so through the same channel as every other publish refusal",
+       /isEmbeddablePost\(studioInstagramUrl\)\) \{\s*setPublishStatus\(null\);\s*setDraftEditError\(/.test(appI));
+  }
+}
+
 // ── THE NAVIGATION, WHERE A WEBSITE PUTS IT ────────────────────────
 //
 // Oliver, 21 Aug 2026: "Maybe on PC we gotta cut the drop down navigation.
@@ -28182,7 +28489,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // "Remember to have '*' on parts that is mandatory to answer."
   ok("required fields are starred", /required showGaps=\{showGaps\}/.test(auth));
   ok("email carries one", /Email<span style=\{\{ color: showGaps && !email\.trim\(\)/.test(auth));
-  ok("password carries one", /Password<span style=\{\{ color: showGaps && password\.length < 6/.test(auth));
+  // The label became conditional on 22 Aug, because a reset link lands on a
+  // screen where "Password" is the wrong word for a box you are choosing a NEW
+  // value in. The mark still has to be on it either way.
+  ok("password carries one",
+     /\{mode === "newpass" \? "New password" : "Password"\}<span style=\{\{ color: showGaps && password\.length < 6/.test(auth));
   ok("and the gaps only show after a press", /const \[showGaps, setShowGaps\] = useState\(false\);/.test(auth)
      && /setShowGaps\(true\);/.test(auth));
   ok("the missing ones are named rather than counted", /Still needed: \$\{gaps\.map/.test(auth));

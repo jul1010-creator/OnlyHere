@@ -3,7 +3,8 @@ import { useState, useEffect } from "react";
 import { ProfileQuestions } from "./ProfileQuestions";
 import { EMPTY_PROFILE, saveProfile, holdProfile, missingRequired, REQUIRED_LABEL } from "../utils/profile";
 import { C } from "../utils/theme";
-import { signInWithPassword, signUpWithPassword, sendPasswordReset, startGoogleSignIn } from "../utils/auth";
+import { signInWithPassword, signUpWithPassword, sendPasswordReset, startGoogleSignIn, updatePassword } from "../utils/auth";
+import { GOOGLE_SIGN_IN } from "../config";
 
 // ── WHERE AN ACCOUNT IS ASKED FOR, AND WHAT IT HONESTLY BUYS ─────────
 //
@@ -51,7 +52,11 @@ import { signInWithPassword, signUpWithPassword, sendPasswordReset, startGoogleS
 // Google stays the biggest control on purpose, because this sheet interrupts
 // somebody who wanted a guide, not an account. "Logging in with google should
 // be easy" is a requirement about how long the interruption lasts.
-export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, initialMode }) => {
+// `recoverySession` is the session a password reset link hands over. It is a
+// real, authenticated session, which is what made this flow so easy to leave
+// half-built: the app signed them in and everything looked fine, except the one
+// thing they came to do. See updatePassword in utils/auth.js.
+export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, initialMode, recoverySession = null }) => {
   // ── AND NOW IT DEFAULTS TO SIGNING IN ─────────────────────────────
   //
   // Oliver, 21 Aug 2026, point 9: "The create account gotta change… the big
@@ -64,7 +69,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   // has to notice a small underlined line to get to the thing they came for,
   // while somebody new is here BECAUSE they were just told they need an
   // account, so the one extra tap lands on the person who already expects one.
-  const [mode, setMode] = useState(initialMode || "in");   // "up" | "in" | "reset"
+  const [mode, setMode] = useState(initialMode || "in");   // "up" | "in" | "reset" | "newpass"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -128,6 +133,21 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   // somebody could end up with an account and no answers by closing the sheet.
   const submit = async () => {
     setShowGaps(true);
+    // ── SETTING A NEW ONE NEEDS NO EMAIL ────────────────────────
+    // They arrived holding a recovery token, so who they are is already settled
+    // and asking again would be asking them to prove something they just proved.
+    if (mode === "newpass") {
+      if (password.length < 6) { setError("Passwords need at least 6 characters."); return; }
+      if (password !== confirm) { setError("The two passwords do not match."); return; }
+      setBusy(true); setError(null); setNotice(null);
+      try {
+        await updatePassword(recoverySession, password);
+        setNotice("Password changed. You are signed in.");
+        setBusy(false);
+        onSignedIn(recoverySession);
+        return;
+      } catch (e) { setError(String(e.message || e)); setBusy(false); return; }
+    }
     if (!email.trim()) { setError("Enter your email."); return; }
     if (mode !== "reset" && password.length < 6) { setError("Passwords need at least 6 characters."); return; }
     if (mode === "up") {
@@ -155,7 +175,12 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         if (session) await saveProfile(session, answers);
         else holdProfile(answers);
         if (needsConfirmation) {
-          setNotice("Account made, and your answers are saved. Check your email to confirm the account, then come back and sign in.");
+          // "saved" was not true on this branch. There is no session yet, so the
+          // answers are on THIS DEVICE waiting for one, and holdProfile does
+          // nothing at all in private mode. Saying so is the difference between
+          // somebody confirming on the same phone and somebody confirming on a
+          // laptop and wondering where their answers went.
+          setNotice("Account made, and your answers are kept on this device. Confirm through the email, then sign in here on this same browser and they will be attached to your account.");
           setBusy(false);
           return;
         }
@@ -169,9 +194,10 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
     setBusy(false);
   };
 
-  const label = { in: "Sign in", up: "Create account", reset: "Send reset link" }[mode];
+  const label = { in: "Sign in", up: "Create account", reset: "Send reset link", newpass: "Set new password" }[mode];
   // The heading answers "why am I being asked", not "what screen is this".
-  const heading = mode === "reset" ? "Reset password"
+  const heading = mode === "newpass" ? "Choose a new password"
+    : mode === "reset" ? "Reset password"
     : reason === "guide" ? (mode === "up" ? "Keep this guide" : "Sign in to keep it")
     : mode === "up" ? "Create an account" : "Sign in";
 
@@ -220,6 +246,17 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         </div>
 
         {/* ── WHAT IT BUYS, AND WHAT IT DOES NOT ──────────────────── */}
+        {/* ── WHAT SOMEBODY LOCKED OUT NEEDS TO READ ────────────────
+            Not the signup pitch. They followed a reset link because they cannot
+            get in; telling them an account syncs between devices answers a
+            question they did not ask and buries the one instruction that
+            matters. Caught by looking at the rendered screen rather than at the
+            code, which is the only way this kind of thing is ever caught. */}
+        {mode === "newpass" ? (
+          <div style={{ fontSize: 13, color: C.light, lineHeight: 1.62, marginBottom: 14 }}>
+            Type it twice and you are back in. This link works once, so if it fails, ask for a new one.
+          </div>
+        ) : (
         <div style={{ fontSize: 13, color: C.light, lineHeight: 1.62, marginBottom: 14 }}>
           {reason === "guide"
             ? <>The guide itself is free and yours to read right now. An account is what keeps it, on this phone and every other one.</>
@@ -228,8 +265,49 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             <span style={{ color: C.gold }}> The {localSaveCount} {localSaveCount === 1 ? "item" : "items"} already saved on this device will come with you.</span>
           )}
         </div>
+        )}
 
-        <button onClick={startGoogleSignIn} disabled={busy}
+        {/* ── OFF UNTIL THERE IS A PRIVACY POLICY AND TERMS ─────────
+            Oliver, 22 Aug 2026: "the google provider won't be available before I
+            have a terms of use and privacy policy written." A Google OAuth
+            consent screen cannot be published without both URLs, so the provider
+            either does not exist in Supabase or refuses at Google's end, and
+            this would be the most prominent control on the sheet doing nothing
+            but bouncing people back with an error. See config.js: one line turns
+            it on, and everything behind it is built and tested already.
+
+            KEPT RATHER THAN DELETED on purpose. Deleting it would mean writing
+            the redirect handling, the profile hold and the return-route guard
+            again from scratch, and those are the parts that were wrong for
+            weeks. Switched off, they stay under test. */}
+        {GOOGLE_SIGN_IN && <>
+        {/* ── THE GOOGLE BUTTON USED TO EAT THE FORM ────────────────
+            It was `onClick={startGoogleSignIn}` with the profile questions
+            rendering directly underneath it. So somebody could tap "New User?
+            Sign up here!", fill in name, year of birth and gender, press
+            Continue with Google, and lose every answer to the redirect. The
+            mandatory-field check lives inside submit(), so it never ran either,
+            and they landed on the profile nudge instead: a sheet behind a thirty
+            day cooldown that stops asking for good after two skips.
+
+            The answers are held on the device first, exactly as the email path
+            already does while somebody is off opening their inbox, and
+            takeHeldProfile claims them on the other side of the redirect. That
+            machinery was already built and already keyed on userSession
+            specifically so the Google cold load would work. Nothing was putting
+            anything into it. */}
+        <button onClick={() => {
+          if (mode === "up") {
+            setShowGaps(true);
+            const gaps = missingRequired(answers);
+            if (gaps.length) {
+              setError(`Still needed: ${gaps.map(k => REQUIRED_LABEL[k]).join(", ")}.`);
+              return;
+            }
+            holdProfile(answers);
+          }
+          startGoogleSignIn();
+        }} disabled={busy}
           style={{ width: "100%", background: "#fff", border: "none", color: "#1F1F1F", borderRadius: 11, padding: "13px", fontSize: 14.5, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 9 }}>
           <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true">
             <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.6 30.2 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.8 6.1C12.3 13.2 17.6 9.5 24 9.5z" />
@@ -240,11 +318,14 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
           Continue with Google
         </button>
 
+        {/* The "or" divider goes with it. A divider separating one thing from
+            nothing is the tell that a button used to be there. */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 13 }}>
           <div style={{ flex: 1, height: 1, background: C.border }} />
           <span style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.5 }}>or</span>
           <div style={{ flex: 1, height: 1, background: C.border }} />
         </div>
+        </>}
 
         {/* ── THE MANDATORY MARKS ───────────────────────────────────
             "Remember to have '*' on parts that is mandatory to answer." Gold
@@ -256,17 +337,22 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             Email<span style={{ color: showGaps && !email.trim() ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
           </div>
         )}
-        <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"
-          autoComplete="email" style={{ ...field, ...(mode === "up" && showGaps && !email.trim() ? { borderColor: "#FF8A80" } : null) }} />
+        {mode !== "newpass" && (
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"
+            autoComplete="email" style={{ ...field, ...(mode === "up" && showGaps && !email.trim() ? { borderColor: "#FF8A80" } : null) }} />
+        )}
         {mode !== "reset" && (
           <>
-            {mode === "up" && (
+            {/* newpass too, or the new-password box is the one field on the
+                screen with no label and no asterisk while the confirm box
+                underneath it has both. */}
+            {(mode === "up" || mode === "newpass") && (
               <div style={{ fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 }}>
-                Password<span style={{ color: showGaps && password.length < 6 ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
+                {mode === "newpass" ? "New password" : "Password"}<span style={{ color: showGaps && password.length < 6 ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
                 <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, color: C.muted }}> · at least 6 characters</span>
               </div>
             )}
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password"
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder={mode === "newpass" ? "New password" : "Password"}
               autoComplete={mode === "up" ? "new-password" : "current-password"}
               onKeyDown={e => { if (e.key === "Enter") submit(); }}
               style={{ ...field, ...(mode === "up" && showGaps && password.length < 6 ? { borderColor: "#FF8A80" } : null) }} />
@@ -275,7 +361,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         {/* ── CONFIRM, AND CHECKED BEFORE THE ACCOUNT IS MADE ───────
             "And make a confirm password section too." A typo caught afterwards
             is an account somebody cannot get back into without the reset flow. */}
-        {mode === "up" && (
+        {(mode === "up" || mode === "newpass") && (
           <>
             <div style={{ fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 }}>
               Confirm password<span style={{ color: showGaps && (!confirm || confirm !== password) ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
@@ -290,8 +376,10 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             {/* ── AND THE REST OF THE INFORMATION, ON THE SAME PAGE ──
                 "And then you get onto a page where you enter mail, password,
                 and the rest of the information." One form, submitted once. */}
-            <div style={{ height: 1, background: C.border, margin: "16px 0 18px" }} />
-            <ProfileQuestions value={answers} onChange={setAnswers} required showGaps={showGaps} />
+            {mode === "up" && <>
+              <div style={{ height: 1, background: C.border, margin: "16px 0 18px" }} />
+              <ProfileQuestions value={answers} onChange={setAnswers} required showGaps={showGaps} />
+            </>}
           </>
         )}
 
@@ -304,9 +392,11 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         </button>
 
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          {/* Nothing to switch to mid-recovery: they are here holding a token
+              that expires, and every other screen throws it away. */}
           {/* His words: "The small part should be 'New User? Sign up here!'" */}
-          {mode !== "up" && <button style={linkBtn} onClick={() => { setMode("up"); setError(null); setNotice(null); setShowGaps(false); }}>New User? Sign up here!</button>}
-          {mode !== "in" && <button style={linkBtn} onClick={() => { setMode("in"); setError(null); setNotice(null); setShowGaps(false); }}>I already have one</button>}
+          {mode !== "up" && mode !== "newpass" && <button style={linkBtn} onClick={() => { setMode("up"); setError(null); setNotice(null); setShowGaps(false); }}>New User? Sign up here!</button>}
+          {mode !== "in" && mode !== "newpass" && <button style={linkBtn} onClick={() => { setMode("in"); setError(null); setNotice(null); setShowGaps(false); }}>I already have one</button>}
           {mode === "in" && <button style={linkBtn} onClick={() => { setMode("reset"); setError(null); setNotice(null); }}>Forgot password</button>}
         </div>
 
@@ -314,11 +404,11 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             His rule for entries applied to his own product: never let the
             promise turn out to have been smaller than it sounded. A free
             account keeps the guide. It does not keep the guide CURRENT. */}
-        <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}`, fontSize: 11, color: C.muted, lineHeight: 1.6 }}>
+        {mode !== "newpass" && <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}`, fontSize: 11, color: C.muted, lineHeight: 1.6 }}>
           A free account saves your guide and nothing more. Keeping it live as your trip
           approaches, new events worth rerouting for, help while you are there,
           that is the paid side, and it is not switched on yet.
-        </div>
+        </div>}
 
         <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 12 }}>
           We store your email and your saved list. Next you can add a few optional details about yourself, which only ever shape what Gemlyx suggests to you. No tracking, no marketing email, nothing sold. You can delete your account and everything in it from this menu at any time.

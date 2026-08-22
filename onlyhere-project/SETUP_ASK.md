@@ -58,9 +58,9 @@ the same Supabase screen.
 
 ## 3. The function count
 
-Vercel Hobby allows **12 serverless functions**. `api/` now holds exactly 12
-with `ask.js` added. The next API route you want will need one of the existing
-ones removed first.
+~~Vercel Hobby allows 12 serverless functions.~~ **Out of date. The account is on
+Vercel PRO** (confirmed 21 Aug 2026), so there is no twelve-function ceiling and
+no route has to be removed to add another. `api/` holds 15 and that is fine.
 
 ## What it actually does
 

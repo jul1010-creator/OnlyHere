@@ -12,6 +12,13 @@
 //   "No more than 12 Serverless Functions can be added to a Deployment on the
 //    Hobby plan."
 //
+// SUPERSEDED, 21 Aug 2026. Oliver: "it is pro vercel now. I am sick of having to
+// tell every chat that it is pro and not hobby anymore." The account is on PRO,
+// so that ceiling is gone and api/ is not full. The paragraph is kept because
+// the REASON this file is Edge Middleware rather than a serverless function is
+// still worth knowing, but nobody should be told a route has to be deleted
+// before another can be added.
+//
 // api/ holds exactly 12. Edge Middleware is counted separately, so this costs
 // no slot. It is also simply better: the crawler list is real JavaScript with a
 // real /i flag, unit tested, rather than a regex string inside vercel.json that
@@ -43,8 +50,8 @@ import { towns as hardcodedTowns } from "./src/data/towns.js";
 // Guide URLs, town pages, and the sitemap. Everything else on the site keeps
 // index.html's own card and never pays for this to run.
 //
-// THE SITEMAP IS HERE AND NOT IN api/ ON PURPOSE. The Hobby plan allows twelve
-// serverless functions and api/ already holds exactly twelve, which is why the
+// THE SITEMAP IS HERE AND NOT IN api/ ON PURPOSE. It was written when the Hobby
+// plan's twelve-function ceiling applied and api/ held exactly twelve, which is why the
 // preview injection lives in middleware at all. Edge middleware is counted
 // separately, so the sitemap costs no slot.
 // ── LITERAL STRINGS ONLY, AND THIS IS NOT A STYLE CHOICE ────────────

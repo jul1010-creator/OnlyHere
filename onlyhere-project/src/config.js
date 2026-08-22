@@ -1,5 +1,25 @@
 export const SUPABASE_URL = "https://vpxfahjnerkkkoueovhl.supabase.co";
 export const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZweGZhaGpuZXJra2tvdWVvdmhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MzQ4OTYsImV4cCI6MjA5NTMxMDg5Nn0.-GgXeog0DufIz6WNXn_8pIzxmQfkHRK3Lz8V71O-v_c";
+// ── SIGN IN WITH GOOGLE, SWITCHED OFF ────────────────────────────────
+//
+// Oliver, 22 Aug 2026: "the google provider won't be available before I have a
+// terms of use and privacy policy written."
+//
+// He is right, and it is not only a Google requirement: an OAuth consent screen
+// has to name a privacy policy and terms URL before it can be published, and
+// until then the provider either does not exist in Supabase or refuses at
+// Google's end. Either way the button cannot work.
+//
+// So it does not render. A button that cannot work is worse than no button: it
+// is the most prominent control on the sheet, somebody presses it first, and
+// what they get back is a bounce with an error. Signing up with an email and a
+// password is the whole flow until this flips.
+//
+// ONE LINE TO TURN ON. Nothing else has to change: startGoogleSignIn,
+// captureRedirectSession and the profile hold are all built and tested, and the
+// suite asserts they stay that way rather than rotting while switched off.
+export const GOOGLE_SIGN_IN = false;
+
 export const APP_VERSION = "v2.87 — AI plans become saveable guides with real data + mini-maps";
 
 // ── THE ONE PLACE THE PUBLIC ADDRESS IS WRITTEN DOWN ─────────────────
