@@ -12,11 +12,7 @@
 # have to travel together or the build goes red every time.
 #
 # So the check moves to before the push, where it costs twenty seconds and
-# nobody gets an email about it.
-#
-# Runs exactly what .github/workflows/build-check.yml runs, in the same
-# order, so green here means green there. Drop the build line if twenty
-# seconds is too slow and you would rather only guard the suite.
+# nobody gets an email about it. It earned itself on its first three runs.
 #
 # git runs hooks from the top of the working tree, so this cd is from the
 # repo root rather than from .githooks.
@@ -29,7 +25,13 @@ cd onlyhere-project
 printf "pre-push: running the suite\\n"
 node tests/run.mjs
 
+# ── NOT `npm run build` ─────────────────────────────────────────────
+# It failed here on Windows with "/usr/bin/env: bash: No such file or
+# directory". git runs this hook through the minimal sh it ships, npm on that
+# path is a shell script wanting bash, and bash is not on the PATH that shell
+# hands out. Calling vite through node skips npm, skips the shebang, and skips
+# the PATH question, and behaves the same on Windows and on the Linux runner.
 printf "pre-push: building\\n"
-npm run build --silent
+node node_modules/vite/bin/vite.js build
 
 printf "pre-push: green, pushing\\n"
