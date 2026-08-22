@@ -464,8 +464,23 @@ export const dotJoin = (...parts) => parts.map(p => String(p ?? "").trim()).filt
 // instead of counting "Day N:" occurrences. isFullPlanText is kept for any content
 // that still uses the old day-by-day format (e.g. already-sent messages).
 export const READY_MARKER = "[[GEMLYX_READY_TO_BUILD]]";
-export const isReadyToBuild = (text) => !!text && text.includes(READY_MARKER);
-export const stripReadyMarker = (text) => text ? text.replaceAll(READY_MARKER, "").trim() : text;
+
+// ── TOLERANT ON PURPOSE ─────────────────────────────────────────────
+// 22 Aug 2026, from Oliver's father using Gemlyx in Danish: a finished plan,
+// then "Den er klar.", and no button anywhere. The marker is an ASCII string
+// defined in an English prompt, and the reply wrapped around it is written in
+// the traveller's own language. A model composing Danish drops the brackets,
+// lowercases it, spaces it out, or renders it as prose often enough that an
+// exact `includes` is a coin toss, and the cost of losing that toss is the one
+// button the whole product funnels into.
+//
+// So anything unmistakably this marker counts. The core sequence GEMLYX READY
+// TO BUILD cannot occur in a real reply about Denmark by accident, which is
+// what makes loosening it safe rather than reckless.
+const READY_PATTERN = /\[{0,2}\s*GEMLYX[\s_-]*READY[\s_-]*TO[\s_-]*BUILD\s*\]{0,2}/i;
+export const isReadyToBuild = (text) => !!text && READY_PATTERN.test(text);
+export const stripReadyMarker = (text) =>
+  text ? text.replace(new RegExp(READY_PATTERN.source, "gi"), "").trim() : text;
 
 // Common AI-writing tells — surface-level phrases that read as generic AI filler
 // rather than a real person's voice. Case-insensitive, checked as whole phrases

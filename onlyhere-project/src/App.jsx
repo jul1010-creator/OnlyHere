@@ -92,7 +92,7 @@ import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommun
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
 import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoice";
 import { cityFromLocation } from "./utils/guideEnrichment";
-import { readBrief, briefBlock, nextAsks } from "./utils/tripBrief";
+import { readBrief, briefBlock, nextAsks, buildBlockedNote } from "./utils/tripBrief";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
 // The sentence an entry already has about who it suits, rather than the first
@@ -12208,6 +12208,10 @@ If the message includes "Also include these saved places: ...", those are specif
 
 WHAT "BUILDING THE PLAN" ACTUALLY MEANS IN THIS CHAT REPLY — THIS IS A HARD FORMAT RULE: when you're ready to build (whether from the tick-box flow above or the freeform flow below), your reply in THIS CONVERSATION is NEVER a day-by-day breakdown — no "Day 1: ... Day 2: ..." listing of stops, times, or activities here. That level of detail belongs to the real guide (with actual verified routes, maps, and times) that gets built separately once the traveler taps "Turn this into a guide" — writing it out again in plain chat text is pure duplication and is exactly the "wall of text" feeling that makes this feel like a generic chatbot instead of a real planner handing off a finished itinerary. Instead, your ready-to-build reply is short — a genuine local planner's handoff, not a list: 2-4 sentences describing the KIND of trip you've put together (the vibe, the balance — e.g. "This leans into real local nightlife and food, mixing well-known spots with a couple of places most tourists never find, at a relaxed pace so nothing feels rushed") plus the essentials worth knowing before they see it — budget reality, the one most important practical thing, and a transport tip if relevant — the same essentials system the guide itself uses, just spoken aloud here first. Never itemize individual stops or times in this reply. THE MARKER IS A PROMISE, NOT A CASUAL SIGN-OFF — GET THIS RIGHT: only include it when you have genuinely enough concrete specifics on the table to actually construct a real multi-day itinerary from RIGHT NOW — a real starting point, a real trip length, and real direction on interests/style. A reply that's still discussing budget, still weighing options, still mid-conversation, or that could just as easily be followed by more back-and-forth is NOT ready — do not attach the marker to those, even if it sounds like a natural-feeling wrap-up sentence ("Looking forward to turning this into a guide!" is exactly the kind of line that sounds final but isn't — never a substitute for actually having enough to build). If you're at all unsure whether there's enough to build a real itinerary from, that uncertainty itself means: no marker, ask instead. End this exact reply, and ONLY a genuinely ready-to-build reply meeting that bar, with this exact string on its own line so the interface knows to show the "Turn this into a guide" button — it's invisible to the traveler, never explain what it is, never mention it exists, just include it silently: [[GEMLYX_READY_TO_BUILD]]
 
+WRITE THE MARKER EXACTLY AS PRINTED, NEVER TRANSLATED. It is a machine string, not a sentence. When the rest of your reply is in Danish, German or any other language, the marker stays [[GEMLYX_READY_TO_BUILD]] in ASCII with its brackets. Do not translate it, do not paraphrase it into "Den er klar" or "It's ready" or any equivalent, and do not replace it with a closing line of your own. A translated marker is not a marker, and the traveller gets no button.
+
+AND NEVER NAME A BUTTON. You do not know what is on the traveller's screen or what language it is labelled in. If somebody says nothing appeared, nothing popped up, or asks where the guide is, do NOT tell them to press a button by name. Tell them what you are still waiting for and ask for it. If you believe you have everything, say that you are building it and include the marker. Quoting an English button name at somebody reading Danish is how this went wrong on 22 August 2026.
+
 NARROW DOWN GENUINE INTEREST, DON'T JUST ACCEPT THE FIRST BROAD CATEGORY — a broad answer like "nature" or "history" still fits dozens of very different places in Denmark, and defaulting to the same handful of famous spots for every "nature" answer is exactly how everyone ends up at the same places. If someone gives a broad category and you have room for one more question before committing to a full plan, ask ONE specific, real follow-up that actually changes the plan — e.g. for "nature": "coastal walks, forest and lakes, or the wilder Wadden Sea/island side?"; for "history": "Viking-era sites, WWII history, or old market towns?"; for "food": "casual local spots or something worth planning a splurge around?" Skip this if they've already been specific, or if they've made clear they just want you to pick for them — don't turn a simple "surprise me" into another round of questions.
 
 SCOPE THE ANSWER TO WHAT THEY ASKED — once you do have enough to plan, match the plan's size to what they actually requested. Someone with a few hours doesn't need a 3-day, 3-city itinerary. Someone who said "budget-friendly" shouldn't get a plan stacked with 230 DKK museum tickets without at least flagging the cost. Don't pad a short trip into a long one just to showcase more of Gemlyx's content. This is about SCOPE (how much ground the plan covers), not detail — still give real costs and specifics within whatever size plan fits their ask.
@@ -12534,6 +12538,19 @@ ${languageBlock()}`;
       if (replyText && !brief.ready && isReadyToBuild(replyText)) {
         console.warn("Gemlyx chat: ready marker withheld, brief incomplete.", { missing: brief.missing });
         replyText = stripReadyMarker(replyText);
+        // ── AND THEN SAY SO ─────────────────────────────────────
+        // 22 Aug 2026, Oliver's father in Danish: a plan, then "Den er klar.",
+        // then nothing. He wrote "der er ikke noget der er poppet op" and was
+        // told to press a button, by its English name, that was not there.
+        //
+        // Everything above worked. He gave no dates and no party, both HARD,
+        // so the claim was stripped, correctly. The failure was that the strip
+        // said nothing, so the refusal was invisible and he was left reading a
+        // finished-sounding plan with no way forward. The paragraph below is
+        // what turns a silent no into an answerable question. See
+        // buildBlockedNote in utils/tripBrief.js.
+        const blocked = buildBlockedNote(brief);
+        if (blocked) replyText = `${replyText}\n\n${blocked}`;
       }
       // Recorded from what this turn was TOLD to ask, never parsed back out of the
       // reply: a slot asked once is not asked again, so an unanswered question
@@ -12929,7 +12946,24 @@ ${languageBlock()}`;
                     text: two or more "Day N:" headers, or one plus real length.
                     If the reply looks like a plan, the button is offered,
                     marker or not. A button shown one turn early costs a tap. A
-                    button never shown costs the whole product. */}
+                    button never shown costs the whole product.
+
+                    ── AND THAT SAFETY NET HAS A HOLE THE SIZE OF ITS JOB ──
+                    22 Aug 2026, after Oliver's father got no button at all.
+                    isFullPlanText needs "Day N:" headers, and the chat prompt
+                    forbids exactly that shape in this reply: "your reply in
+                    THIS CONVERSATION is NEVER a day-by-day breakdown". So on a
+                    correctly formatted ready reply the fallback CANNOT fire,
+                    and the button rests entirely on the marker after all. The
+                    net catches only replies that broke the format.
+
+                    It is kept, because a badly formatted plan is still a plan
+                    and still needs a way out. What actually fixed his case is
+                    two changes elsewhere: isReadyToBuild now tolerates a marker
+                    the model mangled while writing in another language, and a
+                    withheld marker now says what it is waiting for instead of
+                    vanishing. Do not read this line as a guarantee that the
+                    button cannot go missing. It is not one. */}
                 {(() => {
                   const lastAssistantMsg = [...aiMessages].reverse().find(m => m.role === "assistant");
                   if (!lastAssistantMsg || aiLoading) return false;
@@ -12976,7 +13010,7 @@ ${languageBlock()}`;
                   <button onClick={sendAI} disabled={aiLoading} style={{ background: C.accent, border: "none", borderRadius: 100, width: 44, height: 44, cursor: "pointer", fontSize: 16, flexShrink: 0, color: "#fff" }}>↗</button>
                 </div>
                 <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginTop: 8 }}>
-                  Mention who's traveling — kids, budget, a car. The more Gemlyx knows, the better the plan.
+                  Mention who's traveling: kids, budget, a car. The more Gemlyx knows, the better the plan.
                 </div>
                 {isStudio && !studioSession && (
                   <div style={{ background: C.surface, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "20px", marginTop: 18 }}>
@@ -16960,7 +16994,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase" }}>Gemlyx Intelligence</span>
                 </div>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Gemlyx Detour</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 480, margin: "0 auto" }}>Your personal Denmark guide. Tell it when you're coming and what you're into — it plans a real route, checks live weather and events for your exact days, and steers you off the obvious path.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 480, margin: "0 auto" }}>Your personal Denmark guide. Tell it when you're coming and what you're into, and it plans a real route, checks live weather and events for your exact days, and steers you off the obvious path.</div>
               </div>
 
               <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${C.border}`, marginBottom: 20 }}>
@@ -17066,7 +17100,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     else folded behind a "fine-tune" toggle so the page reads calm. */}
                 <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px 16px" }}>
                   <div style={{ fontSize: 16, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 4 }}>When are you coming?</div>
-                  <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.55, marginBottom: 14 }}>Real dates mean Gemlyx checks the actual weather and what's on while you're here. Everything else is optional — or just type in the chat below.</div>
+                  <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.55, marginBottom: 14 }}>Real dates mean Gemlyx checks the actual weather and what's on while you're here. Everything else is optional, or just type in the chat below.</div>
 
                   <div className="detour-2col" style={{ marginBottom: 14 }}>
                     <DateTimePicker

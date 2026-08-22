@@ -142,14 +142,79 @@ export const monthOnlyIn = (text, today = new Date()) => {
   return { start, end, month: monthIdx, year };
 };
 
+// ── AND IT ONLY EVER LISTENED IN ENGLISH ────────────────────────────
+//
+// 22 Aug 2026. Oliver's father told Gemlyx "today" and "7 days", in Danish, and
+// got no button. Every reader in tripBrief runs on the traveller's own words,
+// and every pattern in this file is English, so a Danish speaker can answer the
+// two questions that block a build and fill neither slot. Gemlyx replies in
+// their language and reads only ours, and the gap between those two is a person
+// answering correctly and being asked again.
+//
+// Danish first because it is the country the product is about and the one
+// language we know is in use. The rest follow the day they are needed, and the
+// shape here is built so that adding one is a list entry rather than a rewrite.
 export const dayCountIn = (text) => {
   const s = String(text || "");
-  const digits = s.match(/\b(\d{1,2})\s*(?:-|–|to)?\s*(?:day|days)\b/i);
+  const digits = s.match(/\b(\d{1,2})\s*(?:-|–|to)?\s*(?:days?|dage?)\b/i);
   if (digits) return Math.min(parseInt(digits[1], 10), 14);
-  const weeks = s.match(/\b(\d{1,2})\s*(?:-|–)?\s*weeks?\b/i);
+  const weeks = s.match(/\b(\d{1,2})\s*(?:-|–)?\s*(?:weeks?|uger?)\b/i);
   if (weeks) return Math.min(parseInt(weeks[1], 10) * 7, 14);
   if (/\b(?:a|an|the|one)\s+(?:whole|entire|full)?\s*week\b/i.test(s)) return 7;
+  // "en uge", "hele ugen". `uge` alone is not enough: "i ugen" and "ugens" turn
+  // up in ordinary sentences that are not an answer about length.
+  // NOT \b before the alternation: é is not an ASCII word character, so a word
+  // boundary in front of "én" never matches and that spelling fell through.
+  if (/(?:^|[^\wÆØÅæøå])(?:én|en|hele|den ene)\s+(?:hel\s+)?uge[nr]?\b/i.test(s)) return 7;
   if (/\b(?:a|an|the|one)\s+fortnight\b/i.test(s)) return 14;
+  if (/\b(?:to|2)\s+uger\b/i.test(s)) return 14;
+  return null;
+};
+
+// ── "TODAY" IS AN ANSWER, AND NOTHING COULD READ IT ─────────────────
+//
+// The date reader above wants a day number and a month name. It has never had
+// any concept of a relative day, in any language, so the most ordinary answer
+// there is to "which dates?" filled nothing: today, tomorrow, this weekend,
+// next week. His father said "today" and was asked again.
+//
+// Returns a start and an end rather than a bare date, because a weekend is two
+// days and claiming it is one is the kind of quiet overstatement this codebase
+// exists to refuse. `end` is null wherever the answer really is a single day.
+const DK_DAYS = { "i dag": 0, "idag": 0, "i aften": 0, "iaften": 0, "i morgen": 1, "imorgen": 1, "i overmorgen": 2, "overmorgen": 2 };
+const EN_DAYS = { "today": 0, "tonight": 0, "tomorrow": 1, "the day after tomorrow": 2, "day after tomorrow": 2 };
+
+export const relativeDayIn = (text, today = new Date()) => {
+  const s = String(text || "").toLowerCase();
+  const base = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const plus = (n) => new Date(base.getFullYear(), base.getMonth(), base.getDate() + n);
+
+  // "in 3 days" / "om 3 dage". Checked first: it carries a number, so it is the
+  // most specific thing in here, and "om 3 dage" also contains no day word the
+  // entries below would catch.
+  const inN = s.match(/\b(?:in|om)\s+(\d{1,2})\s+(?:days?|dage?)\b/);
+  if (inN) return { start: plus(parseInt(inN[1], 10)), end: null };
+
+  // Longest key first, so "i overmorgen" is not read as "i morgen" inside it.
+  const table = { ...EN_DAYS, ...DK_DAYS };
+  const keys = Object.keys(table).sort((a, b) => b.length - a.length);
+  for (const k of keys) {
+    if (new RegExp(`\\b${k.replace(/ /g, "\\s+")}\\b`, "i").test(s)) return { start: plus(table[k]), end: null };
+  }
+
+  // A weekend is Saturday and Sunday, and saying so is two days rather than one.
+  // Already inside one means this one, not the next.
+  if (/\b(?:this|the)\s+weekend\b|\bi\s+weekenden\b|\bdenne\s+weekend\b|\bher\s+i\s+weekenden\b/i.test(s)) {
+    const dow = base.getDay();                       // 0 Sunday, 6 Saturday
+    const toSat = dow === 0 ? -1 : (6 - dow);        // Sunday belongs to the weekend that began yesterday
+    const sat = plus(toSat);
+    return { start: sat, end: new Date(sat.getFullYear(), sat.getMonth(), sat.getDate() + 1) };
+  }
+  // Next week starts on its Monday. Denmark counts the week from Monday.
+  if (/\bnext\s+week\b|\bn(?:æ|ae)ste\s+uge\b/i.test(s)) {
+    const dow = base.getDay();
+    return { start: plus(((8 - dow) % 7) || 7), end: null };
+  }
   return null;
 };
 

@@ -91,7 +91,7 @@ writeFileSync(entry, `
   export { directionsEndpoint, collapsedRoute } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { upgradeWorthIt, onFootMinutes, MIN_UPGRADE_SAVING, COLLAPSE_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
-  export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, missingRequired, cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS, cleanBornDate, birthYear, BORN_DATE_MIN, BORN_DATE_MAX, REQUIRED_PROFILE, REQUIRED_LABEL, AGE_BANDS, BORN_YEARS, bandForYear, holdProfile, takeHeldProfile, PENDING_PROFILE_KEY, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
+  export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, missingRequired, cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS, cleanBornDate, birthYear, BORN_DATE_MIN, BORN_DATE_MAX, REQUIRED_PROFILE, REQUIRED_LABEL, AGE_BANDS, BORN_YEARS, bandForYear, ageFrom, underMinimumAge, MIN_ACCOUNT_AGE, TERMS_VERSION, holdProfile, takeHeldProfile, PENDING_PROFILE_KEY, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
   export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
@@ -104,7 +104,7 @@ writeFileSync(entry, `
   export { isOwnRoute, RETURN_PARAM, captureRedirectSession, startGoogleSignIn } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
   export { GOOGLE_SIGN_IN } from ${JSON.stringify(join(root, "src/config.js"))};
   export { writeInLanguage, guideLanguageBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
-  export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, briefBlock, MAX_ASKS_AT_ONCE } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
+  export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, briefBlock, buildBlockedNote, MAX_ASKS_AT_ONCE } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { GREETING, openingThread, withTestBrief, withoutTestBrief, threadIsSound, TEST_BRIEF } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { CHAT_REPORT_KIND, CHAT_REPORT_VERSION, buildChatReport, chatReportFilename, turnReport, briefTimeline, intakeReport } from ${JSON.stringify(join(root, "src/utils/chatReport.js"))};
   export { RIGHTS_HOLDER, copyrightLine, GUIDE_RIGHTS_SHORT, GUIDE_RIGHTS_FULL, TDM_RESERVATION } from ${JSON.stringify(join(root, "src/utils/rights.js"))};
@@ -155,7 +155,7 @@ writeFileSync(entry, `
   export { vehicleMismatches, guideRides } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { factCheckCopy } from ${JSON.stringify(join(root, "src/utils/factCheckCopy.js"))};
   export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn, travelModeKey, modeReachKm, MODE_DAY_KM, preferReachable, preferPassing, overnightMove, describeOvernightMove, spokenDuration, beyondModeRange, BEYOND_DAY_FACTOR, sameMode, howForReader, EATS_THE_DAY_MINUTES } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
-  export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dayCountIn, daysBetween, describePicks, monthOnlyIn, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
+  export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dayCountIn, relativeDayIn, daysBetween, describePicks, monthOnlyIn, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED, isRegionCrossing } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { mergeForecasts, agreementNote, SPREAD_DISAGREES_C, weatherIsStale, weatherChanges, WEATHER_STALE_HOURS, dayWeather } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
@@ -22200,12 +22200,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // passing whatever the Google button did.
     const gbtn = sheetA.slice(sheetA.indexOf("<button onClick={() => {"), sheetA.indexOf("}} disabled={busy}"));
     ok("the Google handler was found", gbtn.length > 80 && gbtn.includes("startGoogleSignIn()"));
-    ok("the answers are held before the redirect", /holdProfile\(answers\);\s*\}\s*startGoogleSignIn\(\);/.test(gbtn));
+    ok("the answers are held before the redirect", /holdProfile\(acceptedNow\(answers\)\);\s*\}\s*startGoogleSignIn\(\);/.test(gbtn));
     // ORDER MATTERS: holding an incomplete profile and redirecting anyway is
     // the same data loss with an extra step, since missingRequired would then
     // never be consulted again on this device.
+    // BOTH PRESENT, THEN ORDERED. The old form compared two indexOf results
+    // with only the first guarded, so a missing holdProfile returned -1 and -1
+    // is less than everything: the assertion passed hardest at the moment the
+    // call it exists to order had been deleted.
     ok("and the mandatory fields are checked first",
-       gbtn.indexOf("missingRequired(answers)") >= 0 && gbtn.indexOf("missingRequired(answers)") < gbtn.indexOf("holdProfile(answers)"));
+       gbtn.includes("missingRequired(answers)") && gbtn.includes("holdProfile(acceptedNow(answers))") &&
+       gbtn.indexOf("missingRequired(answers)") < gbtn.indexOf("holdProfile(acceptedNow(answers))"));
     ok("an incomplete form stops the redirect rather than warning past it",
        /if \(gaps\.length\) \{[\s\S]{0,180}return;\s*\}/.test(gbtn));
     ok("the bare handler is gone", !/onClick=\{startGoogleSignIn\}/.test(stripNonCode(sheetA)));
@@ -22351,7 +22356,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // the profile hold and the return-route guard again from scratch one day,
     // and those are precisely the parts that were wrong for weeks. Switched off,
     // they stay under test.
-    ok("the machinery behind it is still there", /startGoogleSignIn\(\);/.test(sheetG) && /holdProfile\(answers\);/.test(sheetG));
+    ok("the machinery behind it is still there", /startGoogleSignIn\(\);/.test(sheetG) && /holdProfile\(acceptedNow\(answers\)\);/.test(sheetG));
   }
 
   // The menu entry opened the sheet without setting the mode, so it reopened on
@@ -23817,11 +23822,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // the assertion that keeps the notice honest: a page that claimed to own an
   // opening time would be making exactly the kind of unearned claim the rest of
   // this codebase exists to refuse.
+  // REWRITTEN 22 AUG into a formal register, so these now pin the RULE rather
+  // than the sentence that carried it. The wording moved; the refusal did not.
   ok("the terms say plainly that facts are not owned",
-     /nobody owns those/i.test(terms));
-  ok("and name what actually took the work", /What took the work was checking them/i.test(terms));
+     /not owned by any person/i.test(terms));
+  ok("and name what actually took the work", /selection, verification and arrangement/i.test(terms));
   // The stronger and more apt claim: a verified collection, which IS protected.
-  ok("the collection is claimed under database law", /database law/i.test(terms));
+  ok("the collection is claimed under database law", /sui generis database right/i.test(terms));
 
   // ── THE RULE, BOTH HALVES ───────────────────────────────────────
   ok("the short notice allows taking it on the trip", /take it on your trip/i.test(GUIDE_RIGHTS_SHORT));
@@ -23835,12 +23842,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the full version still allows sending it to travel companions",
      /travelling with you/i.test(GUIDE_RIGHTS_FULL));
   ok("and quoting is explicitly fine", /Quoting is fine/i.test(GUIDE_RIGHTS_FULL));
+  // Both halves, separately, because the two documents no longer share a
+  // sentence and a rule that survives in only one of them is the drift this
+  // assertion exists to catch.
   ok("the terms agree with the guide notice about publishing",
-     /Your guide is yours\. Publishing it is not\./.test(terms));
+     /republish or repost the whole or any substantial part/i.test(terms));
+  ok("and agree about the half that is allowed",
+     /read, print, store and retain a Guide/i.test(terms) && /send it to the persons travelling with the User/i.test(terms));
   ok("and the terms no longer say a guide is yours to share, full stop",
      !/yours to use, print, share and take on your trip/.test(terms));
   ok("the terms are re-dated, because a rule change that keeps the old date is a lie",
-     /last updated 17 August 2026/.test(terms));
+     /In force from 22 August 2026/.test(terms));
 
   // ── IT REACHES A READER ─────────────────────────────────────────
   // A notice in a util nothing renders is not a notice.
@@ -28775,7 +28787,450 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // profileLearning feature stop being dead code. It is NOT a field the form
   // fills and never appears in it: see the isBlank assertions below.
   ok("the stored shape is the one the form fills",
-     /EMPTY_PROFILE = \{ name: "", bornDate: "", bornYear: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: \[\], transport: \[\], style: \[\], learned: \{\} \}/.test(prof));
+     /EMPTY_PROFILE = \{ name: "", bornDate: "", bornYear: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: \[\], transport: \[\], style: \[\], termsVersion: "", termsAcceptedAt: "", learned: \{\} \}/.test(prof));
+}
+
+// ── 22 AUGUST 2026: HIS FATHER GOT NO BUTTON ────────────────────────
+//
+// He was handed a plan ending "Den er klar." and nothing appeared. He wrote
+// "der er ikke noget der er poppet op" and was told to press a button called
+// "Turn this into a guide", by its English name, that was not on his screen.
+//
+// Nothing was broken. He gave no dates and never said who was coming, both
+// HARD, so brief.ready was false and App.jsx stripped the claim exactly as it
+// should since "it cannot make a build without dates". The defect was that the
+// strip was SILENT, and a silent refusal is a dead end.
+{
+  const { isReadyToBuild, stripReadyMarker, READY_MARKER, buildBlockedNote, readBrief, briefReady } = M;
+
+  // ── THE MARKER SURVIVES A MODEL WRITING IN ANOTHER LANGUAGE ─────
+  // It is ASCII defined in an English prompt, wrapped in a Danish reply. An
+  // exact `includes` was a coin toss, and losing it costs the one button the
+  // whole product funnels into.
+  for (const [what, text] of [
+    ["the exact marker", `Here is the plan.\n${READY_MARKER}`],
+    ["no brackets and lower case", "Her er planen.\ngemlyx_ready_to_build"],
+    ["spaced out", "Plan.\n[[ GEMLYX READY TO BUILD ]]"],
+    ["hyphenated", "Plan.\nGEMLYX-READY-TO-BUILD"],
+  ]) ok(`a mangled marker still counts: ${what}`, isReadyToBuild(text));
+
+  // ── AND DOES NOT FIRE ON PROSE ──────────────────────────────────
+  // Loosening the match is only safe while it cannot hit a real reply. The last
+  // case is the exact sentence his father was shown, which must NOT count: the
+  // brief was incomplete, and a button there would build a guide with no dates.
+  for (const [what, text] of [
+    ["a plan with no marker", "Day 1: Copenhagen, Nyhavn and the Round Tower.\nDay 2: train to Odense."],
+    ["a question", "Where are you flying into, and how many days do you have?"],
+    ["an ordinary Danish reply", "Så bygger jeg en uge der starter i Mols Bjerge og fortsætter til Ribe."],
+    ["an English sentence about being ready", "Ready to build something around Aarhus whenever you are."],
+    ["the Danish paraphrase that caused all this", "Den er klar."],
+  ]) ok(`prose is not a marker: ${what}`, !isReadyToBuild(text));
+
+  ok("a mangled marker is removed from what the reader sees",
+     !/gemlyx/i.test(stripReadyMarker("Her er planen.\ngemlyx_ready_to_build")));
+
+  // ── THE REFUSAL HAS A VOICE ─────────────────────────────────────
+  const emptyBrief = readBrief({ travellerText: "hi", today: new Date(2026, 7, 22) });
+  ok("a brief with nothing in it is not ready", !briefReady(emptyBrief));
+  const note = buildBlockedNote(emptyBrief);
+  ok("and it says what it is waiting for", note.length > 20);
+  ok("naming it in the words the slot was already written in",
+     M.BRIEF_SLOTS.some(sl => sl.ask && note.includes(sl.ask)));
+  // One question, because MAX_ASKS_AT_ONCE is 1 and the reason for that rule
+  // applies twice over to somebody just told a plan was ready.
+  is("exactly one question is asked", (note.match(/\?/g) || []).length, 1);
+
+  // ── AND NOTHING TO SAY WHEN THERE IS NOTHING MISSING ────────────
+  // A note appended to a ready brief would contradict the button beside it.
+  is("a complete brief produces no note", buildBlockedNote({ missing: [], unanswered: [], vagueToAsk: [] }), "");
+  is("and neither does a brief that is not there at all", buildBlockedNote(null), "");
+
+  // ── IT IS ACTUALLY APPENDED ─────────────────────────────────────
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the withheld marker appends the note rather than vanishing",
+     /const blocked = buildBlockedNote\(brief\);/.test(app) && /if \(blocked\) replyText = /.test(app));
+
+  // ── AND HE HAD ANSWERED BOTH QUESTIONS ──────────────────────────
+  //
+  // Oliver, after reading the first account of this: "he said 'today' and 7
+  // days." So the brief was not empty because he refused to answer. It was
+  // empty because nothing here could hear him. arrivalDateIn wants a day number
+  // and an English month name; dayCountIn wanted the English word for a day.
+  // He answered correctly twice, in Danish, and was asked again both times.
+  //
+  // Two separate holes, and the second is the one that matters beyond Denmark:
+  // Gemlyx REPLIES in the traveller's language and READS only English.
+  {
+    const { relativeDayIn, dayCountIn, readBrief } = M;
+    const SAT = new Date(2026, 7, 22);            // 22 August 2026, a Saturday
+    const day = (r) => (r ? r.start.toDateString() : null);
+
+    // His exact two answers, which is the case this was written from.
+    is("'i dag' is today", day(relativeDayIn("i dag", SAT)), SAT.toDateString());
+    is("and '7 dage' is seven days", dayCountIn("7 dage"), 7);
+
+    // The same answers in English, which never worked either.
+    is("'today' is today", day(relativeDayIn("today", SAT)), SAT.toDateString());
+    is("'tomorrow' is the next day", day(relativeDayIn("tomorrow", SAT)), new Date(2026, 7, 23).toDateString());
+    is("and so is 'i morgen'", day(relativeDayIn("i morgen", SAT)), new Date(2026, 7, 23).toDateString());
+    is("'i overmorgen' is two days out", day(relativeDayIn("i overmorgen", SAT)), new Date(2026, 7, 24).toDateString());
+    is("'in 3 days' counts", day(relativeDayIn("in 3 days", SAT)), new Date(2026, 7, 25).toDateString());
+    is("and 'om 3 dage' counts the same", day(relativeDayIn("om 3 dage", SAT)), new Date(2026, 7, 25).toDateString());
+
+    // LONGEST KEY FIRST, or "i overmorgen" is read as the "i morgen" inside it
+    // and the traveller arrives a day early.
+    ok("the day after tomorrow is not read as tomorrow",
+       day(relativeDayIn("i overmorgen", SAT)) !== day(relativeDayIn("i morgen", SAT)));
+
+    // A weekend is two days, and saying it is one would be the quiet kind of
+    // overstatement the rest of this codebase refuses.
+    const wknd = relativeDayIn("this weekend", SAT);
+    ok("a weekend carries an end as well as a start", !!wknd && !!wknd.end);
+    is("starting on the Saturday", wknd.start.getDay(), 6);
+    is("and ending on the Sunday", wknd.end.getDay(), 0);
+    is("'i weekenden' is the same weekend", day(relativeDayIn("i weekenden", SAT)), day(wknd));
+
+    // Denmark counts a week from Monday, and "next week" said ON a Monday means
+    // the one after, not today.
+    is("next week starts on a Monday", relativeDayIn("next week", SAT).start.getDay(), 1);
+    is("and so does 'næste uge'", relativeDayIn("næste uge", SAT).start.getDay(), 1);
+    is("said on a Monday it means the following one",
+       day(relativeDayIn("next week", new Date(2026, 7, 24))), new Date(2026, 7, 31).toDateString());
+
+    // ── AND IT MUST NOT FIRE ON ORDINARY SENTENCES ────────────────
+    // Loosening a reader is only safe while it stays deaf to prose. "i ugen"
+    // and "ugen" appear in sentences that are not an answer about length.
+    for (const t of ["we want to see Ribe and Aarhus", "hvad koster det i ugen", "ugen er lang"]) {
+      is(`prose is not a date: ${t}`, relativeDayIn(t, SAT), null);
+      is(`prose is not a length: ${t}`, dayCountIn(t), null);
+    }
+
+    // ── THE MORE PRECISE ANSWER WINS ──────────────────────────────
+    // Somebody who writes a real date has said more than somebody who writes
+    // "next week", so the explicit reader still runs first.
+    const explicit = readBrief({ travellerText: "we land 14 October, next week is no good", today: SAT });
+    is("an explicit date beats a relative one", explicit.known.when.value.getMonth(), 9);
+
+    // ── AND HIS FATHER'S CONVERSATION NOW FILLS BOTH ──────────────
+    const dad = readBrief({ travellerText: "i dag, 7 dage, vi vil gerne se Mols Bjerge", today: SAT });
+    ok("the dates slot fills from his own words", !!dad.known.when);
+    ok("and so does the length", !!dad.known.days);
+    is("seven of them", dad.known.days.value, 7);
+    // He never said who was coming, which is a real gap and the one thing
+    // Gemlyx should now be asking him for instead of going quiet.
+    ok("who is coming is still the open question", !dad.known.party);
+    ok("so the brief is still not ready, correctly", !briefReady(dad));
+    ok("and the note asks for exactly that",
+       buildBlockedNote(dad).includes("Who is coming?"));
+  }
+
+  // ── AND THE MODEL IS TOLD NOT TO NAME BUTTONS ───────────────────
+  // Quoting an English button label at somebody reading Danish is what turned a
+  // missing button into a dead end he could not get out of.
+  ok("the prompt forbids naming a button", /AND NEVER NAME A BUTTON/.test(app));
+  ok("and forbids translating the marker", /WRITE THE MARKER EXACTLY AS PRINTED, NEVER TRANSLATED/.test(app));
+}
+
+// ── 22 AUGUST 2026: THE LIGHT THEME FAILED AA ON PAPER ──────────────
+//
+// Measured off a screenshot of the studio screen rather than guessed. The muted
+// tone, which carries nearly every piece of secondary text in the app, was
+// 4.37:1 against the page. The gold, which carries headings, links and the
+// primary button, was 4.03:1. Both under the 4.5 line, at 11 to 13px.
+//
+// A palette is a number, so it is asserted as one and nobody has to eyeball a
+// screenshot again.
+//
+// TWO SHAPES OF ASSERTION, AND THE DIFFERENCE IS DELIBERATE. Light is held to
+// AA outright, because it was fixed today and verified. Warm and dark are held
+// to a FLOOR of what they measure right now, because two of dark's numbers are
+// below AA and dark is the theme he asked to be kept as it was. Recording them
+// stops them sliding further without pretending they pass, and the two that
+// need his decision are named below rather than quietly rounded up.
+{
+  const { THEMES } = M;
+  const chan = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  const lum = (hex) => {
+    const h = String(hex).replace("#", "");
+    const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+    return 0.2126 * chan(r) + 0.7152 * chan(g) + 0.0722 * chan(b);
+  };
+  const ratio = (a, b) => {
+    const la = lum(a), lb = lum(b), hi = Math.max(la, lb), lo = Math.min(la, lb);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  // Sanity on the maths before it is trusted to judge a palette.
+  is("black on white is 21:1", Math.round(ratio("#000000", "#FFFFFF")), 21);
+  is("a colour against itself is 1:1", Math.round(ratio("#123456", "#123456")), 1);
+
+  const AA = 4.5;      // normal text
+  const AA_UI = 3;     // borders and other non-text parts
+  const TEXT_KEYS = ["text", "muted", "gold", "light"];
+
+  // ── LIGHT IS HELD TO THE STANDARD ───────────────────────────────
+  const L = THEMES.light;
+  for (const key of TEXT_KEYS) {
+    for (const ground of ["bg", "surface"]) {
+      const r = ratio(L[key], L[ground]);
+      ok(`light: ${key} on ${ground} reaches AA (${r.toFixed(2)}:1)`, r >= AA);
+    }
+  }
+  // accent is a BACKGROUND in every theme, not a text colour: it is the send
+  // button and the traveller's own chat bubble. What has to be legible is the
+  // text sitting ON it, so that is what is measured.
+  ok(`light: text on the accent reaches AA (${ratio(L.onGold, L.accent).toFixed(2)}:1)`,
+     ratio(L.onGold, L.accent) >= AA);
+  ok(`light: text on the gold reaches AA (${ratio(L.onGold, L.gold).toFixed(2)}:1)`,
+     ratio(L.onGold, L.gold) >= AA);
+  ok(`light: the field border clears the UI bar (${ratio(L.fieldBorder, L.surface).toFixed(2)}:1)`,
+     ratio(L.fieldBorder, L.surface) >= AA_UI);
+
+  // ── THE OTHER TWO MAY NOT GET WORSE ─────────────────────────────
+  // Floors, measured 22 Aug 2026. Raise one when its colour improves; never
+  // lower one to make a change fit.
+  const FLOOR = {
+    warm: { textOnBg: 16.6, mutedOnBg: 5.7, goldOnBg: 9.3, textOnAccent: 5.6, textOnGold: 9.3, fieldBorder: 3.6 },
+    dark: { textOnBg: 16.7, mutedOnBg: 3.8, goldOnBg: 8.4, textOnAccent: 3.7, textOnGold: 8.4, fieldBorder: 3.3 },
+  };
+  for (const [name, f] of Object.entries(FLOOR)) {
+    const t = THEMES[name];
+    const got = {
+      textOnBg: ratio(t.text, t.bg), mutedOnBg: ratio(t.muted, t.bg), goldOnBg: ratio(t.gold, t.bg),
+      textOnAccent: ratio(t.text, t.accent), textOnGold: ratio(t.onGold, t.gold),
+      fieldBorder: ratio(t.fieldBorder, t.surface),
+    };
+    for (const k of Object.keys(f)) {
+      ok(`${name}: ${k} has not slipped below ${f[k]} (${got[k].toFixed(2)}:1)`, got[k] >= f[k]);
+    }
+  }
+
+  // ── AND THE TWO THAT ARE STILL SHORT, NAMED ─────────────────────
+  // Not failures of this suite, because dark is the theme he asked to keep as
+  // it was and changing its signature red is a look decision rather than a
+  // contrast fix. They are written down so the next person does not have to
+  // rediscover them, and they flip to real assertions the day he says so.
+  //
+  //   dark muted  #64708C   3.85:1 on bg   (needs 4.5, #7C88A6 gives 5.39)
+  //   dark accent #E23B4E   3.70:1 under its own text (#C82A3C gives 4.78)
+  ok("the dark shortfalls are still exactly the two that are written down",
+     ratio(THEMES.dark.muted, THEMES.dark.bg) < AA && ratio(THEMES.dark.text, THEMES.dark.accent) < AA);
+}
+
+// ── 22 AUGUST 2026: THE EM DASH ON EVERY GUIDE ──────────────────────
+//
+// Four live guides were read and three of them carried an em dash. Every one
+// was the same sentence, and it was not the model: it was a template in
+// weatherWarn.js. His rule covers generated copy and hardcoded copy alike, and
+// the strings in this file reach a reader without passing through stripDashes,
+// so nothing was ever going to catch them but this.
+{
+  const src = readFileSync(join(root, "src/utils/weatherWarn.js"), "utf8");
+  const strings = src.split("\n").filter(l => {
+    const t = l.trim();
+    return !t.startsWith("//") && /["'`]/.test(l);
+  }).join("\n");
+  const dashes = strings.match(/[‒–—―]/g) || [];
+  is("no weather warning carries a dash", dashes.length, 0);
+}
+
+// ── 22 AUGUST 2026: THE TWO LEGAL PAGES ─────────────────────────────
+//
+// Nothing in this suite read public/privacy.html until today, which is exactly
+// how it spent eleven days telling readers that Gemlyx stored an age band and
+// never a date of birth, that every profile field was optional, and that
+// nothing was ever learned from behaviour. All three were false, and all three
+// were green, because no assertion was looking. A promise is a fact about the
+// product and belongs under test like any other fact about it.
+{
+  const terms = readFileSync(join(root, "public/terms.html"), "utf8");
+  const privacy = readFileSync(join(root, "public/privacy.html"), "utf8");
+  const cfg = readFileSync(join(root, "src/config.js"), "utf8");
+  const prof = readFileSync(join(root, "src/utils/profile.js"), "utf8");
+
+  // ── THE TRADER, NAMED ───────────────────────────────────────────
+  // Danish e-handelsloven wants a commercially oriented site to carry a name, a
+  // physical address and a working address for contact, permanently reachable.
+  // "Run by a single person in Denmark" was none of the three.
+  for (const [what, needle] of [["a name", "Oliver Verhein Hoffmann"],
+                                ["an address", "Lindholm Brygge 35"],
+                                ["a privacy contact", "privacy@gemlyxtravel.com"],
+                                ["a general contact", "hello@gemlyxtravel.com"]]) {
+    ok(`the terms carry ${what}`, terms.includes(needle));
+    ok(`and the privacy policy carries ${what}`, privacy.includes(needle));
+  }
+  ok("neither page still hides behind an unnamed sole trader",
+     !/run by a single person in Denmark/i.test(terms + privacy));
+
+  // ── THE THREE CLAIMS THAT WENT FALSE ────────────────────────────
+  // Asserted as ABSENCES, because the failure mode here is not a missing
+  // sentence. It is a sentence that was true the day it was written and stopped
+  // being true while nobody reread it.
+  ok("the privacy page no longer promises a band rather than a date of birth",
+     !/A band, never a date of birth/i.test(privacy));
+  ok("and no longer calls the whole profile optional",
+     !/Every field is optional and the whole thing can be skipped/i.test(privacy));
+  ok("and no longer denies building a picture from behaviour",
+     !/We do not build a profile of you from your behaviour/i.test(privacy));
+  // And their replacements are present, so none of the three can pass by the
+  // section simply having been deleted.
+  ok("the date of birth is disclosed instead", /Date of birth/.test(privacy));
+  ok("the required half is labelled required", /<h3>Required<\/h3>/.test(privacy));
+  ok("and what Gemlyx notices has a section of its own",
+     /What Gemlyx notices about you/i.test(privacy));
+
+  // ── THE COUNT MATCHES THE TABLE UNDER IT ────────────────────────
+  // It said "two things you must give" directly above a table listing five.
+  // Nobody counts, so the assertion counts.
+  const WORD = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight"];
+  const listed = ((prof.match(/export const REQUIRED_PROFILE = \[([^\]]*)\]/) || [])[1] || "")
+    .split(",").filter(x => x.trim()).length;
+  ok("REQUIRED_PROFILE was actually found", listed > 0);
+  // Plus the email address and the password, which the form demands and the
+  // profile shape knows nothing about.
+  ok("the privacy page's count matches REQUIRED_PROFILE plus email and password",
+     new RegExp(`Registration asks for ${WORD[listed + 2]} things you must give`).test(privacy));
+
+  // ── THE AFFILIATE LIST MATCHES WHAT IS SWITCHED ON ──────────────
+  // The page named Booking.com and Ticketmaster as the partners that pay while
+  // both of their config values were empty strings, and left Tiqets, the only
+  // one live, unnamed. Naming the wrong partner is worse than naming none.
+  const set = (decl) => new RegExp(`export const ${decl} = "[^"]+"`).test(cfg);
+  ok("Tiqets is the partner that is switched on", set("TIQETS_BROWSE_LINK"));
+  ok("and the privacy page names it", /Tiqets/.test(privacy));
+  ok("Booking.com is not switched on", !set("BOOKING_AFFILIATE_ID"));
+  ok("Ticketmaster is not switched on", !set("TICKETMASTER_AFFILIATE_TEMPLATE"));
+  ok("so the page says those two earn nothing rather than claiming they pay",
+     /carry no partner code at the moment and earn Gemlyx nothing/.test(privacy));
+
+  // ── THE AGE ALL THREE HAVE TO AGREE ON ──────────────────────────
+  ok("the terms state a minimum age", /at least 15 years of age/i.test(terms));
+  ok("the privacy page states the same one", /under 15/i.test(privacy));
+  ok("and the code enforces that number and no other",
+     /export const MIN_ACCOUNT_AGE = 15;/.test(prof));
+
+  // ── ARTICLE 50, WHICH APPLIED FROM 2 AUGUST 2026 ────────────────
+  ok("the terms disclose that nobody is talking to a person",
+     /not interacting with a natural person/i.test(terms));
+  ok("and cite the provision that requires it",
+     /Article 50\(1\) of Regulation \(EU\) 2024\/1689/.test(terms));
+
+  // ── LEGAL BASES, WHICH ARTICLE 13 REQUIRES AND V1 HAD NONE OF ───
+  for (const art of ["6(1)(a)", "6(1)(b)", "6(1)(f)"]) {
+    ok(`the privacy page names Article ${art}`, privacy.includes(`Article ${art}`));
+  }
+
+  // ── HIS RULE, ON THE TWO PAGES MOST LIKELY TO BREAK IT ──────────
+  // Legal text is the thing people paste in from a template, and templates are
+  // full of em dashes.
+  for (const [name, text] of [["terms", terms], ["privacy policy", privacy]]) {
+    ok(`the ${name} carries no em or en dash`, !/[‒–—―]/.test(text));
+  }
+}
+
+// ── 22 AUGUST 2026: THE MINIMUM AGE, PROMISED TWICE AND CHECKED NOWHERE ──
+//
+// terms.html clause 5.1 and privacy.html section 16 both said an account may
+// not be created by anyone under 15, and nothing anywhere looked at the date of
+// birth the form had just collected. A rule stated in two documents and
+// enforced in none is decoration.
+{
+  const { underMinimumAge, MIN_ACCOUNT_AGE, ageFrom, bandForYear } = M;
+  const NOW = new Date(2026, 7, 22);   // 22 August 2026
+
+  is("the minimum is the number both documents state", MIN_ACCOUNT_AGE, 15);
+
+  // The birthday matters, which is the entire reason bornDate replaced bornYear.
+  is("someone who turns 15 tomorrow is still 14", ageFrom("2011-08-23", NOW), 14);
+  is("and is refused", underMinimumAge("2011-08-23", NOW), true);
+  is("someone who turned 15 today is 15", ageFrom("2011-08-22", NOW), 15);
+  is("and is let through", underMinimumAge("2011-08-22", NOW), false);
+  is("somebody clearly older is let through", underMinimumAge("1994-03-04", NOW), false);
+
+  // A bare year is all a row filled in before the date field existed has. It is
+  // knowingly up to a year out, and erring towards admitting somebody beats
+  // locking an adult out on a guess.
+  is("a bare year still answers", underMinimumAge("2020", NOW), true);
+  is("and a bare year on the boundary is not refused", underMinimumAge("2011", NOW), false);
+
+  // ── AND AN UNREADABLE DATE IS NOT AN UNDERAGE ONE ───────────────
+  // missingRequired already reports an empty box. If this reported the same box
+  // too, one blank field would produce two different errors depending on which
+  // check happened to run first.
+  for (const bad of ["", null, undefined, "banana", "not-a-date", "0000-00-00"]) {
+    is(`an unreadable value is not treated as underage: ${JSON.stringify(bad)}`,
+       underMinimumAge(bad, NOW), false);
+  }
+  is("and ageFrom says it does not know rather than guessing zero", ageFrom("", NOW), null);
+  is("a band cannot be derived from nothing either", bandForYear("", NOW), "");
+
+  // ── ONE CALCULATION, READ TWICE ─────────────────────────────────
+  // The band and the gate must never disagree about how old somebody is. This
+  // is the 31 December case that was wrong in bandForYear until this morning.
+  is("the band and the gate agree on a 24 year old", bandForYear("2001-12-31", NOW), "Under 25");
+  is("and the gate lets that person through", underMinimumAge("2001-12-31", NOW), false);
+
+  // ── BOTH SIGNUP ROUTES, NOT ONE ─────────────────────────────────
+  // The Google button keeps its own copy of the checks because it redirects
+  // away from the page. A gate on one route only is not a gate, and that route
+  // is the one where a miss becomes an account on the way back.
+  const sheet = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
+  const gate = /if \(underMinimumAge\(answers\.bornDate \|\| answers\.bornYear\)\) \{/g;
+  is("the gate runs on the email route and on the Google route",
+     (sheet.match(gate) || []).length, 2);
+}
+
+// ── 22 AUGUST 2026: WHICH TERMS THEY AGREED TO ──────────────────────
+//
+// terms.html clause 3.3 states that the version accepted at the point of
+// account creation is recorded against the Account. That is a clause about a
+// database column, so the column is under test like any other.
+{
+  const { cleanProfile, isBlank, EMPTY_PROFILE, TERMS_VERSION } = M;
+  const terms = readFileSync(join(root, "public/terms.html"), "utf8");
+  const sheet = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
+
+  ok("the stamped version is the one printed at the head of the terms page",
+     new RegExp(`Version ${TERMS_VERSION.replace(/\./g, "\\.")} `).test(terms));
+  ok("the shape carries both halves of the record",
+     "termsVersion" in EMPTY_PROFILE && "termsAcceptedAt" in EMPTY_PROFILE);
+  is("a version survives a clean", cleanProfile({ termsVersion: "2.0" }).termsVersion, "2.0");
+  is("an ISO instant survives a clean",
+     cleanProfile({ termsAcceptedAt: "2026-08-22T10:00:00.000Z" }).termsAcceptedAt,
+     "2026-08-22T10:00:00.000Z");
+  // Date.parse accepts a great deal of loose input. A stored "yes" must not
+  // become a timestamp, and nothing may reach a jsonb column as NaN.
+  for (const junk of ["yes", "true", "22 August", "2026", "", null, undefined]) {
+    is(`junk is not a timestamp: ${JSON.stringify(junk)}`,
+       cleanProfile({ termsAcceptedAt: junk }).termsAcceptedAt, "");
+  }
+
+  // ── AND NEITHER FIELD IS AN ANSWER SOMEBODY GAVE ────────────────
+  // The same trap `learned` fell into, one field later. Every account carries a
+  // terms version from the moment it exists, so counting these as answers would
+  // report every profile in the app as filled in, which is precisely what the
+  // comment above isBlank was written about.
+  ok("a profile carrying only a terms stamp is still blank",
+     isBlank({ ...EMPTY_PROFILE, termsVersion: "2.0", termsAcceptedAt: "2026-08-22T10:00:00.000Z" }));
+  ok("and one real answer is still not blank",
+     !isBlank({ ...EMPTY_PROFILE, termsVersion: "2.0", name: "Oliver" }));
+
+  // ── STAMPED WHERE ACCEPTANCE ACTUALLY HAPPENS ───────────────────
+  // Not defaulted inside cleanProfile, which would claim every row had agreed
+  // to whatever version happened to be current when it was next read.
+  ok("the stamp is taken at the moment of signup",
+     /termsVersion: TERMS_VERSION, termsAcceptedAt: new Date\(\)\.toISOString\(\)/.test(sheet));
+  ok("and both routes record it",
+     /saveProfile\(session, accepted\)/.test(sheet) && /holdProfile\(acceptedNow\(answers\)\)/.test(sheet));
+
+  // ── THE LINE THAT MAKES IT AN ACCEPTANCE ────────────────────────
+  // A record of agreement to something nobody was shown is worse than no
+  // record. The line and its two links are what the stamp refers to.
+  ok("the signup screen says what creating an account agrees to",
+     /By creating an account you agree to the/.test(sheet));
+  ok("and links both documents",
+     /href="\/terms\.html"/.test(sheet) && /href="\/privacy\.html"/.test(sheet));
+  ok("and says it only on the signup screen", /\{mode === "up" && <div/.test(sheet));
 }
 
 // ── 21 AUGUST 2026: "IT CANNOT MAKE A BUILD WITHOUT DATES" ──────────
@@ -29214,8 +29669,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // something honest to test.
   ok("and an empty name is left out rather than sent blank",
      /const clean = String\(name \|\| ""\)\.trim\(\)\.slice\(0, 60\);/.test(readFileSync(join(root, "src/utils/auth.js"), "utf8")));
-  ok("a session writes them straight to the row", /if \(session\) await saveProfile\(session, answers\);/.test(auth));
-  ok("and no session holds them on the device", /else holdProfile\(answers\);/.test(auth));
+  ok("a session writes them straight to the row", /if \(session\) await saveProfile\(session, accepted\);/.test(auth));
+  ok("and no session holds them on the device", /else holdProfile\(accepted\);/.test(auth));
 
   // ── CONFIRM PASSWORD, CHECKED BEFORE THE ACCOUNT EXISTS ─────────
   // "And make a confirm password section too." A typo caught afterwards is an

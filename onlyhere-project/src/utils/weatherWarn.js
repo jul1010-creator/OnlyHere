@@ -153,18 +153,18 @@ export const forecastWarnings = (day, { mode = null } = {}) => {
     if (wind >= WIND_STORM) {
       out.push(warn("wind-storm", "warn",
         selfPowered
-          ? `Gale force wind, ${ms} m/s. This is not a day to cycle or walk a coastline — move the outdoor part of it if you can.`
+          ? `Gale force wind, ${ms} m/s. This is not a day to cycle or walk a coastline. Move the outdoor part of it if you can.`
           : `Gale force wind, ${ms} m/s. Exposed coast and open bridges are unpleasant, and ferries start cancelling around this strength.`,
         { windMs: ms }));
     } else if (wind >= WIND_GALE) {
       out.push(warn("wind-gale", selfPowered ? "warn" : "watch",
         selfPowered
-          ? `${ms} m/s of wind. On a bike this is the day, not a detail — expect to be slower than the plan says in whichever direction is into it.`
+          ? `${ms} m/s of wind. On a bike this is the day, not a detail. Expect to be slower than the plan says in whichever direction is into it.`
           : `${ms} m/s of wind. Worth knowing before an exposed walk or a coastal viewpoint.`,
         { windMs: ms }));
     } else if (wind >= WIND_STRONG && selfPowered) {
       out.push(warn("wind-strong", "watch",
-        `${ms} m/s of wind — a headwind you will feel for the whole leg, not a breeze.`,
+        `${ms} m/s of wind, a headwind you will feel for the whole leg rather than a breeze.`,
         { windMs: ms }));
     } else if (wind >= WIND_FRESH && selfPowered && Number.isFinite(mm) && mm >= RAIN_WET) {
       // Only together. 9 m/s alone is an ordinary Danish day and warning about
@@ -181,7 +181,7 @@ export const forecastWarnings = (day, { mode = null } = {}) => {
     // "around the middle of the day", every time, because that is the window
     // the number came from. See RAIN_WET above.
     out.push(mm >= RAIN_HEAVY
-      ? warn("rain-heavy", "warn", `${shown}mm of rain around the middle of the day. That is enough to decide the day for you — worth having the indoor stop ready.`, { rainMm: shown })
+      ? warn("rain-heavy", "warn", `${shown}mm of rain around the middle of the day. That is enough to decide the day for you, so have the indoor stop ready.`, { rainMm: shown })
       : warn("rain", "watch", `${shown}mm of rain around the middle of the day.`, { rainMm: shown }));
   }
 
@@ -198,7 +198,7 @@ export const forecastWarnings = (day, { mode = null } = {}) => {
     // millimetres there IS no mm figure, so the sentence says "wet" and `measured`
     // carries nothing it did not state.
     out.push(warn("cold-wet", "warn",
-      `${Math.round(temp)}° and ${wetMm === null ? "wet" : `${wetMm}mm of rain around the middle of the day`}. Colder days are easier than this one — it is the combination that gets people, and cotton is the wrong answer to it.`,
+      `${Math.round(temp)}° and ${wetMm === null ? "wet" : `${wetMm}mm of rain around the middle of the day`}. Colder days are easier than this one. It is the combination that gets people, and cotton is the wrong answer to it.`,
       wetMm === null ? { tempC: Math.round(temp) } : { tempC: Math.round(temp), rainMm: wetMm }));
   }
 
@@ -209,11 +209,11 @@ export const forecastWarnings = (day, { mode = null } = {}) => {
       out.push(warn("frost", selfPowered ? "warn" : "watch",
         selfPowered
           ? `${Math.round(temp)}° at midday. Cycle paths ice up at this temperature and Danish ones are not all salted.`
-          : `${Math.round(temp)}° at midday — around freezing.`,
+          : `${Math.round(temp)}° at midday, around freezing.`,
         { tempC: Math.round(temp) }));
     } else if (temp >= HEAT_C) {
       out.push(warn("heat", "warn",
-        `${Math.round(temp)}° — hot for Denmark, and shade is scarcer than you would expect on the coast and in the old town centres.`,
+        `${Math.round(temp)}°, hot for Denmark, and shade is scarcer than you would expect on the coast and in the old town centres.`,
         { tempC: Math.round(temp) }));
     }
   }
@@ -258,7 +258,7 @@ export const normalsWarnings = (day) => {
     // badge for anything that wants it.
     const inTen = Math.round(wetShare * 10);
     out.push(warn("season-wet", "watch",
-      `That week is normally wet more often than dry — about ${inTen} days in ten see rain. Plan the indoor half of the trip properly rather than as a fallback.`,
+      `That week is normally wet more often than dry, about ${inTen} days in ten see rain. Plan the indoor half of the trip properly rather than as a fallback.`,
       { wetDaysInTen: inTen }));
   }
   if (Number.isFinite(hi) && hi <= 8) {
@@ -273,7 +273,7 @@ export const normalsWarnings = (day) => {
   }
   if (Number.isFinite(hi) && hi >= 24) {
     out.push(warn("season-warm", "watch",
-      `Normally around ${Math.round(hi)}° in the afternoon then — warm for Denmark, and worth booking anything with a garden or a harbour early.`,
+      `Normally around ${Math.round(hi)}° in the afternoon then, warm for Denmark, and worth booking anything with a garden or a harbour early.`,
       { highC: Math.round(hi) }));
   }
   return out;
@@ -357,7 +357,7 @@ export const crossingWarning = ({ crossing, windMs, mode = null } = {}) => {
     // cancellation is not a delay, it is the day.
     if (wind < WIND_GALE) return null;
     return warn("crossing-bornholm", "warn",
-      `${ms} m/s of wind on a day that crosses to Bornholm. There is no bridge — the ferry is the whole plan, and strong wind cancels sailings. Check the operator the evening before rather than on the morning.`,
+      `${ms} m/s of wind on a day that crosses to Bornholm. There is no bridge, so the ferry is the whole plan, and strong wind cancels sailings. Check the operator the evening before rather than on the morning.`,
       { windMs: ms, crossing });
   }
 

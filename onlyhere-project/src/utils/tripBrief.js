@@ -44,7 +44,7 @@
 // repeating: the app suggests things, so one sentence back from it reading
 // "Copenhagen has excellent museums" would otherwise become evidence that the
 // traveller asked for museums.
-import { arrivalDateIn, dayCountIn, monthOnlyIn, daysBetween } from "./tripEvents";
+import { arrivalDateIn, dayCountIn, monthOnlyIn, relativeDayIn, daysBetween } from "./tripEvents";
 import { dayStart } from "./calendarDay";
 import { travelModeKey, withoutNonModes } from "./routeOrder";
 
@@ -61,7 +61,7 @@ export const BRIEF_SLOTS = [
   { key: "days", label: "how long", tier: "blocking",
     ask: "How many days have you got?" },
   { key: "when", label: "when", tier: "blocking", hard: true,
-    ask: "Which dates? Even roughly is fine, it decides which events are actually on." },
+    ask: "Which dates? Even roughly is fine, it decides which events are on while you are here." },
   { key: "party", label: "who is coming", tier: "blocking", hard: true,
     ask: "Who is coming? Ages of any kids matter more than you would think." },
   { key: "interests", label: "what kind of trip", tier: "blocking",
@@ -114,6 +114,19 @@ const readWhen = (text, intakeArrival, intakeDeparture, today) => {
   if (from) return { value: from, precision: "day", source: "intake", end: to || null };
   const spokenDay = arrivalDateIn(text, today);
   if (spokenDay) return { value: spokenDay, precision: "day", source: "said", end: null };
+  // ── AND "TODAY" IS AN ANSWER ──────────────────────────────────────
+  // 22 Aug 2026: his father answered this question with "today" and "7 days",
+  // in Danish, and was asked again, because arrivalDateIn wants a day number
+  // and an English month name and dayCountIn wanted the English word for a day.
+  // He answered correctly twice and the brief stayed empty, which is why the
+  // marker kept being withheld and no button ever came.
+  //
+  // AFTER the explicit date and BEFORE the bare month, deliberately. Somebody
+  // who writes "14 October" has said something more precise than "next week",
+  // and somebody who writes "next week" has said something more precise than
+  // "October".
+  const relative = relativeDayIn(text, today);
+  if (relative) return { value: relative.start, precision: "day", source: "said", end: relative.end };
   const month = monthOnlyIn(text, today);
   if (month) return { value: month.start, precision: "month", source: "said", end: month.end };
   return null;
@@ -410,6 +423,36 @@ export const nextAsks = (brief, { limit = MAX_ASKS_AT_ONCE } = {}) => {
     .slice(0, Math.max(0, limit))
     .map(k => BRIEF_SLOTS.find(s => s.key === k))
     .filter(Boolean);
+};
+
+// ── AND A REFUSAL NOBODY CAN SEE IS A DEAD END ──────────────────────
+//
+// 22 Aug 2026. Oliver's father, using Gemlyx in Danish, was handed a plan that
+// ended "Den er klar." and then nothing. He wrote back "der er ikke noget der
+// er poppet op", and Gemlyx told him to press a button called "Turn this into a
+// guide", by its English name, which was not on his screen.
+//
+// NOTHING WAS BROKEN. Every part worked as written. He never gave dates and
+// never said who was coming, both HARD slots, so brief.ready was false, so
+// App.jsx stripped the model's ready marker exactly as it is supposed to since
+// "it cannot make a build without dates". What the code did not do was SAY SO.
+// It removed Gemlyx's claim to be ready and put nothing in its place, which
+// leaves somebody reading a finished-sounding plan with no button, no reason
+// and no next step. A silent refusal is worse than a refusal.
+//
+// So the strip gets a voice, and the voice is the ask that was already written
+// for that slot rather than a new sentence invented here. One question, because
+// MAX_ASKS_AT_ONCE is 1 and the reason for that rule applies twice over to a
+// traveller who has just been told a plan is ready.
+//
+// KNOWN LIMIT, written down rather than left to be discovered: this sentence is
+// English, and the reply it is appended to is in the traveller's language. It
+// is on the same list as the rest of the hardcoded strings. English and honest
+// beats silent, so it ships now and gets translated with the others.
+export const buildBlockedNote = (brief) => {
+  const next = nextAsks(brief)[0];
+  if (!next) return "";
+  return `One thing first, and then I can build it: ${next.ask}`;
 };
 
 // ── THE BLOCK THE MODEL SEES ────────────────────────────────────────

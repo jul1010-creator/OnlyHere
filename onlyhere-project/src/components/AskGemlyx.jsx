@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { C } from "../utils/theme";
-import { stripDashes } from "../utils/helpers";
+import { stripDashes, stripMarkdown } from "../utils/helpers";
 import { readerLanguage } from "../utils/readerLanguage";
 
 // ── THE TRAVELER'S ASSISTANT ─────────────────────────────────────────
@@ -82,8 +82,21 @@ export const AskGemlyx = ({ session, item, kind, onSignIn, founder = false, near
   // held in state is what was shown. The traveler's own question is left
   // exactly as they typed it: this is his rule about generated text, and
   // rewriting somebody's own words back at them is a different thing entirely.
+  // ── AND IT SHOWED THE READER THE ASTERISKS ──────────────────────────
+  // 22 Aug 2026, read off the live site on guide scyek6rypzn. The answer came
+  // back as markdown and was rendered as characters: "**Glasmuseet Ebeltoft**"
+  // with the stars in it, and "- " bullets sitting inline in the prose. Nothing
+  // here has ever turned markdown into formatting, so every bold the model
+  // wrote has been visible punctuation to every reader since this panel
+  // shipped.
+  //
+  // stripMarkdown rather than a renderer, deliberately, and rather than a third
+  // behaviour invented here: the Detour chat one screen away already strips it
+  // the same way, and two AI surfaces in one product formatting the same reply
+  // differently is worse than neither formatting it. If bold is wanted here it
+  // should arrive as bold in BOTH, from one change.
   const say = (role, text, extra = {}) =>
-    setLog(l => [...l, { role, text: role === "you" ? text : stripDashes(String(text ?? "")), ...extra }]);
+    setLog(l => [...l, { role, text: role === "you" ? text : stripDashes(stripMarkdown(String(text ?? ""))), ...extra }]);
 
   const send = async () => {
     const question = input.trim();

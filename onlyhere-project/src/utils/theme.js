@@ -70,11 +70,22 @@ export const THEMES = {
     border: "#E0D8C6",
     // 3.75:1 against surface, 3.41:1 against bg.
     fieldBorder: "#8C8269",
-    fieldRing: "#9A6F1C",
+    fieldRing: "#8A6216",
     accent: "#A83545",
-    gold: "#9A6F1C",     // the gold has to darken or it vanishes on paper
+    // ── AND IT HAD NOT DARKENED ENOUGH ──────────────────────────────
+    // The note below was right and the number was not. #9A6F1C measured 4.03:1
+    // against bg and 4.43:1 against surface, so the gold failed AA on paper in
+    // both places it is used, and white text on a gold button was 4.43:1 as
+    // well. #8A6216 is 4.89 and 5.38, and takes the button with it.
+    gold: "#8A6216",     // the gold has to darken or it vanishes on paper
     text: "#241F16",
-    muted: "#7A705C",
+    // ── THE ONE THAT AFFECTED THE MOST WORDS ────────────────────────
+    // 22 Aug 2026, measured off a screenshot of the studio screen rather than
+    // guessed: #7A705C is 4.37:1 against bg. Under the 4.5 AA line, on the
+    // colour that carries nearly every piece of secondary text in the app, at
+    // 11 to 13px. #6A604D is 5.54 and 6.08 and still reads as a muted tone
+    // rather than as body text.
+    muted: "#6A604D",
     light: "#4A4335",
     scrim: "rgba(20,17,10,0.55)",
     onGold: "#FFFDF7",

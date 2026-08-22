@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120" role="img" aria-label="Gemlyx">
+  <title>Gemlyx</title>
+  <circle cx="60" cy="60" r="54" fill="none" stroke="#241F16" stroke-width="4" opacity="0.9"/>
+  <g transform="translate(12,12) scale(0.8)">
+    <g transform="rotate(45 60 60)">
+      <path d="M 60 30 L 70 60 L 60 60 Z" fill="#A87B26"/>
+      <path d="M 60 30 L 50 60 L 60 60 Z" fill="#A87B26" opacity="0.55"/>
+    </g>
+    <g transform="rotate(135 60 60)">
+      <path d="M 60 30 L 70 60 L 60 60 Z" fill="#A87B26"/>
+      <path d="M 60 30 L 50 60 L 60 60 Z" fill="#A87B26" opacity="0.55"/>
+    </g>
+    <g transform="rotate(225 60 60)">
+      <path d="M 60 30 L 70 60 L 60 60 Z" fill="#A87B26"/>
+      <path d="M 60 30 L 50 60 L 60 60 Z" fill="#A87B26" opacity="0.55"/>
+    </g>
+    <g transform="rotate(315 60 60)">
+      <path d="M 60 30 L 70 60 L 60 60 Z" fill="#A87B26"/>
+      <path d="M 60 30 L 50 60 L 60 60 Z" fill="#A87B26" opacity="0.55"/>
+    </g>
+    <g transform="rotate(0 60 60)">
+      <path d="M 60 8 L 75 60 L 60 60 Z" fill="#E8C25E"/>
+      <path d="M 60 8 L 45 60 L 60 60 Z" fill="#D9A441"/>
+    </g>
+    <g transform="rotate(90 60 60)">
+      <path d="M 60 8 L 75 60 L 60 60 Z" fill="#E8C25E"/>
+      <path d="M 60 8 L 45 60 L 60 60 Z" fill="#D9A441"/>
+    </g>
+    <g transform="rotate(180 60 60)">
+      <path d="M 60 8 L 75 60 L 60 60 Z" fill="#E8C25E"/>
+      <path d="M 60 8 L 45 60 L 60 60 Z" fill="#D9A441"/>
+    </g>
+    <g transform="rotate(270 60 60)">
+      <path d="M 60 8 L 75 60 L 60 60 Z" fill="#E8C25E"/>
+      <path d="M 60 8 L 45 60 L 60 60 Z" fill="#D9A441"/>
+    </g>
+    <g transform="rotate(45 60 60)">
+      <rect x="51.5" y="51.5" width="17" height="17" fill="rgba(10,15,30,0.5)" stroke="#E8C25E" stroke-width="3"/>
+    </g>
+  </g>
+</svg>
