@@ -72,7 +72,7 @@ writeFileSync(entry, `
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { tierBadge, TIER_TONE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { withoutNonModes } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
-  export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -113,7 +113,7 @@ writeFileSync(entry, `
   export { stayTextProblem, stayTextForReader, withoutStump, withoutDayTripClaim as wdtc } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { offerReason as offerReasonFn, rowThemeWords, ARRIVAL_WORDS } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { outOfBudget, budgetWarning, BUDGET_RULES_OUT, PRICED_KINDS } from ${JSON.stringify(join(root, "src/utils/budgetFit.js"))};
-  export { MAX_STOPS_ARRIVAL_DAY, namedIn, ISLAND_KOMMUNE_NAMES } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
+  export { MAX_STOPS_ARRIVAL_DAY, MIN_STOPS_MIDDLE_DAY, namedIn, ISLAND_KOMMUNE_NAMES } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { isSameSpot, SAME_SPOT_KM, cityFromLocation, stopTown } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { travellerBudget, budgetTierMismatch, dayTripClaim, dayTripHonest, dayTripRadiusKm, withoutDayTripClaim, describeDayTripClaim, DAY_TRIP_FRACTION } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { placedLibrary, nearbyPublished, describeLocation, distanceWords, walkMinutes, nearbyLabel, NEAR_KM, WALK_KMH, SAME_VISIT_KM, SAME_VISIT_LIMIT } from ${JSON.stringify(join(root, "src/utils/nearbyPlaces.js"))};
@@ -28788,6 +28788,42 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // fills and never appears in it: see the isBlank assertions below.
   ok("the stored shape is the one the form fills",
      /EMPTY_PROFILE = \{ name: "", bornDate: "", bornYear: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: \[\], transport: \[\], style: \[\], termsVersion: "", termsAcceptedAt: "", learned: \{\} \}/.test(prof));
+}
+
+// ── 22 AUGUST 2026: A NAME THIS FILE ASKS FOR AND NEVER IMPORTED ────
+//
+// `const { stripReadyMarker } = M;` where the entry never exported it. That is
+// not a syntax error and it is not caught by reading the code: destructuring a
+// missing name gives `undefined` silently, and it only becomes a crash at the
+// moment something calls it. So an assertion that merely COMPARES against a
+// missing name has been quietly comparing against undefined, possibly for
+// months, and passing or failing for a reason nobody intended.
+//
+// MIN_STOPS_MIDDLE_DAY was exactly that, destructured and never exported.
+//
+// This file can read itself, so the check is free. It parses its own entry
+// exports and its own destructurings and insists every name it asks for is a
+// name it actually imported.
+{
+  const own = readFileSync(fileURLToPath(import.meta.url), "utf8");
+  const exported = new Set();
+  for (const m of own.matchAll(/export \{([^}]*)\} from \$\{JSON\.stringify/g)) {
+    for (const raw of m[1].split(",")) {
+      const n = raw.trim().split(" as ").pop().trim();
+      if (n) exported.add(n);
+    }
+  }
+  const asked = new Set();
+  for (const m of own.matchAll(/\{([^{}]*)\}\s*=\s*M\s*;/g)) {
+    for (const raw of m[1].split(",")) {
+      const n = raw.trim().split(":")[0].trim();
+      if (n) asked.add(n);
+    }
+  }
+  ok("the entry exports were found at all", exported.size > 500);
+  ok("and the destructurings were too", asked.size > 500);
+  const missing = [...asked].filter(n => !exported.has(n)).sort();
+  is("every name this suite destructures from M is a name it imported", missing, []);
 }
 
 // ── 22 AUGUST 2026: HIS FATHER GOT NO BUTTON ────────────────────────
