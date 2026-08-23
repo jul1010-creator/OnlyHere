@@ -1,5 +1,6 @@
 import { haversineKm as sharedHaversineKm } from "./helpers";
 import { straightLineHours } from "./guideEnrichment";
+import { LETTER } from "./travellerWords";
 
 // ── "THE ROUTE DOESN'T BECOME SILLY" ─────────────────────────────────
 //
@@ -162,12 +163,34 @@ export const travelModeKey = (mode) => {
   // The first version listed bike before walk and camper before tent, so "mostly
   // walking, might rent bikes one day" planned at 60 km a day instead of 15 — the
   // expensive direction by this function's own argument. Found 18 Aug by review.
-  if (/\b(?:walk\w*|on foot|hik\w*)\b/.test(t)) return "walk";
-  if (/\b(?:tents?|camping)\b/.test(t)) return "tent";
-  if (/\b(?:bicycles?|bikes?|biking|cycl\w*)\b/.test(t)) return "bike";
-  if (/\b(?:trains?|buses|busses|bus|coach(?:es)?|public transport\w*|transit|rejseplan\w*|dsb)\b/.test(t)) return "public transport";
-  if (/\b(?:campers?|campervans?|motorhomes?|caravans?)\b/.test(t)) return "camper";
-  if (/\b(?:cars?|driv\w*|rental|rent a car|hire)\b/.test(t)) return "car";
+  // ── AND EVERY ONE OF THESE LISTS WAS ENGLISH ────────────────────────
+  //
+  // 23 Aug 2026. Oliver's father typed "jeg kører i bil" and the trip was
+  // planned with no mode at all. tripBrief's TRANSPORT_RE had already been
+  // taught Danish an hour earlier and the slot STILL came back empty, because
+  // it only fills when this function returns a key, and this function had never
+  // heard of a bil.
+  //
+  // That makes this the more expensive of the two. The brief slot merely gets
+  // asked again. This key decides how far a place can be and still belong to
+  // the trip (modeReachKm), which stops a cyclist being offered somewhere 400 km
+  // away, and it decides the speed the days are planned at. An unknown mode
+  // means no ceiling, so a Danish traveller got the widest possible net.
+  //
+  // Word boundaries do not survive Danish: \b sits between "å" and "s" in some
+  // engines. The letter class from travellerWords is used instead, which is the
+  // same fix the party reader needed.
+  const edge = (words) => new RegExp(`(?:^|[^${LETTER}])(?:${words})(?![${LETTER}])`, "i");
+  // SLOWEST FIRST, in speed order, which is what the rule below actually requires.
+  // The first version listed bike before walk and camper before tent, so "mostly
+  // walking, might rent bikes one day" planned at 60 km a day instead of 15, the
+  // expensive direction by this function's own argument. Found 18 Aug by review.
+  if (edge("walk\\w*|on foot|hik\\w*|til fods|til fods|gå|gaa|går|gar|vandre\\w*|zu fuß|zu fuss|laufen|te voet|lopen|til fots").test(t)) return "walk";
+  if (edge("tents?|camping|telt|zelt|tent").test(t)) return "tent";
+  if (edge("bicycles?|bikes?|biking|cycl\\w*|cykel|cyklen|cykler|cykle|fiets\\w*|fahrrad|rad|sykkel|sykler|cyklar").test(t)) return "bike";
+  if (edge("trains?|buses|busses|bus|bussen|bussar|coach(?:es)?|public transport\\w*|transit|rejseplan\\w*|dsb|tog|toget|zug|trein|tåg|offentlig transport|kollektiv\\w*|öffentliche verkehrsmittel|openbaar vervoer").test(t)) return "public transport";
+  if (edge("campers?|campervans?|motorhomes?|caravans?|autocamper|wohnmobil").test(t)) return "camper";
+  if (edge("cars?|driv\\w*|rental|rent a car|hire|bil|bilen|lejebil|leiebil|udlejningsbil|auto|wagen|kører|køre|kør|fahre|fahren|fährt|rijden|rijd|kör").test(t)) return "car";
   return null;
 };
 

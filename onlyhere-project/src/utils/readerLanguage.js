@@ -129,6 +129,90 @@ export const readerLanguage = (nav) => {
 // Danish traveller who has only ticked boxes has not written anything, and
 // reading those labels as "they chose English" would be the same mistake in the
 // other direction.
+
+// ── AND THE INSTRUCTION ITSELF, IN THE LANGUAGE IT IS ABOUT ──────────
+//
+// Oliver, 23 Aug 2026, with six photographs of a Danish conversation:
+// "it's being made in akward Danish... According to Gemini, you should prompt
+// the Danish language in Danish. If that is possible?"
+//
+// It is, and it is the right instinct. Everything above tells a model to write
+// Danish in English sentences, which is the same fault the block itself warns
+// about one paragraph later: an instruction rendered word for word out of
+// English produces something grammatical that no native speaker would write.
+// An instruction ABOUT Danish, written IN English, is that fault applied to the
+// instruction.
+//
+// ── WHAT THE PHOTOGRAPHS ACTUALLY SHOWED ────────────────────────────
+//
+// Not stiffness. Three faults, and the first one is not a matter of taste:
+//
+//   "Hvornår rejser JEG af sted, cirka?"  and  "skal JEG køre i bil"
+// Gemlyx asking about its own holiday. A first person and second person
+// inversion, in the two questions the whole intake depends on. Nothing in the
+// English block above forbids it, because in English "I" and "you" are hard to
+// confuse and the rule never needed writing down.
+//
+//   "det ligger lige i JERES rejseperiode"  and  "400-600 DKK PER PERSON"
+// He travels alone and said so by never saying otherwise. Danish forces a
+// choice between du and I that English does not, and the model guessed plural.
+//
+//   "weekenderne er markant mere fyldte omgivelser det ellers er der de fleste
+//    ture ligger"
+// Not a sentence in any language.
+//
+// ── ONE LANGUAGE, DELIBERATELY ──────────────────────────────────────
+//
+// Danish only. Not because the others do not deserve it, but because a native
+// block is only worth having if somebody can read it, and Danish is the one
+// language in this repo that its owner can check. Six machine-written blocks in
+// languages nobody here reads is how the awkward Danish got here in the first
+// place. Every other language keeps the English block above, unchanged.
+const DA_COMMON = `
+SKRIV DANSK SOM EN DANSKER, IKKE SOM EN OVERSÆTTELSE.
+Alt det ovenstående er skrevet på engelsk, fordi koden er det. Det fortæller dig HVAD du skal skrive. Det fortæller dig ikke, hvordan det lyder på dansk. Formuler dig fra bunden på dansk.
+
+1. TÆNK PÅ DANSK. Oversæt aldrig en engelsk vending direkte. Det hedder "det giver mening", ikke "det laver sans". Det hedder "når alt kommer til alt", ikke "i slutningen af dagen". Hvis en sætning først giver mening, når man oversætter den tilbage til engelsk, så skriv den om.
+
+2. NATURLIG ORDSTILLING. Brug korrekt dansk syntaks, inversion efter en ledsætning, og de bindeord en dansker rent faktisk bruger. Læs sætningen højt for dig selv, inden du sender den. Snubler den, er den forkert. En sætning som "weekenderne er markant mere fyldte omgivelser det ellers er der de fleste ture ligger" må aldrig forlade dig.
+
+3. DEN REJSENDE ER "DU". DU SELV ER "JEG". Spørg "Hvornår rejser du af sted?", aldrig "Hvornår rejser jeg af sted?". Spørg "Kører du i bil?", aldrig "Skal jeg køre i bil?". Det her er den hyppigste fejl, og den får hele svaret til at ligne noget, der er gået i stykker.
+
+4. ÉN REJSENDE, INDTIL DU FÅR ANDET AT VIDE. Skriv "du", "din tur", "dine dage". Skift først til "I", "jer" og "jeres", når den rejsende selv har fortalt, at der er flere med. Regn heller ikke pris "per person", før du ved, hvor mange personer der er.
+
+5. TONE. Aktivt, levende, nutidigt hverdagsdansk. Ikke kancellisprog, ikke reklamesprog, ikke oversat marketing. Skriv som et menneske, der kender stedet, og som har travlt med at være til nytte.
+
+6. LÅNEORD. Brug kun engelske ord, hvis de er helt almindelige på dansk, som "computer" eller "weekend". Ellers det danske ord. Sæt aldrig et engelsk knapnavn midt i en dansk sætning.
+
+7. EMOJI ER ANSIGTER, IKKE MÆRKATER. Et ansigt bærer stemningen i den sætning, det står i, og det vælges efter den: 😂 når noget er sjovt eller tørt ("så dropper vi København 😂"), 🙂 eller 😊 til varme og små gode nyheder ("det synes jeg er en god idé 🙂"), et let et på et afslappet spørgsmål ("hvornår rejser du? 🙂"). En sætning uden følelse får intet ansigt, og de fleste svar har højst ét. Et piktogram af det, du taler om, er ikke et ansigt: 🚲 ved siden af en cykel eller 🌊 ved siden af havet sætter mærkat på indholdet og får svaret til at ligne en brugerflade i stedet for et menneske. FIRE STEDER FÅR ALDRIG ET, uanset stemningen: ved siden af en pris, i en fejlbesked eller et afslag, ved siden af noget du har slået op og oplyser som tjekket (åbningstider, færgetider, om et arrangement er til salg), og nogen som helst steder inde i selve guiden.
+
+8. STEDNAVNE OG PRISER RØRER DU IKKE. Nørreport hedder Nørreport. Priser står i DKK med tallet, som det er. Sætningen omkring navnet er dansk; navnet er ikke.`;
+
+// The chat block gets one more rule, and it is the rule the product broke on.
+// The marker is instructed in App.jsx in English and the model paraphrases it
+// into Danish anyway: "Den er klar." and "Så er den bygget." are both from
+// Oliver's own screenshots, and both are the paraphrase the English instruction
+// names and forbids. Saying it again in Danish, inside the Danish block, at
+// least puts the rule in the language the sentence is being composed in.
+//
+// It is a belt, not a fix. The fix is in App.jsx: the brief now grants the
+// button on its own when it has everything it needs, so a translated marker
+// costs nothing.
+const DA_CHAT = `
+9. MARKØREN ER EN KODE, IKKE EN SÆTNING. Når du er klar til at bygge planen, skriver du præcis [[GEMLYX_READY_TO_BUILD]] med firkantede parenteser, på engelsk, på sin egen linje. Skriv ALDRIG "Den er klar", "Så er den bygget", "Så er den klar" eller nogen anden dansk formulering i stedet for. En oversat markør er ingen markør, og så står den rejsende med en færdig plan og ingen knap.`;
+
+// And the guide block gets the structural rule restated, for the same reason:
+// it is the one that breaks the build rather than merely reading badly.
+const DA_GUIDE = `
+9. FELTNAVNENE ER ENGELSKE, UDEN UNDTAGELSE. title, essentials, budgetReality, transportTip, keepInMind, days, day, stops, name, town, arrivalTime, suggestedStay, note. De læses af kode. Oversætter du ét af dem til dansk, bliver guiden ikke venligere, den holder op med at kunne indlæses. arrivalTime er et klokkeslæt som "9:00", og dagnumre er tal.`;
+
+// Danish only, and matched on the base tag so da-DK and bare da both hit it.
+export const nativeBlock = (lang, kind = "chat") => {
+  const base = String(lang?.tag || "").split("-")[0].toLowerCase();
+  if (base !== "da") return "";
+  return DA_COMMON + (kind === "guide" ? DA_GUIDE : DA_CHAT);
+};
+
 export const answerInLanguage = (lang) => {
   if (!lang?.name) return "";
   return `MATCH THE TRAVELLER'S OWN LANGUAGE. Read their most recent message and reply in the language THEY wrote it in. That rule outranks everything else in this block.
@@ -136,7 +220,8 @@ Their browser is set to ${lang.tag}, which suggests ${lang.name}. Treat that as 
 NEVER TRANSLATE A NAME. Place names, town names, station and stop names, street names, ferry routes and the names of festivals and venues stay exactly as they are written in Danish or English, because the traveller has to match them against a sign, a departure board or a ticket machine that will not be translated. Prices stay in DKK with the figure unchanged. Write the sentence around the name in ${lang.name}; leave the name alone.
 WRITE ${lang.name.toUpperCase()}, DO NOT TRANSLATE ENGLISH. Everything else you have been given, the questions to ask, the phrases to prefer, the phrases that are banned, the examples of good and bad openings, is written in English because that is the language these instructions happen to be in. It tells you WHAT to say. It does not tell you HOW TO WORD IT in ${lang.name}, and rendering it word for word produces sentences that are grammatical and that no native speaker would ever say. Ask the question a ${lang.name} speaker would ask, from scratch, in their own idiom.
 The banned filler is banned in every language, not only in English. Do not reach for the ${lang.name} equivalent of "Great!", "Certainly!" or "I'd be happy to help" and consider the rule satisfied because the English words are absent. The same goes for the phrases held up as good ones: they are examples of a REGISTER, warm and direct and unfussy, not a phrasebook to translate from.
-And hedging words do not survive translation. An English "roughly", "a bit", "sort of" softens a question; the literal equivalent in another language often reads as clumsy or as an abbreviation nobody uses. If softening the question does not work naturally in ${lang.name}, ask it plainly instead.`;
+And hedging words do not survive translation. An English "roughly", "a bit", "sort of" softens a question; the literal equivalent in another language often reads as clumsy or as an abbreviation nobody uses. If softening the question does not work naturally in ${lang.name}, ask it plainly instead.
+${nativeBlock(lang, "chat")}`;
 };
 
 // One call, for a prompt builder that has a language and wants the block or
@@ -177,7 +262,8 @@ THE JSON KEYS AND THE STRUCTURE STAY IN ENGLISH, ALWAYS, WITHOUT EXCEPTION. Ever
 NEVER TRANSLATE A NAME. Place names, town names, station and stop names, street names, ferry routes, and the names of festivals, museums and venues stay exactly as they are written in Danish or English, because the traveller has to match them against a road sign, a departure board or a ticket machine that will not be translated. "Nørreport Station" is never "Nordtor Station". The "town" field in particular is used to look the place up, so it must stay in its real spelling whatever language the note around it is in.
 PRICES STAY IN DKK with the figure unchanged. Write the sentence around the number in ${lang.name}; do not convert the number.
 WRITE ${lang.name.toUpperCase()}, DO NOT TRANSLATE ENGLISH. Everything you have been given above is written in English because that is the language these instructions happen to be in. It says WHAT to write, not how to word it. A sentence rendered word for word out of English is grammatical and reads like nothing a native speaker would ever write. Compose in ${lang.name} from scratch, in the register a well-travelled friend from that country would use.
-The banned filler above is banned in every language, not only in English. "Charming", "vibrant", "nestled" and the rest have direct equivalents in ${lang.name} and reaching for those is the same fault, not a way around the rule.`;
+The banned filler above is banned in every language, not only in English. "Charming", "vibrant", "nestled" and the rest have direct equivalents in ${lang.name} and reaching for those is the same fault, not a way around the rule.
+${nativeBlock(lang, "guide")}`;
 };
 
 // Same convenience wrapper, for the guide side.

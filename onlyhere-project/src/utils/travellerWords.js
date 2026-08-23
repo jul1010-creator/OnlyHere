@@ -121,6 +121,83 @@ export const NEXT_WEEK = [
 ];
 export const IN_N_DAYS = ["in", "om", "i", "over", "binnen", "fra", "tra"];
 
+// ── LEAVING, AND THE VERBS AN ANSWER IS ALLOWED TO CONTAIN ──────────
+//
+// Oliver, 23 Aug 2026, six photographs. Replayed through readBrief his six
+// Danish turns produced this:
+//
+//     known   : days, interests
+//     missing : origin, when, party, transport, stay
+//
+// He had said "jeg rejser fra Faxe by", "jeg kører i bil" and "jeg rejser i
+// dag". Three answers, given plainly, to Gemlyx's own questions, and the app
+// heard none of them. The readers were English: fly, land, arrive, come,
+// start, drive, by car, on foot.
+//
+// TRAVEL_VERBS is the shared list. relativeAnswerIn uses it to decide whether a
+// turn is an ANSWER about a date or a sentence that merely contains one, which
+// is why "jeg rejser i dag" was rejected while a bare "i dag" was accepted: the
+// residue held the word "rejser" and nothing allowed it. readOrigin uses it for
+// the other half, a departure stated as a verb plus "from".
+export const TRAVEL_VERBS = [
+  // English
+  "travel", "travels", "travelling", "traveling", "leave", "leaves", "leaving",
+  "go", "goes", "going", "head", "heading", "set off", "setting off", "depart", "departing",
+  "fly", "flies", "flying", "drive", "drives", "driving", "sail", "sailing",
+  // Danish and Norwegian
+  "rejser", "rejse", "rejste", "tager", "tage", "kører", "køre", "flyver", "flyve",
+  "sejler", "sejle", "drar", "dra", "reiser", "reise", "afsted", "af sted", "sted",
+  // Swedish
+  "reser", "resa", "åker", "åka", "aker", "flyger",
+  // German
+  "reise", "reisen", "reist", "fahre", "fahren", "fährt", "fahrt", "fliege", "fliegen", "fliegt",
+  "losfahren", "abreise",
+  // Dutch
+  "reis", "reizen", "reist", "vertrek", "vertrekken", "vertrekt", "rijd", "rijden", "vlieg", "vliegen",
+];
+
+// ── FROM, IN SIX LANGUAGES ──────────────────────────────────────────
+// The preposition that turns a travel verb into a departure. Kept separate from
+// the verbs because "til Ribe" and "fra Ribe" are opposite facts and only one of
+// them says where the trip starts.
+export const FROM_WORDS = ["from", "fra", "frå", "von", "ab", "aus", "uit", "vanuit", "da", "di"];
+
+// ── HOW THEY GET AROUND ─────────────────────────────────────────────
+// Two shapes, because a mode is answered two ways: a preposition and a vehicle
+// ("i bil", "med tog", "by car", "mit dem Auto"), or a verb on its own
+// ("cykler", "kører", "driving").
+//
+// The vehicle nouns carry their definite forms, because Danish glues the article
+// on: bil, bilen, tog, toget, cykel, cyklen. A list without them reads "med
+// toget" as no answer at all, which is how a traveller who said how they were
+// getting around was asked again.
+export const TRANSPORT_PREPS = ["by", "on", "in", "with", "i", "med", "på", "pa", "til", "mit", "per", "zu", "met", "te"];
+export const VEHICLE_WORDS = [
+  "car", "cars", "bil", "bilen", "bilkørsel", "auto", "wagen", "pkw", "leiebil", "lejebil", "udlejningsbil",
+  "bike", "bikes", "bicycle", "cycle", "cykel", "cyklen", "cykler", "fiets", "fahrrad", "rad", "sykkel",
+  "train", "trains", "tog", "toget", "zug", "trein", "tåg", "tag",
+  "bus", "busses", "buses", "bussen", "bussar", "coach",
+  "camper", "campervan", "motorhome", "autocamper", "wohnmobil",
+  "scooter", "moped", "motorcykel", "motorcycle",
+  "foot", "fods", "fod", "fuß", "fuss", "voet",
+  "færge", "faerge", "ferry", "fähre", "veerboot",
+];
+// Verbs that state a mode on their own, with no vehicle noun after them.
+export const TRANSPORT_VERBS = [
+  "cycling", "biking", "driving", "walking", "hitchhiking",
+  "cykler", "cykle", "kører", "køre", "går", "gå", "vandrer", "sejler",
+  "fahre", "fahren", "radle", "radeln", "laufe", "laufen", "wandern",
+  "fiets", "fietsen", "loop", "lopen", "rijd", "rijden",
+  "cyklar", "kör", "gar", "sykler",
+];
+// Public transport, which is a mode and names no vehicle.
+export const PUBLIC_TRANSPORT = [
+  "public transport", "public transportation",
+  "offentlig transport", "offentlige transportmidler", "kollektiv trafik", "kollektiv transport",
+  "öffentliche verkehrsmittel", "offentliche verkehrsmittel", "öpnv", "opnv",
+  "openbaar vervoer", "kollektivtrafik", "kollektivtrafikk",
+];
+
 // ── YES AND NO ──────────────────────────────────────────────────────
 // Oliver, 23 Aug 2026: "Instead of writing 'yes' when it asks to build, let it
 // pop up as yes and no, right where the guide will be. So you can click it.

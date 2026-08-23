@@ -578,3 +578,330 @@ An assertion now holds it there: `index.html` loads exactly one script, it is
 than as a hostname, because the comment recording the deletion quotes the URL it
 deleted, and a scan for the host would find the note and call it the script.
 That is the same trap as everything above it.
+
+---
+
+## 23 August, evening: the legal pages, version 2.1
+
+He sent four screenshots of Termly's generated Terms of Service and said "I want
+you to adopt this language into the privacy and terms of use." Asked which he
+meant, the clauses or the voice, he answered: **"The formal language. Your setup
+is fine. But your language is too informal."**
+
+So the structure stands and the register moves.
+
+### What was taken from the template, and what was refused
+
+The existing terms already covered all four screens, and covered them for the
+right country: clause 8.1.2 claims the *sui generis* database right rather than
+asking politely, 7.2 spells out that a reader may print a guide and send it to
+the people travelling with them, and 7.4 preserves quotation, which the template
+quietly removes.
+
+**Three prohibitions were genuinely missing** and are now clauses 8.1.8 to
+8.1.10: using what the Service knows to harass somebody, fishing for another
+user's credentials, and filing a report of abuse the sender knows to be false.
+The old catch-all moved to 8.1.11 so the three sit in front of it. Clause 4.4 is
+new and states that the Service is offered from Denmark and that access from
+elsewhere is on the visitor's own initiative.
+
+**Two were refused, and the refusals are now under test as absences**, because
+the failure mode is somebody pasting the template back in a year with no memory
+of why it was cut:
+
+* *"We are the owner or the licensee of all intellectual property rights in our
+  Services, including all... photographs."* Clause 10.5 says the opposite and is
+  correct. The photographs come from Wikimedia Commons and belong to their
+  photographers. Claiming them would be a false statement on a public page and a
+  breach of the licences this product attributes under.
+* *"Disparage, tarnish, or otherwise harm, **in our opinion**, us and/or the
+  Services."* A term making the trader the sole judge is the textbook entry in
+  the annex to Directive 93/13/EEC, so it does not bind a consumer here, and a
+  product whose promise is honest assessment cannot coherently forbid being
+  assessed honestly.
+
+### The privacy policy was the informal one
+
+The terms were already in legal register. The privacy policy was not: "Gemlyx is
+run by one person in Denmark", "A nickname is fine", "treat it like a door key
+rather than a password". All seventeen sections are restated in the register of
+the terms, with every fact, GDPR citation, table and retention period unchanged.
+
+**One thing to know about this change.** GDPR Article 12(1) requires a privacy
+notice to use "clear and plain language". Plainness there is a legal requirement
+rather than a style, so the register was raised to formal and precise without
+being made impenetrable. A contract has no such constraint, which is why the
+terms can go further than the notice.
+
+**And it caught a stale fact.** The required field was still described as "Name
+or nickname" with "A nickname is fine" beside it, and that label was removed
+from the signup form the same morning. It now reads "Name".
+
+### Version numbers moved with it
+
+Both pages are version 2.1, in force from 23 August 2026, and `TERMS_VERSION` in
+`src/utils/profile.js` moved to `"2.1"` with them. New signups stamp 2.1;
+existing accounts keep the 2.0 stamp, which is the accurate record.
+
+Clause 21.3 requires 30 days' notice for an amendment that materially affects a
+user's obligations. The version history states expressly that 2.1 imposes no
+obligation clause 8.1 did not already impose, which is the basis on which it
+takes effect immediately. **If he disagrees about the false-report clause, that
+one should go out with notice instead.**
+
+### Four assertions were pinned to sentences this rewrite changed
+
+All four were the shape from this morning. Each is now a rule:
+
+* `/In force from 22 August 2026/` became: the header version and date must match
+  what the page's own version history says about that version, and the header
+  must carry the newest version the page names.
+* `Registration asks for ${WORD[n]} things you must give` became: read whatever
+  number word the registration section states and compare it to
+  `REQUIRED_PROFILE` plus the email address and the password.
+* `carry no partner code at the moment and earn Gemlyx nothing` became: wherever
+  the page names Booking.com and Ticketmaster together, the same sentence says
+  they carry no code and earn nothing.
+* `/What Gemlyx notices about you/` became: section 4 is identified by the rules
+  it states, not by its heading.
+
+**And the numbering is now checked.** Renumbering 8.1.8 to 8.1.11 by hand is
+exactly the edit that skips a number, and nothing about the rendered page would
+look wrong. Every clause number in terms.html must follow the one before it
+within its parent, with no gaps and no repeats.
+
+**9,686 passed, 0 failed. Build clean.** Deleting 8.1.9, pasting the
+disparagement ban back, claiming the photographs, and saying four required items
+where the code says five were each mutation-tested and each goes red.
+
+---
+
+## 23 August, night: his father could not be understood in Danish
+
+Six photographs of a Danish conversation that planned a whole week from Faxe and
+never once offered the button. Oliver: "As you can see, it still doesn't work.
+Also, it's being made in akward Danish." And then: "It's my dad that wrote with
+it btw." The same person as 22 August, and largely the same failure.
+
+**The transcript replayed through `readBrief`, before any of this:**
+
+    known   : days, interests
+    missing : origin, when, party, transport, stay
+
+He had written **"jeg rejser fra Faxe by"**, **"jeg kører i bil"** and **"jeg
+rejser i dag"**, each one directly under the question that asked for it. Three
+answers. The app heard none of them.
+
+### Four places had to learn the language, not one
+
+* **`ANSWER_FILLER` in tripEvents** decides whether a turn is an ANSWER about a
+  date or a sentence that merely contains one. It allowed "jeg" and not
+  "rejser", so "jeg rejser i dag" was discarded while a bare "i dag" was kept.
+  Measured both ways before touching it.
+* **`ORIGIN_RE`** knew fly, land, arrive, come, start, drive.
+* **`TRANSPORT_RE`** knew by, on, in, with, plus an English vehicle.
+* **`travelModeKey` in routeOrder**, and this is the expensive one. The
+  transport slot only fills when it returns a key, so teaching `TRANSPORT_RE`
+  Danish changed nothing on its own. It also sets `modeReachKm`, so an
+  unrecognised mode means no distance ceiling: a Danish cyclist was being
+  offered the whole country.
+
+The vocabulary lives in `travellerWords.js` with the rest, so a seventh language
+is a list entry. `TRAVEL_VERBS`, `FROM_WORDS`, `TRANSPORT_PREPS`,
+`VEHICLE_WORDS`, `TRANSPORT_VERBS`, `PUBLIC_TRANSPORT`. **The definite forms are
+not optional**: Danish glues the article on, so a list with `bil` and not
+`bilen`, `tog` and not `toget`, reads "med toget" as no answer at all.
+
+After: `origin, days, when, interests, transport` all read, and the only things
+missing are `party` and `stay`, which he genuinely never said.
+
+### And the button was unreachable by arithmetic
+
+`brief.ready` needs seven slots and two of them are HARD. With three readers
+deaf, it could never be true, so `App.jsx` stripped the model's ready marker on
+every single turn. **"Den er klar." is what was left of the sentence after the
+strip.** Three faults on top of that one, all now fixed:
+
+* **The strip could veto and could never grant.** The button rested entirely on
+  a model emitting an ASCII token while composing Danish. It writes "Den er
+  klar." instead, which is the exact paraphrase the English instruction names
+  and forbids. `brief.ready` now latches the button on its own.
+* **The gate read the last assistant message and nothing else**, so the turn
+  after a ready reply took the button away again and nothing brought it back.
+  His screenshots four and five are that, in order. Readiness latches now.
+* **The refusal spoke English.** `buildBlockedNote` had one English sentence for
+  every language. It takes the reader's language and has `askDa` for every
+  blocking slot.
+
+### The Danish itself, prompted in Danish
+
+Oliver, via Gemini: "you should prompt the Danish language in Danish. If that is
+possible?" It is, and it is right. An instruction ABOUT Danish written IN English
+is the exact fault the block itself warns about one paragraph later.
+
+`nativeBlock` in `readerLanguage.js`, **Danish only and deliberately so**: a
+native block is worth having only if somebody can read it, and Danish is the one
+language in this repo its owner can check. Six machine-written blocks in
+languages nobody here reads is how the awkward Danish arrived.
+
+What the photographs actually showed was not stiffness:
+
+* **"Hvornår rejser JEG af sted"** and **"skal JEG køre i bil"**. Gemlyx asking
+  about its own holiday, in the two questions the intake depends on. Nothing in
+  the English block forbade it, because in English "I" and "you" are hard to
+  confuse and the rule never needed writing down.
+* **"det ligger lige i JERES rejseperiode"** and **"400-600 DKK per person"**.
+  He travels alone and said so by never saying otherwise. Danish forces a choice
+  between du and I that English does not, and the model guessed plural.
+* **"weekenderne er markant mere fyldte omgivelser det ellers er der de fleste
+  ture ligger"**. Not a sentence in any language.
+
+All three are named in the block, in Danish, in the words they went wrong in.
+The chat variant restates the marker rule ("MARKØREN ER EN KODE, IKKE EN
+SÆTNING") and names both paraphrases it produced. The guide variant restates the
+JSON keys instead, because a translated key does not read badly, it stops the
+guide loading.
+
+**9,763 passed, 0 failed. Build clean at 1,608.70 kB.** His father's six turns
+are now a test, and so are the sentences that must NOT fill a slot: "hvor lang
+tid tager toget til Odense?", "det kommer i august", "we have no car", "walking
+distance to the harbour". `kommer` is deliberately absent from the Danish
+arrival verbs, and that check is behavioural, because the list contains
+"ankommer", which contains "kommer", so a source scan for the word says the
+opposite of the truth. It failed that way on its first run.
+
+---
+
+## 23 August, late night: a picture of what it just named
+
+Oliver: "when Ribe is mentioned, show a picture of it as well. Make it distinct
+from other AIs."
+
+**What is distinct is the refusal, not the picture.** Any assistant can search
+the web for a place name and show whatever comes back: a stock photograph of
+somewhere that may or may not be the place, with no licence anybody checked and
+nothing behind it. `utils/chatPlaces.js` shows a photograph **only** where
+Gemlyx holds a published entry, which means a person fact-checked it, the
+licence cleared `api/commons-photo`, and there is a page behind the image that
+opens. A name with no entry gets nothing, and that silence is the honest signal.
+
+Nothing here is a new mechanism. `mentionsPlace` is the boundary-safe matcher
+the preview screen has used since 18 August, so "Als" does not match half of
+"alsidige". `guideHero` already reads `photo` and `__photoCredit` off a
+published row and skips craft, because a product shot is not a picture of
+somewhere you can stand. Cards render after the typewriter finishes, not during,
+so nothing moves under a sentence somebody is reading.
+
+**The licence is not optional.** `imageCredits.js` states it: CC BY and CC BY-SA
+make attribution mandatory and it has to sit near the work. A 124px card is near
+the work, so the credit renders on the card, and a photo whose licence demands a
+credit with no photographer known **is not shown at all**. The credit wraps
+rather than truncating, because an ellipsis through "CC BY-SA 3.0" leaves an
+attribution naming the photographer and not the licence.
+
+### And the rejection reader was English too
+
+Wiring this up found it: **"vi holder os væk fra Copenhagen denne gang"** named
+Copenhagen and read as a recommendation. That is the 15 August preview bug in a
+second language, and the cost had gone up: it used to put a wrong row on a list,
+and it would now have put a **photograph of the one city a traveller asked to
+leave** into the conversation.
+
+`REJECT_BEFORE` and `REJECT_AFTER` now carry Danish, German and Dutch. Note that
+`foundAt` folds the text first, so `væk` arrives as `vaek`: both spellings are
+listed, and the first version failed for exactly that reason.
+
+**A new rule for the verb that comes apart around the name.** "vi springer
+Copenhagen over" is how Danish, German and Dutch say "we are skipping
+Copenhagen": the verb splits and the particle lands on the far side. Neither
+window sees a refusal alone. `SPLIT_VERB_BEFORE` and `SPLIT_PARTICLE_AFTER` must
+BOTH match, which is what keeps "Copenhagen over to dage" and "du springer i
+vandet ved Ribe" out of it.
+
+### The eighth time today
+
+The assertion that the credit must not truncate read the card component's raw
+source for the word "ellipsis", and the comment inside that very block explains
+why an ellipsis through a licence is a problem. It failed on correct code. Fixed
+with `stripComments`, which was written this morning for this exact shape.
+
+**9,792 passed, 0 failed. Build clean at 1,612.18 kB.**
+
+### Emoji, while we were here
+
+He asked whether the phone emoji can be used. **They already are.** Gemlyx ships
+no emoji font, so every device draws them with its own: Apple's on an iPhone,
+Google's on Android, Microsoft's Segoe on his Windows laptop. That is why the
+ones in his screenshots look flatter than the ones on his phone. Measured in
+Chromium rather than assumed: naming an emoji font in the stack changed nothing,
+because the browser falls through to the platform set on its own.
+
+Shipping one set for every platform is possible through Noto Color Emoji on
+Google Fonts, which the CSP already allows. Apple's set cannot be shipped, it is
+licensed to Apple platforms. Left native, and the reason is written here.
+
+---
+
+## 23 August, last: the voice landed, and an example that refuses to be invented
+
+### He picked a rule, not a column
+
+After reading three registers turn by turn: *"I think it's fine to mix all the
+emojis depending on the tone... like 'aight, we not going Copenhagen then
+(laughing emoji)'.. 'I think this is a good idea (happy emoji)' 'And when are you
+travelling? (casual smiling emoji)' like that! Obviously not emoji on every
+sentence but."*
+
+That is better than any of the three columns, because it is **not a count**. A
+face is chosen to match the feeling in the sentence it ends, and a sentence with
+no feeling in it gets none.
+
+**It replaced the opposite instruction.** The chat prompt had been saying "a few
+fitting emojis are welcome ... like a 🚲 next to a bike tip or a 🌊 for a coastal
+stop", which is the pictogram register he does not want, and is exactly where the
+🚗 in his father's transcript came from. That clause is now the counter-example
+rather than the rule: a pictogram labels the content and makes a reply look like
+an interface.
+
+**Four places never get one**, in both the English prompt and the Danish block:
+beside a price, in an error or a refusal, beside anything stated as checked
+(opening hours, ferry times, ticket status), and anywhere in the guide document.
+A face beside a price reads as apology or as selling; a face beside a verified
+fact makes it look breezy.
+
+`AI_TELL_PHRASES` is untouched, and the assertions say so. Faces were never what
+that list was about, and relaxing it was the cost of the register he did not pick.
+
+### The example guide is built and empty on purpose
+
+*"can we make an example of the guide somewhere? So people can see what Gemlyx
+will create them?"*
+
+`src/data/exampleGuide.js` holds `EXAMPLE_GUIDE = null`, and while it does, **the
+route does not exist and nothing links to it**. `/example` is an ordinary 404
+rather than a title over an empty page.
+
+**Nothing in that file was written by hand and nothing in it ever should be.**
+Every other sentence on this site is checked against the place's own sources
+before it is printed, and terms.html clause 10.3 says what is protected is "the
+selection, verification and arrangement" of facts. An invented example would be
+the one page making that untrue, on the page whose whole job is showing a
+stranger what Gemlyx is like. **This is the one thing in this session that only
+Oliver can supply**: a real guide, built on the live site and fact-checked like a
+published entry, pasted in.
+
+The mechanism around it is done:
+
+* `exampleGuideProblems` checks the shape, so a paste that lost half a day fails
+  on `node tests/run.mjs` rather than on the site. Mutation-tested both ways: a
+  whole guide keeps the suite green and switches the route and the link on; a day
+  with no stops turns it red.
+* The route and the landing link are gated on the **same** call, `hasExampleGuide()`,
+  and an assertion counts the gates, because two gates that could disagree are a
+  link to a 404 or a page nothing reaches.
+* Nothing writes `/example` by hand; both sites read `EXAMPLE_GUIDE_PATH`.
+
+Filling instructions are in the file header, in the same style as the Studio
+paste blocks.
+
+**9,828 passed, 0 failed. Build clean.**

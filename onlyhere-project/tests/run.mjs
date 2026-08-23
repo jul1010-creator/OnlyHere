@@ -72,7 +72,7 @@ writeFileSync(entry, `
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM, islandOf, ISLAND_BY_KOMMUNE, ISLAND_LABEL } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { tierBadge, TIER_TONE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
-  export { withoutNonModes } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
+  export { withoutNonModes, travelModeKey as travelModeKeyForTest } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, stripMarkdown, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -102,6 +102,8 @@ writeFileSync(entry, `
   export { THEMES, THEME_ORDER, DEFAULT_THEME } from ${JSON.stringify(join(root, "src/utils/theme.js"))};
   export { layoutBody, trimCaption } from ${JSON.stringify(join(root, "src/utils/articleLayout.js"))};
   export { instagramTarget, isEmbeddablePost } from ${JSON.stringify(join(root, "src/components/InstagramEmbed.jsx"))};
+  export { EXAMPLE_GUIDE, EXAMPLE_GUIDE_PATH, EXAMPLE_GUIDE_NOTE, exampleGuideProblems, hasExampleGuide } from ${JSON.stringify(join(root, "src/data/exampleGuide.js"))};
+  export { placesNamedIn, CHAT_PLACE_CAP } from ${JSON.stringify(join(root, "src/utils/chatPlaces.js"))};
   export { isOwnRoute, RETURN_PARAM, captureRedirectSession, startGoogleSignIn } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
   export { GOOGLE_SIGN_IN } from ${JSON.stringify(join(root, "src/config.js"))};
   export { writeInLanguage, guideLanguageBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
@@ -190,7 +192,7 @@ writeFileSync(entry, `
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
   export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
-  export { readerLanguage, languageName, answerInLanguage, languageBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
+  export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { datesFromListings } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, PRICE_NOT_PUBLISHED, PRICE_UNKNOWN } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { sourceFit, describeSourceFit, LIVING_TYPES } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -22988,6 +22990,434 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   }
 }
 
+// ── THE EXAMPLE GUIDE, AND WHY IT IS ALLOWED TO BE EMPTY ───────────
+//
+// Oliver, 23 Aug 2026: "can we make an example of the guide somewhere? So
+// people can see what Gemlyx will create them?"
+//
+// The mechanism is built and the file is empty, deliberately. Every other
+// sentence on this site is checked against the place's own sources before it is
+// printed, and terms.html clause 10.3 says what is protected is "the selection,
+// verification and arrangement" of facts. An invented example would be the one
+// page making that untrue, on the page whose whole job is showing a stranger
+// what Gemlyx is like. So it holds a real guide or it holds nothing.
+//
+// While it holds nothing, the route does not exist and nothing links to it,
+// which is what these assertions are actually protecting: a visitor must never
+// meet /example as a title over an empty page.
+{
+  const { EXAMPLE_GUIDE: EX, exampleGuideProblems: exProblems, hasExampleGuide: hasEx,
+          EXAMPLE_GUIDE_PATH: EX_PATH, EXAMPLE_GUIDE_NOTE: EX_NOTE } = M;
+  const appX = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // ── ABSENT IS LEGAL. BROKEN IS NOT. ─────────────────────────────
+  is("an absent example is not a problem", exProblems(null), []);
+  is("and reports itself as absent", hasEx(), !!EX);
+  is("a guide with no days is refused", exProblems({ title: "x" }), ["no days array"]);
+  is("an empty days array is refused", exProblems({ title: "x", days: [] }), ["the days array is empty"]);
+  is("a day with no stops is refused",
+     exProblems({ title: "x", days: [{ stops: [] }] }), ["day 1 has no stops"]);
+  is("a stop with no name is refused",
+     exProblems({ title: "x", days: [{ stops: [{ name: "" }] }] }), ["day 1 has a stop with no name"]);
+  is("and a whole one passes",
+     exProblems({ title: "Seven days on the west coast", days: [{ stops: [{ name: "Ribe" }] }] }), []);
+  // The one that matters most: whatever is in the file must be renderable.
+  // A paste that lost half a day fails here rather than on the site.
+  is("whatever is in the file right now is renderable", exProblems(EX), []);
+
+  // ── THE ROUTE AND THE LINK ARE GATED ON THE SAME QUESTION ───────
+  // Two gates that could disagree would be a link to a 404 or a page nothing
+  // reaches, so both read hasExampleGuide and nothing else.
+  ok("the route is gated", /\{hasExampleGuide\(\) && \([\s\S]{0,120}<Route path=\{EXAMPLE_GUIDE_PATH\}/.test(appX));
+  ok("the landing link is gated by the same call",
+     /\{hasExampleGuide\(\) && \([\s\S]{0,400}href=\{EXAMPLE_GUIDE_PATH\}/.test(appX));
+  is("and there are exactly two gates, the route and the link",
+     (appX.match(/hasExampleGuide\(\)/g) || []).length, 2);
+  ok("the route renders the real page rather than a copy of it",
+     /element=\{<GuidePage guide=\{EXAMPLE_GUIDE\} \/>\}/.test(appX));
+  // The path is read from the constant in both places, so it cannot be moved in
+  // one and left in the other.
+  is("nothing writes the path by hand", (appX.match(/["']\/example["']/g) || []).length, 0);
+  ok("the path itself is sane", /^\/[a-z-]+$/.test(EX_PATH));
+  // A reader has to be told what they are looking at, or an example trip to
+  // Jutland reads as their trip to Jutland.
+  ok("there is a line saying it is a real one somebody else got", /real guide/i.test(EX_NOTE));
+  ok("and the note carries no dash", !/[–—]/.test(EX_NOTE));
+}
+
+// ── A FACE, MATCHED TO THE SENTENCE ────────────────────────────────
+//
+// Oliver, 23 Aug 2026, after reading three registers side by side: "I think
+// it's fine to mix all the emojis depending on the tone... like 'aight, we not
+// going Copenhagen then (laughing emoji)'.. 'I think this is a good idea (happy
+// emoji)' 'And when are you travelling? (casual smiling emoji)' like that!
+// Obviously not emoji on every sentence but."
+//
+// That is a better rule than the three columns I showed him, because it is not
+// a COUNT. A face is chosen to match the feeling in the sentence it ends, and a
+// sentence with no feeling in it gets none.
+//
+// AND IT REPLACES THE OPPOSITE INSTRUCTION. The prompt had said since some time
+// before this that "a few fitting emojis are welcome ... like a 🚲 next to a
+// bike tip or a 🌊 for a coastal stop", which is the pictogram register he does
+// not want and is where the 🚗 in his father's transcript came from.
+{
+  const appE = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const daChat = M.nativeBlock({ tag: "da-DK", name: "Danish" }, "chat");
+  const daGuide = M.nativeBlock({ tag: "da-DK", name: "Danish" }, "guide");
+
+  ok("the chat prompt says a face carries the tone", /EMOJI ARE FACES, NOT LABELS/.test(appE));
+  ok("with his own laughing example", /we're not going Copenhagen then 😂/.test(appE));
+  ok("and a sentence with no feeling gets none", /carrying no feeling gets no face/.test(appE));
+  // The old rule is the new counter-example, so it has to be present AS one and
+  // not as an instruction. Asserted by the sentence around it, because the
+  // pictograms themselves still appear in the line that forbids them.
+  ok("a pictogram is named as the thing not wanted",
+     /PICTOGRAM OF THE THING YOU ARE TALKING ABOUT IS NOT A FACE/.test(appE));
+  ok("and the old welcome for one is gone",
+     !/A few fitting emojis are welcome/.test(appE));
+
+  // ── THE FOUR THAT NEVER GET ONE ─────────────────────────────────
+  // These are the rules that keep a face from becoming a claim Gemlyx cannot
+  // support: pleased about a price, cheerful about an error, breezy about a
+  // fact somebody will act on.
+  for (const [what, re] of [
+    ["a price", /beside a price or a cost/],
+    ["an error", /in an error or a refusal/],
+    ["a checked fact", /stating as checked/],
+    ["the guide itself", /anywhere in the guide document itself/],
+  ]) ok(`the English rule names ${what}`, re.test(appE));
+
+  // ── AND THE SAME RULE IN DANISH, WHERE IT IS ACTUALLY READ ──────
+  ok("the Danish block carries the face rule", /EMOJI ER ANSIGTER, IKKE MÆRKATER/.test(daChat));
+  ok("with the laughing case in Danish", /så dropper vi København 😂/.test(daChat));
+  ok("and the four exceptions", /FIRE STEDER FÅR ALDRIG ET/.test(daChat));
+  ok("naming the price", /ved siden af en pris/.test(daChat));
+  ok("and the guide", /inde i selve guiden/.test(daChat));
+  // The guide block gets the rule too, because the guide is one of the four and
+  // the guide writer never sees the chat block.
+  ok("the guide block also says no face in a guide", /EMOJI ER ANSIGTER, IKKE MÆRKATER/.test(daGuide));
+  // Renumbering check: both variants still end on their own rule 9.
+  ok("the chat block's own rule is numbered after it", /9\. MARKØREN ER EN KODE/.test(daChat));
+  ok("and the guide block's", /9\. FELTNAVNENE ER ENGELSKE/.test(daGuide));
+
+  // The filler ban is untouched. Faces were never what that list was about, and
+  // relaxing it was the cost of the register he did NOT pick.
+  {
+    const { AI_TELL_PHRASES } = M;
+    for (const banned of ["great!", "certainly!", "i'd be happy to"]) {
+      ok(`${JSON.stringify(banned)} is still banned`, AI_TELL_PHRASES.includes(banned));
+    }
+  }
+}
+
+// ── A PICTURE OF WHAT IT JUST NAMED ────────────────────────────────
+//
+// Oliver, 23 Aug 2026: "when Ribe is mentioned, show a picture of it as well.
+// Make it distinct from other AIs."
+//
+// The distinct part is the REFUSAL, not the picture. Any assistant can search
+// the web for a name and show whatever comes back. This shows a photograph only
+// where Gemlyx holds a published entry, which means a person fact-checked it,
+// the licence went through api/commons-photo, and there is a page behind the
+// image that opens. A name with no entry gets nothing, and the silence is the
+// honest signal.
+//
+// So the assertions below are mostly about what must NOT appear.
+{
+  const { placesNamedIn: named, CHAT_PLACE_CAP: CAP } = M;
+  const P = (name, extra = {}) => ({ name, _src: "town", photo: "/towns/x.jpg", ...extra });
+  const POOL = [
+    P("Ribe"), P("Møgeltønder"), P("Aarhus"), P("Copenhagen"), P("Als"),
+    P("Skagen", { photo: "" }),
+    P("Fossilsæt", { _src: "craft" }),
+  ];
+  const names = (t) => named(t, POOL).map(p => p.name);
+
+  is("a reply that names three published places shows three",
+     names("Ribe og Møgeltønder ind imellem, og lidt mere liv i Aarhus midtvejs."),
+     ["Ribe", "Møgeltønder", "Aarhus"]);
+  is("in the order the sentence names them, not the order of the library",
+     names("Aarhus først, så Ribe."), ["Aarhus", "Ribe"]);
+  // A place with no photograph is an entry, not a card. An empty frame under a
+  // sentence is worse than no frame.
+  is("a place with no photo shows nothing", names("Skagen er skønt."), []);
+  // guideHero excludes craft from the guide's hero for the same reason: a
+  // product shot is not a picture of somewhere you can stand.
+  is("a craft row is a product and not a place", names("Der er også et fossilsæt."), []);
+  is("a name nobody has published shows nothing", names("Vejle er også fin."), []);
+  // THE ONE THAT WOULD BE EMBARRASSING. The preview screen shipped for two days
+  // showing a list of the one city a traveller had asked to leave; this would
+  // put a photograph of it in the conversation.
+  for (const said of ["Vi holder os væk fra Copenhagen denne gang.",
+                      "Vi undgår Copenhagen.",
+                      "Vi springer Copenhagen over.",
+                      "Ikke Copenhagen, men Ribe.",
+                      "We are skipping Copenhagen."]) {
+    ok(`a place being turned down gets no picture: ${JSON.stringify(said.slice(0, 34))}`,
+       !names(said).includes("Copenhagen"));
+  }
+  // And the inverse, because a rejection reader that rejects everything is the
+  // same bug facing the other way.
+  for (const said of ["Copenhagen over to dage er rigeligt.",
+                      "Copenhagen er skøn, selvom den er fyldt om sommeren.",
+                      "Du springer i vandet ved Copenhagen."]) {
+    ok(`while a place being recommended keeps its picture: ${JSON.stringify(said.slice(0, 34))}`,
+       names(said).includes("Copenhagen"));
+  }
+  // Boundary safety, which is the whole reason mentionsPlace is reused rather
+  // than a fresh indexOf: "Als" is three letters and sits inside ordinary words.
+  is("a name inside another word is not a mention", names("Alsidige oplevelser hele vejen."), []);
+  // A gallery with a sentence attached is not the product.
+  is("the cap holds", CAP, 3);
+  is("and a reply naming five gets three",
+     names("Ribe, Møgeltønder, Aarhus, Copenhagen og Als.").length, 3);
+  is("an empty reply is quiet", names(""), []);
+  is("and so is a reply with no pool", named("Ribe er dejlig", []), []);
+
+  // ── THE LICENCE, WHICH IS NOT OPTIONAL ──────────────────────────
+  // imageCredits.js states the position: CC BY and CC BY-SA make attribution
+  // mandatory and it has to sit near the work. A 124px card is near the work,
+  // so a photo whose licence demands a credit and whose credit is unknown does
+  // not get shown at all.
+  {
+    const cards = readFileSync(join(root, "src/components/ChatPlaceCards.jsx"), "utf8");
+    ok("the card asks whether a credit is required", /creditIsRequired\(credit\)/.test(cards));
+    ok("and withholds the photo when it is required and unknown",
+       /creditIsRequired\(credit\) && !String\(credit\.photographer[\s\S]{0,40}return null/.test(cards));
+    ok("the credit is rendered, not only computed", /creditLine\(shot\.credit\) && \(/.test(cards));
+    // An ellipsis through "CC BY-SA 3.0" leaves an attribution naming the
+    // photographer and not the licence, which is half of what CC BY asks for.
+    // Scoped to the credit's own element. The place NAME truncates on purpose
+    // and sits ten lines above it, which is what the first version of this
+    // assertion caught instead.
+    {
+      // stripComments, and this is the eighth time today. The comment inside
+      // this very block explains that an ellipsis through "CC BY-SA 3.0" is a
+      // licence problem, so scanning the raw block for the word "ellipsis"
+      // finds my own explanation and fails on correct code. It did.
+      const code = stripComments(cards);
+      const at = code.indexOf("creditLine(shot.credit) && (");
+      const el = code.slice(at, code.indexOf("</div>", at));
+      ok("the credit element was found", at > 0 && el.length > 40);
+      ok("and it wraps rather than truncating",
+         !/ellipsis/.test(el) && /wordBreak: "break-word"/.test(el));
+    }
+    // The badge is copy a person reads, so it follows the conversation.
+    ok("the checked badge has a Danish form", /da: "TJEKKET"/.test(cards));
+    ok("and falls back to English", /\|\| "CHECKED"/.test(cards));
+  }
+
+  // ── AND IT IS ACTUALLY WIRED, UNDER ASSISTANT MESSAGES ONLY ─────
+  {
+    const appC = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the chat renders the cards", /<ChatPlaceCards/.test(appC));
+    ok("only under an assistant message",
+       /m\.role === "assistant" && !streaming && \([\s\S]{0,120}<ChatPlaceCards/.test(appC));
+    ok("built from the same pools the preview screen uses",
+       /placesNamedIn\(assistantText, previewPools\(\{/.test(appC));
+    ok("and tapping one opens the entry behind it", /onOpen=\{openStopDetail\}/.test(appC));
+  }
+}
+
+// ── HIS FATHER ANSWERED THREE QUESTIONS AND WAS HEARD ON NONE ──────
+//
+// 23 Aug 2026. The transcript replayed through readBrief, before any of this:
+//
+//     known   : days, interests
+//     missing : origin, when, party, transport, stay
+//
+// He had written "jeg rejser fra Faxe by", "jeg kører i bil" and "jeg rejser i
+// dag", each one directly under the question that asked for it. Three readers,
+// all English, all silent. And because two of the seven blocking slots can only
+// be filled by an answer, brief.ready could never become true, the ready marker
+// was stripped on every turn, and the button was unreachable by arithmetic
+// rather than by accident.
+//
+// FOUR PLACES HAD TO LEARN THE LANGUAGE, not one:
+//   • ANSWER_FILLER in tripEvents, which decides whether a turn is an ANSWER
+//     about a date. "jeg rejser i dag" left the word "rejser" behind and was
+//     thrown away; a bare "i dag" was kept.
+//   • ORIGIN_RE, which knew fly, land, arrive, come, start and drive.
+//   • TRANSPORT_RE, which knew by, on, in, with plus an English vehicle.
+//   • travelModeKey in routeOrder, which is the expensive one. The brief slot
+//     only fills when this returns a key, so teaching TRANSPORT_RE Danish on
+//     its own changed nothing. It also sets modeReachKm, so an unrecognised
+//     mode means no distance ceiling at all: a Danish cyclist was being offered
+//     the whole country.
+{
+  const { readBrief: rb, briefReady: brDy, travelModeKeyForTest: modeKey } = M;
+  const NOW_DA = new Date("2026-08-23T09:00:00Z");
+  // ── THE TRANSCRIPT ITSELF, HIS SIX TURNS, IN ORDER ──────────────
+  const dadTurns = [
+    "jeg vil gerne en tur til jylland",
+    "jeg rejser fra Faxe by. jeg har 7 dage til rådighed. Jeg kan godt lide vand og hygge.",
+    "jeg kører i bil",
+    "jeg rejser i dag",
+    "lav en rute for mig",
+    "så by ruten for søren",
+  ];
+  const dad = rb({ travellerText: dadTurns.join("\n"), travellerTurns: dadTurns, today: NOW_DA });
+  for (const slot of ["origin", "days", "when", "transport", "interests"]) {
+    ok(`his father's Danish fills ${slot}`, !!dad.known[slot]);
+  }
+  // The two he genuinely never answered stay missing, because inventing them is
+  // the failure this whole gate exists to prevent.
+  is("and the only things still missing are the two he never said",
+     [...dad.missing].sort(), ["party", "stay"]);
+  ok("so it is not ready, and it is asking the right thing", !brDy(dad));
+
+  // ── THE MODE KEY, IN SIX LANGUAGES AND WITH ITS TRAPS ───────────
+  for (const [said, want] of [
+    ["jeg kører i bil", "car"], ["vi tager toget", "public transport"],
+    ["på cykel", "bike"], ["til fods", "walk"], ["med bussen", "public transport"],
+    ["vi har en autocamper", "camper"],
+    ["ich fahre mit dem Auto", "car"], ["wij gaan met de trein", "public transport"],
+    ["by car", "car"], ["we're cycling", "bike"], ["on foot", "walk"],
+  ]) is(`mode of ${JSON.stringify(said)}`, modeKey(said), want);
+  // The false positives the English version was hardened against on 18 August
+  // must not come back in through the new vocabulary.
+  for (const said of ["we have no car", "does the hotel have a car park?",
+                      "walking distance to the harbour", "jeg vil gerne se togmuseet"]) {
+    is(`and ${JSON.stringify(said)} still states no mode`, modeKey(said), null);
+  }
+
+  // ── ORIGIN, AND THE SENTENCES THAT MUST NOT FILL IT ─────────────
+  const originOf = (t) => !!rb({ travellerText: t, travellerTurns: [t], today: NOW_DA }).known.origin;
+  for (const said of ["jeg rejser fra Faxe by", "ich fahre von Hamburg",
+                      "jeg flyver til Billund", "I'm driving from Aarhus"]) {
+    ok(`origin read from ${JSON.stringify(said)}`, originOf(said));
+  }
+  // Each of these is a real sentence a traveller writes, and each would stop the
+  // gate asking the one question the system prompt calls non-negotiable.
+  for (const said of ["hvor lang tid tager toget til Odense?", "er Ribe et godt sted?",
+                      "det kommer i august", "jeg vil gerne til Jylland"]) {
+    ok(`and not from ${JSON.stringify(said)}`, !originOf(said));
+  }
+  // `kommer` is deliberately absent from the Danish arrival verbs. Asked as the
+  // three sentences that are the reason, rather than by reading the list: the
+  // list contains "ankommer", which contains "kommer", so a source scan for the
+  // word says the opposite of the truth. It failed that way on its first run.
+  for (const said of ["det kommer i august", "kommer der mange turister?", "hvornår kommer bussen"]) {
+    ok(`kommer alone is not an arrival: ${JSON.stringify(said)}`, !originOf(said));
+  }
+  ok("while ankommer til is one", originOf("jeg ankommer til Aalborg"));
+
+  // ── A DATE ANSWER MAY CONTAIN THE VERB IT WAS ANSWERED WITH ─────
+  const whenOf = (t) => !!rb({ travellerText: t, travellerTurns: [t], today: NOW_DA }).known.when;
+  ok("a bare i dag still reads", whenOf("i dag"));
+  ok("and so does the sentence he actually wrote", whenOf("jeg rejser i dag"));
+  ok("and the German one", whenOf("ich reise morgen"));
+  // The rule this loosening had to keep: a date inside a sentence about
+  // something else is not an answer about the trip.
+  ok("but talk tomorrow is still not a travel date", !whenOf("talk tomorrow!"));
+  ok("nor is a question about an opening time", !whenOf("er museet åbent i morgen, ved du det?"));
+}
+
+// ── SIX PHOTOGRAPHS OF A DANISH CONVERSATION ───────────────────────
+//
+// Oliver, 23 Aug 2026. A whole week planned from Faxe, and no button anywhere.
+// Four faults, all in one transcript, and only one of them is the Danish.
+//
+// THE BUTTON. App.jsx strips the ready marker whenever the brief is short, and
+// the brief wants seven slots. He gave five: no party, no stay. party is HARD,
+// so brief.ready was false on every single turn, the marker was stripped every
+// single turn, and "Den er klar." is what was left of the sentence afterwards.
+// The strip could VETO the model's claim and could never grant one, so the
+// button rested entirely on a model emitting an ASCII token while composing
+// Danish. It writes "Den er klar." instead, which is the exact paraphrase the
+// English instruction names and forbids.
+//
+// THE GATE. It read the LAST assistant message and nothing else, so the turn
+// after a ready reply took the button away again and nothing could bring it
+// back. His screenshots four and five are that, in order.
+//
+// THE REFUSAL. buildBlockedNote had one English sentence for every language.
+//
+// THE PERSON. "Hvornår rejser JEG af sted" and "skal JEG køre i bil": Gemlyx
+// asking about its own holiday, in the two questions the intake depends on.
+{
+  const { nativeBlock, answerInLanguage, writeInLanguage, buildBlockedNote, BRIEF_SLOTS, BLOCKING_SLOTS, readBrief } = M;
+  const appB = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // ── THE BRIEF CAN NOW SAY YES ───────────────────────────────────
+  ok("a complete brief latches the button on its own",
+     /if \(brief\.ready\) setEverReadyToBuild\(true\);/.test(appB));
+  ok("and a surviving marker latches it too",
+     /isReadyToBuild\(replyText\)\)\s*\{[\s\S]{0,200}setEverReadyToBuild\(true\);/.test(appB));
+  ok("the strip still happens when the brief is short, because that rule was right",
+     /!brief\.ready && isReadyToBuild\(replyText\)/.test(appB));
+
+  // ── AND THE GATE READS THE LATCH BEFORE THE LAST MESSAGE ────────
+  // Ordering is the whole point: reading the last message first and the latch
+  // second would be the same bug with an extra variable.
+  {
+    const gate = appB.slice(appB.indexOf("if (aiLoading) return false;"));
+    const cut = gate.slice(0, gate.indexOf("})() && ("));
+    ok("the gate was found", cut.length > 50 && cut.length < 1200);
+    ok("and it answers from the latch before it looks at any message",
+       cut.indexOf("everReadyToBuild") < cut.indexOf("lastAssistantMsg"));
+    ok("the latch is a state, not a recomputation",
+       /const \[everReadyToBuild, setEverReadyToBuild\] = useState\(false\);/.test(appB));
+  }
+
+  // ── THE REFUSAL SPEAKS DANISH TO A DANE ─────────────────────────
+  {
+    const short = readBrief({ travellerText: "I want to see Jutland", today: new Date("2026-08-23T09:00:00Z") });
+    const en = buildBlockedNote(short);
+    const da = buildBlockedNote(short, { tag: "da-DK", name: "Danish" });
+    ok("there is something to ask on a brief this thin", !!en);
+    ok("English is unchanged for everybody else", /One thing first, and then I can build it:/.test(en));
+    ok("and a Danish reader is asked in Danish", /^Lige en ting mere, så bygger jeg den: /.test(da));
+    ok("with no English sentence left in it", !/One thing first/.test(da));
+    // A tag with no region has to hit the same branch, or half of Denmark's
+    // browsers get the English one.
+    ok("bare da counts as Danish", /Lige en ting mere/.test(buildBlockedNote(short, { tag: "da", name: "Danish" })));
+    ok("and an unrelated language does not", !/Lige en ting mere/.test(buildBlockedNote(short, { tag: "de-DE", name: "German" })));
+  }
+  // Every slot that can block a build has to have the Danish, or the note falls
+  // back to English on precisely the slot that is holding somebody up.
+  is("every blocking slot carries its Danish ask",
+     BLOCKING_SLOTS.filter(k => !(BRIEF_SLOTS.find(s2 => s2.key === k) || {}).askDa), []);
+
+  // ── THE INSTRUCTION ABOUT DANISH IS IN DANISH ───────────────────
+  {
+    const chat = nativeBlock({ tag: "da-DK", name: "Danish" }, "chat");
+    const guide = nativeBlock({ tag: "da-DK", name: "Danish" }, "guide");
+    ok("Danish gets a native block at all", chat.length > 400);
+    // THE FAULT FROM THE PHOTOGRAPHS, named in the words it has to prevent.
+    ok("the person rule is stated", /DEN REJSENDE ER "DU"/.test(chat));
+    ok("with the exact sentence it went wrong on", /Hvornår rejser jeg af sted\?/.test(chat));
+    ok("one traveller until told otherwise", /ÉN REJSENDE, INDTIL DU FÅR ANDET AT VIDE/.test(chat));
+    ok("and per person is named as the same mistake", /per person/.test(chat));
+    ok("word order is asked for out loud", /Læs sætningen højt/.test(chat));
+    ok("and the sentence that could not be read is quoted", /markant mere fyldte omgivelser/.test(chat));
+    ok("no English button names inside a Danish sentence", /engelsk knapnavn/.test(chat));
+    // THE MARKER, RESTATED IN THE LANGUAGE IT KEEPS BEING TRANSLATED INTO.
+    ok("the chat block says the marker is a code", /MARKØREN ER EN KODE, IKKE EN SÆTNING/.test(chat));
+    for (const said of ["Den er klar", "Så er den bygget"]) {
+      ok(`and names what it wrote instead: ${said}`, chat.includes(said));
+    }
+    ok("the marker itself is printed in ASCII", chat.includes("[[GEMLYX_READY_TO_BUILD]]"));
+    // THE GUIDE VARIANT IS THE OTHER RULE, because a translated key does not
+    // read badly, it stops the guide loading.
+    ok("the guide block keeps the keys English instead", /FELTNAVNENE ER ENGELSKE/.test(guide));
+    ok("and does not talk about a button it has no part in", !/MARKØREN/.test(guide));
+    ok("the shared half is in both", /TÆNK PÅ DANSK/.test(chat) && /TÆNK PÅ DANSK/.test(guide));
+    // ONE LANGUAGE, DELIBERATELY. A German reader keeps the English block.
+    for (const tag of ["de-DE", "fr", "zh-Hans", "en-GB", ""]) {
+      is(`no native block for ${tag || "an empty tag"}`, nativeBlock({ tag, name: "X" }, "chat"), "");
+    }
+    // AND IT REACHES THE PROMPTS, which is the half that would be easy to miss.
+    ok("the chat prompt block carries it", /DEN REJSENDE ER "DU"/.test(answerInLanguage({ tag: "da-DK", name: "Danish" })));
+    ok("and so does the guide prompt block", /FELTNAVNENE ER ENGELSKE/.test(writeInLanguage({ tag: "da-DK", name: "Danish" })));
+    ok("while German keeps the English one and gains nothing",
+       !/TÆNK PÅ DANSK/.test(answerInLanguage({ tag: "de-DE", name: "German" })));
+    // His standing rule, on copy he cannot read in review as easily as English.
+    ok("and no dash anywhere in the Danish", !/[–—]/.test(chat + guide));
+  }
+}
+
 // ── THE GUIDE WAS NEVER TRANSLATED ─────────────────────────────────
 //
 // Oliver, 22 Aug 2026: "just get the language working for now." His father used
@@ -24888,8 +25318,25 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      /read, print, store and retain a Guide/i.test(terms) && /send it to the persons travelling with the User/i.test(terms));
   ok("and the terms no longer say a guide is yours to share, full stop",
      !/yours to use, print, share and take on your trip/.test(terms));
-  ok("the terms are re-dated, because a rule change that keeps the old date is a lie",
-     /In force from 22 August 2026/.test(terms));
+  // ── RE-DATED, ASKED AS A RULE RATHER THAN AS A DATE ─────────────
+  // This pinned the literal "In force from 22 August 2026", so it failed on
+  // 23 August on an amendment that was correct, which is the shape thirty other
+  // assertions had that morning. The rule it was written for survives it: a
+  // change to the rules may not keep the old date. So the header is checked
+  // against the page's OWN version history, which is the only thing on the page
+  // that knows when the rules last moved.
+  {
+    const head = terms.match(/Version (\d+\.\d+) · In force from (\d{1,2} \w+ \d{4})/);
+    ok("the terms print a version and a date", !!head);
+    const ver = head ? head[1] : "", date = head ? head[2] : "";
+    ok("and the version history describes that version taking force on that date",
+       !!head && new RegExp(`Version ${ver.replace(".", "\\.")}, in force from ${date},`).test(terms));
+    // A newer version documented under an older header is what a stale date
+    // looks like from the inside, and it is the case the literal could not see.
+    const seen = [...terms.matchAll(/Version (\d+)\.(\d+)/g)].map(m => [Number(m[1]), Number(m[2])]);
+    const newest = seen.sort((a, b) => b[0] - a[0] || b[1] - a[1])[0] || [0, 0];
+    is("and the header carries the newest version the page names", ver, newest.join("."));
+  }
 
   // ── IT REACHES A READER ─────────────────────────────────────────
   // A notice in a util nothing renders is not a notice.
@@ -30060,8 +30507,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // ── IT IS ACTUALLY APPENDED ─────────────────────────────────────
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // The rule is that the note is BUILT from the brief and APPENDED. The exact
+  // argument list is not the rule, and pinning it broke this on 23 August when
+  // the reader's language became the second argument so the sentence could
+  // reach a Danish traveller in Danish.
   ok("the withheld marker appends the note rather than vanishing",
-     /const blocked = buildBlockedNote\(brief\);/.test(app) && /if \(blocked\) replyText = /.test(app));
+     /buildBlockedNote\(brief\b/.test(app) && /if \(blocked\) replyText = /.test(app));
+  ok("and the note is told which language the conversation is in",
+     /buildBlockedNote\(brief,\s*readerLang\)/.test(app));
 
   // ── AND HE HAD ANSWERED BOTH QUESTIONS ──────────────────────────
   //
@@ -30315,8 +30768,22 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // section simply having been deleted.
   ok("the date of birth is disclosed instead", /Date of birth/.test(privacy));
   ok("the required half is labelled required", /<h3>Required<\/h3>/.test(privacy));
-  ok("and what Gemlyx notices has a section of its own",
-     /What Gemlyx notices about you/i.test(privacy));
+  // By the rules it states rather than by its heading. The heading was reworded
+  // on 23 August and the section is the same section, which is the difference
+  // between a test of the product and a test of a title.
+  {
+    const at = privacy.search(/<h2>4\./);
+    ok("section 4 exists", at > 0);
+    const sec = privacy.slice(at, privacy.search(/<h2>5\./));
+    ok("and it is the one about what is observed rather than entered",
+       /does not arise from information entered by you/i.test(sec));
+    ok("and it still carries the two-occasion rule",
+       /at least two occasions/i.test(sec));
+    ok("and the rule that what was typed wins",
+       /takes precedence over information observed/i.test(sec));
+    ok("and it points at the screen where a reader can clear it",
+       /What Gemlyx knows about you/i.test(privacy));
+  }
 
   // ── THE COUNT MATCHES THE TABLE UNDER IT ────────────────────────
   // It said "two things you must give" directly above a table listing five.
@@ -30327,8 +30794,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("REQUIRED_PROFILE was actually found", listed > 0);
   // Plus the email address and the password, which the form demands and the
   // profile shape knows nothing about.
-  ok("the privacy page's count matches REQUIRED_PROFILE plus email and password",
-     new RegExp(`Registration asks for ${WORD[listed + 2]} things you must give`).test(privacy));
+  // Asked as "whatever number the page states, it is this one", rather than as
+  // one sentence quoted in full. The sentence was rewritten on 23 August when
+  // the page moved to the register of the terms, and a quoted sentence fails
+  // that edit while the count it protects is still right.
+  {
+    const intro = privacy.slice(0, privacy.indexOf("<h3>Required</h3>"));
+    const said = intro.slice(intro.lastIndexOf("<h2>")).match(/\b(zero|one|two|three|four|five|six|seven|eight)\b/i);
+    ok("the registration section states how many items are required", !!said);
+    is("and that number is REQUIRED_PROFILE plus the email address and the password",
+       said ? said[1].toLowerCase() : null, WORD[listed + 2]);
+  }
 
   // ── THE AFFILIATE LIST MATCHES WHAT IS SWITCHED ON ──────────────
   // The page named Booking.com and Ticketmaster as the partners that pay while
@@ -30339,14 +30815,88 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and the privacy page names it", /Tiqets/.test(privacy));
   ok("Booking.com is not switched on", !set("BOOKING_AFFILIATE_ID"));
   ok("Ticketmaster is not switched on", !set("TICKETMASTER_AFFILIATE_TEMPLATE"));
-  ok("so the page says those two earn nothing rather than claiming they pay",
-     /carry no partner code at the moment and earn Gemlyx nothing/.test(privacy));
+  // The RULE, not the sentence: wherever the page names those two together, it
+  // says in the same breath that they carry no code and earn nothing.
+  {
+    const at = privacy.indexOf("Booking.com and Ticketmaster");
+    ok("the page names the two that are switched off", at > 0);
+    const sentence = privacy.slice(at, at + 220);
+    ok("and says in the same sentence that they carry no partner code",
+       /no partner code/.test(sentence));
+    ok("and that they earn Gemlyx nothing", /earn Gemlyx nothing|generate no revenue|earns Gemlyx nothing/.test(sentence));
+  }
 
   // ── THE AGE ALL THREE HAVE TO AGREE ON ──────────────────────────
   ok("the terms state a minimum age", /at least 15 years of age/i.test(terms));
   ok("the privacy page states the same one", /under 15/i.test(privacy));
   ok("and the code enforces that number and no other",
      /export const MIN_ACCOUNT_AGE = 15;/.test(prof));
+
+  // ── WHAT VERSION 2.1 ADDED, AND WHAT IT REFUSED TO ADD ──────────
+  //
+  // Oliver, 23 Aug 2026, with four screenshots of Termly's generated terms:
+  // "I want you to adopt this language into the privacy and terms of use."
+  //
+  // Three of the template's prohibitions were genuinely missing here and are
+  // now clauses 8.1.8 to 8.1.10. Two were refused and the refusals are asserted
+  // as absences, because the failure mode is somebody pasting the template back
+  // in a year from now with no memory of why it was cut.
+  //
+  //   • "We are the owner or the licensee of all intellectual property rights
+  //     in our Services, including all... photographs". Clause 10.5 says the
+  //     opposite and is correct: the photographs come from Wikimedia Commons
+  //     and belong to their photographers. Claiming them would be false and a
+  //     breach of the licences this product attributes under.
+  //
+  //   • "Disparage, tarnish, or otherwise harm, in our opinion, us and/or the
+  //     Services". A term making the trader the sole judge is the textbook
+  //     entry in the annex to Directive 93/13/EEC, so it does not bind a
+  //     consumer here, and a product whose promise is honest assessment cannot
+  //     coherently forbid being assessed honestly.
+  ok("using what the Service knows to harass somebody is named, not implied",
+     /use any information obtained from the Service in order to harass/i.test(terms));
+  ok("so is fishing for another User's credentials",
+     /obtain the access credentials or account information of another User/i.test(terms));
+  ok("and so is a report of abuse the sender knows to be false",
+     /report of abuse or misconduct that the User knows to be false/i.test(terms));
+  ok("the general prohibition is still there behind the three",
+     /use the Service for any unlawful purpose or in breach of the rights of any third party/i.test(terms));
+  ok("the terms do not claim to own the photographs",
+     !/owner or the licensee of all intellectual property/i.test(terms));
+  ok("and clause 10.5 still says whose they are",
+     /licensed from Wikimedia Commons[\s\S]{0,200}remain the property of their respective photographers/i.test(terms));
+  ok("no clause forbids criticising Gemlyx",
+     !/disparage|tarnish/i.test(terms));
+  ok("the jurisdiction clause says access from elsewhere is the User's own initiative",
+     /accessing the Service from outside Denmark does so on the User's own initiative/i.test(terms));
+  ok("and does not purport to remove mandatory consumer protection",
+     /does not derogate from any mandatory consumer protection/i.test(terms));
+
+  // ── AND THE NUMBERING SURVIVED THE RENUMBERING ──────────────────
+  // 8.1.8 became 8.1.11 so that the three new prohibitions could sit in front
+  // of the catch-all rather than after it. A document that skips 8.1.9 or names
+  // 8.1.4 twice is unreadable in the one situation it exists for, and nothing
+  // about the page would look wrong.
+  {
+    const nums = [...terms.matchAll(/<span class="n(?: deep)?">([\d.]+)<\/span>/g)].map(m => m[1]);
+    ok("clause numbers were found at all", nums.length > 80);
+    const wrong = [];
+    const seen = new Map();
+    for (const n of nums) {
+      if (seen.has(n)) wrong.push(`${n} appears twice`);
+      seen.set(n, true);
+      const parts = n.split(".");
+      const parent = parts.slice(0, -1).join(".");
+      const last = Number(parts[parts.length - 1]);
+      const key = parent || "top";
+      const prev = seen.get("last:" + key);
+      if (prev === undefined ? last !== 1 : last !== prev + 1) {
+        wrong.push(`${n} follows ${parent ? parent + "." + prev : prev}`);
+      }
+      seen.set("last:" + key, last);
+    }
+    is("every clause number follows the one before it", wrong, []);
+  }
 
   // ── ARTICLE 50, WHICH APPLIED FROM 2 AUGUST 2026 ────────────────
   ok("the terms disclose that nobody is talking to a person",

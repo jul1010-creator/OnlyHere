@@ -432,7 +432,19 @@ export const isDeparturePlace = (convoText, name) => {
 // rejection has to be stated close to the name, and a name recommended anywhere
 // is kept even if it is also warned about, because "go on a weeknight, avoid it
 // on a Saturday" is advice about a place being recommended.
-const REJECT_BEFORE = /\b(?:steer\s+(?:well\s+)?clear\s+of|stay\s+(?:well\s+)?away\s+from|avoid|skip|skipping|not|no|never|forget|ignore|rather\s+than|instead\s+of|as\s+opposed\s+to|other\s+than|except|apart\s+from|besides|wouldn'?t\s+(?:go|bother|recommend|suggest|send\s+you\s+to)|would\s+not\s+(?:go|bother|recommend|suggest)|do\s*n'?t\s+(?:go|bother|recommend|suggest)?)\s*(?:to\s+|the\s+)?$/i;
+// ── AND IT ONLY EVER HEARD A REFUSAL IN ENGLISH ─────────────────────
+//
+// 23 Aug 2026, found while wiring photographs into the chat: "vi holder os væk
+// fra Copenhagen denne gang" named Copenhagen and was read as a recommendation,
+// because every word in this list was English. That is the 15 August bug in a
+// second language, and the cost is higher now: it used to put a wrong row on a
+// list, and it would now put a PHOTOGRAPH of the one city a traveller asked to
+// leave into the conversation.
+//
+// The Danish is placed by the same rule as the English: a refusal counts only
+// where it sits directly against the name, so a caveat about a place being
+// recommended is not read as a rejection.
+const REJECT_BEFORE = /\b(?:steer\s+(?:well\s+)?clear\s+of|stay\s+(?:well\s+)?away\s+from|avoid|skip|skipping|not|no|never|forget|ignore|rather\s+than|instead\s+of|as\s+opposed\s+to|other\s+than|except|apart\s+from|besides|wouldn'?t\s+(?:go|bother|recommend|suggest|send\s+you\s+to)|would\s+not\s+(?:go|bother|recommend|suggest)|do\s*n'?t\s+(?:go|bother|recommend|suggest)?|hold(?:er)?\s+(?:os\s+|dig\s+|jer\s+)?(?:helt\s+)?v(?:æ|ae)k\s+fra|holder\s+os\s+fra|undg(?:å|aa|a)r?|springer?\s+over|dropper?|drop|ikke|uden|hverken|i\s+stedet\s+for|frem\s+for|bortset\s+fra|udenom|uden\s+om|vermeide[nt]?|nicht|kein[e]?|statt|vermijd(?:en)?|niet|geen)\s*(?:to\s+|the\s+|at\s+|til\s+|i\s+|den\s+|det\s+)?$/i;
 // Or the verdict lands just after the name: "X, that's stag-do territory, not
 // what you want", "X is a tourist trap".
 // ── AND ONLY A VERDICT ON THE PLACE ITSELF ──────────────────────────
@@ -442,13 +454,26 @@ const REJECT_BEFORE = /\b(?:steer\s+(?:well\s+)?clear\s+of|stay\s+(?:well\s+)?aw
 // which is the failure mode this whole function is written to stay away from.
 // Those words still count in REJECT_BEFORE, where they sit directly against the
 // name and cannot be about a Saturday.
-const REJECT_AFTER = /^[^.!?]{0,80}?\b(?:not\s+(?:what|for|your|really|the)|is\s*n'?t\s+(?:what|for|your|really|the)|tourist\s+trap|overpriced|steer\s+clear|not\s+worth|nothing\s+special|wrong\s+(?:fit|crowd|vibe)|too\s+(?:loud|rowdy|touristy|crowded))\b/i;
+const REJECT_AFTER = /^[^.!?]{0,80}?\b(?:not\s+(?:what|for|your|really|the)|is\s*n'?t\s+(?:what|for|your|really|the)|tourist\s+trap|overpriced|steer\s+clear|not\s+worth|nothing\s+special|wrong\s+(?:fit|crowd|vibe)|too\s+(?:loud|rowdy|touristy|crowded)|turistf(?:æ|ae)lde|er\s+ikke\s+(?:noget\s+for|det\s+rigtige|dig)|ikke\s+v(?:æ|ae)rd|for\s+(?:turistet|fyldt|larmende)|touristenf(?:a|ä)lle|te\s+toeristisch)\b/i;
 // What actually bounds these is the ANCHOR, not the window: REJECT_BEFORE ends
 // in `$`, so the rejection word has to sit immediately against the name, and
 // REJECT_AFTER's `[^.!?]` cannot cross into the next sentence. The windows are
 // there to keep the regex cheap over a long conversation, and widening either
 // one changes nothing, which is worth knowing before somebody tunes them
 // expecting it to.
+// ── THE VERB THAT COMES APART AROUND THE NAME ───────────────────────
+//
+// "vi springer Copenhagen over" is how Danish, German and Dutch say "we are
+// skipping Copenhagen": the verb splits and the particle lands on the far side
+// of the place. Neither window sees a refusal on its own, because "springer" is
+// not one and "over" is not one.
+//
+// BOTH HALVES ARE REQUIRED, which is what makes this safe. A bare "over" after
+// a name is "Copenhagen over to dage", an ordinary sentence, and a bare
+// "springer" before one could be about anything. Only the pair is a refusal.
+const SPLIT_VERB_BEFORE = /\b(?:spring(?:er|e)?|hopp(?:er|e)?|lad(?:er)?\s+(?:os\s+|vi\s+)?|dropp?(?:er|e)?|lass(?:en)?|slaan?|sla)\s+(?:lige\s+|helt\s+)?$/i;
+const SPLIT_PARTICLE_AFTER = /^\s*(?:over|ud|fra|weg|aus|uit)\b/i;
+
 const REJECT_WINDOW_BEFORE = 44;
 const REJECT_WINDOW_AFTER = 90;
 
@@ -461,7 +486,8 @@ export const isRejectedPlace = (convoText, name) => {
       found++;
       const before = hay.slice(Math.max(0, i - REJECT_WINDOW_BEFORE), i);
       const after = hay.slice(i + len, i + len + REJECT_WINDOW_AFTER);
-      if (REJECT_BEFORE.test(before) || REJECT_AFTER.test(after)) rejected++;
+      if (REJECT_BEFORE.test(before) || REJECT_AFTER.test(after)
+          || (SPLIT_VERB_BEFORE.test(before) && SPLIT_PARTICLE_AFTER.test(after))) rejected++;
     }
   }
   // EVERY mention, not any. One recommendation outweighs one warning, because a

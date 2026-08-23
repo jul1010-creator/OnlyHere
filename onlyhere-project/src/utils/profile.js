@@ -275,7 +275,7 @@ export const DESCRIPTION_MAX = 600;
 // account creation is recorded against the Account. A clause promising a record
 // that does not exist is worse than no clause, so here is the record. Bumped
 // whenever the version number at the head of terms.html moves.
-export const TERMS_VERSION = "2.0";
+export const TERMS_VERSION = "2.1";
 
 // KEY ORDER MATTERS HERE, and only because the suite compares this against
 // cleanProfile({}) with JSON.stringify, which is order sensitive. That test is

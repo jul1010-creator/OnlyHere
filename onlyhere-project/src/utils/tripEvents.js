@@ -1,6 +1,6 @@
 import { tierOf } from "./placeThemes";
 // ── ONE VOCABULARY, SIX LANGUAGES, READ BY EVERY PARSER BELOW ───────
-import { MONTH_INDEX, MONTH_PATTERN, DAY_WORDS, WEEK_WORDS, ONE_WEEK, RELATIVE_DAYS, THIS_WEEKEND, NEXT_WEEK, IN_N_DAYS, alt, LETTER } from "./travellerWords";
+import { MONTH_INDEX, MONTH_PATTERN, DAY_WORDS, WEEK_WORDS, ONE_WEEK, RELATIVE_DAYS, THIS_WEEKEND, NEXT_WEEK, IN_N_DAYS, TRAVEL_VERBS, alt, LETTER } from "./travellerWords";
 // The band vocabulary, imported rather than restated. A copy of "2 means
 // comfortable" in this file is a number that has to be kept in step with
 // another file by hand, which is the drift this codebase keeps finding.
@@ -258,7 +258,25 @@ export const relativeDayIn = (text, today = new Date()) => {
 //
 // Deliberately strict. A missed answer costs one more question, which Gemlyx
 // now asks out loud. A wrong date costs a guide built for the wrong week.
-const ANSWER_FILLER = /^(?:and|og|men|but|vi|we|i|jeg|to|til|for|on|om|about|ca|omkring|ish|arrive|arrives|arriving|arrival|ankommer|ankomst|kommer|komme|start|starts|starting|starter|please|thanks|tak|ja|yes|yep|ok|okay|the|a|an|den|det|er|is|it)$/i;
+// ── AND A TRAVEL VERB IS NOT NOISE, IT IS THE ANSWER ────────────────
+//
+// 23 Aug 2026. This list held "jeg" and not "rejser", so "jeg rejser i dag" was
+// rejected as a sentence that merely mentions a date, while a bare "i dag" was
+// accepted. Oliver answered the date question in a full Danish sentence and the
+// brief recorded nothing, which is one of the three reasons the button was
+// unreachable. Measured, not guessed: latestRelativeAnswer(["jeg rejser i dag"])
+// returned null and latestRelativeAnswer(["i dag"]) returned the right day.
+//
+// The rule it protects still holds. "Talk tomorrow!" is still rejected, because
+// "talk" is not a travel verb and never will be. What changes is that the verbs
+// somebody actually uses to say when they are leaving no longer disqualify the
+// sentence they are leaving in.
+const ANSWER_FILLER = new RegExp(
+  `^(?:and|og|men|but|vi|we|i|jeg|du|man|ich|wir|ik|wij|je|jag|han|hun|hij|zij|to|til|for|on|om|about|ca|omkring|ish` +
+  `|arrive|arrives|arriving|arrival|ankommer|ankomst|kommer|komme` +
+  `|start|starts|starting|starter|please|thanks|tak|ja|yes|yep|ok|okay` +
+  `|the|a|an|den|det|er|is|it` +
+  `|${TRAVEL_VERBS.filter(w => !w.includes(" ")).join("|")})$`, "i");
 
 export const relativeAnswerIn = (turn, today = new Date()) => {
   const raw = String(turn || "");

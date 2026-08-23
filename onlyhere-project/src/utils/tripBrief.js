@@ -45,7 +45,7 @@
 // "Copenhagen has excellent museums" would otherwise become evidence that the
 // traveller asked for museums.
 import { arrivalDateIn, dayCountIn, monthOnlyIn, latestRelativeAnswer, daysBetween } from "./tripEvents";
-import { PARTY_BARE, PARTY_POSSESSIVE, PARTY_POSSESSIVES, PARTY_COUNT, alt, LETTER } from "./travellerWords";
+import { PARTY_BARE, PARTY_POSSESSIVE, PARTY_POSSESSIVES, PARTY_COUNT, TRAVEL_VERBS, FROM_WORDS, TRANSPORT_PREPS, VEHICLE_WORDS, TRANSPORT_VERBS, PUBLIC_TRANSPORT, alt, LETTER } from "./travellerWords";
 import { dayStart } from "./calendarDay";
 import { travelModeKey, withoutNonModes } from "./routeOrder";
 
@@ -56,23 +56,46 @@ const has = (v) => !!clean(v);
 // One line each, in the order a person would naturally give them. `ask` is the
 // question in Gemlyx's own voice, short, one thing at a time, because the whole
 // complaint was the wall of text.
+// ── askDa, AND WHY ONE LANGUAGE AND NOT ALL OF THEM ──────────────────
+//
+// These asks are normally handed to the MODEL, which puts them into the
+// traveller's own language along with everything else it was told. One of them
+// is not: buildBlockedNote appends its sentence in code, after the reply, when
+// Gemlyx has claimed to be ready and the brief disagrees. That sentence reached
+// a Danish reader in English, which is recorded at the bottom of this file as a
+// known limit shipped on 22 August.
+//
+// It is Danish that gets the second string, and only Danish, because Denmark is
+// where this product is used and Danish is the one language in this repo that
+// can be checked by the person who owns it. A machine translation into six more
+// would be six sentences nobody here can read, which is how the awkward Danish
+// in the rest of the product happened in the first place. Everything else falls
+// back to `ask`, in English, which is the behaviour that shipped yesterday.
 export const BRIEF_SLOTS = [
   { key: "origin", label: "where they start", tier: "blocking",
-    ask: "Where are you flying into, or starting from?" },
+    ask: "Where are you flying into, or starting from?",
+    askDa: "Hvor rejser du fra?" },
   { key: "days", label: "how long", tier: "blocking",
-    ask: "How many days have you got?" },
+    ask: "How many days have you got?",
+    askDa: "Hvor mange dage har du?" },
   { key: "when", label: "when", tier: "blocking", hard: true,
-    ask: "Which dates? Even roughly is fine, it decides which events are on while you are here." },
+    ask: "Which dates? Even roughly is fine, it decides which events are on while you are here.",
+    askDa: "Hvilke datoer rejser du? Cirka er fint, det afgør hvilke begivenheder der er noget af mens du er der." },
   { key: "party", label: "who is coming", tier: "blocking", hard: true,
-    ask: "Who is coming? Ages of any kids matter more than you would think." },
+    ask: "Who is coming? Ages of any kids matter more than you would think.",
+    askDa: "Hvem skal med? Børns alder betyder mere for planen, end man skulle tro." },
   { key: "interests", label: "what kind of trip", tier: "blocking",
-    ask: "What kind of trip is this? Food, history, design, nature, nightlife, or something else entirely." },
+    ask: "What kind of trip is this? Food, history, design, nature, nightlife, or something else entirely.",
+    askDa: "Hvad er det for en tur? Mad, historie, design, natur, natteliv eller noget helt andet." },
   { key: "transport", label: "how they get around", tier: "blocking",
-    ask: "How are you getting around once you're here? Car, bike, trains and buses, or a mix of them." },
+    ask: "How are you getting around once you're here? Car, bike, trains and buses, or a mix of them.",
+    askDa: "Hvordan kommer du rundt undervejs? Bil, cykel, tog og bus, eller en blanding." },
   { key: "stay", label: "whether a hotel is booked", tier: "blocking",
-    ask: "Have you booked somewhere to stay already? If you have, the whole plan should sit around it." },
+    ask: "Have you booked somewhere to stay already? If you have, the whole plan should sit around it.",
+    askDa: "Har du allerede booket et sted at bo? Hvis du har, bygger jeg hele planen op omkring det." },
   { key: "budget", label: "budget", tier: "optional",
-    ask: "Roughly what are you happy to spend a day?" },
+    ask: "Roughly what are you happy to spend a day?",
+    askDa: "Hvad vil du cirka bruge om dagen?" },
 ];
 
 export const BLOCKING_SLOTS = BRIEF_SLOTS.filter(s => s.tier === "blocking").map(s => s.key);
@@ -170,7 +193,35 @@ const readDays = (text, intakeArrival, intakeDeparture) => {
 // you are arriving on one or asking what it costs, so they need "into", which is
 // the word English uses for arriving somewhere. Same discriminator as
 // utils/arrival.js, for the same reason, found by the same review.
-const ORIGIN_RE = /\b(?:fly(?:ing)?|land(?:ing)?|arriv(?:e|ing)|com(?:e|ing)|start(?:ing)?|driv(?:e|ing))\s+(?:in|into|to|from|at)\b|\b(?:ferry|ferries|sail(?:ing)?|cruis(?:e|ing)|train|bus|coach)\s+into\b|\b(?:airport|lufthavn|kastrup|billund airport)\b/i;
+// ── AND THEN IT ONLY EVER LISTENED IN ENGLISH ───────────────────────
+//
+// 23 Aug 2026. "jeg rejser fra Faxe by" filled nothing. The list was fly, land,
+// arrive, come, start, drive, and Oliver's own transcript shows Gemlyx asking
+// where he was starting from, being told, and asking again.
+//
+// TWO SHAPES ARE ADDED AND A THIRD IS DELIBERATELY NOT.
+//
+// A travel verb plus a from-word is unambiguous in every language on the list:
+// "rejser fra", "fahre von", "vertrek uit", "driving from". Nothing that means
+// "leaving X" can mean anything else.
+//
+// The arrival verbs get their own short list with "til" and "i", because
+// "flyver til Billund" and "lander i Kastrup" are how a Dane says where the
+// trip starts. `kommer` is NOT on it, on purpose: "det kommer i august" is an
+// ordinary sentence about anything at all, and filling a blocking slot from it
+// would stop the gate asking the one question it must ask.
+//
+// A bare place name is still not an origin, which is the rule this reader was
+// built around and the reason it stays narrow.
+const ORIGIN_TRAVEL = alt(TRAVEL_VERBS.filter(w => !w.includes(" ")));
+const ORIGIN_FROM = alt(FROM_WORDS);
+const ORIGIN_RE = new RegExp([
+  /\b(?:fly(?:ing)?|land(?:ing)?|arriv(?:e|ing)|com(?:e|ing)|start(?:ing)?|driv(?:e|ing))\s+(?:in|into|to|from|at)\b/.source,
+  `(?:^|[^${LETTER}])(?:${ORIGIN_TRAVEL})\\s+(?:${ORIGIN_FROM})(?![${LETTER}])`,
+  `(?:^|[^${LETTER}])(?:flyver|flyve|lander|lande|ankommer|ankomme|sejler|sejle|fliege|fliegen|fliegt|vlieg|vliegen)\\s+(?:til|i|fra|in|naar|naar|nach|aus)(?![${LETTER}])`,
+  /\b(?:ferry|ferries|sail(?:ing)?|cruis(?:e|ing)|train|bus|coach)\s+into\b/.source,
+  /\b(?:airport|lufthavn|kastrup|billund airport)\b/.source,
+].join("|"), "i");
 const readOrigin = (text, intakeStartPoint) => {
   if (has(intakeStartPoint)) return { value: clean(intakeStartPoint), source: "intake" };
   return ORIGIN_RE.test(String(text || "")) ? { value: "said in the conversation", source: "said" } : null;
@@ -307,11 +358,25 @@ const readInterests = (text, intakeInterest) => {
 // attraction — the same mistake "kids" made in the interests list. So the pattern
 // wants a movement or possession word next to the mode, or a word that can only
 // be about travelling.
+// ── AND THIS ONE ONLY LISTENED IN ENGLISH TOO ───────────────────────
+//
+// "jeg kører i bil" filled nothing, on the turn immediately after Gemlyx asked
+// how he was getting around. Three shapes, because a mode is answered three
+// ways: a preposition and a vehicle ("i bil", "med toget", "by car"), a verb on
+// its own ("cykler", "driving"), or the words for public transport.
+//
+// THE DEFINITE FORMS ARE NOT OPTIONAL. Danish glues the article on: bil becomes
+// bilen, tog becomes toget, cykel becomes cyklen. A vehicle list without them
+// reads "med toget" as no answer at all.
+const TR_PREP = alt(TRANSPORT_PREPS);
+const TR_ART = "(?:a|an|the|my|our|en|et|den|det|min|mit|vores|dem|der|das|einem|einer|de|het|een)\\s+";
 const TRANSPORT_RE = new RegExp([
   /\b(?:by|on|in|with|got|have|rent(?:ing|ed)?|hir(?:e|ing|ed)|tak(?:e|ing)|using)\s+(?:a\s+|an\s+|the\s+|my\s+|our\s+)?(?:car|bike|bicycle|cycle|train|bus|coach|camper(?:van)?|motorhome|scooter|foot)\b/.source,
+  `(?:^|[^${LETTER}])(?:${TR_PREP})\\s+(?:${TR_ART})?(?:${alt(VEHICLE_WORDS)})(?![${LETTER}])`,
+  `(?:^|[^${LETTER}])(?:${alt(TRANSPORT_VERBS)})(?![${LETTER}])`,
+  `(?:^|[^${LETTER}])(?:${alt(PUBLIC_TRANSPORT)})(?![${LETTER}])`,
   /\bpublic transport(?:ation)?\b/.source,
   /\bon foot\b/.source,
-  /\b(?:cycling|biking|driving|walking|hitchhiking)\b/.source,
   // "no car" was an alternative here and is gone: the text is scrubbed of negations
   // before this pattern runs (withoutNonModes), so it could never match, and a
   // branch that cannot fire is reassurance rather than a rule.
@@ -480,13 +545,19 @@ export const nextAsks = (brief, { limit = MAX_ASKS_AT_ONCE } = {}) => {
 // MAX_ASKS_AT_ONCE is 1 and the reason for that rule applies twice over to a
 // traveller who has just been told a plan is ready.
 //
-// KNOWN LIMIT, written down rather than left to be discovered: this sentence is
-// English, and the reply it is appended to is in the traveller's language. It
-// is on the same list as the rest of the hardcoded strings. English and honest
-// beats silent, so it ships now and gets translated with the others.
-export const buildBlockedNote = (brief) => {
+// KNOWN LIMIT, NARROWED ON 23 AUGUST. This sentence used to be English in every
+// conversation, including the Danish ones, which is the language this product is
+// actually read in. It is Danish now when the reader is Danish, from askDa on
+// the slot, and English everywhere else. The rest of the languages are still on
+// the same list as the other hardcoded strings, and English and honest still
+// beats silent.
+export const buildBlockedNote = (brief, lang = null) => {
   const next = nextAsks(brief)[0];
   if (!next) return "";
+  const base = String(lang?.tag || "").split("-")[0].toLowerCase();
+  if (base === "da" && next.askDa) {
+    return `Lige en ting mere, så bygger jeg den: ${next.askDa}`;
+  }
   return `One thing first, and then I can build it: ${next.ask}`;
 };
 

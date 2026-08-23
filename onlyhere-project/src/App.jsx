@@ -109,6 +109,9 @@ import { cityFromLocation } from "./utils/guideEnrichment";
 import { readBrief, briefBlock, nextAsks, buildBlockedNote } from "./utils/tripBrief";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
+import { placesNamedIn } from "./utils/chatPlaces";
+import { EXAMPLE_GUIDE, EXAMPLE_GUIDE_PATH, hasExampleGuide } from "./data/exampleGuide";
+import { ChatPlaceCards } from "./components/ChatPlaceCards";
 // The sentence an entry already has about who it suits, rather than the first
 // hundred characters of it, which on a town is always the founding date. See
 // utils/cardLine.js.
@@ -11386,6 +11389,23 @@ If the conversation only covers a single day or a few stops with no explicit day
   // tripBrief.js told it to ask, so a question asked and not answered stops
   // blocking instead of being asked forever. See sendAI, "THE BRIEF, COMPUTED".
   const [briefAsked, setBriefAsked] = useState([]);
+  // ── READINESS LATCHES, BECAUSE A TRIP DOES NOT GET SHORTER ─────────
+  //
+  // Oliver, 23 Aug 2026, with six photographs of a Danish conversation that
+  // planned a whole week and never once offered the button.
+  //
+  // The gate below read the LAST assistant message and nothing else. So on the
+  // turn Gemlyx says it is ready the button appears, and the moment the
+  // traveller asks anything at all, "hvor kan jeg se hvordan rejsen er
+  // opbygget", the next reply carries no marker and the button is gone. Not
+  // hidden until later. Gone, and it never comes back, because no subsequent
+  // reply is a ready reply either.
+  //
+  // Readiness is a fact about the CONVERSATION, not about its most recent
+  // sentence. Once there is enough on the table to build a week in Denmark,
+  // there is still enough one question later. So it latches, and the only thing
+  // that can clear it is a new conversation.
+  const [everReadyToBuild, setEverReadyToBuild] = useState(false);
   const [intakeFamilyMode, setIntakeFamilyMode] = useState(false);
   const [intakeIncludeEvents, setIntakeIncludeEvents] = useState(false);
   const [detourTab, setDetourTab] = useState("sightseeing");
@@ -12387,6 +12407,10 @@ If the conversation only covers a single day or a few stops with no explicit day
       // the brief is not ready, because a model that can be told a rule in a
       // prompt has already demonstrated it can talk itself out of one.
       const travellerTurns = [...aiMessages.filter(m => m.role === "user").map(m => m.text || ""), msg];
+      // Read once for this turn. Used by the withheld-marker note below, which
+      // is appended by CODE rather than written by the model and so has to be
+      // told which language the conversation is in.
+      const readerLang = readerLanguage();
       const brief = readBrief({
         travellerText: travellerTurns.join("\n"),
         // Both shapes. The join is what most readers want; the turns are what a
@@ -12443,7 +12467,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         t.gemlyxFind ? `Gemlyx's own find: ${t.gemlyxFind}` : "",
       ].filter(Boolean).join(" ")).join("\n")}\n`;
 
-      const sysPrompt = `You are Gemlyx — Denmark's insider guide: a genuine local expert who knows this country inside out, and who's warm, friendly, and genuinely eager to help someone have a great trip — like a well-travelled Danish friend, never like a generic AI assistant or customer support script. Never call yourself an AI or a language model. You're a genuinely happy, upbeat guy who loves helping people discover Denmark — let real enthusiasm for a good find show through. A few fitting emojis are welcome where they add warmth (one or two per reply, like a 🚲 next to a bike tip or a 🌊 for a coastal stop) — never a wall of them, never one in every sentence. VARY HOW YOU OPEN AND STRUCTURE EACH REPLY — someone using Gemlyx repeatedly (or across sessions) should never feel like they're getting the same template with different words swapped in; don't default to the same opening phrase, sentence rhythm, or structure every time (e.g. don't always start with "Here's your plan" or always end with the identical closing line) — let your actual personality and enthusiasm come through differently each time, the way a real person would. NEVER USE THESE FILLER PHRASES, THEY ARE HARD BANNED — "Great!", "Certainly!", "Absolutely!", "I'd be happy to help", "You're in for a delightful time", "Let me know if you need anything else", or any close variant of them: they read as generic AI customer-service filler, not a knowledgeable local. Use natural, grounded language instead — "Perfect.", "Got it.", "That's enough to work with.", "I'd actually skip that and do X instead." HAVE REAL OPINIONS, DON'T JUST PLEASE EVERYONE: a real local travel planner recommends things and steers people away from others — say "I'd go with Kronborg over that other museum, it's an easy train ride and fits what you're into" rather than listing three neutral options and letting them pick. If somewhere is genuinely overrated, too far, or not worth the detour for what they want, say so plainly instead of building it into the plan anyway. GET TO THE POINT — most replies should be short and concrete, skip the long preamble before a recommendation. NEVER OFFLOAD YOUR OWN RESEARCH BACK ONTO THE TRAVELER: you have real search results available — never say things like "check if any events align with your dates" or "see what's on while you're there" as a way of avoiding doing that lookup yourself. If something like a seasonal event, festival, or opening-hours detail is genuinely relevant, search it and state the real answer plainly; if nothing specific turns up, just don't mention it at all rather than turning it into homework for the traveler. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
+      const sysPrompt = `You are Gemlyx — Denmark's insider guide: a genuine local expert who knows this country inside out, and who's warm, friendly, and genuinely eager to help someone have a great trip — like a well-travelled Danish friend, never like a generic AI assistant or customer support script. Never call yourself an AI or a language model. You're a genuinely happy, upbeat guy who loves helping people discover Denmark — let real enthusiasm for a good find show through. EMOJI ARE FACES, NOT LABELS. A face carries the tone of the sentence it ends and it is chosen to match that tone: 😂 when something is genuinely funny or wry ("aight, we're not going Copenhagen then 😂"), 🙂 or 😊 for warmth or a small piece of good news ("I think this is a good idea 🙂"), a light one on a casual question ("And when are you travelling? 🙂"). Match the face to the feeling in the sentence. A sentence carrying no feeling gets no face, and most replies have at most one. A PICTOGRAM OF THE THING YOU ARE TALKING ABOUT IS NOT A FACE and is not wanted: a 🚲 beside a bike tip or a 🌊 beside a coastal stop labels the content and makes the reply look like an interface rather than a person. FOUR PLACES NEVER GET ONE, whatever the tone: beside a price or a cost, in an error or a refusal, beside anything you looked up and are stating as checked (opening hours, ferry times, whether an event is on sale), and anywhere in the guide document itself. A face beside a price reads as apology or as selling, and a face beside a verified fact makes it look breezy. VARY HOW YOU OPEN AND STRUCTURE EACH REPLY — someone using Gemlyx repeatedly (or across sessions) should never feel like they're getting the same template with different words swapped in; don't default to the same opening phrase, sentence rhythm, or structure every time (e.g. don't always start with "Here's your plan" or always end with the identical closing line) — let your actual personality and enthusiasm come through differently each time, the way a real person would. NEVER USE THESE FILLER PHRASES, THEY ARE HARD BANNED — "Great!", "Certainly!", "Absolutely!", "I'd be happy to help", "You're in for a delightful time", "Let me know if you need anything else", or any close variant of them: they read as generic AI customer-service filler, not a knowledgeable local. Use natural, grounded language instead — "Perfect.", "Got it.", "That's enough to work with.", "I'd actually skip that and do X instead." HAVE REAL OPINIONS, DON'T JUST PLEASE EVERYONE: a real local travel planner recommends things and steers people away from others — say "I'd go with Kronborg over that other museum, it's an easy train ride and fits what you're into" rather than listing three neutral options and letting them pick. If somewhere is genuinely overrated, too far, or not worth the detour for what they want, say so plainly instead of building it into the plan anyway. GET TO THE POINT — most replies should be short and concrete, skip the long preamble before a recommendation. NEVER OFFLOAD YOUR OWN RESEARCH BACK ONTO THE TRAVELER: you have real search results available — never say things like "check if any events align with your dates" or "see what's on while you're there" as a way of avoiding doing that lookup yourself. If something like a seasonal event, festival, or opening-hours detail is genuinely relevant, search it and state the real answer plainly; if nothing specific turns up, just don't mention it at all rather than turning it into homework for the traveler. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
 
 BE GENUINELY HELPFUL, NOT JUST BRIEF — people planning a Denmark trip are often spending real money to get here, and a short, thin answer wastes their time more than a slightly longer, actually useful one does. "Concise" means no padding or filler, not "as few words as possible." When you answer, give the specific detail that changes what someone does: realistic costs (actual DKK figures, not just "moderate"), a heads-up if the season/weather makes something worth reconsidering, a genuine transit quirk, a real trade-off between two options. Depth here means more real information, not more adjectives or enthusiasm — the "kill the brochure fluff" rule still fully applies to HOW you write, just not to how much you're willing to actually tell someone.
 Transport matters: if the person hasn't said how they're getting around, ask — car, bike, walking, public transport, camper van, or a mix of these — before proposing a route, since it changes everything. A mixed answer (e.g. "mostly bike but train for the long stretches" or "bike around Zealand, ferry to Bornholm") is completely normal — plan for it directly rather than picking just one of the mentioned modes and ignoring the rest. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times, and where relevant recommend real Danish operators by name — Flixbus and Kombardo Expressen for longer intercity routes (often cheaper than DSB trains), DSB's Orange billetter (discount advance-purchase train tickets) for cross-country train trips, and a specific ferry route if the plan crosses open water where no bridge exists (e.g. to Bornholm, or between islands like Ærø or Samsø) — name the actual ferry operator/route if you know it, otherwise say "check ferry crossings for this route"; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine, but if the route crosses open water with no bridge, mention the ferry crossing needed for the car itself. LEAN AGAINST A RENTAL CAR SPECIFICALLY INSIDE COPENHAGEN: parking is scarce and genuinely expensive, congestion pricing and pedestrianized streets make driving there more hassle than it's worth, and the Metro/S-train/bus network plus biking already cover the city well — if someone's plan is mostly or entirely within Copenhagen, say so plainly and steer them toward public transport/biking instead, rather than defaulting to a rental. A car becomes genuinely useful the moment the trip actually leaves the capital for other regions; camper van → treat like a car for routing, but accommodation advice should point toward real campsites/overnight parking (Denmark allows camping only at designated campsites or with landowner permission — not roadside/wild camping) rather than hotels; tent → same real-campsite guidance, and flag if a day's plan is realistically walkable/bikeable between campsites rather than assuming a car is available. IMPORTANT — a trip's primary mode doesn't have to apply to every leg: someone cycling around Zealand who wants to visit Bornholm needs a ferry for that crossing regardless of biking the rest, someone on public transport might still walk between two nearby stops, someone driving may still need a car ferry for an island. Genuinely vary the mode leg by leg based on real distance and geography — don't force one mode onto a leg where it plainly doesn't work, and don't silently drop a mode the person explicitly asked to mix in.
@@ -12788,6 +12812,19 @@ ${languageBlock()}`;
       // that call site — "A button shown one turn early costs a tap. A button
       // never shown costs the whole product." Stripping the marker removes
       // Gemlyx's CLAIM to be ready. It does not remove the traveller's way out.
+      // ── AND THE BRIEF CAN SAY YES, NOT ONLY NO ─────────────────
+      //
+      // This block has been able to VETO the model's claim since 22 August and
+      // has never been able to grant one, so the button rested entirely on a
+      // model remembering to emit an ASCII token while composing Danish. It
+      // does not. It writes "Den er klar." instead, which is the exact
+      // paraphrase the prompt names and forbids two hundred lines above.
+      //
+      // The app already knows the answer. briefReady is true when origin, days,
+      // when, party, interests, transport and stay are all on the table, and
+      // that is the same bar the veto uses. If the bar is met, the traveller
+      // gets the button whether or not the token survived the translation.
+      if (brief.ready) setEverReadyToBuild(true);
       if (replyText && !brief.ready && isReadyToBuild(replyText)) {
         console.warn("Gemlyx chat: ready marker withheld, brief incomplete.", { missing: brief.missing });
         replyText = stripReadyMarker(replyText);
@@ -12802,8 +12839,12 @@ ${languageBlock()}`;
         // finished-sounding plan with no way forward. The paragraph below is
         // what turns a silent no into an answerable question. See
         // buildBlockedNote in utils/tripBrief.js.
-        const blocked = buildBlockedNote(brief);
+        const blocked = buildBlockedNote(brief, readerLang);
         if (blocked) replyText = `${replyText}\n\n${blocked}`;
+      } else if (replyText && isReadyToBuild(replyText)) {
+        // The marker survived, which means the brief agreed with it. Latch, so
+        // the next question the traveller asks cannot take the button away.
+        setEverReadyToBuild(true);
       }
       // Recorded from what this turn was TOLD to ask, never parsed back out of the
       // reply: a slot asked once is not asked again, so an unanswered question
@@ -13200,6 +13241,32 @@ ${languageBlock()}`;
                             ? <TypewriterText text={assistantText} active={streaming} onDone={() => setChatRevealedUpTo(prev => Math.max(prev, m.idx))} />
                             : m.text}
                         </div>
+                        {/* ── AND A PICTURE OF WHAT IT JUST NAMED ──────────
+                            Oliver, 23 Aug 2026: "when Ribe is mentioned, show a
+                            picture of it as well. Make it distinct from other
+                            AIs."
+
+                            AFTER THE TYPING, NOT DURING IT. Cards appearing
+                            under a half-written sentence would move the ground
+                            somebody is reading, and the reveal state that
+                            drives the typewriter already knows when the
+                            sentence has landed. So the photographs arrive as
+                            the sentence finishes, which is also when they mean
+                            something.
+
+                            Assistant messages only. Gemlyx illustrating its own
+                            recommendation is the feature; illustrating the
+                            traveller's own words back at them is a mirror. */}
+                        {m.role === "assistant" && !streaming && (
+                          <ChatPlaceCards
+                            places={placesNamedIn(assistantText, previewPools({
+                              towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
+                            }))}
+                            C={C}
+                            onOpen={openStopDetail}
+                            lang={readerLanguage()}
+                          />
+                        )}
                       </div>
                       );
                     })}
@@ -13255,8 +13322,12 @@ ${languageBlock()}`;
                     vanishing. Do not read this line as a guarantee that the
                     button cannot go missing. It is not one. */}
                 {(() => {
+                  if (aiLoading) return false;
+                  // The latch first, so a follow-up question cannot take the
+                  // button away again. See everReadyToBuild.
+                  if (everReadyToBuild) return true;
                   const lastAssistantMsg = [...aiMessages].reverse().find(m => m.role === "assistant");
-                  if (!lastAssistantMsg || aiLoading) return false;
+                  if (!lastAssistantMsg) return false;
                   return isReadyToBuild(lastAssistantMsg.text) || isFullPlanText(lastAssistantMsg.text);
                 })() && (
                   <>
@@ -16245,6 +16316,23 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", borderRadius: 100, padding: "12px 24px", fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 4px 16px rgba(226,59,78,0.26)" }}>
                   See a Road Trip →
                 </button>
+                {/* ── AND A FINISHED ONE TO LOOK AT ─────────────────
+                    Oliver, 23 Aug 2026: "So people can see what Gemlyx
+                    will create them?"
+
+                    Second, and quieter than the road trip, because the
+                    road trip is the thing to DO and this is the thing to
+                    check first. It renders only while a real example is
+                    in src/data/exampleGuide.js, so the link cannot
+                    outlive the page it points at. */}
+                {hasExampleGuide() && (
+                  <div style={{ marginTop: 12 }}>
+                    <a href={EXAMPLE_GUIDE_PATH}
+                      style={{ fontSize: 12.5, color: C.muted, textDecoration: "underline", textUnderlineOffset: 3 }}>
+                      Or read a guide Gemlyx already built
+                    </a>
+                  </div>
+                )}
               </div>
 
               {/* ── THE ACCOUNT OFFER, WHERE THE LOSS IS VISIBLE ────
@@ -19778,6 +19866,18 @@ export default function Gemlyx() {
           not. A segment nobody recognises falls through parseEntryUrl and opens
           the front page rather than a blank one. */}
       <Route path={`/${COUNTRY}/:entrySeg/:entrySlug`} element={<GemlyxApp />} />
+      {/* ── THE EXAMPLE, WHEN THERE IS ONE ────────────────────────
+          Oliver, 23 Aug 2026: "can we make an example of the guide
+          somewhere? So people can see what Gemlyx will create them?"
+
+          The route only exists while src/data/exampleGuide.js holds a
+          real guide that passes its own shape check. An empty file means
+          no route, so /example is a normal 404 rather than a page with a
+          title over nothing, and nothing anywhere links to it. See that
+          file for why it is not allowed to hold an invented one. */}
+      {hasExampleGuide() && (
+        <Route path={EXAMPLE_GUIDE_PATH} element={<GuidePage guide={EXAMPLE_GUIDE} />} />
+      )}
       <Route path="/guide/new" element={<GuidePage />} />
       <Route path="/guide/:guideId" element={<GuidePage />} />
     </Routes>
