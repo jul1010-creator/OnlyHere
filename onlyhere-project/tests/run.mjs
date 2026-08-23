@@ -179,7 +179,7 @@ writeFileSync(entry, `
   export { SPEND, OBSERVED_VOCAB } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
   export { PARTS as PARTS_FOR_TEST } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { hasPassword } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
-  export { NOTICED_LABEL } from ${JSON.stringify(join(root, "src/components/AboutMePage.jsx"))};
+  export { NOTICED_LABEL, ME_SECTIONS, meSectionFor, DEFAULT_ME_SECTION } from ${JSON.stringify(join(root, "src/components/AboutMePage.jsx"))};
   export { placeKindOf, kindLabel, isArea, baseTownFor, relationLine, collapseToParent, areasInside, dayTripsFrom, PLACE_KINDS } from ${JSON.stringify(join(root, "src/utils/placeKind.js"))};
   export { SWEEP_INTENT, SWEEP_PROMPT } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
@@ -10131,7 +10131,13 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("nor is an empty body", !missingProfileColumn({}));
   ok("nor is undefined", !missingProfileColumn(undefined));
   ok("not folded into 'no profile yet'", /if \(res\?\.missingColumn\)/.test(code));
-  ok("and the setup SQL is shown to him", /profileSetupSql &&/.test(appSrc));
+  // ── READ THE ACCOUNT SCREEN, NOT App.jsx ────────────────────────
+  // These named a FILE, and on 23 Aug the account screen stopped being a modal
+  // inside App.jsx and became src/components/AboutMePage.jsx. Every rule below
+  // was still true and all of them went red. The rule is "somebody is shown the
+  // setup step", not "App.jsx contains this string", so they read the pair.
+  const accountScreen = appSrc + readFileSync(join(root, "src/components/AboutMePage.jsx"), "utf8");
+  ok("and the setup SQL is shown to him", /setupSql &&/.test(accountScreen));
   ok("with the statement to run", /add column if not exists profile jsonb/.test(appSrc));
 
   // ── THE PRIVACY LINE HAD TO MOVE WITH THE PRODUCT ─────────────────
@@ -10139,7 +10145,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // A promise that quietly goes stale is worse than one never made.
   ok("the sheet no longer promises no profile", !/No profile, no tracking/.test(asheet));
   ok("it says what is actually stored", /a few optional details about yourself/.test(asheet));
-  ok("and deletion covers it too", /anything you told Gemlyx about yourself/.test(appSrc));
+  ok("and deletion covers it too", /anything you told Gemlyx about yourself/.test(accountScreen));
 
   // ── SKIPPING IS A REAL ANSWER ─────────────────────────────────────
   // An optional step whose decline is a grey link is not optional.
@@ -10147,7 +10153,17 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and calls finish with save false", /onClick=\{\(\) => finish\(false\)\}/.test(psheet));
   ok("saving nothing is not offered at all", /disabled=\{busy \|\| isBlank\(p\)\}/.test(psheet));
   ok("a chip toggles back off", /const pick = \(k, v\) => set\(k, p\[k\] === v \? "" : v\);/.test(pquest));
-  ok("and there is a way back in to edit it", /Edit what Gemlyx knows about you/.test(appSrc));
+  // ── THE WAY BACK IN IS A ROUTE, NOT A BUTTON LABEL ──────────────
+  // This pinned the words "Edit what Gemlyx knows about you", which he renamed
+  // on 23 Aug. The rule it defends is that a profile asked once at signup must
+  // stay editable, and that is now: the account control reaches the page, and
+  // the page renders the questions. Both halves, because either alone is a way
+  // in to nothing.
+  {
+    const aboutPage = readFileSync(join(root, "src/components/AboutMePage.jsx"), "utf8");
+    ok("there is a way back in to edit it", /navigate\(ABOUT_ME_PATH\)/.test(appSrc));
+    ok("and the questions are on the other side of it", /<ProfileQuestions value=\{p\}/.test(aboutPage));
+  }
 
   // ── IT ADOPTS THE THEME ───────────────────────────────────────────
   // "Right now it's just ... lame. Adopt the theme." C is the mutable palette
@@ -11196,8 +11212,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
      /providers !== null && \(hasPassword\(providers\)/.test(page));
 
   // ── HIS RENAME, AND ONE NAME RATHER THAN TWO ────────────────────
-  ok("the entry point is called Info about me", />\s*Info about me\s*</.test(app));
-  ok("and the old label is gone", !/Edit what Gemlyx knows about you/.test(stripNonCode(app)));
+  // The label lived in the account modal, and the modal is gone: "Account" now
+  // goes straight to the page rather than to a panel holding a button to it. So
+  // the name is the page's own heading, and the old one is gone from both files.
+  ok("the page is called Info about me", />\s*Info about me\s*</.test(page));
+  ok("and the old label is gone", !/Edit what Gemlyx knows about you/.test(stripNonCode(app + page)));
 
   // A PAGE, WHICH MEANS AN ADDRESS. That is the difference he asked for between
   // this and the sheet it replaces: Back closes it and a link reopens it.
@@ -11238,6 +11257,211 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // so a face uploaded there is fetchable by anybody holding the URL and is
   // covered by neither the privacy policy nor the deletion copy.
   ok("no avatar upload was added to the page", !/upload|avatar|profilePicture/i.test(stripNonCode(page)));
+}
+
+
+// ── 23 AUGUST 2026, EVENING: THREE THINGS HE FOUND ON THE LIVE SITE ─
+//
+// A photograph of the landing page with an arrow at the two pills: "on the first
+// picture, you see login and sign up. At that point i was already logged in. So
+// that is clearly a bug." A photograph of the account panel with a red cross
+// through the whole of it: "When you click on account, you get into another
+// panel instantly." And an empty Info about me page, which turned out to be the
+// third and worst of the three.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const page = readFileSync(join(root, "src/components/AboutMePage.jsx"), "utf8");
+  const code = stripNonCode(app);
+
+  // ── ONE: THE LANDING PAGE DID NOT KNOW HIM ──────────────────────
+  //
+  // The same two buttons have now been wrong twice. In August they said
+  // "Accounts are coming soon" on a site that had accounts; today they offered
+  // one to somebody holding it. Neither version ever read userSession, which is
+  // the only question those two controls exist to answer.
+  //
+  // Asserted on the BRANCH rather than on the words, because "the file contains
+  // Log in" is true either way and is the nearby question this suite keeps
+  // answering by accident.
+  // Sliced from the JSX tag, not from the class NAME. "gxa-topbar" appears nine
+  // times in this file, the first of them in a stylesheet hundreds of thousands
+  // of characters earlier, so the obvious slice was the whole app and matched a
+  // "Log in with your Gemlyx" sentence inside Studio. A slice anchored on
+  // something that is not unique is not a slice, and every assertion built on it
+  // is answering a question about a different part of the file.
+  const gateAt = app.indexOf('<div className="gxa-topbar"');
+  const gate = app.slice(gateAt, app.indexOf("{landingNote &&", gateAt));
+  ok("the landing gate was found", gateAt > 0 && gate.length > 500 && gate.length < 8000 && /Sign up/.test(gate));
+  ok("and it reads whether somebody is signed in", /\{userSession \? \(/.test(gate));
+  ok("a signed-in visitor gets one control, not two", /onClick=\{openAccount\}/.test(gate));
+  ok("and the pair is only for somebody signed out",
+     gate.indexOf("{userSession ? (") < gate.indexOf("Log in"));
+
+  // ── TWO: THE PANEL IN THE WAY ───────────────────────────────────
+  //
+  // Everything it held is on the page. Asserted as an ABSENCE plus the presence
+  // of each thing it used to carry, because deleting a screen is only safe if
+  // what was on it survived, and "it is gone" alone would pass with the sync
+  // line, the setup SQL and the delete button gone with it.
+  ok("the account modal is gone", !/authOpen && userSession/.test(code));
+  for (const [what, re] of [
+    ["the email", /session\?\.email/],
+    ["the saved counts", /saved \{savedGuides\.length === 1/],
+    ["the sync state", /Not reaching your account right now/],
+    ["the setup SQL", /add column if not exists profile jsonb|setupSql/],
+    ["sign out", /Sign out/],
+    ["delete", /Delete my saved data/],
+    ["and the deletion wording", /anything you told Gemlyx about yourself/],
+  ]) ok(`${what} survived the move to the page`, re.test(page));
+
+  // Every door goes through one decision. Three separate ones is how the landing
+  // page came to disagree with the menu about whether he had an account.
+  ok("account is decided in one place", /const openAccount = \(\) => \{/.test(code));
+  ok("and it sends a signed-in person to the page",
+     /if \(userSession\) \{ navigate\(ABOUT_ME_PATH\); return; \}/.test(code));
+
+  // ── THREE: THE ONE HE COULD NOT SEE ─────────────────────────────
+  //
+  // The Info about me page was empty, and the cause was not the page. App.jsx
+  // read the profile row and threw it away whenever the TYPED half was blank:
+  //
+  //   if (res.profile && !profileIsBlank(res.profile)) { setUserProfile(...); return; }
+  //
+  // A row can be blank in the typed half and still carry `learned`, and that is
+  // the normal shape for anybody who skipped the questionnaire, which the
+  // profile sheet openly invites ("skipping costs you nothing"). For all of
+  // them userProfile stayed null on every load.
+  //
+  // What it cost: the guide builder writes observations behind `if (userProfile)`,
+  // deliberately, because writing a profile that was never read destroys it. That
+  // guard was therefore permanently shut, so NOTHING was ever learned about
+  // anybody who skipped the form. The counts could not reach OBSERVED_MIN, the
+  // prompt block was always empty, and profileLearning.js was dead code for
+  // exactly the people it was written for.
+  //
+  // The recurring shape, once more: "is their typed profile worth showing" is
+  // not "did the server give us a row".
+  ok("a row that came back is held, blank or not", /if \(res\.profile\) setUserProfile\(res\.profile\);/.test(code));
+  ok("and blankness only decides whether to ASK",
+     /if \(res\.profile && !profileIsBlank\(res\.profile\)\) return;/.test(code));
+  // The write guard stays exactly as it was. It is the thing that made this bug
+  // expensive, and it is also correct: loosening it would put back the data loss
+  // an adversarial review found on 22 August.
+  ok("the write guard is untouched", /if \(userProfile\) \{/.test(code));
+
+  // And the behaviour, run rather than read. A profile whose only content is
+  // what Gemlyx noticed is still BLANK by isBlank, which is right, and must
+  // still survive a round trip, which is what was broken.
+  {
+    const { cleanProfile, isBlank } = M;
+    const noticedOnly = cleanProfile({ learned: { parts: { Jutland: 2 } } });
+    is("a row with only observations is blank", isBlank(noticedOnly), true);
+    is("and its observations survive cleaning",
+       ((noticedOnly.learned || {}).parts || {}).Jutland, 2);
+    // Which is the whole point: blank and worth keeping are different questions,
+    // and this pair is the proof that answering one with the other loses data.
+    ok("so blank cannot be used to decide whether to keep it",
+       isBlank(noticedOnly) && !!Object.keys(noticedOnly.learned || {}).length);
+  }
+}
+
+
+// ── 23 AUGUST 2026: CATEGORIES, AND THE WAY BACK OUT ───────────────
+//
+// Oliver: "The second picture is like a side panel like on this Claude AI
+// software... So it needs to be sorted into categories." Three of them, chosen
+// by him from a longer list. And: "if people click the logo in the top-left
+// corner, it shall go back to the front page."
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const page = readFileSync(join(root, "src/components/AboutMePage.jsx"), "utf8");
+  const code = stripNonCode(app);
+  const { ME_SECTIONS, meSectionFor, DEFAULT_ME_SECTION, NOTICED_LABEL, OBSERVED_FIELDS } = M;
+
+  // ── THE THREE HE PICKED ─────────────────────────────────────────
+  // Read with a fallback, because this block took the whole run down the first
+  // time it was written: the export was missing from the entry file and
+  // ME_SECTIONS.length threw. Same rule the shapeForLive block states in its own
+  // words, and the second time today it has been needed.
+  const sections = ME_SECTIONS || [];
+  is("three categories", sections.length, 3);
+  is("in the order he reads them", sections.map(x => x.id).join(","), "about,account,data");
+  ok("every one has a label", sections.length > 0 && sections.every(x => !!x.label));
+  // The blurb is the line under the name on the PHONE list, which is the whole
+  // screen before anything is opened. A row with a name and no line is a guess,
+  // and his father is the accessibility test for this product.
+  ok("and a line saying what is in it", sections.length > 0 && sections.every(x => (x.blurb || "").length > 12));
+
+  // ── AN ADDRESS SOMEBODY CAN TYPE IS AN ADDRESS SOMEBODY CAN GET WRONG
+  is("a real section is itself", meSectionFor("account"), "account");
+  is("an unknown one falls back", meSectionFor("nonsense"), DEFAULT_ME_SECTION);
+  is("and so does nothing at all", meSectionFor(undefined), DEFAULT_ME_SECTION);
+  is("the fallback is a real section", sections.some(x => x.id === DEFAULT_ME_SECTION), true);
+  // Normalised at BOTH ends, so the address bar and the screen cannot disagree
+  // about which section somebody is on.
+  ok("App.jsx normalises it too", /section=\{meSection \? meSectionFor\(meSection\) : null\}/.test(code));
+  ok("and each section has its own address", /path=\{`\$\{ABOUT_ME_PATH\}\/:meSection`\}/.test(app));
+
+  // ── EVERYTHING THAT WAS ON THE PAGE IS STILL ON A SECTION ───────
+  // Splitting one screen into three is the move that quietly loses a control.
+  for (const [what, re] of [
+    ["the trip status", /tripStatusLine\(trip\.status/],
+    ["the typed answers", /<ProfileQuestions value=\{p\}/],
+    ["what was noticed", /What Gemlyx has picked up/],
+    ["the per-line forget", /Forget this/],
+    ["the bulk forget", /Forget all of it/],
+    ["the password control", /Change password/],
+    ["sign out", /Sign out/],
+    ["delete", /Delete my saved data/],
+    ["the sync state", /Not reaching your account right now/],
+    ["the setup SQL", /setupSql &&/],
+  ]) ok(`${what} survived the split`, re.test(page));
+
+  // Seeing and undoing stay together, which is rule 4's own wording: the
+  // per-line Forget sits with the lines in About me, and only the destructive
+  // bulk one moved to Your data.
+  ok("the noticed lines and their forget buttons are in the same section",
+     page.indexOf("What Gemlyx has picked up") < page.indexOf("Forget this") &&
+     page.indexOf("Forget this") < page.indexOf("const accountSection"));
+  ok("and the bulk one is with the other destructive controls",
+     page.indexOf("const dataSection") < page.indexOf("Forget all of it"));
+
+  // ── NO CONTROL THAT CANNOT WORK ─────────────────────────────────
+  // He chose "password and sign out only". Email is the ONLY way back into an
+  // account and Confirm email is still off in Supabase, so a change would take
+  // effect without the new address ever being verified and one typo would lock
+  // somebody out permanently. Shown as a fact with the reason rather than as a
+  // greyed box, because a disabled control invites a hunt for how to enable it.
+  ok("the email is stated, not offered for editing", /This is the address you sign in with/.test(page));
+  ok("and there is no email field on the page", !/type="email"/.test(page));
+  // Nothing in this product uses a phone number, so collecting one would mean
+  // storing a strong identifier for no purpose.
+  ok("no phone number is collected", !/phone/i.test(stripNonCode(page)));
+
+  // Every noticed field still has a human label after the move.
+  is("no noticed field lost its label", OBSERVED_FIELDS.filter(f => !NOTICED_LABEL[f]).length, 0);
+
+  // ── THE LOGO, AND THE FLAG THAT WOULD HAVE MADE IT A TRAP ───────
+  //
+  // enterDenmark sets `leaving` and nothing had ever cleared it, because the
+  // landing was somewhere you left once. So setEntered(false) on its own
+  // returns somebody to a front page still wearing gxa-leaving, which is
+  // `pointer-events:none` with the Enter Denmark card and the top bar at
+  // opacity 0: the painting, nothing clickable, and no way out but a reload.
+  // enterDenmark's own `if (leaving) return` would refuse to re-enter even if
+  // the card could be pressed.
+  ok("the logo goes to the front page", /<button onClick=\{backToFrontPage\}/.test(app));
+  ok("and the front page is the landing, not a tab", /setEntered\(false\);/.test(code));
+  ok("and the leaving flag is cleared with it", /setLeaving\(false\);/.test(code));
+  // Order matters less than presence, but both must be in the one function.
+  {
+    const fn = code.slice(code.indexOf("const backToFrontPage"), code.indexOf("const backToFrontPage") + 400);
+    ok("both in the same handler", /setLeaving\(false\)/.test(fn) && /setEntered\(false\)/.test(fn));
+  }
+  // A div is not reachable by keyboard and announces nothing. This is the one
+  // control every other site has trained people to press.
+  ok("the logo is a button", /aria-label="Back to the front page"/.test(app));
+  ok("and no longer a bare div", !/<div onClick=\{\(\) => goTab\("home"\)\} style=\{\{ cursor: "pointer"/.test(code));
 }
 
 
@@ -22748,8 +22972,18 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // The menu entry opened the sheet without setting the mode, so it reopened on
   // whatever screen it was last left on.
-  ok("every entry point picks its own screen",
-     /item\.action === "login"\) \{ setAuthMode\("in"\); setAuthOpen\(true\); \}/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+  // ── THE RULE, NOT THE CALL SHAPE ────────────────────────────────
+  // This pinned the menu handler's exact body, and on 23 Aug the three sites
+  // that each decided where "Account" goes were collapsed into one openAccount,
+  // which is what stopped the landing page offering Sign up to somebody already
+  // signed in. The rule is unchanged: nothing may open the sheet without saying
+  // which screen it opens on, or it reopens on whatever it was last left at.
+  {
+    const appMenu = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the menu goes through the one decision", /item\.action === "login"\) openAccount\(\);/.test(appMenu));
+    ok("and that decision names the screen before opening the sheet",
+       /setAuthMode\("in"\); setAuthOpen\(true\);\s*\n\s*\};/.test(appMenu));
+  }
 }
 
 // ── THE INSTAGRAM CARD YOU COULD NOT CLICK ─────────────────────────
@@ -31036,8 +31270,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("which starts optimistic", /useState\(true\);\s*\n\s*const pushTimerRef/.test(app));
   // Read where somebody goes to ask the question, rather than raised as a
   // toast that the save toast's own clear timer would wipe 900ms later.
-  ok("the account screen reports it", /cloudSyncOk \? ", synced to this account\." : /.test(app));
-  ok("and says what it means for them", /on this device only/.test(app));
+  // The account screen is a page now, not a modal in App.jsx. Same rule: this is
+  // read where somebody goes to ask the question, rather than raised as a toast
+  // the save toast's own clear timer would wipe 900ms later.
+  const accountPage = readFileSync(join(root, "src/components/AboutMePage.jsx"), "utf8");
+  ok("the account screen reports it", /cloudSyncOk \? ", synced to this account\." : /.test(accountPage));
+  ok("and says what it means for them", /on this device only/.test(accountPage));
+  ok("and App.jsx hands it the answer", /cloudSyncOk=\{cloudSyncOk\}/.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

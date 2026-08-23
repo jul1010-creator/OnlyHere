@@ -25,7 +25,7 @@ import { seenFromTrip, observeTrip, observedForPrompt } from "./utils/profileLea
 // Live, computed, never stored. See utils/tripStatus.js for why an on-holiday
 // flag is not the same kind of fact as anything in profileLearning.
 import { currentTrip, tripStatusForPrompt } from "./utils/tripStatus";
-import { AboutMePage } from "./components/AboutMePage";
+import { AboutMePage, meSectionFor } from "./components/AboutMePage";
 import { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, NUDGE_KEY, PROFILE_NUDGE_KEY } from "./utils/accountNudge";
 import { sweepAll, sweepRow, deepCheckPlan, checkAge } from "./utils/factSweep";
 import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filterRows } from "./utils/manageGroups";
@@ -8982,6 +8982,35 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   //
   // Called at the moment a prompt is assembled, which is the only moment the
   // answer matters. Nothing is stored, ever. See utils/tripStatus.js.
+  // ── WHERE "ACCOUNT" GOES, DECIDED ONCE ────────────────────────────
+  //
+  // Oliver, 23 Aug 2026, with a red cross drawn over the Your account panel:
+  // "When you click on account, you get into another panel instantly."
+  //
+  // He is right, and the panel had stopped earning its place the moment the page
+  // existed. It held the email, the saved counts, a button to the page, Sign
+  // out, and Delete, and the page now holds all five plus the password control
+  // and everything Gemlyx has noticed. So it was a screen whose only remaining
+  // job was to make you press one more thing.
+  //
+  // THREE CALL SITES USED TO DECIDE THIS SEPARATELY, which is how the landing
+  // page came to offer "Log in" and "Sign up" to somebody already signed in.
+  // One function now, so a fourth entry point cannot get it wrong again.
+  const openAccount = () => {
+    if (userSession) { navigate(ABOUT_ME_PATH); return; }
+    setAuthReason(null); setAuthMode("in"); setAuthOpen(true);
+  };
+
+  // What to call somebody on a signed-in control. Their own name if they gave
+  // one, the local part of the address if not, and never the whole address:
+  // "oliververhein@gmail.com" in a pill is an email in a pill, not a greeting.
+  const accountLabel = () => {
+    const named = String(userProfile?.name || "").trim();
+    if (named) return named.split(/\s+/)[0];
+    const mail = String(userSession?.email || "");
+    return mail.includes("@") ? mail.split("@")[0] : "Account";
+  };
+
   const travellingNow = () => {
     const t = currentTrip(savedGuides, new Date());
     return t ? tripStatusForPrompt(t.status, t.guide?.title) : "";
@@ -9000,7 +9029,20 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   // own comment warns against attempting in one sitting.
   const [aboutMeOpen, setAboutMeOpen] = useState(false);
   const location = useLocation();
-  useEffect(() => { setAboutMeOpen(location.pathname === ABOUT_ME_PATH); }, [location.pathname]);
+  // ── AND EACH SECTION HAS ITS OWN ADDRESS TOO ──────────────────────
+  //
+  // /me is the list on a phone and About me on a desktop, where the rail is
+  // always on screen and there is no list to show. /me/account is that section,
+  // wherever you are. That is what makes Back on a phone go back to the list
+  // rather than out of the page entirely, and it is why the section lives in the
+  // URL rather than in a useState: the browser's own back button is the control
+  // people reach for first, and it can only see the address.
+  const meSection = location.pathname.startsWith(`${ABOUT_ME_PATH}/`)
+    ? location.pathname.slice(ABOUT_ME_PATH.length + 1).split("/")[0]
+    : null;
+  useEffect(() => {
+    setAboutMeOpen(location.pathname === ABOUT_ME_PATH || location.pathname.startsWith(`${ABOUT_ME_PATH}/`));
+  }, [location.pathname]);
   const [profileSetupSql, setProfileSetupSql] = useState(null);
   // Asked once per session at most. Somebody who skipped should not be asked
   // again every time a token refresh produces a new session object. The ACROSS
@@ -9262,7 +9304,34 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // the only symptom was a console line nobody read.
       if (res?.missingColumn) { setProfileSetupSql("alter table gemlyx_user_data add column if not exists profile jsonb;"); return; }
       if (!res) return;                       // network failure: ask another day
-      if (res.profile && !profileIsBlank(res.profile)) { setUserProfile(res.profile); return; }
+      // ── A ROW CAME BACK, SO HOLD IT, BLANK OR NOT ───────────────
+      //
+      // This read `if (res.profile && !profileIsBlank(res.profile)) setUserProfile(...)`,
+      // which is the recurring shape in this codebase once more: "is their typed
+      // profile worth showing" is not "did the server give us a row".
+      //
+      // A row can be blank in the typed half and still carry `learned`, and that
+      // is the NORMAL shape for anybody who skipped the questionnaire, which the
+      // profile sheet openly invites them to do ("skipping costs you nothing").
+      // For every one of those people the row was fetched, read, cleaned, and
+      // then dropped on the floor on every single load.
+      //
+      // What that cost, and it is not cosmetic: the guide builder writes
+      // observations behind `if (userProfile)`, deliberately, because writing a
+      // profile that was never successfully read destroys it. With userProfile
+      // left null by this line, that guard was permanently closed, so NOTHING
+      // WAS EVER LEARNED about anybody who skipped the form. The counts could
+      // never reach OBSERVED_MIN, the prompt block was always empty, and the
+      // whole of profileLearning.js was dead code for exactly the people it was
+      // written to help. Two days of "Gemlyx gets to know you" that could only
+      // work for somebody who had already told it everything.
+      //
+      // Found on 23 Aug by asking why the new Info about me page showed nothing.
+      if (res.profile) setUserProfile(res.profile);
+      // And the ASKING decision keeps its own question, which is the one it was
+      // always answering: a blank typed half means the questionnaire is still
+      // worth offering. Separating the two is the whole fix.
+      if (res.profile && !profileIsBlank(res.profile)) return;
       const verdict = shouldAskProfile({
         signedIn: true, hasProfile: false,
         state: readStored(PROFILE_NUDGE_KEY),
@@ -11333,6 +11402,41 @@ If the conversation only covers a single day or a few stops with no explicit day
     // already white, so the landing is never seen disappearing.
     setTimeout(() => { setEntered(true); window.scrollTo(0, 0); }, 700);
   };
+  // ── AND THE WAY BACK OUT ──────────────────────────────────────────
+  //
+  // Oliver, 23 Aug 2026: "if people click the logo in the top-left corner, it
+  // shall go back to the front page." The logo used to go to the Explore tab,
+  // which is a page inside the app rather than the front door he means.
+  //
+  // ── `leaving` IS THE WHOLE OF THIS FUNCTION ───────────────────────
+  //
+  // enterDenmark sets it and NOTHING has ever cleared it, because until today
+  // the landing was a place you left once and never came back to. The one-line
+  // version of this fix, setEntered(false), therefore returns somebody to a
+  // front page still wearing gxa-leaving, and that class says:
+  //
+  //     .gxa-leaving { pointer-events:none; }
+  //     .gxa-leaving .gxa-choose, .gxa-leaving .gxa-topbar { opacity:0 }
+  //
+  // The painting, with the Enter Denmark card invisible, the top bar invisible,
+  // and nothing on the screen clickable. A dead end with no way out but a
+  // reload, and enterDenmark's own `if (leaving) return` guard would refuse to
+  // re-enter even if the card could be pressed. So the flag is cleared here,
+  // and the state this returns to is the state a first visit lands in.
+  //
+  // The intro splash does NOT replay: introFlightDone is set once and never
+  // reset, which is right. Somebody tapping the logo wants the front page, not
+  // seven hundred milliseconds of animation they have already watched.
+  const backToFrontPage = () => {
+    setShowMenu(false);
+    setLeaving(false);
+    setEntered(false);
+    // So that pressing Enter Denmark again lands somewhere predictable rather
+    // than wherever they happened to be when they left.
+    goTab("home");
+    window.scrollTo(0, 0);
+  };
+
   // Corner-flight opening splash (restored per Oliver: "darkness, logo spins
   // while the background fades in, settles in the corner" — a prior pass had
   // replaced this with a plain full-screen-fade version that never actually
@@ -18192,14 +18296,35 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   The landing renders inside {!entered && ...} rather than an
                   early return, and AuthSheet sits below it in the same tree, so
                   the sheet opens straight over the painting. */}
-              <button onClick={() => { setAuthReason(null); setAuthMode("in"); setAuthOpen(true); }}
-                style={{ background: "rgba(12,11,7,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.28)", color: "#F0EFE6", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                Log in
-              </button>
-              <button onClick={() => { setAuthReason(null); setAuthMode("up"); setAuthOpen(true); }}
-                style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 4px 14px rgba(0,0,0,0.35)" }}>
-                Sign up
-              </button>
+              {/* ── AND THEN THEY WERE WRONG A SECOND TIME ───────────
+                  Oliver, 23 Aug 2026, with an arrow drawn at these two pills:
+                  "on the first picture, you see login and sign up. At that point
+                  i was already logged in. So that is clearly a bug."
+                  The same two buttons, wrong in a new way. In August they denied
+                  accounts existed; today they offer one to somebody who has
+                  already got it. Neither version ever read userSession, which is
+                  the single question they are for.
+                  Signed in it becomes ONE control carrying their own name and
+                  going straight to their page, because two controls offering to
+                  start something they have already started is the whole bug. */}
+              {userSession ? (
+                <button onClick={openAccount}
+                  style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(12,11,7,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.28)", color: "#F0EFE6", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", maxWidth: "52vw" }}>
+                  <span style={{ color: "#E7C766" }}>✦</span>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{accountLabel()}</span>
+                </button>
+              ) : (
+                <>
+                  <button onClick={() => { setAuthReason(null); setAuthMode("in"); setAuthOpen(true); }}
+                    style={{ background: "rgba(12,11,7,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.28)", color: "#F0EFE6", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                    Log in
+                  </button>
+                  <button onClick={() => { setAuthReason(null); setAuthMode("up"); setAuthOpen(true); }}
+                    style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 4px 14px rgba(0,0,0,0.35)" }}>
+                    Sign up
+                  </button>
+                </>
+              )}
             </div>
           </div>
           {landingNote && (
@@ -18285,10 +18410,16 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
       <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, padding: "calc(14px + env(safe-area-inset-top)) 16px 10px", position: "relative" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          {/* Logo */}
-          <div onClick={() => goTab("home")} style={{ cursor: "pointer", flexShrink: 0 }}>
+          {/* ── THE LOGO IS THE WAY BACK TO THE FRONT PAGE ──────────
+              His words, 23 Aug. A <button> rather than a <div onClick>, which
+              is what it was: a div is not reachable by keyboard, announces
+              nothing to a screen reader, and this is the one control on the
+              header that every other site has trained people to press. His
+              father is the accessibility test for this product. */}
+          <button onClick={backToFrontPage} aria-label="Back to the front page"
+            style={{ display: "flex", alignItems: "center", background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0 }}>
             <GemlyxLogo size={22} color={C.text} />
-          </div>
+          </button>
 
           {/* The pages, along the top, on anything wide enough to hold them.
               Hidden by .gx-topnav below 1080px, where the menu button carries
@@ -18425,7 +18556,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   // Press "Sign up" in the header, close it, then press
                   // "Sign in" in the menu, and you got the signup form. Every
                   // other entry point already sets it; this one did not.
-                  else if (item.action === "login") { setAuthMode("in"); setAuthOpen(true); }
+                  // Straight to the page when there is an account to show, and
+                  // to the sheet when there is not. One decision, in openAccount.
+                  else if (item.action === "login") openAccount();
                 }}
                 style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "transparent", color: C.light, border: "none", borderRadius: 10, padding: "13px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${(i + 11) * 0.04}s both` }}>
                 <Ico name={item.ico} size={15} color={C.muted} />
@@ -19066,65 +19199,37 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         session={userSession}
         profile={userProfile}
         savedGuides={savedGuides}
+        savedPlaces={savedPlaces}
+        cloudSyncOk={cloudSyncOk}
+        setupSql={profileSetupSql}
+        deleting={accountBusy}
+        // An unknown id in the address falls back to the first section rather
+        // than rendering an empty shell, because /me/nonsense is a link somebody
+        // can type. Normalised HERE as well as inside the page, so the address
+        // and the screen cannot disagree about which section you are on.
+        section={meSection ? meSectionFor(meSection) : null}
+        onSection={(id) => navigate(id ? `${ABOUT_ME_PATH}/${id}` : ABOUT_ME_PATH)}
         onClose={() => navigate("/")}
         onProfileSaved={(next) => setUserProfile(next)}
         onNeedsSetup={(sql) => setProfileSetupSql(sql)}
         onSignOut={() => { navigate("/"); handleSignOut(); }}
         onDelete={() => { if (window.confirm("Delete your saved places and guides from our servers? Saves on this device stay, and this cannot be undone.")) { navigate("/"); handleDeleteAccount(); } }} />
 
-      {authOpen && userSession && (
-        <div onClick={() => setAuthOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 980, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: C.bg, borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 460, padding: "24px 22px calc(32px + env(safe-area-inset-bottom))", border: `1px solid ${C.border}`, borderBottom: "none" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <div style={{ fontSize: 24, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text }}>Your account</div>
-              <button onClick={() => setAuthOpen(false)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Close</button>
-            </div>
-            <div style={{ fontSize: 12.5, color: C.light, marginBottom: 4 }}>{userSession.email || "Signed in"}</div>
-            <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 18 }}>
-              {savedPlaces.length} saved {savedPlaces.length === 1 ? "place" : "places"} and {savedGuides.length} saved {savedGuides.length === 1 ? "guide" : "guides"}{cloudSyncOk ? ", synced to this account." : ". Not reaching your account right now, so these are on this device only."}
-            </div>
-            {/* Loud, not a console line. gemlyx_research shipped weeks ago and
-                did nothing at all because its table never existed and both
-                calls sat in catch blocks. */}
-            {profileSetupSql && (
-              <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.6, marginBottom: 14, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px" }}>
-                Gemlyx cannot store what you tell it about yourself yet: the database has no profile column. Run this once in the Supabase SQL editor.
-                <code style={{ display: "block", marginTop: 7, color: C.light, fontSize: 10.5, wordBreak: "break-all" }}>{profileSetupSql}</code>
-              </div>
-            )}
-            {/* A way back in. Without this the profile is a one-shot question
-                asked once at signup and never editable, which is exactly the
-                kind of thing somebody notices six months later when what they
-                typed is out of date and there is nowhere to change it. */}
-            {/* ── HIS WORDS, 23 AUG: "should be 'info about me'" ──────
-                One name whether or not anything has been filled in yet, where
-                the old label had two. "Edit what Gemlyx knows about you" named
-                an action on Gemlyx's knowledge, and the page behind it now shows
-                two different kinds of thing: what you told it, and what it
-                worked out. "Info about me" covers both and is shorter. */}
-            <button onClick={() => { setAuthOpen(false); navigate(ABOUT_ME_PATH); }}
-              style={{ width: "100%", background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 10 }}>
-              Info about me
-            </button>
-            <button onClick={() => { setAuthOpen(false); handleSignOut(); }}
-              style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 10 }}>
-              Sign out
-            </button>
-            {/* GDPR gives people a right to deletion, so this is a real button
-                rather than an email address and a promise. It says exactly what
-                it removes, because claiming more than it does would be worse
-                than saying nothing. */}
-            <button onClick={() => { if (window.confirm("Delete your saved places and guides from our servers? Saves on this device stay, and this cannot be undone.")) handleDeleteAccount(); }}
-              disabled={accountBusy}
-              style={{ width: "100%", background: "none", border: "1px solid #FF8A8055", color: "#FF8A80", borderRadius: 10, padding: "12px", fontSize: 13, fontWeight: 700, cursor: accountBusy ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
-              {accountBusy ? "Deleting…" : "Delete my saved data"}
-            </button>
-            <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 12 }}>
-              This deletes everything we hold for you: your saved places, your guides, and anything you told Gemlyx about yourself. To also remove the sign-in record itself, email hello@gemlyxtravel.com and it will be done.
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── THE ACCOUNT PANEL IS GONE ───────────────────────────────
+          Oliver, 23 Aug 2026, with a red cross drawn across the whole of it:
+          "When you click on account, you get into another panel instantly."
+
+          It held the email, the saved counts, a button through to the page,
+          Sign out and Delete. Every one of those is on the page itself now,
+          alongside the password control and everything Gemlyx has noticed, so
+          the panel's only remaining job was to make somebody press one more
+          thing to reach a screen it could not itself show. Account goes
+          straight there now, from every door, through openAccount.
+
+          The database-setup warning it carried moved onto the page with the
+          rest of it rather than being dropped. It is loud on purpose, because
+          gemlyx_research once shipped and did nothing for weeks with a console
+          line as its only symptom. */}
 
       {showCredits && (
         <div onClick={() => setShowCredits(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
@@ -19607,6 +19712,7 @@ export default function Gemlyx() {
           arriving here from a link can close it and be inside the real thing
           rather than at a dead end. */}
       <Route path={ABOUT_ME_PATH} element={<GemlyxApp />} />
+      <Route path={`${ABOUT_ME_PATH}/:meSection`} element={<GemlyxApp />} />
       <Route path={`/${COUNTRY}`} element={<GemlyxApp />} />
       <Route path={`/${COUNTRY}/:townSlug`} element={<GemlyxApp />} />
       {/* ── AND AN ADDRESS FOR EVERYTHING THAT IS NOT A TOWN ─────────
