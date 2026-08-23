@@ -1,4 +1,6 @@
 import { tierOf } from "./placeThemes";
+// ── ONE VOCABULARY, SIX LANGUAGES, READ BY EVERY PARSER BELOW ───────
+import { MONTH_INDEX, MONTH_PATTERN, DAY_WORDS, WEEK_WORDS, ONE_WEEK, RELATIVE_DAYS, THIS_WEEKEND, NEXT_WEEK, IN_N_DAYS, alt, LETTER } from "./travellerWords";
 // The band vocabulary, imported rather than restated. A copy of "2 means
 // comfortable" in this file is a number that has to be kept in step with
 // another file by hand, which is the drift this codebase keeps finding.
@@ -82,9 +84,25 @@ export const daysBetween = (start, end) => {
 // signature bug: utils/danishNames.js existed for weeks while the preview
 // screen did its own substring match, and that is how "also" became an island.
 // One definition, two callers.
-const MONTH_NAMES = { january: 0, february: 1, march: 2, april: 3, may: 4, june: 5, july: 6, august: 7, september: 8, october: 9, november: 10, december: 11 };
-const MONTH_PATTERN = Object.keys(MONTH_NAMES).join("|");
-const DATE_RE = new RegExp(`\\b(?:(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${MONTH_PATTERN})|(${MONTH_PATTERN})\\s+(\\d{1,2})(?:st|nd|rd|th)?)\\b`, "i");
+// ── AND THE MONTHS WERE ENGLISH ONLY ────────────────────────────────
+// 23 Aug 2026. By lexical accident april, august, september, november and
+// december matched a Danish sentence and januar, februar, marts, maj, juni,
+// juli and oktober did not, so half the year silently worked. The standard
+// Danish written form is "15. maj", and the pattern wanted an English ordinal
+// and no period, so the most ordinary way a Dane writes a date failed on both
+// halves at once. Now from travellerWords.js, in six languages.
+//
+// PURELY NUMERIC DATES ARE STILL NOT READ, deliberately. "5/6" is 5 June to a
+// Dane, a German and a Dutchman and 6 May to an American, and five of Denmark's
+// top six inbound markets are European while the sixth is the United States.
+// Guessing costs a guide built for the wrong month; not guessing costs one more
+// question, which Gemlyx now asks out loud, beside a date picker.
+const MONTH_NAMES = MONTH_INDEX;
+const DATE_RE = new RegExp(
+  `(?:^|[^${LETTER}])(?:` +
+    `(?:d\\.\\s*)?(\\d{1,2})(?:st|nd|rd|th|\\.)?\\s*(?:of\\s+|den\\s+|de\\s+)?(${MONTH_PATTERN})` +
+    `|(${MONTH_PATTERN})\\s+(\\d{1,2})(?:st|nd|rd|th|\\.)?` +
+  `)(?![${LETTER}])`, "i");
 
 export const arrivalDateIn = (text, today = new Date()) => {
   const m = String(text || "").match(DATE_RE);
@@ -156,16 +174,17 @@ export const monthOnlyIn = (text, today = new Date()) => {
 // shape here is built so that adding one is a list entry rather than a rewrite.
 export const dayCountIn = (text) => {
   const s = String(text || "");
-  const digits = s.match(/\b(\d{1,2})\s*(?:-|–|to)?\s*(?:days?|dage?)\b/i);
+  const digits = new RegExp(`(?:^|[^${LETTER}])(\\d{1,2})\\s*(?:-|–|to|til|bis|tot)?\\s*(?:${alt(DAY_WORDS)})(?![${LETTER}])`, "i").exec(s);
   if (digits) return Math.min(parseInt(digits[1], 10), 14);
-  const weeks = s.match(/\b(\d{1,2})\s*(?:-|–)?\s*(?:weeks?|uger?)\b/i);
+  const weeks = new RegExp(`(?:^|[^${LETTER}])(\\d{1,2})\\s*(?:-|–)?\\s*(?:${alt(WEEK_WORDS)})(?![${LETTER}])`, "i").exec(s);
   if (weeks) return Math.min(parseInt(weeks[1], 10) * 7, 14);
-  if (/\b(?:a|an|the|one)\s+(?:whole|entire|full)?\s*week\b/i.test(s)) return 7;
+  if (new RegExp(`(?:^|[^${LETTER}])(?:${alt(ONE_WEEK)})(?![${LETTER}])`, "i").test(s)) return 7;
   // "en uge", "hele ugen". `uge` alone is not enough: "i ugen" and "ugens" turn
   // up in ordinary sentences that are not an answer about length.
   // NOT \b before the alternation: é is not an ASCII word character, so a word
   // boundary in front of "én" never matches and that spelling fell through.
   if (/(?:^|[^\wÆØÅæøå])(?:én|en|hele|den ene)\s+(?:hel\s+)?uge[nr]?\b/i.test(s)) return 7;
+  if (new RegExp(`(?:^|[^${LETTER}])(?:to|2|zwei|twee|två)\\s+(?:${alt(WEEK_WORDS)})(?![${LETTER}])`, "i").test(s)) return 14;
   if (/\b(?:a|an|the|one)\s+fortnight\b/i.test(s)) return 14;
   if (/\b(?:to|2)\s+uger\b/i.test(s)) return 14;
   return null;
@@ -181,8 +200,12 @@ export const dayCountIn = (text) => {
 // Returns a start and an end rather than a bare date, because a weekend is two
 // days and claiming it is one is the kind of quiet overstatement this codebase
 // exists to refuse. `end` is null wherever the answer really is a single day.
-const DK_DAYS = { "i dag": 0, "idag": 0, "i aften": 0, "iaften": 0, "i morgen": 1, "imorgen": 1, "i overmorgen": 2, "overmorgen": 2 };
-const EN_DAYS = { "today": 0, "tonight": 0, "tomorrow": 1, "the day after tomorrow": 2, "day after tomorrow": 2 };
+// From travellerWords.js, so adding a language is one list entry. Flattened to
+// phrase -> offset and read longest first, or "i overmorgen" is read as the
+// "i morgen" inside it and they arrive a day early.
+const REL_TABLE = Object.fromEntries(
+  Object.entries(RELATIVE_DAYS).flatMap(([off, list]) => list.map(w => [w, Number(off)]))
+);
 
 export const relativeDayIn = (text, today = new Date()) => {
   const s = String(text || "").toLowerCase();
@@ -192,28 +215,78 @@ export const relativeDayIn = (text, today = new Date()) => {
   // "in 3 days" / "om 3 dage". Checked first: it carries a number, so it is the
   // most specific thing in here, and "om 3 dage" also contains no day word the
   // entries below would catch.
-  const inN = s.match(/\b(?:in|om)\s+(\d{1,2})\s+(?:days?|dage?)\b/);
-  if (inN) return { start: plus(parseInt(inN[1], 10)), end: null };
+  const inN = new RegExp(`(?:^|[^${LETTER}])((?:${alt(IN_N_DAYS)})\\s+(\\d{1,2})\\s+(?:${alt(DAY_WORDS)}))(?![${LETTER}])`, "i").exec(s);
+  if (inN) return { start: plus(parseInt(inN[2], 10)), end: null, matched: inN[1] };
 
   // Longest key first, so "i overmorgen" is not read as "i morgen" inside it.
-  const table = { ...EN_DAYS, ...DK_DAYS };
-  const keys = Object.keys(table).sort((a, b) => b.length - a.length);
+  const keys = Object.keys(REL_TABLE).sort((a, b) => b.length - a.length);
   for (const k of keys) {
-    if (new RegExp(`\\b${k.replace(/ /g, "\\s+")}\\b`, "i").test(s)) return { start: plus(table[k]), end: null };
+    const hit = new RegExp(`(?:^|[^${LETTER}])(${k.replace(/ /g, "\\s+")})(?![${LETTER}])`, "i").exec(s);
+    if (hit) return { start: plus(REL_TABLE[k]), end: null, matched: hit[1] };
   }
 
   // A weekend is Saturday and Sunday, and saying so is two days rather than one.
   // Already inside one means this one, not the next.
-  if (/\b(?:this|the)\s+weekend\b|\bi\s+weekenden\b|\bdenne\s+weekend\b|\bher\s+i\s+weekenden\b/i.test(s)) {
+  const wk = new RegExp(`(?:^|[^${LETTER}])(${alt(THIS_WEEKEND)})(?![${LETTER}])`, "i").exec(s);
+  if (wk) {
     const dow = base.getDay();                       // 0 Sunday, 6 Saturday
     const toSat = dow === 0 ? -1 : (6 - dow);        // Sunday belongs to the weekend that began yesterday
     const sat = plus(toSat);
-    return { start: sat, end: new Date(sat.getFullYear(), sat.getMonth(), sat.getDate() + 1) };
+    return { start: sat, end: new Date(sat.getFullYear(), sat.getMonth(), sat.getDate() + 1), matched: wk[1] };
   }
   // Next week starts on its Monday. Denmark counts the week from Monday.
-  if (/\bnext\s+week\b|\bn(?:æ|ae)ste\s+uge\b/i.test(s)) {
+  const nw = new RegExp(`(?:^|[^${LETTER}])(${alt(NEXT_WEEK)})(?![${LETTER}])`, "i").exec(s);
+  if (nw) {
     const dow = base.getDay();
-    return { start: plus(((8 - dow) % 7) || 7), end: null };
+    return { start: plus(((8 - dow) % 7) || 7), end: null, matched: nw[1] };
+  }
+  return null;
+};
+
+// ── AND A TIME WORD IS NOT AN ANSWER ────────────────────────────────
+//
+// relativeDayIn on its own reads "Great, thanks, talk tomorrow!" as an arrival
+// date and fills the hard `when` slot with it, which is worse than the silence
+// it was written to fix. It is the 21 August failure back again: a guide built
+// confidently for dates nobody gave. It also beat a stated month, so "we are
+// thinking October, I will confirm tomorrow" arrived as tomorrow.
+//
+// The discriminator is not the words, it is whether the TURN is an answer. Take
+// the date phrase out, take any trip length out, and look at what a person still
+// said. "i dag" leaves nothing. "i dag, 7 dage" leaves nothing. "talk tomorrow"
+// leaves "talk", and "is the weekend market good?" leaves most of a sentence.
+//
+// Deliberately strict. A missed answer costs one more question, which Gemlyx
+// now asks out loud. A wrong date costs a guide built for the wrong week.
+const ANSWER_FILLER = /^(?:and|og|men|but|vi|we|i|jeg|to|til|for|on|om|about|ca|omkring|ish|arrive|arrives|arriving|arrival|ankommer|ankomst|kommer|komme|start|starts|starting|starter|please|thanks|tak|ja|yes|yep|ok|okay|the|a|an|den|det|er|is|it)$/i;
+
+export const relativeAnswerIn = (turn, today = new Date()) => {
+  const raw = String(turn || "");
+  const rel = relativeDayIn(raw, today);
+  if (!rel || !rel.matched) return null;
+  let rest = raw.toLowerCase().replace(rel.matched.toLowerCase(), " ");
+  rest = rest.replace(/\b\d{1,2}\s*(?:-|–|to)?\s*(?:days?|dage?|weeks?|uger?)\b/gi, " ");
+  rest = rest.replace(/(?:^|[^\wÆØÅæøå])(?:én|en|hele|den ene|a|an|one)\s+(?:hel\s+)?(?:uge[nr]?|week)\b/gi, " ");
+  const words = rest.split(/[^\wÆØÅæøåéèü]+/).filter(Boolean);
+  return words.some(w => !ANSWER_FILLER.test(w)) ? null : rel;
+};
+
+// ── LATEST ANSWER WINS, AND BOTH READERS USE THIS ONE ───────────────
+// A second answer supersedes a first, so the scan runs backwards. One
+// definition because tripBrief's readWhen and tripWindow below both need it,
+// and two copies of "which turn counts" is how the brief and the event filter
+// came to disagree about the same conversation in the first place.
+//
+// AN ARRAY, NEVER A JOINED STRING. tripWindow's convoText is both halves of
+// the conversation with a "role: " prefix on every line, so splitting it here
+// would read Gemlyx's own replies as the traveller's answers AND leave the
+// word "user" in the residue, which relativeAnswerIn then rejects. A caller
+// that has no turns passes none and gets null.
+export const latestRelativeAnswer = (turns, today = new Date()) => {
+  const list = Array.isArray(turns) ? turns : [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const rel = relativeAnswerIn(list[i], today);
+    if (rel) return rel;
   }
   return null;
 };
@@ -226,7 +299,7 @@ export const relativeDayIn = (text, today = new Date()) => {
 // which is enough to set the limit and not enough to test an overlap. Saying
 // so is the point: `dated` false means we do not know when they are here, and
 // nothing downstream may pretend otherwise.
-export const tripWindow = ({ arrival, departure, convoText, today = new Date() } = {}) => {
+export const tripWindow = ({ arrival, departure, convoText, convoTurns, today = new Date() } = {}) => {
   const start = dayStart(arrival);
   const end = dayStart(departure);
   if (start && end && end.getTime() >= start.getTime()) {
@@ -248,6 +321,35 @@ export const tripWindow = ({ arrival, departure, convoText, today = new Date() }
   const month = monthOnlyIn(convoText, today);
   if (month) {
     return { start: month.start, end: month.end, days: spoken || null, dated: true, source: "conversation", precision: "month" };
+  }
+  // ── AND "I DAG", WHICH IS WHAT HIS FATHER SAID ──────────────────
+  //
+  // 22 Aug 2026 taught the trip BRIEF to read a relative day, in six
+  // languages, and stopped there. This function feeds the event filter, and it
+  // was still reading only a written date and a bare month, so his father's
+  // conversation left the brief saying "I know when you are here" while the
+  // event window said `dated: false` and could not rule out a festival in a
+  // different month. Two parts of one screen disagreeing about one trip, which
+  // is the failure this codebase keeps naming, made WIDER by the six-language
+  // work rather than narrower.
+  //
+  // Last, after the month, and through the same latestRelativeAnswer the brief
+  // calls, so the precedence cannot drift: a stated month beats "I will
+  // confirm tomorrow", and a stated date beats both.
+  const rel = latestRelativeAnswer(convoTurns, today);
+  if (rel && rel.start) {
+    // The length they spoke, if they spoke one. "i dag" plus "7 dage" is a
+    // whole window; "i dag" alone anchors the month and nothing more.
+    if (spoken) {
+      return { start: rel.start, end: new Date(rel.start.getTime() + (spoken - 1) * MS_DAY),
+               days: spoken, dated: true, source: "conversation", precision: "day" };
+    }
+    // A weekend is the one relative answer that carries its own end.
+    if (rel.end) {
+      return { start: rel.start, end: rel.end, days: daysBetween(rel.start, rel.end),
+               dated: true, source: "conversation", precision: "day" };
+    }
+    return { start: rel.start, end: rel.start, days: null, dated: true, source: "conversation", precision: "day" };
   }
   if (spoken) return { start: null, end: null, days: spoken, dated: false, source: "conversation" };
   return null;

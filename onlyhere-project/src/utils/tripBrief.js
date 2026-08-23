@@ -44,7 +44,8 @@
 // repeating: the app suggests things, so one sentence back from it reading
 // "Copenhagen has excellent museums" would otherwise become evidence that the
 // traveller asked for museums.
-import { arrivalDateIn, dayCountIn, monthOnlyIn, relativeDayIn, daysBetween } from "./tripEvents";
+import { arrivalDateIn, dayCountIn, monthOnlyIn, latestRelativeAnswer, daysBetween } from "./tripEvents";
+import { PARTY_BARE, PARTY_POSSESSIVE, PARTY_POSSESSIVES, PARTY_COUNT, alt, LETTER } from "./travellerWords";
 import { dayStart } from "./calendarDay";
 import { travelModeKey, withoutNonModes } from "./routeOrder";
 
@@ -108,28 +109,35 @@ export const HARD_SLOTS = BRIEF_SLOTS.filter(s => s.hard).map(s => s.key);
 
 // A month with no day is a real answer and an imprecise one. Both states are
 // reported, because the difference is exactly what the event filter needs.
-const readWhen = (text, intakeArrival, intakeDeparture, today) => {
+const readWhen = (text, turns, intakeArrival, intakeDeparture, today) => {
   const from = dayStart(intakeArrival);
   const to = dayStart(intakeDeparture);
   if (from) return { value: from, precision: "day", source: "intake", end: to || null };
   const spokenDay = arrivalDateIn(text, today);
   if (spokenDay) return { value: spokenDay, precision: "day", source: "said", end: null };
-  // ── AND "TODAY" IS AN ANSWER ──────────────────────────────────────
+  const month = monthOnlyIn(text, today);
+  if (month) return { value: month.start, precision: "month", source: "said", end: month.end };
+  // ── AND "TODAY" IS AN ANSWER, WHEN THE TURN IS ONE ────────────────
   // 22 Aug 2026: his father answered this question with "today" and "7 days",
   // in Danish, and was asked again, because arrivalDateIn wants a day number
   // and an English month name and dayCountIn wanted the English word for a day.
-  // He answered correctly twice and the brief stayed empty, which is why the
-  // marker kept being withheld and no button ever came.
   //
-  // AFTER the explicit date and BEFORE the bare month, deliberately. Somebody
-  // who writes "14 October" has said something more precise than "next week",
-  // and somebody who writes "next week" has said something more precise than
-  // "October".
-  const relative = relativeDayIn(text, today);
-  if (relative) return { value: relative.start, precision: "day", source: "said", end: relative.end };
-  const month = monthOnlyIn(text, today);
-  if (month) return { value: month.start, precision: "month", source: "said", end: month.end };
-  return null;
+  // LAST, not before the month, and per TURN rather than over the whole
+  // conversation. The first version ran relativeDayIn over every traveller turn
+  // joined together and took anything it found, which read "talk tomorrow!" as
+  // an arrival and beat a stated October with it. A month mention is nearly
+  // always the trip; a time word in the middle of a sentence nearly never is.
+  // relativeAnswerIn holds the other half of that rule: the turn has to be an
+  // answer and not a sentence containing a date. See tripEvents.js.
+  //
+  // Latest qualifying turn wins, because a second answer supersedes a first.
+  // Through latestRelativeAnswer, which tripWindow also calls, so the brief and
+  // the event filter cannot disagree about which turn counted. Here the
+  // newline split is safe and useful: `text` on this path is the traveller's
+  // own turns and nothing of Gemlyx's.
+  const list = Array.isArray(turns) ? turns : (text ? String(text).split("\n") : []);
+  const rel = latestRelativeAnswer(list, today);
+  return rel ? { value: rel.start, precision: "day", source: "said", end: rel.end } : null;
 };
 
 const readDays = (text, intakeArrival, intakeDeparture) => {
@@ -172,7 +180,30 @@ const readOrigin = (text, intakeStartPoint) => {
 // wife" is the real shape of this answer and it carries no number for the adults,
 // so the reader reports that somebody said something about the party rather than
 // pretending to a headcount.
-const PARTY_RE = /\b(?:kids?|children|child|toddler|baby|wife|husband|partner|girlfriend|boyfriend|family|friends?|solo|alone|just me|my (?:son|daughter|mum|mom|dad|parents)|\d+\s+(?:of us|people|adults?))\b/i;
+// ── AND IT ONLY EVER LISTENED IN ENGLISH ────────────────────────────
+//
+// 23 Aug 2026. This was `kids|children|wife|husband|family|friends|solo|alone`
+// and nothing else, and `party` is a HARD slot: being asked does not satisfy
+// it, and nothing builds until it is answered. So Oliver's father could answer
+// "min kone og mig", watch Gemlyx reply in Danish about his wife, and be asked
+// who was coming again, forever. The 22 August work taught `when` Danish and
+// left this one exactly as it was, which is why he still could not reach a
+// build the next morning.
+//
+// Three shapes, because people answer this three ways: a group word on its own
+// ("familien", "alene", "vrienden"), a relation with its possessive ("min
+// kone", "meine Frau"), and a headcount ("vi er 4", "4 Erwachsene"). The
+// vocabulary is in travellerWords.js so adding a language is a list entry.
+//
+// THE POSSESSIVE IS NOT DECORATION. Bare "man" is husband in Danish, Swedish
+// and Norwegian and also the impersonal pronoun in all three, so "man kan tage
+// toget til Ribe" would otherwise report that he had said who was coming.
+const PARTY_RE = new RegExp(
+  `(?:^|[^${LETTER}])(?:` +
+    `(?:${alt(PARTY_BARE)})` +
+    `|(?:${alt(PARTY_POSSESSIVES)})\\s+(?:${alt(PARTY_POSSESSIVE)})` +
+    `|(?:${PARTY_COUNT.join("|")})` +
+  `)(?![${LETTER}])`, "i");
 const readParty = (text, intakeTravelers, familyMode) => {
   if (has(intakeTravelers)) return { value: clean(intakeTravelers), source: "intake" };
   if (familyMode) return { value: "family", source: "intake" };
@@ -348,14 +379,18 @@ const readBudget = (text, intakeBudgetText) => {
 // responsibility to ASK." Asked and unanswered is a third state. It does not
 // block, it is never asked twice, and it is reported to the writer as an
 // assumption rather than a fact, which is the honest way to carry a gap.
-export const readBrief = ({ travellerText = "", intake = {}, today = new Date(), asked = [] } = {}) => {
+export const readBrief = ({ travellerText = "", travellerTurns = null, intake = {}, today = new Date(), asked = [] } = {}) => {
   const t = String(travellerText || "");
+  // Turns, not the join, for anything that has to know whether ONE turn was an
+  // answer. Falls back to splitting the join so every existing caller and every
+  // existing assertion keeps working unchanged.
+  const turns = Array.isArray(travellerTurns) ? travellerTurns : t.split("\n");
   const known = {};
   const set = (key, res) => { if (res) known[key] = res; };
 
   set("origin", readOrigin(t, intake.startPoint));
   set("days", readDays(t, intake.arrival, intake.departure));
-  set("when", readWhen(t, intake.arrival, intake.departure, today));
+  set("when", readWhen(t, turns, intake.arrival, intake.departure, today));
   set("party", readParty(t, intake.travelers, intake.familyMode));
   set("interests", readInterests(t, intake.interest));
   set("transport", readTransport(t, intake.transport));

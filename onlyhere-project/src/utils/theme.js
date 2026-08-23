@@ -22,7 +22,7 @@ export const THEMES = {
   // something. See the theme comparison written on 7 Aug for the reasoning.
   warm: {
     name: "Warm",
-    hint: "Lantern-lit. The one the front door opens into.",
+    hint: "Lantern-lit. Ink-brown rather than blue-black.",
     bg: "#12100B",
     surface: "#1C1912",
     border: "#2E2718",
@@ -36,6 +36,13 @@ export const THEMES = {
     light: "#D8D0BD",
     scrim: "rgba(10,9,5,0.72)",
     onGold: "#12100B",
+    // ── AND THE ACCENT NEEDED ONE TOO ───────────────────────────────
+    // 22 Aug 2026: eleven places set `background: C.accent` with a hardcoded
+    // `color: "#fff"`, so the accent had a foreground in practice and no token
+    // for it. The same hole `onGold` was sitting in, and the reason darkening a
+    // colour "for contrast" made every button worse: the pairing being measured
+    // was not the pairing being rendered.
+    onAccent: "#FFFFFF",
     grain: 0.055,
     scheme: "dark",
   },
@@ -50,13 +57,22 @@ export const THEMES = {
     // 3.32:1 against surface, 3.52:1 against bg.
     fieldBorder: "#5A6A8C",
     fieldRing: "#D9A441",
-    accent: "#E23B4E",
+    // ── BOTH OF THESE WERE UNDER AA ─────────────────────────────────
+    // Measured 22 Aug 2026. The red carried white text at 4.23:1 on the send
+    // button and on every message a traveller has typed, and #D23043 is the
+    // smallest move that clears the line at 4.95 while staying the same bright
+    // red rather than the oxblood the other two themes use.
+    accent: "#D23043",
     gold: "#D9A441",
     text: "#EDF0F7",
-    muted: "#64708C",
+    // 3.85:1 against the page, on the colour carrying nearly every piece of
+    // secondary text in the app, at 11 to 13px. #7C88A6 is 5.39 and still reads
+    // as muted rather than as body text.
+    muted: "#7C88A6",
     light: "#A6B0C6",
     scrim: "rgba(10,15,30,0.72)",
     onGold: "#0A0F1E",
+    onAccent: "#FFFFFF",
     grain: 0,
     scheme: "dark",
   },
@@ -89,13 +105,18 @@ export const THEMES = {
     light: "#4A4335",
     scrim: "rgba(20,17,10,0.55)",
     onGold: "#FFFDF7",
+    onAccent: "#FFFFFF",
     grain: 0.03,
     scheme: "light",
   },
 };
 
 export const THEME_ORDER = ["warm", "dark", "light"];
-export const DEFAULT_THEME = "warm";
+// ── OLIVER, 23 AUG 2026: "I like the dark theme as default" ─────────
+// Warm stays first in THEME_ORDER, because that is the order they are OFFERED
+// in and it reads as the family's opening note. This is which one a person who
+// has never chosen gets, which is a different question.
+export const DEFAULT_THEME = "dark";
 const STORAGE_KEY = "gemlyx_theme";
 
 // The live palette. Starts on the default so the very first paint is already

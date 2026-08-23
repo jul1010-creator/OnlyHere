@@ -609,7 +609,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         {notice && <div style={{ fontSize: 12, color: C.gold, lineHeight: 1.5, marginBottom: 10 }}>{notice}</div>}
 
         <button onClick={submit} disabled={busy}
-          style={{ width: "100%", background: C.gold, border: "none", color: "#0A0F1E", borderRadius: 11, padding: "13px", fontSize: 15, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "'Inter', sans-serif", opacity: busy ? 0.6 : 1, marginBottom: 12 }}>
+          style={{ width: "100%", background: C.gold, border: "none", color: C.onGold, borderRadius: 11, padding: "13px", fontSize: 15, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "'Inter', sans-serif", opacity: busy ? 0.6 : 1, marginBottom: 12 }}>
           {busy ? "Working…" : label}
         </button>
 

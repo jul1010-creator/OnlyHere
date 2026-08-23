@@ -55,6 +55,7 @@ writeFileSync(entry, `
   export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES, bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK, linksInMarkdown, ticketLinksFromMarkdown, scoreTicketLinks } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
+  export { DINING_STYLES, DINING_STYLE_LABEL, diningStyleOf, diningStyleLabel, unstyledEntries, styleCoverage, STYLE_COVERAGE_MIN, showStyleFacet, buildFoodFacets, foodCitiesIn, FOOD_SORTS, byFoodPrice } from ${JSON.stringify(join(root, "src/utils/foodStyle.js"))};
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery, toggleFacetValue, isOptionOn, selectedValues } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
   export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
   export { TIERS } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
@@ -72,7 +73,7 @@ writeFileSync(entry, `
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { tierBadge, TIER_TONE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { withoutNonModes } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
-  export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, stripMarkdown, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -155,7 +156,9 @@ writeFileSync(entry, `
   export { vehicleMismatches, guideRides } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { factCheckCopy } from ${JSON.stringify(join(root, "src/utils/factCheckCopy.js"))};
   export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn, travelModeKey, modeReachKm, MODE_DAY_KM, preferReachable, preferPassing, overnightMove, describeOvernightMove, spokenDuration, beyondModeRange, BEYOND_DAY_FACTOR, sameMode, howForReader, EATS_THE_DAY_MINUTES } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
-  export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dayCountIn, relativeDayIn, daysBetween, describePicks, monthOnlyIn, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
+  export { LANGUAGES, MONTH_INDEX, PARTY_BARE, PARTY_POSSESSIVE, YES_WORDS, NO_WORDS, alt, LETTER } from ${JSON.stringify(join(root, "src/utils/travellerWords.js"))};
+  export { latestRelativeAnswer } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
+  export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dayCountIn, relativeDayIn, relativeAnswerIn, daysBetween, describePicks, monthOnlyIn, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED, isRegionCrossing } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { mergeForecasts, agreementNote, SPREAD_DISAGREES_C, weatherIsStale, weatherChanges, WEATHER_STALE_HOURS, dayWeather } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
@@ -9909,7 +9912,15 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // "Guide saved" was true either way and told a signed-out person nothing
   // about the one thing worth knowing, which is that it is on this device only.
   ok("a signed-out save says where it went", /Saved on this device/.test(appSrc));
-  ok("and a signed-in one says the other thing", /Guide saved to your account/.test(appSrc));
+  // ── AND A SIGNED-IN ONE NAMES THE ACCOUNT ────────────────────────
+  // This pinned the exact string "Guide saved to your account" and 23 Aug
+  // changed it, because that string was a claim about a Supabase push that had
+  // not happened yet. The RULE it was protecting is unchanged: a signed-in save
+  // says something different from a signed-out one and names the account. The
+  // string is not the rule.
+  ok("and a signed-in one names the account", /Syncing to your account/.test(appSrc));
+  ok("and no longer claims a push that has not happened",
+     !/"📖 Guide saved to your account"/.test(appSrc));
 
   // ── NOTHING WRITES A PENDING SAVE ANY MORE ────────────────────────
   // The pending slot only ever existed because the save was blocked, and it is
@@ -10889,6 +10900,77 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the log height follows the viewport", /maxHeight: inline \? "min\(300px, 45vh\)"/.test(sa));
 }
 
+
+// ── AND THE PHONE AGAIN, IN THE PUBLISHED LIST ────────────────────
+// Oliver, 23 Aug: "I can't see which blog is which."
+//
+// Same lever as the Send button above, one screen over. Every row in Manage
+// published put the NAME in a flex child with minWidth: 0 and no flex, beside a
+// button strip with flexShrink: 0. All of the negative free space on a phone
+// therefore came out of the name, which measured 24px at a 390px viewport and,
+// carrying overflow: hidden, rendered as an empty strip. The meta line under it
+// has no such clipping, so it spilled one word per line and every row on the
+// page read "festival · no photo" and nothing else.
+//
+// The strip did not stay whole either. Refusing to shrink does not buy a strip
+// room it has not got; it takes the room from its sibling and then runs off the
+// right edge anyway, which is why Delete was half off the screen in his photo.
+//
+// Read as NUMBERS, over the row's OWN slice, and with the comments blanked.
+// "App.jsx contains the string flex: 1" is the nearby question this codebase
+// keeps answering by mistake. The file holds dozens and none of them is this
+// row. The paragraph above this fix also names flexShrink: 0 twice, so a
+// negative read over the raw slice is defeated by its own explanation. That has
+// now happened often enough to be a rule: negatives go through stripNonCode.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const from = app.indexOf("{open && g.rows.map(row => (");
+  const to = app.indexOf("── WHAT KIND OF PLACE IS THIS ──", from);
+  const row = from >= 0 && to > from ? app.slice(from, to) : "";
+  ok("the published-entry row was found", row.length > 500);
+
+  // The row must be allowed to become two lines. Without this the buttons have
+  // nowhere to go but sideways, off the screen.
+  ok("the row wraps rather than running off the edge", /display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between"/.test(row));
+
+  // A basis, in pixels, read as a number. flex: "1 1 0" would satisfy any regex
+  // asking merely whether the column is flexible, and would still collapse the
+  // name to nothing the moment the strip beside it is wide enough, which is the
+  // bug. 210 is about 26 characters of a name at 13px.
+  const basis = Number((row.match(/flex: "1 1 (\d+)px", minWidth: 0/) || [])[1]);
+  ok("the name column is flexible", Number.isFinite(basis));
+  ok("and its basis is wide enough to be a name", basis >= 160);
+
+  // The one that caused it. Nothing in this row may refuse to shrink:
+  // whichever child does, the name is the child that pays for it.
+  ok("nothing in the row refuses to shrink", !/flexShrink: 0/.test(stripNonCode(row)));
+
+  // Wrapping the strip is what lets the buttons keep their labels once they are
+  // on their own line. Found by index, and the index is asserted, because
+  // row.slice(-1) on a miss makes every negative below it trivially true.
+  const stripAt = row.indexOf('<div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>');
+  ok("the button strip wraps", stripAt > 0);
+  const strip = stripAt > 0 ? row.slice(stripAt) : "";
+  const buttons = (strip.match(/<button /g) || []).length;
+  ok("the strip still holds its buttons", buttons >= 4);
+  // Counted rather than pattern-matched, so adding a seventh button without
+  // this goes red instead of passing on the six that have it.
+  is("and every one of them keeps its label on one line",
+     (strip.match(/whiteSpace: "nowrap", cursor: "pointer"/g) || []).length, buttons);
+
+  // The name is clipped rather than wrapped, so a long one loses its tail. This
+  // is the only way to read it on a phone.
+  ok("a truncated name can still be read in full", /<div title=\{row\.payload\?\.name \|\| ""\}/.test(row));
+
+  // The header above the rows, for the same reason. Three badges fit a phone,
+  // four do not, and any group holding a draft renders four. It degrades by
+  // breaking "28 to look at" into three lines inside its own pill rather than
+  // by overflowing, so nothing on the page ever says it happened.
+  const hdr = app.indexOf("setOpenGroups(prev => { const n = new Set(prev)");
+  ok("the group header was found", hdr > 0);
+  ok("and it wraps once a group has four badges",
+     /display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, width: "100%"/.test(app.slice(hdr, hdr + 700)));
+}
 
 // ── DOES THE DRAFT ARGUMENT SAVE ITS SOURCES ───────────────────────
 // Oliver, 11 Aug: "Does the 'draft argument' section also save the sources?"
@@ -15690,8 +15772,14 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // the wanted set and undo the narrowing, using the app's own suggestion as
   // evidence that the traveller asked for it. Place names still read the whole
   // conversation; an interest may not.
+  // The list is now built ONCE as travellerTurns, because the trip window needs
+  // the same turns as an array, and saidByTraveller is its join. Both halves
+  // are asserted: the filter is still role "user" and nothing else, and the
+  // string is still derived from that one list rather than rebuilt beside it.
   ok("the interest is read from the traveller's turns only",
-    /const saidByTraveller = aiMessages\.slice\(1\)\.filter\(m => m\.role === "user"\)/.test(preview));
+    /const travellerTurns = aiMessages\.slice\(1\)\.filter\(m => m\.role === "user"\)/.test(preview));
+  ok("and one list feeds both the string and the window",
+    /const saidByTraveller = travellerTurns\.join/.test(preview));
   ok("and the place matcher still reads the whole conversation",
     /matchedPlaces\(convoText, previewPools\(/.test(preview));
 
@@ -18640,10 +18728,22 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // an unpriced entry was not hidden from every filter, and that intent has to
   // survive: null belongs to no band, so it shows under All and is claimed by
   // nothing. Asserted against the real filter expression rather than described.
-  const bandApp = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the food filter shows everything under All",
-    /foodTab === "All" \|\| priceBand\(f\.price\) === foodTab/.test(bandApp));
-  // Written out: an unpriced row passes the All tab and no other.
+  // ── RUN, NOT READ ────────────────────────────────────────────────
+  // This asserted the inline filter expression in App.jsx by regex. On 23 Aug
+  // that expression moved into utils/foodStyle.js as the Budget facet's own
+  // `test`, so the regex went stale while the rule it protects did not. Now the
+  // real facet is applied to a real row, which is what moving it out of a
+  // render made possible.
+  const { buildFoodFacets, applyFacets: applyF } = M;
+  const priceFacet = buildFoodFacets([{ name: "x", price: "See website", location: "Aarhus" }])
+    .find(f => f.key === "price");
+  ok("the Budget facet exists whatever the page holds", !!priceFacet);
+  const unpriced = [{ name: "x", price: "See website", location: "Aarhus" }];
+  is("an unpriced row survives no filter at all", applyF(unpriced, [priceFacet], {}).length, 1);
+  for (const b of PRICE_BANDS) {
+    is(`and is claimed by no band: ${b.id}`, applyF(unpriced, [priceFacet], { price: b.id }).length, 0);
+  }
+  // Written out, as the same statement about the function underneath it.
   const shown = (tab, price) => tab === "All" || priceBand(price) === tab;
   ok("an unpriced row is visible under All", shown("All", "See website"));
   ok("and appears in no band", !PRICE_BANDS.some(b => shown(b.id, "See website")));
@@ -23564,10 +23664,22 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("nor in Danish", cityFromLocation("Nyhavn 17, 1051 København K, Danmark"), "Copenhagen");
   is("and nothing is nothing", cityFromLocation(""), "");
   const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the food chips are built from cities",
-     /new Set\(foodSpots\.map\(f => cityFromLocation\(f\.location \|\| f\.city\)\)/.test(appF));
-  ok("and the filter compares the same way",
-     /cityFromLocation\(f\.location \|\| f\.city\) === foodCity/.test(appF));
+  // ── THE FOOD SIDE IS RUN RATHER THAN READ ───────────────────────
+  // Two regexes stood here against inline expressions in App.jsx. Both moved
+  // into utils/foodStyle.js on 23 Aug as foodCitiesIn and the Area facet's own
+  // `test`, and both are now exercised against real rows, which says more than
+  // the regexes did: that the options and the filter read location the SAME
+  // way is the thing that matters, and a pair of regexes could agree on the
+  // spelling while disagreeing on the value.
+  const { foodCitiesIn: cityOpts, buildFoodFacets: mkFacets, applyFacets: applyC } = M;
+  const rows = [{ name: "a", location: "Amagerbro, Copenhagen" },
+                { name: "b", location: "Klostertorvet, Aarhus C" },
+                { name: "c", location: "Nørrebro, København" }];
+  is("the options are cities, folded", cityOpts(rows), ["Copenhagen", "Aarhus"]);
+  const cityFacet = mkFacets(rows).find(f => f.key === "city");
+  is("and the filter agrees with them",
+     applyC(rows, [cityFacet], { city: "Copenhagen" }).map(r => r.name), ["a", "c"]);
+  is("for the other one too", applyC(rows, [cityFacet], { city: "Aarhus" }).map(r => r.name), ["b"]);
   // The attractions page had its own hardcoded list of ten city names beside a
   // lookalike cityOf, so a place in Ribe was filed under "Other".
   ok("the attractions filter shares the one definition",
@@ -28841,6 +28953,116 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("every name this suite destructures from M is a name it imported", missing, []);
 }
 
+// ── 23 AUGUST 2026: IT REPLIED IN HIS LANGUAGE AND READ ONLY OURS ───
+//
+// The 22 August fix taught `when` Danish and stopped there. `party` is equally
+// HARD and was still English only, so his father could answer "min kone og mig",
+// watch Gemlyx acknowledge his wife in Danish, and be asked who was coming
+// again, forever. The wall moved; it did not come down.
+//
+// Denmark's inbound market in 2024: Germany 6.0m, Netherlands 2.0m, United
+// States 1.1m, United Kingdom 0.9m, Sweden 0.8m. Six languages, from one
+// vocabulary in travellerWords.js, so the next one is a list entry.
+{
+  const { readBrief, briefReady, dayCountIn, arrivalDateIn, relativeAnswerIn, LANGUAGES } = M;
+  const NOW = new Date(2026, 7, 22);
+  const party = (t) => !!readBrief({ travellerText: t, today: NOW }).known.party;
+
+  ok("six languages are declared", LANGUAGES.length === 6 && LANGUAGES.includes("da") && LANGUAGES.includes("de"));
+
+  // ── WHO IS COMING, IN THE LANGUAGES PEOPLE ANSWER IT IN ─────────
+  for (const t of ["min kone og jeg", "vi er to voksne", "os to", "alene", "vi er 4",
+                   "med mine børnebørn", "familien", "min søn og jeg", "kun mig",
+                   "meine Frau und ich", "wir sind 4", "mit den Kindern", "zu zweit", "allein",
+                   "mijn vrouw en ik", "we zijn met 3", "met de kinderen", "alleen",
+                   "min fru och jag", "vi är 2", "ensam",
+                   "my wife and I", "just me", "3 of us"]) {
+    ok(`the party slot fills from: ${t}`, party(t));
+  }
+
+  // ── AND STAYS SILENT ON PROSE ───────────────────────────────────
+  // "man" is husband in Danish, Swedish and Norwegian AND the impersonal
+  // pronoun in all three, which is why the relation words need a possessive.
+  for (const t of ["man kan tage toget til Ribe", "wie kommt man nach Aarhus",
+                   "de man op straat", "hvad koster en billet", "is the food good"]) {
+    ok(`prose does not fill the party slot: ${t}`, !party(t));
+  }
+
+  // ── THE DATE A EUROPEAN WRITES ──────────────────────────────────
+  // "15. maj" failed twice over: the period after the day number, and a month
+  // name that was not English. By lexical accident half the year worked.
+  for (const t of ["15. maj", "d. 15. maj", "vi kommer den 15. maj", "15. Mai", "15 mei",
+                   "15 maj", "3. oktober", "15th May", "May 15"]) {
+    ok(`a real written date parses: ${t}`, !!arrivalDateIn(t, NOW));
+  }
+  is("and it is the right month", arrivalDateIn("15. maj", NOW).getMonth(), 4);
+  is("oktober is October, not an English near miss", arrivalDateIn("3. oktober", NOW).getMonth(), 9);
+
+  // ── HOW LONG, INCLUDING THE ENGLISH THAT NEARLY BROKE ───────────
+  // DAY_WORDS held "days?" as a shorthand, and `alt` escapes regex characters,
+  // so it became the literal string "days?" and "7 days" stopped parsing in
+  // English while "7 dagen" carried on working. Plain words only.
+  for (const [t, want] of [["7 days", 7], ["7 dage", 7], ["7 Tage", 7], ["7 dagen", 7], ["7 dagar", 7],
+                           ["en uge", 7], ["eine Woche", 7], ["een week", 7], ["en vecka", 7], ["a week", 7],
+                           ["2 uger", 14], ["zwei Wochen", 14], ["twee weken", 14],
+                           ["i ugen", null], ["ugen er lang", null]]) {
+    is(`length from "${t}"`, dayCountIn(t), want);
+  }
+
+  // ── RELATIVE DAYS, STILL ONLY WHEN THE TURN IS AN ANSWER ────────
+  for (const t of ["i dag", "heute", "vandaag", "i morgen", "übermorgen",
+                   "næste uge", "nächste Woche", "volgende week", "nästa vecka"]) {
+    ok(`a relative answer parses: ${t}`, !!relativeAnswerIn(t, NOW));
+  }
+  for (const t of ["talk tomorrow!", "is the weekend market good?", "wie kommt man dahin"]) {
+    is(`and prose still does not: ${t}`, relativeAnswerIn(t, NOW), null);
+  }
+
+  // ── HIS FATHER'S CONVERSATION, END TO END ───────────────────────
+  // Everything he said, in Danish, in the order he said it. This is the case
+  // the whole two days of work exists for.
+  const dad = readBrief({
+    travellerTurns: ["i dag", "7 dage", "min kone og jeg", "vi kører i bil", "vi vil gerne se Mols Bjerge og naturen"],
+    travellerText: "i dag\n7 dage\nmin kone og jeg\nvi kører i bil\nvi vil gerne se Mols Bjerge og naturen",
+    today: NOW,
+  });
+  ok("the dates fill", !!dad.known.when);
+  ok("the length fills", !!dad.known.days);
+  ok("and who is coming finally fills", !!dad.known.party);
+  is("seven days", dad.known.days.value, 7);
+  // Origin is the one thing he genuinely never said, so it is the one thing
+  // still asked. That is the system working rather than the wall moving again.
+  ok("only where he starts is still open", !dad.known.origin);
+}
+
+// ── 23 AUGUST 2026: A QUESTION WITH TWO ANSWERS ─────────────────────
+//
+// Oliver: "Instead of writing 'yes' when it asks to build, let it pop up as yes
+// and no, right where the guide will be. So you can click it. Then you won't
+// miss it."
+//
+// What it replaced was one gold button labelled "Turn this into a guide", which
+// is a label rather than an answer, under a chat that had just asked a
+// question. His father read the question, looked for somewhere to answer it,
+// and typed.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the card asks the question rather than labelling a button",
+     /Shall I build your guide\?/.test(app));
+  ok("and offers yes", /Yes, build it/.test(app));
+  ok("and offers no", /Not yet/.test(app));
+  ok("yes opens the build", /setGuideModal\("preview"\)/.test(app));
+  // NO IS NOT A DISMISS. It sends a turn so Gemlyx keeps talking, because a No
+  // that silently closed the card is another dead end, which is the failure the
+  // card exists to remove.
+  ok("and no keeps the conversation going rather than closing anything",
+     /sendAI\("Not yet"\)/.test(app));
+  ok("the old bare label is gone", !/📖 Turn this into a guide/.test(app));
+  // Both at 52px, because the person this was written for taps with one finger
+  // and does not aim well.
+  is("both answers are a real tap target", (app.match(/minHeight: 52/g) || []).length, 2);
+}
+
 // ── 22 AUGUST 2026: HIS FATHER GOT NO BUTTON ────────────────────────
 //
 // He was handed a plan ending "Den er klar." and nothing appeared. He wrote
@@ -28987,24 +29209,22 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and forbids translating the marker", /WRITE THE MARKER EXACTLY AS PRINTED, NEVER TRANSLATED/.test(app));
 }
 
-// ── 22 AUGUST 2026: THE LIGHT THEME FAILED AA ON PAPER ──────────────
+// ── 22 AUGUST 2026: THE PALETTE, MEASURED AGAINST WHAT RENDERS ──────
 //
-// Measured off a screenshot of the studio screen rather than guessed. The muted
-// tone, which carries nearly every piece of secondary text in the app, was
-// 4.37:1 against the page. The gold, which carries headings, links and the
-// primary button, was 4.03:1. Both under the 4.5 line, at 11 to 13px.
+// The light muted was 4.37:1 and the light gold 4.03:1, both under the line, on
+// the two colours carrying nearly all secondary text and every heading.
 //
-// A palette is a number, so it is asserted as one and nobody has to eyeball a
-// screenshot again.
+// AND THE FIRST FIX MADE IT WORSE, which is the part worth keeping. Darkening
+// the gold was justified by "white text on a gold button goes from 4.43 to
+// 5.38". Nothing rendered white text on gold. Sixteen buttons hardcoded
+// `color: "#000"`, so the real pairing went from 4.66 to 3.84 while an
+// assertion measuring `onGold` against `gold` stayed green. A token nothing
+// reads is not a fact about the product, and measuring it is measuring nothing.
 //
-// TWO SHAPES OF ASSERTION, AND THE DIFFERENCE IS DELIBERATE. Light is held to
-// AA outright, because it was fixed today and verified. Warm and dark are held
-// to a FLOOR of what they measure right now, because two of dark's numbers are
-// below AA and dark is the theme he asked to be kept as it was. Recording them
-// stops them sliding further without pretending they pass, and the two that
-// need his decision are named below rather than quietly rounded up.
+// So there are two assertions here now, and the second is the one that matters:
+// the numbers, and then the rule that the numbers describe something real.
 {
-  const { THEMES } = M;
+  const { THEMES, DEFAULT_THEME } = M;
   const chan = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
   const lum = (hex) => {
     const h = String(hex).replace("#", "");
@@ -29016,61 +29236,55 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     return (hi + 0.05) / (lo + 0.05);
   };
 
-  // Sanity on the maths before it is trusted to judge a palette.
   is("black on white is 21:1", Math.round(ratio("#000000", "#FFFFFF")), 21);
   is("a colour against itself is 1:1", Math.round(ratio("#123456", "#123456")), 1);
 
-  const AA = 4.5;      // normal text
-  const AA_UI = 3;     // borders and other non-text parts
-  const TEXT_KEYS = ["text", "muted", "gold", "light"];
-
-  // ── LIGHT IS HELD TO THE STANDARD ───────────────────────────────
-  const L = THEMES.light;
-  for (const key of TEXT_KEYS) {
-    for (const ground of ["bg", "surface"]) {
-      const r = ratio(L[key], L[ground]);
-      ok(`light: ${key} on ${ground} reaches AA (${r.toFixed(2)}:1)`, r >= AA);
+  const AA = 4.5, AA_UI = 3;
+  // ── EVERY THEME, NO FLOORS AND NO EXCEPTIONS ────────────────────
+  // The earlier version held light to AA and the other two only to "no worse
+  // than today", because two of dark's numbers were short. They are not short
+  // any more, so the exception goes with them.
+  for (const [name, t] of Object.entries(THEMES)) {
+    for (const key of ["text", "muted", "gold", "light"]) {
+      for (const ground of ["bg", "surface"]) {
+        const r = ratio(t[key], t[ground]);
+        ok(`${name}: ${key} on ${ground} reaches AA (${r.toFixed(2)}:1)`, r >= AA);
+      }
     }
-  }
-  // accent is a BACKGROUND in every theme, not a text colour: it is the send
-  // button and the traveller's own chat bubble. What has to be legible is the
-  // text sitting ON it, so that is what is measured.
-  ok(`light: text on the accent reaches AA (${ratio(L.onGold, L.accent).toFixed(2)}:1)`,
-     ratio(L.onGold, L.accent) >= AA);
-  ok(`light: text on the gold reaches AA (${ratio(L.onGold, L.gold).toFixed(2)}:1)`,
-     ratio(L.onGold, L.gold) >= AA);
-  ok(`light: the field border clears the UI bar (${ratio(L.fieldBorder, L.surface).toFixed(2)}:1)`,
-     ratio(L.fieldBorder, L.surface) >= AA_UI);
-
-  // ── THE OTHER TWO MAY NOT GET WORSE ─────────────────────────────
-  // Floors, measured 22 Aug 2026. Raise one when its colour improves; never
-  // lower one to make a change fit.
-  const FLOOR = {
-    warm: { textOnBg: 16.6, mutedOnBg: 5.7, goldOnBg: 9.3, textOnAccent: 5.6, textOnGold: 9.3, fieldBorder: 3.6 },
-    dark: { textOnBg: 16.7, mutedOnBg: 3.8, goldOnBg: 8.4, textOnAccent: 3.7, textOnGold: 8.4, fieldBorder: 3.3 },
-  };
-  for (const [name, f] of Object.entries(FLOOR)) {
-    const t = THEMES[name];
-    const got = {
-      textOnBg: ratio(t.text, t.bg), mutedOnBg: ratio(t.muted, t.bg), goldOnBg: ratio(t.gold, t.bg),
-      textOnAccent: ratio(t.text, t.accent), textOnGold: ratio(t.onGold, t.gold),
-      fieldBorder: ratio(t.fieldBorder, t.surface),
-    };
-    for (const k of Object.keys(f)) {
-      ok(`${name}: ${k} has not slipped below ${f[k]} (${got[k].toFixed(2)}:1)`, got[k] >= f[k]);
+    // gold and accent are FILLS. What has to be legible is the text on them.
+    for (const [fg, bg, label] of [[t.onGold, t.gold, "onGold on gold"], [t.onAccent, t.accent, "onAccent on accent"]]) {
+      const r = ratio(fg, bg);
+      ok(`${name}: ${label} reaches AA (${r.toFixed(2)}:1)`, r >= AA);
     }
+    const fb = ratio(t.fieldBorder, t.surface);
+    ok(`${name}: the field border clears the UI bar (${fb.toFixed(2)}:1)`, fb >= AA_UI);
   }
 
-  // ── AND THE TWO THAT ARE STILL SHORT, NAMED ─────────────────────
-  // Not failures of this suite, because dark is the theme he asked to keep as
-  // it was and changing its signature red is a look decision rather than a
-  // contrast fix. They are written down so the next person does not have to
-  // rediscover them, and they flip to real assertions the day he says so.
-  //
-  //   dark muted  #64708C   3.85:1 on bg   (needs 4.5, #7C88A6 gives 5.39)
-  //   dark accent #E23B4E   3.70:1 under its own text (#C82A3C gives 4.78)
-  ok("the dark shortfalls are still exactly the two that are written down",
-     ratio(THEMES.dark.muted, THEMES.dark.bg) < AA && ratio(THEMES.dark.text, THEMES.dark.accent) < AA);
+  // ── AND THE NUMBERS ABOVE HAVE TO DESCRIBE THE REAL PIXELS ──────
+  // This is the assertion that would have caught the regression. If any styled
+  // element sets a gold or accent background beside a hardcoded hex foreground,
+  // then the token measured above is decoration and the measurement is a lie.
+  for (const file of ["src/App.jsx", "src/components/AskGemlyx.jsx", "src/components/AuthSheet.jsx"]) {
+    const src = readFileSync(join(root, file), "utf8");
+    const offenders = src.split("\n")
+      .map((ln, i) => ({ ln, n: i + 1 }))
+      .filter(({ ln }) => /background: C\.(gold|accent)/.test(ln) && /color: "#[0-9A-Fa-f]{3,8}"/.test(ln))
+      .map(({ n, ln }) => `${file}:${n} ${ln.trim().slice(0, 90)}`);
+    is(`${file} never hardcodes a foreground on a gold or accent fill`, offenders, []);
+  }
+  // And the tokens are not merely present, they are read.
+  {
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the onGold token is actually used", /color: C\.onGold/.test(app));
+    ok("and so is onAccent", /color: C\.onAccent/.test(app));
+    for (const [name, t] of Object.entries(THEMES)) {
+      ok(`${name} defines onAccent`, typeof t.onAccent === "string" && /^#[0-9A-Fa-f]{6}$/.test(t.onAccent));
+    }
+  }
+
+  // ── OLIVER, 23 AUG 2026: "I like the dark theme as default" ─────
+  is("dark is what somebody who has never chosen gets", DEFAULT_THEME, "dark");
+  ok("and all three are still offered", M.THEME_ORDER.length === 3);
 }
 
 // ── 22 AUGUST 2026: THE EM DASH ON EVERY GUIDE ──────────────────────
@@ -30175,6 +30389,346 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the schema carries the second field", /"entryIsAlreadyCorrect": true \| false \| null/.test(vp));
   ok("asked in the opposite direction", /in the opposite direction from the verdict/.test(vp));
   ok("and told why it is asked twice", /a verdict and the reasoning under it were coming back saying opposite things/.test(vp));
+}
+
+// ── 23 AUGUST 2026: FOUR DROPDOWNS, AND ONE OF THEM HAD NO FIELD ────
+//
+// Oliver: "The filters are different on everything. That bothers me. Especially
+// food is horrible. You need the drop down of like type, area, fastfood/fine
+// dining, budget. Like that."
+//
+// Food carried THREE separate bespoke rows stacked on one page: foodKind as
+// pills, foodCity as a scrolling pill row, foodTab as underline tabs. Three
+// controls, three shapes, each with its predicate written inline in the row and
+// again inline in the .filter() below it, on the page directly beside Events and
+// Attractions where the same questions are one row of dropdowns.
+//
+// Three of his four had a field behind them already. The fourth did not, and
+// placeKind.js had already settled what this codebase may do about that: "A
+// place is only a village if somebody SAID it is a village." So foodStyle.js
+// reads a stated field, a structural one, and a stated CATEGORY, and it reads
+// neither the description nor the price. See the file.
+{
+  const { buildFoodFacets, foodCitiesIn, diningStyleOf, byFoodPrice, showStyleFacet,
+          styleCoverage, unstyledEntries, DINING_STYLES, applyFacets, facetCounts } = M;
+
+  // ── WHAT diningStyleOf IS ALLOWED TO READ ───────────────────────
+  is("a stated style wins over everything", diningStyleOf({ diningStyle: "fine", category: "Hot dog stand" }), "fine");
+  is("and it is not case sensitive", diningStyleOf({ diningStyle: "QUICK", category: "Michelin" }), "quick");
+  is("a style nobody defined is not a style", diningStyleOf({ diningStyle: "posh", category: "Bistro" }), "casual");
+  // A food street is eaten standing up. That is what the field means, not a
+  // guess about the place.
+  is("a food street is a quick bite", diningStyleOf({ isFoodStreet: true, category: "" }), "quick");
+
+  // FINE IS CHECKED FIRST, and this is the assertion that matters most:
+  // "Michelin-starred restaurant" contains "restaurant" and "gastropub"
+  // contains "pub", so checking the general bucket first files a two-star
+  // kitchen as a casual dinner by the last word in its own category.
+  is("a michelin restaurant is not a casual restaurant",
+     diningStyleOf({ category: "Michelin-starred restaurant" }), "fine");
+  is("nor is fine dining", diningStyleOf({ category: "Fine dining restaurant" }), "fine");
+
+  // DANISH WELDS THE HEAD ONTO THE END OF A COMPOUND, so a plain word boundary
+  // on the left finds none of them, which on a Danish food guide is most of the
+  // list.
+  is("a fiskerestaurant is a restaurant", diningStyleOf({ category: "Fiskerestaurant" }), "casual");
+  is("a havnebryggeri is a brewery", diningStyleOf({ category: "Havnebryggeri" }), "casual");
+  is("torvehallerne is a market", diningStyleOf({ category: "Torvehallerne" }), "quick");
+  is("and the definite form still reads", diningStyleOf({ category: "Kroen" }), "casual");
+  // And the right edge is what stops it: kroen is the inn, kroner is money.
+  is("kroner is not an inn", diningStyleOf({ category: "Kroner" }), null);
+
+  // ── AND WHAT IT IS NOT ALLOWED TO GUESS ─────────────────────────
+  // The same answer priceBand gives an unpriced row, in its own words: "it
+  // belongs to no band, so it shows under All and is claimed by nothing."
+  is("a category nobody taught it stays unknown", diningStyleOf({ category: "Wine bar" }), null);
+  is("an empty category stays unknown", diningStyleOf({ category: "" }), null);
+  is("and so does nothing at all", diningStyleOf(null), null);
+
+  // ── THE FACETS, RUN RATHER THAN READ ────────────────────────────
+  // Declared in utils/foodStyle.js and not in App.jsx for the reason
+  // articleLayout.js exists: they decide what a reader sees, and a decision
+  // living in App.jsx can only be checked by a regex over its own source.
+  const POOL = [
+    { id: 1, name: "Ristet",   category: "Hot dog stand",  location: "Indre By, København K", price: "45 kr" },
+    { id: 2, name: "Bageriet", category: "Bakery",         location: "Nørrebro, København N", price: "60 kr" },
+    { id: 3, name: "Bistroen", category: "Bistro",         location: "Latinerkvarteret, Aarhus C", price: "220 kr" },
+    { id: 4, name: "Fisken",   category: "Fiskerestaurant", location: "Aarhus C",             price: "280 kr" },
+    { id: 5, name: "Stjernen", category: "Michelin-starred restaurant", location: "Indre By, København K", price: "1.850 kr" },
+    { id: 6, name: "Torvehal", category: "Food market", isFoodStreet: true, location: "København K", price: "80 kr" },
+    { id: 7, name: "Vinbaren", category: "Wine bar",       location: "Aarhus C",             price: "" },
+  ];
+  const facets = buildFoodFacets(POOL);
+  is("his four, in his order", facets.map(f => f.key), ["kind", "city", "style", "price"]);
+  ok("and all four are on the row rather than behind a button", facets.every(f => f.primary));
+
+  const names = (state) => applyFacets(POOL, facets, state).map(f => f.name).sort();
+  is("type: food streets", names({ kind: "Food Streets" }), ["Torvehal"]);
+  is("type: restaurants", names({ kind: "Restaurants" }).length, 6);
+  is("area folds the postal district", names({ city: "Aarhus" }), ["Bistroen", "Fisken", "Vinbaren"]);
+  is("and folds the Danish spelling onto the canonical one", names({ city: "Copenhagen" }), ["Bageriet", "Ristet", "Stjernen", "Torvehal"]);
+  is("style: quick bite", names({ style: "quick" }), ["Bageriet", "Ristet", "Torvehal"]);
+  is("style: sit-down", names({ style: "casual" }), ["Bistroen", "Fisken"]);
+  is("style: fine dining", names({ style: "fine" }), ["Stjernen"]);
+  is("budget: under 100", names({ price: "under-100" }), ["Bageriet", "Ristet", "Torvehal"]);
+  is("budget: over 250", names({ price: "over-250" }), ["Fisken", "Stjernen"]);
+  is("and they cross", names({ city: "Aarhus", style: "casual" }), ["Bistroen", "Fisken"]);
+  is("an honest empty answer", names({ city: "Aarhus", style: "fine" }), []);
+
+  // ── THE UNCLASSIFIED ROW IS VISIBLE AND CLAIMED BY NOTHING ──────
+  ok("it is on the page", names({}).includes("Vinbaren"));
+  for (const s of DINING_STYLES) ok(`and never handed to somebody who asked for ${s}`, !names({ style: s }).includes("Vinbaren"));
+  is("and it is listable, so the gap can be closed", unstyledEntries(POOL).map(f => f.name), ["Vinbaren"]);
+
+  // COUNTS EXCLUDE THEIR OWN FACET, which listControls already guarantees; this
+  // asserts the food facets are shaped so that it works.
+  const cityCounts = facetCounts(POOL, facets, { city: "Aarhus" }, "city");
+  is("Copenhagen still counts while Aarhus is selected", cityCounts["Copenhagen"], 4);
+  is("and All is the whole page", cityCounts["All"], 7);
+  // AND KØBENHAVN AND COPENHAGEN ARE ONE OPTION, which is cityFromLocation's
+  // own rule and the reason the Area facet reads it rather than the raw
+  // string. Four rows spelled three ways across two postal districts, one
+  // dropdown entry. This assertion was originally written against a
+  // simplified stand-in for cityFromLocation and said "København"; the real
+  // function folds to the app's canonical key, and pinning the stub would
+  // have been a check that answered a nearby question.
+  is("three Danish spellings, two towns", foodCitiesIn(POOL), ["Copenhagen", "Aarhus"]);
+
+  // ── SORT READS THE BAND, NOT THE SENTENCE ───────────────────────
+  // A price field is a sentence: "3-course lunch menu 795 DKK; 4-course 1,095
+  // DKK". An unbandable row sorts LAST rather than as zero, which would put
+  // every unpriced place at the top of a list opened to find the cheap end.
+  const sorted = [...POOL].sort((a, b) => byFoodPrice(a, b) || a.name.localeCompare(b.name)).map(f => f.name);
+  is("unpriced last", sorted[sorted.length - 1], "Vinbaren");
+  ok("and the hot dog above the michelin", sorted.indexOf("Ristet") < sorted.indexOf("Stjernen"));
+
+  // ── A DROPDOWN WITH ONE REAL ANSWER DOES NOT RENDER ─────────────
+  is("no food streets, no Type",
+     buildFoodFacets(POOL.filter(f => !f.isFoodStreet)).map(f => f.key), ["city", "style", "price"]);
+  is("one town, no Area",
+     buildFoodFacets(POOL.filter(f => (f.location || "").includes("Aarhus"))).map(f => f.key), ["style", "price"]);
+
+  // ── AND THE STYLE FACET IS ABSENT RATHER THAN WRONG ─────────────
+  // This is the part that makes shipping a keyword read safe against data
+  // nobody has audited row by row. If the category words turn out not to match
+  // what is really published, three controls describe the whole page and the
+  // fourth is not there, instead of four controls where one describes a fifth
+  // of it and looks exactly like the three that do not.
+  const OPAQUE = [{ name: "a", category: "Wine bar", location: "Aarhus" },
+                  { name: "b", category: "Wine bar", location: "Odense" },
+                  { name: "c", category: "Wine bar", location: "Aalborg" }];
+  is("unreadable categories mean no Style dropdown", buildFoodFacets(OPAQUE).map(f => f.key), ["city", "price"]);
+  ok("and the gate says why", !showStyleFacet(OPAQUE) && styleCoverage(OPAQUE) === 0);
+  ok("a page it can read keeps it", showStyleFacet(POOL));
+  is("an empty page still declares Budget", buildFoodFacets([]).map(f => f.key), ["price"]);
+
+  // ── AND THE THREE OLD ROWS ARE GONE FROM THE PAGE ───────────────
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("Food renders the shared FilterBar", /items=\{foodSpots\}[\s\S]{0,400}facets=\{foodFacets\}/.test(app));
+  ok("the inline three-way predicate is gone", !/foodSpots\.filter\(f => \(foodTab === "All"/.test(app));
+  ok("the kind pill row is gone", !/\["All", "Restaurants", "Food Streets"\]\.map/.test(app));
+  ok("the price tab row is gone", !/setFoodTab\(t\.id\)/.test(app));
+  // ── AND AN EMPTY RESULT SAYS SO, ON THIS PAGE ──────────────────
+  // Four dropdowns crossing each other can empty a list the three old rows
+  // never could, and a page that answers "no" by rendering nothing at all
+  // reads as broken rather than as filtered.
+  //
+  // ANCHORED ON filteredFood, NOT ON THE SENTENCE. The first version of this
+  // asserted the copy, and mutation testing showed it stayed green with the
+  // food empty state deleted: Attractions has carried the identical sentence
+  // since its own redesign, so the assertion was reading a different page.
+  // That is this codebase's oldest recurring shape, found here in a test
+  // written to catch it.
+  ok("and an empty result says so", /filteredFood\.length === 0 \?[\s\S]{0,400}Nothing matches those filters/.test(app));
+  // Same treatment as Attractions, deliberately, because "the filters are
+  // different on everything" is the complaint this whole block answers.
+  is("in the same words on both pages", (app.match(/Nothing matches those filters/g) || []).length, 2);
+}
+
+// ── 23 AUGUST 2026: IT ATE THE DATE OFF A DANISH HOLIDAY ────────────
+//
+// stripMarkdown runs on EVERY assistant message. Three things it got wrong,
+// all three found by an adversarial pass and all three demonstrated by running
+// it rather than by reading it.
+//
+// The first is the one that matters on this product: `^\d+\.\s+` is the
+// markdown numbered-list marker, and it is also, letter for letter, how
+// Danish, German and Dutch write a date. "1. maj er en helligdag" reached
+// readers as "maj er en helligdag", on a guide to Denmark, where public
+// holidays and festival dates are most of what it says.
+{
+  const { stripMarkdown } = M;
+
+  // ── THE EUROPEAN DATE SURVIVES ──────────────────────────────────
+  // Guarded on the month name, read from the same six-language vocabulary the
+  // traveller parsers use, so the guard and the reader cannot drift apart.
+  for (const t of ["1. maj er en helligdag", "15. maj lukker museet", "3. oktober er der marked",
+                   "1. Mai ist ein Feiertag", "5. mei is bevrijdingsdag", "4. July is not Danish",
+                   "   24. december lukker alt"]) {
+    is(`a written date keeps its day: ${t}`, stripMarkdown(t), t);
+  }
+
+  // ── AND A REAL NUMBERED LIST IS STILL STRIPPED ──────────────────
+  is("a numbered list still loses its markers",
+     stripMarkdown("1. Book the ferry first\n2. Then drive north"), "Book the ferry first\nThen drive north");
+  is("indented too", stripMarkdown("  1. Book the ferry"), "Book the ferry");
+  is("and past nine", stripMarkdown("10. Last stop"), "Last stop");
+
+  // ── STRAY ASTERISKS NO LONGER PAIR ACROSS A SENTENCE ────────────
+  // `\*(.+?)\*` matched from the star in "a 4* hotel" to the star in "5*
+  // reviews". Real italics have no whitespace immediately inside the markers.
+  is("star ratings survive", stripMarkdown("a 4* hotel and 5* reviews"), "a 4* hotel and 5* reviews");
+  is("and so does arithmetic", stripMarkdown("5 * 4 = 20"), "5 * 4 = 20");
+  is("real italics still go", stripMarkdown("this is *important* today"), "this is important today");
+  is("even one letter of it", stripMarkdown("*a* thing"), "a thing");
+  is("bold still goes", stripMarkdown("this is **bold** here"), "this is bold here");
+
+  // ── EVERY BULLET FORM, WHICH IS WHAT IT WAS ADDED FOR ───────────
+  // The class was [-•], so a `* ` bullet, a `+ ` bullet and any indented
+  // bullet all survived. A star bullet is the most common form there is.
+  is("star bullets", stripMarkdown("* Nyhavn\n* Tivoli"), "Nyhavn\nTivoli");
+  is("plus bullets", stripMarkdown("+ Nyhavn"), "Nyhavn");
+  is("dash bullets", stripMarkdown("- Nyhavn"), "Nyhavn");
+  is("indented bullets", stripMarkdown("   - Nyhavn"), "Nyhavn");
+  is("bullet dots", stripMarkdown("• Nyhavn"), "Nyhavn");
+  is("and bold inside a star bullet", stripMarkdown("* **Nyhavn** is busy"), "Nyhavn is busy");
+  is("headings", stripMarkdown("## Day one"), "Day one");
+  is("nothing passes through", stripMarkdown(null), null);
+
+  // The list regex is built once at module level and carries /g, which is
+  // stateful under .test() and reset by .replace(). Asserted rather than
+  // reasoned about, because that failure is intermittent and silent.
+  const twice = "1. Book the ferry\n1. maj is a holiday";
+  is("no shared regex state between calls", stripMarkdown(twice), stripMarkdown(twice));
+  is("and it is right both times", stripMarkdown(twice), "Book the ferry\n1. maj is a holiday");
+
+  // ── WHAT IS STILL WRONG, NAMED RATHER THAN HIDDEN ───────────────
+  // "3. sal" and "1. klasse" are ordinals too and still lose their number.
+  // The month case is the one that was reaching readers; this is here so the
+  // remainder is a known gap rather than a surprise.
+  is("a non-month ordinal is still eaten, and that is known",
+     stripMarkdown("3. sal, til venstre"), "sal, til venstre");
+}
+
+// ── 23 AUGUST 2026: THE BRIEF KNEW THE DATES, THE EVENTS DID NOT ────
+//
+// The 22 August fix taught the trip BRIEF to read "i dag", and the night of the
+// 22nd taught it five more languages. Neither touched tripWindow, which is what
+// feeds the event filter. So his father's conversation left the brief saying "I
+// know when you are here" while the window came back `dated: false`, and
+// tripEvents had nothing to rule a February festival out with.
+//
+// Two parts of one screen disagreeing about one trip, which this codebase keeps
+// naming, and the six-language work made it WIDER rather than narrower: heute,
+// vandaag, nästa vecka and three more all filled the brief and gave the events
+// nothing.
+//
+// Both now go through `latestRelativeAnswer`, one function, so the precedence
+// cannot drift apart again.
+{
+  const { tripWindow, readBrief, latestRelativeAnswer } = M;
+  const NOW = new Date(2026, 7, 22);          // Saturday 22 August 2026
+  const d = (x) => (x ? `${x.getFullYear()}-${x.getMonth() + 1}-${x.getDate()}` : null);
+
+  // ── HIS FATHER'S CONVERSATION, THROUGH BOTH READERS ─────────────
+  const turns = ["i dag", "7 dage", "min kone og jeg"];
+  const text = turns.join("\n");
+  const brief = readBrief({ travellerTurns: turns, travellerText: text, today: NOW });
+  const win = tripWindow({ convoText: text, convoTurns: turns, today: NOW });
+  ok("the brief knows when", !!brief.known.when);
+  ok("and so does the event window now", !!win && win.dated);
+  is("on the same day", d(win.start), d(brief.known.when.value));
+  is("for seven days", win.days, 7);
+  is("ending on the 28th", d(win.end), "2026-8-28");
+
+  // ── AN ARRAY OF TURNS, NEVER THE JOINED CONVERSATION ────────────
+  // convoText carries Gemlyx's replies with a role prefix on every line. A
+  // tripWindow that derived turns from it would read a date out of the app's
+  // own words. `text` here is three bare traveller answers with no prefix, so
+  // a version that split convoText WOULD find "i dag" in it: that is what this
+  // asserts is not happening.
+  const noTurns = tripWindow({ convoText: text, today: NOW });
+  is("no turns, no relative date", noTurns.dated, false);
+  is("but the length still counts", noTurns.days, 7);
+  is("and a role prefix is never an answer",
+     latestRelativeAnswer(["user: i dag", "assistant: hvornår kommer du?"], NOW), null);
+
+  // ── AND THE PRECEDENCE MATCHES THE BRIEF'S, EXACTLY ─────────────
+  // A BARE relative answer, so the ORDER of the branches decides this rather
+  // than relativeAnswerIn's own guard. Written first with "jeg bekræfter i
+  // morgen", which the guard rejects on its own, so it passed whichever branch
+  // ran first and tested nothing.
+  const oct = ["vi tænker oktober", "i morgen"];
+  is("a stated month beats a bare tomorrow", tripWindow({ convoText: oct.join("\n"), convoTurns: oct, today: NOW }).precision, "month");
+  is("and the brief says the same thing",
+     readBrief({ travellerTurns: oct, travellerText: oct.join("\n"), today: NOW }).known.when.precision, "month");
+  const dated = ["15. september", "i dag"];
+  is("and a written date beats both", d(tripWindow({ convoText: dated.join("\n"), convoTurns: dated, today: NOW }).start), "2026-9-15");
+
+  // ── SIX LANGUAGES REACH THE EVENT WINDOW TOO ────────────────────
+  for (const [t, want] of [["i dag", "2026-8-22"], ["heute", "2026-8-22"], ["vandaag", "2026-8-22"],
+                           ["i morgen", "2026-8-23"], ["übermorgen", "2026-8-24"], ["nästa vecka", "2026-8-24"]]) {
+    is(`the window opens on: ${t}`, d(tripWindow({ convoText: t, convoTurns: [t], today: NOW }).start), want);
+  }
+
+  // ── AND PROSE STILL OPENS NO WINDOW ─────────────────────────────
+  for (const t of ["talk tomorrow!", "is the weekend market good?"]) {
+    const w = tripWindow({ convoText: t, convoTurns: [t], today: NOW });
+    ok(`prose opens no window: ${t}`, w === null || w.dated === false);
+  }
+
+  const we = tripWindow({ convoText: "i weekenden", convoTurns: ["i weekenden"], today: NOW });
+  ok("a weekend carries its own end, and it is two days", we && we.days === 2);
+  is("silence is still null", tripWindow({ convoText: "", convoTurns: [], today: NOW }), null);
+  is("and the intake form still wins outright",
+     tripWindow({ arrival: "2026-09-01", departure: "2026-09-05", convoText: "i dag", convoTurns: ["i dag"], today: NOW }).source, "intake");
+
+  // ── THE TWO CALL SITES PASS IT ──────────────────────────────────
+  // Both are source assertions because both live inside a render. What they
+  // pin is the RULE, not the call shape: an array built from the traveller's
+  // own turns reaches tripWindow, on both screens.
+  const prev = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  ok("the preview screen passes the traveller's turns", /tripWindow\(\{[^}]*convoTurns:\s*travellerTurns/.test(prev));
+  ok("built from the user's messages only", /travellerTurns = aiMessages[\s\S]{0,80}m\.role === "user"/.test(prev));
+  ok("and saidByTraveller is derived from that one list rather than rebuilt",
+     /saidByTraveller = travellerTurns\.join/.test(prev));
+  const app2 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("and the match call passes them too", /tripWindow\(\{[\s\S]{0,300}convoTurns:[\s\S]{0,120}m\.role === "user"/.test(app2));
+}
+
+// ── 23 AUGUST 2026: IT SAID "SAVED TO YOUR ACCOUNT" AND MEANT MAYBE ─
+//
+// commitGuideSave writes to localStorage, and a debounced effect pushes to
+// Supabase 1.2 seconds later. pushCloudSaves returns a boolean saying whether
+// that worked and NOTHING READ IT, while the toast had already announced
+// "Guide saved to your account".
+//
+// So a signed-in person on a dead connection, or holding an expired token, was
+// told their trip was in their account when it was in this browser and nowhere
+// else. They find out by opening their phone to an empty list. The same shape
+// of lie the pipeline work has spent a week removing from the drafts, except
+// this one is about the reader's own data.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // ── THE TOAST NO LONGER CLAIMS THE PUSH ─────────────────────────
+  // What it says now is true at the instant it is said: the guide is saved,
+  // and it is on its way. The old string promised an outcome that had not
+  // happened yet.
+  ok("the save toast does not claim the account", !/"📖 Guide saved to your account"/.test(app));
+  ok("it says what is true when it is said", /Guide saved\. Syncing to your account\./.test(app));
+  // And the two cases that were already honest stay honest.
+  ok("a signed out save still says where it went", /"📖 Saved on this device"/.test(app));
+  ok("and a refused local write still says so",
+     /This browser refused to store the guide/.test(app));
+
+  // ── AND THE PUSH RESULT IS READ ─────────────────────────────────
+  ok("pushCloudSaves' answer reaches state", /pushCloudSaves\(userSession, savedPlaces, savedGuides\)\.then\(setCloudSyncOk\)/.test(app));
+  ok("which starts optimistic", /useState\(true\);\s*\n\s*const pushTimerRef/.test(app));
+  // Read where somebody goes to ask the question, rather than raised as a
+  // toast that the save toast's own clear timer would wipe 900ms later.
+  ok("the account screen reports it", /cloudSyncOk \? ", synced to this account\." : /.test(app));
+  ok("and says what it means for them", /on this device only/.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

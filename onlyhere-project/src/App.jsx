@@ -71,6 +71,9 @@ import { TypewriterText } from "./components/TypewriterText";
 import { GuidePreviewScreen } from "./components/GuidePreviewScreen";
 import { EventMatchCard } from "./components/EventMatchCard";
 import { FilterBar } from "./components/FilterBar";
+// The fourth food dropdown, and the only one of his four that had no field
+// behind it. See the file for what it reads and what it refuses to read.
+import { buildFoodFacets, FOOD_SORTS, byFoodPrice } from "./utils/foodStyle";
 import { DK_PATHS, dkProject } from "./data/mapShapes";
 import { PageHero } from "./components/PageHero";
 import { LiveEventsHeaderStrip } from "./components/LiveEventsHeaderStrip";
@@ -817,6 +820,10 @@ function GemlyxApp() {
   const [craftLoading, setCraftLoading] = useState(true);
   const [foodTab, setFoodTab] = useState("All");
   const [foodKind, setFoodKind] = useState("All"); // "All" | "Restaurants" | "Food Streets"
+  // null rather than "All", because this one is new and nothing outside the
+  // facet reads it, so it can use the shape listControls prefers.
+  const [foodStyleSel, setFoodStyleSel] = useState(null);
+  const [foodSort, setFoodSort] = useState("az");         // "az" | "price"
   const [nightlifeTab, setNightlifeTab] = useState("Local");
   const [nightlifeTownView, setNightlifeTownView] = useState(null); // null = showing towns; a town name = showing that town's venues
   // ── THE LEVEL BETWEEN A TOWN AND A BAR ────────────────────────────
@@ -9084,13 +9091,34 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   }, [userSession]);
 
   // Mirror every later change up. Debounced, because hearting three places in a
-  // row should be one write, not three. Deliberately fire and forget: a failed
-  // sync must never block the UI or lose the local copy, which is already saved.
+  // row should be one write, not three. Fire and forget in the sense that
+  // matters: a failed sync must never block the UI or lose the local copy,
+  // which is already saved.
+  //
+  // ── BUT THE ANSWER IS NO LONGER THROWN AWAY ───────────────────────
+  // pushCloudSaves returns a boolean and nothing read it, while the toast 1.2
+  // seconds earlier had already said "Guide saved to your account". So a
+  // signed-in person on a dead connection, or holding an expired token, was
+  // told their trip was in their account when it was in this browser and
+  // nowhere else. They find out by opening their phone and seeing an empty
+  // list. That is the same shape of lie the pipeline work has spent a week
+  // removing from the drafts, and it is about the reader's own data.
+  //
+  // Recorded rather than announced. A toast raised here would be wiped by the
+  // save toast's own clear timer 900ms later, and the toast system is 50 call
+  // sites with 22 hand-rolled timers, which is its own job. This is read on the
+  // account screen, which is where somebody goes to ask the question.
+  // True until a push says otherwise. Optimistic on purpose: the answer is
+  // unknown until the first push lands, and "we cannot reach your account" is
+  // not a thing to say to somebody whose account is fine.
+  const [cloudSyncOk, setCloudSyncOk] = useState(true);
   const pushTimerRef = useRef(null);
   useEffect(() => {
     if (!userSession?.token || !syncedOnceRef.current) return;
     clearTimeout(pushTimerRef.current);
-    pushTimerRef.current = setTimeout(() => { pushCloudSaves(userSession, savedPlaces, savedGuides); }, 1200);
+    pushTimerRef.current = setTimeout(() => {
+      pushCloudSaves(userSession, savedPlaces, savedGuides).then(setCloudSyncOk);
+    }, 1200);
     return () => clearTimeout(pushTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedPlaces, savedGuides, userSession]);
@@ -11064,7 +11092,11 @@ If the conversation only covers a single day or a few stops with no explicit day
           ? "📖 Saved to your account. This browser would not store a local copy."
           : "⚠ This browser refused to store the guide, so it will be gone when you close the tab. Sign in to keep it.")
       : userSession
-        ? "📖 Guide saved to your account"
+        // NOT "saved to your account", which was a claim about a push that had
+        // not happened yet and might not. This is what is true at the instant
+        // it is said: the guide is saved, and it is on its way. The account
+        // screen says whether it arrived.
+        ? "📖 Guide saved. Syncing to your account."
         : "📖 Saved on this device");
     setTimeout(() => setToast(null), stored ? 2200 : 4200);
   };
@@ -11681,7 +11713,12 @@ If the conversation only covers a single day or a few stops with no explicit day
     // Glyptotek while the screen kept it hidden under "Add attractions": the
     // same line-versus-list contradiction this comment claims to have closed.
     const forMatch = aiMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
-    const days = tripWindow({ arrival: intakeArrival, departure: intakeDeparture, convoText: forMatch })?.days ?? null;
+    // convoTurns is the traveller's own turns as an ARRAY, because a relative
+    // answer only counts when the TURN is one, and `forMatch` is both halves of
+    // the conversation with a role prefix on every line. Without it "i dag"
+    // gives this call no dates at all, which is what happened to his father.
+    const days = tripWindow({ arrival: intakeArrival, departure: intakeDeparture, convoText: forMatch,
+                              convoTurns: aiMessages.slice(1).filter(m => m.role === "user").map(m => m.text || "") })?.days ?? null;
     // ── AND WHAT THEY ARE INTO IS READ FROM THEM, NOT FROM US ──────
     //
     // `forMatch` is both halves of the conversation, which is right for finding
@@ -12139,6 +12176,9 @@ If the conversation only covers a single day or a few stops with no explicit day
       const travellerTurns = [...aiMessages.filter(m => m.role === "user").map(m => m.text || ""), msg];
       const brief = readBrief({
         travellerText: travellerTurns.join("\n"),
+        // Both shapes. The join is what most readers want; the turns are what a
+        // relative date has to be judged against, one answer at a time.
+        travellerTurns,
         today: now,
         asked: briefAsked,
         intake: {
@@ -12595,8 +12635,8 @@ ${languageBlock()}`;
           style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: savedItems.includes(product.id) ? C.gold : "#fff", cursor: "pointer" }}>
           {savedItems.includes(product.id) ? "♥" : "♡"}
         </button>
-        {product.trending && <div style={{ position: "absolute", top: 8, left: 8, background: C.accent, color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 100 }}>HOT ↗</div>}
-        {product.isNew && <div style={{ position: "absolute", top: product.trending ? 30 : 8, left: 8, background: C.gold, color: "#000", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 100 }}>NEW</div>}
+        {product.trending && <div style={{ position: "absolute", top: 8, left: 8, background: C.accent, color: C.onAccent, fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 100 }}>HOT ↗</div>}
+        {product.isNew && <div style={{ position: "absolute", top: product.trending ? 30 : 8, left: 8, background: C.gold, color: C.onGold, fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 100 }}>NEW</div>}
       </div>
       <div style={{ padding: "12px 14px" }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 2, fontFamily: "'Fraunces', serif" }}>{product.name}</div>
@@ -12682,7 +12722,7 @@ ${languageBlock()}`;
                 prompt showed no badge here. tierOf is the one matcher, and
                 placeThemes.js already says why: "the stored strings are long
                 and inconsistently cased across 71 rows written over weeks". */}
-            {tierOf(event)?.id === "must" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: "#0A0F1E", background: C.gold }}>★ Can't miss out</span>}
+            {tierOf(event)?.id === "must" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: C.onGold, background: C.gold }}>★ Can't miss out</span>}
             {event.tier === "Highly Recommended" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: "#6ECF97", background: "rgba(110,207,151,0.12)" }}>Highly Recommended</span>}
             {event.tier === "Best If You're Already Nearby" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: "#FFB347", background: "#FFB34722" }}>Best if already nearby</span>}
             {event.rating && <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>★ {event.rating}</span>}
@@ -12890,6 +12930,43 @@ ${languageBlock()}`;
     // above August under a control that said "by date". See utils/eventDates.js.
     .sort(eventSort === "az" ? byName : byEventDate);
 
+  // ── FOOD: ONE FILTER, THE SAME ONE EVERY OTHER LIST USES ─────
+  //
+  // Oliver, 22 Aug 2026: "The filters are different on everything. That
+  // bothers me. Especially food is horrible. You need the drop down of like
+  // type, area, fastfood/fine dining, budget. Like that."
+  //
+  // He is describing three separate bespoke rows stacked on one page, each
+  // with its own state, its own visual treatment and its own inline predicate:
+  // foodKind as pills, foodCity as a scrolling pill row, foodTab as underline
+  // tabs. Three controls, three shapes, on the page directly beside Events and
+  // Attractions where the same three questions are one row of dropdowns.
+  //
+  // Nothing here is a new mechanism. FilterBar and listControls.js have done
+  // this since 15 August and Events and Attractions already run on them; Food
+  // was the page that never got moved across.
+  //
+  // The facets are declared in utils/foodStyle.js rather than here, for the
+  // reason articleLayout.js exists: they decide what a reader sees, and a
+  // decision that lives in this file can only be tested by a regex over its
+  // own source. The three old pieces of state keep their names and values, so
+  // everything else that reads foodTab, foodKind or foodCity is untouched.
+  const foodFacets = buildFoodFacets(foodSpots);
+  const foodFacetState = {
+    ...(foodKind !== "All" ? { kind: foodKind } : {}),
+    ...(foodCity !== "All" ? { city: foodCity } : {}),
+    ...(foodStyleSel ? { style: foodStyleSel } : {}),
+    ...(foodTab !== "All" ? { price: foodTab } : {}),
+  };
+  const setFoodFacets = (next) => {
+    setFoodKind(next.kind || "All");
+    setFoodCity(next.city || "All");
+    setFoodStyleSel(next.style || null);
+    setFoodTab(next.price || "All");
+  };
+  const filteredFood = applyFacets(foodSpots, foodFacets, foodFacetState)
+    .sort(foodSort === "price" ? (a, b) => byFoodPrice(a, b) || byName(a, b) : byName);
+
   const aiHelperBlock = () => (
     <div id="ai-helper-anchor" style={{ marginTop: 8 }}>
               <div style={{ padding: "0 0 28px" }}>
@@ -12970,10 +13047,47 @@ ${languageBlock()}`;
                   return isReadyToBuild(lastAssistantMsg.text) || isFullPlanText(lastAssistantMsg.text);
                 })() && (
                   <>
-                    <button onClick={() => setGuideModal("preview")}
-                      style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", background: `linear-gradient(135deg, ${C.gold}33, ${C.accent}33)`, border: `1.5px solid ${C.gold}`, borderRadius: 12, padding: "15px 12px", fontSize: 14.5, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 4, boxShadow: `0 2px 14px ${C.gold}22` }}>
-                      📖 Turn this into a guide
-                    </button>
+                    {/* ── A QUESTION WITH TWO ANSWERS, NOT A BUTTON ────
+                        Oliver, 23 Aug 2026: "Instead of writing 'yes' when it
+                        asks to build, let it pop up as yes and no, right where
+                        the guide will be. So you can click it. Then you won't
+                        miss it."
+
+                        WHAT IT REPLACED, and why he is right. One gold button
+                        reading "Turn this into a guide", which is a label
+                        rather than an answer, sitting under a chat that had
+                        just asked him a question. His father read the question,
+                        looked for somewhere to answer it, and typed. The button
+                        was on screen the whole time and it did not look like
+                        the reply to what he had just been asked.
+
+                        A question card answers the question. It says what it is
+                        asking, it puts the two answers side by side at 52px
+                        tall, and it sits exactly where the guide appears, so
+                        the thing he is looking at IS the thing he has to press.
+
+                        NO IS NOT A DISMISS. It sends a turn, so Gemlyx keeps
+                        talking and asks what to change. A No that silently
+                        closed the card would be another dead end, which is the
+                        failure this whole card exists to remove. */}
+                    <div style={{ background: C.surface, border: `1.5px solid ${C.gold}`, borderRadius: 14, padding: "16px 14px 14px", marginBottom: 10, boxShadow: `0 2px 18px ${C.gold}22` }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", textAlign: "center", marginBottom: 3 }}>
+                        Shall I build your guide?
+                      </div>
+                      <div style={{ fontSize: 11.5, color: C.muted, textAlign: "center", marginBottom: 13, lineHeight: 1.5 }}>
+                        It takes a few minutes. Your plan appears right here.
+                      </div>
+                      <div style={{ display: "flex", gap: 10 }}>
+                        <button onClick={() => setGuideModal("preview")}
+                          style={{ flex: 1, minHeight: 52, background: C.gold, border: "none", borderRadius: 12, fontSize: 15, fontWeight: 800, color: C.onGold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          Yes, build it
+                        </button>
+                        <button onClick={() => { if (!aiLoading) sendAI("Not yet"); }} disabled={aiLoading}
+                          style={{ flex: 1, minHeight: 52, background: "transparent", border: `1.5px solid ${C.fieldBorder}`, borderRadius: 12, fontSize: 15, fontWeight: 700, color: C.text, cursor: aiLoading ? "default" : "pointer", fontFamily: "'Inter', sans-serif", opacity: aiLoading ? 0.5 : 1 }}>
+                          Not yet
+                        </button>
+                      </div>
+                    </div>
                     {/* ── AND THEN IT SAID NOTHING AT ALL ──────────────
                         A line lived here twice. First it promised SECONDS, and
                         the screen it opens promised minutes, which is the one
@@ -13007,7 +13121,7 @@ ${languageBlock()}`;
                   <input className="gx-plain" value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendAI()}
                     placeholder="Tell me about your trip, and I'll find the Denmark most travelers miss…"
                     style={{ flex: 1, border: `2px solid ${C.accent}`, borderRadius: 100, padding: "11px 16px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
-                  <button onClick={sendAI} disabled={aiLoading} style={{ background: C.accent, border: "none", borderRadius: 100, width: 44, height: 44, cursor: "pointer", fontSize: 16, flexShrink: 0, color: "#fff" }}>↗</button>
+                  <button onClick={sendAI} disabled={aiLoading} style={{ background: C.accent, border: "none", borderRadius: 100, width: 44, height: 44, cursor: "pointer", fontSize: 16, flexShrink: 0, color: C.onAccent }}>↗</button>
                 </div>
                 <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginTop: 8 }}>
                   Mention who's traveling: kids, budget, a car. The more Gemlyx knows, the better the plan.
@@ -13024,7 +13138,7 @@ ${languageBlock()}`;
                       style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", marginBottom: 10, boxSizing: "border-box" }} />
                     {loginError && <div style={{ fontSize: 12, color: "#FFB347", marginBottom: 10 }}>{loginError}</div>}
                     <button onClick={studioLogin} disabled={loginLoading}
-                      style={{ width: "100%", background: C.gold, border: "none", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                      style={{ width: "100%", background: C.gold, border: "none", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, color: C.onGold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                       {loginLoading ? "Logging in…" : "Log in"}
                     </button>
                   </div>
@@ -13443,8 +13557,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   const open = searching || openGroups.has(g.type);
                                   return (
                                     <div key={g.type} style={{ marginBottom: 4 }}>
+                                      {/* Wraps for the same reason the rows
+                                          below do. Three badges fit a phone;
+                                          four do not, and a group with drafts
+                                          in it renders four. Measured at 320px
+                                          with the unpublished badge present:
+                                          "28 to look at" broke into three lines
+                                          INSIDE its own pill rather than
+                                          overflowing, so it degrades quietly
+                                          and no scrollbar ever says so. */}
                                       <button onClick={() => setOpenGroups(prev => { const n = new Set(prev); if (n.has(g.type)) n.delete(g.type); else n.add(g.type); return n; })}
-                                        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 9, padding: "8px 11px", cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: open ? 4 : 0 }}>
+                                        style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 9, padding: "8px 11px", cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: open ? 4 : 0 }}>
                                         <span style={{ fontSize: 11, color: C.gold, width: 10 }}>{open ? "▾" : "▸"}</span>
                                         <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{g.label}</span>
                                         <span style={{ fontSize: 11, color: C.muted }}>{g.count}</span>
@@ -13456,9 +13579,30 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                       </button>
                                       {open && g.rows.map(row => (
                             <div key={row.id} style={{ borderBottom: `1px solid ${C.border}` }}>
-                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 0" }}>
-                                <div style={{ minWidth: 0 }}>
-                                  <div style={{ fontSize: 12.5, color: C.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 0" }}>
+                                {/* ── THE NAME IS THE POINT OF THE ROW ────────
+                                    Oliver, 23 Aug: "I can't see which blog is
+                                    which."
+
+                                    The button strip was flexShrink: 0 and this
+                                    column had minWidth: 0 and no flex, so on a
+                                    phone the whole of the negative free space
+                                    came out of the NAME. It shrank to nothing,
+                                    and because the name line carries overflow:
+                                    hidden it rendered as an empty strip while
+                                    the meta line under it wrapped one word per
+                                    line. Every row read "festival · no photo"
+                                    and nothing else. The buttons, which could
+                                    not shrink, ran off the right edge.
+
+                                    Same lever as the Send button in
+                                    StudioAssistant: whichever child MUST stay
+                                    whole is the one that gets flexShrink: 0,
+                                    and it is never the one carrying the words.
+                                    So the name takes a basis wide enough to be
+                                    a name and the buttons wrap under it. */}
+                                <div style={{ flex: "1 1 210px", minWidth: 0 }}>
+                                  <div title={row.payload?.name || ""} style={{ fontSize: 13, color: C.text, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                     {row.payload?.emoji || "•"} {row.payload?.name || "(unnamed)"}
                                   </div>
                                   <div style={{ fontSize: 10, color: C.muted }}>
@@ -13488,23 +13632,28 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                     </div>
                                   ))}
                                 </div>
-                                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                                {/* Wraps rather than refusing to shrink. A strip
+                                    that cannot shrink does not stay whole on a
+                                    phone. It takes the width out of whatever
+                                    is beside it and then runs off the screen
+                                    anyway, so Delete was unreachable too. */}
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                                   {/* Only offered where it would do something,
                                       and labelled with the fact that matters
                                       most to him: it is free. */}
                                   {repairBody(row.payload?.blogBody).changed && (
                                     <button onClick={() => repairRowHeadings(row)} disabled={repairBusy === row.id}
-                                      style={{ background: "#FFB34722", border: "1px solid #FFB34766", color: "#FFB347", borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                      style={{ background: "#FFB34722", border: "1px solid #FFB34766", color: "#FFB347", borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
                                       {repairBusy === row.id ? "…" : "🏷 Fix headings (free)"}
                                     </button>
                                   )}
                                   <button onClick={() => { setMediaEditId(v => v === row.id ? null : row.id); setMediaError(null); setMediaReelInput(""); }}
-                                    style={{ background: mediaEditId === row.id ? `${C.gold}22` : "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                    style={{ background: mediaEditId === row.id ? `${C.gold}22` : "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
                                     🖼 Media
                                   </button>
                                   {row.type === "town" && (
                                     <button onClick={() => openPlaceEdit(row)}
-                                      style={{ background: placeEditId === row.id ? `${C.gold}22` : "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                      style={{ background: placeEditId === row.id ? `${C.gold}22` : "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
                                       📍 Kind
                                     </button>
                                   )}
@@ -13522,7 +13671,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             every one of those leaks got in. */}
                         <button onClick={() => editItem(row)} disabled={manualDraftRunning}
                           title={manualDraftRunning ? "A draft you started by hand is running. Let it finish first, or this row gets its draft." : ""}
-                                    style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                    style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
                                     ✏️ Edit
                                   </button>
                                   {/* Separate from "Edit", which loads the whole
@@ -13531,12 +13680,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                       PROSE, in the order a reader sees it. */}
                                   {(row.payload?.blogBody || []).length > 0 && (
                                     <button onClick={() => openBodyEdit(row)}
-                                      style={{ background: bodyEditId === row.id ? `${C.gold}22` : "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                      style={{ background: bodyEditId === row.id ? `${C.gold}22` : "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
                                       📝 Blog text
                                     </button>
                                   )}
                                   <button onClick={() => deleteContentItem(row.id)} disabled={deletingId === row.id}
-                                    style={{ background: "none", border: "1px solid #E23B4E66", color: "#E57373", borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                    style={{ background: "none", border: "1px solid #E23B4E66", color: "#E57373", borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
                                     {deletingId === row.id ? "…" : "🗑 Delete"}
                                   </button>
                                 </div>
@@ -13697,7 +13846,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                       </div>
                                       <div style={{ fontSize: 11, color: C.muted }}>Hero photo — shows on the card and at the top of the page. First upload becomes it automatically if empty.</div>
                                     </div>
-                                    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.gold, color: "#000", borderRadius: 100, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: mediaBusy ? "default" : "pointer", opacity: mediaBusy ? 0.6 : 1, marginRight: 8 }}>
+                                    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.gold, color: C.onGold, borderRadius: 100, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: mediaBusy ? "default" : "pointer", opacity: mediaBusy ? 0.6 : 1, marginRight: 8 }}>
                                       {mediaBusy ? "Uploading…" : "⬆ Upload photos"}
                                       <input type="file" accept="image/*" multiple disabled={mediaBusy}
                                         onChange={e => { uploadMediaFiles(row, e.target.files); e.target.value = ""; }}
@@ -13775,7 +13924,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                                   <div style={{ fontSize: 9.5, color: C.light, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.credit.photographer}</div>
                                                   <div style={{ fontSize: 9, color: C.gold, marginBottom: 5 }}>{hit.credit.license}</div>
                                                   <button onClick={() => useCommonsPhoto(row, hit)} disabled={mediaBusy || !!photoFinder.saving}
-                                                    style={{ width: "100%", background: C.gold, border: "none", color: "#0A0F1E", borderRadius: 100, padding: "4px", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                                    style={{ width: "100%", background: C.gold, border: "none", color: C.onGold, borderRadius: 100, padding: "4px", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                                     {photoFinder.saving === hit.url ? "Saving…" : "Use this"}
                                                   </button>
                                                 </div>
@@ -13875,7 +14024,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           placeholder="https://..."
                           style={{ flex: 1, border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 12px", fontSize: 12.5, outline: "none", background: C.surface, color: C.text, fontFamily: "'Inter', sans-serif" }} />
                         <button onClick={scanSource} disabled={scanLoading}
-                          style={{ background: C.gold, border: "none", borderRadius: 10, padding: "9px 14px", fontSize: 11.5, fontWeight: 700, color: "#000", cursor: "pointer", flexShrink: 0 }}>
+                          style={{ background: C.gold, border: "none", borderRadius: 10, padding: "9px 14px", fontSize: 11.5, fontWeight: 700, color: C.onGold, cursor: "pointer", flexShrink: 0 }}>
                           {scanLoading ? "Scanning…" : "Scan"}
                         </button>
                       </div>
@@ -13989,7 +14138,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         placeholder={{ town: "Town name, e.g. Ringkøbing", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", foodStreet: "Market/street name + city, e.g. Reffen Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade", nightStreet: "Street name + city, e.g. Gothersgade Copenhagen", nightTown: "Town name, e.g. Aarhus", essential: "What a visitor has to sort out, e.g. Rejsebillet app or Tax-free shopping" }[studioType] || "Name"}
                         style={{ flex: 1, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
                       <button onClick={() => generateArea()} disabled={studioLoading}
-                        style={{ background: C.gold, border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 12, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                        style={{ background: C.gold, border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 12, fontWeight: 700, color: C.onGold, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
                         {studioLoading ? "Researching…" : "Draft it"}
                       </button>
                       {/* DRAFT QUEUE (Oliver: "put others in queue... while I go
@@ -14104,7 +14253,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 Discard
                               </button>
                               <button onClick={() => saveFact(d)} disabled={!d.fact.trim() || d.uploading}
-                                style={{ background: C.gold, border: "none", color: "#0A0F1E", borderRadius: 100, padding: "5px 14px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                style={{ background: C.gold, border: "none", color: C.onGold, borderRadius: 100, padding: "5px 14px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                 Save
                               </button>
                             </div>
@@ -14169,7 +14318,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           </div>
                           {draftQueue.length > 0 && (
                             <button onClick={runDraftQueue} disabled={queueBusyRef.current || studioLoading}
-                              style={{ background: C.gold, border: "none", color: "#0A0F1E", borderRadius: 100, padding: "4px 13px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                              style={{ background: C.gold, border: "none", color: C.onGold, borderRadius: 100, padding: "4px 13px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
                               ▶ Start drafting ({draftQueue.length})
                             </button>
                           )}
@@ -14817,7 +14966,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           style={{ width: "100%", background: C.bg, border: `1px solid ${draftPasteError ? "#E23B4E" : C.border}`, borderRadius: 10, padding: "10px", fontSize: 11, color: C.light, lineHeight: 1.6, fontFamily: "monospace", boxSizing: "border-box", resize: "vertical", marginBottom: 8 }} />
                         {draftPasteError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 8 }}>{draftPasteError}</div>}
                         <button onClick={loadPastedDraft}
-                          style={{ background: C.gold, border: "none", borderRadius: 10, padding: "9px 16px", fontSize: 12, fontWeight: 800, color: "#0A0F1E", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          style={{ background: C.gold, border: "none", borderRadius: 10, padding: "9px 16px", fontSize: 12, fontWeight: 800, color: C.onGold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                           Load into the editor
                         </button>
                       </div>
@@ -14841,7 +14990,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   {manualPricePolishing === priceField ? "…" : "🔄 Polish"}
                                 </button>
                                 <button onClick={() => saveManualPriceField(priceField, manualPriceInputs[priceField] || "")} disabled={!manualPriceInputs[priceField]}
-                                  style={{ background: C.accent, border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, color: "#fff", cursor: "pointer", whiteSpace: "nowrap" }}>
+                                  style={{ background: C.accent, border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, color: C.onAccent, cursor: "pointer", whiteSpace: "nowrap" }}>
                                   ✓ Save
                                 </button>
                               </div>
@@ -15059,7 +15208,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                           <div style={{ fontSize: 9.5, color: C.light, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.credit?.photographer || hit.credit?.source || ""}</div>
                                           <div style={{ fontSize: 9, color: C.gold, marginBottom: 5 }}>{hit.credit?.license}</div>
                                           <button onClick={() => useDraftCommonsPhoto(hit)} disabled={draftPhotoBusy}
-                                            style={{ width: "100%", background: C.gold, border: "none", color: "#0A0F1E", borderRadius: 100, padding: "4px", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                            style={{ width: "100%", background: C.gold, border: "none", color: C.onGold, borderRadius: 100, padding: "4px", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                             Use this
                                           </button>
                                         </div>
@@ -15166,7 +15315,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                         <div style={{ color: "#81C784", marginBottom: 6 }}>{suggestion.suggestion}</div>
                                         <div style={{ display: "flex", gap: 8 }}>
                                           <button onClick={() => applyRephrase(idx)}
-                                            style={{ background: C.accent, border: "none", borderRadius: 8, padding: "5px 12px", fontSize: 10.5, fontWeight: 700, color: "#fff", cursor: "pointer" }}>
+                                            style={{ background: C.accent, border: "none", borderRadius: 8, padding: "5px 12px", fontSize: 10.5, fontWeight: 700, color: C.onAccent, cursor: "pointer" }}>
                                             ✓ Apply
                                           </button>
                                           <button onClick={() => rephraseFlag(flag, idx, [...(suggestion.history || []), suggestion.suggestion])} disabled={rephraseLoadingIdx === idx}
@@ -15398,7 +15547,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, fontSize: 10.5, color: C.light, lineHeight: 1.5, fontFamily: "monospace", marginBottom: 8, boxSizing: "border-box" }} />
                                 <div style={{ display: "flex", gap: 8 }}>
                                   <button onClick={() => { setStudioDraftText(factCheckFixPreview); setFactCheckFixPreview(null); setGoogleCheckResult(null); }}
-                                    style={{ background: C.accent, border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 11, fontWeight: 700, color: "#fff", cursor: "pointer" }}>
+                                    style={{ background: C.accent, border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 11, fontWeight: 700, color: C.onAccent, cursor: "pointer" }}>
                                     ✓ Apply to draft
                                   </button>
                                   <button onClick={() => setFactCheckFixPreview(null)}
@@ -15470,7 +15619,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           </>
                         ) : (
                           <button onClick={publishDraft} disabled={publishStatus === "sending"}
-                            style={{ width: "100%", background: C.gold, border: "none", borderRadius: 10, padding: "10px", fontSize: 12.5, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 8 }}>
+                            style={{ width: "100%", background: C.gold, border: "none", borderRadius: 10, padding: "10px", fontSize: 12.5, fontWeight: 700, color: C.onGold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 8 }}>
                             {publishStatus === "sending" ? (editingId !== null ? "Saving…" : "Publishing…") : editingId !== null ? "💾 Save changes" : "🚀 Publish to Gemlyx"}
                           </button>
                         )}
@@ -15922,7 +16071,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           follows the rule rather than forcing Create. See
                           authMode's declaration. */}
                       <button onClick={() => { setAuthReason(null); setAuthMode("in"); setAuthOpen(true); }}
-                        style={{ background: C.gold, border: "none", color: "#12100B", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        style={{ background: C.gold, border: "none", color: C.onGold, borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                         {copy.accept}
                       </button>
                       {/* Dismiss is a real button with a real consequence, not an
@@ -15962,7 +16111,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       <input value={emailSignup} onChange={e => setEmailSignup(e.target.value)} placeholder="Enter your email"
                         style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "11px 14px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
                       <button onClick={() => { if (emailSignup.includes("@")) setEmailSubmitted(true); }}
-                        style={{ background: C.accent, border: "none", borderRadius: 10, padding: "11px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", color: "#fff", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>
+                        style={{ background: C.accent, border: "none", borderRadius: 10, padding: "11px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", color: C.onAccent, fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>
                         Notify me
                       </button>
                     </div>
@@ -16227,7 +16376,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ textAlign: "center", padding: "48px 20px", color: C.muted, background: C.surface, borderRadius: 16, border: `1px dashed ${C.border}` }}>
                   <div style={{ fontSize: 26, marginBottom: 8 }}>🔍</div>
                   <div style={{ fontSize: 14, color: C.light, fontWeight: 600, marginBottom: 4 }}>Nothing matches those filters</div>
-                  <div style={{ fontSize: 12 }}>Try clearing one — Denmark still has plenty to offer.</div>
+                  <div style={{ fontSize: 12 }}>Try clearing one. Denmark still has plenty to offer.</div>
                 </div>
               ) : (
                 <div>
@@ -16320,7 +16469,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 onSort={setEventSort}
               />
               {filteredEvents.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>No upcoming events — try a different filter</div>
+                <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>No upcoming events. Try a different filter.</div>
               ) : (
                 <div className="cards-grid">
                   {filteredEvents.map(e => <EventCard key={e.id} event={e} />)}
@@ -16338,54 +16487,42 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>From a 1965 hot dog cart to Copenhagen's biggest food market — the everyday spots locals actually eat at, and the bigger names worth the crowd.</div>
               </div>
 
-              <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-                {["All", "Restaurants", "Food Streets"].map(k => (
-                  <Pill key={k} label={k} active={foodKind === k} onClick={() => setFoodKind(k)} />
-                ))}
-              </div>
-
-              {/* WHERE. Food had a budget filter and a kind filter and nothing at
-                  all for location, on a guide covering a whole country: the only
-                  way to find dinner in the town you are standing in was to read
-                  every card. Towns are taken from the food entries themselves, so
-                  a pill exists exactly when there is something behind it. */}
-              {(() => {
-                // ── BY CITY, NOT BY NEIGHBOURHOOD ──────────────────
-                // Oliver, 17 Aug 2026: "Fix filters.. that is ridiculous.." This
-                // read the raw `location`, which is "Neighbourhood, City", so the
-                // row offered three chips for Copenhagen and two for Aarhus and
-                // grew by one with every entry published. See cityFromLocation.
-                const cities = [...new Set(foodSpots.map(f => cityFromLocation(f.location || f.city)).filter(Boolean))].sort(daCompare);
-                if (cities.length < 2) return null;
-                return (
-                  <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch" }}>
-                    {["All", ...cities].map(c => (
-                      <Pill key={c} label={c} active={foodCity === c} onClick={() => setFoodCity(foodCity === c ? "All" : c)} />
-                    ))}
-                  </div>
-                );
-              })()}
-
-              <div style={{ display: "flex", gap: 0, marginBottom: 18, borderBottom: `1px solid ${C.border}`, flexWrap: "wrap" }}>
-                {/* ── REAL MONEY, NOT A DANISH-RELATIVE ADJECTIVE ──
-                    Oliver, 16 Aug 2026: "the average traveller doesn't know
-                    what mid-budget is in Denmark." Budget, Mid-range and
-                    Splurge are defined against Danish norms, so reading one
-                    needs knowledge the reader came here to get. The bands were
-                    always in kroner behind those words. See PRICE_BANDS. */}
-                {[{ id: "All", label: "All" }, ...PRICE_BANDS].map(t => (
-                  <button key={t.id} onClick={() => setFoodTab(t.id)}
-                    style={{ flex: 1, background: "none", border: "none", borderBottom: `2px solid ${foodTab === t.id ? C.accent : "transparent"}`, color: foodTab === t.id ? C.text : C.muted, padding: "12px 6px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>
-                    {t.label}
-                  </button>
-                ))}
-              </div>
+              {/* ── ONE ROW OF DROPDOWNS, LIKE EVERY OTHER LIST ──
+                  What stood here: three separate rows, roughly forty lines of
+                  markup, with the kind rule, the city rule and the price rule
+                  written inline in the row AND again inline in the .filter()
+                  below. Declared once each in foodFacets now, and rendered by
+                  the component Events and Attractions already use. */}
+              <FilterBar
+                items={foodSpots}
+                shown={filteredFood.length}
+                noun="places"
+                facets={foodFacets}
+                state={foodFacetState}
+                onChange={setFoodFacets}
+                sort={foodSort}
+                sortOptions={FOOD_SORTS}
+                onSort={setFoodSort}
+              />
 
               {/* Redesign pass: text rows with dangling "Read more" links became
                   real cards — media plate (photo or monogram), name, meta, price,
                   two-sentence description, whole card tappable, tilt on hover. */}
+              {/* ── AND AN EMPTY STATE, WHICH THIS PAGE NEVER NEEDED ──
+                  The old rows could not empty the list: kind, city and price
+                  each had every option backed by something. Four dropdowns
+                  crossing each other can, and a page that answers "no" by
+                  rendering nothing at all reads as broken rather than as
+                  filtered. Events already says this; Food never had to. */}
+              {filteredFood.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "48px 20px", color: C.muted, background: C.surface, borderRadius: 16, border: `1px dashed ${C.border}` }}>
+                  <div style={{ fontSize: 26, marginBottom: 8 }}>🔍</div>
+                  <div style={{ fontSize: 14, color: C.light, fontWeight: 600, marginBottom: 4 }}>Nothing matches those filters</div>
+                  <div style={{ fontSize: 12 }}>Try clearing one. Denmark still has plenty to offer.</div>
+                </div>
+              ) : (
               <div className="cards-grid">
-                {foodSpots.filter(f => (foodTab === "All" || priceBand(f.price) === foodTab) && (foodKind === "All" || (foodKind === "Food Streets" ? f.isFoodStreet : !f.isFoodStreet)) && (foodCity === "All" || cityFromLocation(f.location || f.city) === foodCity)).sort(byName).map(spot => (
+                {filteredFood.map(spot => (
                   <div key={spot.id} onClick={() => setFoodDetail(spot)} onMouseMove={tiltMove} onMouseLeave={tiltLeave}
                     style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer", transition: "transform 0.18s ease", willChange: "transform" }}>
                     <div style={{ height: 128, position: "relative", overflow: "hidden", background: `radial-gradient(120% 90% at 18% 0%, ${spot.color}2E 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
@@ -16405,6 +16542,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   </div>
                 ))}
               </div>
+              )}
             </div>
           )}
 
@@ -17466,7 +17604,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 ))}
                 <div style={{ background: C.surface, borderRadius: 12, padding: "12px 16px", border: `1px solid ${C.border}` }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>Still need help?</div>
-                  <a href="mailto:hello@gemlyxtravel.com" style={{ display: "inline-block", background: C.accent, color: "#fff", borderRadius: 100, padding: "6px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none", marginTop: 6 }}>✉ hello@gemlyxtravel.com</a>
+                  <a href="mailto:hello@gemlyxtravel.com" style={{ display: "inline-block", background: C.accent, color: C.onAccent, borderRadius: 100, padding: "6px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none", marginTop: 6 }}>✉ hello@gemlyxtravel.com</a>
                 </div>
               </div>
             </div>
@@ -17493,7 +17631,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     />
                     <a href={selectedPin ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(selectedPin.shop+" Copenhagen")}` : `https://www.google.com/maps/search/?api=1&query=local+shops+Copenhagen`}
                       target="_blank" rel="noreferrer"
-                      style={{ position: "absolute", bottom: 8, right: 8, zIndex: 600, background: C.gold, color: "#000", padding: "5px 12px", borderRadius: 100, fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
+                      style={{ position: "absolute", bottom: 8, right: 8, zIndex: 600, background: C.gold, color: C.onGold, padding: "5px 12px", borderRadius: 100, fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
                       {selectedPin ? "Get Directions ↗" : "Open in Maps ↗"}
                     </a>
                   </div>
@@ -17501,7 +17639,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     <div style={{ padding: "10px 14px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ fontSize: 11, color: userLocation ? "#4CAF50" : C.muted }}>{userLocation ? "● Sorted by distance" : "Sort by distance?"}</span>
                       {!userLocation ? (
-                        <button onClick={requestLocation} disabled={locationLoading} style={{ background: C.gold, border: "none", borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#000", fontFamily: "'Inter', sans-serif" }}>
+                        <button onClick={requestLocation} disabled={locationLoading} style={{ background: C.gold, border: "none", borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", color: C.onGold, fontFamily: "'Inter', sans-serif" }}>
                           {locationLoading ? "Locating..." : "Use my location ●"}
                         </button>
                       ) : (
@@ -18867,7 +19005,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             </div>
             <div style={{ fontSize: 12.5, color: C.light, marginBottom: 4 }}>{userSession.email || "Signed in"}</div>
             <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 18 }}>
-              {savedPlaces.length} saved {savedPlaces.length === 1 ? "place" : "places"} and {savedGuides.length} saved {savedGuides.length === 1 ? "guide" : "guides"}, synced to this account.
+              {savedPlaces.length} saved {savedPlaces.length === 1 ? "place" : "places"} and {savedGuides.length} saved {savedGuides.length === 1 ? "guide" : "guides"}{cloudSyncOk ? ", synced to this account." : ". Not reaching your account right now, so these are on this device only."}
             </div>
             {/* Loud, not a console line. gemlyx_research shipped weeks ago and
                 did nothing at all because its table never existed and both
@@ -19032,7 +19170,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 {suggestStatus === "error" && <div style={{ fontSize: 12, color: "#FFB347", marginBottom: 10 }}>Please add a name, or check your connection.</div>}
 
                 <button onClick={sendSuggestion} disabled={suggestStatus === "sending"}
-                  style={{ width: "100%", background: C.gold, border: "none", borderRadius: 10, padding: "13px", fontSize: 13, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  style={{ width: "100%", background: C.gold, border: "none", borderRadius: 10, padding: "13px", fontSize: 13, fontWeight: 700, color: C.onGold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                   {suggestStatus === "sending" ? "Sending…" : "Send suggestion"}
                 </button>
               </>
@@ -19190,7 +19328,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             {craftDetail.bookingType === "online" ? (
               <>
                 <a href={craftDetail.bookingUrl} target="_blank" rel="noreferrer"
-                  style={{ display: "block", textAlign: "center", width: "100%", background: C.accent, borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 700, color: "#fff", textDecoration: "none", fontFamily: "'Inter', sans-serif" }}>
+                  style={{ display: "block", textAlign: "center", width: "100%", background: C.accent, borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 700, color: C.onAccent, textDecoration: "none", fontFamily: "'Inter', sans-serif" }}>
                   Book Online ↗
                 </a>
                 <div style={{ fontSize: 11, color: C.muted, textAlign: "center", marginTop: 8 }}>Books directly with {craftDetail.name.split(" — ")[0]} — instant confirmation</div>
@@ -19198,7 +19336,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             ) : (
               <>
                 <button onClick={() => { setCraftModal(craftDetail); setCraftStatus(null); setCraftDetail(null); }}
-                  style={{ width: "100%", background: C.accent, border: "none", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  style={{ width: "100%", background: C.accent, border: "none", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 700, color: C.onAccent, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                   Send Booking Request
                 </button>
                 <div style={{ fontSize: 11, color: C.muted, textAlign: "center", marginTop: 8 }}>No online booking here — we'll reach out to confirm with them personally</div>
@@ -19244,7 +19382,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 )}
 
                 <button onClick={sendCraftRequest} disabled={craftStatus === "sending"}
-                  style={{ width: "100%", background: C.accent, border: "none", borderRadius: 12, padding: "13px", fontSize: 14, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 4 }}>
+                  style={{ width: "100%", background: C.accent, border: "none", borderRadius: 12, padding: "13px", fontSize: 14, fontWeight: 700, color: C.onAccent, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 4 }}>
                   {craftStatus === "sending" ? "Sending..." : "Send request"}
                 </button>
                 <button onClick={() => setCraftModal(null)}
@@ -19258,7 +19396,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ fontSize: 20, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 6 }}>Booking request sent!</div>
                 <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 20 }}>We'll connect you with {craftModal.name} and reply to {craftForm.email} personally.</div>
                 <button onClick={() => { setCraftModal(null); setCraftForm({ name: "", email: "", interest: "", visit: "" }); }}
-                  style={{ background: C.accent, border: "none", borderRadius: 12, padding: "12px 28px", fontSize: 14, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  style={{ background: C.accent, border: "none", borderRadius: 12, padding: "12px 28px", fontSize: 14, fontWeight: 700, color: C.onAccent, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                   Done
                 </button>
               </div>

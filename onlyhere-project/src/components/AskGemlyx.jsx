@@ -254,7 +254,7 @@ export const AskGemlyx = ({ session, item, kind, onSignIn, founder = false, near
           </>
         ) : (
           <button onClick={() => onSignIn?.()}
-            style={{ width: "100%", background: C.gold, border: "none", color: "#000", borderRadius: 100, padding: "10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+            style={{ width: "100%", background: C.gold, border: "none", color: C.onGold, borderRadius: 100, padding: "10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
             Sign in to ask
           </button>
         )}

@@ -220,7 +220,26 @@ export const GuidePreviewScreen = ({
   // for a named region is a question about the trip, not about the region.
   // Computed here rather than inside, so the events and the towns read the same
   // window and cannot disagree about how long somebody is here.
-  const win = tripWindow({ arrival: intakeArrival, departure: intakeDeparture, convoText });
+  // ── THE TRAVELLER'S OWN TURNS, HOISTED ABOVE THE WINDOW ─────────
+  // This used to be declared thirteen lines further down, next to the reads
+  // that needed it. The window needs it now too, and it needs it FIRST, so it
+  // moved up rather than being computed twice. Everything below reads the same
+  // constant it always did.
+  const travellerTurns = aiMessages.slice(1).filter(m => m.role === "user").map(m => m.text || "");
+  const saidByTraveller = travellerTurns.join("\n");
+  // The trip's own length reaches the matcher, because how many towns to offer
+  // for a named region is a question about the trip, not about the region.
+  // Computed here rather than inside, so the events and the towns read the same
+  // window and cannot disagree about how long somebody is here.
+  //
+  // ── AND convoTurns, WHICH IS WHY HIS FATHER'S TRIP HAD NO DATES ──
+  // He answered "i dag" and "7 dage". The BRIEF learned to read that on 22
+  // August; this window did not, so it came back `dated: false` and the event
+  // filter had nothing to rule a February festival out with. An ARRAY of the
+  // traveller's turns, never convoText: that string carries Gemlyx's replies
+  // with a role prefix on every line, and reading a date out of the app's own
+  // words is the exact mistake the comment below this one is about.
+  const win = tripWindow({ arrival: intakeArrival, departure: intakeDeparture, convoText, convoTurns: travellerTurns });
   // ── "THEY ARE ONLY ASKING FOR EVENTS" ─────────────────────────────
   // What the brief is into, read off the intake form and THE TRAVELLER'S OWN
   // TURNS. null means they named nothing, and then nothing is held back. See
@@ -235,7 +254,7 @@ export const GuidePreviewScreen = ({
   // NAMES are a different question and still read from the whole conversation,
   // because a place Gemlyx named and the traveller kept talking about is a
   // place in this trip. An interest has to be theirs.
-  const saidByTraveller = aiMessages.slice(1).filter(m => m.role === "user").map(m => m.text || "").join("\n");
+  // saidByTraveller and travellerTurns are declared together above the window.
   const wanted = wantedCategories(saidByTraveller, intakeInterest);
   // ── AND WHICH ATTRACTIONS, WHICH IS A SECOND QUESTION ─────────────
   // Oliver, 15 Aug 2026, on a brief that said markets and modern design and

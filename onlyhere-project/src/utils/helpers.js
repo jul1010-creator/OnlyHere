@@ -2,6 +2,9 @@ import { TOWN_COORDS } from "../data/towns";
 // Its own file, not inlined here and not imported from eventDates.js, which
 // already imports daCompare from this one. See utils/calendarDay.js.
 import { dayStart, dayWithin } from "./calendarDay";
+// The six-language month vocabulary, so a numbered-list marker and a European
+// date can be told apart. See utils/travellerWords.js.
+import { MONTH_PATTERN } from "./travellerWords";
 
 // ── ONE ANSWER TO "IS THIS LEG A BOAT" ───────────────────────────────
 // Audited 10 Aug 2026: this question was being asked in SEVEN places in FIVE
@@ -477,10 +480,28 @@ export const READY_MARKER = "[[GEMLYX_READY_TO_BUILD]]";
 // So anything unmistakably this marker counts. The core sequence GEMLYX READY
 // TO BUILD cannot occur in a real reply about Denmark by accident, which is
 // what makes loosening it safe rather than reckless.
-const READY_PATTERN = /\[{0,2}\s*GEMLYX[\s_-]*READY[\s_-]*TO[\s_-]*BUILD\s*\]{0,2}/i;
+// ── TOLERANT, BUT NOT SO TOLERANT IT EATS ENGLISH ───────────────────
+// The first version was `\\[{0,2}...GEMLYX[\\s_-]*READY[\\s_-]*TO[\\s_-]*BUILD...`,
+// which made every bracket and every separator optional at once. That matches
+// the ordinary sentence "I'll have Gemlyx ready to build your guide", and
+// because stripReadyMarker also swallowed the spaces on both sides it rendered
+// as "I'll haveyour guide". Every assistant message goes through the strip, so
+// the damage was not limited to the ready case.
+//
+// So it is EITHER bracketed, with any separator, OR unbracketed with separators
+// no human writes between those four words. A model that mangles the marker
+// still gets caught; a model writing prose about being ready does not.
+const READY_PATTERN = /\[\[?\s*GEMLYX[\s_-]*READY[\s_-]*TO[\s_-]*BUILD\s*\]?\]|\bGEMLYX[_-]+READY[_-]+TO[_-]+BUILD\b/i;
 export const isReadyToBuild = (text) => !!text && READY_PATTERN.test(text);
+// Replaced with a SPACE, not with nothing. Removing the match outright fused
+// the words on either side of it.
 export const stripReadyMarker = (text) =>
-  text ? text.replace(new RegExp(READY_PATTERN.source, "gi"), "").trim() : text;
+  text
+    ? text.replace(new RegExp(READY_PATTERN.source, "gi"), " ")
+        .replace(/[ \t]{2,}/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim()
+    : text;
 
 // Common AI-writing tells — surface-level phrases that read as generic AI filler
 // rather than a real person's voice. Case-insensitive, checked as whole phrases
@@ -555,14 +576,44 @@ export const isFullPlanText = (text) => {
   return dayHeaders >= 2 || (dayHeaders >= 1 && text.length > 500);
 };
 
+// ── THREE THINGS IT GOT WRONG, ON A DANISH TRAVEL PRODUCT ───────────
+//
+// Found 22 Aug 2026 by an adversarial pass over the previous night's work, all
+// three demonstrated by execution rather than by reading.
+//
+// 1. IT ATE DANISH DATES. `^\d+\.\s+` is the markdown numbered-list marker and
+//    it is also, letter for letter, how Danish, German and Dutch write a date.
+//    "1. maj er en helligdag" came out as "maj er en helligdag". The product is
+//    a guide to Denmark; public holidays and festival dates are most of what it
+//    says, and this ran on EVERY assistant message.
+//
+//    The guard is the month name, read from the same six-language vocabulary
+//    the traveller parsers use, so "1. maj", "15. Mai" and "3. oktober" survive
+//    while "1. Book the ferry first" is still stripped. It is not complete: "3.
+//    sal" and "1. klasse" are ordinals too and still lose their number. The
+//    month case is the one that was reaching readers.
+//
+// 2. IT PAIRED STRAY ASTERISKS ACROSS A SENTENCE. `\*(.+?)\*` matched from the
+//    star in "a 4* hotel" to the star in "5* reviews", so a sentence about a
+//    four-star hotel and five-star reviews came out about a 4 hotel and 5
+//    reviews. Real italics have no whitespace immediately inside the markers,
+//    which is what the \S anchors now require.
+//
+// 3. IT MISSED THE MOST COMMON BULLET THERE IS. The class was [-•], so a `* `
+//    bullet, a `+ ` bullet and any indented bullet all survived, which is the
+//    exact thing the function was added to remove.
+// A numbered-list marker, EXCEPT when the thing after it is a month name, in
+// which case it is a date somebody wrote the way most of Europe writes one.
+const NUMBERED_LIST_RE = new RegExp(`^[ \\t]*\\d+\\.[ \\t]+(?!(?:${MONTH_PATTERN})\\b)`, "gmi");
+
 export const stripMarkdown = (text) => {
   if (!text) return text;
   return text
-    .replace(/^#{1,6}\s+/gm, "")       // headings
-    .replace(/\*\*(.+?)\*\*/g, "$1")    // bold
-    .replace(/\*(.+?)\*/g, "$1")        // italics
-    .replace(/^[-•]\s+/gm, "")          // bullet dashes
-    .replace(/^\d+\.\s+/gm, "");        // numbered lists
+    .replace(/^#{1,6}\s+/gm, "")                    // headings
+    .replace(/\*\*(.+?)\*\*/g, "$1")                 // bold
+    .replace(/\*(\S(?:.*?\S)?)\*/g, "$1")            // italics, no space inside
+    .replace(/^[ \t]*[-*+•]\s+/gm, "")              // bullets, indented or not
+    .replace(NUMBERED_LIST_RE, "");                 // numbered lists, not dates
 };
 
 
