@@ -283,7 +283,22 @@ export const TERMS_VERSION = "2.0";
 // gets added to one and not the other, which is the bug that made `learned`
 // disappear on every save. So `learned` goes last, where cleanProfile puts it,
 // and the two terms fields go immediately before it in both.
-export const EMPTY_PROFILE = { name: "", bornDate: "", bornYear: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: [], transport: [], style: [], termsVersion: "", termsAcceptedAt: "", learned: {} };
+// ── HOW LONG AN ANSWER SHOULD BE ───────────────────────────────────
+//
+// Oliver, 23 Aug 2026: "include a part that is 'long' and 'short' answers.
+// Because some people want a friend, and others want quick answers."
+//
+// Two values and no third, because a middle option on a two-ended scale is what
+// everybody picks and it tells the model nothing. Empty is the real third state:
+// nothing stated, and Gemlyx answers as it always has.
+//
+// This one REACHES THE PROMPT, in profileForPrompt below. That is the condition
+// every setting on that screen has to meet: a stored preference nothing reads is
+// worse than no setting at all, because the person believes they changed
+// something.
+export const REPLY_LENGTHS = ["Short", "Long"];
+
+export const EMPTY_PROFILE = { name: "", bornDate: "", bornYear: "", country: "", ageBand: "", sex: "", phone: "", address: "", replyLength: "", company: "", pace: "", description: "", interests: [], transport: [], style: [], termsVersion: "", termsAcceptedAt: "", learned: {} };
 
 const str = (v, max = 120) => String(v ?? "").trim().slice(0, max);
 const oneOf = (v, list) => (list.includes(String(v ?? "").trim()) ? String(v).trim() : "");
@@ -388,6 +403,20 @@ export const cleanProfile = (raw) => ({
   // because a year is the more precise of the two and is what the form writes.
   ageBand: oneOf(raw?.ageBand, AGE_BANDS),
   sex: oneOf(raw?.sex, SEX_OPTIONS),
+  // ── CONTACT DETAILS, ADDED 23 AUG AT HIS REQUEST ──────────────────
+  //
+  // Both optional and both stored as typed. A phone number is NOT validated
+  // against a pattern: international formats differ by country, people write
+  // them with spaces, dots, brackets and a leading plus or a leading zero, and a
+  // regex that rejects a real number is worse than one that accepts an odd one.
+  // Length is capped so the column cannot be used as a notes field.
+  //
+  // Adding these means public/privacy.html has to name them, which it now does.
+  // A privacy promise that quietly goes stale is worse than one never made, and
+  // that rule is this codebase's own.
+  phone: str(raw?.phone, 40),
+  address: str(raw?.address, 200),
+  replyLength: oneOf(raw?.replyLength, REPLY_LENGTHS),
   company: oneOf(raw?.company, COMPANY),
   pace: oneOf(raw?.pace, PACE),
   description: str(raw?.description, DESCRIPTION_MAX),
@@ -419,6 +448,24 @@ export const cleanProfile = (raw) => ({
 // The free text and the country stay optional: the country he added later and
 // only for the currency line, and "More about yourself" is the field nobody can
 // be made to fill in usefully.
+// ── DATE OF BIRTH AND GENDER ARE NOT SETTINGS ──────────────────────
+//
+// Oliver, 23 Aug 2026: "Date of Birth and Gender should be completely gone. You
+// don't change your birth."
+//
+// Asked once at signup, where they belong, and absent from the settings screen
+// entirely. Not shown locked, not shown greyed: absent. A read-only row for a
+// fact that cannot change is a row nobody ever needs to look at, and a disabled
+// control invites a hunt for the way to enable it.
+//
+// They stay on the PROFILE, because the age band derived from the date is what
+// shapes a recommendation and the prompt reads both. What changed is only where
+// they can be typed.
+//
+// The one cost, written down rather than discovered later: a row created before
+// these fields existed carries no date of birth, and there is now no screen on
+// which to add one. Those rows keep the age band they already had, and anybody
+// signing up today answers both, so the gap closes rather than growing.
 export const REQUIRED_PROFILE = ["name", "bornDate", "sex"];
 export const REQUIRED_LABEL = { name: "Name", bornDate: "Date of birth", sex: "Gender" };
 
@@ -486,8 +533,55 @@ export const profileForPrompt = (p) => {
     ? `On famous versus hidden: no strong preference, so a mix is right.`
     : `On what a trip is for: ${c.style.join(", ").toLowerCase()}.`);
   if (c.description) bits.push(`In their own words: "${c.description}"`);
+  // ── AND HOW MUCH OF AN ANSWER THEY WANT ──────────────────────────
+  // "some people want a friend, and others want quick answers." Said as an
+  // instruction rather than as a fact about them, because unlike everything
+  // above it it is not a thing to reason from, it is a thing to obey. It governs
+  // LENGTH and manner only: it never licenses leaving out a price, a date or a
+  // warning, because a short answer that drops the one fact somebody needed is
+  // not a short answer, it is a wrong one.
+  if (c.replyLength === "Short") bits.push(`They have asked for SHORT answers. Say the thing and stop: no preamble, no summary of what they just asked, no offer of further help at the end. Never drop a price, a date, an opening time or a warning to be brief.`);
+  if (c.replyLength === "Long") bits.push(`They have asked for FULL answers. Give the context and the reasoning behind a suggestion, and talk to them the way a well-travelled friend would. Length is not licence to pad: every extra sentence still has to carry something they did not already know.`);
   if (!bits.length) return "";
   return `ABOUT THIS TRAVELLER, given by them and not inferred. Use it to choose what to recommend and how to pitch it. Never repeat it back to them as though it were a discovery, never assume anything it does not say, and if it conflicts with what they ask for in this conversation, what they ask for wins.\n${bits.join(" ")}`;
+};
+
+// ── EVERYTHING GEMLYX KNOWS, IN A FORM A PERSON CAN READ ───────────
+//
+// Oliver, 23 Aug 2026: "everything AI knows about the person should be together.
+// EVERYTHING."
+//
+// The settings screen splits the EDITING across sections: name and contact under
+// General, preferences under About me, and date of birth and gender nowhere at
+// all because they are asked once at signup. That split is right for editing and
+// wrong for reading, because it leaves no single place that answers "what does
+// this thing know about me".
+//
+// So this returns the same FIELD SET profileForPrompt sends to the model, as
+// label and value pairs, and About me prints it. Both functions live in this
+// file and read the same cleaned profile, and the suite asserts that every value
+// reaching the prompt also appears here: a field added to one and forgotten in
+// the other is the drift this pairing exists to prevent.
+//
+// Empty fields are dropped rather than listed as blanks. "Gender: not set" on a
+// screen with no way to set it is a row that can only frustrate.
+export const knownAboutTraveller = (p) => {
+  const c = cleanProfile(p);
+  const band = bandForYear(cleanBornDate(c.bornDate) || birthYear(c)) || c.ageBand;
+  const out = [
+    ["Name", c.name],
+    ["Age", band],
+    ["Gender", c.sex && c.sex !== "Prefer not to say" ? c.sex : ""],
+    ["Travelling from", c.country ? countryNamed(c.country).name : ""],
+    ["Usually travels", c.company],
+    ["Pace", c.pace],
+    ["Interests", c.interests.join(", ")],
+    ["Transport", c.transport.join(", ")],
+    ["Trip style", c.style.join(", ")],
+    ["Answer length", c.replyLength],
+    ["In their own words", c.description],
+  ];
+  return out.filter(([, v]) => String(v ?? "").trim()).map(([label, value]) => ({ label, value: String(value) }));
 };
 
 // ── HELD ON THE DEVICE UNTIL THERE IS A ROW TO PUT IT IN ────────────

@@ -30,7 +30,25 @@ import { BORN_DATE_MIN, BORN_DATE_MAX, cleanBornDate, SEX_OPTIONS, COMPANY, PACE
 // turns those marks red once somebody has pressed the button with one empty. Off
 // until then, because a form that scolds you before you have typed anything is a
 // worse form.
-export const ProfileQuestions = ({ value, onChange, required = false, showGaps = false }) => {
+// ── ONE FORM, NOW ASKED IN TWO HALVES ────────────────────────────────
+//
+// `show` picks which half renders. The default is "all", so AuthSheet and the
+// signup flow are unchanged, and the settings screen asks for the two halves on
+// two different sections:
+//
+//   "general"  name and country. Date of birth and gender are NOT here, by his
+//              instruction of 23 Aug: they are asked once at signup and never
+//              shown again, because they do not change.
+//   "travel"   the preference groups, rendered open. Behind a disclosure they
+//              are an optional extra on a signup form; on a settings page they
+//              are the content, and a page whose content starts collapsed is a
+//              page that looks empty.
+//
+// A prop rather than a second component, for the reason this file exists: a
+// second copy of these fields is how the signup version and the settings version
+// drift apart, and this codebase has already found four duplicated functions the
+// hard way.
+export const ProfileQuestions = ({ value, onChange, required = false, showGaps = false, show = "all" }) => {
   const p = value;
   // Open/closed is pure display state and belongs here rather than in either
   // caller, which is the whole point of this component owning no data.
@@ -151,11 +169,13 @@ export const ProfileQuestions = ({ value, onChange, required = false, showGaps =
           A placeholder that EXAMPLES the answer is not the same thing as a
           placeholder that instructs: it shows the shape and disappears the
           moment anybody types, which is what a placeholder is for. */}
+      {show !== "travel" && (<>
       <div style={legend}>Name{star("name")}</div>
       <input value={p.name} onChange={e => set("name", e.target.value.slice(0, 60))} placeholder="e.g. John Smith"
         autoComplete="given-name" style={{ ...field, marginBottom: 18, ...ring("name") }} />
 
       <div style={trio}>
+        {show === "all" && (<>
         <div>
           {/* ── ONE CONTROL, NOT THREE ────────────────────────────
               "year of birth should obviously include month and day as well."
@@ -172,6 +192,7 @@ export const ProfileQuestions = ({ value, onChange, required = false, showGaps =
           <div style={legend}>Gender{star("sex")}</div>
           {select("sex", SEX_OPTIONS, "Select")}
         </div>
+        </>)}
         <div>
           <div style={legend}>Country of origin</div>
           <select value={p.country} onChange={e => set("country", e.target.value)}
@@ -181,20 +202,23 @@ export const ProfileQuestions = ({ value, onChange, required = false, showGaps =
           </select>
         </div>
       </div>
+      </>)}
 
       {/* ── THE OPTIONAL HALF, BEHIND THE SAME DOOR AS FINE-TUNE ───
           "Make a dropdown on the 'optional' exactly like with the Gemlyx
           finetuning." Same bordered gold button, same chevron, same rule his dad
           taught this codebase once already: a borderless text row reads as a
           heading rather than something you can press. */}
+      {show === "all" && (
       <button onClick={() => setMoreOpen(o => !o)}
         style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: moreOpen ? `${C.gold}14` : C.bg, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "12px 14px", marginBottom: moreOpen ? 16 : 4, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left" }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: C.gold }}>✦ Optional: about yourself</span>
         <span style={{ fontSize: 11, color: C.muted }}>the more Gemlyx knows, the better it plans</span>
         <span style={{ marginLeft: "auto", fontSize: 12, color: C.gold, transform: moreOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s ease", display: "inline-block" }}>▾</span>
       </button>
+      )}
 
-      {moreOpen && (<div>
+      {(show === "travel" || (show === "all" && moreOpen)) && (<div>
         {groupMany("Interests", "", INTERESTS, "interests")}
         {groupMany("Preferred transport", "", TRANSPORT, "transport")}
         {groupMany("Preferred travelling", "", TRAVEL_STYLE, "style")}

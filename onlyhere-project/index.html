@@ -142,47 +142,24 @@
          ways this can be checked.
          Impact-Site-Verification: 87383212-a6cf-40cb-ab5a-d974b44e3187 -->
 
-    <!-- ── TRAVELPAYOUTS VERIFICATION, AND IT COMES BACK OUT ──────────
-         TEMPORARY. Added 15 Aug 2026 to pass Travelpayouts' site check, and it
-         is meant to be deleted the moment the dashboard says verified. If you
-         are reading this and the site is already verified, delete this block.
+    <!-- ── THE TRAVELPAYOUTS TAG IS OUT, 23 AUG 2026 ─────────────────
+         A script loading https://emrldtp.com/NTYyNzA5.js sat here from 15 Aug
+         to pass Travelpayouts' site check. It was written as temporary on the
+         day it went in and this is the deletion it was written for.
 
-         WHY IT IS HERE AT ALL, since a script in this file is the one thing
-         everything else here avoids. Impact, above, verifies with a meta tag
-         and a comment: inert text, no code. Travelpayouts has no equivalent.
-         Their help centre lists WordPress, manual HTML, Wix and Squarespace,
-         and every one of them is the same thing, a script in the head. There is
-         no meta tag, no DNS record and no file upload to use instead.
+         WHY IT COULD NOT STAY. public/privacy.html tells a reader Gemlyx sets
+         no cookies of its own and runs no tracking pixels, in those words, in
+         two places. A third-party script in the head is the one thing that can
+         make that false without anybody editing the sentence. Emerald's own
+         product is inserting affiliate links and picking recommendation blocks,
+         which is editorial control this site does not hand out.
 
-         WHAT IT LOADS. emrldtp.com is Travelpayouts' Emerald infrastructure and
-         NTYyNzA5 is base64 for 562709, the same partner id as the query string.
-         Emerald's actual product is inserting affiliate links into your pages,
-         adding hover tooltips and placing recommendation blocks that IT picks.
-         Gemlyx must never run that: which places are recommended, and in what
-         order, is editorial, and public/privacy.html now promises a reader in
-         so many words that nothing is ranked higher because it pays.
+         The affiliate links themselves are unaffected. They are plain URLs
+         built in src/utils/affiliates.js from the templates in src/config.js,
+         and they need no script on the page.
 
-         SO BEFORE THIS SHIPS, turn every Emerald tool OFF in the Travelpayouts
-         dashboard. This tag is a doorbell, not a monetiser.
-
-         AND THE PRIVACY PAGE IS THE CLOCK. It says Gemlyx sets no cookies of
-         its own and runs no tracking pixels. That stays true only while this is
-         a short verification window, which is the whole reason it is temporary
-         rather than a decision. Deploy, verify, delete, deploy again.
-
-         The wrapper attributes Travelpayouts printed are gone on purpose:
-         nowprocket, data-noptimize, data-cfasync, data-wpfc-render,
-         seraph-accel-crit and data-no-defer are opt-outs for WordPress cache
-         plugins. There is no WordPress here and they were noise. -->
-    <script>
-      (function () {
-        var s = document.createElement("script");
-        s.async = 1;
-        s.setAttribute("data-cmp-ab", "2");
-        s.src = "https://emrldtp.com/NTYyNzA5.js?t=562709";
-        document.head.appendChild(s);
-      })();
-    </script>
+         IF THE DASHBOARD SAYS UNVERIFIED, the block is in git history at this
+         line. Put it back, deploy, verify, delete again. Do not leave it in. -->
 
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }

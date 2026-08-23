@@ -458,3 +458,123 @@ today added a variant: **a measurement of something the product does not do.**
 "Is `onGold` legible on `gold`" is not "is the button legible" when no button
 reads `onGold`. "Does the text contain a time word" is not "did they answer the
 question". Both shipped, both green.
+
+---
+
+## 23 August, late: the settings screen, and then the suite itself
+
+Written after "How much of this can you just fix yourself?" Four things were
+promised. All four are done. The last one turned into the largest find of the
+day.
+
+### The guide builder was reading three languages fewer than the brief
+
+`generateGuide` carried English-only copies of the day count, the arrival date
+and the bare month, while `tripEvents.js` had read all six languages since
+22 August. So "7 dage" left `requestedDays` null and no day count was enforced,
+and "15. maj" left `arrivalDate` null, which is the wrong weather and the wrong
+event month. The three local readers are gone and the shared ones are imported.
+
+Two bugs went with them. The day count was read off `convoText`, which includes
+Gemlyx's own turns, so the model could set the trip length by saying a number;
+it now reads `saidByTravellerForGuide`. And the old bare-month branch pushed
+"in August", written on 17 August, into the following year.
+
+The builder also gained the relative-day branch it never had, so "next weekend"
+and "om to uger" now reach it.
+
+### Every toast shared one timer
+
+46 `setToast` sites, 22 of them hand-rolling `setTimeout(() => setToast(null))`.
+A toast raised while another was showing was cut short by the older timer, and
+nothing cleared on unmount. There is now one `showToast(text, ms)` wrapper
+holding one ref, and the 22 pairs are gone.
+
+### And then: sixteen assertions that could not fail
+
+`stripNonCode` blanks string CONTENTS as well as comments. That is right for
+"is this code still here" and silently wrong for "is this sentence still here",
+because the sentence lives inside a string. So
+
+    ok("the false claim is gone", !/Most tourists see Denmark for/.test(stripNonCode(app)))
+
+was reading a row of spaces where the copy is. It was green with the copy on the
+page and would have stayed green if the copy came back.
+
+Scanning raw source instead is the trap these assertions were moved off in the
+first place: the comment above a fix quotes the line it removed, so the scan
+finds the bug report and calls it the bug.
+
+**`tests/tdz.mjs` now exports `stripComments` as well.** Same walk, one flag:
+comments blanked, strings kept, positions preserved. Both failure modes go at
+once. Sixteen assertions moved onto it, each mutation-tested twice: red when the
+copy comes back inside a string, green when a comment merely quotes it.
+
+**Fourteen hand-rolled comment strippers are gone with them.** Eleven were
+`split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l))`, which misses a comment
+that trails code on the same line. Three were `.replace(/\/\/[^\n]*/g, "")`,
+which eats everything after `https://` on any line holding a link. That one was
+real: a sentence sitting after a URL was invisible to the assertion checking it
+was gone.
+
+**A guard now stops the class coming back.** The suite reads its own source and
+fails if any NEGATIVE whose pattern is three or more plain words in a row runs
+through `stripNonCode`. Three plain words is a claim about copy, and a claim
+about copy may not be scanned with the strings blanked out. Declarations are
+excluded by keyword, so `export const normName` stays where it belongs, and
+matches sitting inside the suite's own comments and strings are excluded by
+using `stripNonCode` as a position map rather than as text.
+
+### Two assertions were passing on a comment
+
+Found by a sweep that runs every positive twice, raw and stripped, and reports
+the ones that only match raw. It lives in the repo as **`tests/comment-audit.mjs`**
+and is not part of the suite; its own header says why.
+
+* **AuthSheet** claimed the sheet says what is stored, matching "a few optional
+  details about yourself". That wording had been REPLACED, and the comment above
+  the new sentence quotes it to explain why. The whole paragraph could have been
+  deleted with the assertion still green. It now names the sentence that ships,
+  and asserts the old one gone through `stripComments`.
+* **FilterBar** claimed "the sort still says it is not a filter". That sentence
+  is a comment in FilterBar explaining the layout. No reader has ever seen it.
+  It is now the structural claim the comment was describing: no sort control is
+  drawn above the count.
+
+### One caller/callee pin became a relationship
+
+`fetchExactDurations` had its whole parameter list and whole argument list
+pinned character for character, which is a transcript rather than a rule.
+It now looks the trip date's slot up and asserts the caller fills THAT slot with
+the arrival date. Proven three ways: red when the argument is dropped, red when
+two arguments are swapped, green through a consistent rename.
+
+That is the pattern for the rest of the 177 call-shape pins when somebody gets
+to them. **The count is not the point.** Around thirty assertions broke on
+correct code today and every one was pinned to a file name, a literal or a call
+shape.
+
+**9,663 passed, 0 failed. Build clean at 1,602.23 kB, and the bundle hash is
+unchanged, which is the proof that none of this touched `src/`.**
+
+Changed tonight: `tests/run.mjs`, `tests/tdz.mjs`, `tests/comment-audit.mjs` (new).
+
+### And the Travelpayouts tag came out
+
+He did not know what Emerald was, which is the best argument for deleting it.
+It is Travelpayouts' automated monetiser: a script that reads your pages,
+converts text into affiliate links, adds in-text tooltips and drops
+recommendation boxes for hotels and tours that IT picks. Their own help centre
+says a publisher cannot choose which brands it uses or cap how many links it
+adds. On a site whose privacy policy promises nothing is ranked higher because
+it pays, that is not a setting to leave on, it is a product to not have.
+
+The tag was only ever there to pass their site check, and the Tiqets deep-link
+template in `src/config.js` is issued, which does not happen before approval.
+So `index.html` is back to one script, the app's own module entry.
+
+An assertion now holds it there: `index.html` loads exactly one script, it is
+`/src/main.jsx`, and nothing is inlined into the head. Counted as TAGS rather
+than as a hostname, because the comment recording the deletion quotes the URL it
+deleted, and a scan for the host would find the note and call it the script.
+That is the same trap as everything above it.

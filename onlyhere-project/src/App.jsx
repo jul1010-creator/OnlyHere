@@ -7,7 +7,10 @@ export const ABOUT_ME_PATH = "/me";
 
 import { craftItemsFallback, handmadeCraftShops } from "./data/craft";
 import { splitForCheck, CHECK_SCOPE_BLOCK, admissible, checkModeOf, fieldIn } from "./utils/checkScope";
-import { tripWindow } from "./utils/tripEvents";
+// ── THE GUIDE BUILDER READS WHAT THE BRIEF READS ────────────────────
+// It carried its own copies of all three of these, English only, while the
+// brief has read six languages since 22 August. See the swap in generateGuide.
+import { tripWindow, dayCountIn, arrivalDateIn, monthOnlyIn, latestRelativeAnswer } from "./utils/tripEvents";
 import { denmarkFacts } from "./data/denmarkFacts";
 import { orderFor, nextSeed, advancePos, factAt } from "./utils/factRotation";
 import { events, majorEvents, vikingEvents } from "./data/events";
@@ -1159,8 +1162,8 @@ function GemlyxApp() {
       if (!res.ok) { setBodyError(studioErrorMessage("this entry", res.status, saved)); setBodySaving(false); return; }
       setManageItems(prev => (prev || []).map(r => r.id === row.id ? { ...r, payload: merged } : r));
       setBodyEditId(null);
-      setToast(`Saved ${changedIndexes(live.blogBody, nextBody).length === 1 ? "one paragraph" : `${changedIndexes(live.blogBody, nextBody).length} paragraphs`} on ${merged.name}. Visitors see it on their next load.`);
-      setTimeout(() => setToast(null), 3500);
+      showToast(`Saved ${changedIndexes(live.blogBody, nextBody).length === 1 ? "one paragraph" : `${changedIndexes(live.blogBody, nextBody).length} paragraphs`} on ${merged.name}. Visitors see it on their next load.`, 3500);
+      
     } catch (e) { setBodyError(String(e.message || e)); }
     setBodySaving(false);
   };
@@ -1190,8 +1193,8 @@ function GemlyxApp() {
       if (!res.ok) { setPlaceError(studioErrorMessage("this entry", res.status, body)); setPlaceSaving(false); return; }
       setManageItems(prev => (prev || []).map(r => r.id === row.id ? { ...r, payload: merged } : r));
       setPlaceEditId(null);
-      setToast(`Saved. ${merged.name} is now a ${cleanPlaceKind(merged.placeKind) || "town"}. Visitors see it on their next load.`);
-      setTimeout(() => setToast(null), 3500);
+      showToast(`Saved. ${merged.name} is now a ${cleanPlaceKind(merged.placeKind) || "town"}. Visitors see it on their next load.`, 3500);
+      
     } catch (e) { setPlaceError(String(e.message || e)); }
     setPlaceSaving(false);
   };
@@ -1655,8 +1658,8 @@ function GemlyxApp() {
         blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), block],
       });
       setPhotoFinder(null);
-      setToast(`Added, credited to ${hit.credit.photographer} (${hit.credit.license})`);
-      setTimeout(() => setToast(null), 3000);
+      showToast(`Added, credited to ${hit.credit.photographer} (${hit.credit.license})`, 3000);
+      
     } catch (e) {
       const msg = String(e?.message || e);
       setPhotoFinder(f => ({ ...f, saving: null, error:
@@ -1760,10 +1763,10 @@ function GemlyxApp() {
         setToast("🗑 Deleted — refreshing");
         setTimeout(() => window.location.reload(), 900); // simplest correct way to clear it from every merged array
       } else {
-        setToast("❌ Delete failed — check the delete RLS policy exists");
-        setTimeout(() => setToast(null), 2500);
+        showToast("❌ Delete failed. Check the delete RLS policy exists", 2500);
+        
       }
-    } catch { setToast("❌ Delete failed"); setTimeout(() => setToast(null), 2500); }
+    } catch { showToast("❌ Delete failed", 2500);  }
     setDeletingId(null);
   };
 
@@ -2001,8 +2004,8 @@ function GemlyxApp() {
     // Public-domain and CC0 files legitimately have no nameable author, so the
     // toast falls through to the licence rather than saying "credited to
     // undefined", which is what the published panel's version does today.
-    setToast(`Added, credited to ${credit.photographer || credit.license || "Wikimedia Commons"}`);
-    setTimeout(() => setToast(null), 3000);
+    showToast(`Added, credited to ${credit.photographer || credit.license || "Wikimedia Commons"}`, 3000);
+    
   };
 
   // ── A DRAFT YOU ALREADY HAVE, PUT BACK ──────────────────────────────
@@ -7010,10 +7013,10 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     draftQueueRef.current = [...draftQueueRef.current, ...fresh.map(name => ({ name, type }))];
     setDraftQueue([...draftQueueRef.current]);
     setDiscoverPicked([]);
-    setToast(fresh.length === list.length
+    showToast(fresh.length === list.length
       ? `${fresh.length} added to the queue · press Start drafting`
-      : `${fresh.length} added, ${list.length - fresh.length} already queued`);
-    setTimeout(() => setToast(null), 2800);
+      : `${fresh.length} added, ${list.length - fresh.length} already queued`, 2800);
+    
   };
 
   // ── UPDATE CURRENT (events only): re-verify EXISTING upcoming events —
@@ -8593,8 +8596,8 @@ ${researchRules("festival", ev)}`
           if (next) {
             setTimeout(() => {
               loadQueueResult(next);
-              setToast(`Published · next up: ${next.name}`);
-              setTimeout(() => setToast(null), 2800);
+              showToast(`Published · next up: ${next.name}`, 2800);
+              
             }, 700);
           }
         }
@@ -8624,8 +8627,8 @@ ${researchRules("festival", ev)}`
           if (applied) {
             setManageItems(items => (items || []).map(r => r.id === editingId ? { ...r, payload: shaped } : r));
             bumpLiveContent(v => v + 1);
-            setToast("💾 Saved");
-            setTimeout(() => setToast(null), 2200);
+            showToast("💾 Saved", 2200);
+            
           } else {
             setToast("💾 Saved, refreshing to pick it up");
             setTimeout(() => window.location.reload(), 900);
@@ -9124,8 +9127,8 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       if (!cloud) {
         // Table missing or unreachable. Stay signed in and keep working from
         // local storage rather than pretending the whole account is broken.
-        setToast("Signed in, but your saves could not sync right now");
-        setTimeout(() => setToast(null), 3000);
+        showToast("Signed in, but your saves could not sync right now", 3000);
+        
         return;
       }
       // ── THIS MERGE USED TO EAT THE GUIDE IT WAS SIGNED IN TO SAVE ──
@@ -9161,9 +9164,9 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // to discard it, so a green "saves synced" could sit over a 403 and the
       // person found out weeks later on another device.
       const pushed = await pushCloudSaves(userSession, finalPlaces, finalGuides);
-      setToast(!pushed ? "Signed in, but your saves could not be sent to your account"
-        : gained > 0 ? `Signed in · ${gained} saved ${gained === 1 ? "item" : "items"} restored` : "Signed in · saves synced");
-      setTimeout(() => setToast(null), pushed ? 2600 : 3600);
+      showToast(!pushed ? "Signed in, but your saves could not be sent to your account"
+        : gained > 0 ? `Signed in · ${gained} saved ${gained === 1 ? "item" : "items"} restored` : "Signed in · saves synced", pushed ? 2600 : 3600);
+      
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userSession]);
@@ -9348,8 +9351,8 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     // Local saves deliberately STAY. Signing out is not "delete my trips", and
     // wiping the device copy would be a nasty surprise for someone signing out
     // on a shared laptop who then goes back to their own phone.
-    setToast("Signed out · saves on this device are untouched");
-    setTimeout(() => setToast(null), 2600);
+    showToast("Signed out · saves on this device are untouched", 2600);
+    
   };
 
   const handleDeleteAccount = async () => {
@@ -9360,11 +9363,11 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       await authSignOut();
       setUserSession(null);
       syncedOnceRef.current = false;
-      setToast("Your saved data has been deleted from our servers");
-      setTimeout(() => setToast(null), 3400);
+      showToast("Your saved data has been deleted from our servers", 3400);
+      
     } catch (e) {
-      setToast(`Could not delete: ${String(e.message || e).slice(0, 60)}`);
-      setTimeout(() => setToast(null), 4000);
+      showToast(`Could not delete: ${String(e.message || e).slice(0, 60)}`, 4000);
+      
     }
     setAccountBusy(false);
   };
@@ -10065,82 +10068,97 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // was silently collapsing real multi-day requests into a single day whenever the
       // wording varied even slightly. Detect it directly from the conversation and pass
       // it through as a hard requirement instead.
-      const dayCountMatch = convoText.match(/\b(\d{1,2})\s*(?:-|–|to)?\s*(?:day|days)\b/i);
-      // Word-based durations ("a week", "an entire week", "two weeks", "a fortnight") never
-      // matched the digit-only regex above, so requestedDays stayed null and NONE of the
-      // day-count enforcement below ever activated — this was the actual cause of guides
-      // still collapsing to one day despite someone clearly asking for a week.
-      const weekWordMatch = !dayCountMatch && convoText.match(/\b(\d{1,2})\s*(?:-|–)?\s*weeks?\b/i);
-      const singleWeekMatch = !dayCountMatch && !weekWordMatch && convoText.match(/\b(?:a|an|the|one)\s+(?:whole|entire|full)?\s*week\b/i);
-      const fortnightMatch = !dayCountMatch && !weekWordMatch && !singleWeekMatch && convoText.match(/\b(?:a|an|the|one)\s+fortnight\b/i);
-      const requestedDays = dayCountMatch ? Math.min(parseInt(dayCountMatch[1], 10), 14)
-        : weekWordMatch ? Math.min(parseInt(weekWordMatch[1], 10) * 7, 14)
-        : singleWeekMatch ? 7
-        : fortnightMatch ? 14
-        : null;
+      // ── dayCountIn, NOT A SIXTH COPY OF IT ────────────────────────
+      //
+      // Four regexes lived here reading "day", "days", "week", "weeks" and
+      // "fortnight". Every one of them was English only, and tripEvents.js has
+      // read six languages since 22 August through travellerWords.js. So the
+      // brief could hold "7 dage" while THIS line saw nothing, requestedDays
+      // stayed null, and none of the day-count enforcement below ever ran: a
+      // Danish traveller asking for a week got a guide free to collapse into one
+      // day. Same cap, same fortnight rule, five more languages.
+      //
+      // AND OFF BOTH HALVES OF THE CONVERSATION. This read convoText, which
+      // carries Gemlyx's replies as well, so a length Gemlyx proposed counted as
+      // one the traveller asked for. Sixth reader of intent in this file to be
+      // moved, after the arrival point, the transport mode, the plan gate, the
+      // interests and the arrival date. Leaving it on both halves while teaching
+      // it six languages would have made it worse rather than better, which is
+      // exactly what happened to the brief and the event window in August.
+      //
+      // The intake form is safe on the traveller-only text: it posts its answers
+      // as a user turn (sendAI(parts.join(" | "), { hidden: true })), so
+      // "Exact trip length: 7 days" is the traveller's own message.
+      const requestedDays = dayCountIn(saidByTravellerForGuide);
       // Real arrival date, if mentioned — without this, weather was silently wrong for
       // any trip not starting today: fetchGuideWeather just indexed into "the forecast
       // starting now", so a trip planned today for next month showed THIS week's weather
       // mislabeled as the trip's days. Parses common phrasings ("August 15th", "the 15th
       // of August") — if nothing matches, falls back to the old today-relative behavior
       // rather than guessing wrong.
-      const MONTH_NAMES = { january: 0, february: 1, march: 2, april: 3, may: 4, june: 5, july: 6, august: 7, september: 8, october: 9, november: 10, december: 11 };
-      const monthPattern = Object.keys(MONTH_NAMES).join("|");
-      const dateRe = new RegExp(`\\b(?:(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${monthPattern})|(${monthPattern})\\s+(\\d{1,2})(?:st|nd|rd|th)?)\\b`, "i");
-      // ── AND THE DATE IS THEIRS TO STATE ─────────────────────────────
+      // ── AND THE SAME FOR THE DATE, THROUGH THE SAME READERS ───────
       //
-      // Oliver, 21 Aug 2026, on a guide titled "…in October": "I only said
-      // October. It didn't know when in October."
+      // A month table, a month pattern and a date regex lived here, all English
+      // only, beside a bare-month branch that was English only as well. So "15.
+      // maj" and "vi kommer i oktober" reached the brief and vanished here, and
+      // a guide fell back to today: the weather was for the wrong week and the
+      // events were filtered against the wrong month.
       //
-      // He is right, and it is worse than a missing date. This read `convoText`,
-      // both halves, and the assistant's own turn on that trip contained the
-      // sentence "Culture Night falls on Fri 9 Oct". So the regex matched a date
-      // GEMLYX wrote, made it his arrival, and dated all eight days from it.
+      // arrivalDateIn and monthOnlyIn are the readers the brief and the event
+      // window already share, so all three agree by construction rather than by
+      // being kept in step by hand.
       //
-      // That one line explains both of his complaints at once. Day 1 became 9
-      // October, so Day 4 became the 12th, which is why Culture Night sat on Day
-      // 4 carrying a warning that it "Runs Fri 9 Oct, which is not the day this
-      // stop falls on". The guide invented a date and then flagged itself for
-      // disagreeing with it.
+      // ── AND monthOnlyIn FIXES A YEAR BUG WHILE IT IS HERE ─────────
       //
-      // Fifth reader of intent in this file to be moved off both halves, after
-      // the arrival point, the transport mode, the plan gate and the interests.
-      const dm = saidByTravellerForGuide.match(dateRe);
+      // The bare-month branch built the 15th and pushed it to NEXT YEAR whenever
+      // it had already passed. Somebody writing "in August" on the 17th of
+      // August therefore got August of the following year, and with it a whole
+      // year of wrong weather and no event ever overlapping. monthOnlyIn
+      // compares on the MONTH rather than the day, and says so in its own words.
+      //
+      // The 15th itself stays: weather normals for mid-month are the fairest
+      // single sample of a month, and datePrecision "month" is what stops that
+      // arbitrary day ever being shown to anybody as the trip's date.
+      const nowForDates = new Date();
       let arrivalDate = null;
       // "day" when they named one, "month" when they named only a month, null
       // when they said nothing datelike at all. Carried rather than inferred
       // from arrivalDate being set, because the month case sets a date too and
       // the difference between the two is the whole point.
       let datePrecision = null;
-      if (dm) {
-        const day = parseInt(dm[1] || dm[4], 10);
-        const monthIdx = MONTH_NAMES[(dm[2] || dm[3]).toLowerCase()];
-        const now = new Date();
-        let candidate = new Date(now.getFullYear(), monthIdx, day);
-        if (candidate < new Date(now.toDateString())) candidate = new Date(now.getFullYear() + 1, monthIdx, day); // already passed this year — assume next year
-        arrivalDate = candidate;
+      // Fifth reader of intent in this file moved off both halves. Gemlyx's own
+      // turn on one trip said "Culture Night falls on Fri 9 Oct", the regex made
+      // that his arrival, and the guide then flagged itself for disagreeing with
+      // the date it had invented.
+      const statedDate = arrivalDateIn(saidByTravellerForGuide, nowForDates);
+      const statedMonth = statedDate ? null : monthOnlyIn(saidByTravellerForGuide, nowForDates);
+      // ── AND "I DAG", WHICH THIS FILE COULD NEVER READ AT ALL ──────
+      //
+      // The brief and the event window have read a relative day since 23 August
+      // and the guide builder had no concept of one. His father answering "i
+      // dag" or "i morgen" filled the brief, opened the event window, and left
+      // the guide dating itself from today regardless: right by luck for "i
+      // dag", a day out for "i morgen".
+      //
+      // AN ARRAY OF TURNS, NEVER A JOINED STRING, which is latestRelativeAnswer's
+      // own rule: it judges whether ONE turn was an answer, and a join hides the
+      // boundaries. saidByTravellerForGuide is the traveller's turns joined with
+      // newlines, so splitting it back is the same list.
+      //
+      // Last of the three, matching the precedence the brief and the window
+      // already share: a written date beats a bare month beats a relative day.
+      const statedRelative = (statedDate || statedMonth)
+        ? null
+        : latestRelativeAnswer(String(saidByTravellerForGuide || "").split("\n"), nowForDates);
+      if (statedDate) {
+        arrivalDate = statedDate;
         datePrecision = "day";
-      } else {
-        // ── A BARE MONTH IS NOT NOTHING ───────────────────────────
-        // His call, asked directly: build, and stop pretending. A month is
-        // enough to plan a route and to rule out an event in another month, and
-        // it is not enough to place a day. Without this branch the fix above
-        // makes it worse rather than better: arrivalDate falls back to TODAY
-        // further down, so an October trip would have been given August weather.
-        //
-        // The 15th, because weather normals for mid-month are the fairest single
-        // sample of a month, and because any day chosen here is arbitrary and
-        // must never be shown to anybody as the trip's date. datePrecision is
-        // what stops that happening.
-        const bare = saidByTravellerForGuide.match(new RegExp(`\\b(${monthPattern})\\b`, "i"));
-        if (bare) {
-          const monthIdx = MONTH_NAMES[bare[1].toLowerCase()];
-          const now = new Date();
-          let candidate = new Date(now.getFullYear(), monthIdx, 15);
-          if (candidate < new Date(now.toDateString())) candidate = new Date(now.getFullYear() + 1, monthIdx, 15);
-          arrivalDate = candidate;
-          datePrecision = "month";
-        }
+      } else if (statedMonth) {
+        arrivalDate = new Date(statedMonth.start.getFullYear(), statedMonth.start.getMonth(), 15);
+        datePrecision = "month";
+      } else if (statedRelative && statedRelative.start) {
+        arrivalDate = statedRelative.start;
+        datePrecision = "day";
       }
       // ── THE EVENTS THE TRAVELLER TICKED ARE FIXED POINTS ────────
       // Oliver, 14 Aug 2026, on the preview screen: "make the person able to
@@ -11217,7 +11235,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     // A signed-in person whose browser refused the write has not lost anything:
     // the cloud push reads this same state a second later. A signed-out one has,
     // as soon as the tab closes, and that is worth interrupting them for.
-    setToast(!stored
+    showToast(!stored
       ? (userSession
           ? "📖 Saved to your account. This browser would not store a local copy."
           : "⚠ This browser refused to store the guide, so it will be gone when you close the tab. Sign in to keep it.")
@@ -11227,15 +11245,15 @@ If the conversation only covers a single day or a few stops with no explicit day
         // it is said: the guide is saved, and it is on its way. The account
         // screen says whether it arrived.
         ? "📖 Guide saved. Syncing to your account."
-        : "📖 Saved on this device");
-    setTimeout(() => setToast(null), stored ? 2200 : 4200);
+        : "📖 Saved on this device", stored ? 2200 : 4200);
+    
   };
   const saveCurrentGuide = () => {
     if (!guideModal || guideModal === "loading") return;
     const weatherMissing = guideModal.days.some(d => !d.weather);
     if (weatherMissing && weatherPending > 0) {
-      setToast("⏳ Still checking weather for this trip — try Save again in a few seconds");
-      setTimeout(() => setToast(null), 2600);
+      showToast("⏳ Still checking weather for this trip. Try Save again in a few seconds", 2600);
+      
       return;
     }
     // No branch on the session. That IS the change.
@@ -11243,7 +11261,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     // savedGuideRow refuses anything it cannot make a real row out of, and a null
     // pushed into the list would be a row with no id: invisible on screen,
     // undeletable, and dropped by mergeSaves on the next login.
-    if (!row) { setToast("Could not save this guide. Nothing was lost, try again."); setTimeout(() => setToast(null), 2600); return; }
+    if (!row) { showToast("Could not save this guide. Nothing was lost, try again.", 2600);  return; }
     commitGuideSave(row);
   };
 
@@ -11963,6 +11981,36 @@ If the conversation only covers a single day or a few stops with no explicit day
   const [videoReady, setVideoReady] = useState(false);
   const [tabArrow, setTabArrow] = useState(true);
   const [toast, setToast] = useState(null);
+  // ── ONE TOAST, ONE TIMER ──────────────────────────────────────────
+  //
+  // Found on 23 August while fixing the save toast, and latent across the whole
+  // app rather than in that one place: there were 46 setToast call sites and 22
+  // hand-rolled `setTimeout(() => setToast(null), n)` clears, each holding its
+  // own timer. So ANY toast raised while another was showing got cut short by
+  // the older one's timer. Raise a 3.5 second message 200ms after a 2.2 second
+  // one and it lived for two seconds, which is the failure that stopped the
+  // cloud-sync result being announced at all: it would have been wiped 900ms
+  // later by the save toast's own clear.
+  //
+  // The timer lives in a ref rather than in state so that replacing it never
+  // causes a render, and it is cleared before the new one is set, which is the
+  // whole of the fix: there can only ever be one pending clear, and it belongs
+  // to the message currently on screen.
+  //
+  // All 22 call sites were converted. `setToast` itself is left alone rather
+  // than wrapped, because a wrapper cannot tell a stale timer's setToast(null)
+  // from a deliberate dismissal, and half a fix here is worse than none.
+  const toastTimerRef = useRef(null);
+  const showToast = (text, ms = 3000) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = null;
+    setToast(text);
+    if (text == null) return;
+    toastTimerRef.current = setTimeout(() => { setToast(null); toastTimerRef.current = null; }, ms);
+  };
+  // A pending clear on an unmounted component sets state on nothing. Harmless in
+  // React 18 and still a leak of a live timer.
+  useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); }, []);
   const [weatherAlerts, setWeatherAlerts] = useState([]);
   useEffect(() => {
     // Purely in-app "your weather changed" notice — like an Instagram-style corner
@@ -13573,8 +13621,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               setStudioType("town");
                               setStudioTown(t.name);
                               setRedraftOpen(false);
-                              setToast(`Ready to redraft ${t.name} — hit Draft it below`);
-                              setTimeout(() => setToast(null), 3000);
+                              showToast(`Ready to redraft ${t.name}. Hit Draft it below`, 3000);
                             }}
                               style={{ background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
                               Redraft
@@ -14282,7 +14329,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               {sum.decisions} {sum.decisions === 1 ? "decision" : "decisions"} where two sources disagreed.
                             </div>
                           )}
-                          <button onClick={() => { try { navigator.clipboard.writeText(formatLog(last)); setToast("Run log copied"); setTimeout(() => setToast(null), 1800); } catch { /* ignore */ } }}
+                          <button onClick={() => { try { navigator.clipboard.writeText(formatLog(last)); showToast("Run log copied", 1800); } catch { /* ignore */ } }}
                             style={{ marginTop: 8, background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                             Copy the full trace
                           </button>
@@ -15813,8 +15860,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           try {
                             const parsed = (() => { try { return JSON.parse(studioDraftText) || {}; } catch { return studioDraft || {}; } })();
                             navigator.clipboard.writeText(factCheckCopy(parsed, { type: studioType, now: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) }));
-                            setToast("📋 Copied, claims and measurements only");
-                            setTimeout(() => setToast(null), 2200);
+                            showToast("📋 Copied, claims and measurements only", 2200);
                           } catch { /* ignore */ }
                         }}
                           style={{ width: "100%", background: "none", border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "9px", fontSize: 11.5, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 6 }}>
@@ -15824,7 +15870,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           The written claims, then the measured figures marked as settled, then what our own gates already flagged. Not the plumbing.
                         </div>
                         <div style={{ fontSize: 9.5, color: C.muted, textAlign: "center", marginBottom: 6 }}>Copy code below reflects the original draft, not your edits above</div>
-                        <button onClick={() => { try { navigator.clipboard.writeText(studioResult); setToast("📋 Copied"); setTimeout(() => setToast(null), 1800); } catch { /* ignore */ } }}
+                        <button onClick={() => { try { navigator.clipboard.writeText(studioResult); showToast("📋 Copied", 1800); } catch { /* ignore */ } }}
                           style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px", fontSize: 11.5, fontWeight: 700, color: C.muted, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                           📋 Or copy code (manual paste into App.jsx)
                         </button>
@@ -18864,8 +18910,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             setDiscoverTown("");
             if (pendingRandomGuideMode) { setPendingRandomGuideMode(null); setAiMessages(withoutTestBrief); }
             setGuideModal(null);
-            setToast(`🔭 Searching ${finding?.target?.label || "where coverage is thinnest"}`);
-            setTimeout(() => setToast(null), 2600);
+            showToast(`🔭 Searching ${finding?.target?.label || "where coverage is thinnest"}`, 2600);
+            
             // After the modal has gone, so the panel he is sent to is the one
             // he can see working.
             setTimeout(() => runDiscovery(finding?.searchType || undefined), 250);

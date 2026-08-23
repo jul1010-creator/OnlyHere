@@ -25,7 +25,7 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { stripNonCode, functionBody, useBeforeDeclare, namedFunctions, hookDepsBeforeDeclaration, readOutOfScope } from "./tdz.mjs";
+import { stripNonCode, stripComments, functionBody, useBeforeDeclare, namedFunctions, hookDepsBeforeDeclaration, readOutOfScope } from "./tdz.mjs";
 
 let passed = 0, failed = 0;
 const fails = [];
@@ -176,7 +176,7 @@ writeFileSync(entry, `
   export { buildPreviewHtml, injectMeta, isCrawler, guideIdFromPath, articleBlocks, articleHtml, worthServing, structuredData, injectArticle } from ${JSON.stringify(join(root, "src/utils/linkPreview.js"))};
   export { SITE_ORIGIN } from ${JSON.stringify(join(root, "src/config.js"))};
   export { tripStatus, currentTrip, tripStatusLine, tripStatusForPrompt } from ${JSON.stringify(join(root, "src/utils/tripStatus.js"))};
-  export { SPEND, OBSERVED_VOCAB } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
+  export { SPEND, OBSERVED_VOCAB, knownAboutTraveller, REPLY_LENGTHS } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
   export { PARTS as PARTS_FOR_TEST } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { hasPassword } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
   export { NOTICED_LABEL, ME_SECTIONS, meSectionFor, DEFAULT_ME_SECTION } from ${JSON.stringify(join(root, "src/components/AboutMePage.jsx"))};
@@ -1287,9 +1287,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // would otherwise match itself. That is the other standing trap in this
     // suite, and the two of them together are why this assertion needed three
     // attempts to become real.
-    const codeLines = (f) => readFileSync(join(root, f), "utf8").split("\n")
-      .filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l))
-      .join("\n")
+    const codeLines = (f) => stripComments(readFileSync(join(root, f), "utf8"))
       .replace(/export const FERRY_TEXT = [^;]+;/, "");
     const strays = files.filter(f => /\/[^\n\/]*(?:ferry|færge|faerge)[^\n\/]*\/i/.test(codeLines(f)));
     is("nothing writes its own ferry pattern any more", strays, []);
@@ -2004,8 +2002,50 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 
     // ── WIRED, WHICH IS WHERE IT WAS BROKEN ────────────────────────
     const app6 = readFileSync(join(root, "src/App.jsx"), "utf8");
-    ok("the router takes the trip's real date", /const fetchExactDurations = async \(days, primaryMode, freshGeo = \{\}, onlyWalking = false, tripDate = null\)/.test(app6));
-    ok("and the caller actually passes it", /fetchExactDurations\(parsed\.days, travelMode, freshGeo, onlyWalking, arrivalDate\)/.test(app6));
+    // ── ASKED AS A RELATIONSHIP, NOT AS TWO TRANSCRIPTS ─────────────
+    //
+    // These two lines used to pin the whole parameter list and the whole
+    // argument list, character for character. That is a transcript of the code
+    // rather than a rule about it: renaming freshGeo, or adding a sixth
+    // parameter, turns both red on a correct refactor, and around thirty
+    // assertions broke that way on 23 Aug alone.
+    //
+    // The rule underneath is one sentence: whatever slot the trip date occupies,
+    // the caller fills that slot with the real arrival date. So the slot is
+    // looked up rather than assumed, which survives every rename and reorder and
+    // still goes red the moment the argument is dropped or moved.
+    const paramsOf = (src, decl) => {
+      const at = src.indexOf(decl);
+      if (at < 0) return [];
+      const open = src.indexOf("(", at);
+      const close = src.indexOf(")", open);
+      if (open < 0 || close < 0) return [];
+      return src.slice(open + 1, close).split(",").map(x => x.split("=")[0].trim()).filter(Boolean);
+    };
+    const argsOf = (src, call) => {
+      const at = src.indexOf(call);
+      if (at < 0) return [];
+      const open = src.indexOf("(", at);
+      if (open < 0) return [];
+      let depth = 1, i = open + 1;
+      while (i < src.length && depth > 0) { const c = src[i]; if (c === "(") depth++; else if (c === ")") depth--; i++; }
+      return src.slice(open + 1, i - 1).split(",").map(x => x.trim()).filter(Boolean);
+    };
+    const durParams = paramsOf(app6, "const fetchExactDurations = async ");
+    const durArgs = argsOf(app6, "fetchExactDurations(parsed.days");
+    ok("the router takes the trip's real date", durParams.includes("tripDate"));
+    // Not "the same number of arguments as parameters": a defaulted parameter
+    // nobody passes is legal, and pinning the count would put the brittleness
+    // back one level down. What matters is that the call reaches the date's slot
+    // and does not overrun the list.
+    ok("and the call reaches that slot rather than stopping short",
+       durParams.indexOf("tripDate") >= 0 && durArgs.length > durParams.indexOf("tripDate"));
+    ok("and passes nothing the router does not declare", durArgs.length <= durParams.length);
+    is("including the one the date goes in", durArgs[durParams.indexOf("tripDate")], "arrivalDate");
+    // The days and the mode are the two the router cannot work without, so they
+    // are named too rather than left to the length check alone.
+    is("the days go in the days slot", durArgs[durParams.indexOf("days")], "parsed.days");
+    is("and the mode in the mode slot", durArgs[durParams.indexOf("primaryMode")], "travelMode");
     // `di + 1` rather than `1` when day.day is missing, corrected 22 Aug: the
     // cross-day push added that day had the right fallback and this one did not,
     // so on a guide whose days carry no number every intra-day leg was routed as
@@ -2814,6 +2854,104 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // Same for a function with a defaulted parameter, which the first version of
   // functionBody truncated to its parameter list and then silently skipped.
   ok("so is a function with a defaulted parameter", (functionBody(stripped, "const fetchExactDurations = ") || "").length > 2000);
+
+  // ── THE THIRD SCANNER, AND THE HOLE IT WAS BUILT TO CLOSE ────────
+  //
+  // 23 Aug 2026. Every "this sentence is gone" assertion in this file had a
+  // choice of two wrong scans and no right one.
+  //
+  // stripNonCode blanks string CONTENTS, so
+  //     !/Most tourists see Denmark for/.test(stripNonCode(app))
+  // reads a row of spaces where the copy lives and can never fail. Four of
+  // those were green tonight with nothing stopping the sentence coming back.
+  //
+  // Raw source is the trap they were moved off in the first place: the comment
+  // above a fix quotes the line it removed, so the scan finds the bug report
+  // and calls it the bug. Three assertions failed that way on the day they
+  // were written, and seventeen comments in this file record the workaround.
+  //
+  // stripComments is neither. Comments blanked, strings kept, positions
+  // preserved, so both failure modes go at once. Every one of the fifteen was
+  // then mutation-tested twice: red when the copy comes back inside a string,
+  // green when a comment merely quotes it.
+  {
+    const withComment = 'const a = "keep me"; // drop me\nconst b = 1;';
+    const c1 = stripComments(withComment);
+    ok("a comment goes", !/drop me/.test(c1));
+    ok("a string stays", /keep me/.test(c1));
+    ok("and the file keeps its shape", c1.length === withComment.length);
+    // The `//` in an https:// URL is not a comment, which is what the regex
+    // stripper this replaced could not tell. It ate the rest of every line
+    // holding a link, so a sentence sitting after one was invisible.
+    const url = 'const help = "See https://rejseplanen.dk"; const chip = "No direct route";';
+    ok("a URL inside a string does not open a comment", /No direct route/.test(stripComments(url)));
+    ok("and the old stripper is why that had to be said",
+       !/No direct route/.test(url.replace(/\/\/[^\n]*/g, "")));
+    // JSX comments are block comments in brace position, so no separate pass.
+    ok("a JSX comment goes too", !/hidden note/.test(stripComments("<div>{/* hidden note */}</div>")));
+    // Template TEXT is string content and survives; the ${} inside it is code
+    // either way. This is the pair that hid the browser-language shout in
+    // api/ask.js, where the words and the interpolation sit in one literal.
+    const tmpl = "const s = `ANSWER IN ${x.toUpperCase()}`;";
+    ok("template text survives", /ANSWER IN/.test(stripComments(tmpl)));
+    ok("and stripNonCode is still the one that blanks it", !/ANSWER IN/.test(stripNonCode(tmpl)));
+  }
+
+  // ── AND THE SUITE CHECKS ITSELF FOR THE SAME MISTAKE ─────────────
+  //
+  // Fifteen assertions had it and none of them looked wrong. The shape is
+  // mechanical, so the check is: a NEGATIVE whose pattern is three or more
+  // plain words in a row is a claim about copy, and a claim about copy may not
+  // be scanned with the strings blanked out.
+  //
+  // Variables count as well as the inline call, and a name qualifies only if
+  // every binding of it in this file is a stripNonCode, so a `code` bound to
+  // something else somewhere cannot drag an innocent assertion in.
+  {
+    const suiteSrc = readFileSync(join(root, "tests/run.mjs"), "utf8");
+    const bindings = new Map();
+    for (const m of suiteSrc.matchAll(/const\s+(\w+)\s*=\s*([^\n]*)/g)) {
+      if (!bindings.has(m[1])) bindings.set(m[1], []);
+      bindings.get(m[1]).push(m[2]);
+    }
+    const strippedVars = [...bindings]
+      .filter(([, rhs]) => rhs.every(r => r.trimStart().startsWith("stripNonCode(")))
+      .map(([name]) => name);
+    // Keywords keep declarations out of it: `export const normName` is three
+    // words and is a claim about code, correctly scanned with strings blanked.
+    const KEYWORDS = /\b(export|const|let|var|function|import|return|await|async|new|typeof|class|if|else|null|true|false|style|onClick|useState|useEffect)\b/;
+    // Three words in a row, any length. An earlier version wanted every word to
+    // be two letters or more and missed "Or a nickname" and "Takes a few
+    // minutes", which are two of the sixteen this was written to find.
+    const PROSE = /(?:^|[^\\A-Za-z])[A-Za-z]+(?: [A-Za-z]+){2,}/;
+    const target = `(?:stripNonCode\\(${strippedVars.length ? "|" + strippedVars.map(v => v + "\\b").join("|") : ""})`;
+    const re = new RegExp(`!\\/((?:[^\\/\\\\\\n]|\\\\.)+)\\/[gimsuy]*\\.test\\(\\s*${target}`, "g");
+    // The file has to be read raw, because the patterns live in regex literals
+    // and stripNonCode blanks those along with everything else. So the mask is
+    // used as a MAP rather than as the text: a match whose leading ! survives
+    // stripNonCode is code, and one whose ! was blanked is sitting in a comment
+    // or a string. Without this the two samples below would flag themselves,
+    // which is the first thing this check did.
+    const masked = stripNonCode(suiteSrc);
+    const proseOverStripped = [];
+    for (const m of suiteSrc.matchAll(re)) {
+      if (masked[m.index] !== "!") continue;
+      const pat = m[1];
+      if (KEYWORDS.test(pat) || !PROSE.test(pat)) continue;
+      proseOverStripped.push(`line ${suiteSrc.slice(0, m.index).split("\n").length}: ${pat.slice(0, 60)}`);
+    }
+    is("no negative about copy is scanned with the strings blanked out", proseOverStripped, []);
+    // The finder has to be able to find something, or an empty list means the
+    // regex broke rather than the suite being clean.
+    const rigged = `ok("x", !/Most tourists see Denmark for/.test(stripNonCode(app)));`;
+    re.lastIndex = 0;
+    ok("and the check can see one when there is one", re.test(rigged) && PROSE.test("Most tourists see Denmark for"));
+    // And is not so eager that a claim about code trips it.
+    re.lastIndex = 0;
+    ok("while a claim about code does not trip it",
+       KEYWORDS.test("export const normName") && !PROSE.test("rome2rio"));
+    ok("and a short word in the middle does not save one", PROSE.test("Or a nickname"));
+  }
 
   // ── THE SCANNER, AGAINST BOTH SHAPES IT EXISTS FOR ───────────────
   const bodyOf = (src, d) => functionBody(stripNonCode(src), d);
@@ -4401,7 +4539,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 
   const evd = readFileSync(join(root, "src/utils/eventDates.js"), "utf8");
   ok("and no month is matched by a prefix with an open tail again",
-    !/\[a-z\]\*/.test(evd.replace(/\/\/[^\n]*/g, "")));
+    !/\[a-z\]\*/.test(stripComments(evd)));
 
   const app13 = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("discovery drops them in code, not only in a prompt", /splitFinishedCandidates\(fresh, new Date\(\)\)/.test(app13));
@@ -5734,7 +5872,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
        { parts: journeyParts([{ mode: "transit", vehicle: "BUS", mins: 20, from: "A", to: "B" }], 21) }), []);
 
   // ── WIRED, AND ON BOTH PASSES ────────────────────────────────────
-  const codeJ = app6.split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+  const codeJ = stripComments(app6);
   ok("the breakdown is kept rather than thrown away inside a prompt",
      /transitParts = journeyParts\(transitD\?\.steps, transitD\?\.durationMinutes\);/.test(codeJ));
   ok("and the prompt reads the same object the gate does",
@@ -5980,7 +6118,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // fetchExactDurations has measured a single leg. A gate placed there would
   // have nothing to check against, which is the ordering bug that let an
   // untraceable 275 kr through this morning.
-  const codeGu = app6.split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+  const codeGu = stripComments(app6);
   ok("the guide runs the gate", /const gl = guideLogisticsProblems\(collectGuideProseFields\(parsed\), exactFound\);/.test(codeGu));
   ok("after the legs are measured",
      codeGu.indexOf("const gl = guideLogisticsProblems(") > codeGu.indexOf("await fetchExactDurations("));
@@ -6307,7 +6445,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // these assertions failed that way on their first run, which is the suite
   // working: a source scan that reads comments cannot tell a fix from a
   // description of what was fixed.
-  ok("the bare month list is gone", !/We are coming in June/.test(stripNonCode(appSrc)));
+  ok("the bare month list is gone", !/We are coming in June/.test(stripComments(appSrc)));
   ok("the brief carries a real arrival date", /We arrive on \$\{arrivalPhrase\}/.test(appSrc));
   // Two to twenty-six weeks out, through the shared primitive rather than a
   // mutating setDate on a value carrying the current time of day.
@@ -6556,8 +6694,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // dayTripFrom says so. The first fix was three checks around that field.
   // Deleting the reader-facing list deletes the failure mode instead, which
   // is the only fix that cannot regress.
-  ok("no day-trip list reaches readers", !/Day trips from/.test(stripNonCode(detailSrc)));
-  ok("and neither does the planner jargon", !/Without changing hotel/.test(stripNonCode(detailSrc)));
+  ok("no day-trip list reaches readers", !/Day trips from/.test(stripComments(detailSrc)));
+  ok("and neither does the planner jargon", !/Without changing hotel/.test(stripComments(detailSrc)));
   ok("the town page no longer reads the curated field", !/dayTripsFrom/.test(stripNonCode(detailSrc)));
   // Containment is a different claim and does not go stale, so it stays.
   ok("Inside survives", /group\(`Inside \$\{item\.name\}`/.test(detailSrc));
@@ -7435,11 +7573,13 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // opens from data already in the browser; the promise of a wait was inherited
   // from the guide build that used to sit behind this button. Both halves are
   // asserted, so nobody reinstates either wording.
-  // stripNonCode, because the comment that RECORDS his instruction quotes the
+  // stripComments, because the comment that RECORDS his instruction quotes the
   // sentence it removed, which is the house style here and would otherwise make
-  // this assertion fail on the very edit that satisfies it.
+  // this assertion fail on the very edit that satisfies it. It read
+  // stripNonCode until 23 Aug and that blanks the string the sentence lives in,
+  // so it could not have failed whatever the button said.
   ok("and it does not promise minutes either, because the preview is instant",
-     !/Takes a few (?:seconds|minutes)/.test(stripNonCode(appSrc)));
+     !/Takes a few (?:seconds|minutes)/.test(stripComments(appSrc)));
 }
 
 // ── MINIMIZE THE WAIT, KEEP THE BUILD ───────────────────────────────
@@ -10144,8 +10284,23 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // It promised "no profile", which stopped being true the moment this shipped.
   // A promise that quietly goes stale is worse than one never made.
   ok("the sheet no longer promises no profile", !/No profile, no tracking/.test(asheet));
-  ok("it says what is actually stored", /a few optional details about yourself/.test(asheet));
-  ok("and deletion covers it too", /anything you told Gemlyx about yourself/.test(accountScreen));
+  // ── THIS ONE WAS SATISFIED BY THE COMMENT ABOVE THE LINE ───────
+  // Found 23 Aug by a sweep that ran every positive twice, once raw and once
+  // with the comments blanked, and reported the ones that only match raw.
+  // "a few optional details about yourself" is the wording this line REPLACED,
+  // and the comment above it quotes it to explain why. So the assertion was
+  // green whatever the sheet said, and deleting the whole paragraph would not
+  // have turned it red. It now names the sentence that ships, and the old one
+  // is asserted gone through stripComments, which is the only scan that can
+  // see the difference between a string and the comment quoting it.
+  ok("it says what is actually stored",
+     /We store your email, what you fill in here, and your saved list/.test(asheet));
+  ok("including the part nobody typed", /notices which kinds of trip you build/.test(asheet));
+  ok("and the wording it replaced is off the screen",
+     !/add a few optional details about yourself/.test(stripComments(asheet)));
+  // The wording moved to a plain register on 23 Aug at his request. The RULE is
+  // that deletion copy names the profile, not that it uses one sentence.
+  ok("and deletion covers it too", /your details and everything Gemlyx has learned/.test(accountScreen));
 
   // ── SKIPPING IS A REAL ANSWER ─────────────────────────────────────
   // An optional step whose decline is a grey link is not optional.
@@ -10162,7 +10317,10 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   {
     const aboutPage = readFileSync(join(root, "src/components/AboutMePage.jsx"), "utf8");
     ok("there is a way back in to edit it", /navigate\(ABOUT_ME_PATH\)/.test(appSrc));
-    ok("and the questions are on the other side of it", /<ProfileQuestions value=\{p\}/.test(aboutPage));
+    // The one form is now asked in two halves, on two sections, so this counts
+    // the halves rather than pinning one call.
+    is("and the questions are on the other side of it",
+       (aboutPage.match(/<ProfileQuestions show="/g) || []).length, 2);
   }
 
   // ── IT ADOPTS THE THEME ───────────────────────────────────────────
@@ -11171,15 +11329,15 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // TYPED AND NOTICED ARE TWO SECTIONS, NOT ONE LIST. Rule 3 of
   // profileLearning is that an observation must never quietly become a typed
   // answer, and a merged list is that promotion happening in the interface.
-  ok("what you told us is its own section", /What you told us/.test(page));
-  ok("and what was noticed is another", /What Gemlyx has picked up/.test(page));
-  ok("the noticed half says it was noticed, not told",
-     /never from anything Gemlyx said itself/.test(page));
+  ok("the typed details are their own section", /Your details/.test(page));
+  ok("and what was learned is another", /Learned preferences/.test(page));
+  ok("the learned half says where it came from, not that they said it",
+     /Drawn from your saved trips/.test(page));
 
   // Rule 4 is REVERSIBLE as well as visible. A list somebody can read and cannot
   // change is not what that rule asked for.
-  ok("each noticed line can be cleared", /Forget this/.test(page));
-  ok("and all of them at once", /Forget all of it/.test(page));
+  ok("each learned line can be cleared", />\s*Remove\s*</.test(page));
+  ok("and all of them at once", />\s*Clear all\s*</.test(page));
 
   // ── SAVING THE FORM MUST NOT WIPE THE OBSERVATIONS ──────────────
   // cleanProfile emits the WHOLE object literal and saveProfile writes it, so a
@@ -11216,7 +11374,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // goes straight to the page rather than to a panel holding a button to it. So
   // the name is the page's own heading, and the old one is gone from both files.
   ok("the page is called Info about me", />\s*Info about me\s*</.test(page));
-  ok("and the old label is gone", !/Edit what Gemlyx knows about you/.test(stripNonCode(app + page)));
+  ok("and the old label is gone", !/Edit what Gemlyx knows about you/.test(stripComments(app + page)));
 
   // A PAGE, WHICH MEANS AN ADDRESS. That is the difference he asked for between
   // this and the sheet it replaces: Back closes it and a link reopens it.
@@ -11256,7 +11414,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // Recorded rather than merely absent. gemlyx-media serves from /object/public/,
   // so a face uploaded there is fetchable by anybody holding the URL and is
   // covered by neither the privacy policy nor the deletion copy.
-  ok("no avatar upload was added to the page", !/upload|avatar|profilePicture/i.test(stripNonCode(page)));
+  ok("no avatar upload was added to the page", !/upload|avatar|profilePicture/i.test(stripComments(page)));
 }
 
 
@@ -11310,8 +11468,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ["the sync state", /Not reaching your account right now/],
     ["the setup SQL", /add column if not exists profile jsonb|setupSql/],
     ["sign out", /Sign out/],
-    ["delete", /Delete my saved data/],
-    ["and the deletion wording", /anything you told Gemlyx about yourself/],
+    ["delete", /Delete my data/],
+    ["and the deletion wording", /your details and everything Gemlyx has learned/],
   ]) ok(`${what} survived the move to the page`, re.test(page));
 
   // Every door goes through one decision. Three separate ones is how the landing
@@ -11384,8 +11542,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // ME_SECTIONS.length threw. Same rule the shapeForLive block states in its own
   // words, and the second time today it has been needed.
   const sections = ME_SECTIONS || [];
-  is("three categories", sections.length, 3);
-  is("in the order he reads them", sections.map(x => x.id).join(","), "about,account,data");
+  // Four now: General, About me, Plan, Legal. He revised the list on 23 Aug.
+  is("four categories", sections.length, 4);
+  is("in the order he reads them", sections.map(x => x.id).join(","), "general,about,plan,legal");
   ok("every one has a label", sections.length > 0 && sections.every(x => !!x.label));
   // The blurb is the line under the name on the PHONE list, which is the whole
   // screen before anything is opened. A row with a name and no line is a guess,
@@ -11393,7 +11552,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and a line saying what is in it", sections.length > 0 && sections.every(x => (x.blurb || "").length > 12));
 
   // ── AN ADDRESS SOMEBODY CAN TYPE IS AN ADDRESS SOMEBODY CAN GET WRONG
-  is("a real section is itself", meSectionFor("account"), "account");
+  is("a real section is itself", meSectionFor("plan"), "plan");
   is("an unknown one falls back", meSectionFor("nonsense"), DEFAULT_ME_SECTION);
   is("and so does nothing at all", meSectionFor(undefined), DEFAULT_ME_SECTION);
   is("the fallback is a real section", sections.some(x => x.id === DEFAULT_ME_SECTION), true);
@@ -11406,13 +11565,14 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // Splitting one screen into three is the move that quietly loses a control.
   for (const [what, re] of [
     ["the trip status", /tripStatusLine\(trip\.status/],
-    ["the typed answers", /<ProfileQuestions value=\{p\}/],
-    ["what was noticed", /What Gemlyx has picked up/],
-    ["the per-line forget", /Forget this/],
-    ["the bulk forget", /Forget all of it/],
+    ["the travel questions", /<ProfileQuestions show="travel"/],
+    ["the identity questions", /<ProfileQuestions show="general"/],
+    ["what was learned", /Learned preferences/],
+    ["the per-line remove", />\s*Remove\s*</],
+    ["the bulk clear", />\s*Clear all\s*</],
     ["the password control", /Change password/],
     ["sign out", /Sign out/],
-    ["delete", /Delete my saved data/],
+    ["delete", /Delete my data/],
     ["the sync state", /Not reaching your account right now/],
     ["the setup SQL", /setupSql &&/],
   ]) ok(`${what} survived the split`, re.test(page));
@@ -11420,11 +11580,13 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // Seeing and undoing stay together, which is rule 4's own wording: the
   // per-line Forget sits with the lines in About me, and only the destructive
   // bulk one moved to Your data.
-  ok("the noticed lines and their forget buttons are in the same section",
-     page.indexOf("What Gemlyx has picked up") < page.indexOf("Forget this") &&
-     page.indexOf("Forget this") < page.indexOf("const accountSection"));
-  ok("and the bulk one is with the other destructive controls",
-     page.indexOf("const dataSection") < page.indexOf("Forget all of it"));
+  // Seeing and undoing stay together, which is rule 4's own wording, and both
+  // sit inside About me because "everything AI knows about the person should be
+  // together. EVERYTHING."
+  ok("the learned lines and their controls are in one section",
+     /Learned preferences[\s\S]{0,5000}Clear all/.test(page));
+  ok("and deletion sits with the data it deletes",
+     /<H>Your data<\/H>[\s\S]{0,2500}Delete my data/.test(page));
 
   // ── NO CONTROL THAT CANNOT WORK ─────────────────────────────────
   // He chose "password and sign out only". Email is the ONLY way back into an
@@ -11432,11 +11594,25 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // effect without the new address ever being verified and one typo would lock
   // somebody out permanently. Shown as a fact with the reason rather than as a
   // greyed box, because a disabled control invites a hunt for how to enable it.
-  ok("the email is stated, not offered for editing", /This is the address you sign in with/.test(page));
+  ok("the email is stated, not offered for editing", /Contact hello@gemlyxtravel\.com to change your email address/.test(page));
   ok("and there is no email field on the page", !/type="email"/.test(page));
-  // Nothing in this product uses a phone number, so collecting one would mean
-  // storing a strong identifier for no purpose.
-  ok("no phone number is collected", !/phone/i.test(stripNonCode(page)));
+  // ── AND HE ASKED FOR THE PHONE NUMBER BACK ──────────────────────
+  // The earlier version said none was collected, on the argument that nothing
+  // uses one. He overruled that on 23 Aug: "throw phone number, adress, and name
+  // into the account part." His product, and the argument was about cost rather
+  // than correctness. What the cost WAS is now the assertion: a field holding
+  // personal data has to be named in the published policy and covered by
+  // deletion, or the policy quietly goes stale, which is his own rule.
+  ok("a phone number can be given", /type="tel"/.test(page));
+  ok("and an address", /p\.address/.test(page));
+  {
+    const policy = readFileSync(join(root, "public/privacy.html"), "utf8");
+    ok("the privacy policy names the phone number", /Phone number/.test(policy));
+    ok("and the address", /Postal address/.test(policy));
+    ok("and the retention table covers both", /including any address and phone number/.test(policy));
+    ok("and it no longer says the observations screen is missing",
+       !/is not built yet/.test(policy));
+  }
 
   // Every noticed field still has a human label after the move.
   is("no noticed field lost its label", OBSERVED_FIELDS.filter(f => !NOTICED_LABEL[f]).length, 0);
@@ -11462,6 +11638,201 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // control every other site has trained people to press.
   ok("the logo is a button", /aria-label="Back to the front page"/.test(app));
   ok("and no longer a bare div", !/<div onClick=\{\(\) => goTab\("home"\)\} style=\{\{ cursor: "pointer"/.test(code));
+}
+
+
+// ── 23 AUGUST 2026: EVERYTHING IT KNOWS, IN ONE PLACE ──────────────
+//
+// Oliver: "Remember, everything AI knows about the person should be together.
+// EVERYTHING. And also include a part that is 'long' and 'short' answers.
+// Because some people want a friend, and others want quick answers."
+{
+  const { knownAboutTraveller, profileForPrompt, cleanProfile, REPLY_LENGTHS,
+          SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE } = M;
+  const page = readFileSync(join(root, "src/components/AboutMePage.jsx"), "utf8");
+  const prof = readFileSync(join(root, "src/utils/profile.js"), "utf8");
+
+  const full = {
+    name: "Oliver", bornDate: "1998-04-02", sex: SEX_OPTIONS[0], country: "DK",
+    company: COMPANY[1], pace: PACE[0], interests: INTERESTS.slice(0, 2),
+    transport: [TRANSPORT[0]], style: [TRAVEL_STYLE[1]],
+    description: "Harbour towns.", replyLength: "Short",
+    phone: "+45 12 34 56 78", address: "Nyhavn 1",
+  };
+
+  // ── EVERYTHING MEANS EVERYTHING ─────────────────────────────────
+  //
+  // The screen splits the EDITING across sections, which is right for editing
+  // and leaves no single place answering "what does this thing know about me".
+  // knownAboutTraveller is that place, and this is the check that keeps it
+  // honest: every value profileForPrompt sends to the model has to appear in it.
+  // A field added to one and forgotten in the other is the drift the pairing
+  // exists to prevent, and a screen that claims to show everything while showing
+  // less is worse than one that never claimed it.
+  const known = knownAboutTraveller(full);
+  const shown = known.map(k => k.value.toLowerCase()).join(" | ");
+  for (const [what, value] of [
+    ["their name", "Oliver"], ["where they travel from", "Denmark"],
+    ["who they travel with", COMPANY[1]], ["their pace", PACE[0]],
+    ["their interests", INTERESTS[0]], ["their transport", TRANSPORT[0]],
+    ["their trip style", TRAVEL_STYLE[1]], ["their own words", "Harbour towns."],
+    ["the answer length", "Short"],
+  ]) ok(`the page can show ${what}`, shown.includes(String(value).toLowerCase()));
+  // The age BAND, never the date. Only the band reaches the model, and only the
+  // band is shown, which is what the privacy policy promises.
+  ok("the age is shown as a band", known.some(k => k.label === "Age" && /\d/.test(k.value)));
+  ok("and the date of birth is not shown at all",
+     !known.some(k => /1998-04-02/.test(k.value)));
+
+  // Nothing is invented either: contact details are NOT sent to the model, so
+  // they must not appear on a list whose heading says everything on it is.
+  ok("the phone number is not on the list", !/12 34 56 78/.test(shown));
+  ok("nor the address", !/nyhavn/.test(shown));
+  const prompt = profileForPrompt(full);
+  ok("and the prompt does not carry them either", !/12 34 56 78|Nyhavn/.test(prompt));
+
+  is("an empty profile knows nothing", knownAboutTraveller({}).length, 0);
+  ok("and the page says so rather than showing an empty box",
+     /known\.length === 0 \?/.test(page));
+
+  // ── SHORT AND LONG ──────────────────────────────────────────────
+  is("two lengths, no middle", REPLY_LENGTHS.join(","), "Short,Long");
+  // A middle option on a two-ended scale is what everybody picks and tells the
+  // model nothing. Empty is the real third state.
+  is("and not choosing is a real state", cleanProfile({ replyLength: "" }).replyLength, "");
+  is("a value nobody was offered is dropped", cleanProfile({ replyLength: "Medium" }).replyLength, "");
+
+  // THE CONDITION EVERY SETTING ON THIS SCREEN HAS TO MEET: it reaches a prompt.
+  // A stored preference nothing reads is worse than no setting, because the
+  // person believes they changed something.
+  ok("Short reaches the model", /SHORT answers/.test(profileForPrompt({ ...full, replyLength: "Short" })));
+  ok("Long reaches the model", /FULL answers/.test(profileForPrompt({ ...full, replyLength: "Long" })));
+  ok("and nothing is said when nothing was chosen",
+     !/(SHORT|FULL) answers/.test(profileForPrompt({ ...full, replyLength: "" })));
+  // Brevity is never licence to drop a fact somebody needs.
+  ok("the short instruction protects the facts",
+     /Never drop a price, a date, an opening time or a warning/.test(profileForPrompt({ ...full, replyLength: "Short" })));
+  ok("and the long one is not licence to pad",
+     /Length is not licence to pad/.test(profileForPrompt({ ...full, replyLength: "Long" })));
+  ok("the control is on the page", /Answer length/.test(page));
+
+  // ── DATE OF BIRTH AND GENDER ARE OFF THE SETTINGS SCREEN ────────
+  //
+  // "Date of Birth and Gender should be completely gone. You don't change your
+  // birth." Absent, not locked and not greyed: a read-only row for a fact that
+  // cannot change is a row nobody needs, and a disabled control invites a hunt
+  // for the way to enable it.
+  {
+    const quest = readFileSync(join(root, "src/components/ProfileQuestions.jsx"), "utf8");
+    ok("the settings half does not render them", /\{show === "all" && \(<>/.test(quest));
+    ok("and the signup form still does", /Date of birth\{star\("bornDate"\)\}/.test(quest));
+    // They stay ON the profile, because the age band shapes a recommendation.
+    ok("the fields themselves are untouched", /bornDate: cleanBornDate\(raw\?\.bornDate\),/.test(prof));
+    ok("and the reason is written down", /don't change your birth/.test(prof));
+  }
+
+  // ── THE PLAN PANEL SAYS WHAT IS TRUE ────────────────────────────
+  //
+  // His question was "make a payment panel as well. or?" There is no billing:
+  // nothing charges, so there is no card on file, no invoice and no renewal, and
+  // a form for any of those would be the dead control the landing page shed this
+  // morning, rebuilt on purpose.
+  ok("the plan is named", /<H>Your plan<\/H>/.test(page));
+  ok("and it says nothing is charged yet", /nothing on Gemlyx charges yet/.test(page));
+  // ── A NEGATIVE ABOUT COPY CANNOT GO THROUGH stripNonCode ────────
+  //
+  // The first version of this read a word list over stripNonCode(page) and
+  // survived a mutation that put <input placeholder="Card number" /> straight
+  // into the panel, because stripNonCode blanks the inside of every STRING and
+  // that is exactly where the copy lives. This morning's lesson was that
+  // negatives about CODE must be stripped, or the comment explaining the fix
+  // defeats them. The inverse is true too, and this is the proof: a negative
+  // about what a person SEES must not be.
+  //
+  // So it asks the structural question instead, which no wording can dodge: the
+  // Plan section contains no control that takes input. That is what "no billing
+  // UI" means, and it holds however the copy is phrased.
+  {
+    const planAt = page.indexOf("const planSection");
+    const planEnd = page.indexOf("const legalSection", planAt);
+    ok("the plan section was found", planAt > 0 && planEnd > planAt);
+    const plan = page.slice(planAt, planEnd);
+    ok("no field takes payment details", !/<input|<select|<textarea|<form/i.test(plan));
+    ok("and no invoice or renewal is invented", !/invoice|renewal|next payment|card ending/i.test(plan));
+  }
+  ok("what is coming is marked as not for sale", /Not available to buy yet/.test(page));
+
+  // ── LEGAL IS LAST, AND IT LINKS RATHER THAN COPIES ──────────────
+  // Built from an array rather than written twice, so there is no literal href
+  // to match: the RULE is that both documents are reachable from the section.
+  ok("the terms are reachable", /\["Terms of Service", "\/terms\.html"\]/.test(page));
+  ok("and the privacy policy", /\["Privacy Policy", "\/privacy\.html"\]/.test(page));
+  ok("from the Legal section itself", /const legalSection[\s\S]{0,1500}terms\.html/.test(page));
+  // Reproducing either would be a second copy to keep in step with the first.
+  ok("neither is reproduced on the page", page.length < 40000);
+}
+
+
+// ── 23 AUGUST 2026: ONE TOAST, ONE TIMER ───────────────────────────
+//
+// Carried from the handoff as latent across the whole app: 46 setToast call
+// sites and 22 hand-rolled `setTimeout(() => setToast(null), n)` clears, each
+// holding its own timer. Any toast raised while another was showing got cut
+// short by the OLDER one's timer, which is why the cloud-sync result could not
+// be announced as a toast at all: the save toast's own clear would have wiped it
+// 900ms later.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const code = stripNonCode(app);
+
+  // THE RULE, as an absence. A single hand-rolled clear anywhere puts the bug
+  // back for every message that follows it, so this is the assertion that has to
+  // hold rather than any count of conversions.
+  ok("no hand-rolled toast clear is left", !/setTimeout\(\(\)\s*=>\s*setToast\(null\)/.test(code));
+
+  // One timer, in a ref so replacing it never renders, cleared before the next
+  // is set. That ordering is the whole fix: there can only be one pending clear
+  // and it belongs to the message on screen.
+  ok("there is one wrapper", /const showToast = \(text, ms = 3000\) => \{/.test(code));
+  ok("the timer lives in a ref", /const toastTimerRef = useRef\(null\);/.test(code));
+  ok("and the old one is cleared before the new one is set",
+     code.indexOf("if (toastTimerRef.current) clearTimeout(toastTimerRef.current)") <
+     code.indexOf("toastTimerRef.current = setTimeout"));
+  // A pending clear on an unmounted component is a live timer nobody owns.
+  ok("and it is cleared on unmount",
+     /useEffect\(\(\) => \(\) => \{ if \(toastTimerRef\.current\) clearTimeout\(toastTimerRef\.current\); \}, \[\]\);/.test(code));
+
+  // Every converted site passes a duration. A call that relied on its own
+  // setTimeout and lost it would sit on the default and be wrong by seconds.
+  {
+    // ── COUNTED OVER RAW, AND HERE IS WHY ─────────────────────────
+    //
+    // A POSITIVE count is the one case where the raw file is the right source.
+    // A comment mentioning showToast( could only ever inflate it, and none does,
+    // which is asserted below. The negative above is the one that goes through
+    // stripNonCode, exactly as this morning's lesson requires.
+    //
+    // AND A REAL BLIND SPOT IN stripNonCode, WORTH KNOWING BEYOND THIS BLOCK.
+    // It loses one genuine line of App.jsx: a JSX onClick handler on the Studio
+    // run-log copy button. The masker treats an apostrophe in ordinary JSX PROSE
+    // as the start of a string literal, because JSX children are not JavaScript,
+    // and everything to the next quote is blanked. So every negative assertion
+    // in this suite written as !/x/.test(stripNonCode(app)) has a hole in it of
+    // that shape. Not fixed here, because tdz.mjs is load-bearing for the TDZ
+    // scan and changing its masker deserves its own pass, but written down so
+    // the next person does not rediscover it as a mystery.
+    const calls = app.match(/showToast\(/g) || [];
+    ok("every site was converted", calls.length >= 22);
+    ok("and no comment is padding that count", !/\/\/[^\n]*showToast\(/.test(app));
+    const bare = app.match(/showToast\([^;]*?\);/g) || [];
+    const noMs = bare.filter(c => !/,\s*(?:\d+|[a-zA-Z_$][\w$]*\s*\?)/.test(c));
+    is("and every one names how long it stays", noMs.length, 0);
+  }
+
+  // setToast itself is deliberately NOT wrapped. A wrapper cannot tell a stale
+  // timer's setToast(null) from a deliberate dismissal, so half a fix there
+  // would clear a newer message and look like the bug it replaced.
+  ok("the raw setter is still available for a dismissal", /const \[toast, setToast\] = useState\(null\);/.test(code));
 }
 
 
@@ -12402,7 +12773,7 @@ rmSync(dir, { recursive: true, force: true });
 
   // ── WIRED, AND ON BOTH PASSES ────────────────────────────────────
   const appG = readFileSync(join(root, "src/App.jsx"), "utf8");
-  const codeG = appG.split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+  const codeG = stripComments(appG);
   ok("the gate runs inside gateDraft",
      codeG.indexOf("const gp = [") > codeG.indexOf("const gateDraft = (pass) =>") &&
      codeG.indexOf("const gp = [") < codeG.indexOf('gateDraft("first")'));
@@ -12659,7 +13030,7 @@ rmSync(dir, { recursive: true, force: true });
   // cost this block four assertions on the first run. Comment lines are dropped
   // instead, which closes the other documented trap: a comment quoting the old
   // code satisfying an assertion about the new code.
-  const code = app.split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+  const code = stripComments(app);
 
   // THE GATES ARE A FUNCTION, so there is one definition to keep correct
   // rather than two copies drifting apart.
@@ -13033,7 +13404,7 @@ rmSync(dir, { recursive: true, force: true });
 
   // ── WIRED, AND IN FRONT OF THE RESEARCH ──────────────────────────
   const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
-  const codeR = appR.split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+  const codeR = stripComments(appR);
   ok("the sources are ranked", /const rankedSources = rankSources\(/.test(codeR));
   ok("and the block is built from that ranking rather than left empty",
      /const orderBlock = sourceOrderBlock\(rankedSources\);/.test(codeR));
@@ -13442,7 +13813,7 @@ rmSync(dir, { recursive: true, force: true });
 
   // ── WIRED: ALL FOUR, ON THE AUTOMATIC PATH ───────────────────────
   const appI = app;
-  const codeI = app.split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+  const codeI = stripComments(app);
   ok("the check reads the whole research through the window",
      /const checkResearch = researchForCheck\(rawResearch\);/.test(codeI));
   ok("and no longer slices it at three thousand characters",
@@ -14788,6 +15159,31 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // for the price of one line.
   ok("and the raw segment is present exactly as Impact printed it",
      idx.includes("Impact-Site-Verification: 87383212-a6cf-40cb-ab5a-d974b44e3187"));
+  // ── AND ONE SCRIPT ONLY, WHICH IS THE PRIVACY PAGE'S PROMISE ────
+  //
+  // The Travelpayouts tag came out on 23 Aug. It loaded emrldtp.com from the
+  // head from 15 Aug to pass their site check, was written as temporary on the
+  // day it went in, and public/privacy.html says in two places that Gemlyx sets
+  // no cookies of its own and runs no tracking pixels. A third party in the
+  // head is the one thing that can make that sentence false without anybody
+  // editing it, so the sentence is what this assertion protects.
+  //
+  // Counted as TAGS, not as a hostname. The comment recording the deletion
+  // quotes the URL it deleted, which is this file's house style and is exactly
+  // what defeats a scan for the host: it would find the note and call it the
+  // script. Sixteen assertions elsewhere in this suite were green that way
+  // until this morning.
+  {
+    const scripts = idx.match(/<script\b[^>]*>/g) || [];
+    is("index.html loads one script and it is the app", scripts.length, 1);
+    ok("and that one is the module entry",
+       scripts.length === 1 && /src="\/src\/main\.jsx"/.test(scripts[0]));
+    // Not "no emrldtp": inline code is the same risk under any name, and the
+    // verifier Impact uses reads a comment, so comments have to stay legal.
+    ok("nothing is inlined into the head either",
+       !/<script(?![^>]*\bsrc=)[^>]*>/.test(idx));
+  }
+
   // AND NOTHING MAY INTERCEPT THE HOMEPAGE. The verifier fetches the root, and
   // a middleware matcher that grew to cover "/" would serve it something else
   // while every page still looked fine, which is the shape of the
@@ -17820,7 +18216,9 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ok("and searches for the type the brief asked for", /runDiscovery\(finding\?\.searchType \|\| undefined\)/.test(appC));
   // The Discover panel sits behind the preview. A run he cannot watch is a run
   // he will not trust.
-  ok("and closes the preview first, so he can watch it run", /setGuideModal\(null\);\s*\n\s*setToast\(`🔭/.test(appC));
+  // setToast plus a hand-rolled clear became showToast(text, ms) on 23 Aug. The
+  // rule is the ORDER: the preview closes before the message, so he sees the run.
+  ok("and closes the preview first, so he can watch it run", /setGuideModal\(null\);\s*\n\s*showToast\(`🔭/.test(appC));
 }
 
 // ── "THE ROUTE DOESN'T BECOME SILLY" ───────────────────────────────
@@ -21008,7 +21406,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── AND THE WIRING, WHICH IS WHERE THE OLD SHAPE WAS WRITTEN ─────
   const appS = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the save uses the shared shape", /const guideToSave = \(\) => savedGuideRow\(guideModal, \{ id: Date\.now\(\), savedAt: new Date\(\)\.toISOString\(\) \}\);/.test(appS));
-  ok("and refuses to commit a row it could not build", /if \(!row\) \{ setToast\("Could not save this guide/.test(appS));
+  ok("and refuses to commit a row it could not build", /if \(!row\) \{ showToast\("Could not save this guide/.test(appS));
   // THE INLINE OBJECT LITERAL IS GONE. This is the assertion that actually
   // guards the bug: it was one `{ title: g.title, days: g.days }` in a click
   // handler, and it can be written again in a second by anyone adding a second
@@ -22451,7 +22849,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("it is entered when the signup needs confirming", /if \(needsConfirmation\) \{[\s\S]{0,320}setSentTo\(email\.trim\(\)\);/.test(sheetS));
   // The old inline sentence must not come back alongside it, or there are two
   // ways of saying the same thing and one of them is the thing he called 2005.
-  ok("the sentence wedged into the form is gone", !/Account made, and your answers are kept on this device/.test(stripNonCode(sheetS)));
+  ok("the sentence wedged into the form is gone", !/Account made, and your answers are kept on this device/.test(stripComments(sheetS)));
 
   // ── THE ADDRESS IS THE POINT OF THE SCREEN ──────────────────────
   // Held as the address rather than a boolean deliberately: a typo is invisible
@@ -22528,8 +22926,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // than city. "Most tourists" was the word doing the damage.
 {
   const appC = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the false claim is gone", !/Most tourists see Denmark for/.test(stripNonCode(appC)));
-  ok("and nothing generalises about tourists in its place", !/All of it in Copenhagen/.test(stripNonCode(appC)));
+  ok("the false claim is gone", !/Most tourists see Denmark for/.test(stripComments(appC)));
+  ok("and nothing generalises about tourists in its place", !/All of it in Copenhagen/.test(stripComments(appC)));
   ok("the replacement is a measured distance, not a claim about people",
      /Aarhus is about three hours from Copenhagen by train/.test(appC));
 
@@ -22564,7 +22962,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and gives the figure behind it", /45 percent of every night spent in the Nordics since 2008/.test(appC));
   // The vaguer wording stays out: "popular among international visitors" reads
   // as arrivals, which is the measure Denmark does not lead.
-  ok("the ambiguous version is not what ships", !/most popular Nordic country/.test(stripNonCode(appC)));
+  ok("the ambiguous version is not what ships", !/most popular Nordic country/.test(stripComments(appC)));
   ok("and the current record is still there too", /Statistics Denmark counting a record 26\.1 million overnight stays in the first half of 2026/.test(appC));
   // THE ONE THAT WOULD HAVE BEEN EMBARRASSING. His draft read "the founders of
   // Denmark decided to create Gemlyx".
@@ -22658,7 +23056,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // deliberate separate copy (api/ cannot import from src/). A Danish phone
   // typing English got Danish back, which is half of Denmark's phones.
   ok("Ask Gemlyx leads with the question's own language", /MATCH THE LANGUAGE OF THE QUESTION\. Read the question below/.test(ask));
-  ok("and no longer shouts the browser tag", !/ANSWER IN \$\{String\(lang\.name\)\.toUpperCase\(\)\}/.test(stripNonCode(ask)));
+  ok("and no longer shouts the browser tag", !/ANSWER IN \$\{String\(lang\.name\)\.toUpperCase\(\)\}/.test(stripComments(ask)));
   ok("the tag is demoted to a hint", /a hint about a device, not a statement about the person/.test(ask));
   // TWO: the sentinel gates the entire web-lookup path and was matched with
   // startsWith, which fails OPEN. A stray quote, a bold marker, or a model
@@ -23849,9 +24247,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // stripNonCode blanks the INSIDE of every string, so `kind === "town"` comes
   // back as `kind === "    "` and the test would fail on a correct file. Wrong
   // instrument for a claim about a string literal.
-  const dpNoComments = dp
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
-    .split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+  const dpNoComments = stripComments(dp);
   ok("the town-centre fallback only applies to towns",
      /kind === "town" \? townPointFor/.test(dpNoComments));
 
@@ -25159,7 +25555,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // The dead fallback key is gone: it was written in the app's vocabulary
   // against a store keyed in Google's, so it could never match, and with _mode
   // null it built the literal key "A|B|null".
-  ok("and the key that could never match is gone", !/\$\{firstThere\.name\}\|\$\{guide\._mode\}/.test(stripNonCode(gpSrc)));
+  ok("and the key that could never match is gone", !/\$\{firstThere\.name\}\|\$\{guide\._mode\}/.test(stripComments(gpSrc)));
   {
     const { spokenDuration: sd, sameMode, howForReader, describeOvernightMove: dom, overnightMove: om } = M;
     is("Google's word and ours are the same mode", sameMode("driving", "car"), true);
@@ -26382,7 +26778,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // AND IT NO LONGER CALLS THE MEAN A GUST. locationforecast/compact carries no
   // gust figure, so "Vindstød omkring X m/s" over details.wind_speed named a
   // quantity nobody had measured, and overstated it.
-  ok("it does not claim a gust it never measured", !/vindst/i.test(apiWeather.split("export default")[0].replace(/\/\/[^\n]*/g, "")));
+  ok("it does not claim a gust it never measured", !/vindst/i.test(stripComments(apiWeather.split("export default")[0])));
   ok("and the reader-facing text is not in Danish",
      !/detaljer:/.test(apiWeather) && !/Kraftig (vind|nedbør)/.test(apiWeather));
   const strip = readFileSync(join(root, "src/components/WeatherStrip.jsx"), "utf8");
@@ -26558,8 +26954,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     //
     // So: comment lines dropped by hand, which is all the protection this
     // particular check needs, and strings left intact.
-    const aiSrc = readFileSync(join(root, "src/utils/aiClient.js"), "utf8")
-      .split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+    const aiSrc = stripComments(readFileSync(join(root, "src/utils/aiClient.js"), "utf8"));
     ok("the Claude sink is handed askClaude's own model argument",
        /recordModelCall\("claude",\s*model\s*,/.test(aiSrc));
     ok("and the OpenAI sink its own hardcoded one",
@@ -26870,8 +27265,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // the transit feed. It fired on Helsingør to Hillerød, a scheduled train.
   const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
   const gpCode = stripNonCode(gp);
-  ok("the guide page no longer links Rome2Rio", !/rome2rio/i.test(gpCode));
-  ok("and no longer claims a route does not exist", !/No direct route/i.test(gp.replace(/\/\/[^\n]*/g, "")));
+  ok("the guide page no longer links Rome2Rio", !/rome2rio/i.test(stripComments(gp)));
+  ok("and no longer claims a route does not exist", !/No direct route/i.test(stripComments(gp)));
   ok("it points at the national journey planner instead", /OPERATORS\.rejseplanen\.url/.test(gpCode));
 
   // ── THE REVIEW HAS TO REPORT WHAT IT CUT ──────────────────────────
@@ -26910,8 +27305,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       // this is looking for would come back as `_src: "    "`. Comments are
       // stripped by line, which is all that is needed. Both patterns are read:
       // the write (`_src: "food"`) and the read (`_src === "food"`).
-      const raw = readFileSync(join(root, rel), "utf8")
-        .split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+      const raw = stripComments(readFileSync(join(root, rel), "utf8"));
       for (const m of raw.matchAll(/_src:\s*"([a-z]+)"/g)) types.add(m[1]);
       for (const m of raw.matchAll(/_src\s*===\s*"([a-z]+)"/g)) types.add(m[1]);
     }
@@ -27016,9 +27410,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // stripNonCode removes comments AND string contents, so it is the wrong tool for
   // finding a string; the right test is on the JSX TEXT, which is what is left once
   // comments go.
-  const hwkNoComments = howWeKnow
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
-    .split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+  const hwkNoComments = stripComments(howWeKnow);
   ok("and neither does the panel under an entry", !/fact.?check/i.test(hwkNoComments));
   // ── THE HONESTY, IN BOTH BRANCHES, NOT EITHER ─────────────────────
   // This was two file-wide regexes, and a mutant that deleted the admission from
@@ -27529,7 +27921,28 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("there is no filter sheet left", !/setSheet|const \[sheet\]|Panel width=\{280\}/.test(fb2));
   ok("and no dead state behind it", !/sheetRef/.test(fb2));
   ok("the facets are the controls", /<Dropdown key=\{f\.key\}/.test(fb2));
-  ok("and the sort still says it is not a filter", /changes the ORDER of\n {10}what you are looking at and never the contents|changes the order, never/i.test(fb2));
+  // ── AND THE SORT IS SOMEWHERE ELSE, WHICH IS THE CLAIM ─────────
+  // This read as a text search for "changes the ORDER of what you are looking
+  // at and never the contents", and that sentence is a COMMENT in FilterBar
+  // explaining the layout. No reader ever sees it, so the assertion was a
+  // reading of the source's own explanation of itself: green while the sort sat
+  // anywhere at all. The rule the comment states is structural, so it is asked
+  // structurally instead.
+  {
+    const code = stripComments(fb2);
+    // The region drawn ABOVE the count, which is the row a reader reads as the
+    // filters. Anchored on the last `return (` before the count rather than the
+    // first in the file, because FilterBar holds a Dropdown component of its own
+    // and the component opens with a useCloseOnOutside on the sort key: a hook,
+    // not a control, and above everything drawn.
+    const countAt = code.indexOf("${shown} of ${items.length}");
+    const filterRow = code.slice(code.lastIndexOf("return (", countAt), countAt);
+    ok("the facet row was found", /<Dropdown/.test(filterRow));
+    ok("and no sort control is drawn in it", !/__sort/.test(filterRow));
+    ok("the sort is below the count instead",
+       code.indexOf("Sort by:") > countAt);
+    ok("and a reader is told it sorts", /Sort by:/.test(code));
+  }
   // ── HALF THE LIBRARY COULD NEVER REACH THE FRONT PAGE ────────────
   // Oliver, 19 Aug 2026, with the Food chip selected and the page reading
   // "Nothing published in that category yet": "Food, Nightlife, and workshops".
@@ -29427,8 +29840,21 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // `learned` joined the shape on 22 Aug, which is what made the whole
   // profileLearning feature stop being dead code. It is NOT a field the form
   // fills and never appears in it: see the isBlank assertions below.
-  ok("the stored shape is the one the form fills",
-     /EMPTY_PROFILE = \{ name: "", bornDate: "", bornYear: "", country: "", ageBand: "", sex: "", company: "", pace: "", description: "", interests: \[\], transport: \[\], style: \[\], termsVersion: "", termsAcceptedAt: "", learned: \{\} \}/.test(prof));
+  // ── RUN IT, DO NOT MATCH THE LITERAL ────────────────────────────
+  // This pinned the whole EMPTY_PROFILE literal character for character, so
+  // adding phone, address and replyLength on 23 Aug broke it while the rule it
+  // defends was untouched. The rule is that the blank shape and the cleaner
+  // agree about which fields exist: a key in one and not the other is a field
+  // that either never round-trips or never initialises. Both directions, because
+  // each catches a different mistake.
+  {
+    const { EMPTY_PROFILE, cleanProfile } = M;
+    const cleanedKeys = Object.keys(cleanProfile({})).sort();
+    const blankKeys = Object.keys(EMPTY_PROFILE || {}).sort();
+    is("the stored shape is the one the form fills", cleanedKeys.join(","), blankKeys.join(","));
+    // And the blank one really is blank, which is what makes isBlank meaningful.
+    ok("and the blank shape holds no answers", isBlank(EMPTY_PROFILE));
+  }
 }
 
 // ── 22 AUGUST 2026: A NAME THIS FILE ASKS FOR AND NEVER IMPORTED ────
@@ -30340,14 +30766,80 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // FIFTH READER MOVED OFF BOTH HALVES, after the arrival point, the transport
   // mode, the plan gate and the interests.
-  ok("the date is read from his turns only", /const dm = saidByTravellerForGuide\.match\(dateRe\);/.test(appD));
-  ok("and no date reader is left on convoText", !/convoText\.match\(dateRe\)/.test(appD));
+  // ── PINNED TO THE RULE, AFTER THE READER MOVED ──────────────────
+  // This matched `const dm = saidByTravellerForGuide.match(dateRe)` literally,
+  // and on 23 Aug the local dateRe was deleted in favour of arrivalDateIn, the
+  // reader the brief and the event window already share. The rule is unchanged:
+  // the date comes from HIS turns and never from Gemlyx's.
+  ok("the date is read from his turns only",
+     /arrivalDateIn\(saidByTravellerForGuide, nowForDates\)/.test(appD));
+  ok("and no date reader is left on convoText",
+     !/arrivalDateIn\(convoText|convoText\.match\(dateRe\)/.test(appD));
+  // The same for the length, which was still on both halves until 23 Aug.
+  ok("and the trip length comes from his turns too",
+     /dayCountIn\(saidByTravellerForGuide\)/.test(appD));
 
   // A BARE MONTH IS NOT NOTHING. His call: build, and stop pretending. Without
   // this branch the fix above would be worse than the bug, because arrivalDate
   // falls back to TODAY and an October trip would get August weather.
   ok("a bare month still sets a date", /datePrecision = "month";/.test(appD));
-  ok("sampled mid-month", /monthIdx, 15\)/.test(appD));
+  ok("sampled mid-month", /statedMonth\.start\.getMonth\(\), 15\)/.test(appD));
+
+  // ── AND THE GUIDE BUILDER READS WHAT THE BRIEF READS ────────────
+  //
+  // Carried over from the 23 Aug handoff as the last of the elderly-user
+  // findings: "generateGuide has its own duplicate parsers, still English only.
+  // The brief now reads six languages; the guide builder reads one."
+  //
+  // The cost was not cosmetic. "7 dage" filled the brief and left requestedDays
+  // null here, so none of the day-count enforcement ran and a Danish traveller
+  // asking for a week could get a one-day guide. "15. maj" filled the brief and
+  // left arrivalDate null here, so the guide dated itself from today: wrong
+  // weather, and every event filtered against the wrong month.
+  //
+  // THE ANTI-DRIFT RULE, asserted as an absence over stripped code: this file
+  // holds no date or duration regex of its own any more. A seventh copy is how
+  // the six existing ones came to disagree, and a negative is the only check
+  // that catches the copy BEFORE it drifts.
+  {
+    const code = stripNonCode(appD);
+    ok("no month table is defined here", !/MONTH_NAMES\s*=\s*\{\s*january/.test(code));
+    ok("nor a date regex", !/const dateRe\s*=/.test(code));
+    ok("nor a day-count regex", !/dayCountMatch|weekWordMatch|singleWeekMatch|fortnightMatch/.test(code));
+    ok("the shared readers are imported instead",
+       /import \{ tripWindow, dayCountIn, arrivalDateIn, monthOnlyIn, latestRelativeAnswer \} from "\.\/utils\/tripEvents"/.test(appD));
+  }
+
+  // And the behaviour those readers bring, run rather than read. These are the
+  // exact inputs that reached the brief and died here.
+  {
+    const { dayCountIn, arrivalDateIn, monthOnlyIn, latestRelativeAnswer } = M;
+    const NOW = new Date(2026, 7, 23);           // Sunday 23 August 2026
+    is("a Danish week now sets the day count", dayCountIn("vi er her i 7 dage"), 7);
+    is("and a German one", dayCountIn("7 Tage"), 7);
+    is("and a bare Danish week", dayCountIn("en uge"), 7);
+    is("a Danish written date is read", arrivalDateIn("vi kommer den 15. maj", NOW).getMonth(), 4);
+    is("and a Dutch one", arrivalDateIn("15 mei", NOW).getMonth(), 4);
+    is("a bare Danish month is read", monthOnlyIn("vi tænker oktober", NOW).start.getMonth(), 9);
+    // THE YEAR BUG THE OLD BRANCH HAD. It built the 15th and pushed it to next
+    // year whenever it had already passed, so "in August" written ON the 17th of
+    // August meant August of the following year: a year of wrong weather and no
+    // event ever overlapping. monthOnlyIn compares on the month.
+    is("a month already begun is this year, not next",
+       monthOnlyIn("we are coming in August", new Date(2026, 7, 17)).start.getFullYear(), 2026);
+    // And the relative day, which this file could not read at all.
+    ok("i dag is readable", !!latestRelativeAnswer(["i dag"], NOW));
+    ok("and prose still is not", !latestRelativeAnswer(["talk tomorrow!"], NOW));
+    // ── AND THE BUILDER HAS TO USE IT ───────────────────────────
+    // The two above test the shared reader, which is tripEvents' own job. They
+    // both survived deleting the branch that CALLS it from generateGuide, which
+    // is the nearby question once more: "can this be read" is not "does the
+    // guide builder read it".
+    ok("and the guide builder acts on it",
+       /\} else if \(statedRelative && statedRelative\.start\) \{/.test(appD));
+    ok("last of the three, after a date and a month",
+       appD.indexOf("statedDate = arrivalDateIn") < appD.indexOf("statedRelative = (statedDate || statedMonth)"));
+  }
   ok("and the precision travels with it", /datePrecision === "day"/.test(appD));
 
   // A FIXED POINT NEEDS A DAY TO BE FIXED TO.
@@ -30526,12 +31018,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // PURPOSE in the abstract and landed as a riddle. Four unlike examples make the
   // range obvious instead: a dislike, a diet, a preference and an enthusiasm all
   // count, and nobody has to work that out.
-  ok("the riddle in the free-text box is gone", !/what a good friend recommended/.test(stripNonCode(quest)));
+  ok("the riddle in the free-text box is gone", !/what a good friend recommended/.test(stripComments(quest)));
   ok("and it shows the range instead", /placeholder="e\.g\. I hate crowds, no seafood/.test(quest));
   // Stripped, because the comment above the field quotes the placeholder it
   // removed, which is the trap this suite has walked into twice already.
-  ok("and the placeholder that confused it is gone", !/Or a nickname/.test(stripNonCode(quest)));
-  ok("and the label does not offer a choice either", !/Name or nickname/.test(stripNonCode(quest)));
+  ok("and the placeholder that confused it is gone", !/Or a nickname/.test(stripComments(quest)));
+  ok("and the label does not offer a choice either", !/Name or nickname/.test(stripComments(quest)));
   ok("Born", /<div style=\{legend\}>Date of birth\{star\("bornDate"\)\}/.test(quest));
   ok("Gender", /<div style=\{legend\}>Gender\{star\("sex"\)\}/.test(quest));
   // ── THREE ON ONE LINE, ALL DROPDOWNS ────────────────────────────

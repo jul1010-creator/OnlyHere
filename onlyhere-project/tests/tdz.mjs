@@ -22,7 +22,28 @@
 // forward slash. On a file this size that is O(n²) and it ran for over two
 // minutes before being killed. The answer is tracked in one variable instead.
 
-export const stripNonCode = (src) => {
+// ── ONE WALK, TWO QUESTIONS ────────────────────────────────────────
+//
+// `keepStrings` is the whole difference between the two exports below, and it
+// exists because 23 Aug 2026 turned up a hole neither answer covers alone.
+//
+// stripNonCode blanks string CONTENTS, which is right for "is this code still
+// here" and silently wrong for "is this sentence still here". A negative like
+//   !/Most tourists see Denmark for/.test(stripNonCode(app))
+// can never fail: the sentence lives inside a string, so the scan is reading a
+// row of spaces where the copy is. The test was green with the copy on the page.
+//
+// Scanning the RAW file instead is the trap these assertions were moved off in
+// the first place: the comment above a fix quotes the line it removed, so the
+// scan finds the bug report and calls it the bug. Three assertions failed that
+// way on the day they were written.
+//
+// So the answer is neither. Blank the comments, keep the strings, and both
+// failure modes go away at once: a comment quoting the old copy is invisible, a
+// string carrying it is not. Mode tracking is identical either way, because the
+// walk still has to know it is inside a string to know a // in there is not a
+// comment. Only what gets written out changes.
+const scan = (src, keepStrings) => {
   const n = src.length;
   const out = [];
   // Brace depth of each ${ } we are inside, so a } closing an object literal in
@@ -31,6 +52,9 @@ export const stripNonCode = (src) => {
   let mode = "code", inClass = false, lastSig = "", i = 0;
   const keep = (ch) => { out.push(ch); if (!/\s/.test(ch)) lastSig = ch; };
   const blank = (ch) => { out.push(ch === "\n" ? "\n" : " "); };
+  // Everything that is not a comment: blanked in stripNonCode, written out as it
+  // stands in stripComments. Comments call blank directly and are never kept.
+  const hide = (ch) => { if (keepStrings) out.push(ch); else blank(ch); };
   // A / that follows an operator or an opener cannot be division, so it opens a
   // regex literal — whose insides are full of quotes and backticks and have to
   // be opaque. This is the standard heuristic and it is good enough here; the
@@ -48,15 +72,15 @@ export const stripNonCode = (src) => {
       // An escape in code position is almost always inside a regex the heuristic
       // missed. Skipping the pair stops the \` in /^\`\`\`json/ from opening
       // template mode, which is exactly what broke the first version.
-      if (c === "\\") { blank(c); i++; if (i < n) { blank(src[i]); i++; } continue; }
+      if (c === "\\") { hide(c); i++; if (i < n) { hide(src[i]); i++; } continue; }
       if (c === "/" && c2 === "/") { mode = "line"; blank(c); i++; blank(c2); i++; continue; }
       if (c === "/" && c2 === "*") { mode = "block"; blank(c); i++; blank(c2); i++; continue; }
-      if (c === "/" && (lastSig === "" || REGEX_CAN_START.test(lastSig))) { mode = "regex"; blank(c); i++; continue; }
-      if (c === "'") { mode = "sq"; blank(c); i++; continue; }
-      if (c === '"') { mode = "dq"; blank(c); i++; continue; }
-      if (c === "`") { mode = "tmpl"; tmpl.push(-1); blank(c); i++; continue; }
+      if (c === "/" && (lastSig === "" || REGEX_CAN_START.test(lastSig))) { mode = "regex"; hide(c); i++; continue; }
+      if (c === "'") { mode = "sq"; hide(c); i++; continue; }
+      if (c === '"') { mode = "dq"; hide(c); i++; continue; }
+      if (c === "`") { mode = "tmpl"; tmpl.push(-1); hide(c); i++; continue; }
       if (c === "}" && tmpl.length && tmpl[tmpl.length - 1] === 0) {
-        tmpl[tmpl.length - 1] = -1; mode = "tmpl"; blank(c); i++; continue;
+        tmpl[tmpl.length - 1] = -1; mode = "tmpl"; hide(c); i++; continue;
       }
       if (tmpl.length && tmpl[tmpl.length - 1] >= 0) {
         if (c === "{") tmpl[tmpl.length - 1]++;
@@ -70,28 +94,37 @@ export const stripNonCode = (src) => {
       blank(c); i++; continue;
     }
     if (mode === "regex") {
-      if (c === "\\") { blank(c); i++; if (i < n) { blank(src[i]); i++; } continue; }
-      if (c === "[") { inClass = true; blank(c); i++; continue; }
-      if (c === "]") { inClass = false; blank(c); i++; continue; }
+      if (c === "\\") { hide(c); i++; if (i < n) { hide(src[i]); i++; } continue; }
+      if (c === "[") { inClass = true; hide(c); i++; continue; }
+      if (c === "]") { inClass = false; hide(c); i++; continue; }
       // A newline means it was division after all. Bail out rather than
       // swallowing the rest of the file.
-      if (c === "\n") { mode = "code"; inClass = false; blank(c); i++; continue; }
-      if (c === "/" && !inClass) { mode = "code"; lastSig = "/"; blank(c); i++; continue; }
-      blank(c); i++; continue;
+      if (c === "\n") { mode = "code"; inClass = false; hide(c); i++; continue; }
+      if (c === "/" && !inClass) { mode = "code"; lastSig = "/"; hide(c); i++; continue; }
+      hide(c); i++; continue;
     }
     if (mode === "sq" || mode === "dq") {
-      if (c === "\\") { blank(c); i++; if (i < n) { blank(src[i]); i++; } continue; }
+      if (c === "\\") { hide(c); i++; if (i < n) { hide(src[i]); i++; } continue; }
       if ((mode === "sq" && c === "'") || (mode === "dq" && c === '"')) { mode = "code"; lastSig = '"'; }
-      blank(c); i++; continue;
+      hide(c); i++; continue;
     }
     // inside a template literal
-    if (c === "\\") { blank(c); i++; if (i < n) { blank(src[i]); i++; } continue; }
-    if (c === "`") { tmpl.pop(); mode = "code"; lastSig = '"'; blank(c); i++; continue; }
-    if (c === "$" && c2 === "{") { tmpl[tmpl.length - 1] = 0; mode = "code"; blank(c); i++; blank(c2); i++; continue; }
-    blank(c); i++; continue;
+    if (c === "\\") { hide(c); i++; if (i < n) { hide(src[i]); i++; } continue; }
+    if (c === "`") { tmpl.pop(); mode = "code"; lastSig = '"'; hide(c); i++; continue; }
+    if (c === "$" && c2 === "{") { tmpl[tmpl.length - 1] = 0; mode = "code"; hide(c); i++; hide(c2); i++; continue; }
+    hide(c); i++; continue;
   }
   return out.join("");
 };
+
+// Comments and strings both gone. The right scan for "is this CODE still here",
+// and the wrong one for anything a reader sees.
+export const stripNonCode = (src) => scan(src, false);
+
+// Comments gone, strings intact. The right scan for "is this SENTENCE still
+// here": a fix's own comment quoting the copy it deleted no longer counts as
+// the copy, and copy hiding in a string literal still does.
+export const stripComments = (src) => scan(src, true);
 
 // The body of a named function, by brace matching on ALREADY-STRIPPED code so a
 // brace inside a prompt cannot throw the count off.
