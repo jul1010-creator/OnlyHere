@@ -21804,10 +21804,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      !/@import url\('https:\/\/fonts\.googleapis/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
 
   // ── AND THE FIRST PIXEL OF THE PRODUCT ──────────────────────────
-  // theme-color read #0A0F1E, the DARK theme's background, while the default is
-  // warm. applyTheme corrects it at runtime, so the only thing wrong was the
-  // first frame, which is the phone's browser chrome painting navy and then
-  // changing. Read from THEMES rather than written out, so it cannot drift again.
+  // applyTheme corrects this tag at runtime, so the only thing it decides is the
+  // first frame, which is the phone's browser chrome painting one colour and
+  // then changing. Read from THEMES rather than written out, and it has now
+  // caught the drift in BOTH directions: the tag held the dark navy while the
+  // warm theme was default, and then held the warm colour after DEFAULT_THEME
+  // became "dark" on 22 August. A constant in index.html cannot follow a
+  // decision made in theme.js, so this is the line that makes it follow.
   const themeColor = /<meta name="theme-color" content="([^"]+)"/.exec(html2)?.[1];
   ok("index.html declares a theme colour", !!themeColor);
   is("and it is the default theme's background", themeColor, M.THEMES[M.DEFAULT_THEME].bg);
@@ -29185,7 +29188,19 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is("an explicit date beats a relative one", explicit.known.when.value.getMonth(), 9);
 
     // ── AND HIS FATHER'S CONVERSATION NOW FILLS BOTH ──────────────
-    const dad = readBrief({ travellerText: "i dag, 7 dage, vi vil gerne se Mols Bjerge", today: SAT });
+    // TURNS, not one comma-joined line, because that is the shape the product
+    // passes: App.jsx builds travellerTurns from his messages and joins them
+    // with a newline for everything that wants the whole text.
+    //
+    // This assertion was written on 22 August, when the brief read the entire
+    // conversation as one string, and it kept that shape when relativeAnswerIn
+    // became per turn and answer-only the following night. It is a FIFTH
+    // assertion pinned to code that moved under it, and it survived the sweep
+    // that caught the other four because it runs readBrief rather than a regex
+    // over a source file, so no regex-extraction check could see it. Worth
+    // remembering: that sweep only covers assertions that read source TEXT.
+    const dadTurns = ["i dag", "7 dage", "vi vil gerne se Mols Bjerge"];
+    const dad = readBrief({ travellerTurns: dadTurns, travellerText: dadTurns.join("\n"), today: SAT });
     ok("the dates slot fills from his own words", !!dad.known.when);
     ok("and so does the length", !!dad.known.days);
     is("seven of them", dad.known.days.value, 7);
@@ -29200,6 +29215,23 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const asked = M.nextAsks(dad)[0];
     ok("the note asks for the first thing still missing", !!asked && buildBlockedNote(dad).includes(asked.ask));
     ok("and that thing is genuinely not known yet", !dad.known[asked.key]);
+
+    // ── AND THE GAP THAT LEAVES, WRITTEN DOWN RATHER THAN LEFT ────
+    // Those same three answers in ONE message fill the length and not the date.
+    // relativeAnswerIn asks whether the TURN was an answer, and a turn carrying
+    // a whole sentence after the date is not one: that is the guard that stops
+    // "talk tomorrow!" becoming an arrival date, and it cannot tell a compound
+    // answer from a sentence without a rule nobody has written yet.
+    //
+    // Nobody has been seen typing this. It is asserted rather than fixed for
+    // exactly that reason, because a reader loosened for a case the product has
+    // never produced is how three regressions shipped on 22 August. If somebody
+    // IS seen answering three questions in one message, this is the line that
+    // says where to look, and the rule to write is probably "the date fills a
+    // clause of its own" rather than "anything is left over".
+    const oneLine = readBrief({ travellerText: dadTurns.join(", "), today: SAT });
+    ok("the length still reads out of one compound line", !!oneLine.known.days);
+    is("the date does not, and that is the known edge", oneLine.known.when, undefined);
   }
 
   // ── AND THE MODEL IS TOLD NOT TO NAME BUTTONS ───────────────────

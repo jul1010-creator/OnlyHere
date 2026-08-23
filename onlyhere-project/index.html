@@ -9,13 +9,20 @@
          line was genuinely stopping Android users from pinching to zoom at all.
          MDN treats any maximum-scale under 3 as an accessibility failure. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- ── THE WARM THEME IS THE DEFAULT, SO THIS HAS TO BE ITS COLOUR ──
-         This read #0A0F1E, which is the DARK theme's background. The default is
-         warm, #12100B, and applyTheme corrects this tag at runtime, so the only
-         thing wrong was the first frame: the phone's browser chrome painted navy
-         and then changed. Small, and it is the very first pixel of the product
-         anybody sees. -->
-    <meta name="theme-color" content="#12100B" />
+    <!-- ── THIS HAS TO BE THE DEFAULT THEME'S COLOUR, WHICHEVER IT IS ──
+         applyTheme corrects this tag at runtime, so the only thing it decides is
+         the FIRST frame: the phone's browser chrome paints this, then changes.
+         Small, and it is the very first pixel of the product anybody sees.
+
+         It has now been wrong in both directions. It read #0A0F1E while the warm
+         theme was the default, was corrected to #12100B, and then DEFAULT_THEME
+         became "dark" on 22 August and left this holding the warm colour again.
+         A constant in a second file cannot follow a decision made in the first,
+         so the suite reads THEMES[DEFAULT_THEME].bg and compares. Change the
+         default theme and this line goes red until it is changed with it.
+
+         The body background below is the same colour for the same reason. -->
+    <meta name="theme-color" content="#0A0F1E" />
 
     <!-- ── THE RESERVATION THAT ONLY EXISTS IF IT IS WRITTEN DOWN ──
          Oliver, 17 Aug 2026: "I also want you to write on the pages that I claim
