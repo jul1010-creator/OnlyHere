@@ -905,3 +905,84 @@ Filling instructions are in the file header, in the same style as the Studio
 paste blocks.
 
 **9,828 passed, 0 failed. Build clean.**
+
+---
+
+## 23 August: "Ticketmaster approved me!!!!"
+
+Ten days after "let's finish the ticketmaster affiliate", and the mail finally
+worked.
+
+### Five assertions failed on the good news
+
+Switching the template on turned the suite red, and every one of the five was a
+test of the STATE rather than of a rule: "nothing is active until he pastes the
+template", "a Ticketmaster link is passed through untouched", "the disclosure
+says nothing", "the template ships empty", and the privacy page's claim that
+Ticketmaster earns nothing.
+
+Each was true the day it was written and false the day he succeeded. **A suite
+that fails on success is a suite somebody deletes on success**, so all five are
+now rules that hold on both sides of approval:
+
+* the wrapping and the disclosure appear **exactly when** the programme is
+  active, which is red if a link is wrapped while inactive and red if a link is
+  left bare while active;
+* the privacy page and `config.js` must **agree** about which partners pay, with
+  the paragraph split at its own non-paying clause and each partner checked to be
+  on the side its config puts it.
+
+That last one has a trap worth remembering: split on `". "` and not on `"."`,
+because **"Booking.com" contains a full stop**. The first version cut the
+sentence in half inside the partner's own name and then reported that the page
+said nothing clear about Booking.com, which was the assertion being wrong about
+the page rather than the page being wrong.
+
+### What Impact actually handed him was not a template
+
+```
+https://ticketmaster.evyy.net/c/7614922/264167/4272?u=https%3A%2F%2Fwww.ticketmaster.com%3Firgwc%3D1...
+```
+
+Decoded, the `u=` already held a destination, and the destination was
+**`https://www.ticketmaster.com`, the front page**, with Impact's own macros
+(`{clickid}`, `{irpid}`, `{ircid}`) filled in server side on the redirect. It is
+the generic homepage link, not a deep link.
+
+**Pasting it verbatim would have sent every reader who tapped a ticket button to
+Ticketmaster's home page instead of the event they were reading about, while
+still paying, and nothing on the page would have looked wrong.** The new
+assertion catches exactly that: a template with no `{url}` fails the suite. It
+was written an hour before the link arrived and it fired on the real thing.
+
+The tracking half is kept, the destination half is the placeholder:
+
+```js
+export const TICKETMASTER_AFFILIATE_TEMPLATE =
+  "https://ticketmaster.evyy.net/c/7614922/264167/4272?u={url}";
+```
+
+Verified end to end: a `ticketmaster.dk` event wraps and still lands on that
+event, `livenation.dk` wraps, `billetlugen.dk` is untouched, the reader label
+reads Ticketmaster and the disclosure fires.
+
+### Two things only a click can settle
+
+1. **The generic link pointed at .com and his readers buy on .dk.** Danish events
+   live on ticketmaster.dk, and `TICKETMASTER_HOSTS` wraps .dk, .com, .eu and
+   livenation. If the programme covers only the US storefront, a wrapped .dk link
+   earns nothing **and** adds a redirect for no reason, which is a cost to a
+   reader with no benefit to anybody. Check the covered domains in Impact and cut
+   .dk out of the host list if it is not among them.
+2. **Deep linking has to be clicked once.** Open a real Danish event on the live
+   site and tap the ticket button. The event page means this works. The front
+   page means the programme does not allow an arbitrary `u=`, and the ticket
+   buttons should go back to being plain links.
+
+Both are written into `config.js` above the constant.
+
+**privacy.html is version 2.2**, in force 23 August 2026: section 13 names
+Ticketmaster alongside Tiqets as a partner that pays. Nothing about what is
+collected changed, and the version note says so.
+
+**9,829 passed, 0 failed. Build clean.**

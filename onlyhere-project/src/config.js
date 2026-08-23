@@ -76,7 +76,38 @@ export const BOOKING_AFFILIATE_ID = "";
 // Ticketmaster link stays an ordinary link that earns nothing. It does NOT mean
 // the link disappears: a reader still has to be able to reach the tickets, and
 // the revenue is the second reason that button exists, not the first.
-export const TICKETMASTER_AFFILIATE_TEMPLATE = "";
+// ── APPROVED 23 AUG 2026 ────────────────────────────────────────────
+//
+// Ten days after "the mail won't fking work". The ids below are his:
+// 7614922 is the publisher, 264167 the campaign, 4272 the ad.
+//
+// WHAT IMPACT ACTUALLY HANDED HIM was not this. It was a link whose `u=`
+// already held a destination, and the destination was
+// https://www.ticketmaster.com, the front page, with Impact's own macros
+// ({clickid}, {irpid}, {ircid}) filled in server side on the redirect. Pasting
+// that here verbatim would have sent every reader who tapped a ticket button to
+// Ticketmaster's home page instead of the event they were reading about, while
+// still paying, and nothing on the page would have looked wrong. The suite
+// catches it now: a template with no {url} in it fails.
+//
+// So the tracking half is kept and the destination half is replaced by the
+// placeholder, which is the deep link shape and the shape this file has
+// documented since 13 August.
+//
+// ── TWO THINGS TO VERIFY BEFORE TRUSTING THE MONEY ──────────────────
+//
+// 1. THE GENERIC LINK POINTED AT .COM AND HIS READERS BUY ON .DK. A Danish
+//    event lives on ticketmaster.dk, and TICKETMASTER_HOSTS below wraps .dk,
+//    .com, .eu and livenation. If the programme he was approved for covers only
+//    the US storefront, a wrapped .dk link earns nothing AND adds a redirect for
+//    no reason, which is a cost to a reader with no benefit to anybody. Check
+//    the covered domains in Impact, and if .dk is not among them, take it out of
+//    TICKETMASTER_HOSTS rather than leaving a redirect that does nothing.
+// 2. DEEP LINKING HAS TO BE CLICKED ONCE. Open a real Danish event on the live
+//    site, tap the ticket button, and see where it lands. The event page means
+//    this works. The front page means the programme does not allow an arbitrary
+//    `u=` and the ticket buttons should go back to being plain links.
+export const TICKETMASTER_AFFILIATE_TEMPLATE = "https://ticketmaster.evyy.net/c/7614922/264167/4272?u={url}";
 
 // ── TIQETS, THROUGH TRAVELPAYOUTS ───────────────────────────────────
 //

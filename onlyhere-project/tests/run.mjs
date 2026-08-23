@@ -15344,15 +15344,32 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ok("nor a lookalike domain", !isTicketmasterUrl("https://ticketmaster.dk.evil.com/e/1"));
   ok("nor a bare string", !isTicketmasterUrl("ticketmaster.dk"));
 
-  // UNAPPROVED IS THE STATE THIS SHIPS IN, and it must be the safe one: every
-  // link still works and earns nothing, rather than the button disappearing.
-  // A reader needs to reach the tickets whether or not anybody is paid for it.
-  ok("nothing is active until he pastes the template", !ticketmasterActive());
-  is("so a Ticketmaster link is passed through untouched", ticketmasterUrl(TM), TM);
-  is("and so is everything else", ticketmasterUrl(NOT), NOT);
+  // ── TRUE IN BOTH STATES, WHICH IS THE POINT ─────────────────────
+  //
+  // 23 Aug 2026: "Ticketmaster approved me!!!!"
+  //
+  // These four lines used to read "nothing is active until he pastes the
+  // template", "a Ticketmaster link is passed through untouched", "the
+  // disclosure says nothing", and "the template ships empty". Every one of them
+  // was true when written and every one of them FAILS on the day he is
+  // approved. Five assertions turned red on the good news, ten days after he
+  // wrote "let's finish the ticketmaster affiliate", and a suite that fails on
+  // success is a suite somebody deletes on success.
+  //
+  // The rule underneath does not care which state he is in: the wrapping and
+  // the disclosure appear exactly when the programme is active and never
+  // otherwise. That is red if a link is wrapped while inactive, red if a link is
+  // left bare while active, and green on both sides of approval.
+  const tmLive = ticketmasterActive();
+  is("a Ticketmaster link is wrapped exactly when the programme is active",
+     ticketmasterUrl(TM) !== TM, tmLive);
+  is("and the disclosure appears on exactly the same condition",
+     ticketDisclosure(TM) !== "", tmLive);
+  // Whatever the state, these hold, and they are the ones that protect a reader
+  // rather than the revenue.
+  is("nothing that is not Ticketmaster is ever wrapped", ticketmasterUrl(NOT), NOT);
   is("a link with no scheme is refused rather than wrapped", ticketmasterUrl("ticketmaster.dk/e/1"), null);
   is("and so is nothing at all", ticketmasterUrl(""), null);
-  is("the disclosure says nothing when nothing is earned", ticketDisclosure(TM), "");
 
   // ── AND THE STATE HE WILL ACTUALLY BE IN, ONCE APPROVED ─────────
   // The template is passed in rather than read from config, because the config
@@ -15395,8 +15412,32 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
        /import \{ hostOf \} from "\.\/pageScan";/.test(readFileSync(join(root, "src/utils/affiliates.js"), "utf8")));
   }
   ok("the template constant exists", /export const TICKETMASTER_AFFILIATE_TEMPLATE = /.test(cfg));
-  ok("and ships empty", /export const TICKETMASTER_AFFILIATE_TEMPLATE = "";/.test(cfg));
   ok("with the placeholder documented, so he knows what to paste", /\{url\}/.test(cfg));
+  // ── AND WHAT HE PASTES HAS TO BE A TEMPLATE ─────────────────────
+  //
+  // "ships empty" was the old assertion and it is worthless from today: it can
+  // only ever fail on approval. What matters now is the shape of what goes in,
+  // because the likely mistake on approval day is pasting the Impact link
+  // WITHOUT {url} on the end. That is not a broken build. It is every ticket
+  // button on the site quietly sending readers to Ticketmaster's front page
+  // instead of the event they were reading about, while still paying.
+  {
+    const tmVal = (cfg.match(/export const TICKETMASTER_AFFILIATE_TEMPLATE = "([^"]*)"/) || [])[1];
+    ok("the constant is a plain string literal", typeof tmVal === "string");
+    ok("empty, or carrying the destination placeholder",
+       tmVal === "" || tmVal.includes("{url}"));
+    ok("and when it is set, it is an https link",
+       tmVal === "" || /^https:\/\//.test(tmVal));
+    // The disclosure, the partner label and the outbound-link rules all key off
+    // isPartnerLink, which knows a fixed list of hosts. An Impact programme on a
+    // host that list has never seen would pay him and show a reader nothing.
+    if (tmVal) {
+      const built = tmVal.replace("{url}", encodeURIComponent("https://www.ticketmaster.dk/event/1"));
+      ok(`the template's host is one this app recognises as a partner: ${built.split("/")[2] || "?"}`,
+         M.isPartnerLink(built));
+      is("and it is labelled as Ticketmaster to a reader", M.partnerMerchant(built), "Ticketmaster");
+    }
+  }
 }
 
 // ── DEMANDING THE TICKET AGENT ─────────────────────────────────────
@@ -30811,19 +30852,57 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // both of their config values were empty strings, and left Tiqets, the only
   // one live, unnamed. Naming the wrong partner is worse than naming none.
   const set = (decl) => new RegExp(`export const ${decl} = "[^"]+"`).test(cfg);
-  ok("Tiqets is the partner that is switched on", set("TIQETS_BROWSE_LINK"));
-  ok("and the privacy page names it", /Tiqets/.test(privacy));
-  ok("Booking.com is not switched on", !set("BOOKING_AFFILIATE_ID"));
-  ok("Ticketmaster is not switched on", !set("TICKETMASTER_AFFILIATE_TEMPLATE"));
-  // The RULE, not the sentence: wherever the page names those two together, it
-  // says in the same breath that they carry no code and earn nothing.
+  // ── ASKED AS AGREEMENT, NOT AS A SNAPSHOT ───────────────────────
+  //
+  // 23 Aug 2026, the evening Ticketmaster approved him after ten days: "Ticket
+  // master approved me!!!!"
+  //
+  // This block asserted the STATE ("Ticketmaster is not switched on"), which was
+  // true when it was written and becomes false the moment he pastes the Impact
+  // template into config.js. A test that fails on the good news is a test that
+  // gets deleted on the good news.
+  //
+  // The rule underneath survives the switch and is the one that matters: the
+  // privacy page says which partners pay, and it has to agree with which
+  // partners are configured to pay. Either side may move; they may not move
+  // apart. So the paragraph is split at its own non-paying clause and every
+  // partner is checked to be on the side its config puts it.
+  //
+  // Scoped to the affiliate paragraph. "Ticketmaster" also appears in section 9
+  // as a recipient of place data, which is a different fact about a different
+  // thing and must not be read as a claim about money.
   {
-    const at = privacy.indexOf("Booking.com and Ticketmaster");
-    ok("the page names the two that are switched off", at > 0);
-    const sentence = privacy.slice(at, at + 220);
-    ok("and says in the same sentence that they carry no partner code",
-       /no partner code/.test(sentence));
-    ok("and that they earn Gemlyx nothing", /earn Gemlyx nothing|generate no revenue|earns Gemlyx nothing/.test(sentence));
+    const start = privacy.indexOf("Certain links carry a partner code");
+    ok("the affiliate paragraph was found", start > 0);
+    const para = privacy.slice(start, privacy.indexOf("</p>", start));
+    const noCodeAt = para.indexOf("carry no partner code");
+    ok("and it names a group that carries no code", noCodeAt > 0);
+    // Split on ". " and not on ".", because "Booking.com" contains a full stop.
+    // The first version cut the sentence in half inside the partner's own name
+    // and then reported that the page said nothing clear about Booking.com,
+    // which is the assertion being wrong about the page rather than the page
+    // being wrong. It failed that way on its first run.
+    const sentStart = para.lastIndexOf(". ", noCodeAt) + 1;
+    const sentEnd = para.indexOf(". ", noCodeAt + 1);
+    const notPaying = para.slice(sentStart, sentEnd < 0 ? para.length : sentEnd);
+    const paying = para.slice(0, sentStart);
+    const wrongSide = [];
+    for (const [name, decl] of [["Tiqets", "TIQETS_BROWSE_LINK"],
+                                ["Booking.com", "BOOKING_AFFILIATE_ID"],
+                                ["Ticketmaster", "TICKETMASTER_AFFILIATE_TEMPLATE"]]) {
+      const on = set(decl);
+      const saysPays = paying.includes(name);
+      const saysFree = notPaying.includes(name);
+      if (on ? !(saysPays && !saysFree) : !(saysFree && !saysPays)) {
+        wrongSide.push(`${name}: config says it ${on ? "PAYS" : "does not pay"}, privacy.html says it ${saysPays && !saysFree ? "pays" : saysFree && !saysPays ? "does not pay" : "nothing clear"}`);
+      }
+    }
+    is("privacy.html and config.js agree about which partners pay", wrongSide, []);
+    // And the non-paying claim still says both halves of what it claims, so the
+    // sentence cannot degrade into naming them without stating the position.
+    ok("the non-paying sentence says there is no code", /no partner code/.test(notPaying));
+    ok("and that they earn nothing",
+       /earn Gemlyx nothing|generate no revenue|earns Gemlyx nothing/.test(notPaying));
   }
 
   // ── THE AGE ALL THREE HAVE TO AGREE ON ──────────────────────────
