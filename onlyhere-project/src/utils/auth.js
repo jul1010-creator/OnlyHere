@@ -300,6 +300,59 @@ export const updatePassword = async (session, password) => {
   return true;
 };
 
+// ── WHICH WAY THEY GET IN, WHICH DECIDES WHAT WE MAY OFFER ──────────
+//
+// Oliver, 23 Aug 2026, asked for a change-password control on the account page.
+// The trap is that not everybody has a password. Somebody who signed up through
+// Google has an identity and no password at all, and a "Change password" box
+// offered to them is a control that cannot work: the same fault as the front
+// page that said "Accounts are coming soon" while accounts existed, and as the
+// old Google button that was the most prominent thing on the auth sheet while
+// being a dead end.
+//
+// ── ASKED FRESH, NOT CACHED ON THE SESSION ──────────────────────────
+//
+// The obvious implementation is to record the provider in withUser and read it
+// off the stored session. That is wrong for everybody who is ALREADY signed in:
+// withUser returns early once a session has a userId, so it never runs again,
+// and every existing session in localStorage would carry no provider forever.
+// The page would then either hide a real control from password users or offer a
+// dead one to Google users, permanently, and only for the people who had been
+// here longest.
+//
+// So it is one request when the page opens. Supabase returns `identities`, and
+// `app_metadata.providers` alongside it; identities is the authoritative list
+// and the other is read as a fallback for an older shape.
+//
+// AN EMPTY LIST IS NOT AN ANSWER. A failed request returns null rather than [],
+// because [] would read as "they have no password" and quietly hide the control
+// from somebody who does have one. The page renders nothing while it does not
+// know, which is the honest state: a control that might be dead is worse than a
+// control that arrives a moment later.
+export const accountProviders = async (session) => {
+  if (!session?.token) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${session.token}` },
+    });
+    if (!res.ok) return null;
+    const u = await res.json();
+    const fromIdentities = Array.isArray(u?.identities)
+      ? u.identities.map(i => String(i?.provider || "").trim().toLowerCase()).filter(Boolean)
+      : [];
+    const fromMeta = Array.isArray(u?.app_metadata?.providers)
+      ? u.app_metadata.providers.map(x => String(x || "").trim().toLowerCase()).filter(Boolean)
+      : [];
+    const all = [...new Set([...fromIdentities, ...fromMeta])];
+    return all.length ? all : null;
+  } catch { return null; }
+};
+
+// Supabase names the email and password identity "email". Read through a
+// function rather than compared inline at the call site, so the one place that
+// knows Supabase's word for it is this file and not a component.
+export const hasPassword = (providers) => Array.isArray(providers) && providers.includes("email");
+
 // ── SENDING THE CONFIRMATION AGAIN ──────────────────────────────────
 //
 // Needed the moment there is a screen that waits for an email, because the

@@ -175,6 +175,11 @@ writeFileSync(entry, `
   export { routeTowns, countStops, orderedStops, shareSummary, shareMessage, shareTitle, metaDescription, hasMeasuredTravel, escapeHtml } from ${JSON.stringify(join(root, "src/utils/share.js"))};
   export { buildPreviewHtml, injectMeta, isCrawler, guideIdFromPath, articleBlocks, articleHtml, worthServing, structuredData, injectArticle } from ${JSON.stringify(join(root, "src/utils/linkPreview.js"))};
   export { SITE_ORIGIN } from ${JSON.stringify(join(root, "src/config.js"))};
+  export { tripStatus, currentTrip, tripStatusLine, tripStatusForPrompt } from ${JSON.stringify(join(root, "src/utils/tripStatus.js"))};
+  export { SPEND, OBSERVED_VOCAB } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
+  export { PARTS as PARTS_FOR_TEST } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
+  export { hasPassword } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
+  export { NOTICED_LABEL } from ${JSON.stringify(join(root, "src/components/AboutMePage.jsx"))};
   export { placeKindOf, kindLabel, isArea, baseTownFor, relationLine, collapseToParent, areasInside, dayTripsFrom, PLACE_KINDS } from ${JSON.stringify(join(root, "src/utils/placeKind.js"))};
   export { SWEEP_INTENT, SWEEP_PROMPT } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
@@ -10971,6 +10976,270 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and it wraps once a group has four badges",
      /display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, width: "100%"/.test(app.slice(hdr, hdr + 700)));
 }
+
+// ── 23 AUGUST 2026: INFO ABOUT ME ──────────────────────────────────
+//
+// Oliver: "We need a page where you can set up profile picture, edit your info,
+// change password, etc. and your 'edit what Gemlyx knows about you' should be
+// 'info about me'. And this should show EVERYTHING you've gathered as info about
+// the user already."
+//
+// Which is rule 4 of profileLearning.js, written down there since 21 August and
+// never built: "IT HAS TO BE VISIBLE AND REVERSIBLE."
+{
+  const { tripStatus, currentTrip, tripStatusLine, tripStatusForPrompt } = M;
+  const { OBSERVED_FIELDS, OBSERVED_VOCAB, SPEND, PARTS_FOR_TEST, NOTICED_LABEL, hasPassword } = M;
+  const { seenFromTrip, observeTrip, settledObservations, observedForPrompt, OBSERVED_MIN, cleanProfile, cleanLearned } = M;
+
+  // ── HIS OWN EXAMPLE, DAY BY DAY ─────────────────────────────────
+  // "If they chose to go from the 5th to the 12th, and it is the 7th, then
+  // obviously they are on vacation."
+  //
+  // Eight days from the 5th ends on the 12th, so the length is start + (days-1)
+  // and never start + days. Getting that wrong is an off-by-one nobody would see
+  // until somebody was told their holiday was still running the day after they
+  // flew home.
+  const trip = { _arrivalDate: "2026-08-05", days: Array.from({ length: 8 }, (_, i) => ({ day: i + 1 })) };
+  const on = (iso) => tripStatus(trip, new Date(`${iso}T09:30:00`));
+
+  is("the day before is before", on("2026-08-04").phase, "before");
+  is("and it is tomorrow", on("2026-08-04").daysUntil, 1);
+  is("the first day counts as day one", on("2026-08-05").dayOfTrip, 1);
+  is("and it is during", on("2026-08-05").phase, "during");
+  is("his own example: the 7th is day three", on("2026-08-07").dayOfTrip, 3);
+  is("the last day is still the trip", on("2026-08-12").phase, "during");
+  is("and it is day eight of eight", on("2026-08-12").dayOfTrip, 8);
+  is("the day after is over", on("2026-08-13").phase, "after");
+
+  // ── AND THE END DATE ITSELF, WHICH THE PHASES DO NOT COVER ──────
+  //
+  // Added after a mutation survived. `phase` is decided by counting forward from
+  // the start, so writing `end` as start + days rather than start + (days - 1)
+  // left every phase assertion above green while the stored end date was a day
+  // late. That value is not decoration: it is the date read out to the model in
+  // tripStatusForPrompt, so the model would have been told an eight day trip
+  // from the 5th runs to the 13th and offered somebody something for a day they
+  // had already flown home on.
+  //
+  // A check that answers a nearby question, once more: "which phase is today" is
+  // not "when does this end".
+  is("the trip ends on its last day", on("2026-08-07").end.getDate(), 12);
+  is("in the right month", on("2026-08-07").end.getMonth(), 7);
+  is("and a one day trip ends the day it starts",
+     tripStatus({ _arrivalDate: "2026-08-05", days: [{}] }, new Date("2026-08-05T10:00:00")).end.getDate(), 5);
+  ok("the model is given that same date and not the day after",
+     /which ends 12 August/.test(tripStatusForPrompt(on("2026-08-07"), "Ribe")));
+
+  // The time of day must not decide this. A trip is a set of calendar days, and
+  // reading the clock rather than the day would flip the answer at midnight in
+  // whichever timezone the browser happens to be in.
+  is("the hour of the day changes nothing",
+     tripStatus(trip, new Date("2026-08-12T23:58:00")).phase, "during");
+
+  // Nothing to say is said as nothing. A guide built from "four days somewhere
+  // quiet" has a length and no arrival, and tripWindow already says why that
+  // must not be dressed up as knowing when somebody is here.
+  is("no arrival date, no answer", tripStatus({ days: [{}, {}] }, new Date("2026-08-07")), null);
+  is("no days, no answer", tripStatus({ _arrivalDate: "2026-08-05", days: [] }, new Date("2026-08-07")), null);
+  is("nothing at all, no answer", tripStatus(null, new Date("2026-08-07")), null);
+  // The saved ROW writes the same value under a second name, which userSaves.js
+  // says in its own words. Reading only one of the two would work in the app and
+  // fail on every trip a person had saved.
+  is("a saved row's arrivalDate counts too",
+     tripStatus({ arrivalDate: "2026-08-05", days: [{}, {}, {}] }, new Date("2026-08-06T10:00:00")).dayOfTrip, 2);
+
+  // ── ONE HOLIDAY AT A TIME ───────────────────────────────────────
+  const g = (start, n) => ({ _arrivalDate: start, days: Array.from({ length: n }, () => ({})) });
+  const many = [g("2026-03-01", 3), g("2026-08-05", 8), g("2026-12-01", 4)];
+  is("a trip in progress wins", currentTrip(many, new Date("2026-08-07T09:00:00")).status.phase, "during");
+  is("failing that, the next one to start", currentTrip(many, new Date("2026-06-01T09:00:00")).status.phase, "before");
+  is("and a finished trip is not news", currentTrip([g("2026-03-01", 3)], new Date("2026-08-07T09:00:00")), null);
+
+  // ── SAID TO THE MODEL ONLY WHILE IT IS TRUE ─────────────────────
+  // profileForPrompt returns "" for an empty profile, and a prompt carrying a
+  // paragraph about not knowing something is worse than one that never raises
+  // it.
+  ok("the model is told when they are mid-trip",
+     /travelling RIGHT NOW/.test(tripStatusForPrompt(on("2026-08-07"), "Ribe")));
+  is("and told nothing at all when they are not",
+     tripStatusForPrompt(on("2026-08-01"), "Ribe"), "");
+  is("nor after it has ended", tripStatusForPrompt(on("2026-08-20"), "Ribe"), "");
+  // The one instruction in that block is the one that prevents harm: somebody
+  // standing in Denmark cannot act on advice about what to book before leaving.
+  ok("and it says not to advise on what to book beforehand",
+     /booked or decided before leaving home/.test(tripStatusForPrompt(on("2026-08-07"), "Ribe")));
+  ok("a person is told in plain counting",
+     /day 3 of 8/.test(tripStatusLine(on("2026-08-07"), "Ribe")));
+
+  // ── AND IT IS NEVER STORED ──────────────────────────────────────
+  //
+  // The whole reason this lives in its own file. An observation in
+  // profileLearning stays true; "on holiday" becomes false on the 13th with
+  // nobody typing anything, so a stored copy is a claim that was true when it
+  // was written, which is the shape that produced the save toast, the frozen
+  // Copenhagen claim and the theme colour left behind by a moved default.
+  //
+  // Asserted through the CLEANER rather than by grepping, because the cleaner is
+  // what decides what reaches Supabase: a field it does not name cannot be
+  // written whatever any call site does.
+  const withHoliday = cleanProfile({ name: "Oliver", onHoliday: true, tripStatus: "during", travelling: true });
+  is("the profile cleaner has no holiday field", withHoliday.onHoliday, undefined);
+  is("nor a trip status", withHoliday.tripStatus, undefined);
+  is("nor anything else it was handed", withHoliday.travelling, undefined);
+  ok("and the learned vocabulary has no such field",
+     !OBSERVED_FIELDS.some(f => /holiday|travelling|vacation|trip/i.test(f)));
+
+  // ── WHAT GEMLYX MAY NOTICE, NOW FIVE THINGS ─────────────────────
+  // His answer, 23 Aug: where in Denmark they go, and what they spend.
+  ok("where they go is noticed", OBSERVED_FIELDS.includes("parts"));
+  ok("and what they spend", OBSERVED_FIELDS.includes("spend"));
+
+  // ONE VOCABULARY, TWO IMPORTERS. profileLearning carried its own copy of this
+  // map under the name LEARNABLE, so growing the list from three fields to five
+  // meant remembering to grow it twice. Asserted as an identity rather than as
+  // matching contents, because two objects with equal contents today is exactly
+  // the state a copy starts in.
+  {
+    const pl = readFileSync(join(root, "src/utils/profileLearning.js"), "utf8");
+    ok("the learnable map is imported rather than restated",
+       /const LEARNABLE = OBSERVED_VOCAB;/.test(pl));
+    ok("and there is no second literal of it",
+       !/const LEARNABLE = \{/.test(stripNonCode(pl)));
+  }
+  // The parts vocabulary is geography's own list and not a fifth copy of five
+  // Danish place names.
+  is("the parts are geography's parts", OBSERVED_VOCAB.parts, PARTS_FOR_TEST);
+  is("and spend has three levels", SPEND.length, 3);
+
+  // ── TWO SIGHTINGS, FOR THE NEW FIELDS TOO ───────────────────────
+  // "One trip is not a preference" is rule 2, and a field added without it would
+  // be a preference invented from a single holiday.
+  let L = observeTrip({}, seenFromTrip({ parts: ["Jutland", "Funen"], spend: "tight" }));
+  is("one trip settles nothing", JSON.stringify(settledObservations(L)), "{}");
+  L = observeTrip(L, seenFromTrip({ parts: ["Jutland"], spend: "tight" }));
+  is("two trips settle Jutland", JSON.stringify(settledObservations(L).parts), '["Jutland"]');
+  is("and the budget they described twice", JSON.stringify(settledObservations(L).spend), '["Tight"]');
+  ok("while Funen, seen once, does not count",
+     !(settledObservations(L).parts || []).includes("Funen"));
+  is("and the minimum is still two", OBSERVED_MIN, 2);
+
+  // An option nobody was offered is dropped on the way IN as well as on the way
+  // to storage, which is what LEARNABLE is for.
+  const junk = observeTrip({}, seenFromTrip({ parts: ["Narnia", "Jutland"], spend: "lavish" }));
+  is("a place that is not a part of Denmark is refused", JSON.stringify(junk.parts), '{"Jutland":1}');
+  is("and a budget word nobody offered", junk.spend, undefined);
+  is("saying nothing about money is not an answer",
+     JSON.stringify(seenFromTrip({ spend: "" }).spend), "[]");
+
+  // ── WORDED AS WHAT THEY SAID, NOT WHAT THEY CAN AFFORD ──────────
+  // Money is the field where being confidently wrong about somebody is worst,
+  // and an observation is weak evidence everywhere in that file.
+  const said = observedForPrompt({}, L);
+  ok("the money line reports their own description", /described their budget as tight before/.test(said));
+  ok("and never states it as a fact about them", !/they are (?:poor|broke|wealthy|rich|on a tight budget)/i.test(said));
+  ok("the places line names where they went", /taken them to Jutland/.test(said));
+  ok("and the whole block is still marked as weaker than the conversation",
+     /much weaker than this conversation/.test(said));
+
+  // ── THE PAGE ────────────────────────────────────────────────────
+  const page = readFileSync(join(root, "src/components/AboutMePage.jsx"), "utf8");
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // Every field in the vocabulary has a human label. A field added to
+  // OBSERVED_FIELDS and forgotten here would print its own internal name at
+  // somebody, which is the fault TYPE_LABEL already exists to stop in Studio.
+  // Counted, so adding a sixth field without a label goes red.
+  is("every noticed field has a label a person can read",
+     OBSERVED_FIELDS.filter(f => !NOTICED_LABEL[f]).length, 0);
+
+  // TYPED AND NOTICED ARE TWO SECTIONS, NOT ONE LIST. Rule 3 of
+  // profileLearning is that an observation must never quietly become a typed
+  // answer, and a merged list is that promotion happening in the interface.
+  ok("what you told us is its own section", /What you told us/.test(page));
+  ok("and what was noticed is another", /What Gemlyx has picked up/.test(page));
+  ok("the noticed half says it was noticed, not told",
+     /never from anything Gemlyx said itself/.test(page));
+
+  // Rule 4 is REVERSIBLE as well as visible. A list somebody can read and cannot
+  // change is not what that rule asked for.
+  ok("each noticed line can be cleared", /Forget this/.test(page));
+  ok("and all of them at once", /Forget all of it/.test(page));
+
+  // ── SAVING THE FORM MUST NOT WIPE THE OBSERVATIONS ──────────────
+  // cleanProfile emits the WHOLE object literal and saveProfile writes it, so a
+  // save built from the form alone sends `learned: {}` and destroys every count
+  // on the server. That is the same data loss an adversarial review found on 22
+  // August, reached from the other direction.
+  ok("the form save carries the noticed half through",
+     /const next = \{ \.\.\.cleanProfile\(p\), learned \};/.test(page));
+  // And the cleaner would drop it anyway if it did not, which is the belt to
+  // that brace: proved by running it rather than read off the source.
+  // Read with a fallback DELIBERATELY, which is the rule the shapeForLive block
+  // states in its own words: when the field is dropped the assertion has to
+  // FAIL, not throw, because a mutation that crashes the suite is not a mutation
+  // the suite caught. Removing "parts" from the vocabulary crashed this line the
+  // first time it was mutated.
+  const carried = cleanProfile({ name: "Oliver", learned: { parts: { Jutland: 2 } } });
+  is("and the cleaner keeps a count it is given", ((carried.learned || {}).parts || {}).Jutland, 2);
+
+  // ── A CONTROL THAT CANNOT WORK IS NOT OFFERED ───────────────────
+  // Somebody who signed up with Google has no password. Offering them a change
+  // password box is the same fault as the front page that said "Accounts are
+  // coming soon" while accounts existed.
+  is("an email account has a password", hasPassword(["email"]), true);
+  is("a Google account does not", hasPassword(["google"]), false);
+  is("an account with both does", hasPassword(["google", "email"]), true);
+  // null is NOT an empty list. A failed lookup returning [] would read as "no
+  // password" and hide a real control from somebody who has one, permanently.
+  is("and not knowing is not the same as no", hasPassword(null), false);
+  ok("so nothing is rendered until the answer arrives",
+     /providers !== null && \(hasPassword\(providers\)/.test(page));
+
+  // ── HIS RENAME, AND ONE NAME RATHER THAN TWO ────────────────────
+  ok("the entry point is called Info about me", />\s*Info about me\s*</.test(app));
+  ok("and the old label is gone", !/Edit what Gemlyx knows about you/.test(stripNonCode(app)));
+
+  // A PAGE, WHICH MEANS AN ADDRESS. That is the difference he asked for between
+  // this and the sheet it replaces: Back closes it and a link reopens it.
+  ok("it has its own route", /<Route path=\{ABOUT_ME_PATH\}/.test(app));
+  ok("read from one constant, not two hand-written copies",
+     /export const ABOUT_ME_PATH = "\/me";/.test(app));
+  ok("and the path decides whether it is open",
+     /location\.pathname === ABOUT_ME_PATH/.test(app));
+
+  // ── AND THE MODEL HEARS ABOUT THE TRIP ──────────────────────────
+  // Both prompt sites, because somebody asking a question from a hotel room
+  // wants a different answer on an entry page as much as in the chat.
+  // ── COUNTED OVER CODE, AND PER SITE ─────────────────────────────
+  //
+  // This was one count over the whole file, and it survived deleting the entry
+  // page's call outright, because the comment ABOVE that call says the words
+  // "travellingNow() is third and last on purpose" and kept the total up. The
+  // seventh time in this repo that an explanation has defeated the assertion
+  // defending it, and the second time today.
+  //
+  // Two fixes, both of which this codebase already knows: count over
+  // stripNonCode, and assert each site rather than a total, because a total is
+  // satisfied by having the call twice in one place and not at all in the other.
+  // Per LINE of stripped code rather than by regex over the raw file, because
+  // stripNonCode blanks the inside of a template literal along with the
+  // comments, so the chat prompt's `${...}` markers are not there to match on.
+  // What survives is the code, which is the thing being asserted.
+  const appCodeLines = stripNonCode(app).split("\n");
+  ok("the chat prompt is told whether they are travelling",
+     appCodeLines.some(l => /profileForPrompt\(userProfile\)/.test(l) && /travellingNow\(\)/.test(l) && !/travellerBlock/.test(l)));
+  ok("and so is the entry page panel",
+     appCodeLines.some(l => /const travellerBlock = \[/.test(l) && /travellingNow\(\)/.test(l)));
+  ok("computed at the moment the prompt is built, never at mount",
+     /const travellingNow = \(\) => \{/.test(app));
+
+  // ── THE PICTURE HE DROPPED, AND WHY ─────────────────────────────
+  // Recorded rather than merely absent. gemlyx-media serves from /object/public/,
+  // so a face uploaded there is fetchable by anybody holding the URL and is
+  // covered by neither the privacy policy nor the deletion copy.
+  ok("no avatar upload was added to the page", !/upload|avatar|profilePicture/i.test(stripNonCode(page)));
+}
+
 
 // ── DOES THE DRAFT ARGUMENT SAVE ITS SOURCES ───────────────────────
 // Oliver, 11 Aug: "Does the 'draft argument' section also save the sources?"
@@ -22713,8 +22982,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const pl = readFileSync(join(root, "src/utils/profileLearning.js"), "utf8");
     const pf = readFileSync(join(root, "src/utils/profile.js"), "utf8");
     ok("the cleaner lives in profile.js", /export const cleanLearned = \(raw\) => \{/.test(pf));
+    // ── THE NAME, NOT THE LIST ──────────────────────────────────
+    // This read the export list literally, so it went red on 23 Aug when SPEND
+    // was added beside the other three, while the rule it defends (cleanLearned
+    // is re-exported and not redefined) was untouched. That is the same fault
+    // the suite already carries a warning about two blocks up: pin the rule, not
+    // the call shape. It now asks whether the NAME is in a re-export list, which
+    // is the whole of what this is protecting, and survives the list growing
+    // again.
     ok("and profileLearning re-exports it rather than redefining it",
-       /export \{ cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS \};/.test(pl));
+       /export \{[^}]*\bcleanLearned\b[^}]*\};/.test(pl));
     ok("with no second definition left behind", !/export const cleanLearned/.test(stripNonCode(pl)));
     ok("and profile.js does not import from profileLearning", !/from "\.\/profileLearning"/.test(pf));
   }

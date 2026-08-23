@@ -42,7 +42,7 @@
 //      Gemlyx thinks it has noticed and clear it. A profile that grows silently
 //      from behaviour and cannot be inspected is the thing people mean when
 //      they say they do not want to be profiled, and this is a Danish business.
-import { INTERESTS, TRANSPORT, COMPANY, cleanProfile, cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS } from "./profile";
+import { SPEND, OBSERVED_VOCAB, cleanProfile, cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS } from "./profile";
 
 // ── cleanLearned AND ITS TWO CONSTANTS NOW LIVE IN profile.js ───────
 //
@@ -55,7 +55,7 @@ import { INTERESTS, TRANSPORT, COMPANY, cleanProfile, cleanLearned, OBSERVED_CAP
 // file already imports from profile.js, so the cleaner moved rather than the
 // import going both ways. Re-exported here so every existing importer still
 // works and so this file still reads as the place the idea lives.
-export { cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS };
+export { cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS, SPEND };
 
 // Two trips. One is a trip; two is a pattern, and the gap between them is where
 // every false reading lives.
@@ -72,10 +72,13 @@ export const OBSERVED_MIN = 2;
 
 const clampCount = (n) => Math.max(0, Math.min(OBSERVED_CAP, Math.round(Number(n) || 0)));
 
-// The same three vocabularies cleanLearned validates against, named here too
-// because observeTrip has to refuse an option nobody was offered on the way IN,
-// not only on the way to storage.
-const LEARNABLE = { interests: INTERESTS, transport: TRANSPORT, company: COMPANY };
+// THE SAME vocabulary cleanLearned validates against, imported rather than
+// restated. observeTrip has to refuse an option nobody was offered on the way
+// IN and not only on the way to storage, and this file used to hold a second
+// copy of the map to do it. Two copies of one list is the mistake both files
+// warn about in their own comments, and it went unnoticed here until the list
+// grew from three fields to five.
+const LEARNABLE = OBSERVED_VOCAB;
 
 export const learnedIsEmpty = (learned) => !Object.keys(cleanLearned(learned)).length;
 
@@ -93,16 +96,27 @@ export const learnedIsEmpty = (learned) => !Object.keys(cleanLearned(learned)).l
 // storing an answer nobody was offered.
 const THEME_TO_INTEREST = { history: "History", nature: "Nature", nightlife: "Nightlife", food: "Food" };
 const MODE_TO_TRANSPORT = { car: "Car", bike: "Bike", "public transport": "Public transport", walk: "Walks", ship: "Ship", plane: "Plane" };
+// travellerBudget answers in lowercase ids. The form has no money question, so
+// there is no form vocabulary to match and these three words are the whole of
+// it; capitalised so the panel can print them without a second lookup table.
+const BUDGET_TO_SPEND = { tight: "Tight", middling: "Middling", generous: "Generous" };
 
 // `company` is taken ONLY from the intake form, never from the conversation.
 // tripBrief's readParty answers "did they say who is coming", and on the text
 // path its value is the literal string "said in the conversation", which is a
 // yes-or-no rather than a who. Learning a travel companion from that would be
 // learning noise, and this file's own second rule forbids exactly that.
-export const seenFromTrip = ({ themes = null, modes = [], company = "" } = {}) => ({
+// `parts` arrives ALREADY ANSWERED, by geography's own partsPresent reading the
+// stops' coordinates. It is not mapped here because there is nothing to map: the
+// five names geography uses are the five names a person reads. `spend` is the
+// one string travellerBudget produced from their own turns, or "" if they said
+// nothing about money, and saying nothing is not an answer.
+export const seenFromTrip = ({ themes = null, modes = [], company = "", parts = [], spend = "" } = {}) => ({
   interests: [...(themes || [])].map(t => THEME_TO_INTEREST[t]).filter(Boolean),
   transport: (Array.isArray(modes) ? modes : []).map(m => MODE_TO_TRANSPORT[m]).filter(Boolean),
   company: company ? [company] : [],
+  parts: (Array.isArray(parts) ? parts : []).filter(Boolean),
+  spend: BUDGET_TO_SPEND[String(spend || "").toLowerCase()] ? [BUDGET_TO_SPEND[String(spend).toLowerCase()]] : [],
 });
 
 // ── ONE TRIP'S WORTH OF EVIDENCE ─────────────────────────────────────
@@ -170,6 +184,16 @@ export const observedForPrompt = (profile, learned) => {
   if (transport.length) bits.push(`they have travelled by ${transport.join(", ").toLowerCase()} before`);
   const company = fresh("company");
   if (company.length) bits.push(`they usually travel ${company.join(" or ").toLowerCase()}`);
+  const parts = fresh("parts");
+  if (parts.length) bits.push(`their earlier trips have taken them to ${parts.join(", ")}`);
+  // Worded as what they SAID, never as what they can afford. An observation is
+  // weak evidence everywhere in this file, and money is the field where being
+  // confidently wrong about somebody is worst, so the sentence reports their own
+  // description rather than promoting it into a fact about their means. The
+  // paragraph below already forbids overriding the conversation, and budgetFit
+  // reads the CURRENT conversation, which outranks this every time.
+  const spend = fresh("spend");
+  if (spend.length) bits.push(`they have described their budget as ${spend.join(" or ").toLowerCase()} before`);
 
   if (!bits.length) return "";
   return `NOTICED ACROSS EARLIER TRIPS, not told to you and not confirmed by them: ${bits.join("; ")}. This is weaker than anything in the block above and much weaker than this conversation. Use it to break a tie or to pick between two equally good options, never to override something they have said and never as a fact about them. Do not repeat it back to them as though they had told you.`;

@@ -21,6 +21,9 @@
 // one: a Danish business collecting a field it never uses has taken on a
 // liability in exchange for nothing.
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
+// The five parts of Denmark, as one list rather than two. See OBSERVED_VOCAB
+// below for why this is imported rather than retyped.
+import { PARTS } from "./geography";
 
 // Bands rather than a birthdate. A band is what actually changes a
 // recommendation (a stag weekend, a family half-term, an unhurried week), and a
@@ -327,8 +330,36 @@ const cleanTimestamp = (v) => {
 // offered is dropped for the same reason cleanProfile drops one: a stored answer
 // that cannot have been given is a bug that survives.
 export const OBSERVED_CAP = 6;
-export const OBSERVED_FIELDS = ["interests", "transport", "company"];
-const OBSERVED_VOCAB = { interests: INTERESTS, transport: TRANSPORT, company: COMPANY };
+
+// ── TWO FIELDS WITH NO TYPED COUNTERPART ────────────────────────────
+//
+// Oliver, 23 Aug 2026, asked for where in Denmark somebody goes and what they
+// spend to be noticed as well. Both are things the pipeline ALREADY measures
+// properly, which is the only reason they are allowed in: partsPresent answers
+// "which parts of the country did this trip cover" from the stops' own
+// coordinates, and travellerBudget answers "what did they say about money" from
+// their own turns. Neither is a new reader of intent, and rule 1 in
+// profileLearning.js exists because a seventh reader of intent is how the
+// existing six came to disagree.
+//
+// SPEND, not "budget". The typed profile has no money field, so nothing here
+// collides with an answer somebody gave, and the word is the one a person would
+// use about themselves rather than the one the pipeline uses internally.
+//
+// PARTS comes from geography.js rather than being retyped. Five strings is
+// exactly the size of list that gets copied and then drifts, and this file
+// already refuses a stored answer nobody was offered; a second copy of the
+// vocabulary is the same bug one level up.
+export const SPEND = ["Tight", "Middling", "Generous"];
+export const OBSERVED_FIELDS = ["interests", "transport", "company", "parts", "spend"];
+// EXPORTED, and that is the point of this edit rather than a side effect.
+// profileLearning.js carried its own copy of this map under the name LEARNABLE,
+// because observeTrip has to refuse an option nobody was offered on the way IN
+// and not only on the way to storage. Two copies of one vocabulary is the bug
+// this file spends three comments warning about, one level up, and adding two
+// fields to it would have meant remembering to add them twice. One map, two
+// importers.
+export const OBSERVED_VOCAB = { interests: INTERESTS, transport: TRANSPORT, company: COMPANY, parts: PARTS, spend: SPEND };
 const clampObserved = (n) => Math.max(0, Math.min(OBSERVED_CAP, Math.round(Number(n) || 0)));
 
 export const cleanLearned = (raw) => {

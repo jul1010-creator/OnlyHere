@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Routes, Route, useNavigate, useParams } from "react-router-dom";
+import { Routes, Route, useNavigate, useParams, useLocation } from "react-router-dom";
+// One string, named once. The route table and the effect that opens the page
+// both read it, and two hand-written copies of a path is how a link and the
+// screen it opens come to disagree.
+export const ABOUT_ME_PATH = "/me";
 
 import { craftItemsFallback, handmadeCraftShops } from "./data/craft";
 import { splitForCheck, CHECK_SCOPE_BLOCK, admissible, checkModeOf, fieldIn } from "./utils/checkScope";
@@ -18,6 +22,10 @@ import { fetchProfile, saveProfile, takeHeldProfile, profileForPrompt, isBlank a
 // The half of the account that learns rather than being typed. See
 // utils/profileLearning.js for the four rules it has to obey.
 import { seenFromTrip, observeTrip, observedForPrompt } from "./utils/profileLearning";
+// Live, computed, never stored. See utils/tripStatus.js for why an on-holiday
+// flag is not the same kind of fact as anything in profileLearning.
+import { currentTrip, tripStatusForPrompt } from "./utils/tripStatus";
+import { AboutMePage } from "./components/AboutMePage";
 import { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, NUDGE_KEY, PROFILE_NUDGE_KEY } from "./utils/accountNudge";
 import { sweepAll, sweepRow, deepCheckPlan, checkAge } from "./utils/factSweep";
 import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filterRows } from "./utils/manageGroups";
@@ -8965,6 +8973,34 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   // same moment a guide is being claimed. See components/ProfileSheet.jsx.
   const [userProfile, setUserProfile] = useState(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  // ── ARE THEY ON THE TRIP RIGHT NOW ────────────────────────────────
+  //
+  // A FUNCTION, not a memo and not a value computed in render. It reads the
+  // clock, and a value read once at mount is wrong from the moment it is read:
+  // somebody with the app open at midnight on the last day of their trip would
+  // keep being told they are on day 8 of 8 into the following week.
+  //
+  // Called at the moment a prompt is assembled, which is the only moment the
+  // answer matters. Nothing is stored, ever. See utils/tripStatus.js.
+  const travellingNow = () => {
+    const t = currentTrip(savedGuides, new Date());
+    return t ? tripStatusForPrompt(t.status, t.guide?.title) : "";
+  };
+  // ── INFO ABOUT ME HAS ITS OWN ADDRESS ─────────────────────────────
+  //
+  // Oliver asked for a PAGE rather than another sheet, and the difference
+  // between the two is the URL: Back closes it, a link reopens it, and it is not
+  // one more thing stacked on top of the account modal, which already carries
+  // four controls and is at its limit.
+  //
+  // Same shape every other route in this app uses: /me renders GemlyxApp, which
+  // reads the path and opens the page over itself. utils/placeUrl.js and the
+  // town routes already work this way, and the alternative, lifting the session
+  // and profile out to a sibling page, is an architectural change the wrapper's
+  // own comment warns against attempting in one sitting.
+  const [aboutMeOpen, setAboutMeOpen] = useState(false);
+  const location = useLocation();
+  useEffect(() => { setAboutMeOpen(location.pathname === ABOUT_ME_PATH); }, [location.pathname]);
   const [profileSetupSql, setProfileSetupSql] = useState(null);
   // Asked once per session at most. Somebody who skipped should not be asked
   // again every time a token refresh produces a new session object. The ACROSS
@@ -10776,10 +10812,35 @@ If the conversation only covers a single day or a few stops with no explicit day
       // does not update, and it must never cost somebody their guide.
       if (userSession && !testProfile) {
         try {
+          // ── WHERE THEY WENT AND WHAT THEY SAID ABOUT MONEY ────────
+          //
+          // Oliver, 23 Aug 2026, adding two fields to what Gemlyx may notice.
+          // Both are read by something that ALREADY answers the question
+          // properly, which is the only reason they are allowed in: partsPresent
+          // places a stop from its own coordinate, and travellerBudget reads
+          // money words out of his turns. Neither is a new reader of intent, and
+          // rule 1 in profileLearning.js exists because a seventh reader of
+          // intent is how the existing six came to disagree.
+          //
+          // freshGeo is the geocode this build just did, so the parts come from
+          // where the stops REALLY are rather than from what their names sound
+          // like. A stop with no coordinate contributes nothing rather than a
+          // guess, which is the same answer geography's own `unplaced` gives.
+          const stopPoints = (parsed.days || [])
+            .flatMap(d => (d?.stops || []))
+            .map(st => freshGeo?.[st?.name])
+            .filter(pt => pt && Number.isFinite(pt.lat) && Number.isFinite(pt.lon))
+            .map(pt => ({ __lat: pt.lat, __lon: pt.lon }));
           const seen = seenFromTrip({
             themes: briefThemes(saidByTravellerForGuide, []),
             modes: mentionedModes,
             company: intakeFamilyMode ? "With family" : "",
+            parts: partsPresent(stopPoints),
+            // The intake field first, for the same reason budgetSays above reads
+            // it first: a box somebody typed a budget into is a plainer answer
+            // than a sentence it has to be inferred from. Both are his own words
+            // and neither is Gemlyx's.
+            spend: travellerBudget(intakeBudgetText) || travellerBudget(saidByTravellerForGuide) || "",
           });
           // ── NEVER WRITE A PROFILE WE NEVER SUCCESSFULLY READ ──────
           //
@@ -12280,7 +12341,7 @@ If asked for a plan or itinerary, structure it day by day using only the above, 
 
 You also have a web_search tool. Use it whenever someone asks about something that changes over time and isn't in the lists above — current opening hours, whether a specific event is still on, ticket availability, or anything at a museum/castle/attraction not already listed here. Don't use it for things already covered in your lists above.
 
-${profileForPrompt(userProfile)}${observedForPrompt(userProfile, userProfile?.learned) ? `\n${observedForPrompt(userProfile, userProfile.learned)}` : ""}
+${profileForPrompt(userProfile)}${observedForPrompt(userProfile, userProfile?.learned) ? `\n${observedForPrompt(userProfile, userProfile.learned)}` : ""}${travellingNow() ? `\n${travellingNow()}` : ""}
 
 ── HOW A TURN IS SHAPED, WHICH IS NOT THE SAME AS WHICH WORDS ARE BANNED ──
 Oliver, 21 Aug 2026, on the opening of a real conversation: "Gemlyx is a little too much of a robot at start." The vocabulary in that conversation was clean. Every banned phrase above was absent. What made it a robot was the SHAPE of each turn, and these are rules about shape.
@@ -18524,7 +18585,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         // knows somebody is only worth having if it reaches the places they ask
         // questions in, which is his point: "the account will also help
         // questions on attractions and towns".
-        const travellerBlock = [profileForPrompt(userProfile), observedForPrompt(userProfile, userProfile?.learned)]
+        // travellingNow() is third and last on purpose. The typed profile is
+        // what they said, the observations are what was noticed across trips,
+        // and this is what is true today, which is the strongest of the three
+        // for a question asked from a hotel room and irrelevant in February.
+        const travellerBlock = [profileForPrompt(userProfile), observedForPrompt(userProfile, userProfile?.learned), travellingNow()]
           .filter(Boolean).join("\n");
         return <AskGemlyx session={readerSession} item={reading} kind={readingKind}
                           nearby={readingNear}
@@ -18996,6 +19061,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         }}
         onNeedsSetup={(sql) => { setProfileOpen(false); setProfileSetupSql(sql); }} />
 
+      <AboutMePage
+        open={aboutMeOpen && !!userSession}
+        session={userSession}
+        profile={userProfile}
+        savedGuides={savedGuides}
+        onClose={() => navigate("/")}
+        onProfileSaved={(next) => setUserProfile(next)}
+        onNeedsSetup={(sql) => setProfileSetupSql(sql)}
+        onSignOut={() => { navigate("/"); handleSignOut(); }}
+        onDelete={() => { if (window.confirm("Delete your saved places and guides from our servers? Saves on this device stay, and this cannot be undone.")) { navigate("/"); handleDeleteAccount(); } }} />
+
       {authOpen && userSession && (
         <div onClick={() => setAuthOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 980, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <div onClick={e => e.stopPropagation()} style={{ background: C.bg, borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 460, padding: "24px 22px calc(32px + env(safe-area-inset-bottom))", border: `1px solid ${C.border}`, borderBottom: "none" }}>
@@ -19020,9 +19096,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 asked once at signup and never editable, which is exactly the
                 kind of thing somebody notices six months later when what they
                 typed is out of date and there is nowhere to change it. */}
-            <button onClick={() => { setAuthOpen(false); setProfileOpen(true); }}
+            {/* ── HIS WORDS, 23 AUG: "should be 'info about me'" ──────
+                One name whether or not anything has been filled in yet, where
+                the old label had two. "Edit what Gemlyx knows about you" named
+                an action on Gemlyx's knowledge, and the page behind it now shows
+                two different kinds of thing: what you told it, and what it
+                worked out. "Info about me" covers both and is shorter. */}
+            <button onClick={() => { setAuthOpen(false); navigate(ABOUT_ME_PATH); }}
               style={{ width: "100%", background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 10 }}>
-              {userProfile && !profileIsBlank(userProfile) ? "Edit what Gemlyx knows about you" : "Tell Gemlyx about you"}
+              Info about me
             </button>
             <button onClick={() => { setAuthOpen(false); handleSignOut(); }}
               style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 10 }}>
@@ -19520,6 +19602,11 @@ export default function Gemlyx() {
           Same GemlyxApp component, not a parallel page. The town opens over the
           app the way it always has, so somebody arriving from a search result
           can close it and be inside the real thing rather than at a dead end. */}
+      {/* Info about me. Same component, opened over the app by the effect that
+          watches the path, for the reason the town routes give below: somebody
+          arriving here from a link can close it and be inside the real thing
+          rather than at a dead end. */}
+      <Route path={ABOUT_ME_PATH} element={<GemlyxApp />} />
       <Route path={`/${COUNTRY}`} element={<GemlyxApp />} />
       <Route path={`/${COUNTRY}/:townSlug`} element={<GemlyxApp />} />
       {/* ── AND AN ADDRESS FOR EVERYTHING THAT IS NOT A TOWN ─────────
