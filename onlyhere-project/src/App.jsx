@@ -43,6 +43,7 @@ import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS
 import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
 import { placeSlug, townPath, findBySlug, COUNTRY, kindForSeg, entryUrlPath, isEntryUrl } from "./utils/placeUrl";
 import { startRun, endRun, summarise, averageFor, describe, describeAverage, recentRuns, installFetchMeter } from "./utils/apiCost";
+import { cleanOffer, offerProblems, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "./utils/offer";
 import { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog } from "./utils/runLog";
 import { domainOf, isListingHost, scrapeTier, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE, MAX_TICKET_PAGES, isOwnSiteFor, urlNames, isKommuneHost } from "./utils/pageScan";
 import { weatherSourceFor, weatherBadge, normalsNote, dayWeather, FORECAST, NORMALS } from "./utils/weather";
@@ -52,7 +53,7 @@ import { roadTrips, seasonalItineraries } from "./data/roadtrips";
 import { WEATHER_CITIES } from "./data/mapShapes";
 import { cities, allProducts, campingSpots, PRODUCT_COORDS } from "./data/shop";
 
-import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION } from "./config";
+import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION, PAID_PLANS_LIVE } from "./config";
 import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, hasFinished, externalHref, weatherIcon,
   isInDenmark, travelLabel, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm, scanForAITells, priceBand, PRICE_BANDS,
@@ -1441,6 +1442,8 @@ function GemlyxApp() {
     setStudioDraftText(JSON.stringify(payload, null, 2));
     setStudioResult(`// Loaded from pasted JSON, not from a research run.\n// Nothing here was measured by this session: the gates below run on what you pasted.`);
     setStudioPhotoName(payload.photo ? String(payload.photo).split("/").pop() : `${slugify(payload.name)}.jpg`);
+    setStudioOfferText(payload.__offer?.text || "");
+    setStudioOfferUntil(payload.__offer?.until || "");
     setDraftPasteError("");
     // The two bugs this function was carrying, studioFrozenGeo inheriting the
     // previous run's coordinate ("Stored at 0.000, 0.000") and editingId
@@ -1462,6 +1465,10 @@ function GemlyxApp() {
     setStudioDraftText(JSON.stringify(row.payload, null, 2));
     setStudioResult("// Editing an existing published entry — Save changes below updates it in place.\n// (No manual-paste code needed for edits — this goes straight to Supabase.)");
     setStudioPhotoName(row.payload?.photo ? row.payload.photo.split("/").pop() : "");
+    // Round-trips, so opening a published row shows the offer it already
+    // carries rather than an empty box that would clear it on save.
+    setStudioOfferText(row.payload?.__offer?.text || "");
+    setStudioOfferUntil(row.payload?.__offer?.until || "");
     setStudioInstagramUrl(row.payload?.blogBody?.find(b => b.type === "instagram")?.url || "");
     setManageOpen(false);
   };
@@ -1722,7 +1729,25 @@ function GemlyxApp() {
       const p = row.payload || {};
       // First-ever photo also becomes the hero (card + detail header) so the
       // listing stops looking bare; further uploads land in the writing only.
-      await patchContentPayload(row, { ...p, photo: p.photo || firstUrl, blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), ...newBlocks] });
+      //
+      // ── AND "FIRST-EVER" MEANS FIRST THAT LOADS ────────────────
+      // This said `p.photo || firstUrl`, which is the exact rule the Commons
+      // finder eight hundred lines up retired on 7 Aug, in a comment headed
+      // "p.photo || src WAS NOT ENOUGH". Its measurement: 53 of 71 published
+      // entries carried a local hero path and 52 of those files did not exist,
+      // so under `||` every one of them counted as "already set" and a real
+      // photograph was appended to the body while the broken path stayed on the
+      // card.
+      //
+      // THE FIX WAS APPLIED TO ONE DOOR AND NOT THE OTHER. Measured again on
+      // 24 Aug across 148 published rows: 27 still carry a relative hero that
+      // does not load, and Præstø is one of them, with three Commons photographs
+      // sitting in its own body and a dead /towns/praesto.jpg on the card.
+      //
+      // Same test as the finder and as publish: a hero that does not load is
+      // not a hero. imageLoads, not a truthiness check.
+      const heroBroken = !(await imageLoads(p.photo));
+      await patchContentPayload(row, { ...p, photo: heroBroken ? firstUrl : p.photo, blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), ...newBlocks] });
     } catch (e) { setMediaError(String(e?.message || e)); }
     setMediaBusy(false);
   };
@@ -2294,6 +2319,12 @@ Say which answer came from which source, so a fact from a vouched page and a fac
   };
   const [publishErrorDetail, setPublishErrorDetail] = useState(null);
   const [studioPhotoName, setStudioPhotoName] = useState("");
+  // ── THE GEMLYX OFFER, ON CREATE AND ON EDIT ─────────────────────
+  // Two fields rather than one, because his answer to "how does it stop being
+  // a promise you cannot keep" was a valid-until date. See utils/offer.js for
+  // why the date is required rather than optional.
+  const [studioOfferText, setStudioOfferText] = useState("");
+  const [studioOfferUntil, setStudioOfferUntil] = useState("");
   const [studioInstagramUrl, setStudioInstagramUrl] = useState("");
   const [studioFrozenGeo, setStudioFrozenGeo] = useState(null); // { lat, lon, station, stopKind } — real, computed once, never touched by OpenAI
   // { lat, lon, precise, via, region, kommune } — the maps answer, found BEFORE
@@ -6805,6 +6836,8 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     // version that parsed.
     if (typeof saved.text === "string" && saved.text.trim()) setStudioDraftText(saved.text);
     if (saved.photoName) setStudioPhotoName(saved.photoName);
+    if (saved.offerText) setStudioOfferText(saved.offerText);
+    if (saved.offerUntil) setStudioOfferUntil(saved.offerUntil);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -6833,6 +6866,8 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
         inventedWarning: studioInventedWarning,
         text: studioDraftText,
         photoName: studioPhotoName,
+        offerText: studioOfferText,
+        offerUntil: studioOfferUntil,
       } : null;
       const { store } = packStore({ queue: draftQueue, results: queueResults, editor }, Date.now());
       let storage = null;
@@ -6845,7 +6880,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     return () => clearTimeout(t);
   }, [studioSession, draftQueue, queueResults, editingId, studioDraft, studioDraftText,
       studioType, studioTown, studioResult, studioFrozenGeo, studioIdentityWarning,
-      studioInventedWarning, studioPhotoName]);
+      studioInventedWarning, studioPhotoName, studioOfferText, studioOfferUntil]);
 
   // Dropping the finished list is a deliberate act, so it needs a button. It is
   // also the only advice problemNote can give when storage is full.
@@ -7218,6 +7253,41 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
       for (let i = 0; i < batch.length; i++) {
         const row = batch[i];
         const p = row.payload;
+
+        // ── THE PICTURE IT ALREADY HAS, BEFORE THE ONE IT WOULD BUY ──
+        //
+        // Nine of the broken rows on 24 Aug carry absolute images in their own
+        // blogBody with credits already attached, and were about to be handed a
+        // stranger's photograph instead. Præstø is the example: three Commons
+        // pictures of Præstø in the body, a dead /towns/praesto.jpg on the card.
+        //
+        // This file's own rule two screens up is "check first, repair second,
+        // because checking is cheap and tells us the real size of the job before
+        // a single paid lookup happens". A photo already in the row is cheaper
+        // than cheap: no API call, no rate limit wait, and it is the picture HE
+        // chose rather than whatever a search returns today.
+        //
+        // The credit rides with it in the same write, never as a second step,
+        // because a CC BY file without its attribution is a licence breach and
+        // not a cosmetic gap.
+        const own = (Array.isArray(p.blogBody) ? p.blogBody : [])
+          .find(b => b?.type === "image" && /^https?:\/\//i.test(String(b.src || "").trim()));
+        if (own) {
+          try {
+            const patch = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
+              method: "PATCH",
+              headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=minimal" },
+              body: JSON.stringify({ payload: { ...p, photo: String(own.src).trim(), ...(own.credit ? { __photoCredit: { ...own.credit } } : {}) } }),
+            });
+            if (patch.ok) { fixed++; setPhotoFixState({ running: true, done: i + 1, total: batch.length, fixed, skipped, notFound, failed }); continue; }
+            failed.push(`${p.name}: promoting its own photo failed (${patch.status})`);
+          } catch (e) {
+            failed.push(`${p.name}: ${String(e?.message || e).slice(0, 80)}`);
+          }
+          setPhotoFixState({ running: true, done: i + 1, total: batch.length, fixed, skipped, notFound, failed });
+          continue;
+        }
+
         // The town is real disambiguation: "Bones" alone finds a skeleton.
         const where = p.town || p.city || p.location || p.region || "";
         const query = `${p.name}${where && !p.name.includes(where) ? ` ${where}` : ""} Denmark`;
@@ -8236,6 +8306,29 @@ ${researchRules("festival", ev)}`
       // Drafting fresh: shape the raw AI draft into the final object first, as before.
       const isEditing = editingId !== null;
       const shaped = isEditing ? editedDraft : shapeForLive(studioType, editedDraft);
+
+      // ── THE GEMLYX OFFER, FROM THE TWO FIELDS, ON BOTH PATHS ────
+      //
+      // Applied HERE rather than only inside shapeForLive, because shapeForLive
+      // does not run on an edit: `isEditing ? editedDraft : shapeForLive(...)`
+      // one line up. That asymmetry is the exact shape of the festival date bug
+      // twenty lines below, where a gate named a key that only exists on a fresh
+      // draft and a founder following the instruction exactly was refused again.
+      //
+      // THE TWO FIELDS ARE THE SOURCE OF TRUTH. Both empty removes the offer,
+      // deliberately, so clearing the boxes is how an offer ends early. That
+      // keeps the standing rule from PASS 45: what you review is what you
+      // publish, and a field on screen that the save ignores is the thing that
+      // rule exists to stop.
+      const offerFromFields = cleanOffer({ text: studioOfferText, until: studioOfferUntil });
+      const offerFaults = offerProblems(offerFromFields);
+      if (offerFaults.length) {
+        setPublishStatus(null);
+        setDraftEditError(`Not published, because the Gemlyx offer would not render. ${offerFaults.join(" ")}`);
+        return;
+      }
+      if (offerFromFields) shaped.__offer = offerFromFields;
+      else delete shaped.__offer;
       // ── "/undefined/aarhus.jpg" ────────────────────────────────
       // A real published hero path, found while auditing photos on 7 Aug. This
       // map had no entry for nightTown, and an undefined lookup interpolates as
@@ -15948,6 +16041,51 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "monospace", marginBottom: 12, boxSizing: "border-box" }} />
                           </>
                         )}
+
+                        {/* ── THE GEMLYX OFFER ────────────────────────────────
+                            Oliver, 24 Aug 2026: "Put into the draft on edit and
+                            create 'Gemlyx offer'."
+
+                            OUTSIDE the editingId === null block above, and that
+                            is the requirement rather than a detail: the photo
+                            field is create-only, and an offer is the thing most
+                            likely to be added to a place that was published
+                            months ago, after he has walked into the shop.
+
+                            Two boxes, because his answer to "how does it stop
+                            being a promise you cannot keep" was a valid-until
+                            date. utils/offer.js refuses to render an offer with
+                            no end date, and refuses to publish one, so the
+                            sentences below are the same ones the publish gate
+                            would give rather than a second opinion about it. */}
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, margin: "12px 0 5px" }}>GEMLYX OFFER (what a paying member gets here)</div>
+                        <input value={studioOfferText} onChange={e => setStudioOfferText(e.target.value)}
+                          maxLength={OFFER_TEXT_MAX} placeholder="Free bag of bolcher for the first 10 Gemlyx members"
+                          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", marginBottom: 8 }} />
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 5 }}>VALID UNTIL (YYYY-MM-DD)</div>
+                        <input value={studioOfferUntil} onChange={e => setStudioOfferUntil(e.target.value)}
+                          placeholder="2026-12-31"
+                          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
+                        {(() => {
+                          const faults = offerProblems({ text: studioOfferText, until: studioOfferUntil });
+                          if (!faults.length) return null;
+                          return (
+                            <div style={{ fontSize: 10.5, color: "#FFB347", lineHeight: 1.55, marginTop: 6 }}>
+                              {faults.join(" ")}
+                            </div>
+                          );
+                        })()}
+                        {/* Says the locked state out loud, because PAID_PLANS_LIVE is
+                            false and every offer therefore renders locked today. Without
+                            this he would fill both boxes, publish, open the page and see
+                            a badge with no offer under it, and reasonably conclude it was
+                            broken. */}
+                        {!PAID_PLANS_LIVE && offerProblems({ text: studioOfferText, until: studioOfferUntil }).length === 0 && studioOfferText.trim() && (
+                          <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 6 }}>
+                            Paid plans are switched off, so this renders as "{OFFER_LOCKED_LABEL}. {OFFER_LOCKED_NOTE}" and nobody is shown the offer itself. Flip PAID_PLANS_LIVE in config.js when plans exist.
+                          </div>
+                        )}
+
                         {/* ── A SUCCESS BANNER MAY NOT BE A DEAD END ──────────
                             The green line REPLACED the button, so spotting a
                             typo one second after publishing left no way to send
@@ -18825,14 +18963,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           live control it held, bookableOnly, already has its own pill on the
           Attractions page and is untouched. */}
 
-      <DetailPage item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} />
+      <DetailPage paid={hasPaidPlan(userProfile)} item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} />
       {/* onOpenEvent powers the new "What's on in <town>" section: tapping a
           festival closes the town page and opens that event's real entry, so the
           traveler lands on the full page with dates, tickets and directions
           rather than a dead-end list item. */}
-      <DetailPage item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} />
-      <DetailPage item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} />
-      <DetailPage item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} />
+      <DetailPage paid={hasPaidPlan(userProfile)} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} />
+      <DetailPage paid={hasPaidPlan(userProfile)} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} />
+      <DetailPage paid={hasPaidPlan(userProfile)} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} />
       {/* ── The assistant that follows him (Oliver, 6 Aug: "some sort of
           assistant for the admin /#studio guy? That will always be with me?
           Even when I'm on the blogs")  ────────────────────────────────
@@ -18969,7 +19107,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           onSaved={() => refreshLiveContent()} />;
       })()}
 
-      <DetailPage item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} />
+      <DetailPage paid={hasPaidPlan(userProfile)} item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} />
 
       {/* Per Oliver ("get rid of the popup"): once a guide finishes building, we
           navigate straight to the full-page GuidePage instead of showing a

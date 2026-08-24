@@ -80,6 +80,8 @@ writeFileSync(entry, `
   export { mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink, GUIDE_SCAFFOLDING } from ${JSON.stringify(join(root, "src/utils/userSaves.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
+  export { cleanOffer, offerProblems, offerLive, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
+  export { PAID_PLANS_LIVE } from ${JSON.stringify(join(root, "src/config.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
   export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, VERIFY_PROMPT, settleVerdict, keepMeasured, isPipelineOwned, MEASURED_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
@@ -32853,6 +32855,200 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const src = stripComments(readFileSync(join(root, rel), "utf8"));
     is(`no dash anywhere in ${rel.split("/").pop()}`, (src.match(/[–—]/g) || []).length, 0);
   }
+}
+
+// ── THE GEMLYX OFFER ───────────────────────────────────────────────
+//
+// Oliver, 24 Aug 2026: "Put into the draft on edit and create 'Gemlyx offer'",
+// and on who sees it: "it will only be visible to paid users. So Gemlyx offer
+// will say 'Only for paying users'. But only paying users will know what the
+// offer is."
+//
+// An offer is the only thing Gemlyx prints that is a PROMISE about somebody
+// else's shop rather than a fact it checked, so the rules below are stricter
+// than the rest of the payload and each one is here because breaking it puts a
+// traveller at a counter being refused in front of the business.
+{
+  const { cleanOffer, offerProblems, offerLive, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE, PAID_PLANS_LIVE } = M;
+  const ok9 = { text: "Free bag of bolcher for the first 10 Gemlyx members", until: "2099-12-31" };
+
+  // ── THE DASH GUARD, WHICH IS WHY THIS IS CLEANED AND NOT JUST READ ──
+  // stripDashesDeep runs over every published payload as it loads and SKIPS
+  // every key beginning with an underscore, because those are machinery:
+  // helpers.js, `out[k] = k.startsWith("_") ? v : stripDashesDeep(v)`.
+  // __offer is machinery-shaped and its text is reader-facing prose, so it is
+  // the one field in the payload that would carry a sentence past that guard.
+  ok("an offer's text is stripped of dashes where the payload guard cannot reach it",
+    !/[–—]/.test(cleanOffer({ text: "Free bag — first 10 members", until: "2099-12-31" }).text));
+
+  is("an empty offer is null, not an empty shape", cleanOffer({ text: "", until: "" }), null);
+  is("and so is a non-object", cleanOffer("free stuff"), null);
+  ok("the text is capped", cleanOffer({ text: "x".repeat(400), until: "2099-12-31" }).text.length === OFFER_TEXT_MAX);
+
+  // ── AN OFFER WITH NO END DATE DOES NOT RENDER ────────────────────
+  // The rule the whole file exists for. An offer with no end is a promise
+  // nobody remembers to take down, and it is the shop that gets left holding
+  // it. Refused, and said out loud in the Studio rather than dropped quietly.
+  ok("no end date means not live", !offerLive({ text: "Free bag", until: "" }));
+  ok("and the Studio is told why", offerProblems({ text: "Free bag", until: "" }).some(x => /no end date/i.test(x)));
+  ok("an unreadable date means not live", !offerLive({ text: "Free bag", until: "next summer" }));
+  ok("and the Studio is told that too", offerProblems({ text: "Free bag", until: "next summer" }).some(x => /not a date/i.test(x)));
+  ok("a date with no text is refused", offerProblems({ text: "", until: "2099-12-31" }).some(x => /nothing to show/i.test(x)));
+  is("a clean offer has nothing to report", offerProblems(ok9), []);
+
+  // The last day counts in full, which is what dayEnd is for. An offer valid
+  // until the 30th is valid all of the 30th, not until midnight starting it.
+  ok("live on its final day", offerLive({ text: "Free bag", until: "2026-08-24" }, new Date("2026-08-24T23:00:00")));
+  ok("and gone the next", !offerLive({ text: "Free bag", until: "2026-08-24" }, new Date("2026-08-25T00:30:00")));
+
+  // ── THREE STATES, NOT TWO ───────────────────────────────────────
+  {
+    const locked = offerView(ok9, { paid: false });
+    ok("a visitor is told an offer exists", locked.show === true && locked.locked === true);
+    is("and is not told what it is", locked.text, "");
+    const open = offerView(ok9, { paid: true });
+    ok("a paying member sees it", open.show === true && open.locked === false);
+    is("and it is the real text", open.text, ok9.text);
+    // The one a careless edit would get wrong: an ended offer must show
+    // NOTHING, not a locked badge. A badge advertising something finished
+    // would be shown to exactly the people being asked to pay for access.
+    const ended = { text: "Free bag", until: "2020-01-01" };
+    is("an ended offer shows nothing to a visitor", offerView(ended, { paid: false }).show, false);
+    is("and nothing to a member either", offerView(ended, { paid: true }).show, false);
+  }
+
+  // ── NOBODY IS PAYING, AND THAT IS THE SHIPPED STATE ─────────────
+  // There is no payment system and no plan field. This is false for everyone
+  // on purpose, so every offer ships locked and no promise is made to anybody
+  // whose payment cannot be verified. Asserted as a RELATIONSHIP to the flag
+  // rather than as `false`, so the day plans exist this goes red by name
+  // instead of silently describing the past.
+  if (!PAID_PLANS_LIVE) {
+    ok("with plans off, nobody is paying", !hasPaidPlan({ plan: "premium" }) && !hasPaidPlan(null));
+    ok("so every live offer renders locked", offerView(ok9, { paid: hasPaidPlan({ plan: "premium" }) }).locked === true);
+  }
+
+  // ── IT SURVIVES PUBLISH ON EVERY TYPE ───────────────────────────
+  // Carried as a shared field rather than in nine type branches, for the reason
+  // written four times above it about the photo: the ninth branch is the one
+  // that gets forgotten. Checked by RUNNING shapeForLive on every type rather
+  // than by reading its source.
+  {
+    const types = ["town", "festival", "free", "food", "foodStreet", "night", "nightStreet", "nightTown", "booking"];
+    const kept = types.filter(t => {
+      const out = M.shapeForLive(t, { name: "Test", desc: "d", vibeLocation: "d", characterAndFit: "d", __offer: ok9 });
+      return out?.__offer?.text === ok9.text;
+    });
+    is("the offer survives publish on every content type", kept, types);
+    // And a broken one never reaches the database looking published.
+    const bad = M.shapeForLive("town", { name: "Test", characterAndFit: "d", __offer: { text: "Free bag", until: "" } });
+    is("an offer with no end date is not stored", bad.__offer, undefined);
+  }
+
+  // ── AND IT IS ACTUALLY RENDERED, BY EVERY CALLER ────────────────
+  //
+  // The signature failure of this codebase is a finished, correct, well-tested
+  // function that nothing calls, and the second shape is a value computed and
+  // never printed. Both are asked structurally here, because a unit test of
+  // offerView answers neither.
+  {
+    const dp = stripComments(readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8"));
+    ok("DetailPage asks offerView", /offerView\s*\(/.test(dp));
+    ok("and prints the disclosure it computes", /OFFER_NOTE/.test(dp) && /\{OFFER_NOTE\}/.test(dp));
+    // Pinned as a RULE and not as a call shape, which is the mistake the 23
+    // August pass recorded thirty times: it reads the constants, and it does
+    // not carry its own copy of the words. A hardcoded "Only for paying users"
+    // here is a second place to change when the wording moves, and the one
+    // that gets missed.
+    ok("it reads the locked wording rather than carrying its own", /OFFER_LOCKED_LABEL/.test(dp) && /OFFER_LOCKED_NOTE/.test(dp));
+    ok("and no copy of that sentence is hardcoded in the render", !new RegExp(OFFER_LOCKED_NOTE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).test(dp));
+
+    // Five call sites today. Counted rather than listed, so a sixth cannot be
+    // added without the prop: `paid` defaults to false, so a forgotten one
+    // would not crash, it would silently lock the offer for a paying member
+    // on one page and nowhere else.
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    const sites = app.match(/<DetailPage\b/g) || [];
+    const withPaid = app.match(/<DetailPage\s+paid=\{/g) || [];
+    ok("there are DetailPage call sites to check", sites.length >= 4);
+    is("and every one of them passes paid", withPaid.length, sites.length);
+    ok("the Studio writes the offer on edit as well as create", /shaped\.__offer\s*=\s*offerFromFields/.test(app));
+    ok("and refuses to publish one that would not render", /offerProblems\(offerFromFields\)/.test(app));
+  }
+}
+
+// ── A HERO THAT DOES NOT LOAD IS NOT A HERO, AT EVERY DOOR ─────────
+//
+// 24 Aug 2026. Oliver: "look at præstø as an example, why is the hero picture
+// not showing on the front page?"
+//
+// Row 70 carries `photo: "/towns/praesto.jpg"`, which 404s, while three
+// Wikimedia photographs of Præstø sit in its own blogBody with credits
+// attached. Measured across all 148 published rows the same evening: 40 have a
+// working absolute hero, 2 a working relative one, 27 a relative hero that does
+// NOT load, and 79 no hero field at all.
+//
+// The cause is recorded in this repo already. On 7 Aug the Commons finder's
+// rule was `p.photo || src`, and its replacement comment says why that failed:
+// "53 carry a local hero path like /towns/ringkobing.jpg and 52 of those files
+// do not exist... those 52 heroes were 'already set', so choosing a Commons
+// photo appended it to the body and left the broken path in place as the card
+// image."
+//
+// THE FIX WAS APPLIED TO ONE DOOR. `addMediaToPublished` still said
+// `p.photo || firstUrl` seventeen days later. That is this project's signature
+// failure in its second form: not an unwired function, a rule wired into one
+// caller and not its sibling, with the reasoning sitting in a comment above the
+// one that got it.
+//
+// So the rule is asked of ALL of them, structurally, rather than of the two we
+// happen to have found. A truthiness check on a hero is the bug; the loads test
+// is the rule.
+{
+  const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+
+  // Every place a photo becomes a hero has to decide whether the existing one
+  // counts. `p.photo || <a url>` is that decision made wrongly, and it is the
+  // shape to keep out, wherever it is written.
+  //
+  // `|| null` is EXEMPT and the exemption is not a loophole. The first run of
+  // this assertion went red on a third site nobody had looked at, saveFact,
+  // which writes `photo: draft.photo || null` into gemlyx_facts. That is a
+  // loading-screen fact, not an entry, and the expression normalises a missing
+  // upload to absent rather than promoting a URL over an existing hero. A
+  // different question, so it is not this rule's business. The check finding it
+  // and being read is the check working.
+  // The lookahead sits directly after the || and swallows the spaces itself.
+  // Written as \s*(?!null) first, which matched everything: \s* is greedy, the
+  // engine backtracks it to zero characters, and the lookahead then reads a
+  // leading space rather than the word. A negative lookahead after a variable
+  // gap is a lookahead that can always find somewhere to succeed.
+  const truthy = app.match(/photo:\s*\w+\.photo\s*\|\|(?!\s*null\b)/g) || [];
+  is("no door promotes a hero over an existing one on truthiness alone", truthy, []);
+
+  // And the two that do it correctly still do. Named by their test rather than
+  // by a line number, so moving the code does not break this and removing the
+  // test does.
+  ok("the Commons finder asks whether the hero loads", /const heroBroken = !\(await imageLoads\(p\.photo\)\)/.test(app));
+  ok("and so does the file uploader", (app.match(/!\(await imageLoads\(p\.photo\)\)/g) || []).length >= 2);
+
+  // The draft panel answers the same question a different way, because a DRAFT
+  // has no deployed file to probe: an absolute URL is a real picture and a
+  // relative path is a guess. shapeForLive applies the identical rule at
+  // publish. The two must agree or a photo looks attached until it silently is
+  // not, which is what that panel's own comment says.
+  ok("the draft panel tests the hero for being an absolute URL", /const heroAlready = \/\^https\?:/.test(app));
+  const sc = stripComments(readFileSync(join(root, "src/utils/studioContent.js"), "utf8"));
+  ok("and publish applies the same rule", /const heroUrl = \/\^https\?:\\\/\\\//.test(sc));
+
+  // ── AND THE REPAIR SPENDS NOTHING IT DOES NOT HAVE TO ────────────
+  // Nine of the broken rows carry a usable photograph already. Reaching for
+  // Wikimedia first would replace a picture he chose with a stranger's AND pay
+  // for the privilege, on rows where the answer was already in the payload.
+  ok("backfill promotes a row's own body image before paying for a new one",
+    /blogBody[\s\S]{0,200}?\.find\(b => b\?\.type === "image"/.test(app));
+  ok("and carries the credit in the same write, never as a second step",
+    /photo: String\(own\.src\)\.trim\(\)[\s\S]{0,120}__photoCredit/.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

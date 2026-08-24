@@ -11,6 +11,7 @@ import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
 import { bookingUrl, airbnbUrl, STAY_DISCLOSURE, ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote } from "../utils/affiliates";
 import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl } from "../utils/ticketLink";
+import { offerView, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
 import { HowWeKnow } from "./HowWeKnow";
 import { JourneyCard } from "./JourneyCard";
 import { events, majorEvents, vikingEvents } from "../data/events";
@@ -128,7 +129,7 @@ const eventsForTown = (townName) => {
 export const detailPoint = (item, kind) =>
   placeCoords(item) || (kind === "town" ? townPointFor(item?.name) : null);
 
-export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, onOpenEvent, onOpenNearby }) => {
+export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, onOpenEvent, onOpenNearby, paid = false }) => {
   if (!item) return null;
   const color = item.color || C.accent;
   // ── ONE POINT, TWO USES ───────────────────────────────────────────
@@ -776,6 +777,44 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             rel gains sponsored and nofollow when it IS tracked. That is what
             Google asks for on a paid link, and it is the difference between an
             affiliate programme and something that reads as an undisclosed ad. */}
+        {/* ── THE GEMLYX OFFER ────────────────────────────────────
+            Oliver, 24 Aug 2026, on who sees what: "it will only be visible to
+            paid users. So Gemlyx offer will say 'Only for paying users'. But
+            only paying users will know what the offer is."
+
+            Three states, and offerView owns which one this is rather than the
+            ternaries below, so the rule can be asserted without a browser and
+            cannot quietly become two states the next time this JSX is edited.
+            Same argument that moved layoutBody and the food facets out of their
+            render sites.
+
+            AN ENDED OFFER RENDERS NOTHING AT ALL, not even the locked badge,
+            which is why this asks offerView rather than asking whether __offer
+            exists. A badge advertising an offer that has finished would be
+            shown to exactly the people being asked to pay for access to it.
+
+            OFFER_NOTE is not decoration. affiliates.js holds the invariant that
+            nothing comes out tracked without a sentence under it; this is the
+            same question with the money running the other way, since Gemlyx may
+            have paid the shop to put the offer there. */}
+        {(() => {
+          const view = offerView(item.__offer, { paid });
+          if (!view.show) return null;
+          return (
+            <div style={{ background: `${C.gold}14`, border: `1px solid ${C.gold}55`, borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.gold, letterSpacing: 0.4, marginBottom: view.locked ? 3 : 5 }}>
+                ◈ {OFFER_LOCKED_LABEL}
+              </div>
+              <div style={{ fontSize: view.locked ? 12 : 13, color: view.locked ? C.muted : C.text, lineHeight: 1.55 }}>
+                {view.locked ? OFFER_LOCKED_NOTE : view.text}
+              </div>
+              <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.5, marginTop: 7 }}>
+                {OFFER_NOTE}{view.until ? ` Until ${view.until}.` : ""}
+              </div>
+            </div>
+          );
+        })()}
+
         {(kind === "free" || kind === "event") && externalHref(item.website) && (() => {
           const dest = externalHref(item.website);
           // affiliateHref rather than ticketmasterUrl: one door, so the day a

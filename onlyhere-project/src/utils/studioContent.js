@@ -7,6 +7,7 @@
 // hardcoded data array (towns/events/freeEntrance/foodSpots/etc.) expects.
 import { normaliseTicketStatus } from "./tickets";
 import { isBookableTicketUrl } from "./ticketLink";
+import { cleanOffer, offerProblems } from "./offer";
 import { placeCoords } from "./guideEnrichment";
 // PRICE_UNKNOWN, not the literal "See website" this branch used to fall back to:
 // an empty price reaching publish means the drafting pass never ran (an edit, a
@@ -436,6 +437,20 @@ export const shapeForLive = (type, t) => {
     });
   const heroCredit = heroUrl ? cleanCredit(t?.__photoCredit) : null;
 
+  // ── AND THE GEMLYX OFFER, ON THE SAME TERMS AS THE REST ──────────
+  //
+  // Carried HERE, once, as a shared field, for the reason written four times
+  // above about the photo: nine type branches means the ninth gets forgotten,
+  // and an offer is not specific to a town or a festival. Sømods is a workshop
+  // and a bakery is food and a museum is an attraction, and the offer means the
+  // same thing on all three.
+  //
+  // REFUSED RATHER THAN STORED when offerProblems has anything to say, so a
+  // dateless offer cannot reach the database and sit there looking published
+  // while rendering nothing. The Studio shows the same sentences before publish,
+  // so the refusal is never a surprise.
+  const offer = offerProblems(t?.__offer).length === 0 ? cleanOffer(t?.__offer) : null;
+
   // ── NOT EVERY UNCERTAINTY IS FOR A READER ───────────────────────
   // The pipeline writes instructions to HIM into the same array: "STOP, DO NOT
   // PUBLISH", "PIPELINE CONTRADICTION, FIX BEFORE PUBLISHING", the note about
@@ -519,6 +534,7 @@ export const shapeForLive = (type, t) => {
   // 404 over a real photograph for 52 rows.
   if (heroUrl) out = { ...out, photo: heroUrl };
   if (heroCredit) out = { ...out, __photoCredit: heroCredit };
+  if (offer) out = { ...out, __offer: offer };
   // Appended AFTER the prose, which is where layoutBody in DetailPage.jsx wants
   // them: it looks for the trailing run of images and deals them back in beside
   // the paragraphs, so a picture ends up floated next to writing instead of

@@ -20,6 +20,26 @@ export const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdX
 // suite asserts they stay that way rather than rotting while switched off.
 export const GOOGLE_SIGN_IN = false;
 
+// ── PAID PLANS, WHICH DO NOT EXIST YET ──────────────────────────────
+//
+// Oliver, 24 August 2026, designing the Gemlyx offer field: "it will only be
+// visible to paid users."
+//
+// There is no payment system, no plan field on a profile, and the Plan panel in
+// the account screen is deliberately a statement rather than a control, with an
+// assertion holding it that way. So this is false and every offer on the site
+// renders in its locked state: the badge says an offer exists here and nobody
+// is shown what it is.
+//
+// That is the correct state to ship in rather than a placeholder. A promise
+// made to a reader whose payment cannot be verified is a promise a shop is left
+// holding at its own counter.
+//
+// ONE LINE TO TURN ON, and one function to give a field to read:
+// hasPaidPlan in utils/offer.js is the only thing in the app that asks who is
+// paying, so nothing else can drift out of agreement with it.
+export const PAID_PLANS_LIVE = false;
+
 export const APP_VERSION = "v2.87 — AI plans become saveable guides with real data + mini-maps";
 
 // ── THE ONE PLACE THE PUBLIC ADDRESS IS WRITTEN DOWN ─────────────────
