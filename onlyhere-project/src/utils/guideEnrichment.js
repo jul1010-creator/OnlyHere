@@ -488,7 +488,23 @@ export const stopTown = (stop, row) => {
 // stops with coordinates a couple of hundred metres apart (a park entrance and a
 // stage inside it), and the shortest walk anybody would ever describe as a leg is
 // longer than that. Under it, there is nothing to travel.
-export const SAME_SPOT_KM = 0.3;
+// ── 300 METRES IS A WALK, NOT "THE SAME PLACE" ──────────────────────
+//
+// 23 Aug 2026, from the same guide. Day 4 read "Design Museum Denmark 10:00 ...
+// Same place, nothing to travel ... 12:15 Amalienborg". They are two separate
+// paid attractions about 350 metres apart on Bredgade, and the reader is told
+// there is nothing between them.
+//
+// This constant is meant to say "the same site": two stops inside one complex,
+// a harbour and the café on it, a museum and its annexe. At 300 metres it was
+// saying "close", and close is a four minute walk that a person planning a day
+// needs to see. Telling somebody there is nothing to travel and then making
+// them cross a district is the small lie that makes a whole document feel
+// careless.
+//
+// 120 metres is a courtyard. Anything past it gets a leg, and the leg is a walk
+// because of the rule added to resolveLegMode the same evening.
+export const SAME_SPOT_KM = 0.12;
 
 // The distance decides when there is one. NOT through legDistanceKm, which is
 // where the first version of this went wrong: that function deliberately returns
@@ -596,6 +612,26 @@ export const resolveLegMode = (how, primaryMode, originName, destName, onlyWalki
     // transit leg this short is a walk; the only exception is an explicit
     // ferry/boat leg (a 1km harbour crossing is genuinely not walkable).
     else if (mode === "transit" && distKm <= 1.5 && !isFerryText(how)) mode = "walking";
+    // ── AND THE SAME RULE FOR A CAR, WHICH IT NEVER HAD ──────────────
+    //
+    // Oliver, 23 Aug 2026, on a live guide: four days in Copenhagen where every
+    // leg read "5 mins by car", "12 mins by car", "15 mins by car", while the
+    // guide's OWN essentials told him "lad bilen stå: parkering er dyrt og
+    // svært". Danish Architecture Center to Strøget is about a kilometre. The
+    // document contradicted itself inside two screens.
+    //
+    // The transit branch above has had this rule since Ærøskøbing and the
+    // comment beside it gives the reason: a leg that short is a walk. Nothing
+    // about that reasoning is specific to trains. It is stronger for a car,
+    // because the car also has to be parked at the other end, in the city this
+    // product keeps telling people not to drive in.
+    //
+    // WALK_MAX_KM rather than the transit branch's flat 1.5, deliberately. It is
+    // the distance this product already defends as how far it will ask anybody
+    // to walk, derived from WALK_MAX_MINUTES, so the ceiling moves in one place.
+    // That makes this branch STRICTER than the transit one, which is the right
+    // way round: somebody who chose a car may have luggage in it.
+    else if (mode === "driving" && distKm <= WALK_MAX_KM && !isFerryText(how)) mode = "walking";
   }
   return mode;
 };

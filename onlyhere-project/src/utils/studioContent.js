@@ -6,7 +6,7 @@
 // helpers; shapeForLive turns a raw AI draft into the exact object shape each
 // hardcoded data array (towns/events/freeEntrance/foodSpots/etc.) expects.
 import { normaliseTicketStatus } from "./tickets";
-import { isTiqetsProductUrl } from "./ticketLink";
+import { isBookableTicketUrl } from "./ticketLink";
 import { placeCoords } from "./guideEnrichment";
 // PRICE_UNKNOWN, not the literal "See website" this branch used to fall back to:
 // an empty price reaching publish means the drafting pass never ran (an edit, a
@@ -475,7 +475,13 @@ export const shapeForLive = (type, t) => {
   // Tiqets URL, and tracking is added at render time from the template in
   // config.js. Storing a tracked link would freeze today's marker into 78 rows
   // and mean a database migration the day any of it changes.
-  if (isTiqetsProductUrl(t?.ticketUrl)) out = { ...out, ticketUrl: String(t.ticketUrl).trim() };
+  // ── AND A TICKETMASTER EVENT PAGE IS A TICKET PAGE TOO ────────────
+  // 23 Aug 2026. This read isTiqetsProductUrl, so on the evening Impact
+  // approved him a Ticketmaster event URL was dropped here without a word and
+  // the affiliate had nowhere to live. isBookableTicketUrl asks the one question
+  // this line is actually asking, and it still refuses a front page, a search
+  // and a category listing, which is the whole reason the check exists.
+  if (isBookableTicketUrl(t?.ticketUrl)) out = { ...out, ticketUrl: String(t.ticketUrl).trim() };
   // ── WHAT LANGUAGE THE THING ITSELF RUNS IN ────────────────────────
   // Oliver, 15 Aug 2026: "I wonder if we should make people aware that an event
   // might have a great language barrier." Carried on the same terms as __hours

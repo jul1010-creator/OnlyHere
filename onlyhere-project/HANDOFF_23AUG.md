@@ -986,3 +986,259 @@ Ticketmaster alongside Tiqets as a partner that pays. Nothing about what is
 collected changed, and the version note says so.
 
 **9,829 passed, 0 failed. Build clean.**
+
+---
+
+## 23 August, after the approval: "There is no links on any of my events though"
+
+He was right, and the reason was worse than a missing field.
+
+### `ticketUrl` was written by nothing
+
+Three occurrences in the entire app, and no producer among them:
+
+```
+src/components/DetailPage.jsx:819   const dest = String(item.ticketUrl || "").trim();   // read
+src/utils/studioContent.js:478      if (isTiqetsProductUrl(t?.ticketUrl)) ...            // filtered
+```
+
+**The Tickets button was unreachable on every entry ever published.** Not empty
+on some. Unreachable, always, by construction.
+
+And the one gate that existed accepted a Tiqets product page and nothing else,
+so the affiliate approved an hour earlier had no field to live in.
+
+**`ticketLink.js` was dead in the same way.** `pickTicketUrl`, `ticketQuery`,
+`ticketMatches` and `describeTicketSearch` were called from nowhere in `src/` or
+`api/`, with 21 assertions covering a module nothing ran. **Eighth helper in this
+codebase written, tested and left unwired.**
+
+### Two producers, and both were already holding the answer
+
+1. **`__ticket.url`.** `stampTicketSource` has stored the Ticketmaster listing
+   for the exact event since 13 August, on a strong match only. Until tonight
+   the only thing that read it was a findings message telling him to open it by
+   hand. It is now the ticket link.
+2. **`pickTicketUrl` over `pagesByUrl`**, every page the draft run already
+   fetched, so a Tiqets product page or a Ticketmaster event the API never
+   matched still becomes a link. **No extra API call**: these pages are re-read,
+   not re-fetched, and the page's own text is the corroboration, which is a far
+   stronger signal than a URL slug.
+
+Strong-match-only on the first is the guard that keeps a Tickets button off the
+wrong edition of a festival. The picker still returns null rather than a best
+guess, which is the rule that file states about itself.
+
+**The stored value is the plain listing.** Tracking is added at render from
+`config.js`, which is the rule the Tiqets field already followed and the reason
+his approval needed no database migration.
+
+### The gate learned Ticketmaster and kept its refusals
+
+`isBookableTicketUrl` is the one question everything downstream asks now. It
+takes a Tiqets product page and a Ticketmaster or Live Nation event page, and
+refuses the front page, a search, an artist page and a category listing.
+
+**The front page refusal is not hypothetical.** The generic Impact link he was
+given pointed at exactly that.
+
+### And nothing can render a paid link without disclosing it
+
+*"remember to make an affiliate section!!!! ... Otherwise I'm fked."*
+
+He is not. Terms clause 14 has covered this in four sub-clauses since 13 August,
+privacy section 13 says the same in plain language, and the per-link sentence
+renders under the button. What changed tonight is that `ticketDisclosure()` is
+gated on the template being set, so before he pasted it, **it returned an empty
+string for every Ticketmaster link**. The sentence was written, tested, and had
+never once rendered.
+
+The risk was never the wording. It is a future edit that wraps a link and
+forgets the sentence. So it is now asked structurally across every render file:
+any file calling `ticketmasterUrl`, `tiqetsUrl`, `bookingUrl` or `carRentalUrl`
+must also compute the matching disclosure **and print it**, because "computed and
+never rendered" is a bug this codebase has already had once. Mutation-tested by
+adding a new component that wraps a link with no disclosure: caught by name.
+
+**9,873 passed, 0 failed. Build clean.**
+
+---
+
+## 23 August: "Køge Festuge and Copenhell without affiliate links"
+
+*"is it possible to put in affiliate links on these? Like automatically enable
+affiliate links if I am affiliated to the place. So if I redraft Køge festuge,
+then the affiliate link will come with it."*
+
+Two answers, and the better one does not involve redrafting either of them.
+
+### They may already carry the listing
+
+`stampTicketSource` has written `__ticket.url` onto the payload since 13 August
+whenever the Ticketmaster match was STRONG, and **`shapeForLive` keeps it on the
+live row** (line 305). So the Ticketmaster listing for an event drafted weeks
+ago is already sitting in Supabase, and nothing had ever read it on the page.
+
+DetailPage now falls back to it when `ticketUrl` is empty. A hand-corrected
+`ticketUrl` still wins, and the fallback goes through the same refusals, so a
+front page or a search never becomes a button. **If Copenhell got a strong match
+when it was drafted, its Tickets button appears with no republish at all.**
+
+If it did not, a redraft now fills the field through the chain built earlier
+tonight.
+
+### One door for every outbound link
+
+This is the better half of what he asked for. There were four wrappers applied
+by hand at whichever render site somebody remembered. There is now one:
+
+```js
+affiliateHref(url)   // tracked URL if a programme covers that host, else the link unchanged
+affiliateNote(url)   // the sentence that must go under it, empty when nothing is earned
+isAffiliateHref(url) // whether rel="sponsored nofollow" is required
+```
+
+**Every wrapper it composes is gated on a template read at RENDER.** So the day a
+programme is approved, every entry ever published starts earning through it with
+no migration, no republish and no redraft, and the day one ends they all go
+quietly back to being ordinary links. That is the property the Tiqets field
+already had and nothing else did, and it is exactly the "automatically enable
+affiliate links if I am affiliated" he described.
+
+A festival's own site is not a partner link: `copenhell.dk` passes through
+untouched and says nothing, which is the honest answer and the common case.
+
+### The invariant that makes the door safe
+
+Asserted as a property over the whole matrix rather than case by case, because
+the failure that costs a programme is one link somewhere that got wrapped and
+said nothing:
+
+* nothing comes out tracked without a sentence to put under it;
+* nothing claims a commission on a link that earns none.
+
+Mutation-tested by removing Ticketmaster from `affiliateNote`: three URLs named
+in the failure. And by deleting the no-redraft fallback: caught by name.
+
+Six assertions moved because they pinned the old per-agent wrapping by function
+name. The branch did not disappear, it moved inside `affiliateHref` so every
+render site gets it instead of one.
+
+**9,888 passed, 0 failed. Build clean.**
+
+---
+
+## Phase: reading his own live guide (`/guide/4c1vzfmge00`)
+
+He sent the link with "eh.. you might wanna take a look at this..". Nine
+problems came out of reading it. Two are fixed here; the rest are listed at the
+bottom of this section with what each one actually is, because several of them
+need a fact from him and not a code change.
+
+### Fix 1: a car leg shorter than a walk is a walk
+
+The guide gave "5 mins by car", "12 mins by car" and "15 mins by car" for legs
+inside central Copenhagen, on the same page whose own essentials paragraph told
+the reader **"lad bilen stå: parkering er dyrt og svært"**. The guide was
+arguing with itself.
+
+`resolveLegMode` in `src/utils/guideEnrichment.js` had had the demote-to-walking
+rule on the transit branch since the Ærøskøbing pass, where a bus for 400 m was
+the visible nonsense. Driving never got the same rule, so nothing stopped a car
+from being suggested for a distance a person covers faster on foot.
+
+```js
+else if (mode === "driving" && distKm <= WALK_MAX_KM && !isFerryText(how)) mode = "walking";
+```
+
+The ferry guard matters and is not decoration: a short hop across water is a
+short distance and a car is the only way to make it. Without `isFerryText` the
+rule would have told an Ærø reader to walk onto the Baltic.
+
+### Fix 2: three hundred and fifty metres is not the same place
+
+The guide printed **"Same place, nothing to travel"** between Design Museum
+Denmark and Amalienborg. They are both on Bredgade and they are 350 m apart,
+which is a five minute walk past three other things worth looking at.
+
+`SAME_SPOT_KM` was `0.3`. It is now `0.12`, which is roughly a building and its
+own forecourt, and which leaves the real same-place cases (two entrances to one
+site, a museum and its café) still collapsing.
+
+The assertion that pinned `0.3` broke, correctly, on a correct change. It was
+pinning the number rather than the behaviour, so it has been rewritten as a
+rule: the threshold must sit between 50 m and 150 m, and must be under a quarter
+of `WALK_MAX_KM` so that "same place" can never swallow a leg the guide would
+otherwise describe as a walk. The Design Museum/Amalienborg pair is now a named
+case in the suite, with its real coordinates, so the specific thing he saw on
+his own screen cannot come back.
+
+### Still open from that guide, and what each one needs
+
+1. **Møns Klint and Fanefjord Kirke have no coordinates.** The numbering falls
+   back to letters, so his guide has stops "M" and "F" sitting among 1, 2, 3.
+   That is a geocode gap in the data, not a layout bug.
+2. **Rundetaarn's description is the single word "Bygget".** A truncation
+   upstream of the render.
+3. **Summer copy on a November trip**, in two places. Date-blind text.
+4. **Rundetaarn "Free to enter"** needs his fact-check. It is not free.
+5. **The inverted weather sentence.**
+6. **~150 hardcoded English strings** in the guide surface, which is why his
+   father's Danish guide still contains English furniture.
+7. **The route line omits the return leg.**
+
+**9,891 passed, 0 failed. Build clean.**
+
+---
+
+## Phase: the fifty point review, Layla, and a developer note on the live site
+
+He brought back a fifty point product review from ChatGPT, addressed to Claude,
+closing by asking which points were already built. Every one was checked against
+the source rather than the live site.
+
+**Seventeen already built and reaching people. Twenty-three part built. Seven
+absent. One absent on purpose.** The reviewer could only see the surface, so a
+large share of its "should eventually" items exist in code: the event relevance
+score, the mode-aware reach ceiling, the accommodation writer, the honesty
+notices, the transparency machinery, the edge prerendering for crawlers.
+
+The finding it could not have guessed at is the tenth and eleventh instance of
+this project's signature failure. Five pieces of finished, tested code with no
+caller, listed at the top of `HANDOFF_NEXT.md`. The one that matters most is
+`shutOnVisit`, which answers whether a place is closed on the day the guide
+scheduled it, and which nothing calls.
+
+The second finding worth recording: **`profileForPrompt` never reaches the guide
+build prompt.** It reaches the chat and Ask Gemlyx, and the comment beside the
+Ask Gemlyx call claims it hands the guide writer the same two blocks. It hands
+it neither. Everything a returning traveller has told Gemlyx about themselves is
+absent at the moment their trip is written. That is the same shape as the ticket
+links: a comment asserting a wiring that was never made.
+
+### A developer note was rendering on the live site
+
+`WeatherStrip.jsx` printed, on failure, an instruction to check that
+`/api/weather.js` was deployed with a working User-Agent. To travellers. On the
+Essentials page and in the header strip.
+
+It now says the forecast could not be loaded, that this is our end rather than a
+quiet spell, and points at DMI or Yr. The wording is deliberate and follows the
+rule the rest of the app already keeps: a failed request is not a fact about the
+world, and a reader must never be able to read "no forecast" as "no weather
+worth reporting". `ReviewsSection` keeps the same rule about a failed reviews
+read, in the same words.
+
+The assertion is a rule rather than a string, because one string is what this
+codebase keeps catching one at a time. **No `.jsx` file may contain a path of
+the shape `/api/<name>.js` once comments are stripped**, because a component
+fetches the extensionless route and never needs the filename, so such a path is
+always either a leaked developer note or a fetch that would 404.
+
+Comments stripped first, in both directions, deliberately: the fix's own comment
+quoted the old string, so a raw scan would have stayed green on a file that had
+never been fixed. Ninth time.
+
+Mutation tested by restoring the old string: five assertions named it.
+
+**9,898 passed, 0 failed. Build clean.**

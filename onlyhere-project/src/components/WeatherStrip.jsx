@@ -56,7 +56,17 @@ export const WeatherStrip = ({ label, weatherKey, lat, lon, weather, weatherLoad
           )}
         </>
       ) : data?.error ? (
-        <div style={{ fontSize: 12, color: C.muted }}>Couldn't fetch weather — check /api/weather.js is deployed with a working User-Agent.</div>
+        // ── A DEVELOPER NOTE WAS SHOWING ON THE LIVE SITE ───────────────
+        // This read "check /api/weather.js is deployed with a working
+        // User-Agent", which is a message to whoever wrote the endpoint,
+        // printed to a traveller looking up the forecast for their trip.
+        //
+        // The replacement follows the rule the rest of this app already
+        // keeps: a failed request is not a fact about the world. A reader
+        // must never be able to read "no forecast could be loaded" as
+        // "there is no weather worth reporting", so the sentence names the
+        // load as the thing that failed and points them somewhere real.
+        <div style={{ fontSize: 12, color: C.muted }}>The forecast could not be loaded just now. This is our end, not a quiet spell: check DMI or Yr for these days.</div>
       ) : (
         <div style={{ fontSize: 12, color: C.muted }}>Loading forecast...</div>
       )}

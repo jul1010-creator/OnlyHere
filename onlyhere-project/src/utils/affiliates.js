@@ -317,6 +317,58 @@ const PARTNER_MERCHANTS = {
   kiwi: "Kiwi.com",
   aviasales: "Aviasales",
 };
+// ── ONE DOOR FOR EVERY OUTBOUND LINK ────────────────────────────────
+//
+// Oliver, 23 Aug 2026, on two published festivals with no ticket link: "Like
+// automatically enable affiliate links if I am affiliated to the place. So if I
+// redraft Koge festuge, then the affiliate link will come with it."
+//
+// The redraft half is built. This is the better half of his question, because
+// it removes the redraft: instead of four wrappers applied by hand at whichever
+// render site somebody remembered, there is ONE function that asks "do we hold
+// a programme covering this host" and answers with either the tracked URL or
+// the link exactly as it came in.
+//
+// WHY THAT MATTERS MORE THAN IT SOUNDS. Every wrapper in this file is gated on
+// its template being configured, and the template is read at RENDER. So the day
+// a programme is approved, every entry ever published starts earning through it
+// with no migration, no republish and no redraft, and the day one ends they all
+// go quietly back to being ordinary links. That is the property the Tiqets
+// field already had and nothing else did.
+//
+// ORDER CANNOT COLLIDE: a URL is on ticketmaster or on tiqets and never on
+// both, so the first wrapper that changes anything is the only one that could
+// have.
+export const affiliateHref = (url) => {
+  const raw = String(url || "").trim();
+  // The same refusal both wrappers make, kept here so a caller gets one
+  // contract: null means "this is not a link", never "this is not a partner".
+  if (!/^https?:\/\//i.test(raw)) return null;
+  for (const wrap of [ticketmasterUrl, tiqetsUrl]) {
+    const out = wrap(raw);
+    if (out && out !== raw) return out;
+  }
+  return raw;
+};
+
+// The sentence that MUST accompany it, from the same place, deliberately. A
+// caller reaching for one and forgetting the other is the failure the render
+// scan in tests/run.mjs exists to prevent, and pairing them here is how that
+// stops being a thing anybody has to remember.
+//
+// Empty for a link that earns nothing, because "this may earn us a commission"
+// printed over a link that earns nothing is a false statement about money.
+export const affiliateNote = (url) => ticketDisclosure(url) || tiqetsDisclosure(url) || "";
+
+// True when the link is going through a programme, for a caller that has to set
+// rel="sponsored nofollow", which is what Google asks of a paid link.
+export const isAffiliateHref = (url) => {
+  const raw = String(url || "").trim();
+  const out = affiliateHref(raw);
+  return !!out && out !== raw;
+};
+
+
 
 export const partnerMerchant = (url) => {
   if (!isPartnerLink(url)) return "";

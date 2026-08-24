@@ -9,8 +9,8 @@ import { InstagramEmbed } from "./InstagramEmbed";
 import { ReviewsSection } from "./ReviewsSection";
 import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
-import { bookingUrl, airbnbUrl, STAY_DISCLOSURE, ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure } from "../utils/affiliates";
-import { isTiqetsProductUrl } from "../utils/ticketLink";
+import { bookingUrl, airbnbUrl, STAY_DISCLOSURE, ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote } from "../utils/affiliates";
+import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl } from "../utils/ticketLink";
 import { HowWeKnow } from "./HowWeKnow";
 import { JourneyCard } from "./JourneyCard";
 import { events, majorEvents, vikingEvents } from "../data/events";
@@ -778,9 +778,13 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             affiliate programme and something that reads as an undisclosed ad. */}
         {(kind === "free" || kind === "event") && externalHref(item.website) && (() => {
           const dest = externalHref(item.website);
-          const href = ticketmasterUrl(dest) || dest;
+          // affiliateHref rather than ticketmasterUrl: one door, so the day a
+          // programme is approved every entry ever published starts earning
+          // through it with no republish, and a website that happens to be a
+          // Tiqets page is covered too. See utils/affiliates.js.
+          const href = affiliateHref(dest) || dest;
           const paid = href !== dest;
-          const note = ticketDisclosure(dest);
+          const note = affiliateNote(dest);
           return (
             <div style={{ marginBottom: 10 }}>
               <a href={href} target="_blank" rel={paid ? "noreferrer sponsored nofollow" : "noreferrer"}
@@ -816,10 +820,32 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             here, at render, from the template in config.js. That is what lets
             the marker change without a database migration. */}
         {(() => {
-          const dest = String(item.ticketUrl || "").trim();
-          if (!isTiqetsProductUrl(dest)) return null;
-          const href = tiqetsUrl(dest) || dest;
-          const note = tiqetsDisclosure(dest);
+          // ── AND THE ONE ALREADY ON THE ROW ───────────────────────
+          //
+          // Oliver, 23 Aug 2026: "I have Koge festuge and Copenhell without
+          // affiliate links.. is it possible to put in affiliate links on
+          // these?"
+          //
+          // Without republishing either of them, yes. stampTicketSource has
+          // written __ticket.url onto the payload since 13 August whenever the
+          // Ticketmaster match was STRONG, and shapeForLive keeps it on the
+          // live row. So the listing for an event drafted weeks ago is already
+          // in Supabase, and nothing had ever read it here.
+          //
+          // ticketUrl still wins, because that is the field a person can
+          // correct by hand. This is the fallback under it, and it goes through
+          // the same refusals: a front page or a search never becomes a button.
+          const dest = String(item.ticketUrl || "").trim()
+            || (isBookableTicketUrl(item?.__ticket?.url) ? String(item.__ticket.url).trim() : "");
+          // ── EITHER AGENT, EACH THROUGH ITS OWN TEMPLATE ──────────
+          // This read isTiqetsProductUrl and tiqetsUrl only, so a stored
+          // Ticketmaster event page would have rendered nothing at all. The
+          // agent decides which template wraps it, and an unrecognised value
+          // still renders no button rather than a bare link asking for money.
+          const agent = ticketAgentOf(dest);
+          if (!agent) return null;
+          const href = affiliateHref(dest) || dest;
+          const note = affiliateNote(dest);
           return (
             <div style={{ marginBottom: 10 }}>
               <a href={href} target="_blank" rel={note ? "noreferrer sponsored nofollow" : "noreferrer"}

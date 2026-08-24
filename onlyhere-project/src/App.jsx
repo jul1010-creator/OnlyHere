@@ -109,6 +109,7 @@ import { cityFromLocation } from "./utils/guideEnrichment";
 import { readBrief, briefBlock, nextAsks, buildBlockedNote } from "./utils/tripBrief";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
+import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch } from "./utils/ticketLink";
 import { placesNamedIn } from "./utils/chatPlaces";
 import { EXAMPLE_GUIDE, EXAMPLE_GUIDE_PATH, hasExampleGuide } from "./data/exampleGuide";
 import { ChatPlaceCards } from "./components/ChatPlaceCards";
@@ -5450,6 +5451,48 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             used: true,
           });
         }
+        // ── AND IF NO LISTING WAS CONFIRMED, WHAT WAS READ ─────────
+        //
+        // The path above only fires on a STRONG Ticketmaster match. Everything
+        // else, a Tiqets product page for an attraction, a Ticketmaster event
+        // the API never matched, is sitting in pagesByUrl already: every page
+        // this run read, with its text. pickTicketUrl is the module written on
+        // 15 August to vet exactly that and it had never been called from
+        // anywhere. Eighth helper in this codebase written, tested and left
+        // unwired.
+        //
+        // NO EXTRA CALL. These pages were fetched for other reasons and are
+        // being re-read rather than re-fetched, which is the difference between
+        // this and a lookup nobody asked for.
+        //
+        // The page's own TEXT is the corroboration. sourceIsAboutPlace behind
+        // ticketMatches wants a haystack, and a ticket page's body naming the
+        // event is a far stronger signal than a slug. It still returns null
+        // rather than a best guess, which is the rule that file states about
+        // itself: an absent Tickets button is one fewer button, and a wrong one
+        // is a reader who paid for something else.
+        if (!String(t.ticketUrl || "").trim()) {
+          const candidates = Object.keys(pagesByUrl).map(u => ({ url: u, snippet: String(pagesByUrl[u] || "").slice(0, 800) }));
+          const picked = pickTicketUrl(candidates, { name, town: draftTown });
+          if (picked) {
+            t.ticketUrl = picked;
+            note("The ticket link, off a page already read", {
+              provider: "fetch",
+              detail: picked.slice(0, 120),
+              outcome: "ok",
+              got: "a bookable ticket page for this entry, vetted against its own text",
+              used: true,
+            });
+          } else if (candidates.length) {
+            note("No ticket link", {
+              provider: "fetch",
+              detail: `${candidates.length} page${candidates.length === 1 ? "" : "s"} considered`,
+              outcome: "empty",
+              got: describeTicketSearch(candidates, { name, town: draftTown }),
+              used: false,
+            });
+          }
+        }
 
         // ── AND WHAT THE WHOLE DRAFT IS STANDING ON ─────────────
         // Oliver, 16 Aug, on this draft's __sources: "one source? What da fk".
@@ -5744,6 +5787,37 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // written on the row rather than shown once in the run log, because the
         // run log is gone by the time anybody reads the published page.
         t = stampTicketSource(t, rec);
+        // ── AND THAT LISTING BECOMES THE TICKET LINK ───────────────
+        //
+        // Oliver, 23 Aug 2026: "Make it so if an event is ticketmaster, then it
+        // puts affiliate link into the address."
+        //
+        // It already knew. stampTicketSource has stored `__ticket.url`, the
+        // Ticketmaster listing for this exact event, since 13 August, and the
+        // only thing that ever read it was a findings message telling him to
+        // open it by hand. A reader never saw it and no ticket link was ever
+        // built from it.
+        //
+        // ONLY ON A STRONG MATCH, which is the condition stampTicketSource
+        // already applies to the field: a weak match is a listing that LOOKS
+        // like this event and was not confirmed as the same edition, and a
+        // Tickets button on the wrong edition takes money for the wrong night.
+        // isBookableTicketUrl refuses a front page and a search on top of that.
+        //
+        // The affiliate template is NOT applied here. The plain listing is what
+        // gets stored, and the tracking is added at render from config.js, which
+        // is the rule the Tiqets field already follows and the reason his
+        // Ticketmaster approval needed no database migration.
+        if (!String(t.ticketUrl || "").trim() && isBookableTicketUrl(t?.__ticket?.url)) {
+          t.ticketUrl = String(t.__ticket.url).trim();
+          note("The ticket link, off the confirmed listing", {
+            provider: "ticketmaster",
+            detail: t.ticketUrl.slice(0, 120),
+            outcome: "ok",
+            got: "the event's own Ticketmaster page, which the reader's Tickets button now opens",
+            used: true,
+          });
+        }
         // ── AND WHAT LANGUAGE IT RUNS IN, STORED WITH IT ───────────
         // Measured at step 17 off the operator's own pages. On the row rather
         // than only in the run log, for the same reason the ticket source is:

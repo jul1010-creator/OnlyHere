@@ -63,8 +63,8 @@ writeFileSync(entry, `
   export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
   export { TICKET_HUNT_PROMPT, ticketHuntUrls } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
-  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, isPartnerLink, partnerDisclosure, partnerMerchant, linkLabel } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
-  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
+  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, isPartnerLink, partnerDisclosure, partnerMerchant, linkLabel, affiliateHref, affiliateNote, isAffiliateHref } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
+  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
@@ -14233,7 +14233,12 @@ rmSync(dir, { recursive: true, force: true });
      /externalHref\(item\.website\) && \(\(\) => \{/.test(detail) && /const dest = externalHref\(item\.website\);/.test(detail));
   ok("and it no longer renders item.website straight into href",
      !/href=\{item\.website\}/.test(detail));
-  ok("a Ticketmaster destination is tracked", /const href = ticketmasterUrl\(dest\) \|\| dest;/.test(detail));
+  // ── ONE DOOR, SO A NEW PROGRAMME NEEDS NO REPUBLISH ─────────────
+  // This pinned ticketmasterUrl by name. It is affiliateHref now, which asks
+  // the same question of every programme at once and is the whole reason his
+  // already-published entries could start earning without a redraft.
+  ok("the destination goes through the affiliate door", /const href = affiliateHref\(dest\) \|\| dest;/.test(detail));
+  ok("and the sentence comes from the same place", /const note = affiliateNote\(dest\);/.test(detail));
   // RAW SOURCE, not stripNonCode. It blanks string CONTENTS as well as comments
   // and JSX bodies, so a pattern quoting "noreferrer sponsored nofollow" matches
   // against an empty string and passes whatever the file says. This file's own
@@ -19317,10 +19322,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Three different things for him to do, so three different sentences. A
   // Studio that says "none found" when it means "found one and would not trust
   // it" sends him hunting by hand for something that is genuinely not there.
+  // Reworded on 23 Aug when Ticketmaster joined Tiqets: the first branch used to
+  // say "No Tiqets page found", which is the wrong sentence to print when the
+  // reason there is no link might be that neither agent sells it.
   ok("no page at all is its own answer",
-    /do not have one/.test(describeTicketSearch([], { name: "Asaa Havn" })));
-  ok("a category-only result says so",
-    /only category listings/.test(describeTicketSearch([{ url: CATEGORY, title: "x" }], { name: "Rosenborg Slot" })));
+    /no ticket link is the right answer/.test(describeTicketSearch([], { name: "Asaa Havn" })));
+  ok("and it names both agents rather than only the one it started with",
+    /Tiqets or Ticketmaster/.test(describeTicketSearch([], { name: "Asaa Havn" })));
+  ok("a listing-only result says so",
+    /only listings and category pages/.test(describeTicketSearch([{ url: CATEGORY, title: "x" }], { name: "Rosenborg Slot" })));
   ok("and a bookable page that does not match says that instead",
     /none of them is clearly about/.test(describeTicketSearch([rosenborg], { name: "Asaa Havn", town: "Asaa" })));
   // The three branches must be three different sentences, or the distinction
@@ -19368,12 +19378,29 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   ok("the detail page offers the ticket", /🎫 Book tickets/.test(detail));
-  ok("tracked at render rather than at publish", /tiqetsUrl\(dest\)/.test(detail));
-  ok("and disclosed", /tiqetsDisclosure\(dest\)/.test(detail));
+  ok("tracked at render rather than at publish", /affiliateHref\(dest\)/.test(detail));
+  ok("and disclosed from the same door", /affiliateNote\(dest\)/.test(detail));
   // ABSENT, NOT DEGRADED. A Tickets button falling back to a search is the
   // "something on the card so there is something on the card" failure with
   // money attached.
-  ok("and absent entirely when there is no ticket", /if \(!isTiqetsProductUrl\(dest\)\) return null;/.test(detail));
+  // Widened on 23 Aug from isTiqetsProductUrl to the agent lookup, so a stored
+  // Ticketmaster event page renders too. The RULE is unchanged and is the one
+  // being asserted: an unrecognised value renders no button at all rather than
+  // a bare link asking a reader for money.
+  ok("and absent entirely when there is no ticket",
+     /const agent = ticketAgentOf\(dest\);\s*\n\s*if \(!agent\) return null;/.test(stripComments(detail)));
+  // Each agent still gets its own template; the branch just moved into
+  // affiliateHref so every render site gets it rather than this one.
+  ok("each agent has its own template behind the door",
+     /for \(const wrap of \[ticketmasterUrl, tiqetsUrl\]\)/.test(readFileSync(join(root, "src/utils/affiliates.js"), "utf8")));
+  // ── AND THE ROW HE ALREADY PUBLISHED IS ENOUGH ──────────────────
+  // Koge Festuge and Copenhell were drafted before any of this and carry
+  // __ticket.url on the live row. Reading it here is what lights them up with
+  // no redraft, which is what he actually asked for.
+  ok("a listing already on the row becomes the button with no republish",
+     /isBookableTicketUrl\(item\?\.__ticket\?\.url\) \? String\(item\.__ticket\.url\)\.trim\(\) : ""/.test(detail));
+  ok("and a hand-corrected ticketUrl still wins over it",
+     /String\(item\.ticketUrl \|\| ""\)\.trim\(\)\s*\n?\s*\|\|/.test(detail));
 }
 
 // ── "IT HAS TO BE RANDOMS, BUT IT HAS TO START ON A FACT" ────────────
@@ -23086,6 +23113,237 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and the note carries no dash", !/[–—]/.test(EX_NOTE));
 }
 
+// ── THE TICKET LINK NOW HAS A PRODUCER ─────────────────────────────
+//
+// Oliver, 23 Aug 2026: "There is no links on any of my events though." And
+// then: "Make it so if an event is ticketmaster, then it puts affiliate link
+// into the address."
+//
+// `ticketUrl` had three occurrences in the whole app: read once in DetailPage,
+// filtered once in shapeForLive, and WRITTEN BY NOTHING. The Tickets button was
+// unreachable on every entry ever published, and the gate accepted a Tiqets
+// product page only, so the affiliate approved that evening had no field to
+// live in. `ticketLink.js` was dead in the same way: pickTicketUrl, ticketQuery,
+// ticketMatches and describeTicketSearch were called from nowhere in src/ or
+// api/, with 21 assertions covering a module nothing ran.
+//
+// Two producers now, in priority order, and both were already holding the
+// answer:
+//   1. __ticket.url, the Ticketmaster listing stampTicketSource has stored
+//      since 13 August on a strong match, read until tonight only by a findings
+//      message telling him to open it by hand.
+//   2. pickTicketUrl over pagesByUrl, every page the run already read, so a
+//      Tiqets product page or an unmatched Ticketmaster event still becomes a
+//      link with no extra call.
+{
+  const { isBookableTicketUrl: bookable, ticketAgentOf: agentOf, pickTicketUrl: pick } = M;
+  const appT = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const shape = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+
+  // ── THE GATE TAKES BOTH AGENTS AND STILL REFUSES THE REST ───────
+  for (const [url, want] of [
+    ["https://www.ticketmaster.dk/event/tonder-festival-billetter/1234567", "ticketmaster"],
+    ["https://www.ticketmaster.com/event/0E005F1234", "ticketmaster"],
+    ["https://www.livenation.dk/show/999", "ticketmaster"],
+    ["https://www.tiqets.com/en/copenhagen-attractions-c113/tickets-for-rosenborg-castle-p974091/", "tiqets"],
+  ]) {
+    ok(`${url.split("/")[2]} event page is bookable`, bookable(url));
+    is("and names its agent", agentOf(url), want);
+  }
+  // The refusals are the point of the file and the generic Impact link he was
+  // given was the front page, which is the first of these.
+  for (const url of ["https://www.ticketmaster.dk",
+                     "https://www.ticketmaster.dk/search?q=tonder",
+                     "https://www.ticketmaster.dk/artist/some-band",
+                     "https://www.tiqets.com/en/copenhagen-attractions-c113/",
+                     "https://www.billetlugen.dk/event/1"]) {
+    ok(`refused: ${url.replace("https://www.", "")}`, !bookable(url));
+    is("and named as no agent", agentOf(url), "");
+  }
+
+  // ── THE PUBLISH GATE ASKS THE WIDER QUESTION ────────────────────
+  ok("shapeForLive stores either agent", /if \(isBookableTicketUrl\(t\?\.ticketUrl\)\)/.test(shape));
+  ok("and no longer only Tiqets", !/if \(isTiqetsProductUrl\(t\?\.ticketUrl\)\)/.test(shape));
+
+  // ── PRODUCER ONE: THE CONFIRMED LISTING ─────────────────────────
+  ok("a confirmed Ticketmaster listing becomes the ticket link",
+     /if \(!String\(t\.ticketUrl \|\| ""\)\.trim\(\) && isBookableTicketUrl\(t\?\.__ticket\?\.url\)\)/.test(appT));
+  // __ticket.url is only set on a strong match, which is the guard that keeps a
+  // Tickets button off the wrong edition of a festival.
+  ok("and __ticket.url is only written on a strong match",
+     /url: rec\?\.confidence === "strong"/.test(readFileSync(join(root, "src/utils/tickets.js"), "utf8")));
+
+  // ── PRODUCER TWO: THE PAGES ALREADY READ ────────────────────────
+  ok("the picker is finally called", /const picked = pickTicketUrl\(candidates, \{ name, town: draftTown \}\);/.test(appT));
+  ok("over the pages this run already fetched",
+     /Object\.keys\(pagesByUrl\)\.map\(u => \(\{ url: u, snippet:/.test(appT));
+  ok("and it only runs when nothing better was found",
+     /if \(!String\(t\.ticketUrl \|\| ""\)\.trim\(\)\) \{[\s\S]{0,200}pickTicketUrl\(/.test(appT));
+  ok("with the reason journalled when it finds nothing", /describeTicketSearch\(candidates/.test(appT));
+
+  // ── AND THE PICKER STILL REFUSES RATHER THAN GUESSES ────────────
+  {
+    const pages = [
+      { url: "https://www.ticketmaster.dk/search?q=tonder", snippet: "Tønder Festival billetter" },
+      { url: "https://www.visittonder.dk/", snippet: "Tønder Festival er en af Danmarks ældste" },
+      { url: "https://www.ticketmaster.dk/event/tonder-festival-2027/9988776", snippet: "Tønder Festival 2027, Tønder. Køb billetter." },
+    ];
+    is("it picks the event page over the search page and the tourist board",
+       pick(pages, { name: "Tønder Festival", town: "Tønder" }),
+       "https://www.ticketmaster.dk/event/tonder-festival-2027/9988776");
+    is("and picks nothing at all when no page is about this entry",
+       pick(pages, { name: "Asaa Havn", town: "Asaa" }), null);
+    is("nor from pages that sell nothing", pick([pages[0], pages[1]], { name: "Tønder Festival", town: "Tønder" }), null);
+  }
+
+  // ── AND THE STORED VALUE IS PLAIN, TRACKED AT RENDER ────────────
+  // The same rule the Tiqets field already follows, and the reason his approval
+  // needed no database migration: a marker can change without touching a row.
+  ok("the plain listing is what gets stored", /t\.ticketUrl = String\(t\.__ticket\.url\)\.trim\(\);/.test(appT));
+  ok("and nothing writes a tracking template onto a draft",
+     !/ticketUrl = ticketmasterUrl\(|ticketUrl = tiqetsUrl\(/.test(stripComments(appT)));
+}
+
+// ── ONE DOOR, AND THE INVARIANT THAT MAKES IT SAFE ─────────────────
+//
+// Oliver, 23 Aug 2026: "is it possible to put in affiliate links on these? Like
+// automatically enable affiliate links if I am affiliated to the place."
+//
+// affiliateHref is that question asked once. Every wrapper it composes is gated
+// on its template being read at RENDER, so the day a programme is approved
+// every entry ever published starts earning through it with no migration and no
+// republish, and the day one ends they all go back to ordinary links.
+//
+// THE INVARIANT IS THE POINT: a link that comes out tracked always has a
+// sentence to put under it. Asserted as a property over the whole matrix rather
+// than case by case, because the failure that costs a programme is one link
+// somewhere that got wrapped and said nothing.
+{
+  const { affiliateHref: href, affiliateNote: note, isAffiliateHref: paid } = M;
+  const URLS = [
+    "https://www.ticketmaster.dk/event/copenhell-2027/998877",
+    "https://www.ticketmaster.com/event/0E005F1234",
+    "https://www.livenation.dk/show/999",
+    "https://www.tiqets.com/en/copenhagen-attractions-c113/tickets-for-rosenborg-castle-p974091/",
+    "https://www.copenhell.dk/",
+    "https://www.billetlugen.dk/event/1",
+    "https://www.visitdenmark.dk/",
+  ];
+  const silentlyPaid = URLS.filter(u => paid(u) && !note(u));
+  is("nothing comes out tracked without a sentence to put under it", silentlyPaid, []);
+  const notedButFree = URLS.filter(u => !paid(u) && note(u));
+  is("and nothing claims a commission on a link that earns none", notedButFree, []);
+  // At least one of each, or the matrix proves nothing.
+  ok("the matrix contains a tracked link", URLS.some(paid));
+  ok("and an untracked one", URLS.some(u => !paid(u)));
+
+  // A partner's own site is NOT a partner link. copenhell.dk is where the
+  // festival lives and no programme covers it, so it passes through untouched
+  // and says nothing, which is the honest answer and the common case.
+  is("a festival's own site is left exactly as it is",
+     href("https://www.copenhell.dk/"), "https://www.copenhell.dk/");
+  is("and carries no disclosure", note("https://www.copenhell.dk/"), "");
+  // The contract both wrappers already had, kept at the door: null means "this
+  // is not a link", never "this is not a partner".
+  is("something that is not a link is refused rather than passed through", href("copenhell.dk"), null);
+  is("and so is nothing at all", href(""), null);
+
+  // ── THE PROPERTY HE IS ACTUALLY BUYING ──────────────────────────
+  // A programme that is off wraps nothing and says nothing; the same link with
+  // the programme on wraps and discloses. Same URL, same code, config only.
+  {
+    const { ticketmasterUrl: tmUrl, ticketDisclosure: tmNote } = M;
+    const EV = "https://www.ticketmaster.dk/event/copenhell-2027/998877";
+    is("with no template the link is untouched", tmUrl(EV, ""), EV);
+    is("and says nothing", tmNote(EV, ""), "");
+    ok("with one it is wrapped", tmUrl(EV, "https://x.example/c/1/2/3?u={url}") !== EV);
+    ok("and the destination survives the wrap",
+       decodeURIComponent(tmUrl(EV, "https://x.example/c/1/2/3?u={url}")).includes(EV));
+    ok("and it says so", !!tmNote(EV, "https://x.example/c/1/2/3?u={url}"));
+  }
+}
+
+// ── NO TRACKED LINK WITHOUT ITS DISCLOSURE, ANYWHERE ───────────────
+//
+// Oliver, 23 Aug 2026, an hour after Ticketmaster approved him: "remember to
+// make an affiliate section!!!! ... Otherwise I'm fked."
+//
+// He is not. Terms clause 14 has covered this since 13 August, in four
+// sub-clauses, and privacy.html section 13 says the same in plain language. The
+// part a programme actually enforces is the disclosure AT THE POINT OF THE
+// LINK, and that renders under the button.
+//
+// The risk was never the wording. It is a future edit that wraps a link in an
+// affiliate template and forgets the sentence under it, which is a paid link
+// presented as an ordinary one. That is the thing that costs a programme, and
+// it is one careless render away at any time.
+//
+// So it is asked structurally and across the whole app: every file that wraps a
+// link must also compute the matching disclosure AND print it. "Computed and
+// never rendered" is the exact bug this codebase already caught once, which is
+// why printing is checked separately from computing.
+{
+  const RENDER_DIRS = ["src/components", "src/pages"];
+  const files = [];
+  for (const dir of RENDER_DIRS) {
+    for (const f of readdirSync(join(root, dir))) {
+      if (/\.jsx?$/.test(f)) files.push(join(dir, f).split(sep).join("/"));
+    }
+  }
+  files.push("src/App.jsx");
+  // wrapper -> the disclosure that has to accompany it
+  const PAIRS = [
+    ["ticketmasterUrl", "ticketDisclosure"],
+    ["tiqetsUrl", "tiqetsDisclosure"],
+    ["bookingUrl", "STAY_DISCLOSURE"],
+    ["carRentalUrl", "partnerDisclosure"],
+    // The shared door, which is what a render site should reach for now. Listed
+    // alongside the four rather than replacing them, because a file that still
+    // calls a specific wrapper is still a file that must disclose.
+    ["affiliateHref", "affiliateNote"],
+  ];
+  const undisclosed = [];
+  const unprinted = [];
+  for (const rel of files) {
+    const src = stripComments(readFileSync(join(root, rel), "utf8"));
+    for (const [wrap, tell] of PAIRS) {
+      if (!new RegExp(`\\b${wrap}\\(`).test(src)) continue;
+      if (!new RegExp(`\\b${tell}\\b`).test(src)) { undisclosed.push(`${rel}: calls ${wrap}() and never mentions ${tell}`); continue; }
+      // COMPUTED IS NOT PRINTED. The disclosure has to reach the tree, which in
+      // this codebase always means a brace holding the value.
+      const printed = /\{note && [\s\S]{0,200}\{note\}/.test(src)
+        || new RegExp(`\\{\\s*${tell}\\b`).test(src)
+        || /\{(?:note|disclosure|tell)\}/.test(src);
+      if (!printed) unprinted.push(`${rel}: computes ${tell} and never renders it`);
+    }
+  }
+  is("no file wraps a link in an affiliate template without its disclosure", undisclosed, []);
+  is("and none of them computes a disclosure it never prints", unprinted, []);
+  // The finder has to be able to find something, or an empty list means the
+  // scan broke rather than the app being clean.
+  ok("the scan actually looked at the file that does this",
+     files.includes("src/components/DetailPage.jsx"));
+  ok("and that file really does wrap links",
+     /\baffiliateHref\(/.test(readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8")));
+
+  // ── AND THE SENTENCE ITSELF SAYS THE TWO THINGS IT MUST ─────────
+  // A disclosure that says "we may earn a commission" and stops is worse than
+  // useless: the reader is left wondering whether it costs them more. Both
+  // programmes' wording carries the commission AND the no-extra-cost promise,
+  // which is also what terms clause 14.2 states.
+  {
+    const { ticketDisclosure: td, tiqetsDisclosure: tqd } = M;
+    const TM = "https://www.ticketmaster.dk/event/x/1";
+    const TQ = "https://www.tiqets.com/en/x-c1/tickets-for-y-p974091/";
+    for (const [what, said] of [["the Ticketmaster one", td(TM, "https://t.example/?u={url}")],
+                                ["the Tiqets one", tqd(TQ, "https://t.example/?u={url}")]]) {
+      ok(`${what} names the commission`, /commission/i.test(said));
+      ok(`${what} says it costs the reader nothing`, /costs you nothing|no cost to you/i.test(said));
+      ok(`${what} carries no dash`, !/[–—]/.test(said));
+    }
+  }
+}
+
 // ── A FACE, MATCHED TO THE SENTENCE ────────────────────────────────
 //
 // Oliver, 23 Aug 2026, after reading three registers side by side: "I think
@@ -24247,7 +24505,27 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("two real stops in one city are not the same place",
      !isSameSpot("Tivoli Gardens", "Nyhavn", geo, "Copenhagen", "Copenhagen"));
   ok("nor two cities", !isSameSpot("Tivoli Gardens", "Odense", geo, "Copenhagen", "Odense"));
-  is("three hundred metres is the line", SAME_SPOT_KM, 0.3);
+  // ── THE RULE, NOT THE NUMBER ────────────────────────────────────
+  // This pinned 0.3 and broke on 23 Aug when the constant moved to 0.12, on a
+  // change that was made BECAUSE 300 metres was wrong: a live guide told a
+  // reader there was "nothing to travel" between Design Museum Denmark and
+  // Amalienborg, which are 350 metres and a four minute walk apart.
+  //
+  // What the constant has to mean is "the same site", so it is asserted against
+  // the two things a site is: small enough that a courtyard counts, and well
+  // under the distance this product is willing to call a walk.
+  ok("the same-spot line is a site, not a neighbourhood", SAME_SPOT_KM <= 0.15);
+  ok("and not so small that one building has two entrances in it", SAME_SPOT_KM >= 0.05);
+  ok("it is far under the distance this product calls a walk", SAME_SPOT_KM < M.WALK_MAX_KM / 4);
+  // The case that moved it, measured rather than described. 350 m apart.
+  {
+    const bredgade = {
+      "Design Museum Denmark": { lat: 55.6866, lon: 12.5920 },
+      "Amalienborg": { lat: 55.6841, lon: 12.5934 },
+    };
+    ok("two paid attractions 350 m apart are not one place",
+       !isSameSpot("Design Museum Denmark", "Amalienborg", bredgade, "Copenhagen", "Copenhagen"));
+  }
   // With no coordinates at all the name is the only signal, and it has to be
   // strict: a shared first word is not a shared place.
   ok("with no coordinates, one name containing the other counts",
@@ -32398,6 +32676,55 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the account screen reports it", /cloudSyncOk \? ", synced to this account\." : /.test(accountPage));
   ok("and says what it means for them", /on this device only/.test(accountPage));
   ok("and App.jsx hands it the answer", /cloudSyncOk=\{cloudSyncOk\}/.test(app));
+}
+
+// ── A DEVELOPER NOTE WAS RENDERING ON THE LIVE SITE ───────────────────
+// The weather strip's failure state told the reader it could not fetch
+// weather, and then told them to check that /api/weather.js was deployed
+// with a working User-Agent.
+//
+// That is a message to whoever wrote the endpoint, printed to a traveller on
+// the Essentials page and in the header strip. Not a crash, not an error
+// anywhere, just an instruction to a developer sitting in a reader's forecast.
+//
+// The rule is tighter than the one string, because one string is what this
+// codebase keeps catching one at a time. A component never needs the FILENAME
+// of an endpoint: it fetches "/api/weather", extensionless, because that is
+// what the route is. So a path of the shape /api/<name>.js inside a .jsx file
+// is always either a leaked developer note or a fetch that would 404, and
+// neither belongs in rendered output.
+//
+// Comments are stripped first, deliberately and in both directions: the fix's
+// own comment quotes the old string verbatim, so a raw scan would stay green
+// on a file that had never been fixed. This is the ninth time in this suite
+// that a comment could have answered for the code it sits above.
+{
+  const jsxFiles = [];
+  const walkJsx = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) { if (name !== "node_modules") walkJsx(full); }
+      else if (name.endsWith(".jsx")) jsxFiles.push(full);
+    }
+  };
+  walkJsx(join(root, "src"));
+  ok("there are .jsx files to scan", jsxFiles.length > 10);
+
+  const leaks = jsxFiles.filter(f => /\/api\/[a-z-]+\.js\b/.test(stripComments(readFileSync(f, "utf8"))));
+  is("no rendered string names an endpoint's source file", leaks.map(f => f.slice(root.length + 1)), []);
+
+  // And the specific sentence, by its shape rather than its wording, so that
+  // rephrasing it does not quietly restore a developer instruction.
+  const ws = stripComments(readFileSync(join(root, "src/components/WeatherStrip.jsx"), "utf8"));
+  ok("the strip no longer tells the reader to check a deployment", !/is deployed with/.test(ws));
+  ok("nor names a User-Agent at them", !/User-Agent/.test(ws));
+
+  // What it says instead has to do the one job the old string did not: stop a
+  // reader reading a failed request as a claim about the weather. The same
+  // rule ReviewsSection already keeps about a failed reviews read.
+  ok("a failed forecast read says the load failed", /could not be loaded just now/.test(ws));
+  ok("and refuses to be read as a quiet spell", /not a quiet spell/.test(ws));
+  ok("and points somewhere real", /DMI or Yr/.test(ws));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

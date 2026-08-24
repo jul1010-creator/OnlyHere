@@ -36,7 +36,7 @@
 //                               solves exactly this for research sources and
 //                               already knows that an ordinary name like
 //                               "Harbour" needs corroborating.
-import { isTiqetsUrl } from "./affiliates";
+import { isTiqetsUrl, isTicketmasterUrl } from "./affiliates";
 import { sourceIsAboutPlace } from "./sourcePolicy";
 
 // ── WHICH TIQETS PAGES ARE WORTH LINKING TO ─────────────────────────
@@ -78,6 +78,47 @@ export const tiqetsPageKind = (url) => {
   return "other";
 };
 
+// ── AND THE SAME QUESTION FOR TICKETMASTER ──────────────────────────
+//
+// 23 Aug 2026, an hour after Impact approved him: "There is no links on any of
+// my events though."
+//
+// He was right, and the reason was worse than a missing field. `ticketUrl` was
+// read in DetailPage, filtered here in shapeForLive, and WRITTEN BY NOTHING:
+// three occurrences in the whole app and no producer among them. The Tickets
+// button was unreachable on every entry ever published. And the one gate that
+// existed accepted a Tiqets product page and nothing else, so the affiliate he
+// had just been approved for had no field to live in.
+//
+// THE REFUSALS ARE THE SAME ONES, because the risk is the same one. A category
+// page on Tiqets sells nothing and sends a reader back to a search; the
+// equivalents here are the front page, a search results page, and an artist or
+// venue page that lists shows without being one. A Tickets button pointing at
+// Ticketmaster's home page is the failure the whole file exists to prevent, and
+// it is exactly what the generic Impact link he was given would have produced.
+//
+// livenation is included because his own TICKETMASTER_HOSTS covers it and the
+// programme does, and its bookable page is /show/<id> rather than /event/<id>.
+const TICKET_EVENT_PATH = /\/(?:event|show)\/[^/?#]+/i;
+
+const pathOf = (url) => {
+  try { return new URL(String(url || "").trim()).pathname || ""; } catch { return ""; }
+};
+
+export const isTicketmasterEventUrl = (url) =>
+  isTicketmasterUrl(url) && TICKET_EVENT_PATH.test(pathOf(url));
+
+// ── ONE QUESTION, ASKED IN ONE PLACE ────────────────────────────────
+// Everything downstream asks "may this be stored and shown as a ticket link",
+// never "is this Tiqets". Adding a third agent later is a line here rather than
+// an edit in the publish gate, the render and the picker.
+export const isBookableTicketUrl = (url) =>
+  isTiqetsProductUrl(url) || isTicketmasterEventUrl(url);
+
+// Which agent it is, for the render, which has to reach for the right template.
+export const ticketAgentOf = (url) =>
+  isTiqetsProductUrl(url) ? "tiqets" : isTicketmasterEventUrl(url) ? "ticketmaster" : "";
+
 // ── AND IS IT ABOUT THE PLACE THIS ENTRY IS ABOUT ───────────────────
 // sourceIsAboutPlace, not a name comparison written here. It is the function
 // the research pipeline already uses to decide whether a page it found is about
@@ -90,11 +131,21 @@ export const tiqetsPageKind = (url) => {
 // text that never repeats the venue name, while the slug always carries it:
 // "tickets-for-rosenborg-castle-p974091" says Rosenborg even when the blurb
 // only says "skip the line".
-const slugWords = (url) => lastSegment(url).replace(/-[pl]\d+$/, "").replace(/-/g, " ");
+// The trailing id is stripped for both agents: Tiqets ends -p974091, and a
+// Danish Ticketmaster event ends /<slug>/1234567, so the id is the whole last
+// segment and the words are in the one before it.
+const slugWords = (url) => {
+  const last = lastSegment(url);
+  if (/^\d+$/.test(last)) {
+    const parts = pathOf(url).split("/").filter(Boolean);
+    return (parts[parts.length - 2] || "").replace(/-/g, " ");
+  }
+  return last.replace(/-[pl]\d+$/, "").replace(/-/g, " ");
+};
 
 export const ticketMatches = (result, { name, town } = {}) => {
   const url = String(result?.url || "").trim();
-  if (!isTiqetsProductUrl(url)) return false;
+  if (!isBookableTicketUrl(url)) return false;
   const said = [result?.title, result?.snippet, slugWords(url)].filter(Boolean).join(" ");
   return sourceIsAboutPlace(said, { name, town, url });
 };
@@ -113,6 +164,9 @@ export const pickTicketUrl = (results, { name, town } = {}) => {
   const list = (Array.isArray(results) ? results : []).filter(r => r?.url);
   const ok = list.filter(r => ticketMatches(r, { name, town }));
   if (!ok.length) return null;
+  // Unchanged for Tiqets. A Ticketmaster event page has no venue-versus-product
+  // distinction to break a tie with, so it simply keeps the order it came back
+  // in, which is what the paragraph above already says to do.
   const venue = ok.find(r => tiqetsPageKind(r.url) === "venue");
   return (venue || ok[0]).url;
 };
@@ -123,11 +177,11 @@ export const pickTicketUrl = (results, { name, town } = {}) => {
 // find it by hand, accept that there is no ticket, or fix the name.
 export const describeTicketSearch = (results, { name, town } = {}) => {
   const list = (Array.isArray(results) ? results : []).filter(r => r?.url);
-  const tiqets = list.filter(r => isTiqetsUrl(r.url));
-  if (!tiqets.length) return `No Tiqets page found for ${name || "this"}. Plenty of Danish places do not have one, and no ticket link is the right answer for those.`;
-  const bookable = tiqets.filter(r => isTiqetsProductUrl(r.url));
-  if (!bookable.length) return `Tiqets has pages mentioning ${name || "this"}, but only category listings, which sell nothing. Left empty rather than sending a reader back to a search.`;
-  return `Found ${bookable.length} bookable Tiqets page${bookable.length === 1 ? "" : "s"}, and none of them is clearly about ${name || "this place"}${town ? ` in ${town}` : ""}. Left empty rather than guessing. Paste one by hand if you know which is right.`;
+  const onAnAgent = list.filter(r => isTiqetsUrl(r.url) || isTicketmasterUrl(r.url));
+  if (!onAnAgent.length) return `No ticket page found for ${name || "this"} on Tiqets or Ticketmaster. Plenty of Danish events sell through their own site or a local agent, and no ticket link is the right answer for those.`;
+  const bookable = onAnAgent.filter(r => isBookableTicketUrl(r.url));
+  if (!bookable.length) return `There are pages mentioning ${name || "this"}, but only listings and category pages, which sell nothing. Left empty rather than sending a reader back to a search.`;
+  return `Found ${bookable.length} bookable page${bookable.length === 1 ? "" : "s"}, and none of them is clearly about ${name || "this place"}${town ? ` in ${town}` : ""}. Left empty rather than guessing. Paste one by hand if you know which is right.`;
 };
 
 // The search a lookup should run. One query, phrased so the engine has to find
@@ -136,3 +190,11 @@ export const describeTicketSearch = (results, { name, town } = {}) => {
 // above will look for anyway.
 export const ticketQuery = (name, town) =>
   `site:tiqets.com "${String(name || "").trim()}"${town ? ` ${String(town).trim()}` : ""} tickets`;
+
+// Both agents, because one query per host is what a search engine answers well
+// and a combined OR query is what it answers badly. The caller runs them in
+// order and stops at the first that yields a bookable page.
+export const ticketQueries = (name, town) => [
+  ticketQuery(name, town),
+  `site:ticketmaster.dk "${String(name || "").trim()}"${town ? ` ${String(town).trim()}` : ""} billetter`,
+];
