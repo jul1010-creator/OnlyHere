@@ -467,6 +467,83 @@ is the proposition. Rank the regions accordingly.
 
 ---
 
+## Every Danish island was being called mainland
+
+Gemini fact-checked a Bybjerg draft and said the routing was physically
+impossible. It was right, and the cause is worse than one entry.
+
+`classifyFerry` decides whether a ferry on a driving route is required or a
+shortcut, by re-querying with `avoid=ferries`. **Google's `avoid` is a
+preference, not a constraint.** When it cannot honour the restriction it relaxes
+it and returns the ferry route anyway, with no error field to notice.
+
+Measured against the live `/api/directions`, driving from Copenhagen with
+ferries banned:
+
+| | banned-ferry result | |
+| --- | --- | --- |
+| Orø | 86m, 67.6 km | still on a ferry |
+| Samsø | 192m, 142 km | still on a ferry |
+| Fanø | 228m, 305 km | still on a ferry |
+| Ærø | 225m, 242 km | still on a ferry, and 49 km longer |
+| Bornholm | 242m, 165 km | still on a ferry |
+| Endelave | 272m, 293 km | still on a ferry |
+| Aarhus | 211m, 310 km | a real land route |
+
+Aarhus is the case this function was written for on 6 August and it still works.
+**Every genuine island was wrong**, which is every island entry this product has
+drafted. The Bybjerg draft carried a "PIPELINE CONTRADICTION, FIX BEFORE
+PUBLISHING" banner telling the founder to take the ferry out, and overrode the
+writer's correct "1h 26min + ferry" with a road figure.
+
+**The answer was already in the response and nothing read it.** The relaxed route
+still reports `hasFerry`. So the question is not "did a route come back", it is
+"does the route I was handed still cross water". Signature failure, new place.
+
+Not the identical-route test, which was the first thing tried: **Ærø** comes back
+49 km longer and still on a boat, so comparing durations would have left one
+island wrong while looking like it worked.
+
+REQUIRED rather than UNKNOWN, and `probeRelaxed` records which way it concluded,
+because the rule directly above deliberately refuses to infer an island from a
+failed call. This is not a failed call: Google searched, could not build a
+ferry-free route, and relaxed the restriction to answer at all.
+
+**The suite had ferry coverage and all of it passed, before and after.** Not one
+case fed a probe that came back still on a ferry. The tests described the
+failure modes somebody imagined; the real one was a success response.
+
+## And the price citation points at the wrong page
+
+Gemini also said the Bybjerg admission price was wrong. **It was not.**
+`oroeminder.dk/museet/aabningstider-og-entre/` states it verbatim: *"Entré 20
+kroner for personer over 12 år. Børn under 12 år i selskab med voksne har gratis
+adgang."* Plus the 50 kr out-of-hours fee. The draft was right on every figure.
+
+**What Gemini got right is that the citation names the wrong page.** The run
+report says "20-20 DKK is on oroe.dk, the highest-ranked page read that states
+it: `/oplev-oroe/kultur-og-sevaerdigheder`". The figure is not on that page.
+
+The chain is visible in the run report and it starts one step earlier. Step 17,
+source freshness, read `oroeminder.dk` as **about 236 months old** and kept it as
+"background only". That is roughly twenty years, and the page carries a current
+season and current prices, so the date detection is wrong about the one
+authoritative source. Demoted, it could not carry the citation, so the price
+provenance fell to the highest-ranked page it had read that contained the
+number.
+
+**A citation pointing at a page that does not state the fact is worse than no
+citation**, because it is the product's whole promise wearing a receipt for
+something else. Not fixed in this pass. It wants the freshness reader looked at
+first, since that is the root, and then whether price provenance should refuse
+rather than fall back.
+
+Gemini's third claim, that the "little here" line is contradicted by an animal
+park and two galleries on `oroe.dk`, is **unverified**: that host refused a fetch
+and it has not been checked either way.
+
+---
+
 ## How this pass was checked
 
 The repo was mirrored into a sandbox and the suite and build were run there

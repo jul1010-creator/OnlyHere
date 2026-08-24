@@ -28,6 +28,56 @@ import { hostOf } from "./pageScan";
 
 const q = (s) => encodeURIComponent(String(s || "").trim());
 
+// ── THE LINE THIS FILE MUST NOT CROSS ───────────────────────────────
+//
+// Directive (EU) 2026/1024 rewrote the Package Travel Directive. Adopted
+// 29 April 2026, in force 28 May 2026, member states apply it from
+// 29 March 2029. It matters to this file now rather than in 2029, because what
+// it changed is the ARCHITECTURE that decides whether a website is a travel
+// organiser, and architecture is cheap to keep and expensive to unwind.
+//
+// LINKED TRAVEL ARRANGEMENTS ARE ABOLISHED as a separate, lighter category.
+// What used to be an LTA is now inside the definition of a package, and a
+// package makes the trader an ORGANISER: liable for the performance of the
+// whole trip, and required to hold insolvency protection covering travellers'
+// payments, repatriation, outstanding refunds and unredeemed vouchers.
+//
+// The condition that reaches a site like this one is the click-through limb.
+// A package now exists where separate contracts with different providers are
+// bought through linked online booking processes such that
+//
+//   THE FIRST TRADER TRANSMITS THE TRAVELLER'S PERSONAL DATA TO ANOTHER TRADER
+//   and within 24 hours of the first booking a further travel service is bought.
+//
+// So the thing that would make Gemlyx an organiser is not the affiliate money
+// and not the recommendation. It is HANDING THE TRAVELLER'S DETAILS ACROSS.
+//
+// ── WHAT THAT MEANS FOR THE BUILDERS BELOW ──────────────────────────
+//
+// Every link this file produces is an ordinary outbound link with a partner's
+// tracking marker on it. Nothing here carries a name, an email address, a phone
+// number, an account id or a booking reference, and nothing here posts a form
+// on somebody's behalf. That is what keeps these links a referral rather than a
+// linked booking process, and it is a property to defend rather than a detail.
+//
+// THE CLOSEST THING TO THE LINE IS ALREADY HERE, and it is worth naming
+// honestly rather than filing under safe. `bookingUrl` and `airbnbUrl` put the
+// traveller's DATES and PARTY SIZE into a search URL. A pre-filled search is a
+// long way from a pre-filled booking: no identifier crosses, the traveller
+// still searches, chooses and contracts on the other site, and dates alone do
+// not identify anybody. But it is the same direction of travel as the limb
+// above, and if a future version pre-fills a name, an email or a checkout, this
+// comment is the thing that should have stopped it.
+//
+// The "bookable itinerary" in the fifty point review is exactly that future
+// version. It is a good product idea and it is the one feature on the roadmap
+// that can turn this app into a travel organiser with an insolvency bond. Build
+// it as a handoff, never as a transfer.
+//
+// NOT LEGAL ADVICE, and the dates above are worth re-checking against the
+// Danish transposition when it lands. Recorded so the constraint is visible at
+// the point where it would be broken.
+
 // Dates are optional. A search with no dates is still a useful search, and a
 // half-filled date range is worse than none, so both must be present or neither.
 const dateRange = (checkin, checkout) =>

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { C } from "../utils/theme";
 import { stripDashes, stripMarkdown } from "../utils/helpers";
+import { aiDisclosureFor } from "../utils/aiDisclosure";
 import { readerLanguage } from "../utils/readerLanguage";
 
 // ── THE TRAVELER'S ASSISTANT ─────────────────────────────────────────
@@ -188,6 +189,25 @@ export const AskGemlyx = ({ session, item, kind, onSignIn, founder = false, near
       </div>
 
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+        {/* ── ARTICLE 50(1), AI ACT ───────────────────────────────
+            "from the start of the first interaction in a clear and
+            distinguishable manner". So it is the first thing in the scroller
+            and not a line in the header, because the header is chrome and a
+            reader's eye starts where the conversation starts.
+
+            ALWAYS, not only on an empty log. 50(1) says the start of the first
+            interaction, and this panel opens fresh on every entry page, so
+            "the first interaction" happens again each time somebody opens it.
+            Rendering it only at log.length === 0 would take it away the moment
+            they typed, which is the same mistake the founder gate two blocks
+            down already documents: a notice that has scrolled away is a notice
+            they do not have.
+
+            In the reader's language, because a clear sentence in a language
+            somebody does not read is not clear. See utils/aiDisclosure.js. */}
+        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, paddingBottom: 2 }}>
+          {aiDisclosureFor(typeof navigator === "undefined" ? null : navigator)}
+        </div>
         {log.length === 0 && (
           <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.65 }}>
             {/* ── SOUND PLEASED TO BE ASKED ──────────────────────────

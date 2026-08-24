@@ -100,13 +100,99 @@ const rank = (type) => {
 // codebase has done before, and it belongs at the bottom where it is visible
 // rather than filtered into nothing.
 export const groupLabel = (type) => TYPE_LABEL?.[type] || type || "(no type)";
+// ── WHEN WAS THIS TOUCHED ───────────────────────────────────────────
+//
+// Oliver, 24 Aug 2026: "We need a 'latest updated'."
+//
+// `gemlyx_content` has `created_at` and NO `updated_at`, so today the honest
+// answer to "latest updated" is "latest published". This reads `updated_at`
+// first and falls back, which means the day the column exists every row starts
+// telling the truth with no code change and no migration of the app.
+//
+// THE COLUMN SHOULD BE MAINTAINED BY THE DATABASE, NOT BY THIS APP. There are
+// several PATCH paths in App.jsx (publish, edit, media, credits, backfill, the
+// correction pass) and a rule that has to be remembered at six call sites is
+// this repo's signature failure with a timestamp on it. A trigger cannot be
+// forgotten:
+//
+//   ALTER TABLE gemlyx_content ADD COLUMN updated_at timestamptz DEFAULT now();
+//   UPDATE gemlyx_content SET updated_at = created_at WHERE updated_at IS NULL;
+//   CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS trigger AS $$
+//     BEGIN NEW.updated_at = now(); RETURN NEW; END;
+//   $$ LANGUAGE plpgsql;
+//   CREATE TRIGGER gemlyx_content_touch BEFORE UPDATE ON gemlyx_content
+//     FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+//
+// Until that runs, every stamp below is a created date and says so.
+export const rowStamp = (row) => {
+  const v = row?.updated_at || row?.created_at || null;
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isFinite(d.getTime()) ? d : null;
+};
+
+export const rowStampIsEdit = (row) => !!row?.updated_at;
+
+// Short, and in Danish collation order elsewhere, but a date is a date. The
+// year is dropped inside the current year, because twelve rows all saying 2026
+// is twelve pixels of nothing.
+export const stampLabel = (row, today = new Date()) => {
+  const d = rowStamp(row);
+  if (!d) return "";
+  const sameYear = d.getFullYear() === today.getFullYear();
+  const day = String(d.getDate()).padStart(2, "0");
+  const mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
+  return sameYear ? `${day} ${mon}` : `${day} ${mon} ${d.getFullYear()}`;
+};
+
+// ── AND WHETHER IT CAN SHOW ITS WORKING ─────────────────────────────
+//
+// Measured on the live table, 24 Aug 2026: 77 of 148 published entries carry no
+// __sources at all. Towns are the worst, 29 of 39, and towns are the front of
+// the product. `free` is nearly clean at 25 of 29.
+//
+// The cause is recorded in HowWeKnow.jsx: __sources was not on the
+// shapeForLive allow-list, so publish dropped it and "zero of 79 rows carried
+// the list". The fix stops new ones. It cannot recover the old ones, because
+// the URLs were never written down.
+//
+// Nothing false is printed on those pages: HowWeKnow renders nothing at all
+// rather than an empty panel. But the promise this product is built on is that
+// every place was checked against its own sources, and on half the library the
+// page cannot show it. That is a content debt, so it is counted here where the
+// content is managed rather than left as a thing somebody notices.
+export const hasSources = (row) =>
+  Array.isArray(row?.payload?.__sources) && row.payload.__sources.length > 0;
+
+export const SORTS = [
+  { id: "name", label: "Name" },
+  { id: "recent", label: "Newest" },
+];
+
+const byName = (a, b) =>
+  String(a?.payload?.name || "").localeCompare(String(b?.payload?.name || ""), "da");
+
+// Newest first. A row with no stamp sorts last rather than first, because an
+// unknown date pretending to be the newest is the kind of small wrongness that
+// makes somebody stop trusting the order.
+const byRecent = (a, b) => {
+  const da = rowStamp(a), db = rowStamp(b);
+  if (!da && !db) return byName(a, b);
+  if (!da) return 1;
+  if (!db) return -1;
+  return db.getTime() - da.getTime() || byName(a, b);
+};
+
+export const sortRows = (rows, sort = "name") =>
+  (Array.isArray(rows) ? rows : []).slice().sort(sort === "recent" ? byRecent : byName);
+
 
 // ── COUNT THE PROBLEMS, NOT JUST THE ROWS ───────────────────────────
 // "Towns (31)" is a fact. "Towns (31, 12 to look at)" is a decision. The second
 // number is the whole reason to open a group, so the caller passes in whatever
 // per-row finding function it already has rather than this file growing its own
 // idea of what a problem is. Seventh duplicated detector avoided.
-export const groupRows = (rows, problemsFor) => {
+export const groupRows = (rows, problemsFor, { sort = "name" } = {}) => {
   const by = new Map();
   (Array.isArray(rows) ? rows : []).forEach(r => {
     const type = r?.type || "";
@@ -121,8 +207,7 @@ export const groupRows = (rows, problemsFor) => {
     return {
       type,
       label: groupLabel(type),
-      rows: list.slice().sort((a, b) =>
-        String(a?.payload?.name || "").localeCompare(String(b?.payload?.name || ""), "da")),
+      rows: sortRows(list, sort),
       count: list.length,
       flagged: flagged.length,
       // A group with nothing wrong in it can stay shut and never be opened,
@@ -131,6 +216,7 @@ export const groupRows = (rows, problemsFor) => {
       clean: flagged.length === 0,
       unpublished: list.filter(r => !r?.published).length,
       noPhoto: list.filter(r => !r?.payload?.photo).length,
+      noSources: list.filter(r => !hasSources(r)).length,
     };
   });
 

@@ -81,6 +81,9 @@ writeFileSync(entry, `
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { cleanOffer, offerProblems, offerLive, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
+  export { AI_DISCLOSURE, aiDisclosure, aiDisclosureFor, AI_CHAT_SURFACES } from ${JSON.stringify(join(root, "src/utils/aiDisclosure.js"))};
+  export { SAFETY_CLAIM_FIELDS, claimIsSupported, unsupportedSafetyClaims, safetyClaimNote } from ${JSON.stringify(join(root, "src/utils/safetyClaims.js"))};
+  export { rowStamp, rowStampIsEdit, stampLabel, hasSources, sortRows, SORTS } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
   export { PAID_PLANS_LIVE } from ${JSON.stringify(join(root, "src/config.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
@@ -10776,7 +10779,13 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // `shown` rather than manageItems since 15 Aug: the list narrows to the
   // search and the counts above it do not. Anchored on the assignment so a
   // groupRows call somewhere else in the file cannot answer for this one.
-  ok("the panel groups the rows", /const groups = groupRows\(shown, problemsFor\)/.test(app8));
+  // Pinned on the FIRST ARGUMENT, not the whole call. The rule is that the
+  // groups are built from the narrowed list, and the previous version spelled
+  // out the full argument list, so adding a sort option in Aug 2026 broke it
+  // while the rule it guards was untouched. Around thirty assertions broke that
+  // way on 23 Aug; this is the same lesson arriving one more time.
+  ok("the panel groups the rows the search narrowed, not the whole library",
+    /const groups = groupRows\(shown\b/.test(app8) && !/const groups = groupRows\(manageItems\b/.test(app8));
   ok("and what it groups is what the search left", /const shown = filterRows\(manageItems, manageQuery\)/.test(app8));
   // Anchored on the toggle: a header that cannot collapse is a heading, not a group.
   ok("a group can be opened and shut", /setOpenGroups\(prev => \{ const n = new Set\(prev\); if \(n\.has\(g\.type\)\)/.test(app8));
@@ -33049,6 +33058,266 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     /blogBody[\s\S]{0,200}?\.find\(b => b\?\.type === "image"/.test(app));
   ok("and carries the credit in the same write, never as a second step",
     /photo: String\(own\.src\)\.trim\(\)[\s\S]{0,120}__photoCredit/.test(app));
+}
+
+// ── TWO EU RULES, ASSERTED WHERE THEY WOULD BE BROKEN ──────────────
+//
+// 24 Aug 2026. Oliver: "I want you to look up all the EU laws and regulations,
+// and then implement it into my app."
+//
+// Two of them reach the code rather than the legal pages, and both are here
+// because the failure is silent: nothing crashes, nothing looks wrong, and the
+// product is simply non-compliant until somebody notices.
+{
+  const { AI_DISCLOSURE, aiDisclosure, AI_CHAT_SURFACES } = M;
+
+  // ── AI ACT ARTICLE 50(1), IN FORCE SINCE 2 AUGUST 2026 ───────────
+  //
+  // "informed that they are interacting with an AI system... from the start of
+  // the first interaction... in a clear and distinguishable manner."
+  //
+  // Asserted as a RULE about every chat surface rather than as three string
+  // checks, because the failure mode is a fourth chat surface being added and
+  // nobody remembering. Same shape as the disclosure invariant in affiliates.js
+  // and the paid prop on DetailPage: ask it of all of them, always.
+  ok("there are chat surfaces to check", AI_CHAT_SURFACES.length >= 3);
+  const missing = AI_CHAT_SURFACES.filter(rel => {
+    const src = stripComments(readFileSync(join(root, rel), "utf8"));
+    return !/aiDisclosureFor\s*\(/.test(src);
+  });
+  is("every surface where a person types to a model discloses that it is an AI", missing, []);
+
+  // And it is the shared sentence, not a copy. A hardcoded "You are talking to
+  // an AI" in a render is a second place to change when the wording or the
+  // language list moves, and it is the one that gets missed.
+  const strays = AI_CHAT_SURFACES.filter(rel => {
+    const src = stripComments(readFileSync(join(root, rel), "utf8"));
+    return /You are talking to an AI/.test(src);
+  });
+  is("and no surface carries its own copy of the sentence", strays, []);
+
+  // The reader's language, because a clear sentence somebody cannot read is not
+  // clear. The six are the six travellerWords.js parses on the way in, and the
+  // assertion pins the RELATIONSHIP rather than the list, so adding a seventh
+  // language on the way in without one on the way out goes red.
+  {
+    const langs = Object.keys(AI_DISCLOSURE).sort();
+    is("the disclosure covers the six languages the intake reads", langs, ["da", "de", "en", "nl", "no", "sv"]);
+    ok("every one of them is a real sentence", langs.every(l => AI_DISCLOSURE[l].trim().length > 20));
+    ok("an unknown language still gets told, in English", aiDisclosure("fr") === AI_DISCLOSURE.en);
+    ok("and so does a missing one", aiDisclosure(null) === AI_DISCLOSURE.en);
+    ok("none of them carries a dash", langs.every(l => !/[–—]/.test(AI_DISCLOSURE[l])));
+  }
+
+  // ── DIRECTIVE (EU) 2026/1024, THE PACKAGE TRAVEL REWRITE ─────────
+  //
+  // Linked travel arrangements are abolished and folded into "package". The
+  // limb that reaches this app: separate contracts bought through linked online
+  // processes where THE FIRST TRADER TRANSMITS THE TRAVELLER'S PERSONAL DATA to
+  // another trader and a further travel service is bought within 24 hours.
+  // A package makes the trader an organiser, liable for the whole trip and
+  // required to hold insolvency protection.
+  //
+  // So the property to defend is not "we take no payment", it is "no personal
+  // data crosses in the link". Asserted by reading every query parameter this
+  // file can emit and refusing the identifying ones, rather than by naming the
+  // four builders that exist today.
+  {
+    const aff = readFileSync(join(root, "src/utils/affiliates.js"), "utf8");
+    const code = stripComments(aff);
+    const params = [...code.matchAll(/[?&]([a-zA-Z_][a-zA-Z0-9_]*)=/g)].map(m => m[1].toLowerCase());
+    const IDENTIFYING = /^(name|firstname|first_name|lastname|last_name|surname|email|e_mail|mail|phone|tel|mobile|address|postcode|zip|dob|birth|user|userid|user_id|customer|customerid|customer_id|account|token|booking_?ref|reference|guest|guests_?names?|passenger|traveller|traveler)$/;
+    const leaking = [...new Set(params.filter(p => IDENTIFYING.test(p)))];
+    is("no affiliate link carries anything that identifies the traveller", leaking, []);
+    ok("and there are parameters to have checked", params.length >= 4);
+
+    // The comment is load bearing. A future pass adding a pre-filled checkout
+    // would be a product decision with a legal consequence, and the only thing
+    // that makes that visible at the moment of writing it is this note sitting
+    // in the file. Pinned on the directive number, which is stable, rather than
+    // on a sentence, which is not.
+    ok("the constraint is written where it would be broken", /2026\/1024/.test(aff));
+    ok("and names what actually triggers it", /transmits the traveller's personal data/i.test(aff));
+  }
+}
+
+// ── LATEST UPDATED, AND WHICH DATE IT REALLY IS ────────────────────
+//
+// Oliver, 24 Aug 2026: "We need a 'latest updated'."
+//
+// gemlyx_content has created_at and NO updated_at. So the honest answer today
+// is "latest published", and the whole risk in this feature is a list that
+// calls a created date an update: a small wrongness in the one screen he uses
+// to decide what to work on next.
+{
+  const { rowStamp, rowStampIsEdit, stampLabel, hasSources, sortRows, SORTS } = M;
+  const row = (id, name, created, updated) => ({ id, payload: { name }, created_at: created, ...(updated ? { updated_at: updated } : {}) });
+
+  ok("a created row has a stamp", !!rowStamp(row(1, "Asaa", "2026-07-21T23:12:43Z")));
+  ok("and it is not called an edit", rowStampIsEdit(row(1, "Asaa", "2026-07-21T23:12:43Z")) === false);
+  ok("an updated row is", rowStampIsEdit(row(1, "Asaa", "2026-07-21T23:12:43Z", "2026-08-24T10:00:00Z")) === true);
+  ok("and updated_at wins when both exist",
+    rowStamp(row(1, "Asaa", "2026-07-21T23:12:43Z", "2026-08-24T10:00:00Z")).getTime()
+    === new Date("2026-08-24T10:00:00Z").getTime());
+  is("a row with neither has no stamp rather than a wrong one", rowStamp({ payload: {} }), null);
+  is("and no label", stampLabel({ payload: {} }), "");
+  ok("an unreadable date is refused, not rendered", rowStamp({ created_at: "sometime last summer" }) === null);
+
+  // Newest first, and a row with no date sorts LAST. An unknown date drifting
+  // to the top of a "Newest" list is the failure this whole block is about.
+  {
+    const rows = [
+      row(1, "Older", "2026-07-01T00:00:00Z"),
+      row(2, "Newest", "2026-08-20T00:00:00Z"),
+      row(3, "Undated", null),
+      row(4, "Middle", "2026-08-01T00:00:00Z"),
+    ];
+    is("newest first", sortRows(rows, "recent").map(r => r.payload.name), ["Newest", "Middle", "Older", "Undated"]);
+    is("and name is still the default", sortRows(rows).map(r => r.payload.name), ["Middle", "Newest", "Older", "Undated"]);
+    is("an unknown sort falls back to name rather than to nothing",
+      sortRows(rows, "banana").map(r => r.payload.name), sortRows(rows, "name").map(r => r.payload.name));
+  }
+  is("both orders are offered", SORTS.map(s2 => s2.id), ["name", "recent"]);
+
+  // ── AND WHETHER A ROW CAN SHOW ITS WORKING ──────────────────────
+  // 77 of 148 published entries carry no __sources, measured on the live table
+  // 24 Aug 2026. An empty array counts as none: a row that stored the key and
+  // nothing in it proves exactly as much as a row that stored neither.
+  ok("a row with sources says so", hasSources({ payload: { __sources: [{ url: "https://x.dk" }] } }));
+  ok("an empty array is not sources", !hasSources({ payload: { __sources: [] } }));
+  ok("and neither is a missing key", !hasSources({ payload: {} }));
+
+  // ── WIRED, AND SAYING WHICH DATE IT IS ──────────────────────────
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the manage list asks for a date at all", /select=id,type,payload,published,created_at/.test(app));
+    ok("the rows carry a stamp", /stampLabel\(row\)/.test(app));
+    // The load-bearing half. A stamp that says "updated" over a created date is
+    // worse than no stamp, so the word is chosen from the row rather than
+    // hardcoded, and this is what stops somebody simplifying it to one word.
+    ok("and the word is chosen from the row", /rowStampIsEdit\(row\)\s*\?\s*"updated"\s*:\s*"published"/.test(app));
+    ok("the sourceless rows are named in the list", /hasSources\(row\)/.test(app));
+    ok("and counted on the group", /g\.noSources/.test(app));
+    ok("the order can be changed", /setManageSort\(/.test(app) && /sort: manageSort/.test(app));
+  }
+}
+
+// ── EVERY DANISH ISLAND WAS BEING CALLED MAINLAND ──────────────────
+//
+// 24 Aug 2026. Gemini fact-checked a Bybjerg draft and said the routing was
+// physically impossible: Orø is an island in Isefjord with no bridge, and the
+// draft carried a pipeline banner telling the founder to remove the ferry.
+//
+// Measured against the live /api/directions the same evening, driving from
+// Copenhagen with ferries banned. Every one of these is a real island and every
+// one came back on a boat:
+//
+//   Orø 86m/67.6km, Samsø 192m/142km, Fanø 228m/305km, Ærø 225m/242km,
+//   Bornholm 242m/165km, Endelave 272m/293km   all hasFerry TRUE
+//   Aarhus 211m/310km hasFerry FALSE           a genuine land route
+//
+// Google's `avoid` is a preference. When it cannot honour it, it relaxes the
+// restriction and answers anyway, with no error field to notice.
+//
+// The suite had ferry coverage before this and all of it passed, both before
+// and after the fix, because not one case fed a probe that came back STILL ON A
+// FERRY. That is the shape worth remembering: the tests described the failure
+// modes somebody imagined, and the real one was a success response.
+{
+  const { classifyFerry, ferryFindings, FERRY } = M;
+  const sea = { durationMinutes: 86, durationText: "1 hour 26 mins", distanceText: "67.6 km", hasFerry: true };
+
+  // The six islands, by the shape the live API really returned.
+  const islands = [
+    ["Orø", { durationMinutes: 86, durationText: "1 hour 26 mins", distanceText: "67.6 km", hasFerry: true }],
+    ["Samsø", { durationMinutes: 192, distanceText: "142 km", hasFerry: true }],
+    ["Fanø", { durationMinutes: 228, distanceText: "305 km", hasFerry: true }],
+    // Ærø is the one that kills the obvious fix: 49 km longer than the base
+    // route and still on a boat, so comparing durations or distances would have
+    // left it wrong while looking like it worked.
+    ["Ærø", { durationMinutes: 225, distanceText: "242 km", hasFerry: true }],
+    ["Bornholm", { durationMinutes: 242, distanceText: "165 km", hasFerry: true }],
+    ["Endelave", { durationMinutes: 272, distanceText: "293 km", hasFerry: true }],
+  ];
+  const wrong = islands.filter(([, avoid]) => classifyFerry({ base: sea, avoid }).status !== FERRY.REQUIRED).map(([n]) => n);
+  is("a relaxed probe is a required ferry, on every island measured", wrong, []);
+  ok("and it records how it concluded that", classifyFerry({ base: sea, avoid: islands[0][1] }).probeRelaxed === true);
+
+  // Aarhus is the case this function was built for on 6 Aug, where the boat
+  // really is a shortcut. It has to keep working, or the fix traded one wrong
+  // answer for another.
+  {
+    const land = { durationMinutes: 211, durationText: "3 hours 31 mins", distanceText: "310 km", hasFerry: false };
+    const v = classifyFerry({ base: { durationMinutes: 188, hasFerry: true }, avoid: land });
+    is("a real land route is still an optional ferry", v.status, FERRY.OPTIONAL);
+    ok("and it is not marked relaxed", !v.probeRelaxed);
+    ok("and it still says what the boat saves", v.savedMinutes === 23);
+  }
+
+  // The refusals the 6 Aug rule already got right, unchanged.
+  is("no route at all is still required", classifyFerry({ base: sea, avoid: { error: "ZERO_RESULTS" } }).status, FERRY.REQUIRED);
+  is("a broken key still teaches nothing", classifyFerry({ base: sea, avoid: { error: "REQUEST_DENIED" } }).status, FERRY.UNKNOWN);
+  is("and a probe that never ran teaches nothing", classifyFerry({ base: sea, probeRan: false }).status, FERRY.UNKNOWN);
+  is("no ferry on the route is still none", classifyFerry({ base: { durationMinutes: 60, hasFerry: false }, avoid: {} }).status, FERRY.NONE);
+
+  // ── AND THE SENTENCE HAS TO DESCRIBE THE MEASUREMENT IT MADE ────
+  // There are two ways to reach REQUIRED now. A finding that tells the founder
+  // the API "returned no route at all" when it returned a route is a finding he
+  // cannot check against the run report, and the run report is the thing that
+  // made this bug findable in the first place.
+  {
+    const relaxed = ferryFindings(classifyFerry({ base: sea, avoid: islands[0][1] }));
+    const refused = ferryFindings(classifyFerry({ base: sea, avoid: { error: "ZERO_RESULTS" } }));
+    ok("the relaxed finding says a route came back on a ferry", /still crosses on a ferry/.test(relaxed));
+    ok("and does not claim no route came back", !/returned no route at all/.test(relaxed));
+    ok("the refused finding still says no route came back", /returned no route at all/.test(refused));
+    ok("both still forbid calling it unreachable", [relaxed, refused].every(t => /Never write that it is unreachable/.test(t)));
+  }
+}
+
+// ── AN ACCESS CLAIM NOBODY CHECKED ─────────────────────────────────
+//
+// 24 Aug 2026. MEASURED_FIELDS protects the six things the pipeline measures.
+// `accessibility` is not one of them and cannot be, because nothing measures
+// it: a model writes it, shapeForLive carries it, and the page prints it beside
+// figures that were traced to a page. A wrong opening hour costs an hour. A
+// wrong access claim costs a wheelchair user their afternoon abroad.
+{
+  const { SAFETY_CLAIM_FIELDS, claimIsSupported, unsupportedSafetyClaims, safetyClaimNote, MEASURED_FIELDS } = M;
+
+  // The premise, asserted rather than assumed, so this block explains itself if
+  // somebody later adds accessibility to the measured set and wonders why any
+  // of it exists.
+  ok("accessibility is not a measured field", !MEASURED_FIELDS.includes("accessibility"));
+  ok("and it is in the class that has to be supported", SAFETY_CLAIM_FIELDS.includes("accessibility"));
+
+  const bare = { name: "X", accessibility: "Step-free access throughout" };
+  is("a claim with nothing behind it is unsupported", unsupportedSafetyClaims(bare), ["accessibility"]);
+  ok("and the note names the field", /accessibility/.test(safetyClaimNote(bare)));
+  ok("and it is shouted in the form a rewrite may not delete", safetyClaimNote(bare).startsWith("CHECK BEFORE PUBLISHING"));
+
+  is("a claim with sources on the entry passes",
+    unsupportedSafetyClaims({ ...bare, __sources: [{ url: "https://x.dk" }] }), []);
+  is("so does one with its own recorded source",
+    unsupportedSafetyClaims({ ...bare, __accessibilitySource: "https://x.dk/adgang" }), []);
+
+  // SAYING NOTHING IS NOT A PROBLEM. The rule is about claims made, never about
+  // claims missing, which is the distinction absenceClaims already keeps: an
+  // empty field means the pipeline does not know, and demanding a source for
+  // silence would push a writer to invent something to satisfy the gate.
+  is("an entry that claims nothing has nothing to answer for", unsupportedSafetyClaims({ name: "X" }), []);
+  is("and gets no note", safetyClaimNote({ name: "X" }), "");
+  ok("whitespace is not a claim", claimIsSupported({ accessibility: "   " }, "accessibility"));
+
+  // ── WIRED, AND INTO THE DRAFT RATHER THAN A TOAST ───────────────
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("publish asks the question", /safetyClaimNote\(shaped\)/.test(app));
+    // A toast is gone in 900ms; this has to survive until somebody acts on it.
+    ok("and the answer lands in the draft's uncertainties", /shaped\.uncertainties = \[note, \.\.\.existing\]/.test(app));
+    // Twice through the same publish would otherwise stack the same paragraph.
+    ok("and it cannot be added twice", /startsWith\("CHECK BEFORE PUBLISHING: this entry states"\)/.test(app));
+  }
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

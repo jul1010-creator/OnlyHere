@@ -58,6 +58,52 @@ export const classifyFerry = ({ base, avoid, probeRan = true } = {}) => {
   }
   if (!avoid || !Number.isFinite(Number(avoid.durationMinutes))) return { status: FERRY.UNKNOWN };
 
+  // ── AND A ROUTE CAME BACK IS NOT A LAND ROUTE EXISTS ─────────────
+  //
+  // 24 Aug 2026, found by Gemini on a Bybjerg draft and then measured against
+  // the live endpoint. Orø is an island in Isefjord with no bridge, and this
+  // function called its ferry OPTIONAL. The pipeline then printed a
+  // "PIPELINE CONTRADICTION, FIX BEFORE PUBLISHING" banner telling the founder
+  // to take the ferry out of the getting-there text, and overrode the writer's
+  // correct "1h 26min + ferry" with a road figure.
+  //
+  // GOOGLE'S `avoid` IS A PREFERENCE, NOT A CONSTRAINT. When it cannot satisfy
+  // the restriction it relaxes it and returns the ferry route anyway, with no
+  // error and no warning. Measured from Copenhagen on 24 Aug, driving, with
+  // ferries banned:
+  //
+  //   Orø        86m  67.6 km  hasFerry TRUE   identical to the base route
+  //   Samsø     192m   142 km  hasFerry TRUE   identical
+  //   Fanø      228m   305 km  hasFerry TRUE   identical
+  //   Ærø       225m   242 km  hasFerry TRUE   NOT identical, 49 km longer
+  //   Bornholm  242m   165 km  hasFerry TRUE   identical
+  //   Endelave  272m   293 km  hasFerry TRUE   identical
+  //   Aarhus    211m   310 km  hasFerry FALSE  a real land route, 23m slower
+  //
+  // Aarhus is the case this function was written for on 6 Aug and it still
+  // works. Every genuine island was wrong, which is every island entry this
+  // product has ever drafted.
+  //
+  // THE ANSWER WAS ALREADY IN THE RESPONSE AND NOBODY READ IT. The relaxed
+  // route still reports hasFerry. So the question to ask is not "did a route
+  // come back", it is "does the route I was handed still cross water", which is
+  // this codebase's signature failure again: a check that answers a nearby
+  // question.
+  //
+  // NOT the identical-route test, which was the first thing tried. Ærø came
+  // back 49 km longer and still on a boat, so comparing durations would have
+  // left one island wrong and looked like it worked.
+  //
+  // REQUIRED rather than UNKNOWN, and the reasoning is worth stating because
+  // the rule directly above deliberately refuses to infer an island from a
+  // failed call. This is not a failed call. Google searched, could not build a
+  // ferry-free route, and relaxed the restriction to answer at all, which is
+  // the same finding ZERO_RESULTS carries and arrived at by a different road.
+  // `probeRelaxed` records which way it was concluded, so the day somebody
+  // wants to tighten this they can see it without rediscovering the measurement.
+  const avoidStillCrosses = !!(avoid.hasFerry || (avoid.ferries || []).length > 0);
+  if (avoidStillCrosses) return { status: FERRY.REQUIRED, probeRelaxed: true };
+
   const landMinutes = Number(avoid.durationMinutes);
   const seaMinutes = Number(base.durationMinutes);
   return {
@@ -79,7 +125,14 @@ export const ferryFindings = (verdict, namedFerries = []) => {
     : "";
 
   if (verdict.status === FERRY.REQUIRED) {
-    return `FERRY REQUIRED, MEASURED NOT GUESSED: the routing API was asked for the same driving route with ferries banned and returned no route at all, so there is no road connection. This place is reached by boat. ${namedText}Never write that it is unreachable or that no public transport exists: a required crossing means a real scheduled service runs. If the crossing is not named above, research the operator's own site and name both ports, or say plainly that the operator should be checked. Do not invent a route.`;
+    // Two ways to arrive here and the sentence has to be true of both, because
+    // a finding that describes the wrong measurement is a finding a founder
+    // cannot check. Google either refused to route at all, or relaxed the
+    // restriction and handed back a route still crossing water.
+    const how = verdict.probeRelaxed
+      ? "returned a route that still crosses on a ferry, which is what it does when it cannot honour the restriction"
+      : "returned no route at all";
+    return `FERRY REQUIRED, MEASURED NOT GUESSED: the routing API was asked for the same driving route with ferries banned and ${how}, so there is no road connection. This place is reached by boat. ${namedText}Never write that it is unreachable or that no public transport exists: a required crossing means a real scheduled service runs. If the crossing is not named above, research the operator's own site and name both ports, or say plainly that the operator should be checked. Do not invent a route.`;
   }
   if (verdict.status === FERRY.OPTIONAL) {
     return `THE FERRY ON THIS ROUTE IS OPTIONAL, NOT REQUIRED, and this was measured: the fastest driving route uses a ferry, but the same query with ferries banned still returns a road route${verdict.landDurationText ? ` (${verdict.landDurationText}${verdict.landDistanceText ? `, ${verdict.landDistanceText}` : ""})` : ""}, so the place is connected by road${verdict.savedMinutes && verdict.savedMinutes > 0 ? ` and the boat only saves about ${verdict.savedMinutes} minutes` : ""}. ${namedText}DO NOT call this place an island, do not say a ferry is needed to reach it, and do not build the getting-there text around a crossing. You may mention the ferry as an optional shortcut for drivers, clearly labelled optional, or leave it out entirely.`;

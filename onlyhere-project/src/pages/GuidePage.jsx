@@ -24,6 +24,7 @@ import { dayWeather, weatherIsStale, weatherChanges } from "../utils/weather";
 import { dayWarnings, dayCrossings, tripWeatherWarning } from "../utils/weatherWarn";
 import { askClaude } from "../utils/aiClient";
 import { testTravelerLine, isFerryText, daysUntil } from "../utils/helpers";
+import { aiDisclosureFor } from "../utils/aiDisclosure";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen } from "../utils/guideReading";
 import { BOOKING_AFFILIATE_ID } from "../config";
 import { tiqetsBrowseUrl, partnerDisclosure } from "../utils/affiliates";
@@ -2151,6 +2152,14 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             </button>
           </div>
           <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+            {/* ── ARTICLE 50(1), AI ACT ──────────────────────────────
+                Local Assist is the third surface where a person types and a
+                model answers, and the one most likely to be opened mid-trip by
+                somebody who arrived from a shared link and has seen none of the
+                rest of the site. See utils/aiDisclosure.js. */}
+            <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5 }}>
+              {aiDisclosureFor(typeof navigator === "undefined" ? null : navigator)}
+            </div>
             {chatMessages.map((m, i) => {
               const isLatestAssistant = m.role === "assistant" && i === chatMessages.length - 1;
               const streaming = isLatestAssistant && i > chatRevealedUpTo;

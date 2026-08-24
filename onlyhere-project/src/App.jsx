@@ -31,7 +31,7 @@ import { currentTrip, tripStatusForPrompt } from "./utils/tripStatus";
 import { AboutMePage, meSectionFor } from "./components/AboutMePage";
 import { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, NUDGE_KEY, PROFILE_NUDGE_KEY } from "./utils/accountNudge";
 import { sweepAll, sweepRow, deepCheckPlan, checkAge } from "./utils/factSweep";
-import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filterRows } from "./utils/manageGroups";
+import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filterRows, stampLabel, rowStampIsEdit, hasSources, SORTS } from "./utils/manageGroups";
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured, TICKET_HUNT_PROMPT, ticketHuntUrls } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT, correctionLanded, describeCorrection } from "./utils/factCheckRead";
@@ -44,6 +44,8 @@ import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
 import { placeSlug, townPath, findBySlug, COUNTRY, kindForSeg, entryUrlPath, isEntryUrl } from "./utils/placeUrl";
 import { startRun, endRun, summarise, averageFor, describe, describeAverage, recentRuns, installFetchMeter } from "./utils/apiCost";
 import { cleanOffer, offerProblems, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "./utils/offer";
+import { aiDisclosureFor } from "./utils/aiDisclosure";
+import { safetyClaimNote } from "./utils/safetyClaims";
 import { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog } from "./utils/runLog";
 import { domainOf, isListingHost, scrapeTier, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE, MAX_TICKET_PAGES, isOwnSiteFor, urlNames, isKommuneHost } from "./utils/pageScan";
 import { weatherSourceFor, weatherBadge, normalsNote, dayWeather, FORECAST, NORMALS } from "./utils/weather";
@@ -1339,7 +1341,7 @@ function GemlyxApp() {
     if (!studioSession) return;
     setManageLoading(true);
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload,published&order=id.desc`, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload,published,created_at&order=id.desc`, {
         headers: studioAuth(),
       });
       const rows = await res.json();
@@ -2319,6 +2321,11 @@ Say which answer came from which source, so a fact from a vouched page and a fac
   };
   const [publishErrorDetail, setPublishErrorDetail] = useState(null);
   const [studioPhotoName, setStudioPhotoName] = useState("");
+  // ── "WE NEED A LATEST UPDATED" ──────────────────────────────────
+  // Name is still the default, because the list's main job is finding one row
+  // you already have in mind. Newest is the second job: what did I touch, and
+  // what has sat here since July.
+  const [manageSort, setManageSort] = useState("name");
   // ── THE GEMLYX OFFER, ON CREATE AND ON EDIT ─────────────────────
   // Two fields rather than one, because his answer to "how does it stop being
   // a promise you cannot keep" was a valid-until date. See utils/offer.js for
@@ -8329,6 +8336,27 @@ ${researchRules("festival", ev)}`
       }
       if (offerFromFields) shaped.__offer = offerFromFields;
       else delete shaped.__offer;
+
+      // ── AND A CLAIM WHERE BEING WRONG HURTS SOMEBODY ────────────
+      //
+      // A note rather than a refusal, deliberately: 77 published rows carry no
+      // sources at all from before that field was on the allow-list, so a hard
+      // gate would lock him out of his own library over a defect he inherited.
+      // See utils/safetyClaims.js for why accessibility is a different class
+      // from an opening hour.
+      //
+      // Written into the draft's own uncertainties rather than shown as a toast,
+      // because a toast is gone in nine hundred milliseconds and this has to
+      // survive until somebody acts on it. The "CHECK BEFORE PUBLISHING" opening
+      // is the form correction.js already protects from a rewrite tidying it
+      // away, so it cannot be lost to the next correction pass either.
+      {
+        const note = safetyClaimNote(shaped);
+        const existing = Array.isArray(shaped.uncertainties) ? shaped.uncertainties : [];
+        if (note && !existing.some(u => String(u || "").startsWith("CHECK BEFORE PUBLISHING: this entry states"))) {
+          shaped.uncertainties = [note, ...existing];
+        }
+      }
       // ── "/undefined/aarhus.jpg" ────────────────────────────────
       // A real published hero path, found while auditing photos on 7 Aug. This
       // map had no entry for nightTown, and an undefined lookup interpolates as
@@ -13391,6 +13419,20 @@ ${languageBlock()}`;
   const aiHelperBlock = () => (
     <div id="ai-helper-anchor" style={{ marginTop: 8 }}>
               <div style={{ padding: "0 0 28px" }}>
+                {/* ── ARTICLE 50(1), AI ACT ────────────────────────
+                    In force since 2 August 2026, no grace period. The reader
+                    has to be told they are interacting with an AI system "from
+                    the start of the first interaction", so this sits ABOVE the
+                    thread and renders whether or not anything has been said
+                    yet: the obligation attaches to the start, and a notice that
+                    only appears once the conversation is empty is gone by the
+                    time most people look.
+                    In the reader's language. See utils/aiDisclosure.js for why
+                    this does not lean on the "unless this is obvious" carve-out
+                    and why the generated guides are not labelled under 50(4). */}
+                <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>
+                  {aiDisclosureFor(typeof navigator === "undefined" ? null : navigator)}
+                </div>
 
                 {aiMessages.length > 1 && (
                   <div className="ai-msgs" style={{ maxHeight: 300, overflowY: "auto", marginBottom: 12, WebkitOverflowScrolling: "touch" }}>
@@ -13981,7 +14023,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             // current search" is a number that lies the moment
                             // you forget you were searching.
                             const shown = filterRows(manageItems, manageQuery);
-                            const groups = groupRows(shown, problemsFor);
+                            const groups = groupRows(shown, problemsFor, { sort: manageSort });
                             const missing = emptyTypes(groupRows(manageItems, problemsFor));
                             const searching = !!manageQuery.trim();
                             return (
@@ -13999,6 +14041,27 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                       against a search, or every search would
                                       claim eight types are empty. */}
                                   {!searching && missing.length > 0 && <span> Nothing published yet under: {missing.map(t => TYPE_LABEL[t] || t).join(", ")}.</span>}
+                                </div>
+                                {/* ── "WE NEED A LATEST UPDATED" ──────────────
+                                    Two orders, because the list does two jobs.
+                                    Name finds a row you already have in mind.
+                                    Newest answers what did I touch, and what
+                                    has sat here since July.
+                                    The stamp on each row says WHICH date it is.
+                                    gemlyx_content has created_at and no
+                                    updated_at today, so "Newest" is honestly
+                                    newest-published until the column exists.
+                                    The SQL and the argument for a trigger
+                                    rather than six call sites are at the top of
+                                    utils/manageGroups.js. */}
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 0 8px" }}>
+                                  <span style={{ fontSize: 10, color: C.muted }}>Order</span>
+                                  {SORTS.map(srt => (
+                                    <button key={srt.id} onClick={() => setManageSort(srt.id)}
+                                      style={{ background: manageSort === srt.id ? `${C.gold}22` : "none", border: `1px solid ${manageSort === srt.id ? C.gold : C.border}`, color: manageSort === srt.id ? C.gold : C.muted, borderRadius: 100, padding: "3px 10px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                      {srt.label}
+                                    </button>
+                                  ))}
                                 </div>
                                 {groups.map(g => {
                                   // A search that returns collapsed headers has
@@ -14025,7 +14088,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                           <span style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", background: "#FFB34722", borderRadius: 100, padding: "2px 8px" }}>{g.flagged} to look at</span>
                                         )}
                                         {g.unpublished > 0 && <span style={{ fontSize: 10, color: C.muted }}>{g.unpublished} unpublished</span>}
-                                        {g.noPhoto > 0 && <span style={{ fontSize: 10, color: C.muted, marginLeft: "auto" }}>{g.noPhoto} without a photo</span>}
+                                        {/* Counted beside "without a photo" because it is
+                                            the same kind of debt and the same fix pattern:
+                                            visible where the content is managed rather
+                                            than left for somebody to notice. 77 of 148
+                                            published entries carry no __sources at all,
+                                            measured 24 Aug 2026. See utils/manageGroups.js
+                                            for why the old ones cannot be recovered. */}
+                                        {g.noSources > 0 && <span style={{ fontSize: 10, color: "#FFB347", marginLeft: "auto" }}>{g.noSources} with no sources</span>}
+                                        {g.noPhoto > 0 && <span style={{ fontSize: 10, color: C.muted, marginLeft: g.noSources > 0 ? 0 : "auto" }}>{g.noPhoto} without a photo</span>}
                                       </button>
                                       {open && g.rows.map(row => (
                             <div key={row.id} style={{ borderBottom: `1px solid ${C.border}` }}>
@@ -14055,9 +14126,31 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   <div title={row.payload?.name || ""} style={{ fontSize: 13, color: C.text, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                     {row.payload?.emoji || "•"} {row.payload?.name || "(unnamed)"}
                                   </div>
+                                  {/* ── THE STAMP, AND WHICH DATE IT IS ────
+                                      "Newest" at the top orders the rows; this
+                                      says what the order is made of, so nobody
+                                      has to guess whether a date is a publish
+                                      or an edit. It says "published" until
+                                      gemlyx_content grows an updated_at column,
+                                      because calling a created date an update
+                                      is the small wrongness that makes somebody
+                                      stop trusting the whole list. */}
                                   <div style={{ fontSize: 10, color: C.muted }}>
                                     {row.type}{!row.published ? " · not published" : ""}{row.payload?.photo ? "" : " · no photo"}
+                                    {stampLabel(row) ? ` · ${rowStampIsEdit(row) ? "updated" : "published"} ${stampLabel(row)}` : ""}
                                   </div>
+                                  {/* The promise this product is built on is that
+                                      every place was checked against its own
+                                      sources. On a row with none stored, the page
+                                      cannot show it: HowWeKnow renders nothing at
+                                      all rather than an empty panel, so nothing
+                                      false is printed and nothing is proved
+                                      either. Said here, in the row, for the same
+                                      reason the problems below are: a count at the
+                                      top does not tell him which page to open. */}
+                                  {!hasSources(row) && (
+                                    <div style={{ fontSize: 10, color: "#FFB347", lineHeight: 1.5 }}>no sources stored</div>
+                                  )}
                                   {/* Says which problem this row has, in the
                                       row, because a count at the top does not
                                       tell him which page to open. */}
