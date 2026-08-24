@@ -32727,5 +32727,133 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and points somewhere real", /DMI or Yr/.test(ws));
 }
 
+// ── AND NO DASH IN ANYTHING A TRAVELLER READS ──────────────────────
+//
+// 24 Aug 2026. The index.html block above says the rule is "enforced in
+// thirty-two places" and that none of them looked at the title. Same shape
+// again, one layer in: none of them looked at the RENDERED TEXT either.
+//
+// Ten em dashes were on screen when this was written, in copy typed by hand:
+// four save and load failures on the guide page, the unsaved-guide explainer,
+// the save button itself, three lines in the reviews section and four in the
+// craft booking sheet. `stripDashes` and `stripDashesDeep` exist and are
+// correct, and neither one could ever have caught these: one runs on MODEL
+// output and the other on PUBLISHED ROWS as they load. A string typed into a
+// component goes through neither. GuidePreviewScreen.jsx says so in a comment
+// somebody wrote and nobody acted on: "in this codebase runs stripDashes; this
+// string was typed by hand".
+//
+// The rule asserted here is JSX TEXT NODES, not "any string in the file",
+// which is the distinction that makes it survive contact with the repo:
+//
+//   * a text node between tags is on a screen by definition, so there is
+//     nothing to argue about and no exception to carve out;
+//   * a string literal in these files may be a prompt, and a prompt legitimately
+//     uses a dash to separate a day from its stops before a model reads it.
+//     Asserting over every literal would go red on GuidePage's own stop list
+//     and the next person would loosen the assertion rather than fix the copy.
+//
+// Comments are stripped first, and this is the tenth time that has mattered:
+// the note you are reading quotes an em dash to explain the fix, so a raw scan
+// would fail on its own explanation.
+{
+  const surface = [
+    "src/pages/GuidePage.jsx",
+    "src/components/GuidePreviewScreen.jsx",
+    "src/components/AskGemlyx.jsx",
+    "src/components/ChatPlaceCards.jsx",
+    "src/components/EventMatchCard.jsx",
+    "src/components/JourneyCard.jsx",
+    "src/components/GuideRouteMap.jsx",
+    "src/components/WeatherStrip.jsx",
+    "src/components/WeatherHeaderStrip.jsx",
+    "src/components/LiveEventsHeaderStrip.jsx",
+    "src/components/AtAGlanceCard.jsx",
+    "src/components/GemlyxFindCard.jsx",
+    "src/components/DetailPage.jsx",
+    "src/components/ReviewsSection.jsx",
+    "src/components/HowWeKnow.jsx",
+    "src/App.jsx",
+  ];
+  // Text sitting between two tags, with no brace and no angle bracket inside
+  // it, which is the same harvest tools/englishStrings.mjs uses. `>` is also
+  // greater-than, so a candidate carrying an operator is code and not prose.
+  const textNodes = (src) => {
+    const out = [];
+    const re = />([^<>{}]{2,300})</g;
+    let m;
+    while ((m = re.exec(src))) {
+      const t = m[1].replace(/\s+/g, " ").trim();
+      if (!t || !/[A-Za-z]{2}/.test(t)) continue;
+      if (/(&&|\|\||=>|===|!==|\?\?|\.length\b|\.map\(|=\{)/.test(t)) continue;
+      out.push({ text: t, at: m.index });
+    }
+    return out;
+  };
+  // ── AND THE STUDIO IS NOT A READER ───────────────────────────────
+  // App.jsx holds the founder Studio in the same file as the traveller's app.
+  // The Studio is one person's admin tool and its labels are not copy anybody
+  // else reads, so scanning it would drown the real offenders in thirty of his
+  // own button labels and the assertion would be loosened rather than obeyed.
+  // The boundary is found by balancing braces out from each `isStudio &&`,
+  // never by a line number, which in a 1.5 MB file is wrong within a week.
+  const studioSpans = (src) => {
+    const spans = [];
+    const re = /\{\s*isStudio\s*&&/g;
+    let m;
+    while ((m = re.exec(src))) {
+      let depth = 0, i = m.index;
+      for (; i < src.length; i++) {
+        if (src[i] === "{") depth++;
+        else if (src[i] === "}") { depth--; if (depth === 0) break; }
+      }
+      spans.push([m.index, i]);
+    }
+    return spans;
+  };
+  const offenders = [];
+  for (const rel of surface) {
+    const src = stripComments(readFileSync(join(root, rel), "utf8"));
+    const spans = rel.endsWith("App.jsx") ? studioSpans(src) : [];
+    for (const { text, at } of textNodes(src)) {
+      if (!/[–—]/.test(text)) continue;
+      if (spans.some(([a, b]) => at >= a && at <= b)) continue;
+      offenders.push(`${rel}: ${text.slice(0, 70)}`);
+    }
+  }
+  ok("the Studio really is being found and skipped", studioSpans(stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"))).length > 0);
+  is("no en or em dash reaches a reader through a JSX text node", offenders, []);
+  ok("and there is a real surface to scan", surface.every(rel => existsSync(join(root, rel))));
+
+  // ── AND THE FAILURE SENTENCES, WHICH ARE NOT TEXT NODES ──────────
+  //
+  // The four save and load failures on the guide page reach a reader through
+  // `setSaveError` and `setLoadError`, so they are string literals and the scan
+  // above cannot see them. They carried four of the ten dashes.
+  //
+  // Written as a rule over the whole SET rather than a presence check on each
+  // sentence, and the reason is that the first version of this block was three
+  // `ok(/Couldn't save this guide\. /)` lines, which stayed GREEN when one of
+  // the two sentences beginning that way had its full stop taken out, because
+  // the other one still matched. An assertion satisfied by the string next to
+  // the one you meant is the failure this repo keeps finding, and it found it
+  // here in a test written to prevent it.
+  //
+  // A comma or a colon in place of the dash passes, which is right: his rule
+  // names all three as the replacement.
+  const gp = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+  const failures = gp.match(/Couldn't (?:save|load|check)[^"'`]*/g) || [];
+  ok("the guide page's failure sentences are findable", failures.length >= 4);
+  is("and not one of them carries a dash", failures.filter(e => /[–—]/.test(e)), []);
+
+  // Same shape for the two files whose whole job is short reader-facing copy
+  // and which hold no model prompt at all, so every dash in them is a dash a
+  // reader would see, wherever it sits.
+  for (const rel of ["src/components/ReviewsSection.jsx", "src/components/LiveEventsHeaderStrip.jsx"]) {
+    const src = stripComments(readFileSync(join(root, rel), "utf8"));
+    is(`no dash anywhere in ${rel.split("/").pop()}`, (src.match(/[–—]/g) || []).length, 0);
+  }
+}
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }

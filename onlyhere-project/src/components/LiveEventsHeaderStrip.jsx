@@ -108,9 +108,9 @@ export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo
       )}
       {nearYou && typeof nearYou === "object" && (
         <div style={{ marginTop: 2 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 6 }}><Ico name="pin" size={12} color={C.gold} /> Events near you{nearYou.matches.length > 0 ? ` — ${nearYou.matches.length} upcoming within ~30 km` : ""}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 6 }}><Ico name="pin" size={12} color={C.gold} /> Events near you{nearYou.matches.length > 0 ? `: ${nearYou.matches.length} upcoming within ~30 km` : ""}</div>
           {nearYou.matches.length === 0 && (
-            <div style={{ fontSize: 11, color: C.muted }}>No upcoming events near {nearYou.town} right now — browse all under Events.</div>
+            <div style={{ fontSize: 11, color: C.muted }}>No upcoming events near {nearYou.town} right now. Browse all under Events.</div>
           )}
           {nearYou.matches.length > 0 && (
             <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2, WebkitOverflowScrolling: "touch" }}>

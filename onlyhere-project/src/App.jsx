@@ -1526,7 +1526,7 @@ function GemlyxApp() {
       headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=minimal" },
       body: JSON.stringify({ payload: newPayload }),
     });
-    if (!res.ok) throw new Error(`Save failed (${res.status}) — check the update RLS policy on gemlyx_content`);
+    if (!res.ok) throw new Error(`Save failed (${res.status}). Check the update RLS policy on gemlyx_content`);
     setManageItems(items => (items || []).map(r => r.id === row.id ? { ...r, payload: newPayload } : r));
   };
 
@@ -16632,7 +16632,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Attractions</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Everything worth doing that isn't a town, a bar, or a meal — genuinely free places and things worth booking ahead, side by side so you can actually compare them.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Everything worth doing that isn't a town, a bar, or a meal: genuinely free places and things worth booking ahead, side by side so you can actually compare them.</div>
               </div>
 
               {/* ── SEARCH AND SORT, ALWAYS. FILTERS, ONLY WHEN THE
@@ -16711,7 +16711,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
               {attractionView === "handmade" ? (
                 <>
-                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Watch it made, buy it warm — no ticket, no booking, just walk in.</div>
+                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Watch it made, buy it warm. No ticket, no booking, just walk in.</div>
                   {/* Supabase-only content (Aug 5): handmade craft shops have no Studio
                       type/table yet, so this list is empty until one exists. */}
                   {handmadeCraftShops.length === 0 && (
@@ -16819,7 +16819,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Events</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Summer means festival season across Denmark. From legendary stages to harbour markets nobody talks about — we guide you to what's worth traveling for, and exactly how far it is from Copenhagen.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Summer means festival season across Denmark. From legendary stages to harbour markets nobody talks about. We guide you to what's worth traveling for, and exactly how far it is from Copenhagen.</div>
               </div>
 
               <div style={{ display: "flex", gap: 0, marginBottom: 16, borderBottom: `1px solid ${C.border}` }}>
@@ -16857,7 +16857,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Food</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>From a 1965 hot dog cart to Copenhagen's biggest food market — the everyday spots locals actually eat at, and the bigger names worth the crowd.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>From a 1965 hot dog cart to Copenhagen's biggest food market: the everyday spots locals actually eat at, and the bigger names worth the crowd.</div>
               </div>
 
               {/* ── ONE ROW OF DROPDOWNS, LIKE EVERY OTHER LIST ──
@@ -17533,7 +17533,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       </div>
                     </div>
                   ) : (<>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>Pick a route — Gemlyx builds it around real stops along the way</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>Pick a route. Gemlyx builds it around real stops along the way</div>
                   <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Assumes you're driving. You can still add dates, budget and anything else afterwards.</div>
                   {roadTrips.map(rt => (
                     <button key={rt.id} onClick={() => {
@@ -17555,7 +17555,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   {savedPlaces.length > 0 && (
                     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px", marginTop: 16, marginBottom: 4 }}>
                       <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 4 }}>♥ Your Saved Places</div>
-                      <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Saved from Attractions and Booking — tap ✕ to remove.</div>
+                      <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Saved from Attractions and Booking. Tap ✕ to remove.</div>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
                         {savedPlaces.map(p => (
                           <span key={`${p.kind}-${p.id}`} style={{ display: "flex", alignItems: "center", gap: 6, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px" }}>
@@ -17581,7 +17581,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   {/* Moved from the old standalone Road Trips tab, unchanged. */}
                   <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 22, marginTop: 22 }}>
                     <div style={{ fontSize: 18, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 6 }}>⛺ Camping & Tent Spots</div>
-                    <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: 16 }}>Denmark's shelters and coastal campsites are one of its best-kept secrets — many are completely free. Perfect stops to break up any road trip.</div>
+                    <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: 16 }}>Denmark's shelters and coastal campsites are one of its best-kept secrets, and many are completely free. Perfect stops to break up any road trip.</div>
                     <div className="products-grid">
                       {[...campingSpots].sort(byName).map(spot => (
                         <div key={spot.id} onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(spot.mapHint)}`, "_blank")}
@@ -17761,7 +17761,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       if (intakePlacePref) parts.push(`Preference: ${intakePlacePref}`);
                       if (intakeTravelers.trim()) parts.push(`Who's traveling: ${intakeTravelers.trim()}`);
                       if (intakeIncludeSaved && savedPlaces.length > 0) parts.push(`Also include these saved places: ${savedPlaces.map(p => p.town ? `${p.name} (${p.town})` : p.name).join(", ")}`);
-                      if (intakeFamilyMode) parts.push(`Traveling with kids — family-friendly plan`);
+                      if (intakeFamilyMode) parts.push(`Traveling with kids, family-friendly plan`);
                       if (intakeIncludeEvents) parts.push(`Include real events happening during the trip dates, if any genuinely fit`);
                       if (intakeTransport.length) parts.push(`Getting around: ${intakeTransport.map(t => t.replace(/^\S+\s/, "")).join(", ")}`);
                       sendAI(parts.join(" | "), { hidden: true });
@@ -17781,7 +17781,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <Ico name="bulb" size={22} color={C.gold} strokeWidth={1.8} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Know a place we're missing?</div>
-                    <div style={{ fontSize: 11.5, color: C.muted }}>Tell us — every Gemlyx entry is hand-researched and checked against multiple sources, so this helps us find the next one.</div>
+                    <div style={{ fontSize: 11.5, color: C.muted }}>Tell us. Every Gemlyx entry is hand-researched and checked against multiple sources, so this helps us find the next one.</div>
                   </div>
                   <button onClick={() => { setSuggestOpen(true); setSuggestStatus(null); }}
                     style={{ background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
@@ -19534,7 +19534,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <div style={{ fontSize: 24, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text }}>💡 Suggest a Place</div>
               <button onClick={() => setSuggestOpen(false)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Close</button>
             </div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 18, lineHeight: 1.5 }}>We read every suggestion — nothing goes live automatically. If it's a real, worthwhile find, it'll show up in Gemlyx, hand-researched and checked against multiple sources, same as everything else.</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 18, lineHeight: 1.5 }}>We read every suggestion, and nothing goes live automatically. If it's a real, worthwhile find, it'll show up in Gemlyx, hand-researched and checked against multiple sources, same as everything else.</div>
 
             {suggestStatus === "sent" ? (
               <div style={{ textAlign: "center", padding: "20px 0" }}>
@@ -19734,7 +19734,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   style={{ width: "100%", background: C.accent, border: "none", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 700, color: C.onAccent, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                   Send Booking Request
                 </button>
-                <div style={{ fontSize: 11, color: C.muted, textAlign: "center", marginTop: 8 }}>No online booking here — we'll reach out to confirm with them personally</div>
+                <div style={{ fontSize: 11, color: C.muted, textAlign: "center", marginTop: 8 }}>No online booking here. We'll reach out to confirm with them personally</div>
               </>
             )}
             <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(craftDetail.mapHint || craftDetail.location)}`} target="_blank" rel="noreferrer"
@@ -19754,7 +19754,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <>
                 <div style={{ fontSize: 22, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 2 }}>{craftModal.emoji} {craftModal.name}</div>
                 <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>{dotJoin(craftModal.location, travelLabel(userCoords, craftModal.location, craftModal.travelTime))}</div>
-                <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 18 }}>Tell us what you'd like to book — we'll confirm availability and price with the workshop and reply personally.</div>
+                <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 18 }}>Tell us what you'd like to book. We'll confirm availability and price with the workshop and reply personally.</div>
 
                 {[
                   { key: "name", label: "Your name", ph: "Anna Schmidt" },
@@ -19772,7 +19772,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 {craftStatus === "invalid" && <div style={{ fontSize: 12, color: "#ff6666", marginBottom: 10 }}>Please fill in your email and what you'd like to book.</div>}
                 {craftStatus === "fallback" && (
                   <div style={{ fontSize: 12, color: C.light, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 10 }}>
-                    Couldn't send directly — <a href={craftMailto()} style={{ color: C.gold, fontWeight: 700 }}>tap here to send via your email app</a> instead.
+                    Couldn't send directly. <a href={craftMailto()} style={{ color: C.gold, fontWeight: 700 }}>tap here to send via your email app</a> instead.
                   </div>
                 )}
 

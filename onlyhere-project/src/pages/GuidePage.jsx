@@ -48,7 +48,7 @@ import { PhotoCredit } from "../components/PhotoCredit";
 //     fully-enriched `guide` object via router state (maps/exact routes/
 //     accommodation/weather already baked in — see that function for why it
 //     waits for all of that before ever navigating here). Shows the card grid
-//     + a "Looks good — save my guide" confirmation step. Saving POSTs to
+//     + a "Looks good, save my guide" confirmation step. Saving POSTs to
 //     Supabase and redirects to the real /guide/:id URL.
 //  2. SAVED / SHARED — visited directly via a real /guide/:id URL (from a saved
 //     link, or after step 1 completes). Fetches the guide from Supabase by id
@@ -284,7 +284,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
       const data = await res.json();
       setLiveInfo(prev => ({ ...prev, [item.name]: data.answer || (data.results?.[0]?.snippet) || "No current updates found." }));
     } catch {
-      setLiveInfo(prev => ({ ...prev, [item.name]: "Couldn't check right now — try again in a moment." }));
+      setLiveInfo(prev => ({ ...prev, [item.name]: "Couldn't check right now. Try again in a moment." }));
     }
     setLiveInfoLoading(null);
   };
@@ -345,7 +345,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
         if (!rows?.[0]?.payload) { setLoadError("This guide link doesn't exist or was removed."); return; }
         setGuide(rows[0].payload);
       })
-      .catch(() => setLoadError("Couldn't load this guide — check your connection and try again."))
+      .catch(() => setLoadError("Couldn't load this guide. Check your connection and try again."))
       .finally(() => setLoading(false));
   }, [guideId, freshGuide]);
 
@@ -380,7 +380,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
         // other half of it, on the pipeline he cares about most.
         body: JSON.stringify({ id, payload: (({ _testProfile, _testPlan, _planProblems, ...rest }) => rest)(guide) }),
       });
-      if (!res.ok) { setSaveError("Couldn't save this guide — try again."); setSaving(false); return; }
+      if (!res.ok) { setSaveError("Couldn't save this guide. Try again."); setSaving(false); return; }
       // Also bookmark it into the same "gemlyx_saved_guides" localStorage list
       // Home's "Your Saved Guides" quick list reads — this is what used to happen
       // from the old popup's own separate "Save Guide" button, now this page's
@@ -399,7 +399,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
       // not whenever they think to look for a button.
       navigate(`/guide/${id}`, { replace: true, state: { guide, justSaved: true } });
     } catch {
-      setSaveError("Couldn't save this guide — check your connection and try again.");
+      setSaveError("Couldn't save this guide. Check your connection and try again.");
     }
     setSaving(false);
   };
@@ -1128,7 +1128,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
         {isUnsaved && (
           <div style={{ background: `${C.gold}14`, border: `1px solid ${C.gold}55`, borderRadius: 14, padding: "14px 16px", marginBottom: 24, maxWidth: 640 }}>
             <div style={{ fontSize: 13.5, color: C.text, fontWeight: 700, marginBottom: 4 }}>Does this look right?</div>
-            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>Here's everything your guide will include — take a look, then save it to get your own link.</div>
+            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>Here's everything your guide will include. Take a look, then save it to get your own link.</div>
           </div>
         )}
 
@@ -1168,7 +1168,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           const line = testTravelerLine(p);
           return (
             <div style={{ background: `${C.gold}0D`, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "14px 16px", marginBottom: 24, maxWidth: 640, fontSize: 12.5, lineHeight: 1.7 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 }}>◈ Pipeline test — what went in</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 }}>◈ Pipeline test: what went in</div>
               <div style={{ color: C.light }}><span style={{ color: C.text, fontWeight: 700 }}>Test traveler:</span> {line}</div>
               {p.brief && (
                 <div style={{ color: C.muted, fontStyle: "italic", marginTop: 6, paddingLeft: 10, borderLeft: `2px solid ${C.gold}44` }}>{p.brief}</div>
@@ -2093,7 +2093,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           // widths. It's centered and un-z-indexed, while the floating "Ask
           // Gemlyx" launcher below is fixed bottom:20/right:20 with zIndex:40 —
           // on a narrow phone this centered pill runs wide enough that its
-          // right end (the actual "Looks good — save my guide" button) sits
+          // right end (the actual "Looks good, save my guide" button) sits
           // directly under the launcher, which draws on top of it since the
           // bar had no z-index of its own. zIndex 45 here guarantees the save
           // button always wins the stack; the launcher itself also gets moved
@@ -2106,7 +2106,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
               </button>
               <button onClick={saveGuide} disabled={saving}
                 style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, color: "#fff", border: "none", borderRadius: 100, padding: "12px 24px", fontSize: 13, fontWeight: 700, cursor: saving ? "default" : "pointer", opacity: saving ? 0.7 : 1, boxShadow: "0 4px 16px rgba(226,59,78,0.3)" }}>
-                {saving ? "Saving…" : "Looks good — save my guide"}
+                {saving ? "Saving…" : "Looks good, save my guide"}
               </button>
             </div>
           </div>
@@ -2118,7 +2118,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           never collides with the centered "save my guide" bar above. Opens a
           fixed-position panel with its own scrollable history; closing it keeps
           the conversation in memory for the rest of this page visit. */}
-      {/* PASS 27: on narrow phones, when the "Looks good — save my guide" bar
+      {/* PASS 27: on narrow phones, when the "Looks good, save my guide" bar
           is on screen (isUnsaved), this launcher gets pushed up above it
           instead of sitting at its usual bottom:20 — see the sticky bar's own
           comment above for why they collided. Desktop/tablet is unaffected;
