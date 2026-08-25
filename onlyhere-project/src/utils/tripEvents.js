@@ -1,6 +1,6 @@
 import { tierOf } from "./placeThemes";
 // ── ONE VOCABULARY, SIX LANGUAGES, READ BY EVERY PARSER BELOW ───────
-import { MONTH_INDEX, MONTH_PATTERN, DAY_WORDS, WEEK_WORDS, ONE_WEEK, RELATIVE_DAYS, THIS_WEEKEND, NEXT_WEEK, IN_N_DAYS, TRAVEL_VERBS, alt, LETTER } from "./travellerWords";
+import { MONTH_INDEX, MONTH_PATTERN, DAY_WORDS, WEEK_WORDS, ONE_WEEK, RELATIVE_DAYS, THIS_WEEKEND, NEXT_WEEK, IN_N_DAYS, TRAVEL_VERBS, SPELLED_NUMBERS, NUMBER_TOKEN, alt, LETTER } from "./travellerWords";
 // The band vocabulary, imported rather than restated. A copy of "2 means
 // comfortable" in this file is a number that has to be kept in step with
 // another file by hand, which is the drift this codebase keeps finding.
@@ -172,12 +172,30 @@ export const monthOnlyIn = (text, today = new Date()) => {
 // Danish first because it is the country the product is about and the one
 // language we know is in use. The rest follow the day they are needed, and the
 // shape here is built so that adding one is a list entry rather than a rewrite.
+// ── AND A NUMBER WRITTEN AS A WORD IS STILL A NUMBER ────────────────
+//
+// 25 Aug 2026. "We have four days." read nothing; "We have 4 days." read four.
+// The reader had been taught five languages and never taught that English
+// writes small numbers as words — which is how almost everybody types this.
+//
+// The same list serves the party count, so "two adults" and "four days" cannot
+// disagree about what the word two means.
+const spelledNumber = (word) => {
+  const n = SPELLED_NUMBERS[String(word || "").toLowerCase()];
+  return Number.isFinite(n) ? n : null;
+};
+const numFrom = (token) => {
+  const t = String(token || "").trim();
+  if (/^\d+$/.test(t)) return parseInt(t, 10);
+  return spelledNumber(t);
+};
+
 export const dayCountIn = (text) => {
   const s = String(text || "");
-  const digits = new RegExp(`(?:^|[^${LETTER}])(\\d{1,2})\\s*(?:-|–|to|til|bis|tot)?\\s*(?:${alt(DAY_WORDS)})(?![${LETTER}])`, "i").exec(s);
-  if (digits) return Math.min(parseInt(digits[1], 10), 14);
-  const weeks = new RegExp(`(?:^|[^${LETTER}])(\\d{1,2})\\s*(?:-|–)?\\s*(?:${alt(WEEK_WORDS)})(?![${LETTER}])`, "i").exec(s);
-  if (weeks) return Math.min(parseInt(weeks[1], 10) * 7, 14);
+  const digits = new RegExp(`(?:^|[^${LETTER}])(${NUMBER_TOKEN})\\s*(?:-|–|to|til|bis|tot)?\\s*(?:${alt(DAY_WORDS)})(?![${LETTER}])`, "i").exec(s);
+  if (digits) { const n = numFrom(digits[1]); if (n) return Math.min(n, 14); }
+  const weeks = new RegExp(`(?:^|[^${LETTER}])(${NUMBER_TOKEN})\\s*(?:-|–)?\\s*(?:${alt(WEEK_WORDS)})(?![${LETTER}])`, "i").exec(s);
+  if (weeks) { const n = numFrom(weeks[1]); if (n) return Math.min(n * 7, 14); }
   if (new RegExp(`(?:^|[^${LETTER}])(?:${alt(ONE_WEEK)})(?![${LETTER}])`, "i").test(s)) return 7;
   // "en uge", "hele ugen". `uge` alone is not enough: "i ugen" and "ugens" turn
   // up in ordinary sentences that are not an answer about length.
@@ -712,4 +730,75 @@ export const describePicks = (limit, picked, tickable = Infinity) => {
   return n >= limit
     ? `${n} of ${limit} added, which is the most this trip has room for.`
     : `${n} of ${limit} added. A trip this long has room for ${limit}.`;
+};
+
+// ── TWO DATES IN ONE SENTENCE IS A TRIP LENGTH ──────────────────────
+//
+// Oliver's own test brief, 25 Aug 2026, first sentence:
+//
+//   "We're flying into Billund on Thursday 8 October 2026, landing 14:25, and
+//    out of Aalborg on Monday the 12th at 11:00."
+//
+// The chat report he exported: `days` — a BLOCKING slot — empty, and the next
+// question Gemlyx would have asked him is "How many days have you got?" He had
+// answered it in his opening sentence, twice over.
+//
+// arrivalDateIn reads the FIRST date and stops. readDays then looks for a spoken
+// count ("four days") and for the intake date pickers, and finds neither, so a
+// brief that states its own start and end to the minute cannot produce a length.
+//
+// The second date is the hard half, because of how people write it: "out of
+// Aalborg on Monday the 12th" carries a day number and NO MONTH. A bare "the
+// 12th" is only a date at all because the sentence before it named October, so
+// it is resolved against the start rather than guessed at — and when there is no
+// start to resolve against, it stays null instead of picking a month.
+const LEAVING = /\b(?:out|leaving|leave|departing|depart|departure|fly(?:ing)? (?:out|home|back)|back (?:home|on)|home on|返|hjem|afrejse|rejser hjem|tilbage)\b/i;
+// A day number with an ordinal suffix, or a plain one after "the".
+const BARE_DAY = /\bthe\s+(\d{1,2})(?:st|nd|rd|th)?\b|\b(\d{1,2})(?:st|nd|rd|th)\b/i;
+
+export const departureDateIn = (text, start) => {
+  const t = String(text || "");
+  if (!start || !(start instanceof Date) || !Number.isFinite(start.getTime())) return null;
+  // Only look at the part of the sentence AFTER the leaving word: "in on the 8th
+  // and out on the 12th" has both numbers, and taking the first one back would
+  // report a trip that ends before it begins.
+  const at = t.search(LEAVING);
+  if (at < 0) return null;
+  // ── AND ONLY WITHIN THE SAME SENTENCE ─────────────────────────────
+  // "flying out eventually. The Christmas market on the 6th is lovely." has a
+  // leaving word and a day number, and they are about different things. Taking
+  // the tail of the whole text let any later date in the conversation become a
+  // departure, and an invented trip length is worse than no trip length. The
+  // 31-day cap below caught the far cases and this catches the near ones.
+  const tail = t.slice(at).split(/(?<=[.!?])\s+/)[0] || "";
+
+  // A full date wins outright — it names its own month and needs no resolving.
+  const full = tail.match(DATE_RE);
+  if (full) {
+    const day = parseInt(full[1] || full[4], 10);
+    const monthIdx = MONTH_NAMES[(full[2] || full[3]).toLowerCase()];
+    if (day >= 1 && day <= 31 && monthIdx !== undefined) {
+      let d = new Date(start.getFullYear(), monthIdx, day);
+      // December in, January out: the year rolls, and a trip that appears to end
+      // before it starts is the tell.
+      if (d < start) d = new Date(start.getFullYear() + 1, monthIdx, day);
+      return d;
+    }
+  }
+
+  // A bare day number, resolved against the start's month. Rolls to the next
+  // month when the number is smaller, because "in on the 29th, out on the 2nd"
+  // is a trip across a month end and not a trip backwards in time.
+  const bare = tail.match(BARE_DAY);
+  if (!bare) return null;
+  const day = parseInt(bare[1] || bare[2], 10);
+  if (!(day >= 1 && day <= 31)) return null;
+  let d = new Date(start.getFullYear(), start.getMonth(), day);
+  if (d.getDate() !== day) return null;          // the 31st of a 30-day month
+  if (d < start) d = new Date(start.getFullYear(), start.getMonth() + 1, day);
+  // A "departure" more than a month out is not this sentence's second date. It is
+  // some other date that happened to follow the word, and a length invented from
+  // it would be worse than no length.
+  const span = Math.round((d - start) / 86400000);
+  return span >= 0 && span <= 31 ? d : null;
 };

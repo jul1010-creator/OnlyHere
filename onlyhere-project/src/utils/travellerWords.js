@@ -81,11 +81,52 @@ export const PARTY_POSSESSIVE = [
   "fru", "sambo", "son", "dotter", "mamma", "pappa", "föräldrar",
   "kjæreste", "sønn", "mi datter", "foreldre",
 ];
-export const PARTY_POSSESSIVES = ["my", "min", "mit", "mine", "mein", "meine", "mijn", "m'n", "mi"];
+// ── "OUR" WAS NOT IN THE LIST ───────────────────────────────────────
+//
+// 25 Aug 2026. Oliver's own test brief opened "Two adults and our son, he's 7."
+// `party` is a BLOCKING slot, and it came back empty. "my son" filled it; "our
+// son" did not, because this list held every first-person SINGULAR possessive in
+// five languages and no plural one.
+//
+// A couple travelling together says "our son". That is not an edge case, it is
+// the normal way two people describe a third, and it is the exact sentence this
+// slot exists to catch.
+export const PARTY_POSSESSIVES = [
+  "my", "our", "ours",
+  "min", "mit", "mine", "vores", "vor", "vore",
+  "mein", "meine", "unser", "unsere", "unseren", "unserem",
+  "mijn", "m'n", "onze", "ons",
+  "vår", "vårt", "våra", "var", "vart",
+  "mi", "nuestro", "nuestra",
+];
 
 // Safe on their own: none of these is a common word in another sense.
 export const PARTY_BARE = [
-  "kids?", "children", "child", "toddler", "baby", "family", "friends?", "solo", "alone", "just me",
+  // "adults" was missing from the ENGLISH list while voksne, erwachsene,
+  // volwassenen and vuxna were all present below — the one language the product
+  // is written in was the one this word was left out of. Found 25 Aug 2026 on
+  // "Two adults and our son", which filled nothing.
+  // ── EVERY ENTRY HERE IS A LITERAL WORD, NOT A PATTERN ────────────
+  //
+  // `alt` escapes regex metacharacters, correctly — this list also holds "m'n"
+  // and "b&b" and a word list that silently compiled as a pattern would be far
+  // worse. But that means "kids?" has always meant the LITERAL STRING "kids?",
+  // question mark included, and "friends?" likewise.
+  //
+  // So "we have kids" and "travelling with friends" — the two most ordinary
+  // English answers there are — have never filled this slot, on a BLOCKING slot,
+  // for as long as it has existed. "family", "children", "solo" and "alone" carry
+  // no metacharacter and work, which is why nobody noticed: the list looked like
+  // it covered English and covered four words of it.
+  //
+  // Found 25 Aug 2026 while adding "adults", by writing the assertion for the
+  // word rather than for the count in front of it. Both forms are spelled out
+  // now, and the suite asserts that no entry in these lists contains a quantifier
+  // so nobody writes "kids?" again expecting it to mean something.
+  "adults", "adult", "grown-ups", "grown ups", "grownups", "grown-up",
+  "grandkids", "grandkid", "grandchildren", "grandchild", "teenagers", "teenager", "teens",
+  "kids", "kid", "children", "child", "toddler", "baby", "family", "friends", "friend",
+  "solo", "alone", "just me",
   "børn", "børnene", "barnebarn", "børnebørn", "familie", "familien", "venner", "vennerne", "alene", "os to", "kun mig", "voksne",
   "kinder", "kindern", "enkelkinder", "enkelkindern", "enkel", "familie", "freunde", "freunden", "allein", "alleine", "zu zweit", "erwachsene", "erwachsenen",
   "kinderen", "kleinkinderen", "gezin", "familie", "vrienden", "vriendin", "vriend", "alleen", "z'n tweeën", "met z'n tweeën", "volwassenen",
@@ -93,9 +134,22 @@ export const PARTY_BARE = [
   "bambini", "famiglia", "amici", "da solo",
 ];
 // "we are 4", "vi er 4", "wir sind 4", "we zijn met 4", "vi är 4", plus "4 adults".
+// A NUMBER PEOPLE WRITE AS A WORD IS STILL A NUMBER. This read `\d+` only, so
+// "two adults" and "four of us" — which is how anybody actually types it — filled
+// nothing, while "2 adults" filled it. Same list serves the day count.
+export const SPELLED_NUMBERS = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, thirteen: 13, fourteen: 14,
+  en: 1, et: 1, to: 2, tre: 3, fire: 4, fem: 5, seks: 6, syv: 7, otte: 8, ni: 9, ti: 10,
+  ein: 1, eine: 1, zwei: 2, drei: 3, vier: 4, fünf: 5, funf: 5, sechs: 6, sieben: 7, acht: 8, neun: 9, zehn: 10,
+  twee: 2, drie: 3, vijf: 5, zes: 6, zeven: 7, negen: 9, tien: 10,
+  två: 2, tva: 2, fyra: 4, sex: 6, sju: 7, åtta: 8, atta: 8, nio: 9, tio: 10,
+};
+const NUM_WORD = Object.keys(SPELLED_NUMBERS).join("|");
+export const NUMBER_TOKEN = `(?:\\d+|${NUM_WORD})`;
 export const PARTY_COUNT = [
-  "\\d+\\s+(?:of us|people|adults?|voksne|erwachsene|volwassenen|vuxna|personer|personen|persones)",
-  "(?:we are|vi er|vi är|wir sind|we zijn(?:\\s+met)?|siamo)\\s+\\d+",
+  `${NUMBER_TOKEN}\\s+(?:of us|people|adults?|grown[- ]?ups?|voksne|erwachsene|volwassenen|vuxna|personer|personen|persones)`,
+  `(?:we are|we're|vi er|vi är|wir sind|we zijn(?:\\s+met)?|siamo)\\s+${NUMBER_TOKEN}`,
 ];
 
 // ── RELATIVE DAYS ───────────────────────────────────────────────────
@@ -192,6 +246,18 @@ export const TRANSPORT_VERBS = [
 ];
 // Public transport, which is a mode and names no vehicle.
 export const PUBLIC_TRANSPORT = [
+  // ── A LIST OF MODES IS AN ANSWER ─────────────────────────────────
+  // "Trains, buses and ferries only" filled nothing, because every transport
+  // pattern required a movement word or a preposition beside the vehicle, and a
+  // person answering "how are you getting around?" answers with the modes. The
+  // plurals are listed as their own words rather than left to VEHICLE_WORDS,
+  // which needs "by"/"on"/"taking" in front of it to avoid matching "is the train
+  // to Odense expensive?" — a bare plural in a list does not have that problem.
+  "trains", "buses", "busses", "ferries", "coaches", "trams",
+  "tog", "toge", "busser", "færger", "faerger",
+  "züge", "zuge", "busse", "fähren", "fahren",
+  "treinen", "bussen", "veerboten",
+  "tåg", "tag", "bussar", "färjor", "farjor",
   "public transport", "public transportation",
   "offentlig transport", "offentlige transportmidler", "kollektiv trafik", "kollektiv transport",
   "öffentliche verkehrsmittel", "offentliche verkehrsmittel", "öpnv", "opnv",

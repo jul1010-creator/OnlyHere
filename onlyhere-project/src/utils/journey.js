@@ -290,7 +290,65 @@ const CHANGE_COUNT = /\b(?:(one|two|three|four|\d{1,2}))\s+chang(?:e|es)\b/i;
 const WORD_NUM = { one: 1, two: 2, three: 3, four: 4 };
 
 const WALK_WORDS = /\b(walk|walks|walking|on foot|stroll)\b/i;
-const STOP_WORDS = /\b(station|banegård|banegaard|railway|rail stop|bus stop|terminal|platform)\b/i;
+// "St." and "H" are how a Danish station is actually written on every sign and in
+// every timetable — Aalborg St., Odense St., Aarhus H, København H. The list held
+// only the spelled-out forms, so the rule below was reading English prose in a
+// Danish product. Anchored on a preceding capitalised word so "st." inside an
+// ordinary sentence cannot match.
+const STOP_WORDS = /\b(station|banegård|banegaard|railway|rail stop|bus stop|terminal|platform)\b|[A-ZÆØÅ][\wÆØÅæøå-]+\s(?:St\.|H\b)/;
+
+// ── "AALBORG ST." IS NOT THE END OF A SENTENCE ──────────────────────
+//
+// Found on the live Aalborg page, 25 Aug 2026. Its Reality Check reads:
+//
+//   "once you're there, Aalborg St. is a 7-minute walk from the centre so the
+//    town itself is easy to cover on foot"
+//
+// and two paragraphs below, the page prints its own measurement: 16 minutes
+// walking at BOTH ends together, and 7 minutes waiting and connecting. The
+// 7-minute walk is the waiting time wearing a different hat.
+//
+// This is the third recorded instance of one bug. Odense: "the station is about
+// 5 minutes on foot from the city centre", where the station IS the centre.
+// Esbjerg: "the station is a 7-minute walk from the centre", where 7 happened to
+// land within a minute of the measured waiting time and a bag-of-numbers check
+// waved it through. The rule that catches it — a walk between a named stop and a
+// town centre, which nothing in this pipeline measures — has been live since
+// then. It did not fire on Aalborg, for two reasons, both in this file.
+//
+// ONE: THE SPLITTER CUT THE SENTENCE IN HALF. Every check here splits prose on
+// `(?<=[.!?])\s+`, and "Aalborg St." ends in a full stop. So the walk landed in
+// one fragment and the station in another, and a rule that needs both words in
+// one sentence can never see them.
+//
+// TWO: "ST." IS NOT IN STOP_WORDS. It is how every Danish station is written —
+// Aalborg St., Odense St., Aarhus H — and the list held only the spelled-out
+// forms. A gate for Danish railway prose that cannot read a Danish railway
+// abbreviation was checking English sentences in a Danish product.
+//
+// The splitter is shared now, so fixing it fixes all six call sites at once.
+// Splitting on a period followed by a capital, EXCEPT after a known abbreviation
+// and except after a single capital letter (which is an initial, not an end).
+const ABBREV = /(?:^|\s)(?:st|sct|skt|hpt|str|nr|kl|ca|bl\.a|f\.eks|dvs|osv|ift|mr|mrs|ms|dr|prof|no|vs|approx|e\.g|i\.e|etc|jf|inkl|ekskl)\.$/i;
+
+export const sentences = (text) => {
+  const t = String(text ?? "");
+  const out = [];
+  let buf = "";
+  // Split on the boundary, then glue back any piece whose end was an
+  // abbreviation rather than a full stop.
+  for (const piece of t.split(/(?<=[.!?])\s+/)) {
+    buf = buf ? `${buf} ${piece}` : piece;
+    // A single capital before the dot is an initial ("J. Bang"), never an end.
+    if (ABBREV.test(buf) || /(?:^|\s)[A-ZÆØÅ]\.$/.test(buf)) continue;
+    out.push(buf);
+    buf = "";
+  }
+  if (buf) out.push(buf);
+  // Empty input is no sentences, not one empty one. A caller iterating this and
+  // testing every fragment gets a free pass on "" in every regex that allows it.
+  return out.filter(x => x.trim());
+};
 
 const near = (a, b, slack = 2) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= slack;
 
@@ -319,7 +377,7 @@ export const transitProblems = (prose, { parts, drivingMins } = {}) => {
     .map(Number);
   // Split on sentence ends, because attribution is a sentence-level property:
   // the duration and the word "train" have to be in the same claim to be one.
-  for (const s of String(prose || "").split(/(?<=[.!?])\s+/)) {
+  for (const s of sentences(prose)) {
     const ride = RIDE_WORDS.test(s) && !DOOR_WORDS.test(s);
     // Is this sentence about the journey that was measured, or another one?
     const ours = ORIGIN_NAMED.test(s);
@@ -413,14 +471,81 @@ const ABSENCE = [
 // Said about the RESEARCH rather than about the world. These are the sentences
 // this pipeline is built to produce, and flagging them would teach it to stop
 // admitting what it does not know, which is the opposite of the point.
-const HEDGED = /\b(?:could ?n[o']?t be|was ?n[o']?t|were ?n[o']?t|not)\s+(?:\w+\s+){0,2}(?:confirmed|verified|found|established)\b|\bin (?:our |the |this )?research\b|\bwe could ?n[o']?t\b|\bunconfirmed\b|\b(?:was|were|has been|have been) (?:confirmed|verified|found|established)\b/i;
+// ── A HEDGE IS A HEDGE WHEREVER THE NEGATION SITS ───────────────────
+// "No signature annual festival could be confirmed" is the CORRECT sentence and
+// was being flagged as an absence claim, because the negation is the subject
+// ("no festival") rather than the verb ("could not be confirmed") and this
+// pattern only knew the second shape. A gate that fires on its own fix teaches
+// the pipeline to write worse in order to pass — the rule tracePrices earned the
+// hard way. `could be confirmed` and `turned up` are added as bare forms.
+const HEDGED = /\b(?:could ?n[o']?t be|was ?n[o']?t|were ?n[o']?t|not)\s+(?:\w+\s+){0,2}(?:confirmed|verified|found|established)\b|\bcould be (?:confirmed|verified|found|established)\b|\bturned up\b|\bin (?:our |the |this )?research\b|\bwe could ?n[o']?t\b|\bunconfirmed\b|\bmay (?:well )?exist\b|\b(?:was|were|has been|have been) (?:confirmed|verified|found|established)\b/i;
+
+// ── AND THE RULE WAS WRITTEN FOR ONE SUBJECT ────────────────────────
+//
+// Oliver, 25 Aug 2026, reading the live Aalborg page: "No single annual event?
+// Seriously? It has the biggest carnival in Northern Europe."
+//
+// The page says: "There's no single big annual festival tying the city
+// together." Aalborg Karneval runs the last week of every May and is the largest
+// carnival in Scandinavia. The claim is not a matter of taste. It is wrong, and
+// checkably so.
+//
+// THE GATE FOR THIS ALREADY EXISTED AND COULD NOT SEE IT. Every pattern in
+// ABSENCE above is about transport — station, stop, bus, rail, public transport
+// — because that is the sentence that was in front of me the day it was written.
+// The REASONING in its own header is general and always was: an empty field is
+// not evidence of an absence. A search that returned no festivals is a fact about
+// the search.
+//
+// A rule implemented for one subject when its reasoning is general is this
+// project's signature failure in its third form — after the unwired function and
+// the fix applied to one door and not its sibling. Same shape, one level up.
+//
+// So the families are named separately, because the SENTENCE each one earns is
+// different: the transport version can point at nearestStation and at Google
+// returning no route, and this one has to point at the app's own library.
+const ABSENCE_CULTURE = [
+  /\bthere\s+(?:is|are|'s)\s+no\s+(?:\w+\s+){0,4}(?:festival|festivals|carnival|event|events|market|markets|museum|museums|nightlife|bars?|restaurants?|scene)\b/i,
+  /\b(?:has|have|with)\s+no\s+(?:\w+\s+){0,4}(?:festival|festivals|carnival|event|events|market|markets|museum|museums|nightlife|scene)\b/i,
+  /\bno\s+(?:single\s+)?(?:\w+\s+){0,3}(?:annual|yearly|major|big|real|proper|notable|signature)\s+(?:\w+\s+){0,2}(?:festival|carnival|event|celebration)\b/i,
+  /\bnothing\s+(?:\w+\s+){0,3}(?:on|happening|going on)\s+(?:in|at|during)\b/i,
+  /\b(?:is|are)\s*n[o']?t\s+(?:known|famous|noted)\s+for\b/i,
+];
 
 export const absenceClaims = (prose) => {
   const out = [];
-  for (const s of String(prose || "").split(/(?<=[.!?])\s+/)) {
+  for (const s of sentences(prose)) {
     if (HEDGED.test(s)) continue;
-    if (!ABSENCE.some(re => re.test(s))) continue;
-    out.push(`"${s.trim().slice(0, 120)}" states that something does not exist. Nothing in this run measured an absence and nothing could: an empty nearestStation means the pipeline does not know, and Google returning no itinerary means it could not route this, neither of which is evidence that no station or no service exists. Say it could not be confirmed, or take the sentence out.`);
+    if (ABSENCE.some(re => re.test(s))) {
+      out.push(`"${s.trim().slice(0, 120)}" states that something does not exist. Nothing in this run measured an absence and nothing could: an empty nearestStation means the pipeline does not know, and Google returning no itinerary means it could not route this, neither of which is evidence that no station or no service exists. Say it could not be confirmed, or take the sentence out.`);
+      continue;
+    }
+    if (ABSENCE_CULTURE.some(re => re.test(s))) {
+      out.push(`"${s.trim().slice(0, 120)}" states that something does not exist, and nothing in this run could establish that. A search that came back with no festivals is a fact about the search. Aalborg's own page shipped "no single big annual festival" about a city with the largest carnival in Scandinavia. Check the Events library for this town, or take the sentence out.`);
+    }
+  }
+  return [...new Set(out)];
+};
+
+// ── AND WHEN THE APP ITSELF ALREADY DISAGREES ───────────────────────
+//
+// The warning above is what can be said with no data. This is what can be said
+// WITH it, and it is a different kind of statement: not "nothing established
+// this" but "our own library contradicts it".
+//
+// `rowsForTown` is injected — a list of published event rows for this town, which
+// App.jsx already holds after ensureLiveContentLoaded. A draft claiming no
+// festivals for a town whose Events tab lists four is not an unbacked claim. It
+// is a wrong one, and it can be named as wrong.
+export const contradictedAbsence = (prose, { rowsForTown = [], town = "" } = {}) => {
+  const rows = (Array.isArray(rowsForTown) ? rowsForTown : []).filter(r => String(r?.name || "").trim());
+  if (!rows.length) return [];
+  const out = [];
+  for (const s of sentences(prose)) {
+    if (HEDGED.test(s)) continue;
+    if (!ABSENCE_CULTURE.some(re => re.test(s))) continue;
+    const names = rows.slice(0, 3).map(r => String(r.name).trim()).join(", ");
+    out.push(`"${s.trim().slice(0, 120)}" is contradicted by this app's own library: ${rows.length} published event${rows.length === 1 ? "" : "s"} for ${town || "this town"}, including ${names}. Take the sentence out.`);
   }
   return [...new Set(out)];
 };
@@ -467,7 +592,7 @@ export const lastLegProblems = (prose, { stop, walkMinutes } = {}) => {
   const mins = Number(walkMinutes);
   if (!Number.isFinite(mins) || mins <= 0 || mins > SHORT_WALK_MINUTES) return [];
   const out = [];
-  for (const s of String(prose || "").split(/(?<=[.!?])\s+/)) {
+  for (const s of sentences(prose)) {
     const named = stop && s.toLowerCase().includes(String(stop).toLowerCase());
     if (!named && !ARRIVAL_TALK.test(s)) continue;
     for (const [re, why] of NOT_FOR_A_SHORT_WALK) {
@@ -623,7 +748,7 @@ export const guideLogisticsProblems = (fields, legs) => {
     //    real sentence and not a route claim, and flagging it would get this
     //    switched off inside a week.
     if (measured.length) {
-      for (const s of text.split(/(?<=[.!?])\s+/)) {
+      for (const s of sentences(text)) {
         if (!TRAVEL_TALK.test(s)) continue;
         for (const d of journeyDurations(s)) {
           if (minutes.some(m => near(d.mins, m, 3))) continue;
@@ -699,7 +824,7 @@ export const closedButPlanned = (fields, stopNames) => {
     const id = f?.id || "field";
     const text = String(f?.text || "");
     if (!text.trim()) continue;
-    for (const sentence of text.split(/(?<=[.!?])\s+/)) {
+    for (const sentence of sentences(text)) {
       for (const clause of sentence.split(CLAUSE_SPLIT)) {
         if (!CLOSED_NOW.test(clause) || CLOSURE_HEDGED.test(clause)) continue;
         for (const stop of stops) {
@@ -949,4 +1074,124 @@ export const journeyStamp = (parts, today = new Date()) => {
   return months >= MAX_FACT_AGE_MONTHS
     ? `${when}, over ${MAX_FACT_AGE_MONTHS} months ago. Treat it as the rough shape of the trip and not as a timetable.`
     : `${when}. Timetables change, so check departures before you travel.`;
+};
+
+// ── ONE LEG MEASURED, A WHOLE DRAFT OF LOGISTICS ────────────────────
+//
+// Oliver, 25 Aug 2026: "the pipeline still tends to get the logistics wrong,
+// despite using directions. Its draft on Aarhus was called out by Gemini."
+//
+// He is right, and transitProblems is not the thing that is wrong. It is
+// CORRECT, and its correctness is what hides the problem.
+//
+// THE PIPELINE MEASURES EXACTLY ONE JOURNEY: Copenhagen to the frozen
+// coordinate, transit and driving, once. Every other movement claim in an entry
+// — the light rail across Aarhus, the walk from Store Torv to the harbour, how
+// often the 1A runs, forty minutes to Moesgaard — is prose. Nothing measures it,
+// because nothing asked.
+//
+// transitProblems knows this and refuses to speak about journeys it did not
+// measure. That refusal was added deliberately, after the Esbjerg run flagged
+// "Ribe is only about 30 minutes away by train" as unmeasured and listed the
+// Copenhagen figures beside it, which is a check reporting on its own search as
+// though it were a fact about the entry. The rule is right.
+//
+// ── BUT THE LOG SENTENCE IS NOT ─────────────────────────────────────
+//
+// With no problems found, the run log records:
+//
+//   "every duration and change in the prose matches the measured route"
+//
+// which is TRUE of the one journey and reads as a statement about the draft. A
+// founder scanning a green run has no way to learn that five of the six
+// logistics claims on the page were never checked by anything, because the
+// silence of a gate that correctly declined to speak is identical to the
+// silence of a gate that looked and found nothing wrong.
+//
+// A LIMIT HIT IS NOT A LIMIT REPORTED. Found twice already today, in the chat
+// truncation and in the run-log quota. This is the third and the most expensive,
+// because the thing not being reported is the size of the unchecked surface.
+//
+// So this counts rather than accuses. It makes no claim about whether an
+// unmeasured sentence is right — it cannot know — and says only how much of the
+// draft's logistics rests on nothing. That is a fact about the run, which is
+// exactly what a run log is for.
+
+// Is this sentence making a claim about MOVEMENT — how long something takes, how
+// far it is, how often it runs? Anything else in the prose is not logistics and
+// is none of this function's business.
+const MOVEMENT = /\b(walk|walks|walking|on foot|stroll|cycle|cycling|bike|ride|rides|drive|drives|driving|journey|trip|travel|takes?|away|reach|reaches|runs?|departs?|leaves?|connection|service)\b/i;
+const FREQUENCY = /\b(every \d+|\d+ times an hour|hourly|half-?hourly|twice an hour|each hour|per hour)\b/i;
+const DISTANCE = /\b\d+(?:[.,]\d+)?\s?(?:km|kilometers?|kilometres?|m|miles?)\b/i;
+// A distance is only a LOGISTICS claim when it is a distance BETWEEN two things.
+// "The beach is 8 km long" is a fact about a beach; "Moesgaard is 8 km from the
+// centre" is a claim about a journey somebody has to make. Without this the
+// census counted the first as an unmeasured logistics claim, which is the false
+// positive that got the Esbjerg gate trimmed and is not worth repeating.
+const SPATIAL = /\b(from|to|away|outside|north|south|east|west|of the (?:centre|center|town|city)|apart)\b/i;
+
+// ── WHAT COUNTS AS BACKED ───────────────────────────────────────────
+// A claim is MEASURED when it names the origin this run actually routed from AND
+// its figure matches one of the figures that came back. Everything else is
+// unmeasured — including claims that are perfectly true. "Unmeasured" is a
+// statement about this run, never about the world.
+export const journeyCensus = (prose, { parts, drivingMins } = {}) => {
+  const measured = [parts?.total, parts?.onBoard, parts?.onFoot, parts?.waiting, parts?.longest?.mins, drivingMins]
+    .filter(n => Number.isFinite(Number(n)) && Number(n) > 0)
+    .map(Number);
+  const claims = [];
+  for (const s of sentences(prose)) {
+    const sentence = s.trim();
+    if (!sentence) continue;
+    const durations = journeyDurations(sentence);
+    // A DISTANCE BETWEEN TWO PLACES IS ITSELF A MOVEMENT CLAIM and needs no
+    // verb: "Moesgaard is 8 km from the centre" names a journey without ever
+    // saying walk, drive or take. Requiring a movement word missed every one of
+    // those, which is a large share of how a town entry actually states its
+    // logistics.
+    const spatialDistance = DISTANCE.test(sentence) && SPATIAL.test(sentence);
+    const isMovement = MOVEMENT.test(sentence) || RIDE_WORDS.test(sentence) || spatialDistance;
+    const hasFigure = durations.length > 0 || spatialDistance || FREQUENCY.test(sentence);
+    if (!isMovement || !hasFigure) continue;
+    // A duration that matches a measured figure IN A SENTENCE THAT NAMES THE
+    // ORIGIN. Both halves are required: 40 minutes appearing in an Aarhus
+    // sentence and in the Copenhagen measurement is a coincidence, not a check.
+    // That is the bag-of-numbers mistake the Esbjerg walk figure got through on.
+    const backed = ORIGIN_NAMED.test(sentence)
+      && durations.length > 0
+      && durations.every(d => measured.some(m => near(d.mins, m, 3)));
+    claims.push({
+      text: sentence.length > 120 ? `${sentence.slice(0, 117)}…` : sentence,
+      backed,
+      // Named so the note can say WHY it is unbacked, which is the difference
+      // between a warning and something actionable.
+      why: backed ? "" : ORIGIN_NAMED.test(sentence)
+        ? "names the measured origin, but its figure is not one of the measured figures"
+        : "is about a journey this run never measured",
+    });
+  }
+  const unbacked = claims.filter(c => !c.backed);
+  return { total: claims.length, measured: claims.length - unbacked.length, unmeasured: unbacked.length, claims, unbacked };
+};
+
+// The sentence for the run log and for __notes. Empty when there is nothing to
+// say, so a draft that makes no logistics claims at all reports nothing rather
+// than "0 of 0 measured", which is the tone this project keeps having to remove.
+//
+// WRITTEN FOR THE FOUNDER, NOT FOR A LOG. It says what is true, what is not
+// known, and what it would cost to know it, in that order.
+export const censusNote = (census, { origin = "Copenhagen" } = {}) => {
+  const c = census || {};
+  if (!c.total) return "";
+  if (!c.unmeasured) return c.total === 1
+    ? "The one logistics claim in this draft was checked against the measured route."
+    : `All ${c.total} logistics claims in this draft were checked against the measured route.`;
+  const head = c.measured
+    ? `${c.unmeasured} of ${c.total} logistics claims here were never measured by anything in this run.`
+    : `None of the ${c.total} logistics ${c.total === 1 ? "claim" : "claims"} here was measured by anything in this run.`;
+  // The reason, said once, rather than repeated per claim.
+  const why = `The only journey this pipeline measures is ${origin} to this place. Anything about getting around locally, or to anywhere else, is the model's prose.`;
+  const list = c.unbacked.slice(0, 4).map(u => `· "${u.text}"`).join("\n");
+  const more = c.unbacked.length > 4 ? `\n· and ${c.unbacked.length - 4} more` : "";
+  return `${head} ${why}\n${list}${more}`;
 };

@@ -99,7 +99,21 @@ export const endLog = () => {
   finished.unshift(done);
   if (finished.length > MAX_KEPT) finished.length = MAX_KEPT;
   // Survives a reload, which is the difference between a log and a status bar.
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(finished)); } catch { /* private mode, keep the in-memory copy */ }
+  //
+  // AND IT SAYS WHETHER IT SURVIVED. This swallowed the error entirely, so a
+  // full quota meant the shelf silently stopped advancing and the panel showed
+  // an old run as though it were the last one. See storeState at the foot of
+  // this file. The in-memory copy is still authoritative for this session, so a
+  // failed write is a reload problem and never a draft problem.
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(finished));
+    storeState.wrote = true; storeState.why = "";
+  } catch (e) {
+    storeState.wrote = false;
+    storeState.why = /quota|exceeded/i.test(String(e?.name || e?.message || ""))
+      ? "The browser's storage for this site is full, so these runs are kept for this session only and will be gone after a reload."
+      : "This browser refused to store the run log, so these runs are kept for this session only and will be gone after a reload.";
+  }
   return done;
 };
 
@@ -197,3 +211,67 @@ export const formatLog = (log) => {
   }
   return lines.join("\n");
 };
+
+// ── TWELVE RUNS KEPT, ONE EVER SHOWN ────────────────────────────────
+//
+// Oliver, 25 Aug 2026: "its draft on Aarhus was called out by Gemini.
+// Unfortunately I can only see the latest report."
+//
+// He can only see the latest report because the panel renders `logs[0]` under a
+// heading reading "What the last run did", and nothing else. MAX_KEPT has been
+// 12 since this file was written, every one of them is persisted through a
+// reload, and eleven of the twelve have never been visible to anybody.
+//
+// That is this repository's signature failure wearing its reporting hat:
+// finished, correct, tested code that nothing surfaces. Same shape as the six
+// DetailPage save props that were passed and rendered as an unlabelled heart,
+// found four hours ago. The log did not need building. It needed a door.
+//
+// AND THE MISSING DOOR HAS A COST HE JUST PAID. A draft is checked by a person
+// afterwards; by the time Gemini calls out the Aarhus logistics, that run is
+// two or three drafts back and its trace — which names every logistics step that
+// found nothing, and every measured leg the prose then contradicted — is sitting
+// in localStorage with no way to read it. The check happened. The evidence was
+// kept. Nobody could open it.
+
+// One line per stored run, for a picker. Short enough to sit on a chip.
+export const logChips = (logs) => (Array.isArray(logs) ? logs : []).map((log, i) => {
+  const s = summariseLog(log);
+  // The subject is what he is looking for — "Aarhus" — so it leads. The label
+  // ("Draft", "Guide") only disambiguates when there is no subject.
+  const name = s.subject || s.label || "run";
+  return {
+    i,
+    name,
+    // A run is WORTH OPENING when something in it went wrong, and the chip says
+    // so rather than making him open twelve to find out. failed outranks empty
+    // outranks discarded, because those are increasing degrees of "it ran".
+    trouble: s.failed ? "failed" : s.empty ? "empty" : s.discarded ? "discarded" : "",
+    count: s.failed || s.empty || s.discarded || 0,
+    when: log?.startedAt || "",
+    seconds: s.ms != null ? Math.round(s.ms / 1000) : null,
+  };
+});
+
+// The whole shelf as one paste. This is the thing he actually needs at the
+// moment a draft is called out: the run in question is several drafts back and
+// he does not know which one it was.
+export const formatLogs = (logs) => {
+  const list = (Array.isArray(logs) ? logs : []).filter(Boolean);
+  if (!list.length) return "";
+  const head = `${list.length} run${list.length === 1 ? "" : "s"} kept, newest first. Nothing older is stored.`;
+  return [head, ...list.map((l, i) => `\n${"═".repeat(64)}\nRUN ${i + 1} OF ${list.length}\n${"═".repeat(64)}\n${formatLog(l)}`)].join("\n");
+};
+
+// ── AND WHY THERE MAY BE FEWER THAN TWELVE ──────────────────────────
+//
+// endLog writes all twelve runs to localStorage as one string and swallows
+// whatever comes back. A run with forty steps carrying full `got` sentences is
+// tens of kilobytes, twelve of them can pass the 5MB origin quota alongside
+// everything else this app stores, and a QuotaExceededError there means the
+// shelf silently stops advancing: the panel then shows a run that is not the
+// last one, with no indication that it is stale.
+//
+// A limit hit is not a limit reported — the rule this codebase found twice
+// today. So the write says whether it worked, and the panel can say so too.
+export const storeState = { wrote: null, why: "" };

@@ -47,7 +47,7 @@ import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filt
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured, TICKET_HUNT_PROMPT, ticketHuntUrls } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT, correctionLanded, describeCorrection } from "./utils/factCheckRead";
-import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, priceSource, priceMisses, findTicketPrice, ticketPriceOn, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit, VENUE_KINDS, UNCONFIRMED_IDENTITY, UNVERIFIED_PROSE } from "./utils/entryAudit";
+import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, launderedAbsence, priceSource, priceMisses, findTicketPrice, ticketPriceOn, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit, VENUE_KINDS, UNCONFIRMED_IDENTITY, UNVERIFIED_PROSE } from "./utils/entryAudit";
 import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM, upgradeWorthIt, onFootMinutes } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems, travellerBudget, budgetTierMismatch } from "./utils/accommodation";
@@ -60,7 +60,7 @@ import { aiDisclosureFor } from "./utils/aiDisclosure";
 import { SupportPage } from "./components/SupportPage";
 import { safetyClaimNote } from "./utils/safetyClaims";
 import { missingSourcesNote } from "./utils/provenance";
-import { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog } from "./utils/runLog";
+import { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, formatLogs, logChips, storeState } from "./utils/runLog";
 import { domainOf, isListingHost, scrapeTier, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE, MAX_TICKET_PAGES, isOwnSiteFor, urlNames, isKommuneHost } from "./utils/pageScan";
 import { weatherSourceFor, weatherBadge, normalsNote, dayWeather, FORECAST, NORMALS } from "./utils/weather";
 import { foodSpots } from "./data/food";
@@ -115,7 +115,7 @@ import { studioPrompts } from "./utils/studioPrompts";
 import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow } from "./utils/liveContent";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
-import { journeyParts, journeyBlock, transitProblems, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, closedButPlanned, arrivalStop, vehicleMismatches } from "./utils/journey";
+import { journeyParts, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, closedButPlanned, arrivalStop, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
 import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS } from "./utils/correction";
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance, staleUncertainties, describeStale } from "./utils/glanceExtract";
 import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive, isNeverOwnSite, isNeverASource } from "./utils/sourcePolicy";
@@ -149,6 +149,8 @@ import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange,
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
 import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition, venueRatherThanEvent } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
+import { newStreamState, readStreamEvent, visibleText, streamContent, streamDiagnosis, streamTrace } from "./utils/streamRead";
+import { heroNeedsReplacing, heroPatch, heroStatusLine, isAbsolutePhoto } from "./utils/heroPhoto";
 import { languageBlock, guideLanguageBlock, readerLanguage, keepLanguageOf } from "./utils/readerLanguage";
 import { echoInDraft, describeEcho, ECHO_RUN } from "./utils/echoCheck";
 import { PhotoPlate } from "./components/PhotoPlate";
@@ -1677,11 +1679,10 @@ function GemlyxApp() {
       // were "already set", so choosing a Commons photo appended it to the body
       // and left the broken path in place as the card image. A hero that does
       // not load is not a hero.
-      const heroBroken = !(await imageLoads(p.photo));
+      const replacing = await heroNeedsReplacing(p.photo, { loads: imageLoads });
       await patchContentPayload(row, {
         ...p,
-        photo: heroBroken ? src : p.photo,
-        ...(heroBroken ? { __photoCredit: { ...hit.credit } } : {}),
+        ...heroPatch(replacing, src, hit.credit),
         blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), block],
       });
       setPhotoFinder(null);
@@ -1762,8 +1763,12 @@ function GemlyxApp() {
       //
       // Same test as the finder and as publish: a hero that does not load is
       // not a hero. imageLoads, not a truthiness check.
-      const heroBroken = !(await imageLoads(p.photo));
-      await patchContentPayload(row, { ...p, photo: heroBroken ? firstUrl : p.photo, blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), ...newBlocks] });
+      // ONE RULE, SHARED. This was correct and hand-written; it is now the same
+      // call the other three doors make, so the next person to change the rule
+      // cannot change it in three places and miss the fourth. That miss is what
+      // this comment block is about. See utils/heroPhoto.js.
+      const replacing = await heroNeedsReplacing(p.photo, { loads: imageLoads });
+      await patchContentPayload(row, { ...p, ...heroPatch(replacing, firstUrl), blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), ...newBlocks] });
     } catch (e) { setMediaError(String(e?.message || e)); }
     setMediaBusy(false);
   };
@@ -1954,12 +1959,25 @@ function GemlyxApp() {
         blocks.push({ type: "image", src: url });
         if (!firstUrl) firstUrl = url;
       }
-      // Same rule as the published panel: the first photo on an entry with none
-      // becomes the hero, so the card stops looking bare, and later ones land
-      // in the writing only.
+      // ── THE RULE THE OTHER THREE DOORS ALREADY USE ─────────────
+      // Oliver, 25 Aug: "adding photos in the publish or manage doesn't make it
+      // the hero photo. I need to do that in 'add media.'"
+      //
+      // This line was `draft?.photo || firstUrl` — the exact test useCommonsPhoto
+      // retired on 7 Aug and uploadMediaFiles retired on 24 Aug, whose own
+      // comment reads "THE FIX WAS APPLIED TO ONE DOOR AND NOT THE OTHER". This
+      // was the other other one. A draft loaded back from a published row carries
+      // a template path like /towns/praesto.jpg, so `||` called it a hero, the
+      // upload went to the body, and shapeForLive then regenerated the dead path
+      // at publish because only an ABSOLUTE url beats the type template. The
+      // photograph never reached the card, which is precisely what he saw.
+      //
+      // Third recurrence of one rule written out by hand three times, so it is
+      // now written once, in utils/heroPhoto.js, and every door calls it.
+      const replacing = await heroNeedsReplacing(draft?.photo, { loads: imageLoads });
       const next = {
         ...draft,
-        photo: draft?.photo || firstUrl,
+        ...heroPatch(replacing, firstUrl),
         blogBody: [...(Array.isArray(draft?.blogBody) ? draft.blogBody : []), ...blocks],
       };
       setStudioDraft(next);
@@ -2014,7 +2032,7 @@ function GemlyxApp() {
   // refresh away from being published without the right to publish it. Commons
   // returns both in the same response, which is the whole reason this endpoint
   // exists rather than a search engine, so there is no reason to split them.
-  const useDraftCommonsPhoto = (hit) => {
+  const useDraftCommonsPhoto = async (hit) => {
     let draft;
     try { draft = JSON.parse(studioDraftText); }
     catch { setDraftPhotoError("The draft JSON below does not parse, so there is nothing to attach the photo to. Fix it first."); return; }
@@ -2024,21 +2042,26 @@ function GemlyxApp() {
     if (!src) { setDraftPhotoError("That result had no usable image URL."); return; }
     const credit = { ...(hit?.credit || {}) };
     const block = { type: "image", src, credit, ...(useCommonsCaption && hit?.caption ? { caption: hit.caption } : {}) };
-    // ── THE HERO TEST IS THE SAME ONE PUBLISH USES ──────────────────
-    // An absolute URL is a real picture, from the bucket or from Commons.
-    // Anything else in `photo` is a path somebody guessed at, and shapeForLive
-    // applies this identical rule when deciding whether the draft's hero beats
-    // the type template. The two have to agree: if this panel called a relative
-    // path a hero and publish did not, the photo would look attached right up
-    // until it silently was not.
-    const heroAlready = /^https?:\/\//i.test(String(draft?.photo || "").trim());
+    // ── THE HERO TEST IS THE SAME ONE EVERY OTHER DOOR USES ─────────
+    // This was the only door with a purely STRUCTURAL test: an absolute url
+    // counted as a hero whether or not anything was behind it. It agreed with
+    // shapeForLive, which is the floor and cannot do better with no network, but
+    // it did not agree with the two published doors, which actually load the
+    // thing. So a draft carrying an absolute url that 404s — a moved Commons
+    // file, a deleted bucket object — kept it, and the new photograph went to
+    // the body. Same family of bug, one rung up.
+    //
+    // heroNeedsReplacing is that rule for all four doors now. It keeps the
+    // structural floor AND adds the load check, so this panel and publish still
+    // agree, and a hero that does not resolve stops counting as one.
+    // See utils/heroPhoto.js.
+    const replacing = await heroNeedsReplacing(draft?.photo, { loads: imageLoads });
     const next = {
       ...draft,
-      photo: heroAlready ? draft.photo : src,
-      // __photoCredit is what DetailPage renders under the hero. Set only when
-      // this picture actually became the hero, so a credit can never end up
-      // attributing somebody else's photograph.
-      ...(heroAlready ? {} : { __photoCredit: credit }),
+      // __photoCredit is what DetailPage renders under the hero, and heroPatch
+      // attaches it ONLY when this picture actually took the card, so a credit
+      // can never end up attributing somebody else's photograph.
+      ...heroPatch(replacing, src, credit),
       blogBody: [...(Array.isArray(draft?.blogBody) ? draft.blogBody : []), block],
     };
     setStudioDraft(next);
@@ -5631,21 +5654,52 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // anything, it moves an unproven claim to uncertainties.
         {
           const tp = transitProblems(readerText(t), { parts: transitParts, drivingMins });
+          // ── AND HOW MUCH OF THE DRAFT THAT SENTENCE COVERS ───────
+          //
+          // Oliver, 25 Aug: "the pipeline still tends to get the logistics
+          // wrong, despite using directions."
+          //
+          // This step used to report, on a clean run, "every duration and change
+          // in the prose matches the measured route". True of the ONE journey
+          // this pipeline measures — Copenhagen to the frozen coordinate — and
+          // read as a statement about the draft. An Aarhus entry is full of
+          // claims about getting around Aarhus, and nothing measures any of
+          // them, so the gate correctly says nothing and the log correctly says
+          // nothing, and between them the unchecked surface is invisible.
+          //
+          // transitProblems is right to refuse: it will not accuse a sentence it
+          // cannot check, which is why the Esbjerg false positives were removed.
+          // The census does not accuse either. It COUNTS. See journeyCensus.
+          const census = journeyCensus(readerText(t), { parts: transitParts, drivingMins });
           note(`The journey, against what was measured${suffix}`, {
             provider: "google",
             detail: "every duration and change in the prose, against Google's own step list",
-            outcome: !transitParts ? "skipped" : tp.length ? "empty" : "ok",
+            // A run where most of the logistics went unmeasured is not "ok".
+            // It is a step that ran and covered a fraction of what it looks
+            // like it covered, which is what "empty" means everywhere else here.
+            outcome: !transitParts ? "skipped" : tp.length ? "empty" : census.unmeasured ? "empty" : "ok",
             why: transitParts ? "" : "no transit itinerary was measured, so nothing here can be checked",
             got: !transitParts
               ? "nothing to check against"
-              : tp.length
-                ? tp.join(" ")
-                : `every duration and change in the prose matches the measured route (${transitParts.changes} change${transitParts.changes === 1 ? "" : "s"}${transitParts.interchanges?.length ? ` at ${transitParts.interchanges.join(", ")}` : ""})`,
+              : [
+                  tp.length
+                    ? tp.join(" ")
+                    : `every duration and change ABOUT THE MEASURED JOURNEY matches it (${transitParts.changes} change${transitParts.changes === 1 ? "" : "s"}${transitParts.interchanges?.length ? ` at ${transitParts.interchanges.join(", ")}` : ""})`,
+                  // Said on EVERY run, clean or not. The number this step was
+                  // hiding is the size of what it never looked at.
+                  census.total
+                    ? `${census.measured} of ${census.total} logistics claims in the draft were measured; ${census.unmeasured} rest on the model's prose`
+                    : "the draft makes no logistics claims",
+                ].join(" | "),
             used: !!transitParts && !tp.length,
           });
           for (const line of tp) {
             noteToFounder(line);
           }
+          // The founder note carries the unmeasured claims themselves, because a
+          // count he cannot act on is a count. Empty when everything was checked
+          // or when the draft makes no logistics claims at all.
+          noteToFounder(censusNote(census));
         }
 
         // ── AND NOTHING ABOUT THIS RUN IN A FIELD A READER SCANS ────
@@ -5707,10 +5761,37 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // Google returns no itinerary. An empty field means we do not know.
         // See absenceClaims in utils/journey.js.
         {
-          const ac = absenceClaims(readerText(t));
+          // ── AND THE HONEST NOTE, LAUNDERED INTO A FACT ────────────
+          //
+          // Oliver, 25 Aug 2026, on the live Aalborg entry: "No single annual
+          // event? Seriously? It has the biggest carnival in Northern Europe."
+          // Then the diagnosis, which was better than mine: "it doesn't actively
+          // write that there is no annual festival. I assume it looks at the
+          // unconfirmed and just makes it up from there?"
+          //
+          // Exactly that. The draft's own uncertainties said the festival "may
+          // exist but wasn't found", which is correct and is the sentence this
+          // pipeline exists to produce. The prose then said there is none, about
+          // the city with the largest carnival in Scandinavia.
+          //
+          // launderedAbsence pairs the two by SUBJECT: the draft has already told
+          // us what it failed to establish, so the check is only whether it then
+          // went ahead and established it anyway. See utils/entryAudit.js.
+          const ac = [
+            ...absenceClaims(readerText(t)),
+            ...launderedAbsence(t),
+            // The strongest witness of the three, and it needs no phrasing
+            // guesses: our own Events library for this town. Not "nothing
+            // established this" but "our own page disagrees".
+            ...contradictedAbsence(readerText(t), {
+              town: draftTown,
+              rowsForTown: [...(events || []), ...(majorEvents || [])]
+                .filter(r => draftTown && String(r?.town || "").trim().toLowerCase() === String(draftTown).trim().toLowerCase()),
+            }),
+          ];
           note(`Stated absences${suffix}`, {
             provider: "google",
-            detail: "any sentence claiming a station or a service does not exist",
+            detail: "any sentence claiming something does not exist, including one the draft's own uncertainties say was merely not found",
             outcome: ac.length ? "empty" : "ok",
             got: ac.length ? ac.join(" ") : "the draft states no absence it cannot support",
             used: !ac.length,
@@ -7263,6 +7344,9 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   // rather than quietly left looking finished.
   const PHOTO_FIX_BATCH_CAP = 40;
   const [photoFixState, setPhotoFixState] = useState(null);
+  // Which of the kept runs the trace panel is showing. 0 is the newest, which is
+  // what the panel showed for its whole life before there was a way to pick.
+  const [runLogPick, setRunLogPick] = useState(0);
   const backfillPhotos = async () => {
     if (photoFixState?.running) return;
     setPhotoFixState({ running: true, done: 0, total: 0, fixed: 0, skipped: 0, notFound: [], failed: [] });
@@ -7313,7 +7397,12 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
             const patch = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
               method: "PATCH",
               headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=minimal" },
-              body: JSON.stringify({ payload: { ...p, photo: String(own.src).trim(), ...(own.credit ? { __photoCredit: { ...own.credit } } : {}) } }),
+              // heroPatch(true, ...) rather than a hand-written spread. The
+              // decision was already made upstream — this row only reaches here
+              // because its hero failed imageLoads — so `true` is the honest
+              // argument, and routing it through the shared helper means the
+              // credit is attached the one way it is attached everywhere.
+              body: JSON.stringify({ payload: { ...p, ...heroPatch(true, String(own.src).trim(), own.credit) } }),
             });
             if (patch.ok) { fixed++; setPhotoFixState({ running: true, done: i + 1, total: batch.length, fixed, skipped, notFound, failed }); continue; }
             failed.push(`${p.name}: promoting its own photo failed (${patch.status})`);
@@ -7338,7 +7427,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
             const patch = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
               method: "PATCH",
               headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=minimal" },
-              body: JSON.stringify({ payload: { ...p, photo: src, __photoCredit: { ...hit.credit }, blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), block] } }),
+              body: JSON.stringify({ payload: { ...p, ...heroPatch(true, src, hit.credit), blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), block] } }),
             });
             if (patch.ok) fixed++; else failed.push(`${p.name}: save failed (${patch.status})`);
           }
@@ -9622,6 +9711,25 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       try { localStorage.setItem("gemlyx_saved_places", JSON.stringify(updated)); } catch { /* ignore */ }
       return updated;
     });
+  };
+
+  // ── AND THE DOOR OUT OF THE SAVED LIST ──────────────────────────────
+  // toggleSavePlace has existed for months and so has the panel that turns a
+  // saved list into a route request, twelve thousand lines below. Nothing
+  // connected them from inside an entry page, so the only travellers who ever
+  // completed the loop were the ones who happened to scroll to the Road Trips
+  // section afterwards and recognise their own saves.
+  //
+  // Closes the entry first. DetailPage is a fixed overlay at z-index 970 and
+  // sendAI scrolls to an anchor underneath it, so sending without closing puts
+  // the answer behind a full-screen panel — the same class of bug the z-index
+  // comment on DetailPage itself records.
+  const planFromSavedPlaces = () => {
+    const list = savedPlaces.map(p => p.town ? `${p.name} (${p.town})` : p.name).join(", ");
+    if (!list) return;
+    closeEntry();
+    sendAI(`Plan me a trip that includes these places I've saved: ${list}. Suggest a sensible order, roughly how long I need, and one or two things worth seeing along the way.`);
+    setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "end" }), 260);
   };
 
   // Resolve a guide stop name to real coordinates (content data first, then town list), or null.
@@ -12842,12 +12950,27 @@ ${languageBlock()}`;
           return { content: [], error: errData.error?.message || (typeof errData.error === "string" ? errData.error : null) || `Request failed (${res.status})` };
         }
 
+        // ── THE READER RECORDS WHAT IT SAW ────────────────────────
+        //
+        // Oliver, 25 Aug 2026: a 750-character brief pasted into the chat, twice,
+        // and both times "Hit a snag on my end. Try sending that again."
+        //
+        // That sentence is what this file prints when there is no text, no error
+        // and no exhausted tool loop. Three conditions, one message, and it names
+        // none of them — because the reader that produced them could not tell them
+        // apart either. It turned every block type it had not met into
+        // `{ type: "text", text: "" }`, so a reply made entirely of thinking blocks
+        // and a reply where the model said nothing arrived downstream identical;
+        // and a stream cut off mid-flight by a function timeout, which has already
+        // sent its 200 and its headers, simply ended and reported zero blocks.
+        //
+        // A limit hit is not a limit reported, for the fourth time today. See
+        // utils/streamRead.js: the parse is the same, what is new is that the
+        // failure now has a name.
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
-        const blocks = [];
-        let stopReason = null;
-        let streamError = null;
+        const st = newStreamState();
 
         while (true) {
           const { done, value } = await reader.read();
@@ -12862,37 +12985,13 @@ ${languageBlock()}`;
             if (!raw) continue;
             let evt;
             try { evt = JSON.parse(raw); } catch { continue; }
-
-            if (evt.type === "content_block_start") {
-              blocks[evt.index] = evt.content_block?.type === "tool_use"
-                ? { type: "tool_use", id: evt.content_block.id, name: evt.content_block.name, inputJson: "" }
-                : { type: "text", text: "" };
-            } else if (evt.type === "content_block_delta") {
-              const b = blocks[evt.index] || (blocks[evt.index] = { type: "text", text: "" });
-              if (evt.delta?.type === "text_delta") {
-                b.text = (b.text || "") + evt.delta.text;
-                if (onText) onText(blocks.filter(x => x && x.type === "text").map(x => x.text).join(""));
-              } else if (evt.delta?.type === "input_json_delta") {
-                b.inputJson = (b.inputJson || "") + (evt.delta.partial_json || "");
-              }
-            } else if (evt.type === "message_delta") {
-              if (evt.delta?.stop_reason) stopReason = evt.delta.stop_reason;
-            } else if (evt.type === "error") {
-              streamError = evt.error?.message || "Stream error";
-            }
+            readStreamEvent(st, evt, onText);
           }
         }
 
-        const content = blocks.filter(Boolean).map(b => {
-          if (b.type === "tool_use") {
-            let input = {};
-            try { input = JSON.parse(b.inputJson || "{}"); } catch { /* leave empty — malformed tool input, treated as no-op below */ }
-            return { type: "tool_use", id: b.id, name: b.name, input };
-          }
-          return { type: "text", text: b.text || "" };
-        });
-
-        return { content, stop_reason: stopReason, error: streamError };
+        const diagnosis = streamDiagnosis(st);
+        if (diagnosis) console.warn("Gemlyx chat: no text in this turn.", { diagnosis, ...streamTrace(st) });
+        return { content: streamContent(st), stop_reason: st.stopReason, error: st.error, diagnosis, trace: streamTrace(st) };
       };
 
       // The visible chat bubble is created lazily, on the FIRST real text token —
@@ -13122,11 +13221,17 @@ ${languageBlock()}`;
         // needed more looking up than one turn allows, and saying so is both
         // honest and actionable. Dashes are banned in this product's copy, his
         // standing rule, and both of these carried one.
+        // ── AND THE SENTENCE SAYS WHICH THING HAPPENED ────────────
+        // "Hit a snag on my end" was printed for a timed-out connection, a reply
+        // made only of thinking blocks, a stream cut off mid-flight and a model
+        // that genuinely said nothing. Four different events, one sentence, and
+        // no way for him or for me to tell them apart from the screen. The
+        // diagnosis comes off the stream reader, which now records what it saw.
         setAiMessages(prev => [...prev, { role: "assistant", text: data.error
           ? `Hit a snag: ${data.error}`
           : turn.exhausted
             ? "That one needed more looking up than I can do in one go. Ask me about one part of it and I will get there."
-            : "Hit a snag on my end. Try sending that again.", isError: true }]);
+            : data.diagnosis || "Hit a snag on my end. Try sending that again.", isError: true }]);
       }
     } catch (err) {
       console.warn("Gemlyx chat: request threw.", err);
@@ -14702,11 +14807,52 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     {(() => {
                       const logs = recentLogs();
                       if (!logs.length) return null;
-                      const last = logs[0];
+                      // ── TWELVE KEPT, ONE SHOWN ────────────────────
+                      // Oliver, 25 Aug: "its draft on Aarhus was called out by
+                      // Gemini. Unfortunately I can only see the latest report."
+                      //
+                      // This read `logs[0]` and nothing else, under a heading
+                      // saying "What the last run did". MAX_KEPT has been 12
+                      // since the file was written and every one of them
+                      // survives a reload, so eleven finished, persisted traces
+                      // have never been visible to anybody. Nothing needed
+                      // building. It needed a door.
+                      //
+                      // It matters at exactly the moment he hit: a draft is
+                      // checked by a person AFTERWARDS, and by then that run is
+                      // two or three drafts back.
+                      const chips = logChips(logs);
+                      const pick = Math.min(Math.max(0, runLogPick), logs.length - 1);
+                      const last = logs[pick];
                       const sum = summariseLog(last);
                       return (
                         <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 11px", marginBottom: 10 }}>
-                          <div style={{ fontSize: 9.5, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase" }}>What the last run did</div>
+                          <div style={{ fontSize: 9.5, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase" }}>
+                            {logs.length === 1 ? "What the last run did" : `The last ${logs.length} runs`}
+                          </div>
+                          {/* Named by SUBJECT, because "Aarhus" is what he is
+                              looking for, and marked when something in the run
+                              went wrong so he does not have to open twelve to
+                              find the one worth reading. */}
+                          {chips.length > 1 && (
+                            <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 7 }}>
+                              {chips.map(c => (
+                                <button key={c.i} onClick={() => setRunLogPick(c.i)} title={c.when}
+                                  style={{ background: c.i === pick ? `${C.gold}22` : "none", border: `1px solid ${c.i === pick ? C.gold + "88" : C.border}`, color: c.i === pick ? C.gold : C.light, borderRadius: 100, padding: "4px 9px", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                  {c.name}
+                                  {c.trouble === "failed" && <span style={{ color: "#E57373" }}> ·{c.count}✕</span>}
+                                  {c.trouble === "empty" && <span style={{ color: "#FFB347" }}> ·{c.count}∅</span>}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {/* A LIMIT HIT IS NOT A LIMIT REPORTED. endLog used to
+                              swallow a failed write entirely, so a full quota
+                              meant the shelf stopped advancing and this panel
+                              showed an old run as if it were the last one. */}
+                          {storeState.wrote === false && (
+                            <div style={{ fontSize: 10, color: "#FFB347", marginTop: 6, lineHeight: 1.5 }}>{storeState.why}</div>
+                          )}
                           <div style={{ fontSize: 11, color: C.light, marginTop: 5, lineHeight: 1.5 }}>
                             {sum.subject || sum.label}
                           </div>
@@ -14722,10 +14868,21 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               {sum.decisions} {sum.decisions === 1 ? "decision" : "decisions"} where two sources disagreed.
                             </div>
                           )}
-                          <button onClick={() => { try { navigator.clipboard.writeText(formatLog(last)); showToast("Run log copied", 1800); } catch { /* ignore */ } }}
-                            style={{ marginTop: 8, background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                            Copy the full trace
-                          </button>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                            <button onClick={() => { try { navigator.clipboard.writeText(formatLog(last)); showToast("Run log copied", 1800); } catch { /* ignore */ } }}
+                              style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                              Copy this trace
+                            </button>
+                            {/* THE ONE HE ACTUALLY NEEDED. When a draft is called
+                                out afterwards, the run in question is several
+                                drafts back and he does not yet know which. */}
+                            {logs.length > 1 && (
+                              <button onClick={() => { try { navigator.clipboard.writeText(formatLogs(logs)); showToast(`All ${logs.length} runs copied`, 2200); } catch { /* ignore */ } }}
+                                style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                Copy all {logs.length}
+                              </button>
+                            )}
+                          </div>
                         </div>
                       );
                     })()}
@@ -15749,9 +15906,19 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${C.gold}66`, borderRadius: 10, padding: "9px 14px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                 🔎 Find on Wikimedia
                               </button>
-                              {heroOf
+                              {/* ── AND THE LINE THAT WAS LYING ──────────────
+                                  This rendered a 44px <img> whenever `photo`
+                                  was a non-empty string, so a draft carrying a
+                                  template path like /towns/praesto.jpg showed a
+                                  broken-image box and NO explanation, and the
+                                  "first one you add becomes it" sentence never
+                                  appeared — on the exact drafts where the button
+                                  underneath it did not work. A thumbnail that
+                                  fails to load is the panel reporting a hero it
+                                  does not have. See heroStatusLine. */}
+                              {isAbsolutePhoto(heroOf)
                                 ? <img src={heroOf} alt="" style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 8, border: `1px solid ${C.border}` }} />
-                                : <span style={{ fontSize: 10.5, color: C.muted }}>No hero photo yet. The first one you add becomes it.</span>}
+                                : <span style={{ fontSize: 10.5, color: heroOf ? C.gold : C.muted, maxWidth: 340, lineHeight: 1.5 }}>{heroStatusLine(heroOf)}</span>}
                               <span style={{ fontSize: 10, color: C.muted }}>Uploads to the media bucket now and lands in the JSON below. Publish saves it with the rest.</span>
                             </div>
                             {draftPhotoFinder && (
@@ -18259,10 +18426,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <div id="ess-faq" style={{ marginBottom: 20, scrollMarginTop: 90 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>FAQ</div>
                 {[
-                  { q: "Is Gemlyx free?", a: "Yes — completely free for travelers. Browse, save, use the map and discover hidden finds at no cost." },
+                  { q: "Is Gemlyx free?", a: "Everything on the site today is free: browsing, saving, the map, the guides and the finds. If a paid plan is ever added it will be for extra things on top, the free part stays free, and we will say so here before anything changes rather than after." },
                   { q: "How do I save a find?", a: "Tap the ♡ heart on any business. It gets saved to your Saved tab instantly." },
                   { q: "How do I get my shop listed?", a: "Send us a message on Instagram or email hello@gemlyxtravel.com. Every listing is hand-researched and checked against multiple sources before it goes live." },
-                  { q: "Are all finds verified?", a: "Yes — every listing is hand-researched and fact-checked against multiple sources, never invented. We show when each one was last checked." },
+                  { q: "Are all finds verified?", a: "Every listing is researched and checked by one person before it goes live, and nothing here is invented. Where the sources are recorded we show them on the page, including the corrections we had to make and the questions still open. Older entries were written before we started storing sources, so some show fewer than others, and we are working back through them." },
                   { q: "Which cities are covered?", a: "All of Denmark, not just Copenhagen. Towns across Jutland, North Zealand and the islands are covered too, along with the coasts most visitors to Denmark are already heading for." },
                 ].map((item, i) => (
                   <div key={i} style={{ background: C.surface, borderRadius: 12, padding: "12px 16px", marginBottom: 8, border: `1px solid ${C.border}` }}>
@@ -19120,14 +19287,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           live control it held, bookableOnly, already has its own pill on the
           Attractions page and is untouched. */}
 
-      <DetailPage paid={hasPaidPlan(userProfile)} item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} />
+      <DetailPage paid={hasPaidPlan(userProfile)} item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       {/* onOpenEvent powers the new "What's on in <town>" section: tapping a
           festival closes the town page and opens that event's real entry, so the
           traveler lands on the full page with dates, tickets and directions
           rather than a dead-end list item. */}
-      <DetailPage paid={hasPaidPlan(userProfile)} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} />
-      <DetailPage paid={hasPaidPlan(userProfile)} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} />
-      <DetailPage paid={hasPaidPlan(userProfile)} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} />
+      <DetailPage paid={hasPaidPlan(userProfile)} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage paid={hasPaidPlan(userProfile)} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage paid={hasPaidPlan(userProfile)} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       {/* ── The assistant that follows him (Oliver, 6 Aug: "some sort of
           assistant for the admin /#studio guy? That will always be with me?
           Even when I'm on the blogs")  ────────────────────────────────
@@ -19264,7 +19431,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           onSaved={() => refreshLiveContent()} />;
       })()}
 
-      <DetailPage paid={hasPaidPlan(userProfile)} item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} />
+      <DetailPage paid={hasPaidPlan(userProfile)} item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
 
       {/* Per Oliver ("get rid of the popup"): once a guide finishes building, we
           navigate straight to the full-page GuidePage instead of showing a

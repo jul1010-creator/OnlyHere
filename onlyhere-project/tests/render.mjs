@@ -43,8 +43,32 @@
 import { build } from "esbuild";
 import { writeFileSync, mkdtempSync, mkdirSync } from "fs";
 import { join } from "path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const ROOT = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
+// ── AND IT HAS TO WORK ON THE MACHINE HE PUSHES FROM ────────────────
+//
+// 25 Aug 2026. The pre-push hook failed on Oliver's Windows box:
+//
+//   ERR_UNSUPPORTED_ESM_URL_SCHEME: On Windows, absolute paths must be valid
+//   file:// URLs. Received protocol 'c:'
+//
+// Two separate Windows faults in this file, both invisible on Linux, both mine
+// from the day it was written.
+//
+// ONE: `new URL("..", import.meta.url).pathname` returns "/C:/Users/olive/..."
+// on Windows — a leading slash in front of the drive letter — and `join` then
+// builds a path that resolves to nothing. fileURLToPath is the function that
+// exists for exactly this and it is right on both platforms.
+//
+// TWO: `import(absolutePath)` below. Node's ESM loader tolerates a POSIX
+// absolute path because "/root/..." has no scheme; "C:\Users\..." parses as
+// protocol "c:" and throws. pathToFileURL is the fix, and it is also correct on
+// Linux, so there is one code path rather than a platform branch.
+//
+// The suite runs on Linux here and on Windows there. A test harness that only
+// works where it was written is a harness that stops the person who actually
+// ships from pushing.
+const ROOT = fileURLToPath(new URL("..", import.meta.url)).replace(/[\\/]$/, "");
 
 // Globals a browser has and Node does not. Set before the module is imported,
 // because a component that reads navigator at module scope reads it once.
@@ -97,7 +121,8 @@ export const loadComponent = async (relPath, exportName) => {
     external: ["react", "react-dom", "react/jsx-runtime"],
     absWorkingDir: ROOT,
   });
-  const mod = await import(out);
+  // pathToFileURL, not the bare path: see the note at ROOT above.
+  const mod = await import(pathToFileURL(out).href);
   const comp = mod[exportName];
   cache.set(key, comp);
   return comp;

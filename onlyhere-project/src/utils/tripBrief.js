@@ -44,7 +44,7 @@
 // repeating: the app suggests things, so one sentence back from it reading
 // "Copenhagen has excellent museums" would otherwise become evidence that the
 // traveller asked for museums.
-import { arrivalDateIn, dayCountIn, monthOnlyIn, latestRelativeAnswer, daysBetween } from "./tripEvents";
+import { arrivalDateIn, departureDateIn, dayCountIn, monthOnlyIn, latestRelativeAnswer, daysBetween } from "./tripEvents";
 import { PARTY_BARE, PARTY_POSSESSIVE, PARTY_POSSESSIVES, PARTY_COUNT, TRAVEL_VERBS, FROM_WORDS, TRANSPORT_PREPS, VEHICLE_WORDS, TRANSPORT_VERBS, PUBLIC_TRANSPORT, alt, LETTER } from "./travellerWords";
 import { dayStart } from "./calendarDay";
 import { travelModeKey, withoutNonModes } from "./routeOrder";
@@ -163,11 +163,27 @@ const readWhen = (text, turns, intakeArrival, intakeDeparture, today) => {
   return rel ? { value: rel.start, precision: "day", source: "said", end: rel.end } : null;
 };
 
-const readDays = (text, intakeArrival, intakeDeparture) => {
+const readDays = (text, intakeArrival, intakeDeparture, today = new Date()) => {
   const both = daysBetween(intakeArrival, intakeDeparture);
   if (both && both > 0) return { value: both, source: "intake" };
   const spoken = dayCountIn(text);
-  return spoken ? { value: spoken, source: "said" } : null;
+  if (spoken) return { value: spoken, source: "said" };
+  // ── AND TWO DATES IN A SENTENCE ARE A LENGTH ──────────────────────
+  // Oliver's test brief opened "flying into Billund on Thursday 8 October 2026
+  // ... and out of Aalborg on Monday the 12th at 11:00", and this slot came back
+  // empty. The next question Gemlyx would have asked him was "How many days have
+  // you got?" — which he had answered twice in his first sentence.
+  //
+  // Counted INCLUSIVELY, the way a person counts a trip: in on the 8th, out on
+  // the 12th, and they will tell you that is five days. daysBetween does the same
+  // for the intake pickers above, so the two paths cannot disagree.
+  const start = arrivalDateIn(text, today);
+  const end = start ? departureDateIn(text, start) : null;
+  if (start && end) {
+    const span = Math.round((end - start) / 86400000) + 1;
+    if (span > 0 && span <= 30) return { value: span, source: "said" };
+  }
+  return null;
 };
 
 // Deliberately narrow. An airport, a city, or "starting from" phrasing. A place
@@ -454,7 +470,7 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   const set = (key, res) => { if (res) known[key] = res; };
 
   set("origin", readOrigin(t, intake.startPoint));
-  set("days", readDays(t, intake.arrival, intake.departure));
+  set("days", readDays(t, intake.arrival, intake.departure, today));
   set("when", readWhen(t, turns, intake.arrival, intake.departure, today));
   set("party", readParty(t, intake.travelers, intake.familyMode));
   set("interests", readInterests(t, intake.interest));

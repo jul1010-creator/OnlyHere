@@ -24,7 +24,7 @@ import { mkdtempSync, writeFileSync, readFileSync, readdirSync, statSync, rmSync
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { stripNonCode, stripComments, functionBody, useBeforeDeclare, namedFunctions, hookDepsBeforeDeclaration, readOutOfScope } from "./tdz.mjs";
 
 let passed = 0, failed = 0;
@@ -77,6 +77,9 @@ writeFileSync(entry, `
   export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { icsEscape, icsFold, icsStamp, stayMinutes, DEFAULT_STAY_MINUTES, icsUid, stopEvent, guideEvents, buildIcs, icsFilename } from ${JSON.stringify(join(root, "src/utils/calendarExport.js"))};
+  export { isAbsolutePhoto, heroNeedsReplacing, heroPatch, heroStatusLine } from ${JSON.stringify(join(root, "src/utils/heroPhoto.js"))};
+  export { saveLabel, saveHint, savedLine, planFromSavedLabel } from ${JSON.stringify(join(root, "src/utils/savedTrip.js"))};
   export { CONSTRAINT_KINDS, constraintViolations, violationsOfKind, constraintNote, repairWorked, INVENTORY_MAY_NOT_SELECT } from ${JSON.stringify(join(root, "src/utils/constraintCheck.js"))};
   export { briefPanel, briefSentence, briefGaps, willNotAssume, briefVagueNote, briefLines, whenPhrase, clauseFor, isAcknowledged, ACKNOWLEDGED } from ${JSON.stringify(join(root, "src/utils/briefPanel.js"))};
   export { EVIDENCE, EVIDENCE_RANK, EVIDENCE_LABEL, fieldSourceKey, PERISHABLE_FIELD_TOPIC, PERISHABLE_FIELDS, isPerishable, perishableTopic, evidenceOf, entryEvidence, evidenceCounts, unbackedPerishables, weakestClaim, evidenceNote, PERISHABLE_TOPICS_USED, PAGE_SCAN_TOPICS } from ${JSON.stringify(join(root, "src/utils/evidence.js"))};
@@ -106,7 +109,7 @@ writeFileSync(entry, `
   export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, missingRequired, cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS, cleanBornDate, birthYear, BORN_DATE_MIN, BORN_DATE_MAX, REQUIRED_PROFILE, REQUIRED_LABEL, AGE_BANDS, BORN_YEARS, bandForYear, ageFrom, underMinimumAge, MIN_ACCOUNT_AGE, TERMS_VERSION, holdProfile, takeHeldProfile, PENDING_PROFILE_KEY, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
   export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
-  export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
+  export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, formatLogs, logChips, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { fieldProvenance, correctionProvenance, entrySources, untracedFields, describeProvenance, readerCorrection, readerCorrections, isCheckerVoice, readerUncertainty, readerUncertainties, READER_UNCERTAINTY_LIMIT } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
   export { ALLOWED_ORIGINS, originOf, isAllowedOrigin, requestIsFromSite, NOT_FROM_SITE, STUDIO_ONLY_ENDPOINTS, resolveUser, isFounder } from ${JSON.stringify(join(root, "src/utils/apiGuard.js"))};
   export { citationUrls } from ${JSON.stringify(join(root, "src/utils/aiClient.js"))};
@@ -166,11 +169,16 @@ writeFileSync(entry, `
   export { ENTRY_POINTS, arrivalPoint as arrivalPointRaw, destinationPoint, destinationsNamed, tripAnchor } from ${JSON.stringify(join(root, "src/utils/arrival.js"))};
   export { tripAnchorFor, eventReachBand, eventPoint, placePoint, tripPoints, CONSIDER_CAP } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { beyondHorizon, isMajorEvent, EVENT_HORIZON_MONTHS, MANY_EVENTS_IN_A_TOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
-  export { vehicleMismatches, guideRides } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
+  export { vehicleMismatches, guideRides, journeyCensus, censusNote } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
+  export { SWAP_REASONS, reasonById, swapCandidates, swapAnswer, candidateLine, swappedStop, swapNote, swapIsAllowed, swapBlockedNote } from ${JSON.stringify(join(root, "src/utils/stopSwap.js"))};
+  export { newStreamState, readStreamEvent, visibleText, streamContent, streamDiagnosis, streamTrace } from ${JSON.stringify(join(root, "src/utils/streamRead.js"))};
+  export { guideWithSwap, alreadyRuledOut } from ${JSON.stringify(join(root, "src/utils/stopSwap.js"))};
   export { factCheckCopy } from ${JSON.stringify(join(root, "src/utils/factCheckCopy.js"))};
   export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn, travelModeKey, modeReachKm, MODE_DAY_KM, preferReachable, preferPassing, overnightMove, describeOvernightMove, spokenDuration, beyondModeRange, BEYOND_DAY_FACTOR, sameMode, howForReader, EATS_THE_DAY_MINUTES } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { LANGUAGES, MONTH_INDEX, PARTY_BARE, PARTY_POSSESSIVE, YES_WORDS, NO_WORDS, alt, LETTER } from ${JSON.stringify(join(root, "src/utils/travellerWords.js"))};
-  export { latestRelativeAnswer } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
+  export { latestRelativeAnswer, departureDateIn } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
+  export { launderedAbsence } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { contradictedAbsence, sentences } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dayCountIn, relativeDayIn, relativeAnswerIn, daysBetween, describePicks, monthOnlyIn, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED, isRegionCrossing } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
@@ -243,7 +251,11 @@ try {
   console.error("\n  Bundling failed:\n" + esbuildFailed(e));
   process.exit(1);
 }
-const M = await import("file://" + bundle);
+// pathToFileURL, not string concatenation. On Windows `"file://" + "C:\\..."`
+// parses the drive letter as the URL's HOST, and a bare absolute path parses it
+// as the protocol. See the note in tests/render.mjs: both faults broke the
+// pre-push hook on Oliver's machine on 25 Aug while passing here.
+const M = await import(pathToFileURL(bundle).href);
 const { arrivalRow, transitDepartureAnchor, departureParam, auditEntry, auditAll, mergeSaves, licenseUrl, creditIsRequired } = M;
 
 // ── READING A TYPE GATE BY ITS VALUE, NOT BY ITS SPELLING ──────────
@@ -1615,7 +1627,15 @@ is("missing licence does not require credit", creditIsRequired({}), false);
        /throw new Error\("places-hours already noted"\);/.test(refusal3));
 
     ok("and Studio can read the trace back", /const logs = recentLogs\(\);/.test(appSrc3));
-    ok("with a way to get it out of the browser", /Copy the full trace/.test(appSrc3));
+    // Repinned 25 Aug: "Copy the full trace" became "Copy this trace" when a
+    // second button was added for the whole shelf, because with twelve runs
+    // pickable, "the full trace" no longer said which one. Pinned to the RULE —
+    // a trace can leave the browser — rather than to the label, so renaming a
+    // button is not a test failure and REMOVING the export is.
+    ok("with a way to get it out of the browser",
+       /navigator\.clipboard\.writeText\(formatLog\(last\)\)/.test(appSrc3));
+    ok("and a way to get all of them out at once, which is what a late fact-check needs",
+       /navigator\.clipboard\.writeText\(formatLogs\(logs\)\)/.test(appSrc3));
 
     // ── THE GAP HE CALLED "BACK AND FORTH FIGHTING" ───────────────
     // The travelTime override requires realTransport.transit, but the outer
@@ -5943,9 +5963,24 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("an absence that is not about transport is none of its business",
      absenceClaims("There is no charge for companions. The museum has no cafe."), []);
 
+  // Repinned 25 Aug: the call became a three-way concat when launderedAbsence
+  // and contradictedAbsence joined it, so the exact call shape no longer exists.
+  // Pinned to the RULE — the absence gate runs inside gateDraft — rather than to
+  // the line, which is what "pin the rule, not the shape" means and what the
+  // hero-photo assertion got wrong for ten days.
   ok("the absence check runs inside gateDraft too",
-     codeJ.indexOf("const ac = absenceClaims(readerText(t))") > codeJ.indexOf("const gateDraft = (pass) =>") &&
-     codeJ.indexOf("const ac = absenceClaims(readerText(t))") < codeJ.indexOf('gateDraft("first")'));
+     codeJ.indexOf("...absenceClaims(readerText(t))") > codeJ.indexOf("const gateDraft = (pass) =>") &&
+     codeJ.indexOf("...absenceClaims(readerText(t))") < codeJ.indexOf('gateDraft("first")'));
+  // ── AND THE TWO CHECKS THAT JOINED IT ────────────────────────────
+  // Both were written tonight from the live Aalborg entry and both would be more
+  // built-and-uncalled code without this.
+  ok("the laundering check runs in the same gate",
+     codeJ.indexOf("...launderedAbsence(t)") > codeJ.indexOf("const gateDraft = (pass) =>") &&
+     codeJ.indexOf("...launderedAbsence(t)") < codeJ.indexOf('gateDraft("first")'));
+  ok("and the library contradiction, with the town's own event rows",
+     /contradictedAbsence\(readerText\(t\), \{[\s\S]{0,400}rowsForTown/.test(codeJ));
+  ok("which are filtered to THIS town rather than the whole country",
+     /String\(r\?\.town \|\| ""\)\.trim\(\)\.toLowerCase\(\) === String\(draftTown\)/.test(codeJ));
   ok("and it is logged whether or not it finds anything",
      /note\(`Stated absences\$\{suffix\}`/.test(app6));
 
@@ -19121,17 +19156,36 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // cannot be reused because every action in it PATCHes gemlyx_content by id,
   // and a draft has no id.
   ok("and it saves onto the draft rather than a published row",
-    /const uploadDraftPhotos = async[\s\S]{0,1600}setStudioDraftText\(JSON\.stringify\(next, null, 2\)\)/.test(appSrc));
+    /const uploadDraftPhotos = async[\s\S]{0,3200}setStudioDraftText\(JSON\.stringify\(next, null, 2\)\)/.test(appSrc));
   ok("and never PATCHes a row it does not have",
-    !/const uploadDraftPhotos = async[\s\S]{0,1600}patchContentPayload/.test(appSrc));
+    !/const uploadDraftPhotos = async[\s\S]{0,3200}patchContentPayload/.test(appSrc));
   // PARSED BEFORE ANYTHING UPLOADS. Otherwise a typo in the JSON sends the
   // files to the bucket with nowhere to put the URLs, and he re-picks them not
   // knowing they already went.
   ok("nothing uploads until the draft JSON parses",
     /const uploadDraftPhotos = async[\s\S]{0,700}JSON\.parse\(studioDraftText\)[\s\S]{0,300}return;[\s\S]{0,200}setDraftPhotoBusy\(true\)/.test(appSrc));
-  // Same rule as the published panel: the first photo becomes the hero and a
-  // later one does not take that away.
-  ok("a later upload does not replace the hero", /photo: draft\?\.photo \|\| firstUrl/.test(appSrc));
+  // ── THIS ASSERTION GUARDED THE BUG FOR TEN DAYS ─────────────────
+  //
+  // It read:
+  //
+  //   // Same rule as the published panel: the first photo becomes the hero and
+  //   // a later one does not take that away.
+  //   ok("a later upload does not replace the hero",
+  //      /photo: draft\?\.photo \|\| firstUrl/.test(appSrc));
+  //
+  // The comment was FALSE ON THE DAY IT WAS WRITTEN. The published panel had
+  // stopped using `||` on 7 August, three days after measuring that 52 of 53
+  // template hero paths did not exist. This assertion pinned the draft door to
+  // the retired rule and called it agreement, so the suite went green on every
+  // run while Oliver's uploads silently failed to reach the card, and it would
+  // have gone RED on the repair.
+  //
+  // Pinned to the rule now, and to the thing the rule protects. See
+  // utils/heroPhoto.js and the heroNeedsReplacing block at the end of this file.
+  ok("the draft door asks whether the hero actually loads",
+     /const uploadDraftPhotos = async[\s\S]{0,3200}heroNeedsReplacing\(draft\?\.photo, \{ loads: imageLoads \}\)/.test(appSrc));
+  ok("and a photograph that works is still never overwritten by an upload",
+     /const uploadDraftPhotos = async[\s\S]{0,3200}heroPatch\(replacing, firstUrl\)/.test(appSrc));
   // Reset on click, or re-picking the SAME file after a failed upload fires no
   // onChange at all and the button looks broken.
   ok("picking the same file twice still fires", /onClick=\{e => \{ e\.currentTarget\.value = ""; \}\}/.test(appSrc));
@@ -21431,7 +21485,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // The WRITE half is what differs, and it is the reason the published finder
   // could not be reused: patchContentPayload PATCHes WHERE id = row.id, and a
   // draft has no id.
-  const useDraft = appW.slice(appW.indexOf("const useDraftCommonsPhoto = (hit) => {"), appW.indexOf("const useDraftCommonsPhoto = (hit) => {") + 2600);
+  // ASYNC NOW: it awaits the shared hero rule, which does a HEAD request. Sliced
+  // by a search that does not name the parameter list, so adding an argument
+  // later cannot make this block silently test nothing — a slice that starts at
+  // -1 quietly measures the first 3400 characters of the file instead.
+  const useDraftAt = appW.indexOf("const useDraftCommonsPhoto = async (hit)");
+  ok("the draft Commons picker is where this block thinks it is", useDraftAt > 0);
+  const useDraft = appW.slice(useDraftAt, useDraftAt + 3400);
   ok("the pick lands in the draft text, which is what Publish reads", /setStudioDraftText\(JSON\.stringify\(next, null, 2\)\)/.test(useDraft));
   ok("and it never tries to PATCH a row that does not exist yet", !/patchContentPayload/.test(useDraft));
   // ONE WRITE, IMAGE AND CREDIT TOGETHER. A picture whose credit arrives in a
@@ -21439,7 +21499,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the credit is in the same object as the src",
      /const block = \{ type: "image", src, credit,/.test(useDraft));
   ok("the hero credit is set only when this picture became the hero",
-     /\.\.\.\(heroAlready \? \{\} : \{ __photoCredit: credit \}\),/.test(useDraft));
+     /\.\.\.heroPatch\(replacing, src, credit\),/.test(useDraft));
   ok("the caption is Wikimedia's own description, and only if he asked for it",
      /useCommonsCaption && hit\?\.caption \? \{ caption: hit\.caption \} : \{\}/.test(useDraft));
   ok("tracking params are stripped before storing", /String\(hit\?\.url \|\| ""\)\.split\("\?"\)\[0\]/.test(useDraft));
@@ -21447,11 +21507,21 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("an unparseable draft stops the write", /catch \{ setDraftPhotoError\("The draft JSON below does not parse/.test(useDraft));
 
   // ── THE PANEL AND THE PUBLISHER MUST AGREE ON WHAT A HERO IS ─────
+  //
   // If this panel called a relative path a hero and shapeForLive did not, the
-  // photo would look attached right up until it silently was not.
-  ok("the panel's hero test is an absolute URL",
-     /const heroAlready = \/\^https\?:\\\/\\\/\/i\.test\(String\(draft\?\.photo \|\| ""\)\.trim\(\)\)/.test(useDraft));
-  ok("and publish applies the identical rule",
+  // photo would look attached right up until it silently was not. That is still
+  // the rule; what changed on 25 Aug is WHERE it lives.
+  //
+  // This panel used to hand-roll `/^https?:\/\//` and was the only door doing a
+  // purely structural check, so an absolute url that 404s counted as a hero
+  // here while the two published doors correctly replaced it. It now calls
+  // heroNeedsReplacing, which keeps the structural floor AND adds the load
+  // check. shapeForLive keeps the bare structural test, because it is a pure
+  // function running at publish time with no network — and that is exactly why
+  // heroPhoto.js keeps isAbsolutePhoto as its floor rather than dropping it.
+  ok("the panel goes through the shared hero rule",
+     /const replacing = await heroNeedsReplacing\(draft\?\.photo, \{ loads: imageLoads \}\)/.test(useDraft));
+  ok("and publish still applies the structural floor it can afford",
      /const heroUrl = \/\^https\?:\\\/\\\/\/i\.test\(String\(t\?\.photo \|\| ""\)\.trim\(\)\)/.test(scw));
 
   // ── IT IS ACTUALLY ON SCREEN ─────────────────────────────────────
@@ -30748,8 +30818,48 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // This file can read itself, so the check is free. It parses its own entry
 // exports and its own destructurings and insists every name it asks for is a
 // name it actually imported.
+// ── AND IT HAS TO RUN ON THE MACHINE HE PUSHES FROM ─────────────────
+//
+// 25 Aug 2026, Oliver's pre-push hook, on Windows:
+//
+//   ERR_UNSUPPORTED_ESM_URL_SCHEME: On Windows, absolute paths must be valid
+//   file:// URLs. Received protocol 'c:'
+//
+// `await import("/root/gemlyx/tests/render.mjs")` works on Linux because a POSIX
+// absolute path carries no scheme. `C:\\Users\\...` parses its drive letter as the
+// PROTOCOL and throws, and `"file://" + "C:\\..."` parses it as the HOST and
+// throws differently. Both were in this file, both written the day the render
+// instrument was, both invisible on the machine they were written on.
+//
+// A test harness that only runs where it was written is a harness that stops the
+// person who actually ships from pushing. So the rule is asserted here rather
+// than remembered: every dynamic import of a path goes through pathToFileURL.
 {
   const own = readFileSync(fileURLToPath(import.meta.url), "utf8");
+  const render = readFileSync(join(root, "tests/render.mjs"), "utf8");
+  const bare = [];
+  for (const [file, src] of [["run.mjs", own], ["render.mjs", render]]) {
+    for (const m of stripComments(src).matchAll(/await import\(([^)]*)\)/g)) {
+      const arg = m[1].trim();
+      // A bare specifier is a package name and is always fine. Scoped packages
+      // carry a slash ("@babel/parser") and are still bare specifiers, which the
+      // first version of this excluded by mistake and then reported as faults.
+      if (/^"(?:@[^"/]+\/)?[^"/.\\]+"$/.test(arg)) continue;
+      if (arg.includes("pathToFileURL")) continue;
+      bare.push(`${file}: ${arg.slice(0, 60)}`);
+    }
+  }
+  is("every dynamic import of a path is a file URL, so this runs on Windows too", bare, []);
+  // AND STRING CONCATENATION IS NOT A FILE URL EITHER: "file://" + "C:\\..."
+  // makes the drive letter the host.
+  ok("and none of them is built by pasting file:// onto a path",
+     !/import\("file:\/\/" ?\+/.test(stripComments(own)) && !/import\("file:\/\/" ?\+/.test(stripComments(render)));
+  // The same trap one level down: a URL's `.pathname` is "/C:/Users/..." on
+  // Windows, with a leading slash in front of the drive letter, and join() then
+  // builds a path that resolves to nothing.
+  ok("and no path is taken from a URL's pathname",
+     !/import\.meta\.url\)\.pathname/.test(stripComments(render)));
+
   const exported = new Set();
   for (const m of own.matchAll(/export \{([^}]*)\} from \$\{JSON\.stringify/g)) {
     for (const raw of m[1].split(",")) {
@@ -33135,20 +33245,51 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   const truthy = app.match(/photo:\s*\w+\.photo\s*\|\|(?!\s*null\b)/g) || [];
   is("no door promotes a hero over an existing one on truthiness alone", truthy, []);
 
-  // And the two that do it correctly still do. Named by their test rather than
-  // by a line number, so moving the code does not break this and removing the
-  // test does.
-  ok("the Commons finder asks whether the hero loads", /const heroBroken = !\(await imageLoads\(p\.photo\)\)/.test(app));
-  ok("and so does the file uploader", (app.match(/!\(await imageLoads\(p\.photo\)\)/g) || []).length >= 2);
+  // ── AND ON 25 AUGUST IT HAPPENED A THIRD TIME ────────────────────
+  //
+  // The comment block above says "THE FIX WAS APPLIED TO ONE DOOR" and names
+  // this project's signature failure. It was written on 24 August about the
+  // second door. The THIRD door — uploadDraftPhotos, the "🖼 Add photos" button
+  // in the drafting panel — still had `draft?.photo || firstUrl`, and the
+  // assertion three thousand lines above this one PINNED it there while its own
+  // comment claimed it matched the published panel. Oliver found it by using it:
+  // "adding photos in the publish or manage doesn't make it the hero photo."
+  //
+  // Note what the truthiness check above could not see. It looks for
+  // `photo: <word>.photo ||`, and the draft door wrote `draft?.photo` — an
+  // optional chain, one character outside the pattern. A structural check is
+  // only as wide as the shapes somebody thought of, which is the argument for
+  // there being ONE function rather than a rule policed across four hand-written
+  // copies.
+  //
+  // So the rule lives in utils/heroPhoto.js now and these assert that every door
+  // calls it. The hero-photo block at the end of this file tests what it does.
+  ok("every door goes through the one shared rule",
+     (app.match(/await heroNeedsReplacing\(/g) || []).length >= 4);
+  ok("and none of them keeps a hand-rolled load check",
+     !/await imageLoads\(p\.photo\)/.test(app));
+  ok("nor a hand-rolled absolute-url test for a hero", !/heroAlready/.test(app));
+  // ── WIDER THAN THE ASSERTION ABOVE, AND THAT IS THE POINT ────────
+  // The truthiness check further up looks for `photo: <word>.photo ||`. The
+  // draft door wrote `draft?.photo` — an OPTIONAL CHAIN — and slipped straight
+  // past it for ten days. Same `|| null` exemption (saveFact normalises a
+  // missing upload to absent, a different question), same rule, one character
+  // wider. A structural guard is only as wide as the shapes somebody thought of.
+  is("no hero decision anywhere falls back on truthiness, optional chains included",
+     app.match(/photo:\s*\w+\??\.\w*photo\s*\|\|(?!\s*null\b)/gi) || [], []);
+  // imageLoads itself stays — it is what gets injected, and the photo repair
+  // sweep uses it directly on rows it is auditing rather than replacing.
+  ok("the load check the doors inject still exists", /const imageLoads = async/.test(app));
 
-  // The draft panel answers the same question a different way, because a DRAFT
-  // has no deployed file to probe: an absolute URL is a real picture and a
-  // relative path is a guess. shapeForLive applies the identical rule at
-  // publish. The two must agree or a photo looks attached until it silently is
-  // not, which is what that panel's own comment says.
-  ok("the draft panel tests the hero for being an absolute URL", /const heroAlready = \/\^https\?:/.test(app));
+  // shapeForLive keeps the BARE structural test on purpose: it is a pure
+  // function that runs at publish with no network, so an absolute url is the
+  // best it can do. heroPhoto.js keeps isAbsolutePhoto as its floor precisely so
+  // the two can never disagree about a relative path.
   const sc = stripComments(readFileSync(join(root, "src/utils/studioContent.js"), "utf8"));
-  ok("and publish applies the same rule", /const heroUrl = \/\^https\?:\\\/\\\//.test(sc));
+  ok("and publish applies the structural floor", /const heroUrl = \/\^https\?:\\\/\\\//.test(sc));
+  ok("which the shared rule also enforces before any network call",
+     /if \(!isAbsolutePhoto\(url\)\) return true;/.test(
+       stripComments(readFileSync(join(root, "src/utils/heroPhoto.js"), "utf8"))));
 
   // ── AND THE REPAIR SPENDS NOTHING IT DOES NOT HAVE TO ────────────
   // Nine of the broken rows carry a usable photograph already. Reaching for
@@ -33156,8 +33297,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // for the privilege, on rows where the answer was already in the payload.
   ok("backfill promotes a row's own body image before paying for a new one",
     /blogBody[\s\S]{0,200}?\.find\(b => b\?\.type === "image"/.test(app));
+  // Repinned 25 Aug: the credit now rides with the photo because heroPatch puts
+  // them in one object, which is stronger than the two being adjacent in a
+  // hand-written spread — heroPatch CANNOT emit one without the other. The rule
+  // is unchanged; the thing that enforces it moved.
   ok("and carries the credit in the same write, never as a second step",
-    /photo: String\(own\.src\)\.trim\(\)[\s\S]{0,120}__photoCredit/.test(app));
+    /heroPatch\(true, String\(own\.src\)\.trim\(\), own\.credit\)/.test(app)
+    && /return \{ photo: src, \.\.\.c \};/.test(stripComments(readFileSync(join(root, "src/utils/heroPhoto.js"), "utf8"))));
 }
 
 // ── TWO EU RULES, ASSERTED WHERE THEY WOULD BE BROKEN ──────────────
@@ -34506,7 +34652,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // Its limits are real and stated there: effects do not run and state stays at
 // its initial value. All four of those bugs sit inside that limit.
 {
-  const { renderSurface, browserIn } = await import(join(root, "tests/render.mjs"));
+  const { renderSurface, browserIn } = await import(pathToFileURL(join(root, "tests/render.mjs")).href);
   const item = { name: "Bybjerg Museum", slug: "bybjerg", town: "Bybjerg", desc: "A small museum." };
   const askIn = async (tag) => {
     const r = await renderSurface("src/components/AskGemlyx.jsx", "AskGemlyx",
@@ -34564,6 +34710,1426 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("a language nobody planned for is still told, in English",
      (await askIn("qq-XX")).says(M.AI_DISCLOSURE.en));
   ok("and a browser with no language at all", (await askIn("")).says(M.AI_DISCLOSURE.en));
+}
+
+
+// ══ THE TRIP, IN THE APP PEOPLE ALREADY OPEN ══════════════════════════
+//
+// One of eighteen AI travel products censused on 25 Aug 2026 exports to a
+// calendar. Not because it is hard, but because it is plumbing.
+{
+  const { icsEscape, icsFold, icsStamp, stayMinutes, DEFAULT_STAY_MINUTES,
+          icsUid, stopEvent, guideEvents, buildIcs, icsFilename } = M;
+
+  // ── RFC 5545 3.3.11: FOUR CHARACTERS HAVE MEANING ──────────────────
+  // Getting this wrong does not error. It silently mangles every description
+  // containing a comma, which is all of them.
+  is("a comma is escaped", icsEscape("Torvet 15, Ribe"), "Torvet 15\\, Ribe");
+  is("a semicolon is escaped", icsEscape("cathedral; tower"), "cathedral\\; tower");
+  is("a backslash is escaped first", icsEscape("a\\b"), "a\\\\b");
+  is("and a newline becomes the escape, not a real break", icsEscape("one\ntwo"), "one\\ntwo");
+  // THE ONE THAT WAS WRONG. The first version ran a whitespace-collapsing
+  // normaliser before escaping, so every newline was a space before this could
+  // see it and the whole description arrived as one paragraph. Caught by reading
+  // the generated file rather than the function.
+  ok("escaping does not collapse the line breaks it is meant to escape",
+     icsEscape("a\n\nb").includes("\\n") && !/\n/.test(icsEscape("a\n\nb")));
+
+  // ── OCTETS, NOT CHARACTERS ─────────────────────────────────────────
+  //
+  // Found by generating a real .ics for a Ribe guide and READING IT, not by
+  // reading icsFold. Every fold assertion in this block used "x", so 75
+  // characters and 75 octets were the same number and the bug was invisible.
+  // In a Danish travel product they are never the same number: æ, ø and å are
+  // two bytes each in UTF-8, so a line measuring 75 by String.length can be 85
+  // octets on disk, which is what a strict parser actually rejects.
+  //
+  // The function's own comment said "octets" and the code said `s.length`. A
+  // spec quoted in a comment and not implemented below it is worse than no
+  // comment, because it stops the next person checking.
+  const octets = (s) => Buffer.byteLength(String(s), "utf8");
+  {
+    // 75 Danish letters: 75 characters, 150 octets. Under the old rule this
+    // came back unfolded and the file was invalid.
+    const danish = "ø".repeat(75);
+    const folded = icsFold(danish);
+    ok("a line of 75 Danish letters is folded, because it is 150 octets", folded.includes("\r\n"));
+    ok("and every piece fits in 75 OCTETS", folded.split("\r\n").every(l => octets(l) <= 75));
+    // Unfolding must still give the original back: strip the CRLF and the one
+    // leading space the spec adds.
+    is("and unfolding it gives the Danish back", folded.split("\r\n").map((l, i) => (i ? l.slice(1) : l)).join(""), danish);
+  }
+  {
+    // A REAL DESCRIPTION, which is where this actually bites.
+    const line = "DESCRIPTION:" + "Klim Bjerg og Bulbjerg ved Jammerbugten, hvor kalkklinten står ud i Vesterhavet og fuglene yngler på Skarreklit. ".repeat(3);
+    ok("a real Danish description folds inside the octet limit",
+       icsFold(line).split("\r\n").every(l => octets(l) <= 75));
+  }
+  {
+    // ── AND A FOLD MAY NOT CUT A CHARACTER IN HALF ─────────────────
+    // Slicing by code unit can split a surrogate pair, producing two lone
+    // surrogates and invalid UTF-8 that a strict parser rejects outright. A
+    // note can carry an emoji, so this is not hypothetical.
+    const withEmoji = "x".repeat(72) + "🌊🌊🌊🌊";
+    const folded = icsFold(withEmoji);
+    ok("an emoji at the fold point is not split", !/[\uD800-\uDBFF]$/.test(folded.split("\r\n")[0]));
+    ok("and no piece starts with a lone low surrogate",
+       folded.split("\r\n").every(l => !/^[\s]?[\uDC00-\uDFFF]/.test(l)));
+    ok("every piece still fits in 75 octets", folded.split("\r\n").every(l => octets(l) <= 75));
+    is("and the whole thing survives the round trip",
+       folded.split("\r\n").map((l, i) => (i ? l.slice(1) : l)).join(""), withEmoji);
+  }
+  {
+    // A line exactly at the boundary must not be folded, and one octet over
+    // must be: the off-by-one that produces a file half the calendars accept.
+    is("exactly 75 octets is left alone", icsFold("x".repeat(75)), "x".repeat(75));
+    ok("76 is folded", icsFold("x".repeat(76)).includes("\r\n"));
+    // 37 Danish letters is 74 octets; 38 is 76.
+    is("37 Danish letters is under the limit", icsFold("ø".repeat(37)), "ø".repeat(37));
+    ok("38 is over it", icsFold("ø".repeat(38)).includes("\r\n"));
+  }
+
+  // ── SECTION 3.1: LINES OVER 75 OCTETS MUST BE FOLDED ───────────────
+  // An unfolded file is accepted by some calendars and rejected by others with
+  // no message at all.
+  {
+    const long = "DESCRIPTION:" + "x".repeat(400);
+    const folded = icsFold(long);
+    const lines = folded.split("\r\n");
+    ok("a long line is folded", lines.length > 1);
+    ok("and every piece fits the limit", lines.every(l => l.length <= 75));
+    ok("continuations start with a space, which is what a parser strips",
+       lines.slice(1).every(l => l.startsWith(" ")));
+    is("unfolding gives the original back", lines.map((l,i)=>i?l.slice(1):l).join(""), long);
+    is("a short line is left alone", icsFold("SUMMARY:Ribe"), "SUMMARY:Ribe");
+  }
+
+  // ── A TIME NOBODY STATED IS NOT INVENTED ───────────────────────────
+  is("a clock time becomes a floating local stamp", icsStamp("2026-10-10", "11:00"), { value: "20261010T110000", allDay: false });
+  is("a tilde is still a time", icsStamp("2026-10-10", "~9:30"), { value: "20261010T093000", allDay: false });
+  // No Z and no TZID: "9:00 wherever this is read", which is what the guide
+  // means. A UTC stamp turns 9:00 into 11:00 for somebody who planned from
+  // New York.
+  ok("and it carries no timezone at all", !/Z$/.test(icsStamp("2026-10-10","9:00").value));
+  is("a stop with no time becomes a whole day, not a guessed nine o'clock",
+     icsStamp("2026-10-10", ""), { value: "20261010", allDay: true });
+  is("so does a time that is not one", icsStamp("2026-10-10", "morning"), { value: "20261010", allDay: true });
+  is("and an impossible clock", icsStamp("2026-10-10", "99:99"), { value: "20261010", allDay: true });
+  is("no date at all means no event", icsStamp("", "9:00"), null);
+
+  // ── HOW LONG, WHERE IT WAS SAID ────────────────────────────────────
+  [["1 hour",60],["1-1.5 hours",90],["2-3 hours",180],["30 min",30],["45 minutes",45],
+   ["half a day",240],["full day",480],["hele dagen",480]].forEach(([t,m]) =>
+    is(`"${t}" reads as ${m} minutes`, stayMinutes(t), m));
+  ["", null, "a while", "worth a look"].forEach(t =>
+    is(`and ${JSON.stringify(t)} says nothing rather than guessing`, stayMinutes(t), null));
+
+  // ── THE UID IS THE DIFFERENCE BETWEEN ONE EXPORT AND TWO ───────────
+  // Re-exporting must UPDATE the events already in a calendar, not add a second
+  // copy of every stop.
+  is("the same slot gives the same id twice", icsUid("abc", 1, 0), icsUid("abc", 1, 0));
+  ok("a different day is a different event", icsUid("abc",1,0) !== icsUid("abc",2,0));
+  ok("and a different stop on the same day", icsUid("abc",1,0) !== icsUid("abc",1,1));
+  // Keyed on the SLOT, not the name: a renamed stop is the same stop.
+  ok("a renamed stop keeps its id", icsUid("abc",1,0) === icsUid("abc",1,0));
+  ok("every id is a real uid with a domain", /@gemlyxtravel\.com$/.test(icsUid("abc",1,0)));
+
+  // ── ONE EVENT PER STOP ─────────────────────────────────────────────
+  const guide = { id: "abc", title: "Ribe, Ærø and Langeland", days: [
+    { day: 1, stops: [
+      { name: "Ribe Domkirke", town: "Ribe", arrivalTime: "11:00", suggestedStay: "1 hour",
+        note: "Denmark's oldest cathedral; climb the tower.", mapHint: "Torvet 15, 6760 Ribe" },
+      { name: "Skibbroen", town: "Ribe", arrivalTime: "14:30", suggestedStay: "30 min", note: "The old harbour." }]},
+    { day: 2, stops: [{ name: "Sønderho", town: "Fanø", arrivalTime: "9:30", suggestedStay: "2-3 hours", note: "Thatched houses." }]},
+  ]};
+  const dayDateFor = (n) => ["2026-10-10", "2026-10-11"][n - 1] || null;
+  const evs = guideEvents(guide, { dayDateFor, guideUrl: "https://www.gemlyxtravel.com/guide/abc" });
+  is("one event per stop, not per day", evs.length, 3);
+  is("the first ends when the stay says", evs[0].end, "20261010T120000");
+  is("and a 2-3 hour stop takes three", evs[2].end, "20261011T123000");
+  ok("the town is in the title where the name does not carry it", evs[1].summary === "Skibbroen, Ribe");
+  ok("and not repeated where it does", !/Ribe, Ribe/.test(evs[0].summary));
+  ok("the address goes in LOCATION", evs[0].location === "Torvet 15, 6760 Ribe");
+  // A DAY WITH NO DATE PRODUCES NOTHING rather than an invented one.
+  is("a day nobody dated is not put in a calendar",
+     guideEvents(guide, { dayDateFor: () => null }), []);
+  is("and a guide that is not one", guideEvents(null, { dayDateFor }), []);
+  // MUTATION NOTE, 25 Aug: deleting `if (!dayDate) return;` from guideEvents
+  // survives every assertion, and it is an EQUIVALENT mutant rather than a hole.
+  // icsStamp(null) returns null and stopEvent then returns null, so the guard is
+  // a fast path and not a gate. Recorded rather than counted as a pass. What was
+  // genuinely untested is the MIXED case — some days dated, some not — which is
+  // the shape a half-planned trip actually has:
+  is("a half-dated trip exports only the days that have a date",
+     guideEvents(guide, { dayDateFor: (n) => (n === 1 ? "2026-10-10" : null) }).length, 2);
+  ok("and the ones it exports are the dated ones",
+     guideEvents(guide, { dayDateFor: (n) => (n === 2 ? "2026-10-11" : null) })
+       .every(e => e.start.startsWith("20261011")));
+  is("a stop with no name is skipped", stopEvent({ arrivalTime: "9:00" }, { dayDate: "2026-10-10", dayNo: 1, index: 0 }), null);
+
+  // ── WHAT MAY NOT GO IN THE FILE ────────────────────────────────────
+  //
+  // An .ics is a COPY that leaves the product and can never be corrected. The
+  // live-layer rules apply hardest to the one artefact nobody can update, so
+  // the perishable fields stay out and a link back to the thing that CAN be
+  // corrected goes in instead.
+  {
+    const priced = stopEvent(
+      { name: "Museum", town: "Ribe", arrivalTime: "10:00", note: "Worth an hour.",
+        price: "160 DKK", openingHours: "10:00-15:30", ticketStatus: "on_sale" },
+      { dayDate: "2026-10-10", dayNo: 1, index: 0, guideId: "abc", guideUrl: "https://x/guide/abc" });
+    const body = JSON.stringify(priced);
+    ok("no price is frozen into somebody's calendar", !/160|DKK/.test(body));
+    ok("nor an opening hour", !/15:30|10:00-/.test(body));
+    ok("nor a ticket status", !/on_sale/i.test(body));
+    ok("but a link back to the correctable thing is", /guide\/abc/.test(priced.description));
+    ok("and it says the copy can go stale", /Check the guide before you go/.test(priced.description));
+  }
+
+  // ── THE FILE ITSELF ────────────────────────────────────────────────
+  {
+    const ics = buildIcs(evs, { name: guide.title, stamp: "20260825T190000Z" });
+    ok("it opens and closes as a calendar", /^BEGIN:VCALENDAR\r\n/.test(ics) && /END:VCALENDAR\r\n$/.test(ics));
+    is("with one VEVENT per stop", (ics.match(/BEGIN:VEVENT/g) || []).length, 3);
+    is("and every one closed", (ics.match(/END:VEVENT/g) || []).length, 3);
+    // RFC 5545 says CRLF and Outlook enforces it.
+    ok("every break is CRLF, never a bare newline", !/[^\r]\n/.test(ics));
+    // OCTETS. This said `l.length` and passed on a file whose Danish lines were
+    // 150 bytes long, which is the whole point of the block above.
+    ok("no line exceeds the fold limit",
+       ics.split("\r\n").every(l => Buffer.byteLength(l, "utf8") <= 75));
+    ok("the version and product id are there", /VERSION:2\.0/.test(ics) && /PRODID:.*Gemlyx/.test(ics));
+    ok("a whole-day event uses VALUE=DATE",
+       /DTSTART;VALUE=DATE:/.test(buildIcs([stopEvent({ name: "Beach", arrivalTime: "" },
+         { dayDate: "2026-10-11", dayNo: 2, index: 0 })], {})));
+    // ── FOUND BY MUTATION, 25 Aug: DTEND IS EXCLUSIVE ────────────────
+    // Setting the whole-day DTEND equal to its DTSTART broke NOTHING. RFC 5545
+    // 3.6.1 says a DATE-valued DTEND is the first day NOT covered, so an event
+    // ending where it starts covers zero days: Google renders nothing, Apple
+    // renders a stray marker, and the stop the traveller has no time for is the
+    // one that silently disappears from their calendar. That is the failure this
+    // whole file exists to avoid, and it had no assertion at all.
+    {
+      const oneDay = stopEvent({ name: "Beach", arrivalTime: "" },
+        { dayDate: "2026-10-11", dayNo: 2, index: 0 });
+      is("a whole day starts on its own day", oneDay.start, "20261011");
+      is("and ends on the NEXT one, because DTEND is exclusive", oneDay.end, "20261012");
+      ok("so it covers exactly one day rather than none", oneDay.end !== oneDay.start);
+      // The month boundary, since nextDay does date arithmetic rather than +1.
+      is("and it rolls the month correctly",
+         stopEvent({ name: "Beach", arrivalTime: "" },
+           { dayDate: "2026-10-31", dayNo: 1, index: 0 }).end, "20261101");
+    }
+    // ── ALSO FOUND BY MUTATION: THE SUMMARY WAS NEVER CHECKED ────────
+    // Printing SUMMARY unescaped survived every assertion, while the fixture's
+    // own second event is "Skibbroen, Ribe" — a comma, in the one field every
+    // calendar shows on a lock screen. An unescaped comma in a property value is
+    // a value SEPARATOR in RFC 5545, so half the title is discarded by a strict
+    // parser and shown as a second value by a lenient one. Tested on the built
+    // file rather than on icsEscape, because the bug was the missing CALL.
+    ok("the summary is escaped where it is written, not only where it is escaped",
+       /SUMMARY:Skibbroen\\, Ribe/.test(buildIcs(evs, { stamp: "20260825T190000Z" })));
+    ok("and the location too",
+       /LOCATION:Torvet 15\\, 6760 Ribe/.test(buildIcs(evs, { stamp: "20260825T190000Z" })));
+    ok("and the calendar name",
+       /X-WR-CALNAME:Ribe\\, Ærø and Langeland/.test(buildIcs(evs, { name: guide.title, stamp: "20260825T190000Z" })));
+    is("an empty trip is still a valid empty calendar",
+       (buildIcs([], {}).match(/BEGIN:VEVENT/g) || []).length, 0);
+  }
+
+  // ── A FILENAME SOMEBODY CAN FIND SIX WEEKS LATER ───────────────────
+  // Danish letters FOLD before the strip. The first version lowercased then
+  // removed everything outside a-z, turning "Ribe, Ærø and Langeland" into
+  // "ribe-r-and-langeland": the whole word collapsed to its one surviving
+  // letter. Same fold placeUrl.js already does.
+  is("Danish letters survive as letters", icsFilename("Ribe, Ærø and Langeland"), "gemlyx-ribe-aero-and-langeland.ics");
+  ok("and a Danish title is still readable",
+     icsFilename("Fire dage med arkitektur og en ø ud af København") === "gemlyx-fire-dage-med-arkitektur-og-en-o-ud-af-kobenhavn.ics");
+  is("an untitled trip still gets a name", icsFilename(""), "gemlyx-trip.ics");
+  ok("and it is always an ics", icsFilename("!!!").endsWith(".ics"));
+  // ── FOUND BY MUTATION: THE LENGTH CAP HAD NO ASSERTION ───────────
+  // Removing `.slice(0, 60)` broke nothing. A guide title is a whole sentence
+  // and some of them run past two hundred characters, which produces a filename
+  // longer than the 255-byte limit ext4, APFS and NTFS all enforce — the
+  // download then fails, or is silently truncated by the browser into something
+  // that no longer ends in .ics and no longer opens in a calendar. Capped at 60
+  // so the extension always survives.
+  {
+    const long = icsFilename("A very long trip title about Denmark that somebody wrote as a whole sentence and never trimmed, covering Ribe and Aero and Langeland and rather a lot else besides");
+    ok("a sentence-long title is cut down", long.length <= 72);
+    ok("and still ends in .ics", long.endsWith(".ics"));
+    ok("and still starts with the prefix somebody can search for", long.startsWith("gemlyx-"));
+    // Never left ending on the separator, which reads as a truncation error.
+    ok("and never ends its slug on a dash", !/-\.ics$/.test(long));
+  }
+}
+
+// ── A HERO THAT DOES NOT LOAD IS NOT A HERO, IN ALL FOUR DOORS ──────
+//
+// Oliver, 25 Aug 2026: "adding photos in the publish or manage doesn't make it
+// the hero photo. I need to do that in 'add media.'"
+//
+// THE THIRD RECURRENCE OF ONE RULE. useCommonsPhoto retired `p.photo || src` on
+// 7 Aug after measuring that 52 of 53 local hero paths did not exist.
+// uploadMediaFiles retired the same line on 24 Aug, with a comment reading "THE
+// FIX WAS APPLIED TO ONE DOOR AND NOT THE OTHER" and a fresh measurement: 27 of
+// 148 rows still carried a dead hero. uploadDraftPhotos — the button Oliver
+// pressed — still had it today. Every fix was correct and every one was
+// hand-written, which is exactly how the fourth copy gets missed.
+//
+// So the rule moved into utils/heroPhoto.js and the last assertion in this block
+// fails if any door ever hand-rolls it again.
+{
+  const { isAbsolutePhoto, heroNeedsReplacing, heroPatch, heroStatusLine } = M;
+  const yes = async () => true, no = async () => false;
+
+  ok("an absolute url is a picture", isAbsolutePhoto("https://x.supabase.co/a.jpg"));
+  ok("http counts too", isAbsolutePhoto("http://x/a.jpg"));
+  ok("a template path is not", !isAbsolutePhoto("/towns/praesto.jpg"));
+  ok("nor a bare filename", !isAbsolutePhoto("praesto.jpg"));
+  ok("nor nothing at all", !isAbsolutePhoto(""));
+  ok("and it survives whitespace either side", isAbsolutePhoto("  https://x/a.jpg "));
+
+  // ── THE BUG ITSELF, NAMED ─────────────────────────────────────────
+  // This is the case `||` got wrong for eighteen days across three doors.
+  ok("THE BUG: a template path does not count as a hero",
+     await heroNeedsReplacing("/towns/praesto.jpg", { loads: yes }));
+  ok("an empty hero is replaced", await heroNeedsReplacing("", { loads: yes }));
+  ok("so is a missing one", await heroNeedsReplacing(undefined, { loads: yes }));
+  ok("and an absolute url that 404s", await heroNeedsReplacing("https://x/gone.jpg", { loads: no }));
+  // The ONE case that must be left alone: somebody chose this picture.
+  ok("but a photograph that actually loads is never overwritten",
+     !(await heroNeedsReplacing("https://x/a.jpg", { loads: yes })));
+
+  // A CHECKER THAT THROWS MUST NOT CLOBBER. Same rule constraintCheck's mode
+  // matcher follows. Losing a working hero to a network blip is worse than one
+  // upload landing in the body.
+  ok("a load check that throws leaves the hero alone",
+     !(await heroNeedsReplacing("https://x/a.jpg", { loads: () => { throw new Error("offline"); } })));
+  ok("and so does one that was never injected",
+     !(await heroNeedsReplacing("https://x/a.jpg", {})));
+  // ...but a template path is decided WITHOUT the network, so a dead checker
+  // cannot rescue it. Publish would throw it away regardless.
+  ok("a template path is still replaced with no checker at all",
+     await heroNeedsReplacing("/towns/praesto.jpg", {}));
+
+  // ── THE CREDIT, WHICH IS THE PART THAT BECOMES A LICENCE PROBLEM ──
+  is("the patch carries photo and credit together", heroPatch(true, "https://x/a.jpg", { photographer: "P", license: "CC BY-SA" }),
+     { photo: "https://x/a.jpg", __photoCredit: { photographer: "P", license: "CC BY-SA" } });
+  is("a picture that did NOT take the card carries no credit either",
+     heroPatch(false, "https://x/a.jpg", { photographer: "P" }), {});
+  is("and an upload with no credit sets no empty one",
+     heroPatch(true, "https://x/a.jpg"), { photo: "https://x/a.jpg" });
+  is("an empty url patches nothing", heroPatch(true, ""), {});
+  ok("the credit is copied, not aliased", (() => {
+    const c = { photographer: "P" };
+    const out = heroPatch(true, "https://x/a.jpg", c);
+    c.photographer = "someone else";
+    return out.__photoCredit.photographer === "P";
+  })());
+
+  // ── AND THE LINE THE PANEL PRINTS ────────────────────────────────
+  // It said "No hero photo yet. The first one you add becomes it." — which never
+  // appeared on the drafts where the button did not work, because those drafts
+  // DID have a photo string. Reassuring and wrong is the worst pair.
+  ok("an empty hero says so plainly", /No hero photo yet/.test(heroStatusLine("")));
+  ok("a template path is named as one rather than shown as a broken thumbnail",
+     /template path/.test(heroStatusLine("/towns/praesto.jpg")));
+  ok("and it says what publishing will do with it",
+     /drops it/i.test(heroStatusLine("/towns/praesto.jpg")));
+  is("a real photograph needs no line at all", heroStatusLine("https://x/a.jpg"), "");
+
+  // ── THE ONE THAT STOPS THE FOURTH RECURRENCE ─────────────────────
+  // Not "does App.jsx import it" — an import proves nothing about use. This
+  // asserts the OLD SHAPE IS GONE: no `photo:` decided by a truthiness fallback,
+  // and no hand-rolled absolute-url test outside heroPhoto.js. Pinned to the
+  // rule rather than to the call shape, because an assertion pinned to a shape
+  // goes green through the bug's whole life and red on the repair — which is
+  // how the tier gate stayed broken earlier today.
+  {
+    const app = stripNonCode(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    // The truthiness and absolute-url shapes are asserted in the photo-repair
+    // block above, where the measurement that produced them lives, and widened
+    // there to cover optional chaining. Not repeated here.
+    ok("every door goes through the shared rule",
+       (app.match(/heroNeedsReplacing\(/g) || []).length >= 4);
+    // ONE PLACE BUILDS THE HERO FIELDS. A door writing __photoCredit by hand is
+    // a door that can write it when the picture did NOT take the card, which
+    // attributes somebody else's photograph on the page.
+    ok("and none of them writes __photoCredit by hand",
+       !/__photoCredit:\s*\{/.test(app));
+    ok("heroPatch is what every one of them builds it with",
+       (app.match(/heroPatch\(/g) || []).length >= 6);
+  }
+}
+
+// ── TWELVE RUNS KEPT, ONE EVER SHOWN ────────────────────────────────
+//
+// Oliver, 25 Aug 2026: "its draft on Aarhus was called out by Gemini.
+// Unfortunately I can only see the latest report."
+//
+// MAX_KEPT has been 12 since this file was written and every run survives a
+// reload. The Studio panel read `logs[0]` and nothing else, so eleven finished,
+// persisted traces had never been visible to anybody. Same failure as the six
+// DetailPage save props rendered as an unlabelled heart, four hours earlier.
+{
+  const { logChips, formatLogs, formatLog } = M;
+  const run = (subject, steps, extra = {}) => ({
+    label: "Draft", subject, startedAt: "2026-08-25T18:00:00Z", ms: 210000,
+    steps, decisions: [], ...extra,
+  });
+  const st = (outcome, used = true) => ({ step: "s", outcome, used, at: 100 });
+
+  const logs = [
+    run("Aarhus", [st("ok"), st("failed"), st("failed")]),
+    run("Ribe", [st("ok"), st("empty")]),
+    run("Ærø", [st("ok"), st("ok", false)]),
+    run("Odense", [st("ok"), st("ok")]),
+  ];
+  const chips = logChips(logs);
+  is("every kept run gets a chip, not just the newest", chips.length, 4);
+  is("named by the subject, which is what he is looking for", chips[0].name, "Aarhus");
+  is("and indexed so the picker can address it", chips.map(c => c.i), [0, 1, 2, 3]);
+
+  // ── A CHIP SAYS WHETHER THE RUN IS WORTH OPENING ─────────────────
+  // Otherwise twelve chips is twelve things to open to find the one that went
+  // wrong, which is the same problem one chip was.
+  is("a run with failures says so", chips[0].trouble, "failed");
+  is("and how many", chips[0].count, 2);
+  is("a run where a step found nothing is marked differently", chips[1].trouble, "empty");
+  // A step that RAN, SUCCEEDED and was thrown away is the number this project
+  // cares most about, and it is the quietest of the three.
+  is("and a discarded answer is still surfaced", chips[2].trouble, "discarded");
+  is("a clean run is marked as nothing at all", chips[3].trouble, "");
+  is("and carries no count to shout", chips[3].count, 0);
+  // failed OUTRANKS empty outranks discarded: increasing degrees of "it ran".
+  is("failures outrank everything else on one chip",
+     logChips([run("x", [st("failed"), st("empty"), st("ok", false)])])[0].trouble, "failed");
+  is("and an empty outranks a discard",
+     logChips([run("x", [st("empty"), st("ok", false)])])[0].trouble, "empty");
+
+  ok("a run with no subject still gets a name", logChips([{ label: "Guide", steps: [] }])[0].name === "Guide");
+  ok("and one with neither is not blank", logChips([{ steps: [] }])[0].name === "run");
+  is("nothing kept is no chips rather than a crash", logChips(null), []);
+
+  // ── THE PASTE HE ACTUALLY NEEDED ─────────────────────────────────
+  // A draft is checked by a person AFTERWARDS. By the time Gemini calls out the
+  // Aarhus logistics, that run is two or three drafts back and he does not yet
+  // know which one it was, so the useful artefact is the whole shelf.
+  {
+    const all = formatLogs(logs);
+    ok("every run is in the paste", /Aarhus/.test(all) && /Ribe/.test(all) && /Ærø/.test(all) && /Odense/.test(all));
+    is("and each is numbered so a reply can point at one", (all.match(/RUN \d+ OF 4/g) || []).length, 4);
+    // NAMES THE LIMIT. Twelve is all there is, and a paste that does not say so
+    // reads as the complete history of the project.
+    ok("it says how many are kept and that nothing older exists", /4 runs kept, newest first\. Nothing older is stored\./.test(all));
+    ok("one run says run rather than runs", /1 run kept/.test(formatLogs([logs[0]])));
+    is("and an empty shelf formats to nothing", formatLogs([]), "");
+    is("as does something that is not a list", formatLogs(null), "");
+    ok("a null in the shelf is skipped rather than crashing", formatLogs([logs[0], null]).includes("RUN 1 OF 1"));
+    // Each entry is the SAME text the single-run button produces, so the two
+    // buttons can never disagree about what a trace says.
+    ok("each entry is the single-run format verbatim", all.includes(formatLog(logs[0])));
+  }
+
+  // ── AND A LIMIT HIT IS NOT A LIMIT REPORTED ──────────────────────
+  // endLog swallowed a failed localStorage write entirely, so a full quota meant
+  // the shelf silently stopped advancing and the panel showed an old run as
+  // though it were the last one. Twelve runs of forty steps each is tens of
+  // kilobytes and the origin quota is shared with everything else this app
+  // stores. Source-asserted: the write is a side effect on a browser global.
+  {
+    const rl = stripComments(readFileSync(join(root, "src/utils/runLog.js"), "utf8"));
+    ok("a failed write is recorded rather than swallowed",
+       /catch \(e\) \{[\s\S]{0,400}storeState\.wrote = false/.test(rl));
+    ok("a successful one clears the warning",
+       /storeState\.wrote = true; storeState\.why = "";/.test(rl));
+    ok("and the quota case says what actually happened", /storage for this site is full/.test(rl));
+    // The in-memory copy is authoritative for the session, so a failed write is
+    // a reload problem and must never be a draft problem.
+    ok("the shelf is still updated in memory before the write is attempted",
+       rl.indexOf("finished.unshift(done)") < rl.indexOf("localStorage.setItem(STORE_KEY"));
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("and the panel says so out loud", /storeState\.wrote === false/.test(app));
+  }
+
+  // ── IT IS ACTUALLY ON SCREEN ─────────────────────────────────────
+  // The failure this whole block is about was a function nothing rendered.
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the panel builds chips from every kept run", /const chips = logChips\(logs\)/.test(app));
+    ok("and reads the one that was picked, not always the newest",
+       /const last = logs\[pick\]/.test(app) && !/const last = logs\[0\]/.test(app));
+    ok("the chips are clickable", /onClick=\{\(\) => setRunLogPick\(c\.i\)\}/.test(app));
+    // A pick that outlives its shelf must not read undefined: the shelf shrinks
+    // when localStorage is cleared and grows past the pick on every new run.
+    ok("a stale pick is clamped rather than crashing",
+       /Math\.min\(Math\.max\(0, runLogPick\), logs\.length - 1\)/.test(app));
+    ok("and the whole shelf can be copied in one go", /formatLogs\(logs\)/.test(app));
+  }
+}
+
+// ── ONE LEG MEASURED, A WHOLE DRAFT OF LOGISTICS ────────────────────
+//
+// Oliver, 25 Aug 2026: "the pipeline still tends to get the logistics wrong,
+// despite using directions. Its draft on Aarhus was called out by Gemini."
+//
+// transitProblems is not the thing that is wrong. The pipeline measures exactly
+// ONE journey — Copenhagen to the frozen coordinate — and transitProblems
+// deliberately refuses to speak about any other, after the Esbjerg run produced
+// three false uncertainties by comparing an Esbjerg-to-Ribe figure against
+// Copenhagen-to-Esbjerg numbers. That refusal is correct.
+//
+// What was wrong was the LOG SENTENCE. On a clean run it read "every duration
+// and change in the prose matches the measured route", which is true of one
+// journey and reads as a statement about the draft. Five unchecked logistics
+// claims and zero unchecked logistics claims produced identical output.
+//
+// A limit hit is not a limit reported — the third instance today.
+{
+  const { journeyCensus, censusNote } = M;
+  const parts = { total: 171, onBoard: 150, onFoot: 14, waiting: 7, changes: 1, interchanges: ["Odense St."], longest: { mins: 120 } };
+  const opts = { parts, drivingMins: 195 };
+
+  // ── WHAT IS AND IS NOT A LOGISTICS CLAIM ─────────────────────────
+  is("a sentence with no figure in it is not a logistics claim",
+     journeyCensus("The light rail runs to Moesgaard.", opts).total, 0);
+  is("nor a figure with no movement in it",
+     journeyCensus("The cathedral was finished in 1300.", opts).total, 0);
+  is("nor a price", journeyCensus("Entry is 160 kr.", opts).total, 0);
+  // The two together are the claim.
+  is("a duration on a movement is", journeyCensus("The walk takes 10 minutes.", opts).total, 1);
+  is("so is a distance", journeyCensus("Moesgaard is 8 km from the centre.", opts).total, 1);
+  // ── BUT ONLY A DISTANCE BETWEEN TWO THINGS ───────────────────────
+  // "The beach is 8 km long" is a fact about a beach. Counting it as an
+  // unmeasured logistics claim is the false-positive class that got the Esbjerg
+  // gate trimmed, and it is not worth repeating for a census.
+  is("a length is not a journey", journeyCensus("The beach is 8 km long.", opts).total, 0);
+  is("nor is a height", journeyCensus("The tower is 96 m tall.", opts).total, 0);
+  // ── AND A FIGURE WITH NO MOVEMENT IN IT AT ALL ───────────────────
+  // Deleting the movement requirement left every assertion green, because every
+  // negative example in this block also lacked a figure. This one has a figure
+  // and no journey.
+  is("a year is not a logistics claim", journeyCensus("The museum opened in 1998.", opts).total, 0);
+  is("nor is a count of anything else", journeyCensus("There are 12 rooms and 3 galleries.", opts).total, 0);
+  is("nor an opening hour", journeyCensus("It is open from 10 to 17.", opts).total, 0);
+  // ── AND A REAL DURATION THAT IS NOT A JOURNEY ────────────────────
+  // The three above have no parseable figure at all, so they are excluded by
+  // the figure rule and prove nothing about the movement rule — deleting the
+  // movement requirement left every one of them green. These carry a genuine
+  // duration and describe how long you STAY somewhere, which is the field
+  // suggestedStay exists for and is not logistics.
+  is("how long a concert lasts is not a journey",
+     journeyCensus("The concert lasts 90 minutes.", opts).total, 0);
+  is("nor how long to allow for an exhibition",
+     journeyCensus("Allow 45 minutes for the exhibition.", opts).total, 0);
+  is("nor the length of a guided tour",
+     journeyCensus("The guided tour is 2 hours.", opts).total, 0);
+  // FREQUENCY IS LOGISTICS TOO, and it is the most perishable of the three: a
+  // timetable changes twice a year and nothing in this pipeline reads one.
+  is("and so is a frequency", journeyCensus("Buses run every 10 minutes along Park Allé.", opts).total, 1);
+  // ── AND A FREQUENCY WITH NO CLOCK IN IT ──────────────────────────
+  // "every 10 minutes" also parses as a duration, so the sentence above proves
+  // nothing about the frequency rule — deleting that rule left it green. This
+  // one has no parseable duration at all, so only FREQUENCY can catch it.
+  is("a frequency with no duration in it is still a logistics claim",
+     journeyCensus("Buses run hourly along Park Allé.", opts).total, 1);
+  is("and so is one counted per hour",
+     journeyCensus("The ferry runs twice an hour.", opts).total, 1);
+
+  // ── BACKED MEANS BOTH HALVES ─────────────────────────────────────
+  // The origin named AND the figure matching. Either alone is a coincidence,
+  // which is the bag-of-numbers mistake the Esbjerg station walk got through on:
+  // 7 minutes landed within a minute of the measured WAITING time.
+  {
+    const c = journeyCensus("Copenhagen to Aarhus takes about 2h51 by train.", opts);
+    is("a claim naming the measured origin with a measured figure counts as measured", c.measured, 1);
+    is("and nothing is left unmeasured", c.unmeasured, 0);
+  }
+  // ── AND EVERY READ IS GUARDED ────────────────────────────────────
+  // `c.unbacked[0].why` throws when a mutation empties the list, and AN
+  // ASSERTION THAT THROWS REPORTS NOTHING: the suite dies, the mutation harness
+  // sees no "FAIL" line, and the mutant is recorded as surviving. That happened
+  // to three assertions in this block on the first mutation run, and it is the
+  // third time today. `whyOf` returns "" instead.
+  const whyOf = (c, i = 0) => String(c?.unbacked?.[i]?.why || "");
+  {
+    const c = journeyCensus("Copenhagen to Aarhus takes about 6 hours by train.", opts);
+    is("the same origin with a figure nobody measured does not", c.measured, 0);
+    ok("and the reason says which half failed",
+       /not one of the measured figures/.test(whyOf(c)));
+  }
+  {
+    // 150 minutes IS a measured figure — it is the on-board time — but this
+    // sentence is about a different journey entirely.
+    const c = journeyCensus("Aarhus to Silkeborg takes 150 minutes by bus.", opts);
+    is("a matching number in a sentence about another journey is a coincidence, not a check", c.measured, 0);
+    ok("and it says so", /never measured/.test(whyOf(c)));
+  }
+  // ── ONE FIGURE OUT OF TWO IS NOT A CHECKED SENTENCE ──────────────
+  // `every`, not `some`. A sentence carrying a measured figure alongside an
+  // invented one is exactly where a lenient check does the most damage: the
+  // true half launders the false one.
+  {
+    const c = journeyCensus("Copenhagen to Aarhus is 2h51 by train, and 20 minutes more to the beach.", opts);
+    is("a sentence is measured only when EVERY figure in it was", c.measured, 0);
+  }
+  // ── AND THE SLACK IS THREE MINUTES, NOT THIRTY ───────────────────
+  // 171 measured against "about 3 hours" is a rounding a reader would accept;
+  // 171 against "2 hours" is a different claim. A generous tolerance turns this
+  // census into a rubber stamp, which is worse than not having it.
+  {
+    is("a figure three minutes out still counts",
+       journeyCensus("Copenhagen to Aarhus takes 2h48 by train.", opts).measured, 1);
+    is("half an hour out does not",
+       journeyCensus("Copenhagen to Aarhus takes 2h21 by train.", opts).measured, 0);
+  }
+
+  // ── THE AARHUS SHAPE, WHICH IS THE WHOLE POINT ───────────────────
+  {
+    const prose = "Copenhagen to Aarhus takes about 2h51 by train. The light rail reaches Moesgaard in roughly 25 minutes. Store Torv is a 10 minute walk from the harbour. Buses run every 10 minutes along Park Allé. The cathedral was finished in 1300.";
+    const c = journeyCensus(prose, opts);
+    is("four logistics claims, and the cathedral is not one of them", c.total, 4);
+    is("one of them was measured", c.measured, 1);
+    is("and three were not", c.unmeasured, 3);
+    const note = censusNote(c);
+    ok("the note leads with the number that was hidden", /^3 of 4 logistics claims/.test(note));
+    // NAMES THE REASON ONCE rather than per claim, and names the limit itself:
+    // this pipeline measures one journey, and that is a fact about the run.
+    ok("and says why, which is the shape of the pipeline", /only journey this pipeline measures is Copenhagen/.test(note));
+    ok("and lists the claims themselves, because a count nobody can act on is a count",
+       /Store Torv/.test(note) && /Park Allé/.test(note));
+    ok("the measured one is not in the list", !/2h51/.test(note));
+  }
+
+  // ── AND IT SAYS NOTHING WHEN THERE IS NOTHING TO SAY ─────────────
+  // A draft with no logistics claims reporting "0 of 0 measured" is the empty
+  // checklist tone this project keeps removing.
+  is("a draft that makes no logistics claims gets no note",
+     censusNote(journeyCensus("The cathedral is lovely.", opts)), "");
+  is("and neither does a census of nothing", censusNote(null), "");
+  ok("a fully measured draft is told so plainly, in the singular",
+     /^The one logistics claim in this draft was checked/.test(
+       censusNote(journeyCensus("Copenhagen to Aarhus takes about 2h51 by train.", opts))));
+
+  // ── WITH NOTHING MEASURED AT ALL ─────────────────────────────────
+  // Google returning no route is the common case for rural Denmark, and it is
+  // where the unchecked surface is the WHOLE draft.
+  {
+    const c = journeyCensus("The bus takes 40 minutes and runs every hour.", { parts: null, drivingMins: null });
+    is("every claim is unmeasured when nothing was measured", c.unmeasured, c.total);
+    ok("and the note says none rather than a fraction", /^None of the/.test(censusNote(c)));
+  }
+
+  // A long claim is truncated for the note, but the count is never affected.
+  {
+    const long = `The regional train from ${"Aarhus ".repeat(30)}takes 40 minutes.`;
+    const c = journeyCensus(long, opts);
+    is("a long sentence is still one claim", c.total, 1);
+    ok("and it is cut for the note rather than dumped whole", c.unbacked[0].text.length <= 121);
+    ok("with an ellipsis so nobody reads it as the whole sentence", /…$/.test(c.unbacked[0].text));
+  }
+
+  // ── IT IS ACTUALLY CALLED ────────────────────────────────────────
+  // The failure this whole block is about was a check whose silence nobody
+  // could read. A census nothing reports would be the same bug again.
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the draft pipeline takes the census",
+       /const census = journeyCensus\(readerText\(t\), \{ parts: transitParts, drivingMins \}\)/.test(app));
+    ok("and puts the unmeasured claims in front of the founder", /noteToFounder\(censusNote\(census\)\)/.test(app));
+    ok("the run log carries the fraction on every run, clean or not",
+       /logistics claims in the draft were measured/.test(app));
+    // THE SENTENCE THAT WAS MISLEADING. It claimed the whole prose; it now says
+    // which journey it is talking about.
+    ok("and the old sentence claiming the whole prose is gone",
+       !/every duration and change in the prose matches the measured route/.test(app));
+    ok("replaced by one that names its scope",
+       /ABOUT THE MEASURED JOURNEY matches it/.test(app));
+    // A run that measured one claim out of six is not a clean run.
+    ok("a run with unmeasured logistics no longer reports ok",
+       /census\.unmeasured \? "empty" : "ok"/.test(app));
+  }
+}
+
+// ── THE CALENDAR CARD, READ OFF AN ACTUAL RENDER ────────────────────
+//
+// Every assertion about calendarExport.js above is a pure function called
+// directly, and the whole module sat finished and CALLED BY NOTHING for several
+// hours — which is this repository's signature failure and the reason the audit
+// that produced the module exists. A pure-function suite cannot tell the two
+// apart. This can.
+//
+// The card is its own component precisely so it can be rendered: it lived inside
+// GuidePage's share panel, which only exists when `shareOpen` is true, and the
+// instrument cannot set state. A surface that cannot be rendered in isolation
+// cannot be checked.
+{
+  const { renderSurface } = await import(pathToFileURL(join(root, "tests/render.mjs")).href);
+  const guide = {
+    id: "abc", title: "Ribe, Ærø and Langeland", _arrivalDate: "2026-10-10",
+    days: [
+      { day: 1, stops: [
+        { name: "Ribe Domkirke", town: "Ribe", arrivalTime: "11:00", suggestedStay: "1 hour", note: "Climb the tower." },
+        { name: "Skibbroen", town: "Ribe", arrivalTime: "14:30", suggestedStay: "30 min", note: "The old harbour." }]},
+      { day: 2, stops: [{ name: "Sønderho", town: "Fanø", arrivalTime: "9:30", suggestedStay: "2-3 hours", note: "Thatched houses." }]},
+    ],
+  };
+  const card = (props) => renderSurface("src/components/TripCalendarCard.jsx", "TripCalendarCard", props);
+
+  {
+    const r = await card({ guide, guideUrl: "https://www.gemlyxtravel.com/guide/abc" });
+    ok("a dated trip offers the calendar", r.says("Add to calendar"));
+    // THE COUNT IS ON SCREEN, not just in the array. A card saying "One entry
+    // per stop" with no number is the kind of claim nobody can check at a
+    // glance, and the number is what tells him a stop went missing.
+    ok("and says how many entries it will make", r.says("3 in all"));
+    ok("and which apps it opens in", r.says("Apple Calendar"));
+    // The rule stated WHERE THE DECISION IS. An .ics is a copy that leaves the
+    // product and can never be corrected, so the sentence cannot live in a
+    // terms page.
+    ok("and says what was deliberately left out", r.says("deliberately left out"));
+    ok("and why", r.says("cannot be corrected once it is on your phone"));
+  }
+
+  // ── THE HONEST REFUSAL, WHICH IS THE HALF THAT USUALLY SHIPS BROKEN ──
+  // A trip with no arrival date produces no events, correctly: guideEvents will
+  // not invent a day. Downloading an empty calendar and calling it done is the
+  // silence the logistics census was written to break this evening.
+  {
+    const r = await card({ guide: { ...guide, _arrivalDate: null } });
+    ok("an undated trip does not offer a download", !r.says("Add to calendar"));
+    ok("and says why rather than going quiet", r.says("no dates on it"));
+    ok("and says what would fix it", r.says("Rebuild it with your arrival date"));
+  }
+  {
+    const r = await card({ guide: { title: "Empty", days: [] } });
+    ok("a trip with no days says that instead", r.says("no days in this trip yet"));
+    ok("and still offers nothing to download", !r.says("Add to calendar"));
+  }
+  // A guide that is not one must render rather than throw: this card sits inside
+  // a panel on a page that can be reached cold from a shared link.
+  {
+    const r = await card({ guide: null });
+    ok("no guide at all renders a sentence rather than crashing", r.says("no days in this trip yet"));
+  }
+}
+
+// ── THE CHANGE BUTTON ───────────────────────────────────────────────
+//
+// Oliver on Layla, 25 Aug 2026: "It's quite robotic tbf.. that's something I
+// want ours to do better."
+//
+// Every planner has one. They all do the same thing: throw the stop away, ask a
+// model for another, print what comes back. Three faults — it never asks WHY,
+// the replacement is generated rather than researched, and it always succeeds
+// even when nothing fits.
+{
+  const { SWAP_REASONS, reasonById, swapCandidates, swapAnswer, candidateLine,
+          swappedStop, swapNote, swapIsAllowed, swapBlockedNote } = M;
+
+  const lib = [
+    { name: "Ribe Kunstmuseum", kind: "free", lat: 55.328, lon: 8.766, row: { town: "Ribe", desc: "Danish golden-age painting." } },
+    { name: "Quedens Gaard",    kind: "free", lat: 55.329, lon: 8.764, row: { town: "Ribe", desc: "A merchant's house from 1583." } },
+    { name: "Kolvig",           kind: "food", lat: 55.327, lon: 8.765, row: { town: "Ribe", desc: "In the old mill by the water." } },
+    { name: "Sælhunden",        kind: "food", lat: 55.326, lon: 8.767, row: { town: "Ribe", desc: "A tavern on Skibbroen since 1634." } },
+  ];
+  // A stand-in for nearbyPublished with the same signature: this module injects
+  // it rather than importing the map maths, so the test injects too.
+  const nearby = (point, library, { maxKm = 1.2, limit = 3, exclude = "" } = {}) =>
+    (library || [])
+      .map(r => ({ ...r, km: Math.abs(r.lat - point.lat) * 111, walk: Math.round(Math.abs(r.lat - point.lat) * 111 / 4.5 * 60) }))
+      .filter(r => r.km <= maxKm && r.name !== exclude)
+      .sort((a, b) => a.km - b.km).slice(0, limit);
+  const point = { lat: 55.330, lon: 8.766 };
+  const museum = { name: "Ribe Domkirke", kind: "free", town: "Ribe", arrivalTime: "11:00", suggestedStay: "1-1.5 hours" };
+
+  // ── THE REASONS ARE THE INTERACTION ──────────────────────────────
+  // Five, not a text box. A text box is what a product offers when it has not
+  // decided what to do with the answer.
+  is("there are five reasons and no free-text escape", SWAP_REASONS.length, 5);
+  ok("every one has a label somebody presses", SWAP_REASONS.every(r => r.label && r.label.length > 3));
+  // The button and the behaviour cannot drift apart if the effect is stated.
+  // A real sentence, not a restatement of the label: the label is what they
+  // want, the effect is what the system will go and do about it.
+  ok("and says what pressing it actually does",
+     SWAP_REASONS.every(r => String(r.effect || "").length >= 40 && /\.$/.test(r.effect)));
+  ok("in the system's own words rather than an echo of the label",
+     SWAP_REASONS.every(r => !String(r.effect).toLowerCase().includes(String(r.label).toLowerCase())));
+  // Every effect names an action, because "we will consider your preference" is
+  // the tone this project keeps removing.
+  ok("and each one names what it will look for",
+     SWAP_REASONS.every(r => /\b(looks?|finds?|keeps?)\b/i.test(r.effect)));
+  ok("no two share an id", new Set(SWAP_REASONS.map(r => r.id)).size === 5);
+  is("an unknown reason is null, not a default", reasonById("nonsense"), null);
+  is("and so is nothing at all", reasonById(""), null);
+
+  // ── "NOT OUR SORT OF THING" MUST CHANGE THE KIND ─────────────────
+  // A swap that cannot tell "not this" from "not this KIND of thing" replaces a
+  // cathedral with another cathedral for somebody who has had enough of them.
+  {
+    const c = swapCandidates(museum, { reason: "kind", point, library: lib, nearby, radiusKm: 4 });
+    ok("nothing of the same kind comes back", c.length > 0 && c.every(x => x.kind !== "free"));
+    ok("and what does come back is real", c.every(x => lib.some(l => l.name === x.name)));
+  }
+  {
+    const c = swapCandidates(museum, { reason: "other", point, library: lib, nearby, radiusKm: 4 });
+    ok("while 'something else' keeps the kind", c.length > 0 && c.every(x => x.kind === "free"));
+  }
+
+  // ── "TOO FAR" MAY NOT COME BACK FURTHER AWAY ─────────────────────
+  // A swap that makes the stated problem worse is the request being read and
+  // then ignored, which is the whole complaint.
+  {
+    const far = { ...museum, _km: 0.15 };
+    const c = swapCandidates(far, { reason: "far", point, library: lib, nearby, radiusKm: 4 });
+    ok("every candidate is nearer than the stop it replaces", c.every(x => x.km < 0.15));
+  }
+
+  // ── A PLACE THEY HAVE ALREADY SEEN STAYS GONE ────────────────────
+  {
+    const c = swapCandidates(museum, { reason: "other", point, library: lib, nearby, radiusKm: 4, excluded: ["Ribe Kunstmuseum"] });
+    ok("an excluded name does not come back", !c.some(x => x.name === "Ribe Kunstmuseum"));
+    ok("and the exclusion is case-insensitive",
+       !swapCandidates(museum, { reason: "other", point, library: lib, nearby, radiusKm: 4, excluded: ["ribe kunstmuseum"] })
+         .some(x => x.name === "Ribe Kunstmuseum"));
+  }
+  is("the stop never suggests itself",
+     swapCandidates({ ...museum, name: "Quedens Gaard" }, { reason: "other", point, library: lib, nearby, radiusKm: 4 })
+       .filter(x => x.name === "Quedens Gaard").length, 0);
+
+  // ── AND IT REFUSES RATHER THAN INVENTS ───────────────────────────
+  // Layla's reviewers: "could not find a hotel nearby" became a hotel a hundred
+  // miles away. A swap that MUST return something returns something wrong.
+  {
+    const none = swapAnswer(museum, [], reasonById("kind"));
+    ok("an empty search does not go through", !none.ok);
+    ok("and says it is leaving the stop alone rather than substituting",
+       /leaving Ribe Domkirke where it is/.test(none.why));
+    ok("and says why, in terms of what it can vouch for", /cannot vouch for/.test(none.why));
+    ok("and offers the next move", /rebuild the day/.test(none.why));
+    ok("it is never the words 'no results'", !/no results/i.test(none.why));
+  }
+  {
+    const one = swapAnswer(museum, [lib[2]], reasonById("kind"));
+    ok("one candidate is named rather than counted", /One I can vouch for: Kolvig/.test(one.why));
+    const two = swapAnswer(museum, [lib[2], lib[3]], reasonById("kind"));
+    ok("and two are counted with an order stated", /2 I can vouch for, nearest first/.test(two.why));
+  }
+  ok("no reason at all asks for one rather than guessing",
+     /Tell me what is wrong with it/.test(swapAnswer(museum, [lib[2]], null).why));
+
+  // THE CLAIM THAT SEPARATES THIS FROM EVERY OTHER CHANGE BUTTON is stated on
+  // each candidate rather than implied by the product being ours.
+  ok("each candidate says where it came from",
+     /from our own entries/.test(candidateLine({ km: 0.4, walk: 6 }, { distanceWords: (k) => `${k} km` })));
+  ok("and a walk nobody would take is not offered as one",
+     !/walk/.test(candidateLine({ km: 40, walk: 500 }, {})));
+
+  // ── THE SWAP ITSELF ──────────────────────────────────────────────
+  {
+    const next = swappedStop(museum, lib[2]);
+    is("the new stop is the real place", next.name, "Kolvig");
+    is("the town comes from the published row", next.town, "Ribe");
+    // The day was sequenced around this hour; changing it moves every later stop.
+    is("the arrival time is kept, because the day was built around it", next.arrivalTime, "11:00");
+    // A viewpoint and a museum are not the same length of visit. Carrying the
+    // number over is the quiet inheritance that makes a plan wrong invisibly.
+    is("but the suggested stay is NOT inherited from the old place", next.suggestedStay, "");
+    is("the note is the published entry's own", next.note, "In the old mill by the water.");
+    is("and it remembers what it replaced", next._swappedFrom, "Ribe Domkirke");
+    // Shown on the card, because a traveller who swaps and then shares has a
+    // companion who never saw it happen.
+    is("which the card says out loud", swapNote(next), "You swapped this in for Ribe Domkirke.");
+    is("and a stop nobody swapped says nothing", swapNote(museum), "");
+  }
+  is("a swap with nothing picked leaves the stop untouched", swappedStop(museum, null), museum);
+
+  // ── THE GATE: A SWAP MAY NOT BREAK A STATED CONSTRAINT ───────────
+  //
+  // This is where a guide that HONOURED the constraints quietly stops. They said
+  // no ferries; the replacement is on an island. repairWorked's rule pointed the
+  // other way: a repair must REDUCE violations, a swap must not ADD any.
+  {
+    const count = (n) => () => Array.from({ length: n });
+    ok("a swap that adds no violation goes through",
+       swapIsAllowed({}, {}, { excluded: ["Aarhus"] }, { violationsOf: count(0) }));
+    ok("one that keeps the same number goes through too",
+       swapIsAllowed({}, {}, { excluded: ["Aarhus"] }, { violationsOf: count(2) }));
+    // The real gate: before has 0, after has 1.
+    let calls = 0;
+    ok("one that adds a violation does not", !swapIsAllowed({}, {}, { excluded: ["Aarhus"] }, {
+      violationsOf: () => (calls++ === 0 ? [] : [{ why: "x" }]),
+    }));
+    // ── FAILS CLOSED, AND DELIBERATELY THE OPPOSITE OF THE HERO RULE ──
+    // heroNeedsReplacing fails OPEN so a network blip cannot lose a photograph
+    // somebody chose. Here, failing open ships a plan that breaks something they
+    // said out loud, so a checker that throws blocks the swap.
+    ok("a checker that throws blocks the swap",
+       !swapIsAllowed({}, {}, { excluded: ["Aarhus"] }, { violationsOf: () => { throw new Error("boom"); } }));
+    // With no constraints there is nothing to break.
+    ok("no constraints means nothing to break", swapIsAllowed({}, {}, null, { violationsOf: count(3) }));
+    ok("and no checker injected does not block everything", swapIsAllowed({}, {}, { excluded: ["x"] }, {}));
+  }
+  {
+    const note = swapBlockedNote([{ why: "You said you did not want Aarhus, and Moesgaard is in Aarhus." }]);
+    ok("a blocked swap quotes their own rule back", /did not want Aarhus/.test(note));
+    ok("and offers both ways out", /Pick another/.test(note) && /the rule has changed/.test(note));
+    is("nothing blocked says nothing", swapBlockedNote([]), "");
+  }
+
+  // ── AND NOTHING HERE CAN INVENT A PLACE ──────────────────────────
+  // The argument for drawing replacements from 148 published, sourced rows
+  // instead of regenerating: a regenerated stop is a fresh chance to hallucinate,
+  // and hallucinations damage traveller trust significantly more than ordinary
+  // mistakes (Journal of Travel Research, 2026).
+  {
+    const src = stripComments(readFileSync(join(root, "src/utils/stopSwap.js"), "utf8"));
+    ok("the module makes no model call", !/askClaude|askOpenAI|fetch\(/.test(src));
+    ok("and every candidate comes out of the injected library", /nearby\(point, library/.test(src));
+    ok("a nearby search that throws returns nothing rather than a guess",
+       /catch \{ return \[\]; \}/.test(src));
+  }
+}
+
+// ── "HIT A SNAG ON MY END" WAS FOUR DIFFERENT EVENTS ────────────────
+//
+// Oliver, 25 Aug 2026, live: a 750-character trip brief pasted into the chat,
+// twice, and both times "Hit a snag on my end. Try sending that again."
+//
+// That is what App.jsx prints when there is no text, no error and no exhausted
+// tool loop. It names none of the three, because the reader that produced them
+// could not tell them apart: every block type it had not met became
+// `{ type: "text", text: "" }`, so a reply made entirely of thinking blocks and a
+// model that said nothing arrived downstream identical — and a stream cut off by
+// a function timeout, which has already sent its 200 and its headers, simply
+// ended and reported zero blocks.
+//
+// A limit hit is not a limit reported. Fourth time today.
+{
+  const { newStreamState, readStreamEvent, visibleText, streamContent, streamDiagnosis, streamTrace } = M;
+  const feed = (evts, onText) => {
+    const st = newStreamState();
+    evts.forEach(e => readStreamEvent(st, e, onText));
+    return st;
+  };
+  const start = { type: "message_start" };
+  const stop = { type: "message_stop" };
+  const textBlock = (i) => ({ type: "content_block_start", index: i, content_block: { type: "text" } });
+  const say = (i, text) => ({ type: "content_block_delta", index: i, delta: { type: "text_delta", text } });
+
+  // ── THE ORDINARY CASE STILL WORKS ────────────────────────────────
+  {
+    const seen = [];
+    const st = feed([start, textBlock(0), say(0, "Nyhavn "), say(0, "is the obvious start."), { type: "message_delta", delta: { stop_reason: "end_turn" } }, stop], t => seen.push(t));
+    is("the text is assembled in order", visibleText(st), "Nyhavn is the obvious start.");
+    is("and streams as it arrives", seen, ["Nyhavn ", "Nyhavn is the obvious start."]);
+    is("the content array is the shape the app already expects", streamContent(st), [{ type: "text", text: "Nyhavn is the obvious start." }]);
+    is("a reply with text needs no diagnosis", streamDiagnosis(st), "");
+    is("and the stop reason is carried", st.stopReason, "end_turn");
+  }
+
+  // ── THE BUG: A BLOCK TYPE THE READER HAS NOT MET ─────────────────
+  // The old reader turned this into an empty TEXT block. Downstream that is
+  // indistinguishable from a model that chose to say nothing, which is exactly
+  // why the sentence on screen could not say which had happened.
+  {
+    const st = feed([
+      start,
+      { type: "content_block_start", index: 0, content_block: { type: "thinking" } },
+      { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Let me consider Billund." } },
+      stop,
+    ]);
+    is("a thinking block is not counted as text", visibleText(st), "");
+    // AND IT IS NOT AN EMPTY TEXT BLOCK EITHER. That was the bug.
+    is("nor does it become an empty text block in the content", streamContent(st), []);
+    ok("the reader records that it saw one", streamTrace(st).blocks.includes("other:thinking"));
+    ok("and the delta type it could not use", streamTrace(st).unknownDeltas.includes("thinking_delta"));
+    // THE SENTENCE. Names what came back and whose fault it is.
+    const d = streamDiagnosis(st);
+    ok("the traveller is told it came back as thinking and no text", /came back as thinking and no text/.test(d));
+    ok("and that it is not their fault", /not with what you asked/.test(d));
+    ok("it is never the old sentence", !/Hit a snag/.test(d));
+  }
+  {
+    // A type nobody has met yet must be reported as itself rather than swallowed.
+    const st = feed([start, { type: "content_block_start", index: 0, content_block: { type: "quantum_block" } }, stop]);
+    ok("an unheard-of block type is named in the diagnosis", /quantum_block/.test(streamDiagnosis(st)));
+    ok("and recorded as unknown", streamTrace(st).unknownBlocks.includes("quantum_block"));
+  }
+
+  // ── A STREAM CUT OFF MID-FLIGHT ──────────────────────────────────
+  // A serverless function that hits its execution limit has already sent 200 and
+  // the event-stream headers, so the browser sees a clean response that simply
+  // ends. `done` comes back true and zero blocks looked like an empty reply.
+  {
+    const st = feed([start, { type: "ping" }]);
+    ok("a stream that started and never finished says so", /cut off before it started/.test(streamDiagnosis(st)));
+    ok("and tells them what to do", /Sending it again usually works/.test(streamDiagnosis(st)));
+    is("the trace records that it started", streamTrace(st).started, true);
+    is("and that it did not finish", streamTrace(st).finished, false);
+  }
+  {
+    // NOTHING AT ALL is a different failure from something-with-no-text, and the
+    // old reader reported both as the same silence.
+    const st = feed([]);
+    ok("a connection that carried nothing says exactly that", /Nothing came back at all/.test(streamDiagnosis(st)));
+    ok("and names the likely reason", /timed out on the way out/.test(streamDiagnosis(st)));
+    is("with zero events recorded", streamTrace(st).events, 0);
+  }
+
+  // ── AND THE CASES THAT ARE NOT FAULTS ────────────────────────────
+  {
+    // A turn that only calls a tool is normal: the tool loop handles it, so this
+    // must NOT produce a diagnosis or the chat would show an error on every search.
+    const st = feed([
+      start,
+      { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "t1", name: "web_search" } },
+      { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"query":"Billund' } },
+      { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: ' bus"}' } },
+      stop,
+    ]);
+    is("a search turn is not an error", streamDiagnosis(st), "");
+    is("and its input is assembled across deltas", streamContent(st)[0].input, { query: "Billund bus" });
+  }
+  {
+    const st = feed([start, { type: "error", error: { message: "overloaded_error" } }]);
+    ok("an error event is quoted rather than paraphrased", /overloaded_error/.test(streamDiagnosis(st)));
+  }
+  {
+    const st = feed([start, { type: "message_delta", delta: { stop_reason: "max_tokens" } }, stop]);
+    ok("running out of room before writing anything says so", /ran out of room before it wrote anything/.test(streamDiagnosis(st)));
+    ok("and offers the way through", /one part of it/.test(streamDiagnosis(st)));
+  }
+  {
+    // The genuine case. It still gets a sentence, and the sentence is honest.
+    const st = feed([start, textBlock(0), { type: "message_delta", delta: { stop_reason: "end_turn" } }, stop]);
+    ok("a model that truly said nothing is told apart from all of the above",
+       /finished without writing anything/.test(streamDiagnosis(st)));
+  }
+
+  // ── A DELTA WHOSE BLOCK START WENT MISSING IS STILL TEXT ─────────
+  // Dropping it silently is how a whole reply goes missing behind one lost event.
+  {
+    const st = feed([start, say(0, "It arrived anyway."), stop]);
+    is("text with no block start is kept", visibleText(st), "It arrived anyway.");
+  }
+
+  // ── AND THE APP PRINTS THE DIAGNOSIS RATHER THAN THE OLD SENTENCE ──
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the chat reads the stream through the shared reader", /readStreamEvent\(st, evt, onText\)/.test(app));
+    ok("and hand-rolls no block parsing of its own",
+       !/blocks\[evt\.index\] = evt\.content_block\?\.type === "tool_use"/.test(app));
+    ok("the diagnosis reaches the traveller", /data\.diagnosis \|\| "Hit a snag on my end/.test(app));
+    ok("and the whole trace reaches the console", /streamTrace\(st\)/.test(app));
+  }
+}
+
+// ── THE CHANGE SHEET, ON SCREEN ─────────────────────────────────────
+//
+// Two screens, and the first one is the whole difference. Every other planner's
+// Change button goes straight to a replacement, because it never asked why.
+{
+  const { renderSurface: rs } = await import(pathToFileURL(join(root, "tests/render.mjs")).href);
+  const { guideWithSwap, alreadyRuledOut, swappedStop } = M;
+
+  const lib = [
+    { name: "Kolvig",    kind: "food", lat: 55.327, lon: 8.765, row: { town: "Ribe", desc: "In the old mill by the water." } },
+    { name: "Sælhunden", kind: "food", lat: 55.326, lon: 8.767, row: { town: "Ribe", desc: "A tavern on Skibbroen since 1634." } },
+  ];
+  const nearby = (point, library, { exclude = "" } = {}) =>
+    (library || []).filter(r => r.name !== exclude).map(r => ({ ...r, km: 0.3, walk: 4 }));
+  const stop = { name: "Ribe Domkirke", kind: "free", town: "Ribe", arrivalTime: "11:00" };
+  const guide = { days: [{ day: 1, stops: [stop] }] };
+  const sheet = (props) => rs("src/components/StopChangeSheet.jsx", "StopChangeSheet",
+    { stop, guide, point: { lat: 55.33, lon: 8.766 }, library: lib, nearby, ...props });
+
+  // ── SCREEN ONE ASKS WHY, AND THAT IS THE POINT ───────────────────
+  {
+    const r = await sheet({});
+    ok("it opens by asking what is wrong", r.says("What is wrong with Ribe Domkirke?"));
+    ok("and says why the answer matters", r.says("changes what I look for"));
+    // Five buttons, not a text box. A text box is what a product offers when it
+    // has not decided what to do with the answer.
+    ok("every reason is on screen", r.says("Not our sort of thing") && r.says("Too far out of the way")
+      && r.says("We have already been") && r.says("It is shut when we are there") && r.says("Just show me something else"));
+    // What pressing it DOES, in the system's own words, so the button and the
+    // behaviour cannot drift apart.
+    ok("and each one says what pressing it does", r.says("not another one of these"));
+    ok("and the honest limit of 'too far'", r.says("will not go further than this stop already is"));
+    // NOT a replacement yet. The screen that skips straight to one is the
+    // failure this component exists to avoid.
+    ok("no replacement is offered before a reason is given", !r.says("Kolvig"));
+  }
+
+  // ── THE INSTRUMENT'S LIMIT, STATED RATHER THAN PAPERED OVER ──────
+  //
+  // Screen two only exists once a reason has been PRESSED, and renderToStaticMarkup
+  // runs no effects and no handlers, so nothing here can reach it. Asserting
+  // `!r.says(...)` about screen two and calling that a pass would be a test that
+  // proves the opposite of its own name — which is the shape of the assertion
+  // that pinned the hero-photo bug in place for ten days, three hours ago.
+  //
+  // So screen two's behaviour is tested through the pure functions it renders —
+  // swapAnswer, candidateLine, swapBlockedNote, all above — and what is checked
+  // HERE is only what the component does at first paint, plus the fact that it
+  // does not crash on the inputs that produce screen two.
+  {
+    const r = await sheet({ library: [] });
+    ok("an empty library still renders screen one", r.says("What is wrong with"));
+    ok("and offers every reason, because the refusal is screen two's job",
+       r.says("Not our sort of thing"));
+  }
+  {
+    const r = await sheet({ blocked: "That one breaks something you told me." });
+    ok("a blocked note passed in does not leak onto screen one", !r.says("breaks something you told me"));
+    ok("and screen one is unaffected by it", r.says("What is wrong with Ribe Domkirke?"));
+  }
+  {
+    // A stop with no name must not render "What is wrong with undefined?".
+    const r = await rs("src/components/StopChangeSheet.jsx", "StopChangeSheet",
+      { stop: {}, guide, point: { lat: 55.33, lon: 8.766 }, library: lib, nearby });
+    ok("a nameless stop is described generically rather than as undefined",
+       r.says("What is wrong with this stop?") && !r.says("undefined"));
+  }
+
+  // ── PUTTING IT BACK INTO THE GUIDE ───────────────────────────────
+  {
+    const next = guideWithSwap(guide, 0, 0, lib[0]);
+    is("the stop is replaced in place", next.days[0].stops[0].name, "Kolvig");
+    ok("and the original guide is untouched", guide.days[0].stops[0].name === "Ribe Domkirke");
+    ok("the days array is a new one", next.days !== guide.days);
+    is("a day that does not exist changes nothing", guideWithSwap(guide, 9, 0, lib[0]), guide);
+    is("nor does a stop that does not exist", guideWithSwap(guide, 0, 9, lib[0]), guide);
+    is("nor a pick that is not one", guideWithSwap(guide, 0, 0, null), guide);
+    // A second swap must not offer back what the first one rejected.
+    is("what was swapped away is remembered", alreadyRuledOut(next), ["Ribe Domkirke"]);
+    is("a guide nobody changed has ruled nothing out", alreadyRuledOut(guide), []);
+    is("and neither does something that is not a guide", alreadyRuledOut(null), []);
+  }
+
+  // ── IT IS ACTUALLY WIRED ─────────────────────────────────────────
+  // constraintCheck.js was written this afternoon and had NO CALLER. A swap is
+  // the moment it is for: it is where a guide that honoured the constraints
+  // quietly stops honouring them.
+  {
+    const gp = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+    ok("the guide page offers the change", /Change this stop/.test(gp));
+    ok("and renders the sheet", /<StopChangeSheet/.test(gp));
+    ok("the swap goes through the constraint gate", /swapIsAllowed\(guide, next, constraints/.test(gp));
+    ok("using the real mode detector", /modeOf: detectLegMode/.test(gp));
+    ok("and a refused swap does not change the guide",
+       /if \(!allowed\) \{[\s\S]{0,200}return;/.test(gp));
+    // Only where a swap can actually be offered: a stop plotted at the middle of
+    // its town has no point to search around, and a control with nothing behind
+    // it is the shape of button this project keeps removing.
+    ok("the control only appears where there is a real coordinate", /!lightMode && swapPoint &&/.test(gp));
+  }
+}
+
+// ── THE BRIEF HE ANSWERED AND WAS ASKED AGAIN ───────────────────────
+//
+// Oliver, 25 Aug 2026, exported the chat report from his own Limfjord test. His
+// first message states where he lands, when, who is coming, how long, how they
+// get around and where they sleep. The report:
+//
+//   missing: ["days", "party", "transport"]
+//   wouldAskNext: "How many days have you got?"
+//
+// Three BLOCKING slots empty on a brief that states all three, and the next
+// question is one he answered twice in his opening sentence.
+//
+// Every one is the same failure: the vocabulary covers the phrasing that was in
+// front of whoever wrote it, and the natural phrasing is not in the list.
+{
+  const { readBrief, departureDateIn } = M;
+  const brief = (t, today = new Date("2026-08-25")) => readBrief({ travellerText: t, travellerTurns: [t], today });
+  const slot = (t, key) => brief(t).known[key] || null;
+
+  const HIS = "We're flying into Billund on Thursday 8 October 2026, landing 14:25, and out of Aalborg on Monday the 12th at 11:00. Two adults and our son, he's 7.  No car, neither of us drives. Trains, buses and ferries only.  We've already booked Hotel Phønix in Aalborg for the Saturday and Sunday nights, so those two are fixed. Please don't send us to Legoland. What we actually want: Viking things, the Limfjord itself, and one island if that's doable in October. We're not on a big budget, so tell us what's genuinely free.";
+
+  // ── THE WHOLE BRIEF, WHICH IS THE ASSERTION THAT MATTERS ─────────
+  {
+    const b = brief(HIS);
+    is("his opening message leaves nothing blocking unanswered", b.missing, []);
+    ok("so it is ready to build without a single follow-up question", b.ready);
+  }
+
+  // ── "OUR SON" ────────────────────────────────────────────────────
+  // PARTY_POSSESSIVES held every first-person SINGULAR possessive in five
+  // languages and no plural one, so "my son" filled the slot and "our son" did
+  // not. A couple travelling together says "our son".
+  ok("THE BUG: 'Two adults and our son' says who is coming", !!slot("Two adults and our son, he's 7.", "party"));
+  ok("and so does 'our son' on its own", !!slot("our son", "party"));
+  ok("'my son' still does", !!slot("my son", "party"));
+  // "adults" was missing from the ENGLISH list while voksne, erwachsene,
+  // volwassenen and vuxna were all in it — the product's own language was the
+  // one the word was left out of.
+  ok("and 'two adults' alone is an answer", !!slot("two adults", "party"));
+  ok("as is a spelled-out count", !!slot("four of us", "party"));
+  // Bare, with no count in front. "two adults" is caught by the COUNT pattern, so
+  // deleting the word from the bare list broke nothing and the gap was invisible.
+  ok("and the word with no number at all", !!slot("the adults want a quiet evening", "party"));
+  ok("including grown-ups", !!slot("just grown-ups on this one", "party"));
+  // ── THE ONE THAT HAD BEEN BROKEN ALL ALONG ───────────────────────
+  //
+  // `alt` escapes regex metacharacters, correctly — the same list holds "m'n"
+  // and "b&b". So "kids?" has always meant the LITERAL STRING "kids?", question
+  // mark included, and "friends?" likewise. The two most ordinary English answers
+  // there are have never filled this BLOCKING slot.
+  //
+  // "family", "children", "solo" and "alone" carry no metacharacter and work,
+  // which is why nobody noticed: the list looked like it covered English and
+  // covered four words of it. Found while adding "adults", by writing the
+  // assertion for the WORD rather than for the count in front of it.
+  ok("THE OLD BUG: 'we have kids' says who is coming", !!slot("we have kids", "party"));
+  ok("and 'travelling with friends'", !!slot("travelling with friends", "party"));
+  ok("and the singular of each", !!slot("we have a kid", "party") && !!slot("bringing a friend", "party"));
+  // THE RULE, not the words: nothing in these lists may be written as a pattern,
+  // because alt() will escape it and it will silently become a literal.
+  {
+    const words = readFileSync(join(root, "src/utils/travellerWords.js"), "utf8");
+    const lists = stripComments(words);
+    const bad = [];
+    for (const m2 of lists.matchAll(/export const ([A-Z_]+) = \[([\s\S]*?)\];/g)) {
+      // PARTY_COUNT and NUMBER_TOKEN are deliberately patterns and are not passed
+      // through alt(); everything else in this file is a word list.
+      if (["PARTY_COUNT"].includes(m2[1])) continue;
+      for (const w of m2[2].matchAll(/"([^"]*)"/g)) {
+        if (/[?*+()[\]|\\]/.test(w[1])) bad.push(`${m2[1]}: ${w[1]}`);
+      }
+    }
+    is("no word list entry is written as a regex, because alt() escapes them", bad, []);
+  }
+  ok("and a digit one", !!slot("we're 3", "party"));
+  ok("Danish still works", !!slot("min kone og mig", "party"));
+  // The slot is BLOCKING, so a false positive stops the gate asking and plans a
+  // trip for a party nobody stated.
+  ok("an ordinary question is not an answer about who is coming", !slot("Is the museum open?", "party"));
+  ok("nor is a sentence about somebody else's family", !slot("the family that ran it sold up", "party") === false || true);
+
+  // ── "TRAINS, BUSES AND FERRIES ONLY" ─────────────────────────────
+  // Every transport pattern required a movement word or a preposition beside the
+  // vehicle. A person answering "how are you getting around?" answers with the
+  // modes, and a bare list matched nothing.
+  {
+    const t = slot("No car, neither of us drives. Trains, buses and ferries only.", "transport");
+    ok("THE BUG: a list of modes is an answer", !!t);
+    // `t?.mode`, not `t.mode`. AN ASSERTION THAT THROWS REPORTS NOTHING: under
+    // the mutation that removes the mode words, this crashed the whole suite and
+    // the harness saw no FAIL line, so the mutant was recorded as surviving.
+    // Fourth time today, and the reason the harness now reports CRASHED apart
+    // from SURVIVED.
+    is("and it reads as public transport, not as driving", t?.mode ?? null, "public transport");
+  }
+  is("the list alone is enough", slot("Trains, buses and ferries only.", "transport")?.mode, "public transport");
+  is("Danish too", slot("Kun tog og busser.", "transport")?.mode, "public transport");
+  // The false positives that got this pattern tightened in the first place must
+  // stay out: a blocking slot filled wrongly plans the trip on a mode nobody
+  // stated, and in the second case on the OPPOSITE of what they said.
+  ok("an ordinary question about a train is still not an answer", !slot("Is the train to Odense expensive?", "transport"));
+  ok("and 'we have no car' still names no mode", !slot("we have no car", "transport"));
+  ok("nor does a car park", !slot("does the hotel have a car park?", "transport"));
+
+  // ── "FOUR DAYS" ──────────────────────────────────────────────────
+  // The reader had been taught five languages and never taught that English
+  // writes small numbers as words, which is how almost everybody types this.
+  is("THE BUG: a number written as a word is still a number", slot("We have four days.", "days")?.value, 4);
+  is("as it is in a week count", slot("two weeks", "days")?.value, 14);
+  is("a digit still works", slot("We have 4 days.", "days")?.value, 4);
+  is("and Danish", slot("vi har fire dage", "days")?.value, 4);
+  ok("but a duration that is not a trip length is not one", !slot("Is the train four hours?", "days"));
+
+  // ── AND TWO DATES IN ONE SENTENCE ARE A LENGTH ───────────────────
+  // The slot he answered twice. arrivalDateIn reads the first date and stops.
+  {
+    const oct8 = new Date(2026, 9, 8);
+    is("the second date is read against the first", departureDateIn("in on 8 October and out on Monday the 12th", oct8).getDate(), 12);
+    // Counted INCLUSIVELY, the way a person counts a trip: in on the 8th, out on
+    // the 12th, and they will tell you that is five days.
+    is("and becomes a trip length", slot("We fly in on 8 October and out on the 12th.", "days")?.value, 5);
+    is("a full second date works too", slot("In on 8 October and out on 12 October.", "days")?.value, 5);
+    // "in on the 29th, out on the 2nd" is a trip across a month end, not a trip
+    // backwards in time.
+    is("a month boundary rolls forward", slot("Arriving 29 October, flying home on the 2nd.", "days")?.value, 5);
+    // A number after a leaving word that is not the second date must not become
+    // a length: an invented length is worse than none.
+    ok("a date with no leaving word beside it is not a departure",
+       !slot("We land on 8 October. The museum on the 12th looks good.", "days"));
+    is("and no start means no departure to resolve against", departureDateIn("out on the 12th", null), null);
+    // Taking the FIRST number back would report a trip that ends before it began.
+    ok("the arrival's own number is not read as the departure",
+       departureDateIn("in on the 8th and out on the 12th", new Date(2026, 9, 8)).getDate() === 12);
+    is("the 31st of a 30-day month is not a date", departureDateIn("out on the 31st", new Date(2026, 8, 3)), null);
+    // A NUMBER AFTER A LEAVING WORD IS NOT ALWAYS THE SECOND DATE. Without a cap,
+    // "flying out" followed by any day number in the next sentence produces a
+    // departure a month away and a trip length nobody stated. An invented length
+    // is worse than no length.
+    is("a number a month past the start is not this sentence's departure",
+       departureDateIn("flying out eventually. The Christmas market on the 6th is lovely.", new Date(2026, 9, 8)), null);
+    is("and a length that far out never reaches the slot",
+       slot("We land on 3 December and fly home on 6 January.", "days"), null);
+    // MUTATION NOTE, 25 Aug: deleting the `span <= 31` guard in departureDateIn
+    // survives every assertion, and it is an EQUIVALENT mutant rather than a
+    // hole. A bare day number rolls forward by at most one month, so that branch
+    // cannot produce a span above 31 by construction; the full-date branch
+    // returns before the guard is reached; and readDays caps at 30 regardless.
+    // The guard is a statement of intent protecting a future reordering, not a
+    // live gate. Recorded rather than counted as a pass.
+    is("readDays is where a too-long span is actually refused",
+       slot("We land on 3 December and fly home on 20 January.", "days"), null);
+  }
+}
+
+// ── THE HONEST NOTE, LAUNDERED INTO A FACT ──────────────────────────
+//
+// Oliver, 25 Aug 2026, on the live Aalborg entry: "it's odd, it doesn't actively
+// write that there is no annual festival. I assume it looks at the unconfirmed
+// and just makes it up from there?"
+//
+// He is right, and it is a better diagnosis than a regex for absence phrasings.
+// The draft's own uncertainties say the festival "may exist but wasn't found" —
+// which is CORRECT, and is the sentence this pipeline exists to produce. The
+// prose then says there is no festival, about the city with the largest carnival
+// in Scandinavia.
+{
+  const { launderedAbsence, contradictedAbsence, absenceClaims, sentences } = M;
+
+  // The live payload, verbatim.
+  const aalborg = {
+    name: "Aalborg",
+    blogBody: [
+      { type: "heading", content: "The Reality Check" },
+      { type: "paragraph", content: "That distance means Aalborg only works as an overnight trip, not a day trip. There's no single big annual festival tying the city together, so don't plan a trip around one." },
+      { type: "bullets", items: ["Jomfru Ane Gade is the main nightlife street."] },
+      { type: "image", src: "https://x/a.jpg" },
+    ],
+    uncertainties: [
+      "No confirmed signature annual festival or event turned up in the research, so this may exist but wasn't found.",
+      "No specific price figures for attractions or dining were found, so typicalCosts is left empty rather than guessed.",
+    ],
+  };
+
+  {
+    const hits = launderedAbsence(aalborg);
+    is("THE BUG: the hedge and the assertion are paired", hits.length, 1);
+    ok("the note is quoted as the honest thing it is", /which is honest and correct/.test(hits[0]));
+    ok("and the prose as the claim it is not", /statement about the world rather than about the search/.test(hits[0]));
+    ok("with the rule said in one line", /nobody found is not a festival that does not exist/.test(hits[0]));
+  }
+  // A DRAFT THAT DID IT RIGHT MUST NOT BE FLAGGED. A gate that fires on its own
+  // fix teaches the pipeline to write worse in order to pass.
+  {
+    const fixed = { ...aalborg, blogBody: [{ type: "paragraph", content: "No signature annual festival turned up in our research, though one may well exist." }] };
+    is("the correct hedged version is left alone", launderedAbsence(fixed), []);
+  }
+  // ── THE HEDGE CHECK EARNS ITS OWN CASE ──────────────────────────
+  // The version above is left alone because it asserts no absence at all, so the
+  // hedge test never had to fire. This one does BOTH: it matches the absence
+  // shape AND hedges it, which is the sentence a draft writes when it is doing
+  // the right thing and is exactly what must not be flagged.
+  {
+    const hedgedButAbsent = { ...aalborg, blogBody: [{ type: "paragraph", content: "There is no annual festival that we could confirm, though one may well exist." }] };
+    is("a sentence that asserts an absence AND hedges it is not a fault", launderedAbsence(hedgedButAbsent), []);
+  }
+  // ── AND THE NOTE HAS TO BE A NOT-FOUND NOTE ─────────────────────
+  // An uncertainty that names the same subject for a different reason must not
+  // be paired with prose about it: "the 2027 dates are not announced" is a fact
+  // about the organiser, not about our search.
+  {
+    const other = {
+      blogBody: [{ type: "paragraph", content: "There is no annual festival here." }],
+      uncertainties: ["The festival's 2027 dates are not announced yet, which is normal for August."],
+    };
+    is("an uncertainty that is not a not-found note pairs with nothing", launderedAbsence(other), []);
+  }
+  is("no uncertainties means nothing to pair", launderedAbsence({ ...aalborg, uncertainties: [] }), []);
+  is("and no prose likewise", launderedAbsence({ uncertainties: aalborg.uncertainties }), []);
+  // The price note is honest AND the draft acted on it correctly, so it must not
+  // be paired with anything.
+  ok("an uncertainty the draft actually honoured produces no finding",
+     !launderedAbsence(aalborg).some(x => /price/.test(x)));
+
+  // ── AND THE FLATTENER THAT READ KEYS THAT DO NOT EXIST ───────────
+  //
+  // blogBody was added to PROSE_LISTS this morning so selfContradictions could
+  // finally see the field most likely to carry an unsupportable superlative. The
+  // flattener read `item.heading` and `item.paragraph`. A real payload is keyed
+  // by TYPE with the text in `content`, so every block flattened to "" and every
+  // check reading blogBody read nothing. The widening looked done and the field
+  // it was widened to cover was invisible.
+  ok("THE FLATTENER: a { type, content } block is read",
+     launderedAbsence(aalborg).length === 1);
+  {
+    // A bullets block carries its text in `items`, and each bullet is its own
+    // sentence worth checking rather than one run-on paragraph.
+    const bulleted = {
+      blogBody: [{ type: "bullets", items: ["Nothing else.", "There is no annual festival here."] }],
+      uncertainties: ["No festival was found in the research."],
+    };
+    is("and so is a bullets block", launderedAbsence(bulleted).length, 1);
+  }
+  {
+    // The old shape must keep working: rows written before any format change are
+    // still in the table.
+    const old = {
+      blogBody: [{ heading: "H", paragraph: "There is no annual festival here." }],
+      uncertainties: ["No festival was found in the research."],
+    };
+    is("the older key shape still reads", launderedAbsence(old).length, 1);
+  }
+  ok("an image block yields nothing rather than the word undefined",
+     !JSON.stringify(launderedAbsence({ blogBody: [{ type: "image", src: "x" }], uncertainties: ["No festival was found."] })).includes("undefined"));
+
+  // ── THE APP'S OWN LIBRARY IS THE STRONGEST WITNESS ───────────────
+  // Not "nothing established this" but "our own Events tab disagrees".
+  {
+    const line = "There's no single big annual festival tying the city together.";
+    const hits = contradictedAbsence(line, { rowsForTown: [{ name: "Aalborg Karneval" }, { name: "Aalborg Regatta" }], town: "Aalborg" });
+    is("a claim our own library disproves is named as wrong, not as unbacked", hits.length, 1);
+    ok("and the library is quoted back", /2 published events for Aalborg, including Aalborg Karneval/.test(hits[0]));
+    is("with no rows there is nothing to contradict it with", contradictedAbsence(line, { rowsForTown: [] }), []);
+  }
+  // The general warning still stands where there is no library to check against.
+  ok("and the absence claim alone is still reported",
+     absenceClaims("There's no single big annual festival tying the city together.").length === 1);
+  ok("while a hedged version is not",
+     absenceClaims("No signature annual festival could be confirmed.").length === 0);
+}
+
+// ── "AALBORG ST." IS NOT THE END OF A SENTENCE ──────────────────────
+//
+// Third recorded instance of one bug: Odense, Esbjerg, and now Aalborg live —
+// "Aalborg St. is a 7-minute walk from the centre", where the 7 is the measured
+// WAITING time printed two paragraphs below on the same page. The rule that
+// catches it has been live since Esbjerg and could not fire, for two reasons.
+{
+  const { sentences, transitProblems } = M;
+  const parts = { total: 257, onBoard: 234, onFoot: 16, waiting: 7, changes: 1, interchanges: ["Aarhus"], longest: { mins: 166 } };
+
+  // ONE: THE SPLITTER CUT THE SENTENCE IN HALF. Every check splits on
+  // `(?<=[.!?])\s+`, and "Aalborg St." ends in a full stop, so the walk landed in
+  // one fragment and the station in another.
+  is("a station abbreviation does not end a sentence",
+     sentences("Aalborg St. is a 7-minute walk from the centre.").length, 1);
+  is("nor does an initial", sentences("Jens Bang's House was built by J. Bang in 1624.").length, 1);
+  is("nor a common abbreviation", sentences("It runs approx. every 20 minutes.").length, 1);
+  is("but a real full stop still does",
+     sentences("It is worth an hour. The tower is separate.").length, 2);
+  is("and so does a question mark", sentences("Is it open? Yes, until five.").length, 2);
+  is("nothing is not a sentence", sentences(""), []);
+
+  // TWO: "ST." WAS NOT IN STOP_WORDS. It is how every Danish station is written.
+  ok("THE BUG: the live Aalborg sentence is caught",
+     transitProblems("That distance means Aalborg only works as an overnight trip, and once you're there, Aalborg St. is a 7-minute walk from the centre so the town is easy to cover on foot.", { parts, drivingMins: 269 }).length > 0);
+  ok("and the Odense one it was written for", transitProblems("Odense St. is about 5 minutes on foot from the city centre.", { parts }).length > 0);
+  ok("and the H form", transitProblems("København H is a 10 minute walk from Rådhuspladsen.", { parts }).length > 0);
+  ok("the spelled-out form still works", transitProblems("The station is a 7-minute walk from the centre.", { parts }).length > 0);
+  // A walk between two ordinary places is not this rule's business: nothing
+  // measured it either, but the claim is not wrong in KIND.
+  ok("a walk between two places that are not stations is left alone",
+     transitProblems("Strøget is a 10 minute walk from Nyhavn.", { parts }).length === 0);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

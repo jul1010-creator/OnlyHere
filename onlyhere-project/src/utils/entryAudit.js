@@ -1839,10 +1839,44 @@ export const PROSE_FIELDS = ["atmosphere", "whoItsFor", "realityCheck", "desc", 
 // above, because the shape is the reason it was missed.
 export const PROSE_LISTS = ["blogBody", "thingsToKnow"];
 
+// ── THE FLATTENER READ KEYS THAT DO NOT EXIST ───────────────────────
+//
+// Written this morning, when blogBody was added to PROSE_LISTS so that
+// selfContradictions could finally see the field most likely to carry an
+// unsupportable superlative. It read `item.heading` and `item.paragraph`.
+//
+// A real published payload, pasted by Oliver on 25 Aug from the live Aalborg
+// entry, is keyed by TYPE with the text in `content`:
+//
+//   { "type": "heading",   "content": "What to Do in Aalborg" }
+//   { "type": "paragraph", "content": "Aalborg Zoo, the city's most visited..." }
+//   { "type": "bullets",   "items": ["Jomfru Ane Gade is the main nightlife..."] }
+//
+// So every block flattened to "" and every check reading blogBody has been
+// reading nothing since the day it was widened. The widening looked done, the
+// suite went green, and the field it was widened to cover was invisible.
+//
+// That is this repository's signature failure, committed by me, in the fix for
+// this repository's signature failure. The lesson it earns is narrow and worth
+// keeping: a flattener written from an ASSUMED shape is a guess, and the first
+// real payload is the only thing that can settle it.
+//
+// Both shapes are accepted, because rows written before and after any format
+// change both have to work, and an image or instagram block correctly yields
+// nothing rather than "undefined".
 const listProse = (payload) => PROSE_LISTS.flatMap(k => {
   const v = payload?.[k];
   if (!Array.isArray(v)) return [];
-  return v.map(item => typeof item === "string" ? item : [item?.heading, item?.paragraph].filter(Boolean).join(" "));
+  return v.flatMap(item => {
+    if (typeof item === "string") return [item];
+    if (!item || typeof item !== "object") return [];
+    // The bullets block: its text is a list, and each bullet is its own sentence
+    // worth checking rather than one run-on paragraph.
+    if (Array.isArray(item.items)) return item.items.map(x => String(x ?? "")).filter(Boolean);
+    const text = [item.content, item.text, item.heading, item.paragraph]
+      .map(x => (typeof x === "string" ? x : "")).filter(Boolean).join(" ");
+    return text ? [text] : [];
+  });
 });
 
 // Saying who said it. Kept to phrases that name a SOURCE for the claim, not to
@@ -2011,4 +2045,98 @@ export const priceSource = (priceText, pagesByUrl, order = [], { isAbout = null 
   // Nothing on-subject. If some page had the figure, say which, so the Studio
   // can show him the near miss instead of a silent absence.
   return offSubject || null;
+};
+
+// ── THE HONEST NOTE, LAUNDERED INTO A FACT ──────────────────────────
+//
+// Oliver, 25 Aug 2026, reading the live Aalborg payload: "it's odd, it doesn't
+// actively write that there is no annual festival. I assume it looks at the
+// unconfirmed and just makes it up from there?"
+//
+// That is exactly what happened, and it is a better diagnosis than the one I had.
+// The draft's own uncertainties read:
+//
+//   "No confirmed signature annual festival or event turned up in the research,
+//    so this may exist but wasn't found."
+//
+// Which is CORRECT. That is the sentence this whole pipeline is built to produce:
+// a statement about the search, properly hedged, admitting the thing may exist.
+// The research did its job and said so.
+//
+// Then the prose reads:
+//
+//   "There's no single big annual festival tying the city together, so don't
+//    plan a trip around one."
+//
+// Aalborg Karneval runs the last week of every May and is the largest carnival in
+// Scandinavia. The hedge was handed to the writer as context and came out the
+// other side as an assertion about the world, in a field a reader scans, with an
+// instruction attached.
+//
+// ── WHY NO EXISTING GATE SAW IT ─────────────────────────────────────
+//
+// selfContradictions is the right shape and cannot reach this: it requires the
+// uncertainty to QUOTE the claim it retracts, and this one quotes nothing. It was
+// built for "the draft said 'Denmark's largest pumpkin festival' and we could not
+// confirm that", where the words are in both places. Here the uncertainty and the
+// prose share no phrase at all — they share a SUBJECT, and disagree about it.
+//
+// So this pairs them by subject: an uncertainty that says a thing was not FOUND,
+// and prose that says the same thing does not EXIST.
+//
+// This is the strongest form of the rule "an empty field is not evidence of an
+// absence", because it does not guess at phrasings. The draft has already told us
+// what it failed to establish. All this does is check whether it then went ahead
+// and established it anyway.
+
+// The shape of an honest research note. These are the sentences the pipeline is
+// SUPPOSED to write, which is what makes them safe to key on.
+const NOT_FOUND = /\b(?:no|none|nothing|not?)\b[^.!?]{0,80}?\b(?:turned up|was |were |could ?n[o']?t be|was ?n[o']?t|were ?n[o']?t|has ?n[o']?t been)?\s*(?:found|confirmed|verified|established|located|identified)\b|\b(?:could ?n[o']?t|unable to)\s+(?:find|confirm|verify|establish)\b|\bnot found\b|\bno[^.!?]{0,60}\bturned up\b/i;
+
+// The subjects a draft can fail to find AND then deny the existence of. Each is
+// the noun as it appears in both sentences, so the pairing needs no cleverness.
+const SUBJECTS = [
+  { key: "festival", re: /\b(?:festival|festivals|carnival|annual event|signature event|events?)\b/i },
+  { key: "price", re: /\b(?:price|prices|pricing|cost|costs|entry fee|admission)\b/i },
+  { key: "station", re: /\b(?:station|stop|platform|terminal)\b/i },
+  { key: "opening hours", re: /\b(?:opening hours|hours|times|timetable)\b/i },
+  { key: "website", re: /\b(?:website|official site|homepage)\b/i },
+  { key: "tickets", re: /\b(?:tickets?|ticketing|booking)\b/i },
+];
+
+// Prose that ASSERTS an absence, rather than reporting one was not found. The
+// hedges are excluded first, because a draft correctly writing "we could not
+// confirm a festival" must never be flagged for it — a gate that fires on its
+// own fix teaches the pipeline to write worse in order to pass.
+const ASSERTS_ABSENCE = /\bthere\s+(?:is|are|'s)\s+no\b|\b(?:has|have|with)\s+no\b|\bno\s+(?:single|major|big|real|proper|notable|significant)\b|\bnothing\s+(?:much\s+)?(?:on|happening)\b|\b(?:does ?n[o']?t|do ?n[o']?t)\s+have\b|\blacks\b/i;
+// A hedge is a hedge wherever it sits in the sentence. "There is no annual
+// festival THAT WE COULD CONFIRM, though one MAY WELL EXIST" matches the absence
+// shape and is the correct sentence, so both halves have to be readable: the
+// active "we could confirm" as well as the passive "could be confirmed", and
+// "may well exist" as well as "may exist". A gate that fires on its own fix
+// teaches the pipeline to write worse in order to pass.
+const HEDGE_IN_PROSE = /\b(?:could ?n[o']?t be|was ?n[o']?t|were ?n[o']?t|not)\s+(?:\w+\s+){0,2}(?:confirmed|verified|found|established)\b|\b(?:we |that we )?could (?:be )?(?:confirm|confirmed|verify|verified|find|found|establish|established)\b|\bwe could ?n[o']?t\b|\bunconfirmed\b|\bmay (?:well )?exist\b|\bturned up\b|\bin (?:our|the|this) research\b|\bnot (?:that )?we (?:could )?(?:found|find)\b/i;
+
+export const launderedAbsence = (payload) => {
+  const notes = (Array.isArray(payload?.uncertainties) ? payload.uncertainties : []).map(x => String(x || "")).filter(Boolean);
+  if (!notes.length) return [];
+  const fields = [...PROSE_FIELDS.map(k => payload?.[k]), ...listProse(payload)].map(x => String(x ?? "")).filter(Boolean);
+  const out = [];
+  for (const note of notes) {
+    if (!NOT_FOUND.test(note)) continue;
+    const subject = SUBJECTS.find(s => s.re.test(note));
+    if (!subject) continue;
+    for (const field of fields) {
+      for (const sentence of String(field).split(/(?<=[.!?])\s+/)) {
+        if (HEDGE_IN_PROSE.test(sentence)) continue;
+        if (!ASSERTS_ABSENCE.test(sentence)) continue;
+        if (!subject.re.test(sentence)) continue;
+        out.push(
+          `The research note says "${note.trim().slice(0, 110)}" — which is honest and correct. The prose then says "${sentence.trim().slice(0, 110)}", which is a statement about the world rather than about the search. ` +
+          `A ${subject.key} nobody found is not a ${subject.key} that does not exist. Aalborg shipped "no single big annual festival" about the city with the largest carnival in Scandinavia. Say it could not be confirmed, or take the sentence out.`
+        );
+      }
+    }
+  }
+  return [...new Set(out)];
 };

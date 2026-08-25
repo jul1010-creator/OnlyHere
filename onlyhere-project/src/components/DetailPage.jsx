@@ -12,6 +12,7 @@ import { PlaceMiniMap } from "./PlaceMiniMap";
 import { bookingUrl, airbnbUrl, STAY_DISCLOSURE, ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote } from "../utils/affiliates";
 import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl } from "../utils/ticketLink";
 import { offerView, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
+import { saveLabel, saveHint, planFromSavedLabel } from "../utils/savedTrip";
 import { HowWeKnow } from "./HowWeKnow";
 import { JourneyCard } from "./JourneyCard";
 import { events, majorEvents, vikingEvents } from "../data/events";
@@ -129,7 +130,7 @@ const eventsForTown = (townName) => {
 export const detailPoint = (item, kind) =>
   placeCoords(item) || (kind === "town" ? townPointFor(item?.name) : null);
 
-export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, onOpenEvent, onOpenNearby, paid = false }) => {
+export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false }) => {
   if (!item) return null;
   const color = item.color || C.accent;
   // ── ONE POINT, TWO USES ───────────────────────────────────────────
@@ -193,6 +194,41 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           {kind === "event" ? `${item.town}` : kind === "nightlife" ? item.location : kind === "free" ? item.city : kind === "food" ? item.location : item.region}
         </div>
         <div style={{ fontSize: 30, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: 8 }}>{item.name}</div>
+
+        {/* ── THE ADD-TO-TRIP ROW ─────────────────────────────────────
+            The heart in the top corner already did this and had done for
+            months. It sits on a photograph, it is 32 pixels across, and it
+            carries no label, so the only people who ever pressed it were the
+            ones who guessed. See utils/savedTrip.js for the whole argument;
+            the short version is that the save loop was finished, wired and
+            invisible, which is the exact failure this codebase keeps finding.
+
+            Under the title rather than over the photo: this is a decision about
+            the place, so it belongs where the place is being read about, at a
+            size a thumb can hit.
+
+            The second button only exists once something is saved, because an
+            offer to plan a trip around nothing is the empty-checklist tone
+            Oliver objected to. */}
+        {onToggleSave && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <button onClick={onToggleSave}
+                style={{ background: isSaved ? `${C.gold}1e` : "none", border: `1px solid ${isSaved ? C.gold + "66" : C.border}`, color: isSaved ? C.gold : C.text, borderRadius: 100, padding: "9px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                {saveLabel(isSaved)}
+              </button>
+              {isSaved && onPlanFromSaved && planFromSavedLabel(savedCount) && (
+                <button onClick={onPlanFromSaved}
+                  style={{ background: "none", border: "none", color: C.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: "9px 4px", fontFamily: "'Inter', sans-serif" }}>
+                  {planFromSavedLabel(savedCount)}
+                </button>
+              )}
+            </div>
+            <div style={{ fontSize: 11.5, color: C.muted, marginTop: 7, lineHeight: 1.5 }}>
+              {saveHint(isSaved, savedCount)}
+            </div>
+          </div>
+        )}
 
         {kind === "nightlife" && item.crowd && (
           <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: color, background: `${color}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 18 }}>

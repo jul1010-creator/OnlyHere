@@ -29,6 +29,11 @@ import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, st
 import { BOOKING_AFFILIATE_ID } from "../config";
 import { tiqetsBrowseUrl, partnerDisclosure } from "../utils/affiliates";
 import { dayStart, dayKey, dayPlus } from "../utils/calendarDay";
+import { TripCalendarCard } from "../components/TripCalendarCard";
+import { StopChangeSheet } from "../components/StopChangeSheet";
+import { guideWithSwap, swapNote, swapIsAllowed, swapBlockedNote } from "../utils/stopSwap";
+import { constraintViolations } from "../utils/constraintCheck";
+import { detectLegMode } from "../utils/helpers";
 import { shareMessage, shareTitle } from "../utils/share";
 import { returnLeg, describeReturn, REACH_FAR, overnightMove, describeOvernightMove, sameMode, howForReader } from "../utils/routeOrder";
 import { stayTextProblem } from "../utils/accommodation";
@@ -172,6 +177,11 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
   //
   // Same class of bug as keptAlready below, which reads guideId. Anything
   // derived from route state in here needs an effect, not an initialiser.
+  // Which stop's change sheet is open, as "dayIndex-stopIndex". One at a time:
+  // two open sheets is two half-made decisions and a guide in an unclear state.
+  const [changing, setChanging] = useState(null);
+  // A swap the stated constraints refused, quoted back in their own words.
+  const [swapBlocked, setSwapBlocked] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   useEffect(() => {
@@ -807,6 +817,11 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                   style={{ fontSize: 12.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>Email ↗</a>
               </div>
             )}
+            {/* Its own component so it can be RENDERED and read by the
+                instrument, which cannot open a panel gated on useState. See
+                components/TripCalendarCard.jsx. */}
+            <TripCalendarCard guide={guide} guideUrl={shareUrl} />
+
             {/* The rule stated where the action is, which is the only place a
                 rule in a terms page ever actually lands. Note that every target
                 this panel offers — the native sheet, WhatsApp, email — is
@@ -1733,6 +1748,15 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                     {noteBlock}
                   </>
                 );
+                // ── THE CHANGE BUTTON ────────────────────────────────
+                // Only where a swap can actually be offered: it needs a real
+                // coordinate to search around, and a stop plotted at the middle
+                // of its town is not at a known point. Offering the control and
+                // then having nothing to put in it is the shape of button this
+                // project keeps removing.
+                const swapPoint = resolveStopCoords(stop.name, guide._geo || {}, stopTown(stop, real));
+                const swapOpen = changing === `${dayIdx}-${stopIdx}`;
+                const changedFrom = swapNote(stop);
                 return (
                 <div key={stopIdx} style={{ marginBottom: nextStop && lightMode ? 14 : 0 }}>
                   {real?.photo ? (
@@ -1808,6 +1832,58 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                       <div style={{ width: 1, height: 16, background: `${C.gold}55` }} />
                       {legChip(stop.name, nextStop.name, day.glance?.legs?.[stopIdx]?.how)}
                       <div style={{ width: 1, height: 16, background: `${C.gold}55` }} />
+                    </div>
+                  )}
+                  {/* ── AND THE WAY TO CHANGE IT ──────────────────────
+                      Under the card, not over the photo: this is a decision
+                      about the stop and it belongs where the stop is read.
+
+                      Hidden in lightMode, which is the plain guide with no
+                      routes and no leg times — a swap there would recompute
+                      nothing and the card has no coordinate work behind it. */}
+                  {!lightMode && swapPoint && (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                        <button onClick={() => { setChanging(swapOpen ? null : `${dayIdx}-${stopIdx}`); setSwapBlocked(""); }}
+                          style={{ background: "none", border: "none", color: swapOpen ? C.gold : C.muted, fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: 0, fontFamily: "'Inter', sans-serif" }}>
+                          {swapOpen ? "Never mind" : "Change this stop"}
+                        </button>
+                        {/* Said on the CARD, not in a changelog nobody opens: a
+                            traveller who swapped something and then shared the
+                            guide has a companion who never saw it happen. */}
+                        {changedFrom && (
+                          <span style={{ fontSize: 11, color: C.muted }}>{changedFrom}</span>
+                        )}
+                      </div>
+                      {swapOpen && (
+                        <StopChangeSheet
+                          stop={stop} guide={guide} point={swapPoint}
+                          library={mapLibrary} nearby={nearbyPublished}
+                          blocked={swapBlocked}
+                          onClose={() => { setChanging(null); setSwapBlocked(""); }}
+                          onSwap={(pick) => {
+                            const next = guideWithSwap(guide, dayIdx, stopIdx, pick);
+                            // ── THE GATE ────────────────────────────
+                            // A swap is where a guide that HONOURED the
+                            // traveller's constraints quietly stops honouring
+                            // them: they said no ferries and the replacement is
+                            // on an island. See utils/constraintCheck.js, which
+                            // has existed since this afternoon and until now had
+                            // no caller. This is the moment it is for.
+                            const constraints = guide?._constraints || null;
+                            const allowed = swapIsAllowed(guide, next, constraints, {
+                              violationsOf: (g, c) => constraintViolations(g, c, { modeOf: detectLegMode }),
+                            });
+                            if (!allowed) {
+                              setSwapBlocked(swapBlockedNote(constraintViolations(next, constraints, { modeOf: detectLegMode })));
+                              return;
+                            }
+                            setGuide(next);
+                            setChanging(null);
+                            setSwapBlocked("");
+                          }}
+                        />
+                      )}
                     </div>
                   )}
                 </div>
