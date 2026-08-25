@@ -6,3 +6,5 @@ dist
 # image-finder tool — never commit real keys or local run state
 tools/image-finder/config.json
 tools/image-finder/state.json
+
+node_modules/.gx-render/

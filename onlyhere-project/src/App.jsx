@@ -109,7 +109,7 @@ import { WeatherHeaderStrip } from "./components/WeatherHeaderStrip";
 import { StoreBadge } from "./components/StoreBadge";
 import { DateTimePicker } from "./components/DateTimePicker";
 import { GuidePage } from "./pages/GuidePage";
-import { askClaude, parseClaudeJSON, askPerplexity, withRetry, askOpenAI, readDatesFromImage, readPosterText } from "./utils/aiClient";
+import { askClaude, parseClaudeJSON, askPerplexity, withRetry, askOpenAI, readDatesFromImage, readPosterText, wholeSentences } from "./utils/aiClient";
 import { STUDIO_VOICE, slugify, J, bb, bbBullets, bbData, bulletsBlock, shapeForLive } from "./utils/studioContent";
 import { studioPrompts } from "./utils/studioPrompts";
 import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow } from "./utils/liveContent";
@@ -13006,6 +13006,26 @@ ${languageBlock()}`;
       let turn = await runTurn(baseMessages);
       let data = turn.data;
       let replyText = data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
+
+      // ── A REPLY WITH TEXT IN IT CAN STILL BE CUT OFF ──────────────
+      //
+      // Oliver, 25 Aug 2026, on live Gemlyx: a Danish reply ending "Nyhavn er
+      // stadig det oplagte startpunkt for" and stopping there. Mid-sentence, no
+      // full stop, rendered as a finished answer.
+      //
+      // `stop_reason` IS read in this function, four lines down, and only when
+      // the reply came back EMPTY. Non-empty and truncated went straight
+      // through. Anthropic says "max_tokens" in the same response object.
+      //
+      // AND THIS CHAT DOES NOT GO THROUGH askClaude. It calls /api/anthropic
+      // itself and parses the response by hand, so the identical fix in
+      // aiClient.js does not reach it: two implementations of one call, and only
+      // one of them was ever taught to read the flag. That is why this was live
+      // while the other path retried.
+      if (replyText && data?.stop_reason === "max_tokens") {
+        console.warn("Gemlyx chat: reply was cut off at max_tokens.", { chars: replyText.length });
+        replyText = wholeSentences(replyText);
+      }
 
       if (!replyText) {
         // BUG FIX: this used to fall straight to a generic "Something went wrong!"

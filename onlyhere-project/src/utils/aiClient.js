@@ -39,7 +39,29 @@ export const askClaude = async (prompt, maxTokens = 500, model = "claude-sonnet-
         const hint = data.stop_reason === "max_tokens" ? " (response was cut off — ran out of tokens)" : "";
         return { error: `Empty response from Claude${hint}` };
       }
-      return { text };
+      // ── AND A REPLY THAT HAS TEXT CAN STILL BE CUT OFF ─────────
+      //
+      // Oliver, 25 Aug 2026, on live Gemlyx: a Danish Detour reply ending
+      // "Nyhavn er stadig det oplagte startpunkt for" and stopping. No full
+      // stop, mid-sentence, rendered as a finished answer.
+      //
+      // `stop_reason` was read four lines up and ONLY when the reply came back
+      // EMPTY. A reply that is non-empty AND truncated returned `{ text }` and
+      // nothing ever asked. Anthropic says "max_tokens" in the response and the
+      // app threw the sentence away.
+      //
+      // THIS IS THE FOURTH TIME THIS WEEK, and it is the same defect every
+      // time. `avoid=ferries` came back with `hasFerry: true` and nothing read
+      // it. `include_domains` came back off-pin and nothing filtered it.
+      // `maxAge` cannot be confirmed at all and that is recorded rather than
+      // assumed. HANDOFF_25AUG named the rule for the first three: a constraint
+      // sent is not a constraint honoured. This is its twin, on the way back:
+      // A LIMIT HIT IS NOT A LIMIT REPORTED, unless somebody reads the flag.
+      //
+      // Reported rather than fixed here, because what to do about it belongs to
+      // the caller. A guide build should retry with more room. A chat should not
+      // show half a sentence. Only the call site knows which.
+      return { text, truncated: data.stop_reason === "max_tokens" };
     } catch (err) {
       return { error: "Couldn't reach Claude — check the API key and your connection." };
     }
@@ -65,6 +87,19 @@ export const askClaude = async (prompt, maxTokens = 500, model = "claude-sonnet-
     console.warn(`Claude came back empty on ${maxTokens} tokens. Retrying once with ${bigger}.`);
     out = await callOnce(prompt, bigger);
   }
+  // ── THE SAME BUDGET PROBLEM, WEARING TEXT ───────────────────────────
+  // An empty reply and a reply that stops mid-word are one fault with two
+  // symptoms, and only the first one was ever retried. The second is worse,
+  // because empty raises an error somebody sees and truncated renders as an
+  // answer. Same single retry, same doubling, same ceiling.
+  if (!out.error && out.truncated && maxTokens < 16000) {
+    const bigger = Math.min(16000, maxTokens * 2);
+    console.warn(`Claude was cut off at ${maxTokens} tokens. Retrying once with ${bigger}.`);
+    const second = await callOnce(prompt, bigger);
+    // Keep the longer answer. A retry that came back shorter, or errored, must
+    // not throw away a reply the traveller could at least partly use.
+    if (!second.error && String(second.text || "").length >= String(out.text || "").length) out = second;
+  }
   // JSON-expected reply came back as pure prose (no object anywhere in it) —
   // one strict re-ask. The preamble guard in parseClaudeJSON already handles
   // the milder case of chit-chat FOLLOWED by intact JSON; this catches the
@@ -74,6 +109,37 @@ export const askClaude = async (prompt, maxTokens = 500, model = "claude-sonnet-
     out = await callOnce(`${prompt}\n\nIMPORTANT: Your previous attempt replied with conversational text instead of JSON. Respond with ONLY the JSON object itself, starting immediately with the { character, no greeting, no explanation, nothing before or after the JSON.`, Math.min(16000, maxTokens * 2));
   }
   return out;
+};
+
+// ── AND WHEN EVEN THE RETRY COMES BACK CUT OFF ──────────────────────
+//
+// The ceiling is real: a reply truncated at 16,000 tokens cannot be retried
+// bigger, and something still has to reach the reader. Oliver's screen, 25 Aug
+// 2026: "Nyhavn er stadig det oplagte startpunkt for" and nothing after it.
+//
+// A DANGLING CLAUSE CARRIES NO INFORMATION. "the obvious starting point for"
+// tells a reader strictly less than stopping one sentence earlier does, because
+// it invites them to wonder what was lost. So the fragment goes and the
+// complete sentences stay.
+//
+// Only when there IS a complete sentence to keep. A reply that never finished
+// one is left exactly as it came back: half an answer is poor and no answer is
+// worse, and this function has no standing to decide the traveller gets
+// nothing.
+//
+// Danish, German and Chinese sentence endings all count, because this trims
+// reader-facing chat and the chat answers in the reader's language.
+const SENTENCE_END = /[.!?…。！？]["'\u201d\u2019)\]]?(?=\s|$)/g;
+
+export const wholeSentences = (text) => {
+  const t = String(text ?? "");
+  if (!t.trim()) return t;
+  let last = -1, m;
+  SENTENCE_END.lastIndex = 0;
+  while ((m = SENTENCE_END.exec(t)) !== null) last = m.index + m[0].length;
+  if (last <= 0) return t;                       // nothing finished; leave it alone
+  const kept = t.slice(0, last).trim();
+  return kept.length ? kept : t;
 };
 
 // ── EVERY CONSUMER OF THESE CITATIONS WAS READING THEM WRONG ────────

@@ -29903,7 +29903,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // The reader it calls is the research one, not the date one. A date reader
   // asked for opening hours would answer, and it would answer badly.
   ok("it calls the transcriber, not the date reader", /const shot = await readPosterText\(banner\.url, name\);/.test(appR));
-  ok("and both readers are imported", /readDatesFromImage, readPosterText \} from "\.\/utils\/aiClient"/.test(appR));
+  // ── THE RULE, NOT THE ORDER OF THE IMPORT LIST ────────────────────
+  // This was pinned to `readDatesFromImage, readPosterText } from ...`, which
+  // says those two are the LAST names in the list. Adding a seventh import to
+  // aiClient broke it, 25 Aug, on a change that had nothing to do with posters.
+  // Third time today an assertion has been pinned to a shape instead of a rule.
+  {
+    const imp = (appR.match(/import \{([^}]*)\} from "\.\/utils\/aiClient"/) || [])[1] || "";
+    const named = imp.split(",").map(x => x.trim()).filter(Boolean);
+    ok("and both readers are imported from aiClient",
+       named.includes("readDatesFromImage") && named.includes("readPosterText"));
+  }
 }
 
 // ── WHICH OF THE DATES ON THIS PAGE IS THE EVENT'S ──────────────────
@@ -34478,6 +34488,82 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       ok(`no bookable inventory reaches the step that chooses places: ${name}`, !window.includes(name)));
     ok("and there is enough of a window for that to mean something", window.length > 4000);
   }
+}
+
+
+// ══ WHAT DOES THE SCREEN ACTUALLY SAY ═════════════════════════════════
+//
+// Oliver, 25 Aug 2026: "how do we actually know it works?"
+//
+// Every other assertion in this file is a pure function called directly or a
+// regular expression over source text. Neither can see a screen, and that is not
+// a gap in coverage, it is the specific reason four features shipped broken this
+// month: the disclosure, the tier gate, update-events-check and the photo probe
+// were all WIRING failures, and a grep proves a function is called rather than
+// what comes out of it.
+//
+// tests/render.mjs renders a component with react-dom/server and reads the text.
+// Its limits are real and stated there: effects do not run and state stays at
+// its initial value. All four of those bugs sit inside that limit.
+{
+  const { renderSurface, browserIn } = await import(join(root, "tests/render.mjs"));
+  const item = { name: "Bybjerg Museum", slug: "bybjerg", town: "Bybjerg", desc: "A small museum." };
+  const askIn = async (tag) => {
+    const r = await renderSurface("src/components/AskGemlyx.jsx", "AskGemlyx",
+      { item, kind: "free", session: null, startOpen: true, nearby: [] },
+      { globals: browserIn(tag) });
+    return r;
+  };
+
+  // ── THE ARTICLE 50 REGRESSION, READ OFF THE RENDER ─────────────────
+  //
+  // This is the assertion that did not exist on 24 August. Three did: the table
+  // has six entries, all three surfaces call aiDisclosureFor, an unknown
+  // language falls back to English. All three were true and every reader in
+  // every language got the English sentence.
+  //
+  // Verified 25 Aug by restoring that day's exact code and re-rendering: all
+  // four languages came back "You are talking to an AI." So this catches it.
+  const SEEN = {};
+  for (const [tag, expect] of [
+    ["de-DE", M.AI_DISCLOSURE.de],
+    ["da-DK", M.AI_DISCLOSURE.da],
+    ["nl-NL", M.AI_DISCLOSURE.nl],
+    ["sv-SE", M.AI_DISCLOSURE.sv],
+    ["nb-NO", M.AI_DISCLOSURE.no],
+    ["zh-Hans-CN", M.AI_DISCLOSURE["zh-hans"]],
+    ["zh-Hant-TW", M.AI_DISCLOSURE["zh-hant"]],
+    ["en-GB", M.AI_DISCLOSURE.en],
+  ]) {
+    const r = await askIn(tag);
+    SEEN[tag] = r.text;
+    ok(`a browser set to ${tag} SEES the disclosure in its own language`, r.says(expect));
+  }
+
+  // The rule the per-language checks cannot make on their own: a table wired to
+  // nothing satisfies eight individual comparisons if each is allowed to fall
+  // back to English, and that is exactly what happened.
+  ["de-DE", "da-DK", "zh-Hans-CN"].forEach(tag =>
+    ok(`and ${tag} is not quietly handed the English one`, !SEEN[tag].includes(M.AI_DISCLOSURE.en)));
+  ok("the two Chinese scripts render differently on screen",
+     SEEN["zh-Hans-CN"] !== SEEN["zh-Hant-TW"]);
+
+  // ── AND THE SURFACE STILL RENDERS AT ALL ───────────────────────────
+  // A component that throws renders nothing, and "nothing" contains no English
+  // sentence either, so the negative assertions above would pass on a blank
+  // screen. This is the one that stops that.
+  {
+    const r = await askIn("en-GB");
+    ok("the panel renders something a person could read", r.text.length > 80);
+    ok("and it is the panel we think it is", r.says("Bybjerg Museum"));
+  }
+
+  // ── THE INSTRUMENT'S OWN LIMITS, ASSERTED SO THEY STAY KNOWN ───────
+  // An unknown language must still be told something. Article 50 asks us to
+  // inform; a sentence in the wrong language is closer to informing than silence.
+  ok("a language nobody planned for is still told, in English",
+     (await askIn("qq-XX")).says(M.AI_DISCLOSURE.en));
+  ok("and a browser with no language at all", (await askIn("")).says(M.AI_DISCLOSURE.en));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
