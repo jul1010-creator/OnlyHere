@@ -301,9 +301,25 @@ const readParty = (text, intakeTravelers, familyMode) => {
 // asks once and then stops (see `asked`), so a false positive costs a wrong plan
 // while a miss costs one short question.
 const SLEEPS = "hotel|hostel|room|rooms|place|places|apartment|flat|airbnb|bnb|b&b|guesthouse|guest house|kro|inn|cabin|cottage|campsite|camping spot|somewhere to stay|accommodation|lodging";
+// ── AND A HOTEL NAMES ITSELF BEFORE IT IS BOOKED ────────────────────
+//
+// 26 Aug 2026. "We have 71 Nyhavn Hotel booked for the first two nights" filled
+// nothing, on a BLOCKING slot, and the next question would have been "have you
+// booked somewhere to stay already?"
+//
+// Every branch here wanted the booking word BEFORE the sleep word — "booked a
+// hotel", "hotel is booked" — and the way a person naturally writes it puts the
+// NAME in between: "<name> Hotel booked". Two words apart, in the wrong order,
+// and the whole sentence was invisible.
+//
+// The new branch allows a name of up to four words between them, which is what a
+// Danish hotel name actually is, and still requires both halves so an ordinary
+// "the hotel" cannot fill it on its own.
 const BOOKED_RE = new RegExp(
   `\\b(?:book(?:ed)?|reserved|got|have|sorted)\\s+(?:a\\s+|an\\s+|our\\s+|the\\s+|my\\s+)?(?:${SLEEPS})\\b`
   + `|\\b(?:${SLEEPS})\\s+(?:is|are)\\s+(?:already\\s+)?(?:booked|sorted|reserved)\\b`
+  + `|\\b(?:${SLEEPS})\\s+(?:booked|reserved|sorted)\\b`
+  + `|\\b(?:book(?:ed)?|reserved|got|have)\\s+(?:[\\wÆØÅæøå'’-]+\\s+){0,4}(?:${SLEEPS})\\s+(?:booked|reserved|sorted)\\b`
   + `|\\bstaying (?:at|in) (?:the|a|an)\\b`, "i");
 const NOT_BOOKED_RE = /\b(?:not (?:booked|yet)|nothing booked|no hotel|haven'?t booked|need (?:a hotel|somewhere)|looking for (?:a hotel|somewhere)|open to suggestions on (?:hotels?|where to stay))\b/i;
 const readStay = (text, intakeStayBooked) => {

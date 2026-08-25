@@ -150,7 +150,7 @@ import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange,
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
 import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition, venueRatherThanEvent } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
-import { newStreamState, readStreamEvent, visibleText, streamContent, streamDiagnosis, streamTrace, ranOutThinking } from "./utils/streamRead";
+import { newStreamState, readStreamEvent, visibleText, streamContent, streamContentForApi, streamDiagnosis, streamTrace, ranOutThinking } from "./utils/streamRead";
 import { heroNeedsReplacing, heroPatch, heroStatusLine, isAbsolutePhoto } from "./utils/heroPhoto";
 import { languageBlock, guideLanguageBlock, readerLanguage, keepLanguageOf } from "./utils/readerLanguage";
 import { echoInDraft, describeEcho, ECHO_RUN } from "./utils/echoCheck";
@@ -13012,6 +13012,13 @@ ${languageBlock()}`;
         if (diagnosis) console.warn("Gemlyx chat: no text in this turn.", { diagnosis, ...streamTrace(st) });
         return {
           content: streamContent(st), stop_reason: st.stopReason, error: st.error,
+          // ── AND THE OTHER VIEW, FOR THE MESSAGE LIST ────────────
+          // The reader's content has thinking blocks stripped out, correctly.
+          // The API needs them BACK when the same turn called a tool, and
+          // sending the stripped version is what produced "tool_use ids were
+          // found without tool_result blocks" on Oliver's second brief. See
+          // streamContentForApi in utils/streamRead.js.
+          apiContent: streamContentForApi(st),
           diagnosis, trace: streamTrace(st),
           // The one thing the retry has to know: whether changing the budget
           // would change the outcome. See ranOutThinking in utils/streamRead.js.
@@ -13133,7 +13140,8 @@ ${languageBlock()}`;
           } catch { /* keep fallback summary, don't break the chat */ }
           msgs = [
             ...msgs,
-            { role: "assistant", content: out.content },
+            // apiContent, not content: thinking blocks must go back verbatim.
+            { role: "assistant", content: out.apiContent || out.content },
             { role: "user", content: [{ type: "tool_result", tool_use_id: toolUseBlock.id, content: searchSummary }] },
           ];
           out = await streamClaudeChat(msgs, handleDelta);

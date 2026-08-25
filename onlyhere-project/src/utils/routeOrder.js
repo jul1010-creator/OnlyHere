@@ -153,8 +153,30 @@ const NOT_TRAVEL = /\b(?:car parks?|carparks?|car museums?|bus museums?|train mu
 // Exported because tripBrief has to scrub the SAME text before it decides whether a
 // sentence states a mode at all. Two copies of "no car is not a car" is two chances
 // to disagree, and this one already shipped an inversion once.
+// ── A MOBILITY AID IS NOT A TRAVEL MODE ─────────────────────────────
+//
+// 26 Aug 2026. Oliver's second adversarial brief opened:
+//
+//   "I use a WALKING stick and I can't manage more than about twenty minutes on
+//    my FEET at a stretch."
+//
+// and said, two sentences later, "We're renting a car. We both drive."
+//
+// The brief came back `transport: "walk"`. In isolation the car sentence reads
+// `car` correctly — the walking-stick sentence simply comes first in the text and
+// the reader takes the first match.
+//
+// So a trip for a man who tires after twenty minutes on his feet was about to be
+// planned as a WALKING trip, which is the worst answer available and the exact
+// opposite of what he told us. The words that caused it — walking stick, on my
+// feet — are him describing why he CANNOT walk.
+//
+// Stripped in the same pass as the negations, and for the same reason: a phrase
+// that names a mode while denying it must never reach the matcher.
+const MOBILITY_AID = /\b(?:walking|walk)\s+(?:stick|frame|aid)\b|\bwheelchair\b|\bcrutch(?:es)?\b|\brollator\b|\bmobility\s+(?:scooter|aid|issues?|problems?)\b|\bzimmer\b|\bpush ?chair\b|\bbuggy\b|\bpram\b|\bcane\b|\bon (?:my|his|her|their) feet\b|\bstairs? are\b|\bcan'?t (?:manage|do|walk)\b/gi;
+
 export const withoutNonModes = (text) =>
-  String(text || "").toLowerCase().replace(NEGATED, " ").replace(NOT_TRAVEL, " ");
+  String(text || "").toLowerCase().replace(MOBILITY_AID, " ").replace(NEGATED, " ").replace(NOT_TRAVEL, " ");
 
 export const travelModeKey = (mode) => {
   const t = withoutNonModes(mode);

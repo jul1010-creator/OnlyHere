@@ -78,7 +78,7 @@ export const readStreamEvent = (st, evt, onText) => {
       // reply, and RECORDED — because a reply that is empty because the model
       // only thought is a different event from a reply that is empty because
       // the model said nothing, and the traveller deserves the difference.
-      st.blocks[evt.index] = { type: "other", kind: kind || "unnamed", text: "" };
+      st.blocks[evt.index] = { type: "other", kind: kind || "unnamed", text: "", signature: evt.content_block?.signature || "", data: evt.content_block?.data || "" };
       if (!KNOWN_NON_TEXT.has(kind)) st.unknownBlocks.push(kind || "unnamed");
       else if (!st.unknownBlocks.includes(kind)) st.unknownBlocks.push(kind);
     }
@@ -96,6 +96,18 @@ export const readStreamEvent = (st, evt, onText) => {
       if (typeof onText === "function") onText(visibleText(st));
     } else if (JSON_DELTAS.has(d)) {
       b.inputJson = (b.inputJson || "") + (evt.delta.partial_json || "");
+    } else if (d === "thinking_delta") {
+      // KEPT, THOUGH THE READER NEVER SEES IT. See streamContentForApi: a
+      // thinking block has to go BACK to the API verbatim when the same turn
+      // also called a tool, and a block we did not keep is a block we cannot
+      // return.
+      b.text = (b.text || "") + (evt.delta.thinking || "");
+      if (!st.unknownDeltas.includes(d)) st.unknownDeltas.push(d);
+    } else if (d === "signature_delta") {
+      // The signature is what makes a returned thinking block verifiable. It
+      // arrives as its own delta type and dropping it is the same as dropping
+      // the block.
+      b.signature = (b.signature || "") + (evt.delta.signature || "");
     } else if (d && !st.unknownDeltas.includes(d)) {
       // thinking_delta lands here and is correct to ignore for the READER,
       // but it must still be recorded, or "the model only thought" looks
@@ -119,12 +131,58 @@ export const visibleText = (st) =>
 // The content array in the shape the rest of App.jsx already expects. "other"
 // blocks are dropped: nothing downstream knows what to do with them, and their
 // existence is carried in the diagnosis instead.
+// ── TWO VIEWS OF ONE STREAM, AND THEY ARE NOT THE SAME ──────────────
+//
+// 26 Aug 2026, live, and this one is mine. Oliver's second brief came back:
+//
+//   Hit a snag: messages.4: `tool_use` ids were found without `tool_result`
+//   blocks immediately after: toolu_016zzngc...
+//
+// A REGRESSION I INTRODUCED AN HOUR EARLIER, and the diagnosis written in the
+// same hour is what surfaced it.
+//
+// The old reader turned every block type it had not met into an empty TEXT
+// block. That was wrong for the reader — it is why "thinking and no text" was
+// indistinguishable from silence — but it accidentally kept the round trip
+// intact, because an empty text block is legal in an assistant turn.
+//
+// This function then made the parse honest and DROPPED those blocks. runTurn
+// pushes the assistant turn straight back into the message list before sending a
+// tool_result:
+//
+//   msgs = [...msgs, { role: "assistant", content: out.content }, { role: "user", ... }]
+//
+// With extended thinking and tools together, Anthropic requires the thinking
+// block — with its signature — to come back in that assistant turn. Stripped, the
+// turn is malformed and the API rejects the whole sequence.
+//
+// So: the READER's view excludes thinking, and the API's view keeps it. One
+// stream, two consumers, and conflating them is what broke it.
 export const streamContent = (st) =>
   (st?.blocks || []).filter(Boolean).filter(b => b.type !== "other").map(b => {
     if (b.type === "tool_use") {
       let input = {};
       try { input = JSON.parse(b.inputJson || "{}"); } catch { /* malformed tool input, treated as no-op */ }
       return { type: "tool_use", id: b.id, name: b.name, input };
+    }
+    return { type: "text", text: b.text || "" };
+  });
+
+// What goes BACK to the API. Every block in the order it arrived, thinking
+// included, in Anthropic's own shape. Never rendered and never read for text.
+export const streamContentForApi = (st) =>
+  (st?.blocks || []).filter(Boolean).map(b => {
+    if (b.type === "tool_use") {
+      let input = {};
+      try { input = JSON.parse(b.inputJson || "{}"); } catch { /* malformed, sent as a no-op */ }
+      return { type: "tool_use", id: b.id, name: b.name, input };
+    }
+    if (b.type === "other") {
+      // Redacted thinking carries `data` rather than text and must be returned
+      // exactly as it came. Anything else unknown is returned as its own kind so
+      // the sequence stays whole rather than silently losing a block.
+      if (b.kind === "redacted_thinking") return { type: "redacted_thinking", data: b.data || "" };
+      return { type: b.kind || "thinking", thinking: b.text || "", signature: b.signature || "" };
     }
     return { type: "text", text: b.text || "" };
   });

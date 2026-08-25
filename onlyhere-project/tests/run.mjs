@@ -171,7 +171,7 @@ writeFileSync(entry, `
   export { beyondHorizon, isMajorEvent, EVENT_HORIZON_MONTHS, MANY_EVENTS_IN_A_TOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { vehicleMismatches, guideRides, journeyCensus, censusNote } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { SWAP_REASONS, reasonById, swapCandidates, swapAnswer, candidateLine, swappedStop, swapNote, swapIsAllowed, swapBlockedNote } from ${JSON.stringify(join(root, "src/utils/stopSwap.js"))};
-  export { newStreamState, readStreamEvent, visibleText, streamContent, streamDiagnosis, streamTrace } from ${JSON.stringify(join(root, "src/utils/streamRead.js"))};
+  export { newStreamState, readStreamEvent, visibleText, streamContent, streamContentForApi, streamDiagnosis, streamTrace } from ${JSON.stringify(join(root, "src/utils/streamRead.js"))};
   export { guideWithSwap, alreadyRuledOut } from ${JSON.stringify(join(root, "src/utils/stopSwap.js"))};
   export { factCheckCopy } from ${JSON.stringify(join(root, "src/utils/factCheckCopy.js"))};
   export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn, travelModeKey, modeReachKm, MODE_DAY_KM, preferReachable, preferPassing, overnightMove, describeOvernightMove, spokenDuration, beyondModeRange, BEYOND_DAY_FACTOR, sameMode, howForReader, EATS_THE_DAY_MINUTES } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
@@ -30758,7 +30758,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // reported to the traveller as a fault on our side when nothing had broken.
   ok("the tool handling is a loop, not a single if", /for \(let round = 0; round < TOOL_ROUNDS; round\+\+\)/.test(app));
   ok("bounded rather than open ended", /const TOOL_ROUNDS = 3;/.test(app));
-  ok("each round carries the previous exchange forward", /\.\.\.msgs,\s*\n\s*\{ role: "assistant", content: out\.content \},/.test(app));
+  // Repinned 26 Aug: the assistant turn now goes back as `apiContent`, not
+  // `content`. Those are two different views of one stream and conflating them
+  // is what broke Oliver's second brief with "tool_use ids were found without
+  // tool_result blocks" — the reader's content correctly strips thinking blocks,
+  // and the API requires them back verbatim when the same turn called a tool.
+  ok("each round carries the previous exchange forward",
+     /\.\.\.msgs,[\s\S]{0,200}\{ role: "assistant", content: out\.apiContent \|\| out\.content \},/.test(app));
+  ok("and it sends the API's view rather than the reader's",
+     /apiContent: streamContentForApi\(st\)/.test(app));
   ok("and the retry goes through the same loop",
      /const retry = await runTurn\(baseMessages\);/.test(app));
   ok("rather than re-running the turn that just failed",
@@ -36018,6 +36026,46 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and 'we have no car' still names no mode", !slot("we have no car", "transport"));
   ok("nor does a car park", !slot("does the hotel have a car park?", "transport"));
 
+  // ── A MOBILITY AID IS NOT A TRAVEL MODE ─────────────────────────
+  //
+  // 26 Aug 2026, Oliver's second adversarial brief. It opened "I use a WALKING
+  // stick and I can't manage more than about twenty minutes on my FEET", and
+  // said two sentences later "We're renting a car. We both drive."
+  //
+  // It came back `transport: "walk"`. In isolation the car sentence reads car
+  // correctly — the walking-stick sentence simply comes FIRST and the matcher
+  // takes the first hit. So a trip for a man who tires after twenty minutes on
+  // his feet was about to be planned as a walking trip: the worst answer
+  // available, and the exact opposite of what he said.
+  //
+  // The words that caused it are him describing why he CANNOT walk.
+  is("THE BUG: a walking stick does not make it a walking trip",
+     slot("I use a walking stick and I can't manage twenty minutes on my feet. We're renting a car. We both drive.", "transport")?.mode, "car");
+  is("nor a wheelchair", slot("I use a wheelchair. We're renting a car.", "transport")?.mode, "car");
+  is("nor crutches", slot("She's on crutches. We're taking the train.", "transport")?.mode, "public transport");
+  // AND A REAL WALKING TRIP IS STILL A WALKING TRIP. A scrubber that eats the
+  // word everywhere would break the honest case to fix the dishonest one.
+  is("but walking everywhere still reads as walking", slot("We're walking everywhere.", "transport")?.mode, "walk");
+  is("and so does wandering on foot", slot("Mostly walking, we like to wander.", "transport")?.mode, "walk");
+
+  // ── AND A HOTEL NAMES ITSELF BEFORE IT IS BOOKED ────────────────
+  //
+  // "We have 71 Nyhavn Hotel booked for the first two nights" filled nothing, on
+  // a BLOCKING slot, and the next question would have been "have you booked
+  // somewhere to stay already?" Every branch wanted the booking word BEFORE the
+  // sleep word, and the natural sentence puts the NAME between them.
+  is("THE BUG: a named hotel with the booking word after it counts",
+     slot("We have 71 Nyhavn Hotel booked for the first two nights and nothing after that.", "stay")?.value, "booked");
+  is("a Danish name too",
+     slot("We have Hotel Phønix booked for the Saturday.", "stay")?.value, "booked");
+  is("the old orders still work", slot("We booked a hotel already.", "stay")?.value, "booked");
+  is("and the passive one", slot("The hotel is booked.", "stay")?.value, "booked");
+  // NOT-BOOKED IS TESTED FIRST, because "haven't booked" contains "booked", and
+  // a false positive here anchors the whole plan on a hotel that does not exist.
+  is("not booked still wins over the word booked", slot("We haven't booked anywhere yet.", "stay")?.value, "not booked");
+  is("and an ordinary mention of a hotel is not a booking",
+     slot("Does the hotel have a car park?", "stay"), null);
+
   // ── "FOUR DAYS" ──────────────────────────────────────────────────
   // The reader had been taught five languages and never taught that English
   // writes small numbers as words, which is how almost everybody types this.
@@ -36464,6 +36512,78 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // re-queries answers about a different set than the one being managed.
     ok("from the rows already loaded", /Array\.isArray\(manageItems\) && <AffiliatePanel/.test(app));
   }
+}
+
+// ── TWO VIEWS OF ONE STREAM ─────────────────────────────────────────
+//
+// 26 Aug 2026, live, and this one is mine. Oliver's second adversarial brief:
+//
+//   Hit a snag: messages.4: `tool_use` ids were found without `tool_result`
+//   blocks immediately after: toolu_016zzngc...
+//
+// A REGRESSION INTRODUCED AN HOUR EARLIER, surfaced by the diagnosis written in
+// the same hour. The old reader turned unknown blocks into empty TEXT blocks —
+// wrong for the reader, and accidentally right for the round trip, because an
+// empty text block is legal in an assistant turn. Making the parse honest
+// DROPPED them, and runTurn pushes that content straight back before sending a
+// tool_result. With extended thinking and tools together, Anthropic requires the
+// thinking block, signature and all, in that assistant turn.
+{
+  const { newStreamState, readStreamEvent, streamContent, streamContentForApi } = M;
+  const feed = (evts) => { const st = newStreamState(); evts.forEach(e => readStreamEvent(st, e)); return st; };
+
+  // The shape that broke it: thinking, then a tool call, in one turn.
+  const st = feed([
+    { type: "message_start" },
+    { type: "content_block_start", index: 0, content_block: { type: "thinking" } },
+    { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Bornholm in February. " } },
+    { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Check the ferry." } },
+    { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "sig123" } },
+    { type: "content_block_start", index: 1, content_block: { type: "tool_use", id: "toolu_1", name: "web_search" } },
+    { type: "content_block_delta", index: 1, delta: { type: "input_json_delta", partial_json: '{"query":"ferry"}' } },
+    { type: "message_stop" },
+  ]);
+
+  // THE READER'S VIEW. Thinking is not the reader's and never was.
+  is("the reader sees the tool call and no thinking",
+     streamContent(st).map(b => b.type), ["tool_use"]);
+
+  // THE API'S VIEW. Everything, in order, in Anthropic's own shape.
+  {
+    const api = streamContentForApi(st);
+    is("THE BUG: the API view keeps the thinking block", api.map(b => b.type), ["thinking", "tool_use"]);
+    is("with its text assembled across deltas", api[0].thinking, "Bornholm in February. Check the ferry.");
+    // The signature is what makes a returned thinking block verifiable, and it
+    // arrives as its own delta type. Dropping it is the same as dropping the block.
+    is("and its signature, which arrives separately", api[0].signature, "sig123");
+    is("the tool call is unchanged", api[1].input, { query: "ferry" });
+    // ORDER MATTERS: thinking comes before the tool call in the turn it was in.
+    ok("and the order is the order it arrived in", api[0].type === "thinking" && api[1].type === "tool_use");
+  }
+
+  // Redacted thinking carries `data` rather than text and must return verbatim.
+  {
+    const r = feed([
+      { type: "message_start" },
+      { type: "content_block_start", index: 0, content_block: { type: "redacted_thinking", data: "enc123" } },
+      { type: "message_stop" },
+    ]);
+    is("redacted thinking returns as itself", streamContentForApi(r), [{ type: "redacted_thinking", data: "enc123" }]);
+    is("and the reader still sees nothing", streamContent(r), []);
+  }
+
+  // A plain text turn is identical in both views, which is the common case and
+  // must not have been complicated by any of this.
+  {
+    const t = feed([
+      { type: "message_start" },
+      { type: "content_block_start", index: 0, content_block: { type: "text" } },
+      { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Hammershus is free all year." } },
+      { type: "message_stop" },
+    ]);
+    is("an ordinary reply is the same in both views", streamContent(t), streamContentForApi(t));
+  }
+  is("and nothing at all is nothing in both", streamContentForApi(feed([])), []);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
