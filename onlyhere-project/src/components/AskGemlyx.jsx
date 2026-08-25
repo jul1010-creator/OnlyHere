@@ -205,7 +205,7 @@ export const AskGemlyx = ({ session, item, kind, onSignIn, founder = false, near
 
             In the reader's language, because a clear sentence in a language
             somebody does not read is not clear. See utils/aiDisclosure.js. */}
-        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, paddingBottom: 2 }}>
+        <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, paddingBottom: 2 }}>
           {aiDisclosureFor(typeof navigator === "undefined" ? null : navigator)}
         </div>
         {log.length === 0 && (

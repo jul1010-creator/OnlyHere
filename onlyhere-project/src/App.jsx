@@ -46,6 +46,7 @@ import { startRun, endRun, summarise, averageFor, describe, describeAverage, rec
 import { cleanOffer, offerProblems, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "./utils/offer";
 import { aiDisclosureFor } from "./utils/aiDisclosure";
 import { safetyClaimNote } from "./utils/safetyClaims";
+import { missingSourcesNote } from "./utils/provenance";
 import { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog } from "./utils/runLog";
 import { domainOf, isListingHost, scrapeTier, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE, MAX_TICKET_PAGES, isOwnSiteFor, urlNames, isKommuneHost } from "./utils/pageScan";
 import { weatherSourceFor, weatherBadge, normalsNote, dayWeather, FORECAST, NORMALS } from "./utils/weather";
@@ -2266,7 +2267,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
     if (!url || scanLoading) return;
     setScanLoading(true); setScanError(null); setScanResults(null);
     try {
-      const pageRes = await studioFetch(`/api/scan-source?url=${encodeURIComponent(url)}`);
+      const pageRes = await studioFetch(`/api/scan-source?${editingId !== null ? "fresh=1&" : ""}url=${encodeURIComponent(url)}`);
       let pageData;
       try {
         pageData = await pageRes.json();
@@ -4111,7 +4112,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         let postersRead = 0;
         for (const url of toFetch) {
           try {
-            const scanRes = await studioFetch(`/api/scan-source?url=${encodeURIComponent(url)}`);
+            const scanRes = await studioFetch(`/api/scan-source?${editingId !== null ? "fresh=1&" : ""}url=${encodeURIComponent(url)}`);
             const scanData = await scanRes.json();
             // ── THE LIST THAT DECIDES WHETHER FIRECRAWL IS WORTH PAYING FOR ──
             // A read that failed was indistinguishable from one that returned a
@@ -4281,7 +4282,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         // operator is the reason that distinction is load-bearing.
         for (const l of ticketPages.slice(0, MAX_TICKET_PAGES)) {
           try {
-            const tRes = await studioFetch(`/api/scan-source?url=${encodeURIComponent(l.href)}`);
+            const tRes = await studioFetch(`/api/scan-source?${editingId !== null ? "fresh=1&" : ""}url=${encodeURIComponent(l.href)}`);
             const tData = await tRes.json();
             const priced = tData.text ? ticketPriceOn(tData.text) : null;
             note(`Ticket agent: ${domainOf(l.href)}`, {
@@ -4355,7 +4356,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
               for (const u of huntUrls.slice(0, MAX_TICKET_PAGES)) {
                 if (pagesByUrl[u]) continue;                 // already read on this run
                 try {
-                  const hRes = await studioFetch(`/api/scan-source?url=${encodeURIComponent(u)}`);
+                  const hRes = await studioFetch(`/api/scan-source?${editingId !== null ? "fresh=1&" : ""}url=${encodeURIComponent(u)}`);
                   const hData = await hRes.json();
                   const found = hData.text ? ticketPriceOn(hData.text) : null;
                   const real = found && found.kind !== "concession-only";
@@ -5429,8 +5430,23 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // carrying { source: "writer" } because nothing ever filled it from a
         // page that was actually read.
         {
-          const src = priceSource(readerText(t), pagesByUrl, rankedSources.map(r => r.host));
-          if (src) {
+          // ── THE PAGE HAS TO BE ABOUT THIS PLACE ────────────────
+          // A page that merely contains "20 DKK" is not where this entry's
+          // price came from. sourceIsAboutPlace is the same test the ticket
+          // matcher uses, injected rather than imported so entryAudit does not
+          // have to reach into sourcePolicy. See priceSource for the Bybjerg
+          // citation this fixes.
+          const src = priceSource(readerText(t), pagesByUrl, rankedSources.map(r => r.host), {
+            isAbout: (pageText, url) => sourceIsAboutPlace(pageText, { name: t?.name, town: t?.town || t?.city || t?.location, url }),
+          });
+          if (src && src.offSubject) {
+            note("Where the price came from", {
+              provider: "fetch",
+              detail: "the page whose own text carries the figure in this draft",
+              outcome: "empty", used: false,
+              got: `${domainOf(src.url)} states ${src.price} DKK but the page is not about ${t?.name || "this entry"}, so it is not a source for it. Nothing recorded rather than a citation that leads nowhere.`,
+            });
+          } else if (src) {
             t.__priceSource = { url: src.url, host: domainOf(src.url), price: src.price, at: new Date().toISOString() };
             note("Where the price came from", {
               provider: "fetch",
@@ -7887,7 +7903,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
           return { found, why: "", labelled: read.labelled };
         };
         const readForEdition = async (url) => {
-          const r = await studioFetch(`/api/scan-source?url=${encodeURIComponent(url)}`);
+          const r = await studioFetch(`/api/scan-source?${editingId !== null ? "fresh=1&" : ""}url=${encodeURIComponent(url)}`);
           const d = await r.json();
           // banners come back on the blocked path too, which is deliberate: a
           // festival front page that strips to almost no text is exactly the
@@ -8354,6 +8370,19 @@ ${researchRules("festival", ev)}`
         const note = safetyClaimNote(shaped);
         const existing = Array.isArray(shaped.uncertainties) ? shaped.uncertainties : [];
         if (note && !existing.some(u => String(u || "").startsWith("CHECK BEFORE PUBLISHING: this entry states"))) {
+          shaped.uncertainties = [note, ...existing];
+        }
+      }
+
+      // ── AND WHETHER IT CAN SHOW ITS WORKING AT ALL ──────────────
+      // 77 of 148 published entries carry no __sources, because the field was
+      // carried and never required. Every other load-bearing field has a gate:
+      // coordinates, the festival date, the photo path. This one had nothing.
+      // See missingSourcesNote in utils/provenance.js.
+      {
+        const note = missingSourcesNote(shaped);
+        const existing = Array.isArray(shaped.uncertainties) ? shaped.uncertainties : [];
+        if (note && !existing.some(u => String(u || "").startsWith("CHECK BEFORE PUBLISHING: nothing records where"))) {
           shaped.uncertainties = [note, ...existing];
         }
       }

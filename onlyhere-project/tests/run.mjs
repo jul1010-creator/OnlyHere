@@ -83,6 +83,7 @@ writeFileSync(entry, `
   export { cleanOffer, offerProblems, offerLive, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
   export { AI_DISCLOSURE, aiDisclosure, aiDisclosureFor, AI_CHAT_SURFACES } from ${JSON.stringify(join(root, "src/utils/aiDisclosure.js"))};
   export { SAFETY_CLAIM_FIELDS, claimIsSupported, unsupportedSafetyClaims, safetyClaimNote } from ${JSON.stringify(join(root, "src/utils/safetyClaims.js"))};
+  export { hasEntrySources, missingSourcesNote } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
   export { rowStamp, rowStampIsEdit, stampLabel, hasSources, sortRows, SORTS } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
   export { PAID_PLANS_LIVE } from ${JSON.stringify(join(root, "src/config.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -33096,6 +33097,24 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   });
   is("and no surface carries its own copy of the sentence", strays, []);
 
+  // ── AND "CLEAR" HAS A SIZE ──────────────────────────────────────
+  // Article 50(1) asks for the information "in a clear and distinguishable
+  // manner" and says it must meet accessibility requirements. A legally
+  // required disclosure set in the smallest type on the screen is arguable at
+  // best, so it is pinned at or above 11px: not large, and not the thing your
+  // eye skips. Read off the render rather than trusted, because the first
+  // version of two of these shipped at 10.5.
+  {
+    const tooSmall = AI_CHAT_SURFACES.map(rel => {
+      const src = stripComments(readFileSync(join(root, rel), "utf8"));
+      // The style object on the element that prints the disclosure.
+      const near = src.split("aiDisclosureFor").slice(0, -1).map(chunk => chunk.slice(-400));
+      const sizes = near.flatMap(c => [...c.matchAll(/fontSize:\s*([\d.]+)/g)].map(m => Number(m[1])).slice(-1));
+      return { rel, small: sizes.filter(n => n > 0 && n < 11) };
+    }).filter(x => x.small.length).map(x => `${x.rel}: ${x.small.join(", ")}px`);
+    is("the disclosure is not the smallest text on any surface", tooSmall, []);
+  }
+
   // The reader's language, because a clear sentence somebody cannot read is not
   // clear. The six are the six travellerWords.js parses on the way in, and the
   // assertion pins the RELATIONSHIP rather than the list, so adding a seventh
@@ -33317,6 +33336,257 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("and the answer lands in the draft's uncertainties", /shaped\.uncertainties = \[note, \.\.\.existing\]/.test(app));
     // Twice through the same publish would otherwise stack the same paragraph.
     ok("and it cannot be added twice", /startsWith\("CHECK BEFORE PUBLISHING: this entry states"\)/.test(app));
+  }
+}
+
+// ── A MUSEUM'S OWN SITE, DEMOTED FOR HAVING A PAST ─────────────────
+//
+// 24 Aug 2026. A Bybjerg run reported "oroeminder.dk (its newest date is about
+// 236 months old) kept as background only". About 2006. The site is live: a
+// current season, a current admission price, and that price is the one the
+// draft printed. Demoted, it could not carry the citation, so the published
+// entry cited a page that does not state its price.
+//
+// The asymmetry that caused it: a page with NO date passes, a page with ONE old
+// date fails. So the more a place writes about its own history, the less this
+// trusts it about its present, and a local museum is the worst possible case.
+{
+  const { factAge, MAX_FACT_AGE_MONTHS } = M;
+  const now = Date.UTC(2026, 7, 24);
+
+  // The real shape. Danish local sites write the season without a year, so the
+  // only fully-qualified dates are historical, while a bare current year sits
+  // in the footer or a news line.
+  const museum = "Museet blev indviet 12. marts 2006 i den gamle fattiggård. Åbent 15. juni til 31. august, tirsdag til søndag 13-15. Entré 20 kroner for personer over 12 år. Nyheder 2026.";
+  {
+    const a = factAge(museum, now);
+    ok("a page with a newer bare year is not aged from a sentence about 2006", a.perishableOk === true);
+    ok("and it is reported as undated rather than as fresh", a.dated === false);
+  }
+
+  // The half that must not move. A page whose newest signal of any kind is old
+  // is still old, because nothing newer appears on it.
+  {
+    const stale = "Museet blev indviet 12. marts 2006. Entré 15 kroner.";
+    const a = factAge(stale, now);
+    ok("a page with nothing newer on it is still too old to carry a price", a.perishableOk === false);
+    ok("and it still says how old", Math.round(a.ageMonths) > 200);
+  }
+  {
+    const staleYear = "Priser gældende 2024. Entré 15 kroner.";
+    ok("and a bare old year still fails", factAge(staleYear, now).perishableOk === false);
+  }
+
+  // A genuinely recent full date still wins, which is the case this function
+  // was written for: an archive whose newest edition is this summer.
+  {
+    const fresh = "Opdateret 3. august 2026. Entré 20 kroner.";
+    const a = factAge(fresh, now);
+    ok("a recent full date still passes", a.perishableOk === true);
+    ok("and is still reported as dated", a.dated === true);
+    ok("within the window it names", a.ageMonths < MAX_FACT_AGE_MONTHS);
+  }
+
+  // The rule is DISAGREEMENT, not "ignore old dates". An old full date with an
+  // equally old year is not prose, it is an old page.
+  {
+    const consistent = "Skrevet 12. marts 2006. Sidst set 2006.";
+    ok("an old date agreeing with an old year is still an old page", factAge(consistent, now).perishableOk === false);
+  }
+
+  // And nothing here can make a stale page look fresh: a newer year is required
+  // to reach the escape at all, and a stale page has none by definition.
+  {
+    const noYearAtAll = "Entré 20 kroner. Åbent hele sommeren.";
+    ok("a page with no dates at all is unchanged", factAge(noYearAtAll, now).perishableOk === true);
+    ok("and still undated", factAge(noYearAtAll, now).dated === false);
+  }
+}
+
+// ── A REDRAFT MAY NOT BE ANSWERED FROM YESTERDAY ───────────────────
+//
+// Oliver, 24 Aug 2026: "since sources are saved as memories for all drafts,
+// remember to not use old ones when we re-research."
+//
+// FIRECRAWL_CACHE_MS is 24 hours, and the comment above it already described
+// the mechanism without noticing the consequence: a redraft is started BECAUSE
+// somebody suspects the page changed, so answering it from a copy taken before
+// the suspicion is the one thing it must not do.
+{
+  const { firecrawlBody, FIRECRAWL_CACHE_MS } = M;
+  is("a first draft may be answered from cache", firecrawlBody("https://x.dk").maxAge, FIRECRAWL_CACHE_MS);
+  is("a redraft may not", firecrawlBody("https://x.dk", { fresh: true }).maxAge, 0);
+  // Nothing else about the request may change with it, or a redraft would be
+  // reading a different page in a different shape from the draft it replaces.
+  {
+    const a = firecrawlBody("https://x.dk"), b = firecrawlBody("https://x.dk", { fresh: true });
+    is("and only the cache changes", Object.keys(a).filter(k => JSON.stringify(a[k]) !== JSON.stringify(b[k])), ["maxAge"]);
+  }
+
+  // Wired, end to end. Three links in the chain and the middle one is the sort
+  // that gets added and never called.
+  const rp = stripComments(readFileSync(join(root, "src/utils/readPage.js"), "utf8"));
+  ok("readPage takes the flag", /readPage = async \(url, \{[^}]*fresh/.test(rp));
+  ok("and hands it to the scraper", /readFirecrawl\(url, key, fetchImpl, \{ fresh \}\)/.test(rp));
+  const api = stripComments(readFileSync(join(root, "api/scan-source.js"), "utf8"));
+  ok("the endpoint reads it off the query", /req\.query\.fresh/.test(api));
+  ok("and passes it on", /readPage\(url, \{ key, fresh \}\)/.test(api));
+
+  // And the caller marks a redraft. editingId is the app's own word for "this
+  // run is about a row that already exists", which is exactly when the cache is
+  // the wrong answer.
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    const calls = app.match(/\/api\/scan-source\?/g) || [];
+    const marked = app.match(/\/api\/scan-source\?\$\{editingId !== null \? "fresh=1&" : ""\}/g) || [];
+    ok("there are scan-source calls to check", calls.length >= 4);
+    is("and every one of them marks a redraft", marked.length, calls.length);
+  }
+}
+
+// ── A PAGE THAT CONTAINS THE NUMBER IS NOT A SOURCE FOR IT ─────────
+//
+// 24 Aug 2026. The Bybjerg entry said Orø Minder costs 20 kroner for anyone
+// over 12, which is exactly what oroeminder.dk says. The CITATION named
+// oroe.dk/oplev-oroe/kultur-og-sevaerdigheder, a page that does not state it,
+// because that page ranked higher and carried a matching figure.
+//
+// Same error the fact-check pass was fixed for on 5 Aug: right number, wrong
+// subject, delivered with the authority of a check. A citation is the worse
+// place for it, because a reader who follows it and finds nothing learns that
+// the receipts are decorative.
+{
+  const { priceSource } = M;
+  const draft = "Entry is 20 DKK.";
+  const pages = {
+    "https://oroe.dk/oplev-oroe/kultur-og-sevaerdigheder": "Orø Veteranlandbrug, Nørrestængevej 17. Entré 20 kroner.",
+    "https://www.oroeminder.dk/museet/aabningstider-og-entre/": "Orø Minder. Entré 20 kroner for personer over 12 år.",
+  };
+  const order = ["oroe.dk", "oroeminder.dk"];
+
+  // Without the subject test, rank alone decides and the wrong page wins. This
+  // is the behaviour that shipped, asserted so the fix cannot be read as
+  // cosmetic.
+  is("rank alone picks the higher page, whatever it is about",
+    priceSource(draft, pages, order).url, "https://oroe.dk/oplev-oroe/kultur-og-sevaerdigheder");
+
+  // With it, the page that is about the entry wins even though it ranks lower.
+  {
+    const isAbout = (text) => /Orø Minder/i.test(text);
+    const got = priceSource(draft, pages, order, { isAbout });
+    is("the page about the entry wins over the higher-ranked one", got.url, "https://www.oroeminder.dk/museet/aabningstider-og-entre/");
+    ok("and it is not marked off subject", !got.offSubject);
+  }
+
+  // And a figure found ONLY off-subject is refused rather than downgraded, with
+  // the near miss named so the Studio can show it.
+  {
+    const onlyWrong = { "https://oroe.dk/x": "Orø Veteranlandbrug. Entré 20 kroner." };
+    const got = priceSource(draft, onlyWrong, order, { isAbout: (t) => /Orø Minder/i.test(t) });
+    ok("a figure only on an off-subject page is refused", got && got.offSubject === true);
+    is("and the near miss is named", got.url, "https://oroe.dk/x");
+  }
+
+  // A matcher that throws has learned nothing, and nothing is not a pass. Same
+  // rule the ferry probe keeps about a failed call.
+  {
+    const got = priceSource(draft, pages, order, { isAbout: () => { throw new Error("boom"); } });
+    ok("a thrown matcher never passes a page", got && got.offSubject === true);
+  }
+
+  // Nothing anywhere is still nothing, unchanged.
+  is("a figure on no page at all is still null", priceSource(draft, { "https://x.dk": "no prices here" }, order, { isAbout: () => true }), null);
+
+  // Wired, with a subject the caller actually holds.
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the caller passes a subject test", /priceSource\([\s\S]{0,200}?isAbout:/.test(app));
+    ok("built from sourceIsAboutPlace rather than a second matcher", /isAbout: \(pageText, url\) => sourceIsAboutPlace\(/.test(app));
+    ok("and an off-subject hit stores nothing", /src && src\.offSubject/.test(app));
+  }
+}
+
+// ── A CONSTRAINT SENT IS NOT A CONSTRAINT HONOURED ─────────────────
+//
+// The generalisation of the ferry bug, swept across every endpoint on 24 Aug
+// 2026. The shape: a request carries a restriction, the response is believed
+// without being measured against it, and the failure is silent because a
+// success response looks like a success.
+//
+// Three constraints leave this app:
+//
+//   avoid=ferries      api/directions.js   Google relaxes it. NOW READ from the
+//                                          returned route in classifyFerry.
+//   include_domains    api/search.js       Tavily's results were returned
+//                                          unchecked. NOW FILTERED here.
+//   maxAge             utils/pageScan.js   Firecrawl's own cache. Not verifiable
+//                                          from the response, so it is asked for
+//                                          and cannot be confirmed; recorded as
+//                                          a known limit rather than assumed.
+//
+// mode and departure_time are not in this class: they select what is computed
+// rather than restrict it, and a wrong answer there shows up as a wrong number
+// somebody can see, not as a silently inverted geographic fact.
+{
+  const search = readFileSync(join(root, "api/search.js"), "utf8");
+  const code = stripComments(search);
+
+  // The pin is applied to the RESULTS, not just sent with the request. Asserted
+  // on the relationship (results are filtered by the pinned list) rather than on
+  // a call shape, because the shape is what broke thirty assertions on 23 Aug.
+  ok("the search endpoint still sends the pin", /include_domains/.test(code));
+  ok("and filters what comes back by it", /pinned\.length \? all\.filter\(/.test(code));
+  ok("and says how many it dropped", /offPin/.test(code));
+  // A subdomain is inside the pin. Pinning loekkenkoncert.dk has to reach
+  // billet.loekkenkoncert.dk, which is where a small Danish event sells tickets,
+  // and an exact-host test would have silently dropped the only useful page.
+  ok("a subdomain counts as inside the pin", /h\.endsWith\(`\.\$\{d\}`\)/.test(code));
+
+  // The endpoint's own explanation of the ferry probe has to match what the
+  // probe now does, or the next person re-derives the rule that was wrong.
+  // This is not pedantry: the previous comment said a returned route proves a
+  // land connection, and somebody reading it would rebuild the bug.
+  const dir = readFileSync(join(root, "api/directions.js"), "utf8");
+  ok("directions no longer claims a returned route proves a land route",
+    !/a route\s*\n?\s*\/\/\s*still comes back means the boat was a shortcut/.test(dir));
+  ok("and says the restriction can be relaxed", /PREFERENCE|relaxes the restriction/.test(dir));
+}
+
+// ── THE FIELD THAT WAS CARRIED AND NEVER REQUIRED ──────────────────
+//
+// 77 of 148 published entries carry no __sources, measured on the live table
+// 24 Aug 2026. Coordinates have a gate, a dateless festival has a gate, the
+// photo path is probed before it is stored. The one field the product's whole
+// promise rests on had nothing, so half the library went out unable to show a
+// reader where anything came from.
+{
+  const { hasEntrySources, missingSourcesNote } = M;
+
+  ok("a real source counts", hasEntrySources({ __sources: ["https://oroeminder.dk/"] }));
+  ok("an empty array does not", !hasEntrySources({ __sources: [] }));
+  ok("nor a missing key", !hasEntrySources({}));
+  // The 7 Aug lesson about photos, one field over: a value that is not a usable
+  // URL is not a source, and storing the key does not make it one.
+  ok("nor a string that is not a URL", !hasEntrySources({ __sources: ["I read the sign outside"] }));
+  ok("nor a relative path", !hasEntrySources({ __sources: ["/oroe/priser"] }));
+
+  ok("an entry with nothing behind it is told", missingSourcesNote({ name: "X" }).length > 0);
+  ok("and it is shouted in the form a rewrite may not delete", missingSourcesNote({ name: "X" }).startsWith("CHECK BEFORE PUBLISHING"));
+  is("and one that can show its working is left alone", missingSourcesNote({ __sources: ["https://x.dk"] }), "");
+
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("publish asks the question", /missingSourcesNote\(shaped\)/.test(app));
+    ok("and the answer lands in the draft", /shaped\.uncertainties = \[note, \.\.\.existing\]/.test(app));
+    // Two shouted notes now share that block, and they must guard DIFFERENT
+    // sentences. Counting the occurrences was the first version and it was
+    // satisfied by pointing both guards at the same string, which is exactly
+    // the collapse it was written to prevent: an entry with both faults would
+    // then report one. Counting the DISTINCT guards is the rule.
+    {
+      const guards = new Set((app.match(/startsWith\("CHECK BEFORE PUBLISHING: [^"]*"\)/g) || []));
+      is("the two publish notes guard different sentences", guards.size, 2);
+    }
   }
 }
 

@@ -59,7 +59,11 @@ export default async function handler(req, res) {
   }
 
   const key = process.env.FIRECRAWL_API_KEY;
-  const r = await readPage(url, { key });
+  // fresh=1 on a redraft. A redraft is started because somebody suspects the
+  // page changed, so serving it from a copy taken before the suspicion is the
+  // one answer it must not give. See FIRECRAWL_CACHE_MS in utils/pageScan.js.
+  const fresh = String(req.query.fresh || "") === "1";
+  const r = await readPage(url, { key, fresh });
 
   if (!r.blocked) {
     // tickets: the outbound ticket links this page carries, best first. The draft

@@ -67,11 +67,38 @@ export default async function handler(req, res) {
 
     const data = await tavilyRes.json();
 
+    // ── AND A CONSTRAINT SENT IS NOT A CONSTRAINT HONOURED ───────────
+    //
+    // 24 Aug 2026. The ferry check asked Google for a route with ferries banned,
+    // was handed a route with a ferry on it, and believed it, which called every
+    // Danish island mainland for weeks. The general shape of that bug is: a
+    // request carries a restriction and the response is trusted without being
+    // measured against it.
+    //
+    // include_domains is the same shape here. It is sent, and until now every
+    // result came back unchecked. When a caller pins a search to a founder
+    // source, the run report says "8 pages from that site", and nothing had ever
+    // confirmed the pages were from that site.
+    //
+    // Filtered rather than warned about, because a result outside the pin is not
+    // what was asked for and passing it on means a draft can be researched from a
+    // page the founder never chose. `offPin` says how many were dropped, so the
+    // Studio can show a silent narrowing instead of a mystery.
+    //
+    // A subdomain counts as inside: pinning loekkenkoncert.dk has to reach
+    // billet.loekkenkoncert.dk, which is where a small Danish event sells.
+    const pinned = domains ? domains.split(",").map(d => d.trim().toLowerCase().replace(/^www\./, "")).filter(Boolean) : [];
+    const hostOf = (u) => { try { return new URL(String(u)).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; } };
+    const inside = (u) => { const h = hostOf(u); return !!h && pinned.some(d => h === d || h.endsWith(`.${d}`)); };
+    const all = (data.results || []);
+    const kept = pinned.length ? all.filter(r => inside(r.url)) : all;
+
     // Compact, clean shape — exactly what we feed back into the AI's context
     res.status(200).json({
       query: q,
       answer: data.answer || null,
-      results: (data.results || []).map(r => ({
+      ...(pinned.length ? { pinnedTo: pinned, offPin: all.length - kept.length } : {}),
+      results: kept.map(r => ({
         title: r.title,
         url: r.url,
         snippet: r.content?.slice(0, 300) || "",

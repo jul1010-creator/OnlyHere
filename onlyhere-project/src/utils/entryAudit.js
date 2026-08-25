@@ -1906,7 +1906,32 @@ export const selfContradictions = (payload) => {
 // `order` is a list of hosts, best first, as rankSources produces it. Pages on
 // no known host are tried last rather than dropped: a page that states the
 // price is still where the price came from, even if nothing ranked it.
-export const priceSource = (priceText, pagesByUrl, order = []) => {
+// ── AND A PAGE THAT CONTAINS THE NUMBER IS NOT A SOURCE FOR IT ──────
+//
+// 24 Aug 2026, found by Gemini on a Bybjerg draft and confirmed against the
+// museum's own site. The entry said Orø Minder costs 20 kroner for anyone over
+// 12, which is exactly right: oroeminder.dk says "Entré 20 kroner for personer
+// over 12 år." The CITATION was wrong. The run recorded the price as coming
+// from oroe.dk/oplev-oroe/kultur-og-sevaerdigheder, a page that does not state
+// it, because that page ranked higher and contained a matching figure.
+//
+// This is the same error the fact-check pass was fixed for on 5 Aug, where a
+// correction answered about a different ferry route and framed it as a
+// correction: right number, wrong subject, delivered with the authority of a
+// check. A citation is worse, because a reader who follows it and finds nothing
+// learns that the receipts are decorative.
+//
+// `isAbout` is INJECTED rather than imported, the way reachOf is injected into
+// tripEvents and townPoint into arrival: this file would otherwise have to
+// reach into sourcePolicy for sourceIsAboutPlace and the two would become a
+// cycle. The caller already holds the entry's name and town.
+//
+// AND A PRICE FOUND ONLY OFF-SUBJECT IS REFUSED, NOT DOWNGRADED. It comes back
+// marked `offSubject` so the Studio can say what happened, and the caller stores
+// nothing. An empty __priceSource means "we could not show you where this came
+// from", which is true; a wrong one means "here is where this came from", which
+// is not.
+export const priceSource = (priceText, pagesByUrl, order = [], { isAbout = null } = {}) => {
   const wanted = pricesIn(priceText).filter(p => p.currency).map(priceKey);
   if (!wanted.length) return null;
   const hostOf = (u) => { try { return new URL(String(u)).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; } };
@@ -1916,10 +1941,22 @@ export const priceSource = (priceText, pagesByUrl, order = []) => {
     return i === -1 ? Number.MAX_SAFE_INTEGER : i;
   };
   const urls = Object.keys(pagesByUrl || {}).sort((a, b) => rankOf(a) - rankOf(b));
+  let offSubject = null;
   for (const url of urls) {
     const here = new Set(pricesIn(pagesByUrl[url]).map(priceKey));
     const hit = wanted.find(k => here.has(k));
-    if (hit) return { url, price: hit, host: hostOf(url), ranked: rankOf(url) !== Number.MAX_SAFE_INTEGER };
+    if (!hit) continue;
+    const found = { url, price: hit, host: hostOf(url), ranked: rankOf(url) !== Number.MAX_SAFE_INTEGER };
+    if (typeof isAbout !== "function") return found;
+    let about = false;
+    // A thrown matcher must not become "this page is fine". Same rule the
+    // ferry probe keeps about a failed call: a check that could not run has
+    // learned nothing, and nothing is not a pass.
+    try { about = !!isAbout(String(pagesByUrl[url] || ""), url); } catch { about = false; }
+    if (about) return found;
+    if (!offSubject) offSubject = { ...found, offSubject: true };
   }
-  return null;
+  // Nothing on-subject. If some page had the figure, say which, so the Studio
+  // can show him the near miss instead of a silent absence.
+  return offSubject || null;
 };

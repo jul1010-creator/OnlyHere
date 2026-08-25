@@ -412,3 +412,33 @@ export const describeProvenance = (payload, { answeredFrom = "entry", lookupUrls
 
   return lines.join("\n");
 };
+
+
+// ── AND AN ENTRY THAT CANNOT SHOW ITS WORKING SAYS SO ────────────────
+//
+// 24 Aug 2026. Measured on the live table: 77 of 148 published entries carry no
+// __sources at all. The cause is in HowWeKnow.jsx, "__sources was not on the
+// shapeForLive allow-list... zero of 79 rows carried the list". The field was
+// CARRIED and never REQUIRED, so nothing objected on the way past.
+//
+// That is the difference this adds. Coordinates have a gate. A festival with no
+// date has a gate. The photo path is probed before it is stored. Sources, the
+// one field the whole promise of this product rests on, had nothing, so a
+// hundred and forty-eight entries went out and half of them cannot show a
+// reader where anything came from.
+//
+// A NOTE, NOT A REFUSAL, for the same reason the safety claims gate is a note:
+// 77 rows already carry the defect and a hard block would lock the founder out
+// of editing his own library over something he inherited. What it does do is
+// make the absence a RECORDED absence rather than a silent one, on every
+// publish from now on.
+//
+// The shouted opening is the form correction.js protects from a rewrite tidying
+// it away: a model has no standing to delete an instruction to a person.
+export const hasEntrySources = (payload) =>
+  (Array.isArray(payload?.__sources) ? payload.__sources : []).some(u => typeof u === "string" && /^https?:\/\//i.test(u));
+
+export const missingSourcesNote = (payload) => {
+  if (hasEntrySources(payload)) return "";
+  return "CHECK BEFORE PUBLISHING: nothing records where anything in this entry came from. The promise on the front page is that every place is checked against its own sources before it is printed, and this entry cannot show that to anybody. Publish it and it joins the 77 that already cannot. Open the pages this was written from and put them in __sources, or accept that this one is unprovable and say so out loud.";
+};

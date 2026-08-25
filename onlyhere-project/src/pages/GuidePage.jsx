@@ -2157,7 +2157,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                 model answers, and the one most likely to be opened mid-trip by
                 somebody who arrived from a shared link and has seen none of the
                 rest of the site. See utils/aiDisclosure.js. */}
-            <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>
               {aiDisclosureFor(typeof navigator === "undefined" ? null : navigator)}
             </div>
             {chatMessages.map((m, i) => {

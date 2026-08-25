@@ -208,7 +208,21 @@ export const FIRECRAWL_URL = "https://api.firecrawl.dev/v2/scrape";
 export const FIRECRAWL_CACHE_MS = 24 * 60 * 60 * 1000;
 export const FIRECRAWL_TIMEOUT_MS = 30000;
 
-export const firecrawlBody = (url) => ({
+// ── AND A REDRAFT MAY NOT BE ANSWERED FROM YESTERDAY ────────────────
+//
+// Oliver, 24 Aug 2026: "since sources are saved as memories for all drafts,
+// remember to not use old ones when we re-research."
+//
+// He is right, and the comment directly above already describes the mechanism
+// without noticing the consequence. A day of cache is correct for a FIRST
+// draft, where the same URLs are asked for repeatedly inside one session. It is
+// wrong for a redraft, because a redraft is almost always started BECAUSE
+// somebody suspects the page changed or the entry is wrong, and answering that
+// from a copy taken before the suspicion is the one thing it must not do.
+//
+// `fresh` sets maxAge to 0, which makes Firecrawl fetch rather than serve. It
+// costs a credit, and a redraft is already the expensive path.
+export const firecrawlBody = (url, { fresh = false } = {}) => ({
   url,
   // markdown, not html: onlyMainContent already drops the nav, the cookie
   // banner and the footer, which is the half of every scrape we were paying
@@ -219,7 +233,7 @@ export const firecrawlBody = (url) => ({
   // whole reason we are here.
   proxy: "auto",
   blockAds: true,
-  maxAge: FIRECRAWL_CACHE_MS,
+  maxAge: fresh ? 0 : FIRECRAWL_CACHE_MS,
   timeout: FIRECRAWL_TIMEOUT_MS,
 });
 
@@ -779,7 +793,40 @@ export const factAge = (text, nowMs) => {
   const now = Number(nowMs);
   if (!Number.isFinite(now)) return { ageMonths: null, perishableOk: true, why: "no clock was given, so nothing can be aged", dated: false };
   const newest = newestDateIn(text);
-  if (newest !== null) {
+  // ── A DATE IN THE PROSE IS NOT WHEN THE PAGE WAS WRITTEN ─────────
+  //
+  // 24 Aug 2026. A Bybjerg run reported `oroeminder.dk (its newest date is
+  // about 236 months old) kept as background only`, and demoted the museum's
+  // own site. 236 months is about 2006. The site is live: it publishes a
+  // current season and a current admission price, and that price is the one the
+  // draft printed.
+  //
+  // Demoted, it could not carry the citation, so the price trace fell to the
+  // highest-ranked page it had read that merely CONTAINED the number, and the
+  // published entry ended up citing a page that does not state its price. The
+  // whole promise of this product is that a reader can follow the receipt, so a
+  // receipt for the wrong page is the worst failure this file can produce.
+  //
+  // THE CAUSE IS AN ASYMMETRY THIS FUNCTION ALREADY HAD. A page with NO date at
+  // all passes (`perishableOk: true`, undated). A page that mentions one old
+  // date anywhere fails. So a local museum's own site, which is mostly history,
+  // scores worse than a page with no dates on it whatsoever, and the more a
+  // place writes about its own past the less this trusts it about its present.
+  //
+  // AND THE TWO SIGNALS DISAGREE, WHICH IS THE THING TO READ. Danish local
+  // sites write opening seasons without a year ("15. juni til 31. august"), so
+  // newestDateIn cannot see the live content at all, while the history section
+  // carries full dates. If the page ALSO mentions a year newer than its newest
+  // full date, that full date is prose rather than a timestamp, and the year is
+  // the better evidence about the page.
+  //
+  // Conservative in the direction that matters: a genuinely stale page has no
+  // newer year on it, so nothing here can make one look fresh. It only stops a
+  // page being called old on the strength of a sentence about 2006.
+  const newestYear = newestYearIn(text);
+  const datedYear = newest === null ? null : new Date(newest).getUTCFullYear();
+  const dateIsProse = newest !== null && newestYear !== null && newestYear > datedYear;
+  if (newest !== null && !dateIsProse) {
     const ageMonths = (now - newest) / (1000 * 60 * 60 * 24 * 30.44);
     return ageMonths > MAX_FACT_AGE_MONTHS
       ? { ageMonths, perishableOk: false, dated: true, why: `its newest date is about ${Math.round(ageMonths)} months old` }
@@ -791,7 +838,7 @@ export const factAge = (text, nowMs) => {
   // dated is not a page caught being old, which is the discipline every gate in
   // this codebase follows. It passes, and it is marked undated so the caller
   // can say so rather than implying it was checked.
-  const year = newestYearIn(text);
+  const year = newestYear;
   const nowYear = new Date(now).getUTCFullYear();
   if (year === null) return { ageMonths: null, perishableOk: true, dated: false, why: "no date and no year on the page, so it cannot be aged" };
   if (year < nowYear) return { ageMonths: (nowYear - year) * 12, perishableOk: false, dated: false, why: `the newest year on this page is ${year}, so nothing on it can be inside ${MAX_FACT_AGE_MONTHS} months` };

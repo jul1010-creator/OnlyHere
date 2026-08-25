@@ -43,12 +43,12 @@ export const readPlain = async (url, f = fetch) => {
   }
 };
 
-export const readFirecrawl = async (url, key, f = fetch) => {
+export const readFirecrawl = async (url, key, f = fetch, { fresh = false } = {}) => {
   try {
     const r = await f(FIRECRAWL_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify(firecrawlBody(url)),
+      body: JSON.stringify(firecrawlBody(url, { fresh })),
     });
     // A refusal carries a body worth reading, so this does not throw on !ok.
     const json = await r.json().catch(() => null);
@@ -104,7 +104,7 @@ const addressVariants = (url) => {
   return out.slice(0, 4);
 };
 
-export const readPage = async (url, { key = "", fetchImpl = fetch } = {}) => {
+export const readPage = async (url, { key = "", fetchImpl = fetch, fresh = false } = {}) => {
   let plain = await readPlain(url, fetchImpl);
   let first = pageReadVerdict(plain.status, plain.text, plain.err);
   // Only when the first attempt found NOTHING. A bot wall is not an address
@@ -153,7 +153,7 @@ export const readPage = async (url, { key = "", fetchImpl = fetch } = {}) => {
       tickets: plain.tickets || [],
     };
   }
-  const deep = await readFirecrawl(url, key, fetchImpl);
+  const deep = await readFirecrawl(url, key, fetchImpl, { fresh });
   const second = pageReadVerdict(200, deep.text);
   if (deep.ok && second.usable) {
     // Firecrawl returns markdown rather than HTML, so no hrefs come back on this

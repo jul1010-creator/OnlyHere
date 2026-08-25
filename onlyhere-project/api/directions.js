@@ -109,9 +109,21 @@ export default async function handler(req, res) {
     // the mainland with a motorway running to it. That is what shipped in the
     // Aarhus Festuge draft.
     //
-    // Asking again with ferries banned settles it with a measurement: a route
-    // still comes back means the boat was a shortcut, no route comes back means
-    // there is no land connection. Only "avoid=ferries" is accepted, because
+    // Asking again with ferries banned settles it with a measurement, but NOT
+    // the way this comment used to say. It said "a route still comes back means
+    // the boat was a shortcut", and that is false: Google's avoid is a
+    // PREFERENCE, and when it cannot honour it, it relaxes the restriction and
+    // returns the ferry route anyway, with no error to notice. Measured 24 Aug
+    // 2026 from Copenhagen: Orø, Samsø, Fanø, Ærø, Bornholm and Endelave all
+    // came back with hasFerry still true, and every one of them was being
+    // called mainland as a result.
+    //
+    // So the answer is read from the RETURNED ROUTE rather than from the fact
+    // that one arrived: no route means no land connection, and a route that
+    // still crosses water means Google could not honour the ban, which is the
+    // same finding by another road. classifyFerry in utils/transport.js does
+    // that reading; this endpoint's job is only to report hasFerry honestly for
+    // both calls. Only "avoid=ferries" is accepted, because
     // this parameter exists for that one question and passing Google arbitrary
     // client-supplied values is how a routing endpoint becomes a proxy.
     if (avoid === "ferries") url += `&avoid=ferries`;
