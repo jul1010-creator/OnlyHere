@@ -4,6 +4,18 @@ import { Routes, Route, useNavigate, useParams, useLocation } from "react-router
 // both read it, and two hand-written copies of a path is how a link and the
 // screen it opens come to disagree.
 export const ABOUT_ME_PATH = "/me";
+// ── ONE ADDRESS, BECAUSE THE LAW ASKS FOR AN ACCESSIBLE ONE ─────────
+// The support page is a REAL ROUTE rather than another sheet toggled by state,
+// which is how Privacy & Data and Suggest a Place work. Two reasons and the
+// second is the binding one. It has to be linkable, from the footer, from the
+// terms, from an email he sends somebody. And DSA Article 16 requires the
+// notice mechanism to be "easy to access", which a panel reachable only by
+// scrolling the home page and finding the right word is not.
+//
+// Standalone, like GuidePage, and not through GemlyxApp. It shares no state
+// with the 1.5MB component and threading it through would be the only risky
+// part of an otherwise self-contained build.
+export const SUPPORT_PATH = "/support";
 
 import { craftItemsFallback, handmadeCraftShops } from "./data/craft";
 import { splitForCheck, CHECK_SCOPE_BLOCK, admissible, checkModeOf, fieldIn } from "./utils/checkScope";
@@ -45,6 +57,7 @@ import { placeSlug, townPath, findBySlug, COUNTRY, kindForSeg, entryUrlPath, isE
 import { startRun, endRun, summarise, averageFor, describe, describeAverage, recentRuns, installFetchMeter } from "./utils/apiCost";
 import { cleanOffer, offerProblems, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "./utils/offer";
 import { aiDisclosureFor } from "./utils/aiDisclosure";
+import { SupportPage } from "./components/SupportPage";
 import { safetyClaimNote } from "./utils/safetyClaims";
 import { missingSourcesNote } from "./utils/provenance";
 import { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog } from "./utils/runLog";
@@ -136,7 +149,7 @@ import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange,
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
 import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition, venueRatherThanEvent } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
-import { languageBlock, guideLanguageBlock, readerLanguage } from "./utils/readerLanguage";
+import { languageBlock, guideLanguageBlock, readerLanguage, keepLanguageOf } from "./utils/readerLanguage";
 import { echoInDraft, describeEcho, ECHO_RUN } from "./utils/echoCheck";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { EntryLink } from "./components/EntryLink";
@@ -148,7 +161,7 @@ import { StudioAssistant } from "./components/StudioAssistant";
 import { partOfCountry, partsPresent, matchesSearch, islandOf, ISLAND_LABEL } from "./utils/geography";
 import { tileCss } from "./utils/mapTiles";
 import { dayCrossings, tripWeatherWarning } from "./utils/weatherWarn";
-import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel, tierBadge, TIERS, tierOf } from "./utils/placeThemes";
+import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel, tierBadge, TIERS, tierOf, TIER_VALUES } from "./utils/placeThemes";
 import { EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts } from "./utils/eventTypes";
 import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, MARKS } from "./utils/sweeps";
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
@@ -8686,7 +8699,7 @@ ${researchRules("festival", ev)}`
           `Not published. ${said
             ? `The tier reads "${said.slice(0, 40)}", which is not one Gemlyx recognises, so every card would show no rank at all.`
             : "There is no tier, and that is Gemlyx's own judgement about whether the place is worth planning around."} `
-          + `It is what the cards, the region picker and the preview all rank on. Set "tier" in the draft above to one of: ${TIERS.map(t => t.label).join(", ")}.`
+          + `It is what the cards, the region picker and the preview all rank on. Set "tier" in the draft above to one of: ${TIER_VALUES.map(v => `"${v}"`).join(", ")}.`
         );
         return;
       }
@@ -10788,7 +10801,7 @@ If the conversation only covers a single day or a few stops with no explicit day
               const original = proseFields.find(pf => pf.id === flag.id)?.text;
               if (!original) continue;
               const rewriteRes = await askClaude(
-                `Rewrite this travel-guide text because ${flag.reason || "it reads as generic AI writing"}. Keep every real fact, name, price, and date exactly as given — change wording only, never content or meaning. Write like a well-travelled friend giving real advice, not marketing copy — direct, concrete, specific, varied sentence length. Respond with PLAIN TEXT only, no quote marks around your answer, nothing but the rewritten text itself.\n\nText: "${original}"`,
+                `Rewrite this travel-guide text because ${flag.reason || "it reads as generic AI writing"}. Keep every real fact, name, price, and date exactly as given — change wording only, never content or meaning. Write like a well-travelled friend giving real advice, not marketing copy — direct, concrete, specific, varied sentence length. Respond with PLAIN TEXT only, no quote marks around your answer, nothing but the rewritten text itself.\n\n${keepLanguageOf("the text below")}\n\nText: "${original}"`,
                 220
               );
               if (!rewriteRes.error && rewriteRes.text) {
@@ -10828,7 +10841,7 @@ If the conversation only covers a single day or a few stops with no explicit day
             const original = proseFields2.find(pf => pf.id === issue.id)?.text;
             if (!original) continue;
             const fixRes = await askClaude(
-              `This travel-guide text was fact-checked and flagged: ${issue.issue || "a factual detail here may be wrong"}. Rewrite it to fix the real problem — if you know the correct fact, use it; if the correct fact isn't certain, rewrite to remove the specific wrong claim rather than guessing (e.g. say "check current prices online" instead of stating a number you're not sure of). Never invent a fact to replace a wrong one. Keep the same tone and roughly the same length as the original. Respond with PLAIN TEXT only, no quote marks around your answer, nothing but the rewritten text itself.\n\nOriginal text: "${original}"`,
+              `This travel-guide text was fact-checked and flagged: ${issue.issue || "a factual detail here may be wrong"}. Rewrite it to fix the real problem — if you know the correct fact, use it; if the correct fact isn't certain, rewrite to remove the specific wrong claim rather than guessing (e.g. say "check current prices online" instead of stating a number you're not sure of). Never invent a fact to replace a wrong one. Keep the same tone and roughly the same length as the original. Respond with PLAIN TEXT only, no quote marks around your answer, nothing but the rewritten text itself.\n\n${keepLanguageOf("the original text below")}\n\nOriginal text: "${original}"`,
               220
             );
             if (!fixRes.error && fixRes.text) {
@@ -11090,7 +11103,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       if (broken.length > 0) {
         console.warn("Title promises something the itinerary does not contain:", broken);
         const retitle = await askClaude(
-          `Rewrite this Denmark trip title. It currently promises ${broken.join(" and ")}, and this trip contains none of that, which makes the title a false claim before the reader has read a word.\n\nThe trip actually visits: ${finalStopNames.join(", ")}.\n\nWrite one short, warm title, under nine words, naming or evoking only things genuinely on that list. No colon-subtitle unless it earns it. Never use an em dash or an en dash. Reply with the title and nothing else.\n\nCurrent title: ${parsed.title}`,
+          `Rewrite this Denmark trip title. It currently promises ${broken.join(" and ")}, and this trip contains none of that, which makes the title a false claim before the reader has read a word.\n\nThe trip actually visits: ${finalStopNames.join(", ")}.\n\nWrite one short, warm title, under nine words, naming or evoking only things genuinely on that list. No colon-subtitle unless it earns it. Never use an em dash or an en dash. Reply with the title and nothing else.\n\n${keepLanguageOf("the current title below")}\n\nCurrent title: ${parsed.title}`,
           80
         );
         if (!retitle.error && retitle.text) {
@@ -12206,7 +12219,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     const leavingNames = matchedForWhy.filter(p => p._leaving).map(p => p.name);
     (async () => {
       const r = await askClaude(
-        `Based ONLY on this Denmark trip conversation, write 1-2 short, warm sentences in second person explaining why the route being prepared fits THIS traveler specifically. Connect it to their actual stated interests, pace, budget, and travel companions from the conversation, never generic praise, never invented places or facts. Never use em dashes or en dashes.${onScreen.length ? `\n\nTHE SCREEN THIS SENTENCE SITS ON SHOWS EXACTLY THESE PAGES AND NOTHING ELSE: ${onScreen.join(", ")}. Your sentence must be true of that list. Do not name an interest of theirs that nothing on the list serves, and do not name a place that is not on it. If what they asked for and what is on the list only partly meet, write about the part that does.${leavingNames.length ? ` THEY ARE LEAVING ${leavingNames.join(" and ")}: that is where they START, and your sentence must not promise it as somewhere the trip keeps them. Write about where they are going.` : ""}` : `\n\nTHE SCREEN THIS SENTENCE SITS ON IS EMPTY. Gemlyx holds a page for nothing they have named yet, and it says so underneath you. So write about THEM and about how the trip will be put together, and name no place at all: not a town, not an island, not a region. A sentence promising "at least one island visit" over an empty list is the single worst thing this line can do, because the list is the evidence and there is none.`} Respond with only the sentence(s), nothing else.\n\n${convo}`,
+        `Based ONLY on this Denmark trip conversation, write 1-2 short, warm sentences in second person explaining why the route being prepared fits THIS traveler specifically. Connect it to their actual stated interests, pace, budget, and travel companions from the conversation, never generic praise, never invented places or facts. Never use em dashes or en dashes.${onScreen.length ? `\n\nTHE SCREEN THIS SENTENCE SITS ON SHOWS EXACTLY THESE PAGES AND NOTHING ELSE: ${onScreen.join(", ")}. Your sentence must be true of that list. Do not name an interest of theirs that nothing on the list serves, and do not name a place that is not on it. If what they asked for and what is on the list only partly meet, write about the part that does.${leavingNames.length ? ` THEY ARE LEAVING ${leavingNames.join(" and ")}: that is where they START, and your sentence must not promise it as somewhere the trip keeps them. Write about where they are going.` : ""}` : `\n\nTHE SCREEN THIS SENTENCE SITS ON IS EMPTY. Gemlyx holds a page for nothing they have named yet, and it says so underneath you. So write about THEM and about how the trip will be put together, and name no place at all: not a town, not an island, not a region. A sentence promising "at least one island visit" over an empty list is the single worst thing this line can do, because the list is the evidence and there is none.`} Respond with only the sentence(s), nothing else.\n\n${languageBlock()}\n\n${convo}`,
         200
       );
       if (run !== previewWhyRunRef.current) return;   // a later roll owns the screen now
@@ -16761,6 +16774,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <a href="/privacy.html" style={{ color: C.muted, textDecoration: "underline" }}>Privacy Policy</a>
                   <span style={{ opacity: 0.5 }}>·</span>
                   <a href="/terms.html" style={{ color: C.muted, textDecoration: "underline" }}>Terms of Service</a>
+                  <span style={{ opacity: 0.5 }}>·</span>
+                  <a href={SUPPORT_PATH} style={{ color: C.muted, textDecoration: "underline" }}>Contact &amp; report</a>
                 </div>
                 <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.87 · Aug 2026</div>
               </div>
@@ -20212,6 +20227,7 @@ export default function Gemlyx() {
       {hasExampleGuide() && (
         <Route path={EXAMPLE_GUIDE_PATH} element={<GuidePage guide={EXAMPLE_GUIDE} />} />
       )}
+      <Route path={SUPPORT_PATH} element={<SupportPage />} />
       <Route path="/guide/new" element={<GuidePage />} />
       <Route path="/guide/:guideId" element={<GuidePage />} />
     </Routes>

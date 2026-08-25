@@ -38,7 +38,9 @@ import { hostOf } from "./pageScan";
 // checked because somebody added a prose field to a prompt and not to a list.
 // So everything is a claim unless it is named here, and a new field arrives in
 // the paste on the day it is invented.
-const NOT_A_CLAIM = new Set([
+// Exported 25 Aug 2026 so utils/evidence.js can ANSWER TO this list rather
+// than keep a sixth copy of the same idea. Nothing else about it changed.
+export const NOT_A_CLAIM = new Set([
   // Ours, not the world's.
   "id", "slug", "photo", "color", "emoji", "isClub", "isStreet", "isFoodStreet",
   "themes", "tags", "placeKind", "partOf", "dayTripFrom", "nomiPotential",

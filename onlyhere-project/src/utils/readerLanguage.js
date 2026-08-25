@@ -240,6 +240,12 @@ export const languageBlock = (nav) => answerInLanguage(readerLanguage(nav));
 // rewrite passes and the saved-guide assistant had nothing at all. So a Danish
 // traveller had a Danish conversation and was handed an English document.
 //
+// THREE OF THOSE FOUR WERE FIXED THAT DAY. The rewrite passes were not, and
+// this paragraph read for three days as though they had been, because it lists
+// what was broken and then stops. Corrected 25 August, when they got
+// keepLanguageOf at the bottom of this file: a rewrite is the one case where
+// the browser tag is the wrong instrument, and the reasoning is down there.
+//
 // ── WHY THIS IS A SEPARATE BLOCK AND NOT answerInLanguage ───────────
 //
 // The chat block is written for a REPLY: "read their most recent message and
@@ -268,3 +274,47 @@ ${nativeBlock(lang, "guide")}`;
 
 // Same convenience wrapper, for the guide side.
 export const guideLanguageBlock = (nav) => writeInLanguage(readerLanguage(nav));
+
+// ── A REWRITE MAY NOT CHANGE THE LANGUAGE IT WAS HANDED ─────────────
+//
+// 25 Aug 2026, found while surveying for the multilingual assessment. THREE
+// passes rewrite guide prose AFTER the guide has already been written in the
+// traveller's language, and not one of them said a word about language:
+//
+//   App.jsx  the AI-tell rewrite, field by field
+//   App.jsx  the fact-check fix, field by field
+//   App.jsx  the retitle, when titlePromises finds a false claim
+//
+// So a German guide could come back from any of them with one field, or its
+// headline, in English. A document that changes language halfway down is worse
+// than one written plainly in one language, and the reader cannot tell whether
+// the English part is a mistake or the important part.
+//
+// This file has carried the admission since 22 August in its own words, that
+// the pass that day covered "the guide build, the enrichment pass, the rewrite
+// passes and the saved-guide assistant". The build, the enrichment and the
+// assistant did get blocks. The rewrite passes did not, and the comment saying
+// otherwise is corrected below.
+//
+// ── AND writeInLanguage IS THE WRONG INSTRUMENT HERE, TWICE ─────────
+//
+// The obvious repair is to append the block that already exists. It is wrong in
+// BOTH directions, which is why this is a new thing rather than another caller:
+//
+//   BROWSER ENGLISH, TRAVELLER WROTE GERMAN. The guide is German. readerLanguage
+//   returns null for English, so no block is added at all, and the rewrite is
+//   free to drift back to English. The bug survives its own fix.
+//
+//   BROWSER GERMAN, TRAVELLER WROTE ENGLISH. The guide is English and correct.
+//   The block is added, in capitals, naming German, and the rewrite FLIPS A
+//   CORRECT ENGLISH FIELD INTO GERMAN. The fix is worse than the defect.
+//
+// Both failures have the same root: the browser tag says where a device is
+// configured, and a rewrite is not asking that question. A rewrite is holding
+// the answer already. The text is right there.
+//
+// So this NAMES NO LANGUAGE, reads no navigator, and is unconditional. It costs
+// one sentence on every guide build including the English ones, which is the
+// price of an instruction that cannot be got wrong by a setting nobody chose.
+export const keepLanguageOf = (what = "the text you have been given") =>
+  `WRITE YOUR ANSWER IN THE SAME LANGUAGE AS ${String(what).toUpperCase()}. Do not translate it, in either direction: Danish in, Danish out; German in, German out; English in, English out. This text is one field of a document whose other fields you cannot see, and they are all in that language, so a field that comes back in another one makes the document change language halfway down. Place names, station names, street names and prices stay exactly as they are written, whatever language the sentence around them is in.`;

@@ -100,12 +100,51 @@ export const themesPresent = (entries) => {
 // The stored strings are long and inconsistently cased across 71 rows written
 // over weeks ("Can't Miss Out", "Can't miss out"), so they are matched loosely
 // and rendered from ONE list rather than printed raw.
+// ── THE GATE OFFERED WORDS THE GATE REFUSES ─────────────────────────
+//
+// 25 Aug 2026. Oliver could not publish a Copenhagen draft: "it said couldn't
+// publish, and it was because tier wasn't showing."
+//
+// The publish gate is right to refuse an unranked entry, and the comment above
+// it in App.jsx explains at length why the silent "Worth Considering" default
+// was removed. What the gate then TELLS him to do is
+// `TIERS.map(t => t.label)`, and two of those four labels do not pass the
+// matcher standing beside them:
+//
+//   "Can't miss"          accepted
+//   "Highly recommended"  accepted
+//   "Worth a look"        REJECTED by /worth\s*considering/
+//   "If you're nearby"    REJECTED by /already\s*nearby/
+//
+// So a founder who does exactly what the refusal says is refused again, by the
+// same sentence, with no way to tell which half was wrong. That is the failure
+// this file's neighbour already has a name for, written above the festival date
+// gate: "A gate whose instructions cannot be followed is not a gate, it is a
+// wall."
+//
+// TWO FIELDS NOW, BECAUSE THEY ARE TWO JOBS. `label` is what a card prints and
+// is free to be short. `value` is what belongs in the draft, and it is the
+// wording the drafting prompt already asks the model for, so the gate can quote
+// the strings it accepts instead of the strings it displays. The suite asserts
+// both directions: every label and every value passes tierOf, and every value
+// appears in the prompt.
+//
+// AND PUNCTUATION IS NOT A DIFFERENT JUDGEMENT. "Can't-miss" is the same ranking
+// as "Can't miss", and a model writes the hyphen often enough that refusing it
+// costs a research run to fix a dash. `[\s-]*` is tolerance of typography, not
+// of meaning: nothing here accepts a tier nobody wrote, and "Must-see" and
+// "Essential" are still refused, because those are the model inventing a scale
+// Gemlyx does not use.
 export const TIERS = [
-  { id: "must", match: /can'?t\s*miss/i, label: "Can't miss", mark: "★" },
-  { id: "high", match: /highly\s*recommend/i, label: "Highly recommended", mark: "◆" },
-  { id: "worth", match: /worth\s*considering/i, label: "Worth a look", mark: "" },
-  { id: "nearby", match: /already\s*nearby/i, label: "If you're nearby", mark: "" },
+  { id: "must", match: /can'?t[\s-]*miss/i, label: "Can't miss", value: "Can't Miss Out", mark: "★" },
+  { id: "high", match: /highly[\s-]*recommend/i, label: "Highly recommended", value: "Highly Recommended", mark: "◆" },
+  { id: "worth", match: /worth[\s-]*(?:considering|a[\s-]*look)/i, label: "Worth a look", value: "Worth Considering", mark: "" },
+  { id: "nearby", match: /(?:already|if[\s-]*you'?re)[\s-]*nearby/i, label: "If you're nearby", value: "Best If You're Already Nearby", mark: "" },
 ];
+
+// What the gate quotes. The strings the DRAFT must carry, never the display
+// labels, which is the whole bug above.
+export const TIER_VALUES = TIERS.map(t => t.value);
 
 export const tierOf = (entry) => {
   const t = String(entry?.tier ?? "").trim();

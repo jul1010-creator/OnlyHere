@@ -58,7 +58,7 @@ writeFileSync(entry, `
   export { DINING_STYLES, DINING_STYLE_LABEL, diningStyleOf, diningStyleLabel, unstyledEntries, styleCoverage, STYLE_COVERAGE_MIN, showStyleFacet, buildFoodFacets, foodCitiesIn, FOOD_SORTS, byFoodPrice } from ${JSON.stringify(join(root, "src/utils/foodStyle.js"))};
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery, toggleFacetValue, isOptionOn, selectedValues } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
   export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
-  export { TIERS } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
+  export { TIERS, TIER_VALUES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { REGION_NAMES, REGION_PART, canonicalRegion, isRegion, regionPart, kommunerIn, kommuneAt, kommuneNameAt, regionAt, regionOf, kommuneOf, sameRegion, regionsPresent, describeRegion, danishAddressIn } from ${JSON.stringify(join(root, "src/utils/regions.js"))};
   export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
   export { TICKET_HUNT_PROMPT, ticketHuntUrls } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
@@ -77,11 +77,16 @@ writeFileSync(entry, `
   export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { CONSTRAINT_KINDS, constraintViolations, violationsOfKind, constraintNote, repairWorked, INVENTORY_MAY_NOT_SELECT } from ${JSON.stringify(join(root, "src/utils/constraintCheck.js"))};
+  export { briefPanel, briefSentence, briefGaps, willNotAssume, briefVagueNote, briefLines, whenPhrase, clauseFor, isAcknowledged, ACKNOWLEDGED } from ${JSON.stringify(join(root, "src/utils/briefPanel.js"))};
+  export { EVIDENCE, EVIDENCE_RANK, EVIDENCE_LABEL, fieldSourceKey, PERISHABLE_FIELD_TOPIC, PERISHABLE_FIELDS, isPerishable, perishableTopic, evidenceOf, entryEvidence, evidenceCounts, unbackedPerishables, weakestClaim, evidenceNote, PERISHABLE_TOPICS_USED, PAGE_SCAN_TOPICS } from ${JSON.stringify(join(root, "src/utils/evidence.js"))};
+  export { selfContradictions as selfContra, PROSE_FIELDS as AUDIT_PROSE_FIELDS, PROSE_LISTS } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink, GUIDE_SCAFFOLDING } from ${JSON.stringify(join(root, "src/utils/userSaves.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { cleanOffer, offerProblems, offerLive, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
   export { AI_DISCLOSURE, aiDisclosure, aiDisclosureFor, AI_CHAT_SURFACES } from ${JSON.stringify(join(root, "src/utils/aiDisclosure.js"))};
+  export { SUPPORT_TOPICS, REPORT_TOPIC, topicIds, topicLabel, isTopic, GOOD_FAITH_STATEMENT, messagePrompt, MESSAGE_MIN, MESSAGE_MAX, looksLikeEmail, looksLikeUrl, supportProblems, problemFor, supportReference, supportPayload, supportMailto, supportReceipt, SUPPORT_TABLE, SUPPORT_SETUP_SQL, SUPPORT_EMAIL, PRIVACY_EMAIL } from ${JSON.stringify(join(root, "src/utils/support.js"))};
   export { SAFETY_CLAIM_FIELDS, claimIsSupported, unsupportedSafetyClaims, safetyClaimNote } from ${JSON.stringify(join(root, "src/utils/safetyClaims.js"))};
   export { hasEntrySources, missingSourcesNote } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
   export { rowStamp, rowStampIsEdit, stampLabel, hasSources, sortRows, SORTS } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
@@ -199,6 +204,7 @@ writeFileSync(entry, `
   export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
+  export { keepLanguageOf } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { datesFromListings } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, PRICE_NOT_PUBLISHED, PRICE_UNKNOWN } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { sourceFit, describeSourceFit, LIVING_TYPES } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -4094,7 +4100,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // A card showing an invented rank is worse than a card showing none.
   is("an unrecognised tier shows nothing rather than a guess", tierLabel({ tier: "Quite Good Actually" }), null);
   is("and so does a missing one", tierLabel({}), null);
-  is("tierOf agrees with the label", tierOf({ tier: "Highly Recommended" }).id, "high");
+  // `?.id` rather than `.id`: an assertion that THROWS reports nothing. A
+  // mutation that made two tiers share a matcher killed the whole run here
+  // with a TypeError instead of naming the tier that broke, which is the same
+  // lesson entryAudit learned about a matcher that throws never passing a page.
+  is("tierOf agrees with the label", tierOf({ tier: "Highly Recommended" })?.id, "high");
 
   // THE RULE, again: a sweep may only write a field shapeForLive carries. themes
   // was added to the town shape in the same pass as the sweep, deliberately.
@@ -4971,8 +4981,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // The stored field is a RECOMMENDATION STRENGTH, top to bottom. There is no
   // fame field: popularityTag is undefined on all 31 published towns.
   is("the tier vocabulary is a recommendation ladder", M.TIERS.map(t => t.id), ["must", "high", "worth", "nearby"]);
-  is("read off the entry", M.tierOf({ tier: "Can't Miss Out" }).id, "must");
-  is("loosely, because 71 rows spell it differently", M.tierOf({ tier: "cant miss out" }).id, "must");
+  is("read off the entry", M.tierOf({ tier: "Can't Miss Out" })?.id, "must");
+  is("loosely, because 71 rows spell it differently", M.tierOf({ tier: "cant miss out" })?.id, "must");
   is("and an unknown tier is null, never a guess", M.tierOf({ tier: "Quite Good" }), null);
 
   ok("the heading no longer claims to be about fame", !/<Row title="How well known">/.test(app9));
@@ -17574,8 +17584,33 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
 
   ok("publishing an entry with no usable tier is refused",
      /if \("tier" in shaped && !tierOf\(shaped\)\) \{/.test(appK));
-  ok("and the refusal lists the tiers it will accept",
-     /Set "tier" in the draft above to one of: \$\{TIERS\.map/.test(appK));
+  // ── AND THE REFUSAL HAS TO BE FOLLOWABLE ────────────────────────────
+  //
+  // 25 Aug 2026, the Copenhagen draft: "it said couldn't publish, and it was
+  // because tier wasn't showing." The gate offered `TIERS.map(t => t.label)`,
+  // and two of those four labels were rejected by the matcher standing beside
+  // them, so doing exactly what the refusal said got him refused again by the
+  // same sentence.
+  //
+  // THE ASSERTION THAT STOOD HERE WAS PART OF THE PROBLEM. It pinned the call
+  // shape, `${TIERS.map`, which the broken gate satisfies and the fixed one does
+  // not: it was green for the whole life of the bug and went red on the repair.
+  // Same class as the ferry probe and the guard count. So this pins the rule,
+  // in two halves that only mean anything together, and tolerates any join or
+  // format because how a list is punctuated is not a different promise.
+  //
+  // READ AS A SLICE RATHER THAN ONE REGEX, because the message interpolates a
+  // template inside a template and a `[^`]*` window stops at the inner backtick,
+  // one character before the thing worth checking. The first version of the
+  // negative below did exactly that and stayed green under the mutation that
+  // restores the bug.
+  {
+    const at = appK.indexOf('Set "tier" in the draft above to one of:');
+    const offer = at === -1 ? "" : appK.slice(at, at + 200);
+    ok("the refusal names a list at all", offer.length > 40);
+    ok("and it quotes the strings a draft must carry", /TIER_VALUES/.test(offer));
+    ok("not the short labels a card prints", !/\.label/.test(offer));
+  }
   // THE POINT OF THE RULE, which a source grep cannot see. Both failing shapes
   // and one passing one, so a gate that refused everything would fail here too.
   {
@@ -17583,6 +17618,60 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
     ok("an empty tier has no rank", !t(""));
     ok("nor does one Gemlyx does not recognise", !t("Pretty Good"));
     ok("and a real one does", !!t(M.TIERS[0].label));
+    // ── THE BUG ITSELF, STATED AS A LAW ───────────────────────────────
+    // Every string this gate hands somebody has to be a string this gate takes.
+    // Named one by one so a failure says WHICH tier broke rather than that a
+    // set operation came out false.
+    M.TIER_VALUES.forEach(v => ok(`the gate accepts the value it offers: ${v}`, !!t(v)));
+    // And every label, because tierLabel PRINTS these on the cards. A founder
+    // typing what he can see on his own site must not be refused either, which
+    // is the half of the bug that made the refusal unreadable.
+    M.TIERS.forEach(x => ok(`and accepts the label it prints: ${x.label}`, !!t(x.label)));
+    // NOT MERELY ACCEPTED, ACCEPTED AS ITSELF. Four values all resolving to
+    // "must" would satisfy every assertion above and silently collapse the
+    // ranking to one rank, which is the failure the cards exist to prevent.
+    M.TIERS.forEach(x => ok(`${x.value} resolves to its own rank`, t(x.value)?.id === x.id));
+    M.TIERS.forEach(x => ok(`${x.label} resolves to its own rank`, t(x.label)?.id === x.id));
+    ok("no two tiers share an id", new Set(M.TIERS.map(x => x.id)).size === M.TIERS.length);
+    ok("nor a value", new Set(M.TIER_VALUES).size === M.TIERS.length);
+    // Typography is not meaning. A model writes the hyphen and drops the
+    // apostrophe often enough that refusing either costs a research run to fix
+    // a dash.
+    ok("a hyphen is the same ranking", !!t("Can't-miss"));
+    ok("so is a missing apostrophe", !!t("Cant miss out"));
+    ok("and case is not a judgement", !!t("IF YOU'RE NEARBY"));
+    // WHICH IS WHY THE OTHER DIRECTION IS ASSERTED IN THE SAME BREATH: the
+    // tolerance above is of punctuation, never of meaning. A model inventing a
+    // scale Gemlyx does not use is still refused, and that refusal is the thing
+    // that stops "be lenient" from becoming "accept anything".
+    ["Must-see", "Essential", "Top pick", "Recommended-ish", "Skip it"].forEach(v =>
+      ok(`an invented rank is still refused: ${v}`, !t(v)));
+  }
+  // ── AND THE PROMPT ASKS FOR WHAT THE GATE ACCEPTS ───────────────────
+  //
+  // Three surfaces, one vocabulary: the prompt tells the model what to write,
+  // the gate refuses what tierOf rejects, and the card prints what tierLabel
+  // returns. Copenhagen was those drifting apart. So this reads the options out
+  // of the REAL prompt text the model receives rather than trusting a list in a
+  // comment, and requires the ranks offered to be exactly the ranks that exist:
+  // a prompt that dropped one, or invented a fifth, fails here.
+  {
+    const P = M.studioPrompts("Testplace");
+    const offered = [];
+    Object.entries(P).forEach(([type, val]) => {
+      const s = typeof val === "string" ? val : JSON.stringify(val);
+      for (const m of s.matchAll(/"tier":\s*"([^"]+)"/g)) {
+        m[1].split("/").map(x => x.trim()).filter(Boolean).forEach(v => offered.push([type, v]));
+      }
+    });
+    ok("the drafting prompts do ask a model for a tier", offered.length > 0);
+    offered.forEach(([type, v]) =>
+      ok(`the ${type} prompt asks for a tier the gate accepts: ${v}`, !!M.tierOf({ tier: v })));
+    const byType = {};
+    offered.forEach(([type, v]) => (byType[type] ||= []).push(M.tierOf({ tier: v })?.id));
+    const ids = M.TIERS.map(x => x.id).join(",");
+    Object.entries(byType).forEach(([type, got]) =>
+      is(`the ${type} prompt offers every rank and no others`, [...new Set(got)].sort().join(","), ids.split(",").sort().join(",")));
   }
   // ── AND THE PASTE-READY CODEGEN INVENTED THE SAME FOUR VALUES ────
   // studioContent.js deleted `tier`, `popularityTag`, `ticketStatus` and `price`
@@ -33121,11 +33210,63 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // language on the way in without one on the way out goes red.
   {
     const langs = Object.keys(AI_DISCLOSURE).sort();
-    is("the disclosure covers the six languages the intake reads", langs, ["da", "de", "en", "nl", "no", "sv"]);
-    ok("every one of them is a real sentence", langs.every(l => AI_DISCLOSURE[l].trim().length > 20));
-    ok("an unknown language still gets told, in English", aiDisclosure("fr") === AI_DISCLOSURE.en);
+    is("the disclosure covers the six languages the intake reads, plus both Chinese scripts",
+       langs, ["da", "de", "en", "nl", "no", "sv", "zh", "zh-hans", "zh-hant"]);
+    ok("every one of them is a real sentence", langs.every(l => AI_DISCLOSURE[l].trim().length > 8));
+    ok("an unknown language still gets told, in English", aiDisclosure("qq") === AI_DISCLOSURE.en);
     ok("and so does a missing one", aiDisclosure(null) === AI_DISCLOSURE.en);
-    ok("none of them carries a dash", langs.every(l => !/[–—]/.test(AI_DISCLOSURE[l])));
+    const DASH = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+    ok("none of them carries a dash", langs.every(l => !DASH.test(AI_DISCLOSURE[l])));
+
+    // ── AND NOW THE QUESTION ARTICLE 50 ACTUALLY ASKS ──────────────
+    //
+    // 25 Aug 2026. Everything above this line was green on 24 August while the
+    // feature did not work AT ALL: aiDisclosureFor passed readerLanguage()'s
+    // {tag, name} OBJECT into a string lookup, so every reader in every language
+    // got the English sentence, and the English fallback made it look deliberate.
+    //
+    // Three assertions, all true, not one of them about a reader. So these call
+    // it the way the three render sites call it, with a navigator, and read the
+    // sentence that comes back. A table nobody can reach is not a disclosure.
+    const seen = (tag) => M.aiDisclosureFor({ language: tag });
+    [
+      ["de-DE", "de"], ["de-AT", "de"], ["de", "de"],
+      ["da-DK", "da"], ["nl-NL", "nl"], ["sv-SE", "sv"],
+      ["no-NO", "no"], ["nb-NO", "no"], ["nn-NO", "no"],
+      ["zh-Hans-CN", "zh-hans"], ["zh-Hant-TW", "zh-hant"], ["zh-CN", "zh"],
+      ["en-GB", "en"], ["en", "en"], ["qq-XX", "en"], ["", "en"],
+    ].forEach(([tag, key]) =>
+      is(`a browser set to ${tag || "nothing"} is told in ${key}`, seen(tag), AI_DISCLOSURE[key]));
+
+    // THE POINT OF THE ONE ABOVE, which the per-tag checks cannot make alone:
+    // every non-English language must produce a DIFFERENT sentence from English.
+    // A table wired to nothing satisfies sixteen individual comparisons if each
+    // one is allowed to fall back, and that is exactly what happened.
+    const nonEnglish = langs.filter(l => l !== "en");
+    ok("and no two languages share a sentence with English",
+       nonEnglish.every(l => AI_DISCLOSURE[l] !== AI_DISCLOSURE.en));
+    ok("so a German reader is not quietly handed the English one",
+       seen("de-DE") !== AI_DISCLOSURE.en && seen("zh-Hans-CN") !== AI_DISCLOSURE.en);
+
+    // A REGION IS NOT A LANGUAGE AND A SCRIPT IS. The same reduction
+    // readerLanguage.languageName makes, asserted here because this file does
+    // its own and two instruments that disagree is worse than one.
+    ok("a script subtag is honoured", seen("zh-Hans-CN") !== seen("zh-Hant-TW"));
+    ok("a region subtag is discarded", seen("de-DE") === seen("de-CH"));
+
+    // ── AND THE SHAPE THAT CAUSED IT, NAMED AND HELD OPEN ───────────
+    // The bug was `aiDisclosure(readerLanguage(nav))`, an object where a code
+    // was expected. The repair could have been a stricter signature; it is a
+    // tolerant one instead, because {tag, name} is the shape every caller in
+    // this repo already holds and a function that refuses the natural argument
+    // gets called wrongly again. That makes the tolerance a PROMISE, so it is
+    // asserted rather than left as a happy accident: restoring the old call is
+    // now an equivalent mutation, and it is equivalent because of this line.
+    ok("readerLanguage's own return value works fed straight in",
+       aiDisclosure(M.readerLanguage({ language: "de-DE" })) === AI_DISCLOSURE.de
+       && aiDisclosure(M.readerLanguage({ language: "zh-Hant-TW" })) === AI_DISCLOSURE["zh-hant"]);
+    ok("and its null-for-English still reads as English",
+       aiDisclosure(M.readerLanguage({ language: "en-GB" })) === AI_DISCLOSURE.en);
   }
 
   // ── DIRECTIVE (EU) 2026/1024, THE PACKAGE TRAVEL REWRITE ─────────
@@ -33587,6 +33728,755 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       const guards = new Set((app.match(/startsWith\("CHECK BEFORE PUBLISHING: [^"]*"\)/g) || []));
       is("the two publish notes guard different sentences", guards.size, 2);
     }
+  }
+}
+
+
+// ══ THE SUPPORT PAGE, AND THE DSA NOTICE ROUTE INSIDE IT ═══════════════
+//
+// Oliver, 25 Aug 2026: "we need a proper customer support page. Mail you write
+// from, topic, and then what you're writing." Asked whether the Article 16
+// report route should be its own build: "Yes, one page with a topic for it."
+{
+  const {
+    SUPPORT_TOPICS, REPORT_TOPIC, topicIds, isTopic, GOOD_FAITH_STATEMENT,
+    messagePrompt, MESSAGE_MIN, MESSAGE_MAX, looksLikeEmail, looksLikeUrl,
+    supportProblems, problemFor, supportReference, supportPayload, supportMailto,
+    supportReceipt, SUPPORT_SETUP_SQL, SUPPORT_EMAIL, PRIVACY_EMAIL,
+  } = M;
+  const faults = (form) => supportProblems(form).map(p => p.field).sort();
+  const OK = { email: "a@b.dk", topic: "question", message: "The ferry time on the Aeroe page looks wrong to me." };
+
+  // ── THE VOCABULARY ─────────────────────────────────────────────────
+  ok("the topics are a closed list", Array.isArray(SUPPORT_TOPICS) && SUPPORT_TOPICS.length >= 4);
+  ok("every one has an id and a label", SUPPORT_TOPICS.every(t => t.id && t.label));
+  ok("no two share an id", new Set(topicIds()).size === SUPPORT_TOPICS.length);
+  ok("the report topic is one of them", isTopic(REPORT_TOPIC));
+  ok("and something invented is not", !isTopic("refund") && !isTopic(""));
+
+  // ── WHAT A GOOD FORM LOOKS LIKE, AND EVERY WAY A BAD ONE FAILS ─────
+  is("a complete message has nothing wrong with it", faults(OK), []);
+  is("an empty form names all three fields at once", faults({}), ["email", "message", "topic"]);
+  // Named individually, because "returns some problems" is satisfied by a
+  // function that returns the same problem three times.
+  is("a missing topic is named", faults({ ...OK, topic: "" }), ["topic"]);
+  is("a topic nobody offered is refused", faults({ ...OK, topic: "refund" }), ["topic"]);
+  is("a missing address is named", faults({ ...OK, email: "" }), ["email"]);
+  is("an address that is a name is refused", faults({ ...OK, email: "Oliver" }), ["email"]);
+  is("a missing message is named", faults({ ...OK, message: "" }), ["message"]);
+  is("and one too short to answer", faults({ ...OK, message: "hi" }), ["message"]);
+  is("and one longer than the column", faults({ ...OK, message: "x".repeat(MESSAGE_MAX + 1) }), ["message"]);
+  ok("a message exactly at the limit is fine", faults({ ...OK, message: "x".repeat(MESSAGE_MAX) }).length === 0);
+  ok("and one exactly at the minimum", faults({ ...OK, message: "y".repeat(MESSAGE_MIN) }).length === 0);
+  // Both faults reported, not the first. Somebody who left two boxes empty is
+  // told both rather than being sent round the loop twice.
+  is("two faults come back as two", faults({ topic: "question", email: "", message: "" }), ["email", "message"]);
+  ok("and every fault carries a sentence, not just a field name",
+     supportProblems({}).every(p => typeof p.message === "string" && p.message.length > 8));
+  ok("problemFor picks the right one out",
+     problemFor(supportProblems({}), "email").length > 0 && problemFor(supportProblems(OK), "email") === "");
+
+  // ── THE EMAIL TEST IS LOOSE ON PURPOSE ─────────────────────────────
+  // Rejecting a real address is worse than accepting a wrong one: the cost of
+  // the first is telling somebody with a legitimate complaint that their own
+  // address is invalid, and the cost of the second is a bounce he can see.
+  ["a@b.dk", "oliver.verhein+gemlyx@gmail.com", "x_y@sub.domain.co.uk", "UPPER@CASE.DE"]
+    .forEach(v => ok(`a real address is accepted: ${v}`, looksLikeEmail(v)));
+  ["Oliver", "a@b", "@b.dk", "a@.dk", "a b@c.dk", "", "a@b.dk extra"]
+    .forEach(v => ok(`and a broken one refused: ${JSON.stringify(v)}`, !looksLikeEmail(v)));
+
+  // ── ARTICLE 16(2)(b): AN EXACT LOCATION, NOT A DESCRIPTION ─────────
+  ["https://www.gemlyxtravel.com/denmark/skagen", "gemlyxtravel.com/denmark/aeroe", "http://x.dk"]
+    .forEach(v => ok(`a location that resolves is accepted: ${v}`, looksLikeUrl(v)));
+  ["the review on the Skagen page", "Skagen", "", "https://"]
+    .forEach(v => ok(`and a description is refused: ${JSON.stringify(v)}`, !looksLikeUrl(v)));
+
+  // ── THE REPORT TOPIC, WHICH IS THE ONLY ONE THAT CHANGES THE FORM ──
+  const REPORT = { topic: REPORT_TOPIC, email: "a@b.dk", message: "This review names a real person and accuses them of a crime.", url: "https://www.gemlyxtravel.com/denmark/skagen", goodFaith: true };
+  is("a complete report has nothing wrong with it", faults(REPORT), []);
+  is("16(2)(b): a report with no location is refused", faults({ ...REPORT, url: "" }), ["url"]);
+  is("and one whose location is prose", faults({ ...REPORT, url: "on the Skagen page" }), ["url"]);
+  is("16(2)(d): a report without the good-faith statement is refused", faults({ ...REPORT, goodFaith: false }), ["goodFaith"]);
+  // THE CARVE-OUT. Article 16(2)(c) requires name and email EXCEPT where the
+  // content involves an offence under Articles 3 to 7 of Directive 2011/93/EU,
+  // so the mechanism may not REQUIRE identification. A form that demands an
+  // address before it will take that report does not comply, and this is the
+  // assertion that stops somebody tidying the two branches into one.
+  is("16(2)(c): a report may be made anonymously", faults({ ...REPORT, email: "" }), []);
+  is("but every other topic still needs an address", faults({ ...OK, email: "" }), ["email"]);
+  // And a bad address is still a bad address even where one is optional: an
+  // unreachable reply-to is worse than none, because he would try it.
+  is("an anonymous report may not carry a broken address", faults({ ...REPORT, email: "not an address" }), ["email"]);
+  // Article 16(2)(a) wants a SUBSTANTIATED explanation, so the report prompt
+  // has to ask for one. "Tell us what's wrong" does not.
+  ok("the report asks why it is illegal, not what is wrong",
+     /illegal/i.test(messagePrompt(REPORT_TOPIC)) && messagePrompt(REPORT_TOPIC) !== messagePrompt("question"));
+  ok("and the good-faith wording is one readable sentence",
+     GOOD_FAITH_STATEMENT.length > 30 && GOOD_FAITH_STATEMENT.length < 200 && /good faith/i.test(GOOD_FAITH_STATEMENT));
+
+  // ── THE ROW IS AN ALLOW-LIST ───────────────────────────────────────
+  // A form is the one place in this app where a stranger controls the object,
+  // so "everything in the form" is the wrong write. Same rule as shapeForLive.
+  {
+    const row = supportPayload({ ...OK, is_admin: true, handled: true, id: 7, evil: "x" }, { reference: "GX-AAAAAA", at: "2026-08-25T00:00:00.000Z" });
+    is("only the named fields reach the database", Object.keys(row).sort(), ["created_at", "email", "message", "reference", "topic"]);
+    ok("so nothing a stranger invented rides along", !("is_admin" in row) && !("evil" in row) && !("id" in row) && !("handled" in row));
+    // No `page`: a second collection point bought for a fact the person can type.
+    ok("and there is no quiet record of where they came from", !("page" in row));
+  }
+  {
+    const row = supportPayload(REPORT, { reference: "GX-BBBBBB" });
+    ok("a report carries its location and its statement", row.url === REPORT.url && row.good_faith === true);
+    // Storing a good-faith flag against a message where nobody was asked for
+    // one would record a statement that was never made.
+    const plain = supportPayload(OK, { reference: "GX-CCCCCC" });
+    ok("and a question carries neither", !("url" in plain) && !("good_faith" in plain));
+  }
+  ok("an absent address is stored as null, not as an empty string",
+     supportPayload({ ...REPORT, email: "" }).email === null);
+
+  // ── THE REFERENCE IS READ OFF A SCREEN AND TYPED INTO AN EMAIL ─────
+  {
+    const refs = Array.from({ length: 200 }, () => supportReference());
+    ok("every reference has the same shape", refs.every(r => /^GX-[A-Z0-9]{6}$/.test(r)));
+    // 0/O and 1/I/L are the four characters that get typed wrong off a screen.
+    ok("and none of them uses a character people mistype", refs.every(r => !/[01OIL]/.test(r.slice(3))));
+    ok("and they are not all the same", new Set(refs).size > 150);
+  }
+
+  // ── THE FALLBACK CARRIES THE WHOLE MESSAGE ─────────────────────────
+  // If the insert fails the person is holding something they already wrote, and
+  // it must not evaporate.
+  {
+    const tricky = { ...OK, message: "The price says 60 DKK & the sign says 80. Which is right? #confused" };
+    const href = supportMailto(tricky, "GX-DDDDDD");
+    ok("the mailto reaches a real inbox", href.startsWith(`mailto:${SUPPORT_EMAIL}?`));
+    // ── PARSED THE WAY A MAIL CLIENT PARSES IT, NOT PATTERN MATCHED ──
+    //
+    // The first version of this looked for an unencoded ampersand with a
+    // regex and it SURVIVED the mutation that removed the encoding, because
+    // the text after the "&" happened not to look like another parameter.
+    // An assertion about a URL that does not use a URL parser is guessing at
+    // what the browser will do.
+    //
+    // AN UNENCODED AMPERSAND ENDS THE QUERY STRING. A complaint reaching him
+    // as "The price says 60 DKK" and stopping there is the worst kind of bug
+    // in this file: the sender saw their whole message in the box and has no
+    // way to know only a fifth of it arrived.
+    const body = new URL(href).searchParams.get("body") || "";
+    ok("and the mail client is handed every word of it",
+       body.includes("60 DKK & the sign says 80") && body.includes("#confused"));
+    ok("a hash does not become a fragment either", !href.includes("#"));
+    ok("the reference is in the subject, so a reply can be matched up", href.includes(encodeURIComponent("GX-DDDDDD")));
+  }
+  ok("a data request goes to the privacy address instead",
+     supportMailto({ ...OK, topic: "privacy" }, "GX-EEEEEE").startsWith(`mailto:${PRIVACY_EMAIL}?`));
+  ok("and a report carries its location and statement into the mail",
+     decodeURIComponent(supportMailto(REPORT, "GX-FFFFFF")).includes(REPORT.url));
+
+  // ── THE CONFIRMATION MAY NOT SAY MORE THAN IS TRUE ─────────────────
+  //
+  // Article 16(4) makes the screen a confirmation of receipt, which is why the
+  // reference is shown and not merely stored. It is also the screen where the
+  // pull to sound like a company is strongest, and NOTHING IN THIS APP SENDS
+  // EMAIL: the only mail Gemlyx has ever sent is Supabase's own signup
+  // confirmation through Supabase's SMTP.
+  {
+    const all = [supportReceipt(OK, "GX-1"), supportReceipt(REPORT, "GX-2"), supportReceipt({ ...REPORT, email: "" }, "GX-3")];
+    const text = all.map(r => [r.title, ...r.lines].join(" ")).join(" ");
+    ok("every receipt shows the reference", all.every((r, i) => r.lines.join(" ").includes(`GX-${i + 1}`)));
+    ok("none of them claims an email was sent", !/we (have )?(sent|emailed)|check your (inbox|email)|confirmation email/i.test(text));
+    ok("none of them promises a time", !/\b\d+\s*(hour|hours|day|days|working day|business day)\b/i.test(text));
+    ok("and none of them says 'our team'", !/\bour team\b|\bthe team\b/i.test(text));
+    ok("the report receipt says a person decides, not a system",
+       /one person|a person/i.test(supportReceipt(REPORT, "GX-2").lines.join(" ")));
+    // The Article 16(2)(c) carve-out has a cost and the person taking it has to
+    // be told what it is, at the moment they have taken it.
+    ok("an anonymous report is told nobody can reply to it",
+       /no way to tell you|cannot|no address/i.test(supportReceipt({ ...REPORT, email: "" }, "GX-3").lines.join(" ")));
+  }
+
+  // ── THE TABLE MAY NOT BE READABLE BY THE PUBLIC KEY ────────────────
+  //
+  // The anon key ships in the bundle, so it is not a secret and never was. A
+  // select policy on this table would publish every message and every address
+  // in it to anybody who opened the developer console. gemlyx_suggestions can
+  // survive that; an inbox holding somebody's address next to a complaint about
+  // a named business cannot.
+  {
+    const sql = SUPPORT_SETUP_SQL;
+    ok("the setup SQL creates the table", /create table if not exists public\.gemlyx_support/i.test(sql));
+    ok("and turns row level security on", /alter table public\.gemlyx_support enable row level security/i.test(sql));
+    ok("and grants insert", /create policy [^\n]*\n?\s*for insert/i.test(sql));
+    ok("and grants NOTHING to read", !/for select/i.test(sql));
+    ok("it is safe to run twice", /if not exists/.test(sql) && /drop policy if exists/.test(sql));
+    ok("the message column cannot be null", /message\s+text not null/i.test(sql));
+  }
+
+  // ── THE PAGE ITSELF ────────────────────────────────────────────────
+  {
+    const page = stripComments(readFileSync(join(root, "src/components/SupportPage.jsx"), "utf8"));
+    // REAL FORM ELEMENTS, which is the whole accessibility argument. 24 Aug:
+    // tabIndex used zero times in the repo, 37 clickable divs in App.jsx, 38
+    // instances of `outline: none`. theme.js's FIELD_CSS already paints every
+    // real input with the border and focus ring Oliver's father asked for, and
+    // a div dressed as a textarea gets none of it.
+    [["<form", "a form"], ["<label", "labels"], ["<input", "inputs"], ["<textarea", "a textarea"], ["<select", "a select"], ["type=\"submit\"", "a submit button"]]
+      .forEach(([needle, what]) => ok(`the page is built from ${what}`, page.includes(needle)));
+    ok("and it suppresses no focus ring anywhere", !/outline\s*:\s*["']?none/.test(page));
+    ok("every field is tied to its label", (page.match(/htmlFor=/g) || []).length >= 4);
+    // A fault has to be announced, not only coloured. Somebody who cannot see
+    // the red still has to learn WHICH box is wrong.
+    ok("a fault is announced as well as shown", /role="alert"/.test(page) && /aria-describedby/.test(page) && /aria-invalid/.test(page));
+    // Only a 2xx means stored. A table that does not exist yet answers with a
+    // 404 that JSON.parse would read as a body, and the message would be lost.
+    ok("only a real success is treated as sent", /res\.ok \? .*supportReceipt/.test(page) || /if \(res\.ok\) setDone\(\{ ok: true/.test(page));
+    ok("and every other outcome keeps the message", (page.match(/supportMailto\(form, reference\)/g) || []).length === 2);
+    ok("the failure screen says nothing was recorded", /Nothing was recorded/.test(page));
+
+    // ── AND THE POLICY HAS TO KNOW THE PAGE EXISTS ────────────────
+    //
+    // privacy.html, in its own words: "A privacy commitment which quietly
+    // ceases to be accurate is worse than one never given." A form collecting
+    // an address and free text is a new collection point, so the notice that
+    // enumerates every collection point has to enumerate this one. The version
+    // is asserted alongside, because a changed notice carrying an unchanged
+    // version number cannot be verified by the person reading it, which is
+    // what the version is for.
+    {
+      const policy = readFileSync(join(root, "public/privacy.html"), "utf8");
+      ok("the privacy notice describes the contact page", /contact page/i.test(policy) && /\/support/.test(policy));
+      ok("and names the regulation the report route answers to", /2022\/2065/.test(policy));
+      ok("and states a legal basis for it", /Answering a message sent through the contact page/.test(policy));
+      ok("and how long a message is kept", /Messages sent through the contact page/.test(policy));
+      ok("and the version moved when the notice did", /Version 2\.3/.test(policy) && /What changed in version 2\.3/.test(policy));
+      // The one promise the form itself makes, checked against the notice
+      // rather than assumed: the page tells the reader it is not recording
+      // where they came from, so the notice must not describe one either.
+      ok("neither document claims a referrer is stored", /page from which you arrived is not recorded/i.test(policy));
+    }
+
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the page has a real address", /export const SUPPORT_PATH = "\/support";/.test(app));
+    ok("routed to the standalone page", /<Route path=\{SUPPORT_PATH\} element=\{<SupportPage \/>\} \/>/.test(app));
+    // DSA Article 16 wants the mechanism "easy to access". A route nothing links
+    // to is a route nobody finds, which is this repository's oldest defect:
+    // finished, correct code that nothing calls.
+    ok("and something on the site actually links to it", /href=\{SUPPORT_PATH\}/.test(app));
+  }
+}
+
+
+// ══ A REWRITE MAY NOT CHANGE THE LANGUAGE IT WAS HANDED ═══════════════
+//
+// 25 Aug 2026. Three passes rewrite guide prose AFTER the guide has been
+// written in the traveller's language, and a fourth composes fresh prose for
+// the preview screen. None of the four said a word about language, so a German
+// guide could come back with one field, or its headline, in English.
+{
+  const { keepLanguageOf } = M;
+  const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+
+  // ── THE INSTRUMENT ─────────────────────────────────────────────────
+  //
+  // The obvious repair was to append writeInLanguage() and it is wrong in BOTH
+  // directions: with an English browser and a German guide no block is added at
+  // all and the bug survives, and with a German browser and an English guide the
+  // block FLIPS a correct English field into German. Both failures have one
+  // root, that the browser tag answers a question a rewrite is not asking.
+  //
+  // So the rule for this instrument is that it must not depend on the browser,
+  // and these assertions are that rule rather than a check on its wording.
+  {
+    const a = keepLanguageOf("the text below");
+    ok("it says to answer in the language it was handed", /SAME LANGUAGE AS THE TEXT BELOW/.test(a));
+    ok("and it names the source it means", a.includes("THE TEXT BELOW"));
+    ok("a different source is named differently", keepLanguageOf("the current title below").includes("THE CURRENT TITLE BELOW"));
+    // THE WHOLE POINT, and the assertion that fails if somebody "improves" this
+    // by wiring it to the reader's language the way everything else here is.
+    ok("it never mentions the browser", !/browser|navigator|tag is set/i.test(a));
+    // `keepLanguageOf.length` was the first version of this and it is INERT:
+    // Function.length counts parameters before the first default, and `what`
+    // has one, so it reads 0 whatever else is added. The mutation that wired
+    // this to the browser walked straight past it. The rule is about the
+    // function BODY, so it is read from the source.
+    {
+      const rl = readFileSync(join(root, "src/utils/readerLanguage.js"), "utf8");
+      const at = rl.indexOf("export const keepLanguageOf");
+      const body = at === -1 ? "" : rl.slice(at, at + 900);
+      ok("the instrument exists in the file", body.length > 200);
+      ok("and its body never reaches for the reader's language",
+         !/readerLanguage|navigator|lang\.name|lang\?\./.test(body));
+    }
+    // Pure: same input, same output, whatever the environment is doing. A
+    // navigator-dependent version of this would differ between these two calls
+    // on a machine set to anything but English.
+    is("it is the same string every time", keepLanguageOf("x"), keepLanguageOf("x"));
+    ok("it forbids translating in EITHER direction", /either direction/i.test(a));
+    // A rewrite that keeps the language and translates the station name is the
+    // 17 August bug wearing a different hat.
+    ok("and names and prices still stay put", /place names/i.test(a) && /prices/i.test(a));
+    ok("it is one paragraph, not an essay", a.length > 150 && a.length < 700 && !a.includes("\n\n"));
+  }
+
+  // ── THE RULE, ANCHORED ON THE WRITE AND NOT ON THE PROMPT ──────────
+  //
+  // Pinning the four prompts by their wording would be the assertion this repo
+  // keeps having to retire. So each anchor is the line that PUTS THE RESULT IN
+  // FRONT OF THE READER, and the rule is that the model call feeding it carries
+  // a language instruction. A fifth rewrite pass cannot be added without one,
+  // because it will have to store its answer somewhere.
+  const feedingCallHasLanguage = (anchor) => {
+    const out = [];
+    let from = 0;
+    for (;;) {
+      const at = app.indexOf(anchor, from);
+      if (at === -1) break;
+      from = at + anchor.length;
+      // Walk back to the model call that produced this value.
+      const head = app.slice(0, at);
+      const call = Math.max(head.lastIndexOf("askClaude("), head.lastIndexOf("askOpenAI("));
+      if (call === -1) continue;                       // not fed by a model at all
+      const between = app.slice(call, at);
+      out.push(/keepLanguageOf\(|languageBlock\(\)|guideLanguageBlock\(/.test(between));
+    }
+    return out;
+  };
+
+  [
+    ["a rewritten guide prose field", "writeGuideProseField("],
+    ["the retitled guide headline", "parsed.title = cleaned"],
+    ["the preview screen's own sentences", "setPreviewWhy(r.text"],
+  ].forEach(([what, anchor]) => {
+    const found = feedingCallHasLanguage(anchor);
+    ok(`${what} is written by a model at all`, found.length > 0);
+    ok(`and every call that writes ${what} is told which language to use`, found.every(Boolean));
+  });
+
+  // AND THE COUNT, so a fifth site cannot quietly appear with no instruction:
+  // three of these are rewrites and take the input-language rule, one composes
+  // fresh prose from the conversation and takes the reader's.
+  is("three passes rewrite text they were handed", (app.match(/keepLanguageOf\(/g) || []).length, 3);
+  ok("and each names its own source rather than sharing one string",
+     new Set(app.match(/keepLanguageOf\("([^"]*)"\)/g) || []).size === 3);
+
+  // ── AND THE RECORD IN readerLanguage.js SAID THEY WERE DONE ────────
+  // The file listed the four surfaces that had nothing on 22 August, then
+  // stopped. Three were fixed that day; the rewrite passes were not, and the
+  // paragraph read for three days as though they had been.
+  {
+    const rl = readFileSync(join(root, "src/utils/readerLanguage.js"), "utf8");
+    ok("the file no longer implies the rewrite passes were covered in August",
+       /THREE OF THOSE FOUR WERE FIXED THAT DAY/.test(rl));
+    ok("and it says where the reasoning for the new one lives", /keepLanguageOf/.test(rl));
+  }
+}
+
+
+// ══ THE SELF-CONTRADICTION CHECK COULD NOT SEE A CURLY QUOTE ══════════
+//
+// 25 Aug 2026, found by running it rather than reading it, while surveying for
+// the confidence-tier work. Two independent faults, either of which returns
+// "nothing wrong here" on a draft that contradicts itself.
+{
+  const { selfContra, AUDIT_PROSE_FIELDS, PROSE_LISTS } = M;
+  const CLAIM = "the oldest working bakery in Jutland";
+  const SAID  = `A real find: ${CLAIM}, still using the same oven.`;
+  const note  = (open, close) => `${open}${CLAIM}${close} could not be confirmed against any independent source.`;
+  const finds = (payload) => selfContra({ name: "T", ...payload }).length;
+
+  // ── FAULT ONE: THE QUOTE CLASS WAS ASCII ───────────────────────────
+  // `[""]` is two copies of the same straight quote. A note written with
+  // typographic quotes never matched, the claim was never extracted, and the
+  // check passed silently. Models write typographic quotes constantly.
+  const STYLES = [
+    ['"', '"', "straight quotes"],
+    ["“", "”", "typographic quotes"],
+    ["„", "”", "the Danish low-high pair"],
+    ["«", "»", "guillemets"],
+    ["**", "**", "markdown bold"],
+  ];
+  STYLES.forEach(([o, c, what]) =>
+    ok(`a retraction written with ${what} is read`, finds({ uncertainties: [note(o, c)], desc: SAID }) > 0));
+
+  // ── FAULT TWO: THE FIELD LIST MISSED THE LOUDEST FIELD ─────────────
+  // gemlyxFind is defined in the drafting prompt as the one curated
+  // recommendation only Gemlyx would make. An unsupportable superlative goes
+  // there FIRST, and it was not on the list. blogBody was not either, and after
+  // shapeForLive that is where most published prose lives.
+  const CURLY = note("“", "”");
+  ["desc", "gemlyxFind", "highlight", "special", "whatToDo", "atmosphere", "realityCheck"].forEach(f =>
+    ok(`a claim stated in ${f} is seen`, finds({ uncertainties: [CURLY], [f]: SAID }) > 0));
+  ok("a claim stated inside blogBody is seen",
+     finds({ uncertainties: [CURLY], blogBody: [{ heading: "Being There", paragraph: SAID }] }) > 0);
+  ok("and one in a thingsToKnow bullet",
+     finds({ uncertainties: [CURLY], thingsToKnow: ["Bring cash.", SAID] }) > 0);
+  // The shape is why it was missed: norm() of an object is "[object Object]",
+  // which reads as coverage and is none.
+  ok("gemlyxFind is on the list by name", AUDIT_PROSE_FIELDS.includes("gemlyxFind"));
+  ok("and the list-shaped prose is named separately rather than stringified",
+     PROSE_LISTS.includes("blogBody") && PROSE_LISTS.includes("thingsToKnow")
+     && !AUDIT_PROSE_FIELDS.includes("blogBody"));
+
+  // ── AND NONE OF THE WIDENING MAY MAKE IT FIRE ON A CORRECT DRAFT ───
+  // The gate's own comment: a gate that fires on its own fix teaches the
+  // pipeline to write worse in order to pass. Every one of these is a draft
+  // that has done the right thing.
+  is("an attributed claim is not a contradiction",
+     finds({ uncertainties: [CURLY], gemlyxFind: `Billed by its owners as ${CLAIM}.` }), 0);
+  is("nor is a claim the entry never makes", finds({ uncertainties: [CURLY], desc: "A nice bakery." }), 0);
+  is("nor a quoted line that retracts nothing",
+     finds({ uncertainties: [`“${CLAIM}” is lovely.`], desc: SAID }), 0);
+  is("nor an entry with no uncertainties at all", finds({ desc: SAID }), 0);
+  // A field that is the wrong shape must not throw, and must not pass by
+  // accident either: the string here contains no claim, so 0 is correct.
+  is("a blogBody that is not an array is survived", finds({ uncertainties: [CURLY], blogBody: "not an array" }), 0);
+  is("and one full of nulls", finds({ uncertainties: [CURLY], blogBody: [null, undefined, {}] }), 0);
+  // THE ONE THAT PROVES THE FLATTENING IS REAL rather than a stringify that
+  // happens to contain the words: an object whose paragraph holds the claim is
+  // caught, and "[object Object]" could never contain it.
+  ok("the flattening reads the paragraph, not the object",
+     finds({ uncertainties: [CURLY], blogBody: [{ heading: "x", paragraph: SAID }] }) > 0);
+}
+
+
+// ══ ITEM 9: HOW DO WE KNOW THIS ═══════════════════════════════════════
+//
+// ChatGPT asked for confidence tiers in the fifty point review. Gemini arrived
+// at the same idea independently. Four corners of it were already built here on
+// four separate days: MEASURED_FIELDS, __priceSource, safetyClaims, __sources,
+// factAge. utils/evidence.js is the system half; the render is deliberately not
+// built, because "never give an estimate the visual authority of a measurement"
+// is a decision about a page that Oliver should make with his eyes.
+{
+  const {
+    EVIDENCE, EVIDENCE_RANK, EVIDENCE_LABEL, fieldSourceKey, PERISHABLE_FIELD_TOPIC,
+    isPerishable, evidenceOf, entryEvidence, evidenceCounts, unbackedPerishables,
+    weakestClaim, evidenceNote, PERISHABLE_TOPICS_USED, PAGE_SCAN_TOPICS,
+  } = M;
+  const src = readFileSync(join(root, "src/utils/evidence.js"), "utf8");
+  const code = stripComments(src);
+  const tierOfField = (row, f) => evidenceOf(row, f)?.tier;
+
+  // ── IT MAY NOT KEEP A VOCABULARY OF ITS OWN ────────────────────────
+  //
+  // The defect this module exists to end is five separate lists over one field
+  // namespace with invisible gaps between them. A sixth list makes that worse,
+  // so every list is imported and this is the assertion that keeps it so.
+  ["MEASURED_FIELDS", "NOT_A_CLAIM", "SAFETY_CLAIM_FIELDS", "PERISHABLE"].forEach(name => {
+    ok(`${name} is imported, not restated`,
+       new RegExp(`import \\{[^}]*\\b${name}\\b`).test(code) && !new RegExp(`(?:const|let)\\s+${name}\\s*=`).test(code));
+  });
+  // AND THE ONE LIST IT DOES DECLARE ANSWERS TO AN EXISTING ONE. Every topic
+  // used here is a topic pageScan already names, so the two cannot drift into
+  // disagreeing about what "goes out of date" means.
+  const invented = PERISHABLE_TOPICS_USED.filter(t => !PAGE_SCAN_TOPICS.includes(t));
+  is("every perishable topic is one pageScan already names", invented, []);
+  ok("and there are topics in use at all", PERISHABLE_TOPICS_USED.length >= 4);
+
+  // ── AND IT MAY NOT GROW A CONFIDENCE SCORE ─────────────────────────
+  //
+  // The obvious build is a number from 0 to 1. It would be a guess wearing the
+  // costume of a measurement, which is the failure this whole repository is
+  // built to prevent, and nobody could ever say why a field scored 0.72. The
+  // ranks here are an ORDER, not a quantity: four small integers with names.
+  ok("the ranks are whole numbers, not a score", Object.values(EVIDENCE_RANK).every(v => Number.isInteger(v) && v >= 0 && v <= 4));
+  ok("and nothing here computes a percentage or a fraction",
+     !/confidence|score|\bpercent|\* ?100\b|toFixed\(/i.test(code));
+
+  // ── THE FOUR TIERS, ON ONE FIELD, FOUR WAYS ────────────────────────
+  // The same claim, four rows, four answers. A module that returned one tier
+  // for everything would satisfy any single one of these.
+  const P = "60 DKK";
+  is("nothing recorded at all", tierOfField({ price: P }, "price"), EVIDENCE.UNSOURCED);
+  is("the entry was researched but this line is untied",
+     tierOfField({ price: P, __sources: ["https://bybjerg.dk"] }, "price"), EVIDENCE.SOURCED);
+  is("a page is recorded for this field itself",
+     tierOfField({ price: P, __priceSource: "https://bybjerg.dk/priser" }, "price"), EVIDENCE.CITED);
+  is("and a field the pipeline measured", tierOfField({ travelTime: "1h 20min" }, "travelTime"), EVIDENCE.MEASURED);
+  ok("they are strictly ordered",
+     EVIDENCE_RANK[EVIDENCE.MEASURED] > EVIDENCE_RANK[EVIDENCE.CITED]
+     && EVIDENCE_RANK[EVIDENCE.CITED] > EVIDENCE_RANK[EVIDENCE.SOURCED]
+     && EVIDENCE_RANK[EVIDENCE.SOURCED] > EVIDENCE_RANK[EVIDENCE.UNSOURCED]);
+  // A recorded source that is not a URL is not a source. The 7 August photo
+  // lesson and hasEntrySources both already say this one field over.
+  is("a source that is not a URL does not count",
+     tierOfField({ price: P, __sources: ["I read the sign outside"] }, "price"), EVIDENCE.UNSOURCED);
+  ok("and the citation comes back so a render can link it",
+     evidenceOf({ price: P, __priceSource: "https://x.dk/p" }, "price").source === "https://x.dk/p");
+  is("the source key is derived, not hand-written per field", fieldSourceKey("accessibility"), "__accessibilitySource");
+
+  // ── A `__` FIELD IS THE EVIDENCE, NOT THE CLAIM ────────────────────
+  // Caught by running it: isPipelineOwned answers true for anything starting
+  // `__`, so the first version reported __sources as a MEASURED claim and
+  // listed the URL on the page beside the price it is the source for.
+  is("__sources makes no claim about the place", tierOfField({ __sources: ["https://x.dk"] }, "__sources"), EVIDENCE.NOT_A_CLAIM);
+  is("nor does __priceSource", tierOfField({ __priceSource: "https://x.dk" }, "__priceSource"), EVIDENCE.NOT_A_CLAIM);
+  ok("and neither is ever listed for a row",
+     !entryEvidence({ price: P, __sources: ["https://x.dk"], __priceSource: "https://x.dk/p" }).some(e => e.field.startsWith("__")));
+  // Nor is a slug or an emoji, which is what stops the render printing
+  // "Unverified" under a colour swatch.
+  ["slug", "emoji", "photo", "color", "themes"].forEach(f =>
+    is(`${f} makes no claim either`, tierOfField({ [f]: "x" }, f), EVIDENCE.NOT_A_CLAIM));
+  // BUT lat IS ON BOTH LISTS and it IS a claim about the world, measured. The
+  // order of the two checks is what decides this, so it is asserted rather than
+  // left to whichever happens to run first.
+  is("a coordinate is measured, not filed away", tierOfField({ lat: 55.9 }, "lat"), EVIDENCE.MEASURED);
+
+  // ── NOTHING TO ASSESS IS NOT A PROBLEM ─────────────────────────────
+  is("an absent field has no evidence", evidenceOf({ desc: "x" }, "nope"), null);
+  is("nor an empty one", evidenceOf({ desc: "   " }, "desc"), null);
+  is("nor an empty array", evidenceOf({ thingsToKnow: [] }, "thingsToKnow"), null);
+  is("and a row that is not an object survives", entryEvidence(null), []);
+  is("as does a string", entryEvidence("nope"), []);
+
+  // ── THE SECOND AXIS, WHICH IS WHY ONE TIER IS NOT ENOUGH ───────────
+  // "Founded 1891, unsourced" and "opening hours, unsourced" are the same tier
+  // and not the same problem: one was right or wrong the day it was written,
+  // the other is decaying while you read it.
+  ok("a price goes out of date", isPerishable("price"));
+  ok("so do opening hours and a ticket status", isPerishable("openingHours") && isPerishable("ticketStatus"));
+  ok("a description does not", !isPerishable("desc"));
+  ok("nor a coordinate", !isPerishable("lat"));
+  ok("every perishable field names which kind of fact it is",
+     Object.values(PERISHABLE_FIELD_TOPIC).every(t => typeof t === "string" && t.length > 2));
+  // Measured AND perishable is a real combination, not a contradiction: we
+  // checked it, and it will still go stale. That is what factAge is for.
+  {
+    const e = evidenceOf({ travelTime: "1h 20min" }, "travelTime");
+    ok("a measured field can still decay", e.tier === EVIDENCE.MEASURED && e.perishable === true);
+  }
+
+  // ── THE PAIR THAT ACTUALLY MATTERS ─────────────────────────────────
+  // Until now the sources gate saw the first half and factAge saw the second
+  // half and nothing saw both.
+  {
+    const bad = { price: P, openingHours: "10-16", desc: "A small museum." };
+    is("unsourced and perishable is named", unbackedPerishables(bad).map(e => e.field).sort(), ["openingHours", "price"]);
+    ok("and the merely unsourced prose is not", !unbackedPerishables(bad).some(e => e.field === "desc"));
+    is("a cited price is not on the list", unbackedPerishables({ ...bad, __priceSource: "https://x.dk/p", openingHours: "" }).length, 0);
+    // THE NOTE, in the shouted form correction.js protects from a rewrite.
+    ok("publishing raises a note about it", evidenceNote(bad).startsWith("CHECK BEFORE PUBLISHING"));
+    ok("and it names the fields", /price/.test(evidenceNote(bad)) && /openingHours/.test(evidenceNote(bad)));
+    is("a clean row raises nothing", evidenceNote({ desc: "A small museum.", __sources: ["https://x.dk"] }), "");
+    // The prefix is not decoration: correction.js's SHOUTED_NOTE recognises
+    // exactly these openings and refuses to let a model tidy them away.
+    const corr = readFileSync(join(root, "src/utils/correction.js"), "utf8");
+    ok("and correction.js is the thing that recognises that prefix", /CHECK BEFORE PUBLISHING/.test(corr));
+  }
+
+  // ── WEAKEST FIRST, AND SAFETY AHEAD OF SCHEDULE ────────────────────
+  // The order is the render's instruction about what to say first, so it has to
+  // encode what costs most to be wrong about rather than what sorts early.
+  {
+    const row = { name: "Bybjerg", accessibility: "Step-free throughout.", price: P,
+                  openingHours: "10-16", desc: "A small museum.", lat: 55.9, travelTime: "1h" };
+    const order = entryEvidence(row);
+    ok("the list runs weakest first", order.every((e, i) => i === 0 || order[i - 1].rank <= e.rank));
+    is("and the weakest thing here is the access claim", weakestClaim(row).field, "accessibility");
+    ok("which is flagged as a safety claim", order[0].safety === true);
+    // A wrong opening hour costs an hour. A wrong access claim costs a
+    // wheelchair user their afternoon, so at equal evidence it goes first.
+    const aAt = order.findIndex(e => e.field === "accessibility");
+    const pAt = order.findIndex(e => e.field === "price");
+    ok("ahead of an equally unsourced price", aAt < pAt);
+    // Four, not three: name is filed under NOT_A_CLAIM and drops out, leaving
+    // accessibility, price, openingHours and desc. Counted wrong the first time
+    // and the suite said so, which is the only reason to write the number down
+    // rather than assert "some".
+    is("nothing on this row is well evidenced except what was measured",
+       evidenceCounts(row), { measured: 2, cited: 0, sourced: 0, unsourced: 4 });
+    is("and a row with nothing on it counts nothing",
+       evidenceCounts({}), { measured: 0, cited: 0, sourced: 0, unsourced: 0 });
+    is("weakestClaim of an empty row is null, which is an answer", weakestClaim({}), null);
+  }
+
+  // ── EVERY TIER CAN BE SAID OUT LOUD ────────────────────────────────
+  // The test of whether a tier is honest: if you cannot say it to the person
+  // relying on it, the tier is wrong.
+  Object.values(EVIDENCE).filter(t => t !== EVIDENCE.NOT_A_CLAIM).forEach(t =>
+    ok(`${t} has a word a reader would understand`, (EVIDENCE_LABEL[t] || "").length > 3));
+  ok("and every answer explains itself in a sentence",
+     entryEvidence({ price: P, desc: "x", lat: 55.9 }).every(e => e.why.length > 25 && /\.$/.test(e.why)));
+  // WORD BOUNDARIES, because the first version of this failed on "Unverified"
+  // for containing "verified" and was refusing the one label that promises
+  // least. A rule that fires on its own best case is not a rule.
+  ok("no tier label promises more than the tier has",
+     !/\bverified|\bconfirmed|\bguaranteed|\baccurate/i.test(Object.values(EVIDENCE_LABEL).join(" ")));
+  ok("and the weakest label still says so plainly", /^Unverified$/.test(EVIDENCE_LABEL[EVIDENCE.UNSOURCED]));
+}
+
+
+// ══ A CONSTRAINT THE TRAVELLER STATED IS NOT A SUGGESTION ═════════════
+//
+// 25 Aug 2026, built from Layla's own reviews. Three of its seven recurring
+// complaints are one defect: a person said a thing, the model was told, and the
+// itinerary broke it anyway. "Wanted a train trip, kept being routed through
+// airports." "Asked for Faro, repeatedly got Lisbon." "Entered hotels we'd
+// already booked; it replaced them with completely different ones."
+//
+// This repository already had the sentence for it, written on 24 August about
+// api/directions and api/search: A CONSTRAINT SENT IS NOT A CONSTRAINT
+// HONOURED. Three API constraints were audited that day. The traveller's own
+// were never audited at all, and they are the ones people cancel over.
+{
+  const { constraintViolations, violationsOfKind, constraintNote, repairWorked, INVENTORY_MAY_NOT_SELECT } = M;
+  const stop = (name, town) => ({ name, town, arrivalTime: "9:00", suggestedStay: "1 hour", note: "x" });
+  const day = (n, stops, glance) => ({ day: n, title: `Day ${n}`, stops, glance: glance || {} });
+  const guide = {
+    _arrivalDate: "2026-10-10",
+    days: [
+      day(1, [stop("Ribe Domkirke", "Ribe")], { recommendedStay: "Hotel Dagmar", legs: [{ how: "~25 min by car" }] }),
+      day(2, [stop("Sønderho", "Fanø")], { recommendedStay: "Hotel Dagmar", legs: [{ how: "12 min ferry from Esbjerg" }] }),
+    ],
+  };
+  const kinds = (v) => v.map(x => x.kind).sort();
+
+  // ── A CLEAN GUIDE AGAINST REAL CONSTRAINTS ─────────────────────────
+  is("a guide that honours everything reports nothing",
+     constraintViolations(guide, { excluded: ["Copenhagen"], stay: { name: "Hotel Dagmar" }, maxBases: 3,
+                                   dates: { from: "2026-10-10", to: "2026-10-17" } }), []);
+  is("and no constraints at all is not a violation", constraintViolations(guide, {}), []);
+  is("nor is a guide that is not an object", constraintViolations(null, { excluded: ["Copenhagen"] }), []);
+  is("nor constraints that are not one", constraintViolations(guide, null), []);
+
+  // ── "ASKED FOR FARO, REPEATEDLY GOT LISBON" ────────────────────────
+  {
+    const withCph = { ...guide, days: [...guide.days, day(3, [stop("Nyhavn", "Copenhagen")], {})] };
+    const v = constraintViolations(withCph, { excluded: ["Copenhagen"] });
+    is("a place they ruled out is caught", kinds(v), ["excluded"]);
+    ok("and the report says what they said and what it found",
+       !!v[0] && v[0].said === "Copenhagen" && /Nyhavn/.test(v[0].found || "") && /did not want Copenhagen/.test(v[0].why || ""));
+    // A WORD, NOT A SUBSTRING. An excluded "Als" must not fire on "Falster",
+    // and "Ribe" must not fire on "Ribera".
+    is("an exclusion does not fire on a longer word that contains it",
+       constraintViolations({ days: [day(1, [stop("Falster Museum", "Falster")], {})] }, { excluded: ["Als"] }), []);
+    is("nor on a town whose name merely starts the same way",
+       constraintViolations({ days: [day(1, [stop("Ribera", "Ribera")], {})] }, { excluded: ["Ribe"] }), []);
+    // Danish letters folded, because "Nykobing" and "Nykøbing" are one place.
+    ok("but it does fire through a Danish letter",
+       constraintViolations({ days: [day(1, [stop("Torvet", "Nykøbing")], {})] }, { excluded: ["Nykobing"] }).length === 1);
+  }
+
+  // ── "WANTED A TRAIN TRIP, KEPT BEING ROUTED THROUGH AIRPORTS" ──────
+  {
+    const flying = { days: [day(1, [stop("A", "X")], { legs: [{ how: "1h 20min flight to Aalborg" }] })] };
+    const modeOf = (t) => /flight|fly|plane/i.test(t) ? "flight" : "car";
+    const v = constraintViolations(flying, { transport: { ruledOut: ["flight"] } }, { modeOf });
+    is("a mode they ruled out is caught", kinds(v), ["transport"]);
+    ok("and it is reported as NOT fixable, because the trip may need it", v[0]?.fixable === false);
+    is("a leg using an allowed mode is fine",
+       constraintViolations(guide, { transport: { ruledOut: ["flight"] } }, { modeOf }), []);
+    // THE RULE priceSource ALREADY FOLLOWS: a matcher that throws must not
+    // quietly clear every leg. A broken detector reports nothing rather than
+    // reporting everything is fine, and the difference is that it cannot mask.
+    const angry = () => { throw new Error("mode detector is broken"); };
+    let threw = false;
+    try { constraintViolations(flying, { transport: { ruledOut: ["flight"] } }, { modeOf: angry }); }
+    catch { threw = true; }
+    ok("a mode detector that throws does not take the audit down with it", !threw);
+    // READ THROUGH A GUARD, because an assertion that throws reports nothing.
+    // The mutation removing the try/catch killed the whole suite here instead of
+    // failing by name, which is the same defect entryAudit's `?.id` fixed this
+    // morning: a check that explodes teaches less than one that goes red.
+    {
+      let out = null; try { out = constraintViolations(flying, { transport: { ruledOut: ["flight"] } }, { modeOf: angry }); } catch { out = "THREW"; }
+      is("and it passes nothing rather than passing everything", out, []);
+    }
+    is("no detector at all is the same", constraintViolations(flying, { transport: { ruledOut: ["flight"] } }), []);
+  }
+
+  // ── THE ONE THAT HURT MOST IN THE REVIEWS ──────────────────────────
+  // "Entered hotels we had already booked. It recognised them in the chat and
+  // then omitted them, or replaced them with completely different hotels."
+  {
+    const elsewhere = { ...guide, days: guide.days.map(d => ({ ...d, glance: { ...d.glance, recommendedStay: "Hotel Ribe Byferie" } })) };
+    const v = constraintViolations(elsewhere, { stay: { name: "Hotel Dagmar" } });
+    is("a booked hotel replaced by another is caught", kinds(v), ["stay"]);
+    ok("and the sentence names both", /Hotel Dagmar/.test(v[0]?.why || "") && /Byferie/.test(v[0]?.why || ""));
+    // Omitted is the other half of the same complaint and is not the same bug.
+    const silent = { ...guide, days: guide.days.map(d => ({ ...d, glance: { legs: d.glance.legs } })) };
+    const v2 = constraintViolations(silent, { stay: { name: "Hotel Dagmar" } });
+    is("and a guide that says nothing about where you sleep is caught too", kinds(v2), ["stay"]);
+    // `v2[0]` unguarded took the suite down under the mutation that made an
+    // omitted hotel report nothing. Same guard, same reason.
+    ok("with a different sentence, because it is a different failure",
+       !!v2[0] && v2[0].why !== v[0]?.why && /says nothing about where you sleep/.test(v2[0].why || ""));
+    is("the booked hotel actually appearing is clean",
+       constraintViolations(guide, { stay: { name: "Hotel Dagmar" } }), []);
+  }
+
+  // ── "TWO OR THREE BASES IF YOU CAN" ────────────────────────────────
+  {
+    const many = { days: [1,2,3,4].map(n => day(n, [stop("A","X")], { recommendedStay: `Hotel ${n}` })) };
+    const v = constraintViolations(many, { maxBases: 3 });
+    is("more bases than they asked for is caught", kinds(v), ["bases"]);
+    ok("and it counts them", v[0]?.found === "4" && /3 times/.test(v[0]?.why || ""));
+    is("exactly the maximum is fine", constraintViolations(many, { maxBases: 4 }), []);
+    is("a nonsense maximum is ignored rather than obeyed", constraintViolations(many, { maxBases: 0 }), []);
+    // Sleeping in the same place twice is one base, not two.
+    is("the same hotel on two nights counts once", constraintViolations(guide, { maxBases: 1 }), []);
+  }
+
+  // ── DATES, WHICH LAYLA SCRAMBLES ON LONG TRIPS ─────────────────────
+  {
+    is("a guide built from the wrong day is caught",
+       kinds(constraintViolations({ ...guide, _arrivalDate: "2026-10-12" }, { dates: { from: "2026-10-10" } })), ["dates"]);
+    const long = { _arrivalDate: "2026-10-10", days: Array.from({ length: 9 }, (_, i) => day(i + 1, [stop("A","X")], {})) };
+    ok("and more days than the trip has",
+       violationsOfKind(constraintViolations(long, { dates: { from: "2026-10-10", to: "2026-10-17" } }), "dates")
+         .some(x => /8 days/.test(x.said) && /9 days/.test(x.found)));
+    // A Date object, not a string. readWhen hands back Dates and JSON.stringify
+    // renders them as ISO, which is how they got missed in briefPanel today.
+    is("a Date object is read the same as an ISO string",
+       constraintViolations(guide, { dates: { from: new Date("2026-10-10T00:00:00Z") } }), []);
+    is("fewer days than the span is not a violation, it is a short trip",
+       constraintViolations(guide, { dates: { from: "2026-10-10", to: "2026-10-17" } }), []);
+  }
+
+  // ── AND THE SENTENCE, WHICH IS THE DIFFERENCE ──────────────────────
+  // Layla ships the violation in silence, which is how "could not find a hotel
+  // nearby" becomes "recommended a hotel 100 miles away".
+  {
+    is("a clean guide says nothing", constraintNote([]), "");
+    const one = constraintViolations({ ...guide, days: [...guide.days, day(3, [stop("Nyhavn","Copenhagen")], {})] }, { excluded: ["Copenhagen"] });
+    ok("one violation is announced in the singular", /^One thing here/.test(constraintNote(one)));
+    ok("and it offers to rebuild, because it can", /rebuild around it/.test(constraintNote(one)));
+    const hard = [{ kind: "transport", said: "no flight", found: "x", why: "You ruled out flying.", fixable: false }];
+    ok("an unfixable one says so instead of promising a fix",
+       /could not build the trip without it/.test(constraintNote(hard)) && !/rebuild around it/.test(constraintNote(hard)));
+    ok("the note quotes the traveller back rather than naming a rule",
+       /what you told me/.test(constraintNote(one)) && !/violation|constraint|rule/i.test(constraintNote(one)));
+  }
+
+  // ── THE REPAIR GATE, titlePromises' RULE GENERALISED ───────────────
+  // App.jsx accepts a rewritten title only when the rewrite fixed the problem.
+  // A repair that leaves the violation in place spends a model call and moves
+  // the sentence around.
+  {
+    const broken = { ...guide, days: [...guide.days, day(3, [stop("Nyhavn","Copenhagen")], {})] };
+    const c = { excluded: ["Copenhagen"] };
+    ok("a repair that removed the problem is accepted", repairWorked(broken, guide, c));
+    ok("a repair that changed nothing is refused", !repairWorked(broken, broken, c));
+    ok("and one that made it worse is refused",
+       !repairWorked(guide, { ...broken, days: [...broken.days, day(4, [stop("Tivoli","Copenhagen")], {})] }, c));
+  }
+
+  // ── THE INVARIANT THAT IS ALREADY TRUE ─────────────────────────────
+  //
+  // Layla complaint 5: reviewers feel steered toward bookable inventory, and one
+  // says plainly that it "pushes hotels". That cannot happen here, because
+  // selection runs before affiliates are attached at all. It is true by accident
+  // of ordering, which is exactly how an invariant stops being true.
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    const start = app.indexOf('buildStage("Planning your itinerary structure"');
+    const end = app.indexOf('buildStage("Polishing the writing"');
+    ok("the planning and writing window is findable", start > 0 && end > start);
+    const window = app.slice(start, end);
+    INVENTORY_MAY_NOT_SELECT.forEach(name =>
+      ok(`no bookable inventory reaches the step that chooses places: ${name}`, !window.includes(name)));
+    ok("and there is enough of a window for that to mean something", window.length > 4000);
   }
 }
 

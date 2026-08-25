@@ -1,0 +1,446 @@
+<title>Copenhagen Doorstep Round</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800;900&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+
+<style>
+  :root {
+    --ground:    #F1F0EA;
+    --surface:   #FBFAF6;
+    --raise:     #E7E6DE;
+    --ink:       #141815;
+    --ink-soft:  #4A524C;
+    --ink-faint: #7C857E;
+    --rule:      #D6D6CC;
+    --green:     #1F4A38;
+    --green-ink: #FFFFFF;
+    --brass:     #8A6A1E;
+    --brass-bg:  #F0E6CC;
+    --green-bg:  #DCE8E1;
+    --shadow:    0 1px 2px rgba(20,24,21,.06), 0 8px 20px -12px rgba(20,24,21,.18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:    #10140F;
+      --surface:   #171C18;
+      --raise:     #1F2620;
+      --ink:       #E9EBE5;
+      --ink-soft:  #A9B2AB;
+      --ink-faint: #78827B;
+      --rule:      #2A322C;
+      --green:     #6DB292;
+      --green-ink: #0C110E;
+      --brass:     #D6AC5A;
+      --brass-bg:  #2C2617;
+      --green-bg:  #16281F;
+      --shadow:    0 1px 2px rgba(0,0,0,.4), 0 8px 20px -12px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:    #10140F;
+    --surface:   #171C18;
+    --raise:     #1F2620;
+    --ink:       #E9EBE5;
+    --ink-soft:  #A9B2AB;
+    --ink-faint: #78827B;
+    --rule:      #2A322C;
+    --green:     #6DB292;
+    --green-ink: #0C110E;
+    --brass:     #D6AC5A;
+    --brass-bg:  #2C2617;
+    --green-bg:  #16281F;
+    --shadow:    0 1px 2px rgba(0,0,0,.4), 0 8px 20px -12px rgba(0,0,0,.7);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .wrap { max-width: 660px; margin: 0 auto; padding: 0 18px 96px; }
+
+  /* ── sticky field nav ─────────────────────────────────── */
+  nav {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--ground);
+    border-bottom: 1px solid var(--rule);
+    margin: 0 -18px 26px;
+    padding: 9px 18px;
+  }
+  .navrow { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .navrow::-webkit-scrollbar { display: none; }
+  nav a {
+    flex: 0 0 auto;
+    font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ink-soft); text-decoration: none;
+    padding: 6px 11px; border: 1px solid var(--rule); border-radius: 999px;
+    background: var(--surface);
+  }
+  nav a:hover, nav a:focus-visible { color: var(--ink); border-color: var(--green); }
+
+  header { padding: 30px 0 8px; }
+  h1 {
+    font-size: clamp(30px, 8vw, 42px); font-weight: 900; line-height: 1.02;
+    letter-spacing: -.025em; margin: 0 0 10px; text-wrap: balance;
+  }
+  .stand { font-size: 15px; color: var(--ink-soft); margin: 0 0 4px; max-width: 46ch; }
+  .datestamp {
+    font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--brass); margin: 0 0 14px;
+  }
+
+  h2 {
+    font-size: 12px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 44px 0 14px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--rule);
+  }
+  h3 { font-size: 17px; font-weight: 700; margin: 0 0 6px; letter-spacing: -.01em; }
+  p { margin: 0 0 12px; }
+  .lede { font-size: 15px; }
+
+  /* ── the script, set in the reading serif so it is findable at a glance ── */
+  .script {
+    font-family: Newsreader, Georgia, serif;
+    font-size: 19px; line-height: 1.5;
+    background: var(--surface); border-left: 3px solid var(--green);
+    border-radius: 0 10px 10px 0;
+    padding: 16px 18px; margin: 0 0 12px;
+    box-shadow: var(--shadow);
+  }
+  .script .da { display: block; margin-bottom: 10px; }
+  .script .en { display: block; font-size: 15px; font-style: italic; color: var(--ink-soft); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 12px;
+    padding: 16px 17px; margin: 0 0 12px; box-shadow: var(--shadow);
+  }
+  .card p:last-child { margin-bottom: 0; }
+
+  /* ── the deal comparison ──────────────────────────────── */
+  .deals { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+  .deal {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 12px;
+    padding: 15px 16px; box-shadow: var(--shadow);
+  }
+  .deal.pick { border-color: var(--green); border-width: 2px; }
+  .deal-top { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; margin-bottom: 7px; }
+  .deal-name { font-size: 17px; font-weight: 800; letter-spacing: -.01em; }
+  .verdict {
+    font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 4px;
+    background: var(--green); color: var(--green-ink);
+  }
+  .verdict.soft { background: var(--raise); color: var(--ink-soft); }
+  .deal dl { margin: 9px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 14px; }
+  .deal dt {
+    font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--ink-faint); padding-top: 4px; white-space: nowrap;
+  }
+  .deal dd { margin: 0; color: var(--ink-soft); }
+
+  /* ── route ────────────────────────────────────────────── */
+  .stop {
+    display: grid; grid-template-columns: 34px 1fr; gap: 14px;
+    padding: 15px 0; border-bottom: 1px solid var(--rule);
+  }
+  .stop:last-child { border-bottom: none; }
+  .num {
+    font-size: 15px; font-weight: 900; font-variant-numeric: tabular-nums;
+    color: var(--green); line-height: 1.5; padding-top: 1px;
+  }
+  .addr {
+    font-size: 13px; color: var(--ink-soft); margin: 0 0 8px;
+    font-variant-numeric: tabular-nums;
+  }
+  .why { font-size: 14px; color: var(--ink-soft); margin: 0; }
+  .chips { display: flex; gap: 5px; flex-wrap: wrap; margin: 0 0 8px; }
+  .chip {
+    font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+    padding: 3px 7px; border-radius: 4px;
+  }
+  .chip.pitch { background: var(--green-bg); color: var(--green); }
+  .chip.photo { background: var(--brass-bg); color: var(--brass); }
+  .chip.est   { background: var(--raise); color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+  .leg {
+    font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--ink-faint); padding: 14px 0 4px;
+  }
+
+  /* ── objections ───────────────────────────────────────── */
+  .obj { margin-bottom: 16px; }
+  .obj .q {
+    font-family: Newsreader, Georgia, serif; font-size: 18px; font-style: italic;
+    color: var(--ink); margin: 0 0 7px;
+  }
+  .obj .a { font-size: 15px; color: var(--ink-soft); margin: 0; }
+  .obj .a strong { color: var(--ink); font-weight: 600; }
+
+  .warn {
+    background: var(--brass-bg); border: 1px solid var(--brass);
+    border-radius: 12px; padding: 15px 17px; margin: 0 0 12px;
+  }
+  .warn h3 { color: var(--brass); }
+  .warn p { color: var(--ink-soft); margin-bottom: 0; font-size: 15px; }
+
+  ul.tight { margin: 0; padding-left: 19px; }
+  ul.tight li { margin-bottom: 7px; font-size: 15px; color: var(--ink-soft); }
+  ul.tight li strong { color: var(--ink); font-weight: 600; }
+
+  footer {
+    margin-top: 46px; padding-top: 18px; border-top: 1px solid var(--rule);
+    font-size: 13px; color: var(--ink-faint);
+  }
+  footer a { color: var(--ink-soft); }
+  a { color: var(--green); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <nav>
+    <div class="navrow">
+      <a href="#ask">The ask</a>
+      <a href="#open">Opening</a>
+      <a href="#obj">Objections</a>
+      <a href="#route">The round</a>
+      <a href="#bring">Bring back</a>
+      <a href="#never">Never say</a>
+    </div>
+  </nav>
+
+  <header>
+    <p class="datestamp">Indre By &middot; 26 August 2026</p>
+    <h1>Copenhagen Doorstep Round</h1>
+    <p class="stand">Eleven stops in one loop. Six shops to pitch, seven Gemlyx entries that have never had a photograph taken of them, and one decision to make before you leave the flat.</p>
+  </header>
+
+  <h2 id="ask">Decide this before you go</h2>
+  <p class="lede">Three deals, and they are not variations on one thing. They put the risk in different places, and walking in undecided is how you get <em>let me think about it</em>.</p>
+
+  <div class="deals">
+    <div class="deal">
+      <div class="deal-top"><span class="deal-name">10% for Gemlyx users</span><span class="verdict soft">Easiest yes, weakest deal</span></div>
+      <p class="why">Costs them margin on people who would have walked in anyway. Costs you nothing, which is the problem: 10% off a bag of sweets is about five kroner, and nobody pays for a year of Gemlyx to save five kroner.</p>
+      <dl>
+        <dt>Their risk</dt><dd>Small but real, and it is theirs.</dd>
+        <dt>Your risk</dt><dd>None.</dd>
+      </dl>
+    </div>
+
+    <div class="deal pick">
+      <div class="deal-top"><span class="deal-name">500 kr up front, free bags until it runs out</span><span class="verdict">Lead with this</span></div>
+      <p class="why">You hand them 500 kroner today. Subscribers show the offer, take a bag, the shop counts them down. When the money is gone, the offer ends. <strong>They cannot lose on this, and that is the entire pitch.</strong> It is not a discount you are asking them to fund. It is a sale.</p>
+      <dl>
+        <dt>Their risk</dt><dd>Zero, by construction. It is revenue.</dd>
+        <dt>Your risk</dt><dd>Exactly 500 kr per shop and it cannot exceed that. Ten bags is the honest number, and ten is a fixed ceiling rather than an exposure.</dd>
+        <dt>Why it sells</dt><dd>A free bag from an 1891 royal-warrant shop is a reason to subscribe you can photograph and tell someone. A 10% discount is not.</dd>
+      </dl>
+    </div>
+
+    <div class="deal">
+      <div class="deal-top"><span class="deal-name">A proper write-up, no money either way</span><span class="verdict soft">The door, not the deal</span></div>
+      <p class="why">For six of the stops below you have already done this and they do not know. For the other five it is the offer that gets you past the counter. Either way it is what you open with, because it changes the conversation from a salesman asking for a discount into someone who already recommended them asking for one thing back.</p>
+    </div>
+  </div>
+
+  <h2 id="open">The first twenty seconds</h2>
+  <p class="lede">Two versions. The one that matters is the first, and the shop is already on Gemlyx.</p>
+
+  <div class="script">
+    <span class="da">&ldquo;Hej, jeg hedder Oliver. Jeg laver Gemlyx, en rejseguide til Danmark. I st&aring;r faktisk allerede p&aring; den, se her. Har du to minutter?&rdquo;</span>
+    <span class="en">Hi, I'm Oliver. I make Gemlyx, a travel guide to Denmark. You're already on it, look. Have you got two minutes?</span>
+  </div>
+
+  <p class="lede">And where they are not on it yet:</p>
+
+  <div class="script">
+    <span class="da">&ldquo;Hej, jeg hedder Oliver, og jeg laver en rejseguide til Danmark. Jeg vil gerne skrive om jer &mdash; ordentligt, ikke bare en adresse. Og s&aring; vil jeg gerne sp&oslash;rge om &eacute;n ting.&rdquo;</span>
+    <span class="en">Hi, I'm Oliver, I make a travel guide to Denmark. I'd like to write about you properly, not just an address. And then I'd like to ask you one thing.</span>
+  </div>
+
+  <div class="card">
+    <h3>Have the page open before you walk in</h3>
+    <p class="why">Not the front page. <strong>Their page</strong>, already loaded, screen brightness up. The gap between &ldquo;I have a website&rdquo; and &ldquo;here is what I have written about you&rdquo; is the whole meeting.</p>
+  </div>
+
+  <h2 id="obj">What they will say</h2>
+
+  <div class="obj">
+    <p class="q">&ldquo;What if people abuse it? Coming in again and again for a free bag?&rdquo;</p>
+    <p class="a">The one you predicted, and on the 500 kroner deal it has a clean answer: <strong>they cannot.</strong> You have prepaid a fixed number of bags. The shop counts them down and when they are gone the offer is over. Their exposure is zero whatever anybody does. Then, and only if they push further: the offer is visible only to people who have paid for a subscription, so the population that could try it is people who paid for the privilege. <strong>Do not lead with that second part.</strong> Offering to prevent abuse before they have raised it tells them there is an abuse problem.</p>
+  </div>
+
+  <div class="obj">
+    <p class="q">&ldquo;How many customers will this actually send me?&rdquo;</p>
+    <p class="a">You do not know, and you must say so. Gemlyx has no analytics at all &mdash; the tracker was removed on 23 August and the privacy policy says there is none. So: <strong>&ldquo;I can't tell you, because I don't track visitors. That's exactly why I'm paying you up front instead of promising you traffic.&rdquo;</strong> That sentence is worth more than any number you could invent, and it is the only version of it you can say honestly.</p>
+  </div>
+
+  <div class="obj">
+    <p class="q">&ldquo;Send me something and I'll look at it.&rdquo;</p>
+    <p class="a">The polite no. Take it, but not empty-handed: <strong>ask for the photograph before you go.</strong> It costs them nothing, almost nobody refuses, and it is the thing you actually came for. Then ask what year they opened and one thing about the shop nobody prints. You leave with the page improved whether or not the deal happens.</p>
+  </div>
+
+  <h2 id="route">The round</h2>
+  <p class="lede">Roughly 2.5&nbsp;km, walkable in a morning if nobody talks for long. Addresses are from the shops' own pages; the order is a suggestion, so check it against a map before you set off.</p>
+
+  <div class="leg">Start on Slotsholmen</div>
+
+  <div class="stop">
+    <div class="num">1</div>
+    <div>
+      <h3>Christiansborg</h3>
+      <p class="addr">Prins J&oslash;rgens G&aring;rd 1, 1218 K&oslash;benhavn K</p>
+      <div class="chips"><span class="chip photo">3 photos</span><span class="chip est">one stop</span></div>
+      <p class="why">Three separate Gemlyx entries and not one of them has a picture: <strong>the tower, Folketinget, and Slotshaven</strong>. All the same complex, so this is one walk that fixes three rows. The tower is free.</p>
+    </div>
+  </div>
+
+  <div class="leg">North into Indre By</div>
+
+  <div class="stop">
+    <div class="num">2</div>
+    <div>
+      <h3>Farfar's bodega</h3>
+      <p class="addr">Skindergade 20, 1159 K&oslash;benhavn K</p>
+      <div class="chips"><span class="chip pitch">Pitch</span><span class="chip photo">Photo</span></div>
+      <p class="why">On Gemlyx with eight sources and no photograph. A bodega is exactly the shape of business the 500 kroner deal suits. Note for later: this one is in the database twice, rows 127 and 128, identical.</p>
+    </div>
+  </div>
+
+  <div class="stop">
+    <div class="num">3</div>
+    <div>
+      <h3>Hive</h3>
+      <p class="addr">Skindergade 45, 1159 K&oslash;benhavn K</p>
+      <div class="chips"><span class="chip pitch">Pitch</span><span class="chip photo">Photo</span></div>
+      <p class="why">Same street, a hundred metres up. Eight sources, no photograph.</p>
+    </div>
+  </div>
+
+  <div class="stop">
+    <div class="num">4</div>
+    <div>
+      <h3>La Glace</h3>
+      <p class="addr">Skoubogade 3, 1158 K&oslash;benhavn K &middot; est. 1870</p>
+      <div class="chips"><span class="chip pitch">Pitch</span><span class="chip photo">Photo</span></div>
+      <p class="why">Not on Gemlyx. Denmark's oldest konditori, same interior since the 1890s, one location only and no intention of having another. If any shop in the city understands why you would rather pay up front than promise traffic, it is this one.</p>
+    </div>
+  </div>
+
+  <div class="stop">
+    <div class="num">5</div>
+    <div>
+      <h3>S&oslash;mods Bolcher</h3>
+      <p class="addr">N&oslash;rregade 36 B, 1165 K&oslash;benhavn K &middot; est. 1891</p>
+      <div class="chips"><span class="chip pitch">Pitch</span><span class="chip photo">Photo</span><span class="chip est">go 11:00 or 14:15</span></div>
+      <p class="why">The one you named. Royal warrant, open to 17:30. <strong>They run candy-making demonstrations at 10:15, 12:00, 13:30 and 15:00</strong>, which is the worst possible moment to ask an owner for a business conversation and the best possible moment to photograph the shop. Arrive between two of them and you get both.</p>
+    </div>
+  </div>
+
+  <div class="leg">East to K&oslash;bmagergade</div>
+
+  <div class="stop">
+    <div class="num">6</div>
+    <div>
+      <h3>Chapeaux Petitgas</h3>
+      <p class="addr">K&oslash;bmagergade 5, 1150 K&oslash;benhavn K &middot; est. 1857</p>
+      <div class="chips"><span class="chip pitch">Pitch</span><span class="chip photo">Photo</span></div>
+      <p class="why">Men's hats, in the same building since 1857. Small enough that the person behind the counter can say yes without asking anybody.</p>
+    </div>
+  </div>
+
+  <div class="stop">
+    <div class="num">7</div>
+    <div>
+      <h3>P. Hertz</h3>
+      <p class="addr">Kronprinsensgade, 1150 K&oslash;benhavn K &middot; est. 1834</p>
+      <div class="chips"><span class="chip pitch">Pitch</span></div>
+      <p class="why">Sixth-generation goldsmith, royal warrant since 1906. A free bag is the wrong offer here and a 10% discount is worse. This one is a write-up, and the ask is a photograph and the story.</p>
+    </div>
+  </div>
+
+  <div class="stop">
+    <div class="num">8</div>
+    <div>
+      <h3>Rundetaarn</h3>
+      <p class="addr">K&oslash;bmagergade 52A, 1150 K&oslash;benhavn K</p>
+      <div class="chips"><span class="chip photo">Photo</span></div>
+      <p class="why">On Gemlyx, three sources, no picture. You are walking past the door.</p>
+    </div>
+  </div>
+
+  <div class="leg">Toward Gothersgade</div>
+
+  <div class="stop">
+    <div class="num">9</div>
+    <div>
+      <h3>Kj&aelig;r og Sommerfeldt</h3>
+      <p class="addr">Gammel M&oslash;nt, 1117 K&oslash;benhavn K &middot; est. 1875</p>
+      <div class="chips"><span class="chip pitch">Pitch</span><span class="chip photo">Photo</span></div>
+      <p class="why">Wine merchant, royal warrant, 1,700 wines. The prepaid deal works here in a different currency: 500 kroner buys a tasting rather than a bag.</p>
+    </div>
+  </div>
+
+  <div class="stop">
+    <div class="num">10</div>
+    <div>
+      <h3>Gothersgade</h3>
+      <p class="addr">Gothersgade, 1123 K&oslash;benhavn K</p>
+      <div class="chips"><span class="chip photo">Photo</span></div>
+      <p class="why">A whole nightlife street entry with eight sources and no photograph. One good shot along the street after dark would carry it.</p>
+    </div>
+  </div>
+
+  <div class="stop">
+    <div class="num">11</div>
+    <div>
+      <h3>Davids Samling</h3>
+      <p class="addr">Kronprinsessegade 30, 1306 K&oslash;benhavn K</p>
+      <div class="chips"><span class="chip photo">Photo</span></div>
+      <p class="why">Eight sources, no picture, free entry. Last stop before you run out of daylight.</p>
+    </div>
+  </div>
+
+  <div class="leg">If there is time left, west of the lakes</div>
+
+  <div class="stop">
+    <div class="num">+</div>
+    <div>
+      <h3>Old Irish Pub &middot; JOJO &middot; Hyttefadet</h3>
+      <p class="addr">Vesterbrogade 2D &middot; Sundevedsgade 4 &middot; Nyhavn 25</p>
+      <div class="chips"><span class="chip pitch">Pitch</span><span class="chip photo">2 of 3 need photos</span></div>
+      <p class="why">All three already on Gemlyx. Hyttefadet has a photograph; the other two do not. None of them is on the loop above, so treat them as spares rather than planning around them.</p>
+    </div>
+  </div>
+
+  <h2 id="bring">What to bring back</h2>
+  <p class="lede">The deals may not happen. These four things cost the shop nothing, almost nobody refuses them, and every one of them fixes something that is currently wrong in the database.</p>
+  <ul class="tight">
+    <li><strong>A photograph.</strong> Sixty-two published entries have proper sources and no picture at all. Your camera is the only fix that exists for those.</li>
+    <li><strong>The founding year, from them.</strong> Not from a website. That is a citable source and it is the field the pipeline keeps guessing at.</li>
+    <li><strong>One true thing nobody prints.</strong> This is what the Gemlyx find field is for and it is the only part of an entry that cannot be researched from a desk.</li>
+    <li><strong>Their opening hours, out loud, and whether their own website is right.</strong> Half the time it is not, and you will have heard it from the person who unlocks the door.</li>
+  </ul>
+
+  <h2 id="never">Never say</h2>
+
+  <div class="warn">
+    <h3>A number you do not measure</h3>
+    <p>No visitor counts, no &ldquo;we send X people a month&rdquo;, no growth figures. There are no analytics on Gemlyx and your own privacy policy says so in writing. Inventing a number to a business partner is the one mistake here that would be difficult to walk back, and you do not need it: paying up front is the argument.</p>
+  </div>
+
+  <div class="warn">
+    <h3>A date you cannot keep</h3>
+    <p>Not &ldquo;it'll be live next week&rdquo;. The offer field is built and the paid plans are not switched on yet. Say what is true: the page exists today, the offer goes live when subscriptions do, and the 500 kroner is theirs either way.</p>
+  </div>
+
+  <footer>
+    <p>Built from the 148 published Gemlyx rows read live on 25 August 2026, plus the shops' own pages. Shop addresses and founding years are theirs; the route order is a suggestion and worth checking on a map before you set off.</p>
+  </footer>
+</div>

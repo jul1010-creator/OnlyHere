@@ -1791,7 +1791,59 @@ const RETRACTS = /\b(?:not stated in the research|could not be confirmed|not sup
 // not part of the claim.
 const QUOTED = /[""]([^""]{4,200})[""]|\*\*([^*]{4,200})\*\*/g;
 
-export const PROSE_FIELDS = ["atmosphere", "whoItsFor", "realityCheck", "desc", "special", "whoFor", "afterDark", "beforeDark", "bestTime", "howItsMade", "vibeLocation", "characterAndFit", "whatToDo", "gettingThereReality", "highlight"];
+// ── AND THAT CHARACTER CLASS IS ASCII, WHICH IS THE WHOLE BUG ───────
+//
+// 25 Aug 2026, found by running it rather than reading it. `[""]` is two copies
+// of the SAME straight quote, so a note written with typographic quotes was
+// never matched, the claim was never extracted, and selfContradictions returned
+// nothing at all. Silently: no error, no finding, a clean pass.
+//
+// Models write typographic quotes constantly, and so do the drafting prompts in
+// this repository. Which means the check most likely to be defeated by this is
+// the check on the drafts written most carefully.
+//
+// THE LESSON WAS ALREADY ON THE PAGE. Thirty lines down, under "AND TYPOGRAPHY
+// IS NOT MEANING", this exact fault is described and fixed for APOSTROPHES, in
+// `norm`. It was fixed one character short: norm straightens both, but norm
+// runs on the PROSE, and QUOTED runs on the raw note before norm sees it.
+//
+// norm cannot be reused here either, because it STRIPS quotes entirely and
+// QUOTED needs them to find where the claim ends. So this is typography and
+// nothing else: the quote characters, left in place, made uniform. Guillemets
+// included, because a Danish source quoted inside a note is as likely to carry
+// those as anything else.
+const straightenQuotes = (s) => String(s || "").replace(/[\u201C\u201D\u201E\u201F\u00AB\u00BB]/g, '"');
+
+// ── AND THE LIST WAS MISSING THE FIELD MOST LIKELY TO OFFEND ────────
+//
+// 25 Aug 2026. `gemlyxFind` was not on it. That field is defined in the drafting
+// prompt as "ONE specific curated recommendation only Gemlyx would flag", which
+// is to say the one sentence per entry that is MEANT to make a strong claim
+// nobody else makes. An unsupportable superlative goes there first, and this
+// check could not see it.
+//
+// `blogBody` was not on it either, and after shapeForLive that is where most of
+// the published prose lives. It is an array of {heading, paragraph}, so it is
+// flattened below rather than added here: norm() of an object is
+// "[object Object]", which would have looked like coverage and been none.
+//
+// ── AND THIS IS THE SECOND PROSE_FIELDS IN THE REPOSITORY ───────────
+// correction.js exports one too, same name, different contents: four fields
+// overlap and fifteen do not. They are not the same question, one being "where
+// is the prose" and the other "what may a claim that resolved to nothing
+// touch", and neither file imports the other today. Two same-named exports over
+// one namespace is a collision waiting for its first wrong import.
+export const PROSE_FIELDS = ["atmosphere", "whoItsFor", "realityCheck", "desc", "special", "whoFor", "afterDark", "beforeDark", "bestTime", "howItsMade", "vibeLocation", "characterAndFit", "whatToDo", "gettingThereReality", "highlight", "gemlyxFind"];
+
+// Reader-facing prose that is not a plain string. Flattened rather than listed
+// above, because the shape is the reason it was missed.
+export const PROSE_LISTS = ["blogBody", "thingsToKnow"];
+
+const listProse = (payload) => PROSE_LISTS.flatMap(k => {
+  const v = payload?.[k];
+  if (!Array.isArray(v)) return [];
+  return v.map(item => typeof item === "string" ? item : [item?.heading, item?.paragraph].filter(Boolean).join(" "));
+});
 
 // Saying who said it. Kept to phrases that name a SOURCE for the claim, not to
 // general hedges: "probably the largest" is still the entry asserting it, badly.
@@ -1837,14 +1889,14 @@ const norm = (s) => String(s || "")
 
 export const selfContradictions = (payload) => {
   const notes = Array.isArray(payload?.uncertainties) ? payload.uncertainties : [];
-  const prose = PROSE_FIELDS.map(k => norm(payload?.[k])).filter(Boolean).join(" ␟ ");
+  const prose = [...PROSE_FIELDS.map(k => payload?.[k]), ...listProse(payload)].map(norm).filter(Boolean).join(" ␟ ");
   if (!prose) return [];
   const out = [];
   for (const line of notes) {
     if (!RETRACTS.test(String(line))) continue;
     QUOTED.lastIndex = 0;
     let m;
-    while ((m = QUOTED.exec(String(line))) !== null) {
+    while ((m = QUOTED.exec(straightenQuotes(line))) !== null) {
       const claim = norm(m[1] || m[2]);
       // Short fragments match by accident; a claim worth deleting is a clause.
       if (claim.length < 12 || !prose.includes(claim)) continue;

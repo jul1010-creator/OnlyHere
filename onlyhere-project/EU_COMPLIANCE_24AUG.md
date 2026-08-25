@@ -101,7 +101,7 @@ and the new Gemlyx offer field carries `OFFER_NOTE` on the same terms.
 
 ## Applies, not yet done
 
-### Digital Services Act, Regulation (EU) 2022/2065
+### Digital Services Act, Regulation (EU) 2022/2065. **Notice-and-action built 25 August.**
 
 Gemlyx hosts stranger text: reviews on entry pages and the Suggest a Place
 inbox. That makes it a **hosting service**, which is the lightest tier and the
@@ -110,9 +110,33 @@ and a statement of reasons when something is removed. Micro and small
 enterprises are exempt from the heavier online-platform duties, not from the
 hosting ones.
 
-**There is no way to report a review today.** That is a real gap and it is a
-small build: a report control on each review, a record that it was seen, and a
-line in the terms.
+**When this was written there was no way to report anything at all.** Asked on
+25 August whether the report route should be its own build, Oliver: *"Yes, one
+page with a topic for it."* So it is a topic on the support page at `/support`,
+and choosing it changes the form in the three ways Article 16(2) requires:
+
+| | |
+| --- | --- |
+| **16(2)(a)** substantiated explanation | the message prompt asks why the content is *illegal*, not what is wrong with it |
+| **16(2)(b)** exact electronic location | a URL field, validated, that appears on this topic only |
+| **16(2)(c)** name and email, **except** for offences under Arts 3-7 of Directive 2011/93/EU | the address is **optional on this topic alone**, and the form says what leaving it blank costs |
+| **16(2)(d)** good-faith statement | a tick box carrying the sentence, required |
+| **16(4)** confirmation of receipt | the screen is the confirmation, and it shows a reference that is also stored |
+
+16(2)(c) is the one that looks like a mistake and is not: a mechanism that
+demands identification before it will accept that category of report does not
+comply. Every other topic on the page still requires an address, because a
+support request nobody can answer is not support.
+
+**Still outstanding: Article 17, the statement of reasons.** When something is
+removed, the person who posted it has to be told why. That is a build on the
+removal side, not the report side, and it does not exist. Nothing has been
+removed yet, so nothing is owed yet.
+
+**And the reporting route needs the notice to describe it.** The privacy policy
+went to v2.3 in the same change: section 6 describes the page, section 8 gives
+the two legal bases, section 11 gives the retention. A suite assertion now ties
+the two together, so the page cannot ship ahead of the notice again.
 
 ### European Accessibility Act, Directive (EU) 2019/882
 
