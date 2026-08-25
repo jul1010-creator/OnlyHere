@@ -27,10 +27,11 @@ import { testTravelerLine, isFerryText, daysUntil } from "../utils/helpers";
 import { aiDisclosureFor } from "../utils/aiDisclosure";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen } from "../utils/guideReading";
 import { BOOKING_AFFILIATE_ID } from "../config";
-import { tiqetsBrowseUrl, partnerDisclosure } from "../utils/affiliates";
+import { tiqetsBrowseUrl, partnerDisclosure, supportNote, partnerLinkCount, isPartnerLink, carRentalFits } from "../utils/affiliates";
 import { dayStart, dayKey, dayPlus } from "../utils/calendarDay";
 import { TripCalendarCard } from "../components/TripCalendarCard";
 import { StopChangeSheet } from "../components/StopChangeSheet";
+import { problemList, problemHeading, PROBLEM_NOTE } from "../utils/planProblems";
 import { guideWithSwap, swapNote, swapIsAllowed, swapBlockedNote } from "../utils/stopSwap";
 import { constraintViolations } from "../utils/constraintCheck";
 import { detectLegMode } from "../utils/helpers";
@@ -833,6 +834,38 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           </div>
         </div>
       )}
+
+      {/* ── WHAT THE CHECKS CAUGHT ────────────────────────────────
+          Oliver's Limfjord guide, 26 Aug 2026: the logistics gate measured the
+          last leg at 1 minute on foot, caught the guide suggesting a bus for it
+          — his own rule, SHORT_WALK_MINUTES — wrote the finding into
+          _planProblems, and the save path deleted it. The comment on that line,
+          written 12 August, says "Nothing renders them". This renders them.
+
+          No permission check needed: the save path strips the field, so a
+          shared guide never carries one and a reader sent a link cannot see
+          this. The person looking at an unsaved guide is the one who built it. */}
+      {(() => {
+        const problems = problemList(guide);
+        if (!problems.length) return null;
+        return (
+          <div style={{ maxWidth: 960, margin: "0 auto", padding: "20px 16px 0" }}>
+            <div style={{ background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 12, padding: "15px 17px" }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: C.gold, fontFamily: "'Fraunces', serif", marginBottom: 8 }}>
+                {problemHeading(problems.length)}
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 7 }}>
+                {problems.map((x, i) => (
+                  <li key={i} style={{ fontSize: 12, color: C.light, lineHeight: 1.6 }}>{x}</li>
+                ))}
+              </ul>
+              <div style={{ fontSize: 10.5, color: C.muted, marginTop: 11, lineHeight: 1.6, borderTop: `1px solid ${C.border}`, paddingTop: 9 }}>
+                {PROBLEM_NOTE}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "36px 16px 28px" }}>
         {/* Redesign pass: kicker + roomier title, and the essentials box became a
@@ -2154,6 +2187,32 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             agreement. Two lines somebody will actually read beat six they will
             not. The wording, and what it deliberately does NOT claim, is in
             utils/rights.js. */}
+        {/* ── ASKING, ONCE, AT THE END ───────────────────────────────
+            Oliver, 26 Aug 2026: "Can you perhaps make it a thing to write in the
+            Guide that we'd appreciate if they use our affiliates."
+
+            At the foot, after the trip is written, and ONLY when the page
+            actually carries a partner link. The sentence is a claim about this
+            page — "some of the booking links in this guide" — and on a guide
+            that sends you nowhere paid it is simply false.
+
+            Counted off the rendered DOM rather than off what the app is capable
+            of, so it can never promise a link the page does not have. See
+            supportNote in utils/affiliates.js for the four rules the wording
+            follows, and for why "booking anywhere else is completely fine" is
+            the line that separates this from what he objected to in Layla. */}
+        {(() => {
+          if (typeof document === "undefined") return null;
+          const hrefs = [...document.querySelectorAll("a[href]")].map(a => a.getAttribute("href"));
+          const note = supportNote({ partnerLinks: partnerLinkCount(hrefs, { isPaid: isPartnerLink }) });
+          if (!note) return null;
+          return (
+            <div style={{ marginTop: 26, paddingTop: 14, borderTop: `1px solid ${C.border}`, maxWidth: 620, fontSize: 11.5, color: C.light, lineHeight: 1.7 }}>
+              {note}
+            </div>
+          );
+        })()}
+
         <div style={{ marginTop: 28, paddingTop: 14, borderTop: `1px solid ${C.border}`, maxWidth: 620 }}>
           <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.65 }}>
             {GUIDE_RIGHTS_SHORT}

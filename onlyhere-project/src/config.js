@@ -195,4 +195,44 @@ export const TIQETS_AFFILIATE_TEMPLATE = "https://tp.media/r?campaign_id=89&mark
 // the cars are there, paste the link and it goes live everywhere at once. If
 // they are not, DiscoverCars and Rentalcars both have real Danish coverage and
 // both are on Travelpayouts.
-export const CAR_RENTAL_LINK = "";
+// ── SETTLED 26 AUG 2026, BY RUNNING THE CHECK ABOVE ─────────────────
+//
+// Oliver sent both links. GetRentacar's was the one already on hand and the one
+// this comment said to test: getrentacar.com/en/country/denmark returns 404
+// today, and a search of their own domain for Danish coverage turns up nothing
+// at all. 10% and a 90-day cookie, which is the best pair on his Travelpayouts
+// page, of an inventory that does not exist here.
+//
+// AutoEurope has it: Copenhagen Kastrup, BILLUND, Aarhus, AALBORG, Esbjerg,
+// Rønne, Sønderborg, Karup and Odense airports, Copenhagen central station and
+// city, Roskilde, Kolding, Aarhus and Billund, brokered from Alamo, Avis,
+// Budget, Europcar, Hertz and Thrifty. 4.4 to 8%. A worse rate on real cars
+// beats a better one on none, and the two towns in his own test brief are both
+// on the list.
+//
+// THIS IS THE SHORT LINK, so it is a browse button and not a deep link — the
+// same distinction the Tiqets block above spends a paragraph on. It resolves to
+// one fixed destination and cannot carry a location, so a Billund page cannot
+// send somebody to Billund cars with it. The long-form template with {url} is
+// worth generating when there is a reason to; until then this is honest about
+// what it is.
+export const CAR_RENTAL_LINK = "https://autoeurope.tpx.li/SFG4IdAn";
+
+// ── WEGOTRIP, THE HIGHEST RATE ON THE PAGE AND A REAL ONE ───────────
+//
+// 6.64% to 41.5%, which is the best band on his Travelpayouts list, and unlike
+// GetRentacar the inventory is here: 21 activities across Copenhagen, Aarhus,
+// AALBORG (a fjord walk), Helsingør, ROSKILDE (Viking and royal heritage),
+// Vejle, Ringkøbing and Billund. Checked 26 Aug 2026 on their own Denmark page.
+//
+// Self-guided audio walks, which sit closer to what a Gemlyx guide already IS
+// than anything else in the affiliate list. That is the argument for it and the
+// reason to be careful with it: a paid audio tour of Aalborg offered underneath
+// our own free writing about Aalborg has to be additive, not a second version of
+// the same thing sold back.
+//
+// AND IT SELLS LEGOLAND BILLUND ENTRY TICKETS. Whatever renders this must go
+// through the same exclusion gate the preview now uses, or the traveller who
+// wrote "please don't send us to Legoland" gets sold one. See utils/exclusions.js
+// — that failure is four hours old and it must not come back through a partner.
+export const WEGOTRIP_LINK = "https://wegotrip.tpx.li/FqqNAbzW";

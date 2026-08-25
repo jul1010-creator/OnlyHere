@@ -124,6 +124,7 @@ import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords
 import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoice";
 import { cityFromLocation } from "./utils/guideEnrichment";
 import { readBrief, briefBlock, nextAsks, buildBlockedNote } from "./utils/tripBrief";
+import { readExclusions, withoutExcluded, excludedNote } from "./utils/exclusions";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
 import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch } from "./utils/ticketLink";
@@ -149,11 +150,12 @@ import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange,
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
 import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition, venueRatherThanEvent } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
-import { newStreamState, readStreamEvent, visibleText, streamContent, streamDiagnosis, streamTrace } from "./utils/streamRead";
+import { newStreamState, readStreamEvent, visibleText, streamContent, streamDiagnosis, streamTrace, ranOutThinking } from "./utils/streamRead";
 import { heroNeedsReplacing, heroPatch, heroStatusLine, isAbsolutePhoto } from "./utils/heroPhoto";
 import { languageBlock, guideLanguageBlock, readerLanguage, keepLanguageOf } from "./utils/readerLanguage";
 import { echoInDraft, describeEcho, ECHO_RUN } from "./utils/echoCheck";
 import { PhotoPlate } from "./components/PhotoPlate";
+import { AffiliatePanel } from "./components/AffiliatePanel";
 import { EntryLink } from "./components/EntryLink";
 import { AuthSheet } from "./components/AuthSheet";
 import { ProfileSheet } from "./components/ProfileSheet";
@@ -11305,7 +11307,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         } catch { /* never at the cost of the guide */ }
       }
 
-      setGuideModal({ _gid: gid, _fx: fxLine, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
+      setGuideModal({ _gid: gid, _fx: fxLine, _constraints: { excluded: readExclusions(saidByTravellerForGuide), transport: { ruledOut: [] } }, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
       // A build that failed halfway still spent everything it spent up to that
       // point, and a meter that only counts successes reports a cost per guide
@@ -12937,11 +12939,28 @@ ${languageBlock()}`;
       // /api/anthropic (with stream:true) and calls onText with the growing
       // string as each token arrives — a genuine token-by-token stream, not a
       // client-side typewriter animation played over an already-finished reply.
-      const streamClaudeChat = async (messages, onText) => {
+      // ── THE BUDGET HAS TO COVER THE THINKING AS WELL ──────────────
+      //
+      // Oliver, 25 Aug 2026, twice: a 689-character trip brief, and both times no
+      // reply. The diagnosis written an hour earlier named it exactly — "the
+      // reply came back as thinking and no text" — and the response object
+      // carried the cause beside it: stop_reason max_tokens.
+      //
+      // 2048 covered a short question all evening. It does not cover a brief that
+      // states an airport, two dates, a party, a ruled-out attraction, a booked
+      // hotel and four interests, because thinking scales with the question and
+      // this number did not. The model reasoned to the end of the budget and the
+      // answer never started.
+      //
+      // 8192 for the first attempt, and the retry below doubles again rather than
+      // re-running the same turn identically — which is what the existing
+      // empty-reply retry did, and is why it failed twice instead of once.
+      const CHAT_TOKENS = 8192;
+      const streamClaudeChat = async (messages, onText, maxTokens = CHAT_TOKENS) => {
         const res = await fetch("/api/anthropic", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "claude-sonnet-5", system: sysPrompt, messages, tools: claudeTools, max_tokens: 2048, stream: true }),
+          body: JSON.stringify({ model: "claude-sonnet-5", system: sysPrompt, messages, tools: claudeTools, max_tokens: maxTokens, stream: true }),
         });
 
         if (!res.ok || !res.body) {
@@ -12991,7 +13010,13 @@ ${languageBlock()}`;
 
         const diagnosis = streamDiagnosis(st);
         if (diagnosis) console.warn("Gemlyx chat: no text in this turn.", { diagnosis, ...streamTrace(st) });
-        return { content: streamContent(st), stop_reason: st.stopReason, error: st.error, diagnosis, trace: streamTrace(st) };
+        return {
+          content: streamContent(st), stop_reason: st.stopReason, error: st.error,
+          diagnosis, trace: streamTrace(st),
+          // The one thing the retry has to know: whether changing the budget
+          // would change the outcome. See ranOutThinking in utils/streamRead.js.
+          ranOutThinking: ranOutThinking(st),
+        };
       };
 
       // The visible chat bubble is created lazily, on the FIRST real text token —
@@ -13073,9 +13098,24 @@ ${languageBlock()}`;
       // real question, and a cap that can be hit has to say so rather than being
       // reported as a fault.
       const TOOL_ROUNDS = 3;
-      const runTurn = async (messages) => {
+      const runTurn = async (messages, maxTokens = CHAT_TOKENS) => {
         let msgs = messages;
-        let out = await streamClaudeChat(msgs, handleDelta);
+        let out = await streamClaudeChat(msgs, handleDelta, maxTokens);
+        // ── A RETRY THAT CHANGES NOTHING FAILS THE SAME WAY ─────────
+        // If the whole budget went on thinking, the answer is not to ask again.
+        // It is to ask with more room. Same escalation aiClient.js already does
+        // for a truncated reply, capped so a pathological turn cannot spend
+        // without limit.
+        if (out.ranOutThinking && maxTokens < 16000) {
+          console.warn("Gemlyx chat: the budget went on thinking, retrying with more room.", { was: maxTokens });
+          clearStreamedBubble();
+          const roomier = await streamClaudeChat(msgs, handleDelta, Math.min(16000, maxTokens * 2));
+          // Taken only if it is actually better. A second empty turn must not
+          // replace the first, or the diagnosis the traveller sees describes the
+          // retry rather than the thing that went wrong.
+          const better = (r) => (r?.content || []).some(b => (b.type === "text" && String(b.text || "").trim()) || b.type === "tool_use");
+          if (better(roomier)) out = roomier;
+        }
         for (let round = 0; round < TOOL_ROUNDS; round++) {
           const toolUseBlock = out.content?.find(b => b.type === "tool_use");
           // No search coming, so the fragment after the last full stop is the end
@@ -15329,6 +15369,21 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         appears on towns. This fills them in once. It only ever
                         ADDS: a row that already has coordinates is skipped, so
                         it cannot overwrite a verified pin with a geocode. */}
+                    {/* ── WHAT MY AFFILIATES ACTUALLY REACH ─────────
+                        Oliver, 26 Aug 2026: "perhaps make a studio section for
+                        my affiliates.. that looks through what my affiliates
+                        connect to?" He asked because nothing could answer it.
+                        Every link is built, disclosed and gated correctly and no
+                        surface anywhere says how MANY rows carry one. A
+                        programme wired to four rows out of a hundred and
+                        forty-eight earns almost nothing and looks identical,
+                        from the code, to one wired to all of them.
+
+                        Reads manageItems, the rows already loaded, rather than
+                        fetching: a panel that re-queries would be answering
+                        about a different set than the one being managed. */}
+                    {Array.isArray(manageItems) && <AffiliatePanel rows={manageItems} />}
+
                     <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: geoFixState ? 10 : 0 }}>
                         <div>

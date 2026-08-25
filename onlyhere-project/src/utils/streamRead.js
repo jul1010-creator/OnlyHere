@@ -142,6 +142,19 @@ export const streamDiagnosis = (st) => {
   if ((s.blocks || []).some(b => b?.type === "tool_use")) return "";   // a search turn, handled by the tool loop
   if ((s.blocks || []).some(b => b?.type === "other")) {
     const kinds = [...new Set((s.blocks || []).filter(b => b?.type === "other").map(b => b.kind))].join(", ");
+    // ── THINKING *AND* max_tokens IS ITS OWN THING ──────────────────
+    // Oliver's second run, 25 Aug: the diagnosis correctly said "thinking and no
+    // text" and stopped there, which named the symptom and not the cause. The
+    // cause is in the same response object: stop_reason max_tokens. The model
+    // spent the entire budget reasoning and the reply never started.
+    //
+    // That is why a short message worked all evening and a 689-character brief
+    // failed twice: thinking scales with the question and the budget did not.
+    // Worth its own sentence, because the two have different fixes — one is a
+    // parser that cannot read a block type, the other is a number.
+    if (s.stopReason === "max_tokens") {
+      return `I thought about that one until I ran out of room to answer it, so nothing came out. That is a fault on my end. Send it again and I will give myself more room.`;
+    }
     return `The reply came back as ${kinds} and no text, so there is nothing to show. That is a fault on my end, not with what you asked.`;
   }
   if (s.stopReason === "max_tokens") return "The reply ran out of room before it wrote anything. Ask for one part of it and I will get there.";
@@ -163,4 +176,17 @@ export const streamTrace = (st) => {
     unknownBlocks: s.unknownBlocks || [],
     unknownDeltas: s.unknownDeltas || [],
   };
+};
+
+// ── AND THE ONE QUESTION THE CALLER HAS TO ACT ON ───────────────────
+//
+// True when the turn produced no text because the whole budget went on thinking.
+// The empty-reply retry that already exists re-runs the SAME turn identically,
+// which is exactly why Oliver's brief failed twice rather than once: a retry that
+// changes nothing fails the same way. This is what tells it to change something.
+export const ranOutThinking = (st) => {
+  const s = st || {};
+  if (visibleText(s).trim()) return false;
+  if ((s.blocks || []).some(b => b?.type === "tool_use")) return false;
+  return s.stopReason === "max_tokens" || (s.blocks || []).some(b => b?.type === "other");
 };

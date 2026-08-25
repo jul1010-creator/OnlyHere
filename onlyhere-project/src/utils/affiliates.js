@@ -436,3 +436,113 @@ export const linkLabel = (url) => {
   const who = partnerMerchant(url);
   return who ? `Book on ${who}` : "Partner site";
 };
+
+// ── AND A CAR BUTTON MAY NOT CONTRADICT THE PAGE IT SITS ON ─────────
+//
+// carRentalUrl has existed since the link was first discussed and has NEVER had
+// a caller — nothing in the app renders a car button at all. So pasting the
+// AutoEurope link into config.js on its own would have changed nothing, which is
+// this project's signature failure waiting to happen one more time.
+//
+// The gate is Oliver's own writing, quoted from the live Aalborg guide he built
+// on 26 August:
+//
+//   "I får intet ud af en bil, som I heller ikke kører"      (in the city)
+//   "først når man vil ud til Jyllands afkroge på egen hånd,
+//    begynder en bil at give mening"                          (out in Jutland)
+//
+// A rental button on a page that says you would get nothing out of a car is the
+// "pay here and pay here" he objected to in Layla, done to ourselves, on the same
+// screen as our own advice against it. And a traveller who SAID they do not
+// drive must never see one: that is the excluded-constraint failure wearing a
+// commission.
+//
+// So the button appears only where the trip is actually a driving trip. Not
+// "might be" — the traveller said so, or the plan is built around it.
+export const carRentalFits = ({ mode = "", saidNoCar = false } = {}) => {
+  if (saidNoCar) return false;
+  const m = String(mode || "").toLowerCase();
+  if (!m) return false;
+  // travelModeKey's own vocabulary. "public transport", "cycling", "walking"
+  // and "train" are all real answers and none of them wants a rental car.
+  // Prefixes need to allow their own suffixes: `\bdriv\b` was written first and
+  // never matched "driving", because there is no word boundary between "driv"
+  // and "ing". `car` and `bil` stay EXACT on both sides on purpose — a loose
+  // `bil` matches Billund, which is a town in half these guides, and a loose
+  // `car` matches carriage.
+  return /\b(?:driv\w*|rental car|hire car|road ?trip)\b|\b(?:car|bil|kør\w*|bilen)\b/.test(m);
+};
+
+// Said next to it. Names the commission and names the limit in the same breath,
+// because a reader who is being sent to a paid link deserves both.
+export const CAR_RENTAL_DISCLOSURE =
+  "Partner link, and Gemlyx may earn a small commission at no cost to you. It searches Alamo, Avis, Budget, Europcar, Hertz and Thrifty for Danish pick-ups.";
+
+// ── ASKING, ONCE, AT THE END ────────────────────────────────────────
+//
+// Oliver, 26 Aug 2026: "Can you perhaps make it a thing to write in the Guide
+// that we'd appreciate if they use our affiliates."
+//
+// A fair ask, and the whole difficulty is in the register. He spent the evening
+// objecting to Layla for feeling like "constant bills floating on the screen"
+// and "just pay here and pay here", so the version of this that hurts the
+// product is a badge on every stop, a heart, a "support us!" strip above the
+// itinerary. One line, at the foot, after the trip is written, is the opposite
+// of that and asks for the same thing.
+//
+// FOUR RULES, and each one is a way this goes wrong:
+//
+//   SAY WHAT IT IS. "Use our links" is a request; "these are partner links and
+//   they pay us a commission" is a disclosure. It has to be both, in the same
+//   sentence, or the ask is quietly asking them not to notice.
+//
+//   SAY IT COSTS THEM NOTHING, because it genuinely does not, and that is the
+//   only reason it is reasonable to ask at all.
+//
+//   SAY IGNORING IT IS FINE, and mean it. This is the line that separates this
+//   from every version of it he objected to. A request that cannot be declined
+//   without friction is pressure wearing manners.
+//
+//   AND ONLY SAY IT WHERE IT IS TRUE. A guide with no partner link on it must
+//   not carry this, because the sentence is a claim ABOUT THE PAGE — "where this
+//   guide sends you to book" — and on a page that sends you nowhere paid it is
+//   simply false. Every other gate written tonight follows the same rule.
+export const supportNote = ({ partnerLinks = 0 } = {}) => {
+  const n = Number(partnerLinks) || 0;
+  if (n < 1) return "";
+  // ── HIS WORDING, WITH THE DISCLOSURE KEPT IN FRONT OF IT ──────────
+  //
+  // Oliver's own line, 26 Aug: "We appreciate any use of our affiliates, it
+  // helps us manage a better travelling experience for our users!"
+  //
+  // Two words changed and the reason for each is worth writing down, because
+  // both are rules this product already holds itself to elsewhere.
+  //
+  //   "affiliates" → "partner links". To us it is the name of a programme. To
+  //   somebody reading a trip plan it is industry jargon, and the product's own
+  //   rule is to name things by what people recognise. They know what a booking
+  //   link is.
+  //
+  //   "our users" → "you". A sentence addressed to the reader that refers to
+  //   them in the third person makes them a bystander to a conversation about
+  //   themselves.
+  //
+  // AND THE DISCLOSURE STAYS IN FRONT. His sentence is the ask; on its own it
+  // does not say a commission is paid or that it costs nothing, and those two
+  // facts are what make asking legitimate rather than a nudge. Same reason every
+  // other paid link on this site carries a line under it.
+  const ask = "We appreciate any use of them, it helps us build a better travelling experience for you.";
+  const out = "Booking anywhere else is completely fine.";
+  return n === 1
+    ? `One booking link in this guide is a partner link, and it pays Gemlyx a small commission at no extra cost to you. We appreciate any use of it, it helps us build a better travelling experience for you. ${out}`
+    : `Some of the booking links in this guide are partner links, and they pay Gemlyx a small commission at no extra cost to you. ${ask} ${out}`;
+};
+
+// How many paid links a built guide actually carries. Counts what is THERE,
+// rather than what the app is capable of, so the sentence above can never
+// promise a link the page does not have. `isPaid` is injected for the same
+// reason every other audit in this codebase injects its judgement.
+export const partnerLinkCount = (hrefs, { isPaid } = {}) =>
+  (Array.isArray(hrefs) ? hrefs : []).filter(h => {
+    try { return typeof isPaid === "function" ? !!isPaid(h) : false; } catch { return false; }
+  }).length;

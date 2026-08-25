@@ -1,4 +1,5 @@
 import { fold, variantsOf, matchVariantsOf, samePlaceName, containsName, foundAt } from "./danishNames";
+import { readExclusions, isExcluded } from "./exclusions";
 import { townOfLocation } from "./nightlife";
 import { canonicalRegion, regionPart, regionOf, REGION_NAMES } from "./regions";
 import { tierOf, THEME_LABEL } from "./placeThemes";
@@ -703,6 +704,28 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
   // Danish-arrival pass in utils/arrival.js.
   const text = String(convoText || "");
   const ownWords = String(saidByTraveller || "") || text;
+  // ── AND WHAT THEY RULED OUT ───────────────────────────────────────
+  //
+  // Oliver, 26 Aug 2026, on the preview for his own test brief: "someone is
+  // gonna be pissed off when they see this guide." He had written "Please don't
+  // send us to Legoland" and the screen offered him Legoland, top of
+  // ATTRACTIONS, with a picture.
+  //
+  // Read from ownWords, not from `text`: a place GEMLYX named is not a place the
+  // traveller ruled out, and reading the whole transcript is how the arrival
+  // anchor once resolved to Copenhagen Airport on an Aalborg brief.
+  //
+  // Filtered HERE rather than at the three call sites, because a rule applied at
+  // one door and not its siblings is the failure this repository has now paid
+  // for four separate times. See utils/exclusions.js, and constraintCheck.js,
+  // whose `checkExcluded` has been auditing a field nothing wrote.
+  const ruledOut = readExclusions(ownWords);
+  // Every return path goes through this. A place ruled out is REMOVED rather
+  // than marked, unlike `_leaving`: a departure town is still where they are and
+  // belongs on screen, while a place they said not to send them to does not
+  // belong on the screen at all. The guide says out loud that it left it out —
+  // see excludedNote — so the removal is never silent.
+  const keep = (rows) => (ruledOut.length ? rows.filter(r => !isExcluded(r, ruledOut)) : rows);
   // ── AND THE ARRIVAL IS THEIRS TO STATE TOO ──────────────────────
   //
   // This read the whole transcript, and on his Aalborg brief that produced an
@@ -1202,7 +1225,7 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
     // same place by any reading.
     if (km != null && Math.round(km) > 0) {
       const rest = matched.filter(p => p._src !== "town");
-      return [{ ...only, _legKm: Math.round(km), _legFrom: from.name || from.said || ANCHOR_FALLBACK_NAME }, ...rest];
+      return keep([{ ...only, _legKm: Math.round(km), _legFrom: from.name || from.said || ANCHOR_FALLBACK_NAME }, ...rest]);
     }
   }
   if (from && towns.length > 1) {
@@ -1216,7 +1239,7 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
       return leg ? { ...p, _legKm: leg.km, _legFrom: leg.from } : p;
     });
     const rest = matched.filter(p => p._src !== "town");
-    return [...inOrder, ...rest];
+    return keep([...inOrder, ...rest]);
   }
-  return matched;
+  return keep(matched);
 };

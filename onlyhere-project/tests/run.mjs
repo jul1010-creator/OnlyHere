@@ -63,7 +63,7 @@ writeFileSync(entry, `
   export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
   export { TICKET_HUNT_PROMPT, ticketHuntUrls } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
-  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, isPartnerLink, partnerDisclosure, partnerMerchant, linkLabel, affiliateHref, affiliateNote, isAffiliateHref } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
+  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, partnerMerchant, linkLabel, affiliateHref, affiliateNote, isAffiliateHref } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
@@ -176,6 +176,9 @@ writeFileSync(entry, `
   export { factCheckCopy } from ${JSON.stringify(join(root, "src/utils/factCheckCopy.js"))};
   export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn, travelModeKey, modeReachKm, MODE_DAY_KM, preferReachable, preferPassing, overnightMove, describeOvernightMove, spokenDuration, beyondModeRange, BEYOND_DAY_FACTOR, sameMode, howForReader, EATS_THE_DAY_MINUTES } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { LANGUAGES, MONTH_INDEX, PARTY_BARE, PARTY_POSSESSIVE, YES_WORDS, NO_WORDS, alt, LETTER } from ${JSON.stringify(join(root, "src/utils/travellerWords.js"))};
+  export { auditRow, auditRows, auditSummary, auditNote, programmeState, ticketDestination } from ${JSON.stringify(join(root, "src/utils/affiliateAudit.js"))};
+  export { problemText, problemList, problemHeading, PROBLEM_NOTE } from ${JSON.stringify(join(root, "src/utils/planProblems.js"))};
+  export { readExclusions, isExcluded, withoutExcluded, excludedNote } from ${JSON.stringify(join(root, "src/utils/exclusions.js"))};
   export { latestRelativeAnswer, departureDateIn } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { launderedAbsence } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { contradictedAbsence, sentences } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
@@ -19209,7 +19212,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // implemented into essentials and the guide."
 {
   const { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure,
-    carRentalUrl, carRentalActive, isPartnerLink, partnerDisclosure, ESSENTIALS_FOR_TEST } = M;
+    carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, ESSENTIALS_FOR_TEST } = M;
   const TPL = "https://tp.media/click?shmarker=562709&promo_id=9999&u={url}";
   const PRODUCT = "https://www.tiqets.com/en/copenhagen-attractions-c113/tickets-for-copenhagen-card-discover-p1068607/";
 
@@ -19277,13 +19280,96 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("and a junk browse link renders nothing rather than a broken button", tiqetsBrowseUrl("not a url"), null);
   is("an empty one too", tiqetsBrowseUrl(""), null);
 
-  // ── CAR HIRE SHIPS OFF ───────────────────────────────────────────
-  // GetRentacar's own front page lists Turkey, the UAE, Spain, Greece and the
-  // US, /country/denmark is a 404, and no Danish inventory turns up. A rental
-  // button that opens on an empty search teaches a reader that Gemlyx sends
-  // them to things that are not there.
-  is("no car link is configured yet", carRentalActive(), false);
-  is("and nothing renders for one", carRentalUrl(), null);
+  // ── CAR HIRE ────────────────────────────────────────────────────
+  //
+  // This read `is("no car link is configured yet", carRentalActive(), false)`,
+  // which pinned the STATE rather than the rule — so it went red on 26 August
+  // the moment Oliver did the thing its own comment told him to do and pasted a
+  // link. Pin the rule, not the shape: the fourth time that lesson has been paid
+  // for in this file today.
+  //
+  // THE RULE IS ABOUT INVENTORY AND NO TEST CAN CHECK IT. GetRentacar pays 10%
+  // on a 90-day cookie, the best pair on the Travelpayouts page, and
+  // /country/denmark still 404s — 10% of nothing. AutoEurope pays 4.4 to 8% and
+  // has Billund, Aalborg, Copenhagen, Esbjerg, Karup, Rønne and the rest. That
+  // judgement lives in the config comment where a human can re-run it.
+  //
+  // What IS checkable is the shape: whatever is configured has to be a real URL,
+  // and junk must render nothing rather than a broken button.
+  ok("a configured car link is a real url or nothing at all",
+     carRentalUrl() === null || /^https?:\/\//.test(carRentalUrl()));
+  is("junk renders nothing rather than a broken button", carRentalUrl("not a url"), null);
+  is("and an empty one too", carRentalUrl(""), null);
+  is("active tracks whether one resolves", carRentalActive(), carRentalUrl() !== null);
+
+  // ── AND IT MAY NOT CONTRADICT THE PAGE IT SITS ON ────────────────
+  //
+  // carRentalUrl had NO caller for as long as it existed, so pasting the link
+  // would have changed nothing. The gate is Oliver's own writing, from the live
+  // Aalborg guide: "I får intet ud af en bil, som I heller ikke kører" in the
+  // city, and a car starting to make sense only out in Jutland's corners.
+  //
+  // A rental button on a page that says you would get nothing out of a car is
+  // the "pay here and pay here" he objected to in Layla, done to ourselves, on
+  // the same screen as our own advice against it.
+  ok("a driving trip may see a car button", carRentalFits({ mode: "driving" }));
+  ok("and a road trip", carRentalFits({ mode: "car" }));
+  ok("Danish too", carRentalFits({ mode: "bil" }));
+  // THE ONE THAT MATTERS. A traveller who said they do not drive must never see
+  // one: that is the excluded-constraint failure wearing a commission.
+  ok("somebody who said no car never does", !carRentalFits({ mode: "driving", saidNoCar: true }));
+  ok("nor does a public transport trip", !carRentalFits({ mode: "public transport" }));
+  ok("nor a cycling one", !carRentalFits({ mode: "cycling" }));
+  ok("nor a walking one", !carRentalFits({ mode: "walking" }));
+  // Unknown is not permission. A mode nobody stated is not a driving trip.
+  ok("and an unstated mode is not a yes", !carRentalFits({}));
+  ok("nor an empty one", !carRentalFits({ mode: "" }));
+  // The disclosure names the commission AND what the link searches, because a
+  // reader being sent to a paid link deserves both.
+  ok("the disclosure says it may earn", /may earn a small commission/.test(CAR_RENTAL_DISCLOSURE));
+  ok("and what it actually searches", /Alamo, Avis, Budget, Europcar, Hertz and Thrifty/.test(CAR_RENTAL_DISCLOSURE));
+
+  // ── ASKING, ONCE, AT THE END ────────────────────────────────────
+  //
+  // Oliver, 26 Aug 2026: "Can you perhaps make it a thing to write in the Guide
+  // that we'd appreciate if they use our affiliates," then his own wording:
+  // "We appreciate any use of our affiliates, it helps us manage a better
+  // travelling experience for our users!"
+  //
+  // THE GATE IS THE WHOLE DESIGN. He spent the evening objecting to Layla for
+  // "constant bills floating on the screen". One line at the foot, after the
+  // trip is written, and only where it is TRUE.
+  is("a guide with no partner link on it does not ask", supportNote({ partnerLinks: 0 }), "");
+  is("and neither does one that was passed nothing", supportNote({}), "");
+  {
+    const one = supportNote({ partnerLinks: 1 });
+    const many = supportNote({ partnerLinks: 4 });
+    // SAY WHAT IT IS. "Use our links" is a request; naming the commission makes
+    // it a disclosure, and it has to be both or the ask is quietly asking them
+    // not to notice.
+    ok("the ask names the commission", /pays Gemlyx a small commission/.test(one) && /pay Gemlyx a small commission/.test(many));
+    // SAY IT COSTS THEM NOTHING, which is the only reason it is reasonable to
+    // ask at all.
+    ok("and that it costs them nothing", /at no extra cost to you/.test(one) && /at no extra cost to you/.test(many));
+    // HIS WORDING, kept.
+    ok("his own sentence is the ask", /We appreciate any use of/.test(many));
+    ok("and his reason for it", /a better travelling experience for you/.test(many));
+    // SAY IGNORING IT IS FINE, AND MEAN IT. This is the line that separates this
+    // from every version of it he objected to: a request that cannot be declined
+    // without friction is pressure wearing manners.
+    ok("declining is offered in the same breath", /Booking anywhere else is completely fine/.test(one));
+    // Singular and plural both read as English.
+    ok("one link reads as one", /One booking link/.test(one) && /any use of it,/.test(one));
+    ok("and several as several", /Some of the booking links/.test(many) && /any use of them,/.test(many));
+    // No pressure vocabulary, and none of the tone he objected to.
+    ok("it does not beg", !/please|support us|help us out|consider using/i.test(many));
+  }
+  // COUNTED OFF WHAT IS THERE, not off what the app can do, so the sentence can
+  // never promise a link the page does not have.
+  is("only paid links count", partnerLinkCount(["https://tp.media/r?u=x", "https://google.com", "https://www.dsb.dk"], { isPaid: isPartnerLink }), 1);
+  is("nothing counts to nothing", partnerLinkCount([], { isPaid: isPartnerLink }), 0);
+  is("and a counter that throws counts nothing rather than everything",
+     partnerLinkCount(["https://a"], { isPaid: () => { throw new Error("x"); } }), 0);
   is("but the link works the moment it is pasted", carRentalUrl("https://getrentacar.tpx.li/KyhVj8Bg"), "https://getrentacar.tpx.li/KyhVj8Bg");
 
   // ── A PAID LINK SAYS SO WHEREVER IT IS PRINTED ───────────────────
@@ -36130,6 +36216,254 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // measured it either, but the claim is not wrong in KIND.
   ok("a walk between two places that are not stations is left alone",
      transitProblems("Strøget is a 10 minute walk from Nyhavn.", { parts }).length === 0);
+}
+
+// ── A "NO" IS A CONSTRAINT AND NOBODY WAS READING IT ────────────────
+//
+// Oliver, 26 Aug 2026, on the preview screen for his own test brief: "someone is
+// gonna be pissed off when they see this guide."
+//
+// He had written "Please don't send us to Legoland. He's had enough of it and
+// it's not why we're coming." The preview offered him Legoland, top of
+// ATTRACTIONS, with a picture. The guide it then built sold him a Billund hotel
+// on being "tæt på både Legoland og en nem morgenafgang".
+//
+// THE AUDIT FOR THIS ALREADY EXISTED. constraintCheck.js has `checkExcluded`,
+// written the same afternoon, and it has never fired: `constraints.excluded` is
+// read from an object nothing in this app constructs. A finished, tested,
+// correct check with no writer feeding it — this project's signature failure,
+// and I built this instance of it myself.
+{
+  const { readExclusions, isExcluded, withoutExcluded, excludedNote } = M;
+
+  const HIS = "We're flying into Billund on Thursday 8 October 2026, landing 14:25, and out of Aalborg on Monday the 12th at 11:00. Two adults and our son, he's 7. No car, neither of us drives. Trains, buses and ferries only. Please don't send us to Legoland. He's had enough of it and it's not why we're coming. What we actually want: Viking things, the real earthworks, not a theme park, the Limfjord itself, and one island if that's doable in October. We're not on a big budget, so tell us what's genuinely free. One of us reads Danish, the other doesn't at all.";
+
+  is("THE BUG: his brief rules out exactly one place", readExclusions(HIS), ["Legoland"]);
+
+  // ── THE SHAPES PEOPLE ACTUALLY USE ───────────────────────────────
+  is("don't send us to X", readExclusions("Please don't send us to Legoland."), ["Legoland"]);
+  is("skip X", readExclusions("We want to skip Copenhagen entirely."), ["Copenhagen"]);
+  is("avoid X, capitalised at a sentence start", readExclusions("Avoid Tivoli please."), ["Tivoli"]);
+  is("no X on its own", readExclusions("No Legoland."), ["Legoland"]);
+  is("had enough of X", readExclusions("we've had enough of Aarhus"), ["Aarhus"]);
+  is("not interested in X", readExclusions("not interested in Christiania"), ["Christiania"]);
+  is("and Danish", readExclusions("Undgå København."), ["København"]);
+  is("and ikke til X", readExclusions("ikke til Legoland"), ["Legoland"]);
+
+  // ── THE KEYWORDS ARE CASE-INSENSITIVE, THE NAME IS NOT ───────────
+  // They cannot share a flag: `i` on the whole pattern makes [A-ZÆØÅ] in the
+  // name match lowercase, and "not a theme park" becomes an exclusion of "a
+  // theme park". Found immediately — "Avoid Tivoli" and "No Legoland" both read
+  // as nothing, because the sentence starts with a capital.
+  is("a lowercase noun after 'not' is not a place", readExclusions("the real earthworks, not a theme park"), []);
+
+  // ── A FALSE EXCLUSION IS WORSE THAN A MISSED ONE ─────────────────
+  // It drops a real place off a plan for a reason nobody stated, with no way to
+  // see why. Every one of these is in his own brief.
+  is("'no car' names no place", readExclusions("No car, we don't drive."), []);
+  is("nor does a budget", readExclusions("We're not on a big budget."), []);
+  is("nor a language", readExclusions("One of us reads Danish, the other doesn't at all."), []);
+  is("nor 'not why we're coming'", readExclusions("it's not why we're coming"), []);
+  is("nor a day of the week", readExclusions("not Monday"), []);
+  is("nor the country itself", readExclusions("not Denmark"), []);
+  is("nothing said rules nothing out", readExclusions(""), []);
+  is("and neither does something that is not text", readExclusions(null), []);
+
+  // ── THE FILTER ───────────────────────────────────────────────────
+  ok("the named place is out", isExcluded({ name: "Legoland", town: "Billund" }, ["Legoland"]));
+  // "Legoland" has to rule out "Legoland Billund Resort", or the exclusion is
+  // defeated by the row's fuller name.
+  ok("and its fuller name too", isExcluded({ name: "Legoland Billund Resort" }, ["Legoland"]));
+  // And a TOWN ruled out takes everything in it.
+  ok("a town ruled out takes what is in it", isExcluded({ name: "Lindholm Høje", town: "Aalborg" }, ["Aalborg"]));
+  ok("but nothing else is touched", !isExcluded({ name: "Lindholm Høje", town: "Aalborg" }, ["Legoland"]));
+  ok("no exclusions filters nothing", !isExcluded({ name: "Legoland" }, []));
+  is("withoutExcluded keeps the rest",
+     withoutExcluded([{ name: "Legoland" }, { name: "Jelling" }], ["Legoland"]).map(r => r.name), ["Jelling"]);
+
+  // ── AND IT SAYS SO OUT LOUD ──────────────────────────────────────
+  // A place silently dropped is indistinguishable from a place we do not have,
+  // and the traveller has no way to tell their "no" was heard. That silence is
+  // Layla's whole problem.
+  is("one exclusion is named", excludedNote(["Legoland"]), "Leaving out Legoland, as you asked.");
+  ok("two are joined readably", /Leaving out Legoland and Tivoli, as you asked\./.test(excludedNote(["Legoland", "Tivoli"])));
+  is("and nothing ruled out says nothing", excludedNote([]), "");
+
+  // ── FILTERED AT ONE DOOR, NOT THREE ──────────────────────────────
+  // matchedPlaces has three call sites and a rule applied at one of them is the
+  // failure this repository has now paid for four separate times.
+  {
+    const pm = stripComments(readFileSync(join(root, "src/utils/previewMatch.js"), "utf8"));
+    ok("the matcher reads the exclusions itself", /const ruledOut = readExclusions\(ownWords\)/.test(pm));
+    // ownWords, not the whole transcript: a place GEMLYX named is not a place
+    // the traveller ruled out.
+    ok("from the traveller's own words rather than the transcript", !/readExclusions\(text\)/.test(pm));
+    ok("and every return path goes through the filter",
+       (pm.match(/return keep\(/g) || []).length >= 2 && !/^\s*return matched;$/m.test(pm));
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    // constraintCheck has audited a field with no writer since the day it was
+    // written. This is the writer.
+    ok("and the built guide finally carries the constraints it is audited against",
+       /_constraints: \{ excluded: readExclusions\(saidByTravellerForGuide\)/.test(app));
+  }
+}
+
+// ── FOUND, WRITTEN DOWN, AND DELETED ────────────────────────────────
+//
+// Oliver's Limfjord guide, 26 Aug 2026, run log step 14:
+//
+//   The guide's logistics, against its own legs  [google · empty · discarded]
+//   "This suggests a bus for the last leg, and the last leg was MEASURED at
+//    1 minute on foot from Kongernes Jelling."
+//
+// His own rule — SHORT_WALK_MINUTES, 12 August. The gate caught it and wrote it
+// into `planProblems`. `_planProblems` has exactly one consumer in the app, in
+// GuidePage's save path, and it DELETES the field. The comment above that line,
+// written the same day, reads "Nothing renders them" — stated, and left open.
+{
+  const { problemText, problemList, problemHeading, PROBLEM_NOTE } = M;
+
+  const REAL = "This suggests a bus for the last leg, and the last leg was MEASURED at 1 minute on foot from Kongernes Jelling. A walk that short is the connection.";
+
+  is("a string finding reads as itself", problemText(REAL), REAL);
+  // checkPlan returns objects; every other gate returns strings. A mixed list is
+  // the normal case and "[object Object]" is what a naive reader prints.
+  is("an object finding reads its own field", problemText({ why: "A day covers too much ground." }), "A day covers too much ground.");
+  is("and never the words object Object", problemText({ nope: 1 }), "");
+  is("nothing is nothing", problemText(null), "");
+
+  {
+    const guide = { _planProblems: [REAL, { why: "A day covers too much ground." }, "", null, REAL] };
+    const list = problemList(guide);
+    is("both shapes come through", list.length, 2);
+    is("the real one first", list[0], REAL);
+    ok("empties are dropped rather than rendered as blank bullets", !list.includes(""));
+    // The same finding can arrive from two gates on one build.
+    is("and a duplicate is shown once", list.filter(x => x === REAL).length, 1);
+  }
+  is("a guide with no findings renders nothing", problemList({ days: [] }), []);
+  is("nor does something that is not a guide", problemList(null), []);
+
+  ok("the heading counts, and reads as English at one", /^One thing the checks caught/.test(problemHeading(1)));
+  ok("and at more", /^3 things the checks caught/.test(problemHeading(3)));
+  // WHY IT IS WORTH ACTING ON: these are the pipeline's own measurements
+  // disagreeing with its own prose, which is the only kind of problem this app
+  // can be certain about.
+  ok("the note says these are measurements rather than opinions", /own measurements, not from a model's opinion/.test(PROBLEM_NOTE));
+  ok("and that nobody they share it with sees them", /nobody you share it with sees them/.test(PROBLEM_NOTE));
+
+  // ── AND IT IS ACTUALLY ON SCREEN ─────────────────────────────────
+  // The whole bug was a field nothing rendered. A reader nothing renders would
+  // be the same bug with more code.
+  {
+    const gp = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+    ok("the guide page reads the findings", /const problems = problemList\(guide\)/.test(gp));
+    ok("and renders each one", /problems\.map\(\(x, i\) =>/.test(gp));
+    ok("with nothing shown when there are none", /if \(!problems\.length\) return null;/.test(gp));
+    // The save path must STILL strip them: they are notes in the pipeline's own
+    // voice and were being sent to every browser that opened a shared link. The
+    // strip is also what makes the panel self-gating — a shared guide has no
+    // field, so a reader sent a link cannot see it and no permission check is
+    // needed.
+    ok("and the save path still strips them from what is shared",
+       /_testProfile, _testPlan, _planProblems, \.\.\.rest/.test(gp));
+  }
+}
+
+// ── WHAT DO MY AFFILIATES ACTUALLY CONNECT TO ───────────────────────
+//
+// Oliver, 26 Aug 2026: "perhaps make a studio section for my affiliates.. that
+// looks through what my affiliates connect to?"
+//
+// He asked because nothing could answer it, and neither could I. Every link is
+// built, disclosed and gated correctly, and no surface anywhere says how MANY
+// rows carry one. A programme wired to four rows out of a hundred and forty-eight
+// earns almost nothing and is indistinguishable, from the code, from one wired to
+// all of them.
+{
+  const { auditRow, auditRows, auditSummary, auditNote, programmeState, ticketDestination } = M;
+  const isBookable = (u) => /tiqets\.com\/.*-p\d+/.test(String(u || ""));
+  const agentOf = (u) => (isBookable(u) ? "tiqets" : "");
+  const wrap = (u) => (isBookable(u) ? "https://tp.media/r?u=" + encodeURIComponent(u) : "");
+  const opts = { isBookable, agentOf, wrap };
+
+  // The destination is read in the SAME order DetailPage reads it, so the audit
+  // and the render can never disagree about which URL a row would use.
+  is("a hand-set ticketUrl wins", ticketDestination({ payload: { ticketUrl: "https://a", __ticket: { url: "https://b" } } }), "https://a");
+  is("the pipeline's find is the fallback under it", ticketDestination({ payload: { __ticket: { url: "https://b" } } }), "https://b");
+  is("and a row with neither has none", ticketDestination({ payload: { name: "x" } }), "");
+
+  // ── THE FOUR STATES ──────────────────────────────────────────────
+  is("a wrapped product page earns",
+     auditRow({ payload: { name: "Rosenborg", ticketUrl: "https://www.tiqets.com/en/tickets-for-rosenborg-castle-p974091" } }, opts).state, "earning");
+  // THE WORK QUEUE, and the most useful state of the four. The pipeline found
+  // something and the gate refused it, so the row is one hand-edit from earning.
+  is("a search or category page is refused, not earning",
+     auditRow({ payload: { name: "Tivoli", ticketUrl: "https://www.tiqets.com/en/copenhagen-c66018/" } }, opts).state, "refused");
+  is("a row with no link at all is its own state",
+     auditRow({ payload: { name: "Kronborg" } }, opts).state, "none");
+  // A bookable page with no template renders a button that pays nothing, and the
+  // page looks identical either way — which is why it needs naming.
+  is("a product page with no template renders and earns nothing",
+     auditRow({ payload: { name: "R", ticketUrl: "https://www.tiqets.com/en/tickets-for-x-p1" } }, { isBookable, agentOf, wrap: () => "" }).state, "bookable-unwrapped");
+
+  // A checker that throws must not silently promote a row to earning.
+  is("a gate that throws refuses rather than passes",
+     auditRow({ payload: { name: "x", ticketUrl: "https://a" } }, { isBookable: () => { throw new Error("boom"); } }).state, "refused");
+  is("a row that is not one does not crash the audit", auditRows([null, undefined], opts).length, 2);
+
+  {
+    const rows = [
+      { payload: { name: "A", ticketUrl: "https://www.tiqets.com/en/tickets-for-a-p1" } },
+      { payload: { name: "B", ticketUrl: "https://www.tiqets.com/en/tickets-for-b-p2" } },
+      { payload: { name: "C", ticketUrl: "https://www.tiqets.com/en/copenhagen-c66018/" } },
+      { payload: { name: "D" } },
+    ];
+    const s2 = auditSummary(auditRows(rows, opts));
+    is("the counts add up to the total", s2.earning + s2.refused + s2.none + s2.unwrapped, s2.total);
+    is("two earn", s2.earning, 2);
+    // THE SHARE, because 12 of 148 and 12 of 14 are different businesses and the
+    // raw count reads the same.
+    is("and the share is what makes the count mean something", s2.share, 50);
+    is("with the agent named", s2.agents, ["tiqets"]);
+
+    const note = auditNote(s2);
+    ok("the note leads with the share", /2 of 4 published rows earn on a ticket click, which is 50%/.test(note));
+    // The number that can be acted on TODAY rather than the total.
+    ok("and names the work queue as work", /work queue/.test(note));
+    ok("with the singular right", /1 more already carries/.test(note));
+  }
+  ok("nothing published says so plainly", /Nothing published yet/.test(auditNote({ total: 0 })));
+  ok("and a shelf where nothing carries a link is named as earning nothing",
+     /no ticket button renders anywhere/.test(auditNote({ total: 148, earning: 0, refused: 0, unwrapped: 0, none: 148 })));
+
+  // ── AND WHICH PROGRAMMES ARE SWITCHED ON AT ALL ──────────────────
+  // An empty template is not a bug, and there is no way to tell an empty one
+  // from a filled one without opening config.js, which is the state this panel
+  // exists to end.
+  {
+    const ps = programmeState({ tiqetsTemplate: "https://tp.media/r?u={url}", tiqetsBrowse: "", ticketmasterTemplate: "", bookingId: "", carRental: "https://autoeurope.tpx.li/x", wegotrip: "https://wegotrip.tpx.li/y" });
+    const on = ps.filter(p => p.on).map(p => p.name);
+    is("only the configured ones read as on", on.slice().sort(), ["Car hire", "Tiqets", "WeGoTrip"]);
+    // Airbnb can never be on: Associates closed in March 2021 and has not
+    // reopened, so there is nothing to attach.
+    is("Airbnb is always off, because there is nothing to attach", ps.find(p => p.name === "Airbnb").on, false);
+    ok("and it says why rather than looking like an oversight",
+       /closed in March 2021/.test(ps.find(p => p.name === "Airbnb").note));
+    // WeGoTrip sells Legoland Billund entry. The traveller who wrote "please
+    // don't send us to Legoland" must not be sold one through a partner.
+    ok("WeGoTrip carries the warning that it sells Legoland entry",
+       /Legoland/.test(ps.find(p => p.name === "WeGoTrip").note));
+  }
+
+  // ── AND IT IS ON SCREEN ──────────────────────────────────────────
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the Studio renders the panel", /<AffiliatePanel rows=\{manageItems\} \/>/.test(app));
+    // Reads the rows already loaded rather than fetching: a panel that
+    // re-queries answers about a different set than the one being managed.
+    ok("from the rows already loaded", /Array\.isArray\(manageItems\) && <AffiliatePanel/.test(app));
+  }
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
