@@ -81,10 +81,11 @@ writeFileSync(entry, `
   export { isAbsolutePhoto, heroNeedsReplacing, heroPatch, heroStatusLine } from ${JSON.stringify(join(root, "src/utils/heroPhoto.js"))};
   export { saveLabel, saveHint, savedLine, planFromSavedLabel } from ${JSON.stringify(join(root, "src/utils/savedTrip.js"))};
   export { CONSTRAINT_KINDS, constraintViolations, violationsOfKind, constraintNote, repairWorked, INVENTORY_MAY_NOT_SELECT } from ${JSON.stringify(join(root, "src/utils/constraintCheck.js"))};
-  export { briefPanel, briefSentence, briefGaps, willNotAssume, briefVagueNote, briefLines, whenPhrase, clauseFor, isAcknowledged, ACKNOWLEDGED, briefProgress, progressLine } from ${JSON.stringify(join(root, "src/utils/briefPanel.js"))};
+  export { briefPanel, briefSentence, briefGaps, willNotAssume, briefVagueNote, briefLines, whenPhrase, clauseFor, isAcknowledged, ACKNOWLEDGED, briefProgress, progressLine, briefPercent, percentLine } from ${JSON.stringify(join(root, "src/utils/briefPanel.js"))};
   export { EVIDENCE, EVIDENCE_RANK, EVIDENCE_LABEL, fieldSourceKey, PERISHABLE_FIELD_TOPIC, PERISHABLE_FIELDS, isPerishable, perishableTopic, evidenceOf, entryEvidence, evidenceCounts, unbackedPerishables, weakestClaim, evidenceNote, PERISHABLE_TOPICS_USED, PAGE_SCAN_TOPICS } from ${JSON.stringify(join(root, "src/utils/evidence.js"))};
   export { selfContradictions as selfContra, PROSE_FIELDS as AUDIT_PROSE_FIELDS, PROSE_LISTS } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
-  export { mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink, GUIDE_SCAFFOLDING } from ${JSON.stringify(join(root, "src/utils/userSaves.js"))};
+  export { mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink, GUIDE_SCAFFOLDING, syncFailureNote, SYNC } from ${JSON.stringify(join(root, "src/utils/userSaves.js"))};
+  export { literalRenderings, literalNote, looksLikeAName, FALSE_FRIENDS, FALSE_FRIEND_RULE, NAME_RULE } from ${JSON.stringify(join(root, "src/utils/literalDanish.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { cleanOffer, offerProblems, offerLive, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
@@ -12294,7 +12295,46 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // MEASURED, keepProse guards what it WROTE. The chain is asserted rather than
   // the adjacency, so a third guard can be added without this going red for the
   // wrong reason.
-  ok("the auto-correction merges rather than replaces", /const kept = keepMeasured\(t, corrected\);/.test(appW));
+  // Anchored on the first ARGUMENT, not on the whole call. The previous version
+  // spelled out `keepMeasured(t, corrected);` and went red on 26 Aug when a
+  // third argument was added — a shape-pinned assertion failing for a change
+  // that did not touch its rule, which is the class this file keeps retiring.
+  // What matters is that the merge starts from the draft.
+  ok("the auto-correction merges rather than replaces", /const kept = keepMeasured\(t,/.test(appW));
+  // ── AND THE OPERATOR'S OWN DATES ARE LOCKED ──────────────────────
+  // Oliver, 26 Aug 2026: "what should contradict Roskilde-festival.com's page?
+  // Some blogger from USA?" Nothing should. __dateSource already recorded that
+  // the pipeline read the dates off the operator's page and protected nothing.
+  ok("a date the operator published is not rewritable",
+     /const datesAreTheirs = t\.__dateSource\?\.by === "official-site";/.test(appW));
+  ok("and all three date fields are locked when it is",
+     /alsoKeep: datesAreTheirs \? \["date", "dateStart", "dateEnd"\] : \[\]/.test(appW));
+  // Conditional, deliberately: on a draft where nobody confirmed anything, a
+  // date is ordinary rewritable prose and the correction must still reach it.
+  ok("and not locked when nobody confirmed them", /: \[\],/.test(appW));
+  // ── AND THE FUNCTION HAS TO HONOUR IT ────────────────────────────
+  //
+  // Found by mutation on 26 Aug: `locked` was reduced to isPipelineOwned alone,
+  // ignoring alsoKeep entirely, and the suite stayed green at 11,080. The three
+  // assertions above check that App.jsx PASSES the option and none of them check
+  // that keepMeasured does anything with it — the call pinned, the behaviour not.
+  {
+    const before = { name: "Roskilde Festival", dateStart: "2027-06-26", dateEnd: "2027-07-03", desc: "A festival.", travelTime: "50min" };
+    const rewritten = { ...before, dateStart: "2026-06-27", dateEnd: "2026-07-04", desc: "A rewritten festival." };
+    const locked = keepMeasured(before, rewritten, { alsoKeep: ["dateStart", "dateEnd"] });
+    is("a locked date is put back after the rewrite moved it", locked.patched.dateStart, "2027-06-26");
+    is("both ends of it", locked.patched.dateEnd, "2027-07-03");
+    ok("and the founder is told the rewrite reached for them",
+      locked.restored.includes("dateStart") && locked.restored.includes("dateEnd"));
+    // The rewrite is not otherwise weakened: everything it was allowed to change
+    // still changes, or this would be a refusal rather than a lock.
+    is("prose the rewrite was allowed to touch still changes", locked.patched.desc, "A rewritten festival.");
+    // And without the lock the same rewrite goes through, which is correct on a
+    // draft where nobody confirmed anything.
+    const open = keepMeasured(before, rewritten, { alsoKeep: [] });
+    is("an unconfirmed date is still rewritable", open.patched.dateStart, "2026-06-27");
+    is("and defaults to rewritable when nothing is passed", keepMeasured(before, rewritten).patched.dateStart, "2026-06-27");
+  }
   ok("prose is guarded after the measured fields are", /const prose = keepProse\(t, kept\.patched\);/.test(appW));
   ok("and the merged draft is the end of that chain", /const merged = prose\.patched;/.test(appW));
   ok("and the draft Publish reads is the merged one", /t = merged;/.test(appW));
@@ -19597,31 +19637,24 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   //
   // They are replaced rather than kept, because a browse link and a costs list
   // are not two features — the second one is what the first was standing in for.
+  // ── AND THESE MOVED WHEN THE BLOCK DID ─────────────────────────
+  //
+  // Nine assertions used to live here reading GuidePage's source for the shape
+  // of an inline costs list: that forWhat was printed, that a refusal replaced
+  // the link, that the price carried its host. Every one of them was a regex
+  // over JSX, which is the weakest way to ask "what does the screen say".
+  //
+  // The block is its own component since 26 Aug 2026 precisely so the question
+  // can be asked properly, and it is — search this file for "what the costs
+  // block actually says", where the same rules are checked against RENDERED
+  // MARKUP with a real guide going in. They are not deleted, they are stronger.
+  //
+  // What stays here is the only thing a render test cannot see: that the page
+  // reaches for the component at all. A perfect component nobody calls is this
+  // repository's signature bug.
   const guideSrc = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
-  ok("the guide lists what the trip actually costs", /costLines\(\{/.test(guideSrc));
-  ok("ordered so the things that stop being possible come first", /byUrgency\(costLines/.test(guideSrc));
-  // ONCE PER GUIDE, NOT PER DAY, which is the half of the old block that
-  // survives unchanged: "Where to stay" repeats per day because the answer
-  // changes per day, and a costs list does not.
-  is("the costs list is rendered once", (guideSrc.match(/costLines\(\{/g) || []).length, 1);
-  ok("and it sits in the guide's own essentials block, not in a day card",
-    /Before you go[\s\S]{0,8000}costLines\(\{/.test(guideSrc));
-  // Renders nothing rather than an empty labelled row, same as the browse link
-  // did. Mutation testing killed the old version of this guard, so it is kept.
-  ok("and renders nothing at all when there is nothing to pay for", /if \(!lines\.length\) return null;/.test(guideSrc));
-  // The disclosure is printed from the LINKS THAT ARE THERE, not typed, so it
-  // cannot say "this pays us" over a list that happens to contain none.
-  ok("the disclosure is computed from the partner links on the page",
-    /const partnered = lines\.filter\(l => l\.partner\)/.test(guideSrc));
-  ok("and it only appears when there is one", /\{partnered\.length > 0 && \(/.test(guideSrc));
-  // What it is for, which is the field that makes this a list rather than a row
-  // of logos, and the one Oliver asked for by name.
-  ok("every line says what it is for", /\{l\.forWhat\}/.test(guideSrc));
-  // A refused line keeps its place and loses only its checkout.
-  ok("a refused line prints its reason instead of a link", /l\.refused[\s\S]{0,200}\{l\.refused\}/.test(guideSrc));
-  // The price travels with where it was read and when. A figure nobody can
-  // check is a figure nobody should believe.
-  ok("a printed price carries its source", /\{l\.priceFrom\.host\}/.test(guideSrc));
+  ok("the guide page draws the costs block", /<CostsBlock /.test(guideSrc));
+  is("once, not once per day", (guideSrc.match(/<CostsBlock /g) || []).length, 1);
 }
 
 // ── FINDING THE TICKET, AND REFUSING THE WRONG ONE ───────────────────
@@ -24366,12 +24399,22 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── THE GATE THAT MADE IT ALL FAIL ───────────────────────────────
   // Named here so the assertions below have something to be about: four call
   // sites, all refusing a session with no id, none of them shouting.
-  for (const [file, needle] of [
-    ["src/utils/userSaves.js", "if (!session?.token || !session?.userId) return null;"],
-    ["src/utils/userSaves.js", "if (!session?.token || !session?.userId) return false;"],
-    ["src/utils/profile.js", "if (!session?.token || !session?.userId) return null;"],
-    ["src/utils/profile.js", "if (!session?.token || !session?.userId) return { ok: false };"],
-  ]) ok(`${file} still refuses a session with no id`, readFileSync(join(root, file), "utf8").includes(needle));
+  // ── THE GUARD, NOT THE RETURN VALUE ──────────────────────────────
+  //
+  // This used to spell out the whole line including `return null;`, and went red
+  // on 26 Aug when fetchCloudSaves started returning a REASON instead of a bare
+  // null — a change that did not touch the rule this assertion is about. The
+  // rule is that a session with no id is refused; what the refusal looks like is
+  // the caller's business and has now changed twice.
+  for (const [file, count] of [["src/utils/userSaves.js", 2], ["src/utils/profile.js", 2]]) {
+    const src = stripComments(readFileSync(join(root, file), "utf8"));
+    is(`${file} refuses a session with no id, at every door`,
+      (src.match(/if \(!session\?\.token \|\| !session\?\.userId\)/g) || []).length, count);
+  }
+  // fetchCloudSaves itself is not called here: it does network I/O, and the
+  // header of this file says nothing in it touches the network. The DECISION it
+  // now returns a reason for is pure, and that is tested on its own further down
+  // — search for "saves don't sync".
 
   // So the capture has to have one BEFORE it hands the session over. Awaited,
   // not fired and forgotten into a floating promise that only wrote localStorage.
@@ -27110,10 +27153,24 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the report is built from the real conversation", /messages: aiMessages,/.test(appSrc2));
   // COUNTED, not merely present. `asked: briefAsked` appears in sendAI too, so a
   // regex that only asks "is this string anywhere" passed happily with the report's
-  // copy torn out — mutation testing found that. Two call sites, two occurrences:
-  // the live chat gate and the report.
-  is("and from what it had already asked, in both places that need it",
-     (appSrc2.match(/asked: briefAsked,/g) || []).length, 2);
+  // copy torn out — mutation testing found that.
+  //
+  // THREE call sites since 26 Aug 2026, and the third is why a bare number is a
+  // bad assertion: the completeness bar under the composer reads the same brief,
+  // and this went red for a change that was correct. Each site is named, so the
+  // next one is a decision somebody writes down rather than a digit they bump.
+  //
+  //   sendAI                the live chat gate, which decides what to ask next
+  //   buildChatReport       the export, which has to report what was asked
+  //   liveIntakeBrief       the % bar, which must agree with the build button
+  //
+  // A slot that was asked and dodged is not a slot that is done, so a reader
+  // that skips `asked` counts it as done and the bar overstates. That is the
+  // rule all three share and the reason this is one number and not three.
+  is("and from what it had already asked, in every place that needs it",
+     (appSrc2.match(/asked: briefAsked,/g) || []).length, 3);
+  ok("including the completeness bar, which must agree with the build button",
+     /const liveIntakeBrief = useMemo\(\(\) => \{[\s\S]{0,600}asked: briefAsked,/.test(appSrc2));
   ok("and the intake is passed", /transport: intakeTransport,\s*\n\s*budgetText: intakeBudgetText,/.test(appSrc2));
   ok("it downloads a file rather than needing an endpoint", /downloadReport\(report, chatReportFilename\(at\)\);/.test(appSrc2));
   ok("the button says how many turns it will export", /Export this chat as a report \(\$\{aiMessages\.length\} turns\)/.test(appSrc2));
@@ -37345,6 +37402,502 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("a half match gets its own line, not the confirmed one", /HALF CONFIRMED/.test(appD));
     ok("which names the date the operator does not publish", /nothing matching \$\{dc\.missing\.join/.test(appD));
     ok("and it reaches the founder rather than only the log", /if \(dc\.partial\) noteToFounder\(dc\.detail\)/.test(appD));
+  }
+}
+
+
+// ── "IT SEEMED LIKE EVERY DRAFT WAS CORRECTED ON DIRECTIONS API" ────
+//
+// Oliver, 26 Aug 2026, after reading seven run logs in a row. It did look that
+// way, and three of the seven were not corrections:
+//
+//   Roskilde   model "50min 🚂"     value "50min 🚂"
+//   Køge       model "43min 🚂"     value "43min 🚂"
+//   Kliplev    model "3h 35min 🚂"  value "3h 35min 🚂"
+//
+// Each logged "believed Google Directions (measured), overruled the model" —
+// overruled it with its own answer. A decisions list where three of seven
+// entries are agreements is one nobody can skim for the four that mattered,
+// which is how a false "DID NOT LAND" made the correction banner unreadable.
+{
+  const appT = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  // A decision requires a difference, on BOTH branches that measure a duration.
+  ok("the transit branch only decides when the measurement differs",
+    /if \(modelSaid === t\.travelTime\) \{[\s\S]{0,600}\} else \{[\s\S]{0,400}decide\("travelTime"/.test(appT));
+  ok("and the road branch does too",
+    /if \(modelSaid !== t\.travelTime\) \{[\s\S]{0,400}winner: "Google Directions \(measured, by road\)"/.test(appT));
+  // An agreement is not nothing: Google confirming a written duration is real
+  // evidence about the draft, so it is still recorded, just not as a decision.
+  ok("an agreement is still reported, as a note",
+    /note\("travelTime matched the measurement"/.test(appT));
+  ok("and says plainly that nothing was overruled",
+    /so nothing was overruled/.test(appT));
+  // ── AND THE COUNT, WHICH FOUND A THIRD SITE ──────────────────────
+  //
+  // The first version of this demanded that EVERY decide("travelTime") sit
+  // behind a difference check, and it went red on a third one that legitimately
+  // does not: the branch where neither mode returned a usable duration records
+  // that the figure is WRITTEN rather than measured. That is provenance, not an
+  // override, and its winner is the model.
+  //
+  // So the rule is narrower and truer: a decision that names GOOGLE as the
+  // winner has to have found a difference first. Counted, so a fourth measuring
+  // branch cannot appear without one.
+  {
+    const decisions = appT.split('decide("travelTime"').slice(1);
+    const googleWins = decisions.filter(d => /winner: "Google Directions/.test(d.slice(0, 200)));
+    is("there are two branches where a measurement wins", googleWins.length, 2);
+    is("and a difference check for each of them",
+      (appT.match(/modelSaid (?:===|!==) t\.travelTime/g) || []).length, 2);
+    // The exempt one, named so its exemption is deliberate rather than a gap.
+    const modelWins = decisions.filter(d => /winner: `the model/.test(d.slice(0, 200)));
+    is("and one that records an unmeasured figure as written", modelWins.length, 1);
+    ok("which says so in its rule", /This number is WRITTEN, not measured\./.test(appT));
+  }
+}
+
+
+// ── "MAKE A (EG.) 76% COMPLETE" ─────────────────────────────────────
+//
+// Oliver, 26 Aug 2026, with a red line under the chat composer: "depending on
+// how much more the AI needs to have a result ready for the user."
+//
+// One rule carries the whole feature: 100% MEANS THE GUIDE CAN BE BUILT NOW.
+// A bar that reads 100 over a screen with no button, or 88 over a brief that is
+// finished, is a worse thing to show than no bar. So almost everything below
+// checks the percentage against `ready` rather than on its own.
+{
+  const { briefPercent, percentLine, briefProgress, readBrief, BLOCKING_SLOTS } = M;
+  const NOW = new Date("2026-08-26T09:00:00Z");
+  const read = (text, intake = {}) =>
+    readBrief({ travellerText: text, travellerTurns: [text], today: NOW, intake });
+
+  const NOTHING = read("");
+  const SOME = read("Two of us, five days in Copenhagen in October, we like food, we will take the train.");
+  const ALL = read("Two of us, five days from Copenhagen Airport, 8 to 12 October 2026, food and design, trains and buses, we have already booked a hotel.");
+
+  // ── THE PROMISE, BOTH WAYS ───────────────────────────────────────
+  is("a finished brief is 100", briefPercent(ALL), 100);
+  ok("and only a finished brief is", ALL.ready === true && SOME.ready === false && briefPercent(SOME) < 100);
+  is("an empty one is 0", briefPercent(NOTHING), 0);
+  ok("and something part-said is in between", briefPercent(SOME) > 0 && briefPercent(SOME) < 100);
+  // Checked across a spread, because the failure is one specific brief where the
+  // bar and the button part company and any single example can miss it.
+  {
+    const spread = ["", "Copenhagen.", "Five days in Copenhagen.", "Two of us, five days in Copenhagen in October.",
+      "Two of us, five days in Copenhagen in October, food, by train.",
+      "Two of us, five days from Copenhagen Airport, 8 to 12 October 2026, food and design, trains and buses, we have already booked a hotel."].map(t => read(t));
+    for (const b of spread) {
+      const p = briefPercent(b);
+      ok(`100 and ready mean each other (${p}%)`, (p === 100) === (b.ready === true));
+      ok("and it stays inside the bar", p >= 0 && p <= 100);
+    }
+    // Monotonic: adding facts must never move the bar backwards, which is what a
+    // reader will notice before anything else.
+    const pcts = spread.map(briefPercent);
+    ok("more said is never a smaller number", pcts.every((v, i) => i === 0 || v >= pcts[i - 1]));
+  }
+
+  // ── A VAGUE ANSWER IS HALF AN ANSWER ─────────────────────────────
+  //
+  // "Sometime in October" fills `when` and does not settle it. Counting it whole
+  // overstates what Gemlyx knows; counting it as nothing makes the bar jump
+  // backwards when somebody narrows a date they had already given.
+  {
+    const loose = read("Two of us, five days from Copenhagen Airport, sometime in October, food, by train, hotel booked.");
+    const tight = read("Two of us, five days from Copenhagen Airport, 8 to 12 October 2026, food, by train, we have already booked a hotel.");
+    ok("a vague date is worth something", briefPercent(loose) > 0);
+    ok("and pinning it down is worth more", briefPercent(tight) >= briefPercent(loose));
+    // ── AND THE HALF, BY ITS NUMBER ────────────────────────────────
+    //
+    // Found by mutation: making a vague answer worth NOTHING left the suite
+    // green, because the two assertions above compare with >= and pass either
+    // way. A rule about a fraction has to be tested as a fraction.
+    //
+    // Six of seven known, one of them vague: 5.5/7 rounds to 79. Counting it
+    // whole gives 86 and counting it as nothing gives 71, so this one number
+    // rules out both.
+    const six = BLOCKING_SLOTS.slice(0, 6);
+    const known6 = Object.fromEntries(six.map(k => [k, { value: "x", source: "said" }]));
+    is("six known, none vague, is six sevenths",
+      briefPercent({ known: known6, ready: false, vague: [] }), 86);
+    is("and one of them vague is half a slot less",
+      briefPercent({ known: known6, ready: false, vague: [six[0]] }), 79);
+    // A vague slot that is not KNOWN cannot subtract: it was never added.
+    is("a vague slot nobody answered takes nothing away",
+      briefPercent({ known: known6, ready: false, vague: [BLOCKING_SLOTS[6]] }), 86);
+  }
+
+  // ── THE DENOMINATOR ──────────────────────────────────────────────
+  // Not all eight slots: counting the optional budget would cap a complete brief
+  // at 88% and a bar that never fills is worse than no bar.
+  ok("budget is not in the denominator", !BLOCKING_SLOTS.includes("budget"));
+  is("so a complete brief with no budget is still 100", briefPercent(ALL), 100);
+  // Stated as the arithmetic, so widening the denominator is caught by the
+  // number rather than only by whatever else happens to shift. Six of the seven
+  // blocking slots is 86%; six of all eight would be 75%.
+  is("the denominator is the blocking set, not all eight",
+    briefPercent({ known: Object.fromEntries(BLOCKING_SLOTS.slice(0, 6).map(k => [k, { value: "x" }])), ready: false }), 86);
+  is("and it agrees with the count beside it", briefProgress(ALL).done, briefProgress(ALL).total);
+
+  // ── THE WORDS ────────────────────────────────────────────────────
+  ok("the line carries the number", /^\d+% complete/.test(percentLine(SOME)));
+  ok("a finished brief says so instead of a number", /Ready to build/.test(percentLine(ALL)));
+  {
+    const oneLeft = read("Two of us, five days from Copenhagen Airport, 8 to 12 October 2026, food and design, trains and buses.");
+    ok("one slot left is named rather than counted", /I still need/.test(percentLine(oneLeft)));
+  }
+  // ── THE CLAMP, TESTED DIRECTLY ───────────────────────────────────
+  //
+  // Found by mutation on 26 Aug: changing the clamp from 99 to 100 broke
+  // nothing. With seven slots you cannot round to 100 without every slot being
+  // known, and every slot known currently implies `ready`, so no brief readBrief
+  // can produce reaches the guard — the promise the whole feature rests on had
+  // no test at all.
+  //
+  // briefPercent takes a plain object, so the state can be built by hand. That
+  // is the point: the guard exists for the day `ready` gains a condition that
+  // "all slots known" does not satisfy, and this is what will notice.
+  {
+    const allKnown = Object.fromEntries(BLOCKING_SLOTS.map(k => [k, { value: "x", source: "said" }]));
+    is("everything known and ready is 100", briefPercent({ known: allKnown, ready: true }), 100);
+    is("everything known and NOT ready stops short of 100", briefPercent({ known: allKnown, ready: false }), 99);
+    ok("because 100 is a promise about the button, not about the fields",
+      briefPercent({ known: allKnown, ready: false }) < 100);
+  }
+  is("junk does not throw", briefPercent(null), 0);
+  is("nor does junk get words", typeof percentLine(null), "string");
+
+  // ── AND IT REACHES THE SCREEN, UNDER THE COMPOSER ────────────────
+  //
+  // briefPanel.js sat with zero callers for three days before the last one of
+  // these was wired, which is this repository's signature bug.
+  {
+    const appP2 = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the bar is drawn", /percentLine\(liveIntakeBrief\)/.test(appP2));
+    ok("with a width driven by the same number", /width: `\$\{briefPercent\(liveIntakeBrief\)\}%`/.test(appP2));
+    // Under the composer, not somewhere else on the page: the hint line it
+    // replaces is the anchor, because that is the spot Oliver drew on.
+    ok("in the place the hint used to sit",
+      /Mention who's traveling[\s\S]{0,400}$|briefPercent\(liveIntakeBrief\) > 0 \? \([\s\S]{0,1600}Mention who's traveling/.test(appP2));
+    // "0% complete" over an empty box is a form with a scoreboard on it.
+    ok("and nothing is shown before anything is known", /briefPercent\(liveIntakeBrief\) > 0 \? \(/.test(appP2));
+    // THE HALF THAT MADE IT WORTH BUILDING: the form is read too, so the bar is
+    // alive before the first message, which is when those fields get filled.
+    ok("the form feeds it, not only the chat", /arrival: intakeArrival,\s*\n\s*departure: intakeDeparture,/.test(appP2));
+    ok("and so do the traveller's own turns", /travellerTurns: turns,/.test(appP2));
+  }
+}
+
+
+// ── AND WHAT THE COSTS BLOCK ACTUALLY SAYS ──────────────────────────
+//
+// Oliver, 26 Aug 2026: "Shall we test the guide in some way?"
+//
+// This is the half no assertion in this file could reach until the block was
+// pulled out of GuidePage. Everything above checks costLedger's RULES; this
+// checks that a guide goes in and words come out, which is the question four
+// wiring failures shipped through this month.
+{
+  const { renderSurface: rsc } = await import(pathToFileURL(join(root, "tests/render.mjs")).href);
+  const C = { surface: "#111", border: "#222", gold: "#D9A441", text: "#fff", light: "#ddd", muted: "#888", bg: "#0A0F1E" };
+  const FEB = new Date("2027-02-12T09:00:00Z");
+
+  const ROWS = {
+    // A June festival on a February trip: the Distortion case, by name.
+    "Distortion": { _src: "event", date: "2027-06-02", dateEnd: "2027-06-06",
+      ticketUrl: "https://www.ticketmaster.dk/event/distortion-12345", ticketStatus: "on_sale",
+      __priceSource: { url: "https://cphdistortion.dk/billetter", host: "cphdistortion.dk", price: "450 DKK", at: "2026-08-20" } },
+    "Rosenborg Slot": { _src: "free",
+      ticketUrl: "https://www.tiqets.com/en/copenhagen-attractions/rosenborg-castle-tickets-p123456", ticketStatus: "on_sale",
+      __priceSource: { url: "https://kongernessamling.dk", host: "kongernessamling.dk", price: "145 DKK", at: "2026-08-19" } },
+    "Nationalmuseet": { _src: "free", ticketStatus: "free" },
+    "Møns Klint": { _src: "free",
+      __priceSource: { url: "https://moensklint.dk", host: "moensklint.dk", price: "110 DKK", at: "2026-08-20" } },
+  };
+  const GUIDE = {
+    _arrivalDate: "2027-02-12", _mode: "driving",
+    days: [
+      { day: 1, stops: [{ name: "Rosenborg Slot" }, { name: "Nationalmuseet" }], glance: { stayArea: "Indre By", legs: [] } },
+      { day: 2, stops: [{ name: "Distortion" }], glance: { legs: [] } },
+      { day: 3, stops: [{ name: "Møns Klint" }], glance: { legs: [] } },
+    ],
+  };
+  const draw = (props) => rsc("src/components/CostsBlock.jsx", "CostsBlock",
+    { guide: GUIDE, C, rowFor: (n) => ROWS[n] || null, now: FEB, ...props });
+
+  {
+    const r = await draw({});
+    ok("the block draws at all", r.text.length > 0);
+    ok("and calls itself what it is", r.says("What you pay"));
+
+    // ── WHAT IT IS FOR, WHICH IS THE FIELD HE ASKED FOR ────────────
+    ok("a stop is named", r.says("Rosenborg Slot"));
+    ok("with the price that was read", r.says("145 DKK"));
+    ok("and where the price came from", r.says("kongernessamling.dk"));
+    ok("and when it was read", r.says("checked 2026-08-19"));
+    ok("and what the charge is for", r.says("Day 1"));
+
+    // ── THE ONE HE SHOUTED ABOUT, ON THE SCREEN ────────────────────
+    ok("a festival that does not run on their dates is still listed", r.says("Distortion"));
+    ok("with its price, because they would still have to pay it", r.says("450 DKK"));
+    ok("and the reason it cannot be bought", r.says("nothing to buy for your dates"));
+    // The proof it lost its checkout: the Ticketmaster link is nowhere in the markup.
+    ok("and no checkout for it", !/ticketmaster\.dk\/event\/distortion/.test(r.html));
+    // While something on sale keeps one, or the assertion above passes by the
+    // block having no links at all.
+    ok("but a museum on sale keeps its link", /tiqets\.com|tpx\.li/.test(r.html));
+    ok("labelled as a purchase", r.says("Buy tickets"));
+
+    // Free is the line that makes the others believable.
+    ok("free entry says free", r.says("Free"));
+
+    // A priced stop with no link says its price and stops. It must NOT apologise:
+    // "saying 'we have no link' to like Copenhagen's National Museum is near
+    // embarrassing."
+    ok("a stop with no ticket link still shows its price", r.says("110 DKK"));
+    ok("and never says we have no link", !/no link|could not find a link|we do not have/i.test(r.text));
+
+    // The disclosure is printed from the links on the page, not typed.
+    ok("a partner link brings its disclosure", /commission|partner link/i.test(r.text));
+    // And a partner link is marked for crawlers, which is a legal edge, not taste.
+    ok("and is marked sponsored", /rel="[^"]*sponsored/.test(r.html));
+  }
+
+  // ── A TRIP WITH NOTHING TO PAY FOR DRAWS NOTHING ─────────────────
+  //
+  // Not an empty labelled row. This is the assertion that separates "the block
+  // is correctly absent" from "the block is broken", which from the outside look
+  // identical — and which is exactly how four features shipped green this month.
+  {
+    const r = await draw({ guide: { days: [{ day: 1, stops: [{ name: "A Bench" }], glance: { legs: [] } }] }, rowFor: () => null });
+    is("no costs, no block", r.html, "");
+  }
+  // A guide with no days at all must not throw.
+  {
+    const r = await draw({ guide: {}, rowFor: () => null });
+    is("and neither does an empty guide", r.html, "");
+  }
+
+  // ── THE LABEL FOLLOWS THE KIND ───────────────────────────────────
+  // A ferry link goes to a timetable and a hotel link goes to a search. Calling
+  // both "Buy tickets" is the kind of label that makes a reader distrust the page.
+  {
+    const ferryGuide = {
+      _arrivalDate: "2027-02-12", _mode: "public transport",
+      days: [
+        { day: 1, stops: [{ name: "Nationalmuseet" }], glance: { legs: [] } },
+        { day: 2, stops: [{ name: "Nationalmuseet" }], glance: { stayArea: "Rønne", legs: [{ how: "~1h20 by ferry" }] } },
+      ],
+    };
+    const r = await draw({ guide: ferryGuide });
+    ok("a crossing says check times, not buy tickets", r.says("Check times and fares"));
+    ok("and a bed says find a room", r.says("Find a room"));
+    // operators.js's standing rule: a crossing gets the national planner and
+    // never a company name, because Samsø alone is served by two of them.
+    ok("and no ferry company is named", !/Molslinjen|Bornholmslinjen|Færgen/i.test(r.text));
+  }
+
+  // ── AND THE PAGE STILL REACHES FOR IT ────────────────────────────
+  // The component can be perfect and unwired, which is this repository's
+  // signature bug and the reason the extraction was worth doing at all.
+  {
+    const gp = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+    ok("the guide page draws the block", /<CostsBlock guide=\{guide\} C=\{C\} rowFor=\{lookupRealPlace\} now=\{now\} \/>/.test(gp));
+    ok("and no longer builds the list inline", !/byUrgency\(costLines\(/.test(gp));
+    ok("it sits in essentials, not in a day card", /Before you go[\s\S]{0,8000}<CostsBlock/.test(gp));
+  }
+}
+
+
+// ── "SAVES DON'T SYNC. I HAVEN'T SAVED RIGHT NOW BUT" ───────────────
+//
+// Oliver, 26 Aug 2026, with a screenshot of "Signed in, but your saves could
+// not sync right now" printed over the entrance art — on a sign-in where he had
+// saved nothing at all.
+//
+// fetchCloudSaves returned a bare `null` for four different things and the call
+// site had one sentence for all four: no session, a missing table, a REFUSED
+// read, and a dead network. A missing table is a migration nobody ran and a
+// refused read is a row policy; neither is "your saves could not sync", and
+// both are founder problems reported to a traveller as though their data were
+// at risk.
+{
+  const { syncFailureNote, SYNC } = M;
+  const held = { localPlaces: 3, localGuides: 1 };
+
+  // THE ONE HE SAW. Nothing saved locally, so nothing is at stake, so nothing
+  // is said — whatever went wrong.
+  for (const why of [SYNC.NO_SESSION, SYNC.NO_TABLE, SYNC.OFFLINE]) {
+    is(`nothing saved locally, nothing said (${why})`,
+      syncFailureNote({ ok: false, why }, { localPlaces: 0, localGuides: 0 }), "");
+  }
+  // A success says nothing either, obviously, and a junk answer does not throw.
+  is("a working sync says nothing", syncFailureNote({ ok: true, places: [], guides: [] }, held), "");
+  is("and junk is silence, not a crash", syncFailureNote(null, held), "");
+
+  // ── AND WHEN SOMETHING IS AT STAKE, IT SAYS WHICH ────────────────
+  {
+    const offline = syncFailureNote({ ok: false, why: SYNC.OFFLINE }, held);
+    ok("a dead network is the one that will fix itself", /connection is back/.test(offline));
+    const noTable = syncFailureNote({ ok: false, why: SYNC.NO_TABLE }, held);
+    ok("a missing table is not", !/connection is back/.test(noTable));
+    // The promise is the thing that matters: a fault that will not fix itself by
+    // waiting must not invite somebody to wait.
+    ok("and does not promise it will come back on its own", !/will sync|try again|shortly/i.test(noTable));
+    // Both say the saves are safe, because they are — local storage is the store,
+    // and the account is a sync layer on top of it.
+    for (const [name, msg] of [["offline", offline], ["no table", noTable]]) {
+      ok(`${name} says the saves are safe where they are`, /on this device|kept on this device/.test(msg));
+      ok(`${name} does not say they could not sync, which described one of four`, !/could not sync/.test(msg));
+    }
+  }
+  // One place saved is enough to be worth a word: the threshold is "anything",
+  // not "several".
+  ok("a single saved place is enough to be told",
+    syncFailureNote({ ok: false, why: SYNC.OFFLINE }, { localPlaces: 1, localGuides: 0 }).length > 0);
+  ok("and a single saved guide is too",
+    syncFailureNote({ ok: false, why: SYNC.OFFLINE }, { localPlaces: 0, localGuides: 1 }).length > 0);
+
+  // ── AND THE PAGE ASKS BEFORE IT SPEAKS ───────────────────────────
+  {
+    const appS = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the sign-in path reads the reason", /if \(!cloud\.ok\)/.test(appS));
+    ok("and asks how much is at stake before speaking", /syncFailureNote\(cloud, \{/.test(appS));
+    ok("and only shows something when there is something to show", /if \(note\) showToast\(note, 3000\)/.test(appS));
+    // The old sentence is gone rather than merely unused.
+    ok("the four-in-one sentence is retired", !/Signed in, but your saves could not sync right now/.test(appS));
+    // A founder problem still reaches the founder, whatever the traveller is told.
+    ok("and the cause reaches the console", /console\.warn\(`\[gemlyx\] saves sync/.test(appS));
+    // Unchanged and load-bearing: a failed sync must not sign them out or wipe
+    // anything. Local storage is the store; the account is a layer on top.
+    ok("a failed sync still leaves them signed in and working", /return;\s*\n\s*\}/.test(appS));
+  }
+}
+
+
+// ── "MIDDLE-AGE MAN" ────────────────────────────────────────────────
+//
+// Oliver, 26 Aug 2026, relaying a friend reading the Museum Østjylland entry.
+// Read off the live page the same afternoon, twice in one entry:
+//
+//   "In Middle Age Man, let kids try on the monk robes"
+//   "Middle Age Man brings you face to face with a mounted knight"
+//
+// Danish "middelalder" is the Middle Ages; "middelaldrende" is a person in
+// their forties. And it is Title Case both times, because it IS a name: the
+// museum's permanent exhibition is Middelaldermanden.
+//
+// TWO RULES BROKE. The translation is wrong, and a NAME was translated at all —
+// which readerLanguage.js, api/ask.js and glanceExtract.js all forbid, none of
+// them having said that an exhibition inside a museum is that class of thing.
+//
+// languageBarrier.js would pass the sentence without a murmur, because every
+// word in it is English. That is the gap this file fills.
+{
+  const { literalRenderings, literalNote, looksLikeAName, FALSE_FRIENDS, FALSE_FRIEND_RULE, NAME_RULE, GLANCE_EXTRACT_PROMPT } = M;
+
+  // THE LIVE SENTENCE, quoted from the page.
+  {
+    const f = literalRenderings("In Middle Age Man, let kids try on the monk robes and handle the reproduction knight weapons.");
+    is("the entry's own words are caught", f.length, 1);
+    is("and named for what they are", f[0].found, "Middle Age Man");
+    is("with what it probably means", f[0].right, "medieval");
+    ok("and it knows this one is a NAME", f[0].named === true);
+    ok("so the advice is to put the Danish back, not to reword it", /never translated at all/.test(f[0].why));
+  }
+  // The common-noun case gets different advice, because the fix is different.
+  {
+    const f = literalRenderings("The exhibition centres on a middle-age man found in the bog.");
+    is("a lowercase phrase is caught too", f.length, 1);
+    ok("but it is not treated as a name", f[0].named === false);
+    ok("so it is not told to restore a Danish name", !/never translated at all/.test(f[0].why));
+  }
+
+  // ── AND IT MUST NOT FLAG CORRECT ENGLISH ─────────────────────────
+  //
+  // Every assertion above widens the net. These are what stop it becoming a
+  // checker nobody reads — which is the failure mode this whole week has been
+  // about.
+  for (const clean of [
+    "A middle-aged couple will find the pace comfortable.",
+    "The town grew through the Middle Ages and never lost its shape.",
+    "a life-size medieval village with a knight, a shoemaker's family and figures you can talk to",
+    "Ribe Domkirke is the oldest cathedral in Denmark, and the churchyard behind it is quiet.",
+    "Rosenborg Slot was built by Christian IV.",
+    "Kongens Have is behind it and stays open until sunset.",
+    "",
+  ]) is(`correct English is left alone: "${clean.slice(0, 44)}"`, literalRenderings(clean).length, 0);
+  // The same entry gets the common noun RIGHT four lines from the name it got
+  // wrong, which is what makes the name the whole story rather than the word.
+  is("the sentence that is already correct stays correct",
+    literalRenderings("to a life-size medieval village with a knight").length, 0);
+
+  // ── THE NAME TEST ────────────────────────────────────────────────
+  ok("Title Case reads as a name", looksLikeAName("Middle Age Man"));
+  ok("and so does one with a small joining word", looksLikeAName("The Hall of the Middle Ages"));
+  ok("a lowercase phrase does not", !looksLikeAName("middle-age man"));
+  ok("nor does a sentence", !looksLikeAName("The exhibition is about a man"));
+
+  // ── THE REST OF THE LIST, EACH ONE ONCE ──────────────────────────
+  //
+  // A rule that matches nothing is a rule nobody notices is broken, so every
+  // entry is exercised against a sentence built from its own `wrong` pattern.
+  for (const f of FALSE_FRIENDS) {
+    ok(`the ${f.id} rule has a right answer`, !!f.right && !!f.why);
+  }
+  {
+    const cases = [
+      ["domkirke", "The Dome Church dominates the skyline."],
+      ["vandrerhjem", "There is a wanderer's home by the harbour."],
+      ["badehotel", "The bath hotel has been there since 1897."],
+      ["raadhus", "The rathouse sits on the square."],
+      ["kirkegaard", "The church garden behind it is quiet."],
+      ["bymidte", "Everything is in the town middle."],
+      ["udsigtstaarn", "Climb the outlook tower for the view."],
+      ["legeplass", null],
+      ["legeplads", "There is a play place for children."],
+      ["herregaard", "The lord's farm is open on Sundays."],
+      ["slot", "The slot is open every day except Monday."],
+      ["gaagade", "The walking street runs the length of the town."],
+    ].filter(([, s]) => s);
+    for (const [id, sentence] of cases) {
+      const f = literalRenderings(sentence);
+      ok(`${id} is caught`, f.some(x => x.id === id));
+    }
+  }
+  // One finding per RULE, not per occurrence: the live entry says it twice and
+  // that is one thing to fix.
+  is("two occurrences of the same fault are one finding",
+    literalRenderings("Middle Age Man is upstairs. Middle Age Man is worth an hour.").length, 1);
+
+  // ── THE FOUNDER LINE QUOTES THE ENTRY ────────────────────────────
+  // A finding that says "check your translations" is one nobody can act on.
+  {
+    const note = literalNote(literalRenderings("In Middle Age Man, let kids try on the monk robes."));
+    ok("the note quotes what the entry actually says", /"Middle Age Man"/.test(note));
+    ok("and says why it survived a read-back", /correct Danish to a Danish reader/.test(note));
+    is("and nothing found is nothing said", literalNote([]), "");
+  }
+
+  // ── AND THE RULE IS IN THE PROMPT, NOT ONLY IN THE CHECK ─────────
+  //
+  // Catching it afterwards is the second-best place. glanceExtract already told
+  // the model that translating is part of extracting; it never said which
+  // compounds go wrong, and never that an exhibition name is a name.
+  {
+    const prompt = GLANCE_EXTRACT_PROMPT("Museum Østjylland", "free", ["ticketInfo"], "research");
+    ok("the drafting prompt carries the rule", /Middelaldermanden/.test(prompt));
+    ok("interpolated rather than printed as a placeholder", !/\$\{FALSE_FRIEND_RULE\}/.test(prompt));
+    ok("and it names an exhibition as a name", /name of an EXHIBITION/.test(FALSE_FRIEND_RULE));
+    ok("while still forbidding a translated place name", /Rosenborg Slot stays Rosenborg Slot/.test(FALSE_FRIEND_RULE));
+  }
+
+  // ── AND IT REACHES THE FOUNDER'S TRAY ────────────────────────────
+  {
+    const appL = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the audit runs it on the reader-facing prose", /literalRenderings\(readerText\(t\)\)/.test(appL));
+    ok("and prints the note when it finds something", /literalNote\(literalRenderings\(readerText\(t\)\)\)/.test(appL));
   }
 }
 

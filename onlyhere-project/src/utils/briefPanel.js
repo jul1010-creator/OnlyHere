@@ -368,3 +368,62 @@ export const briefPanel = (brief) => ({
   // The count sits BESIDE the sentence, never instead of it. See briefProgress.
   progress: briefProgress(brief),
 });
+
+// ── "MAKE A 76% COMPLETE" ────────────────────────────────────────────
+//
+// Oliver, 26 Aug 2026, with a red line drawn under the chat composer on the
+// front page: "I want you to make a (eg.) '76% complete' depending on how much
+// more the AI needs to have a result ready for the user."
+//
+// briefProgress above answers the same question as "6 of 7", and the two are
+// deliberately separate functions rather than one returning both. A count is
+// read as a list of things — six done, one to go — so its `done` has to stay a
+// whole number or "6.5 of 7" appears on the screen. A percentage is read as a
+// distance, and a distance can be half-travelled.
+//
+// ── THE ONE RULE THAT MAKES THE NUMBER MEAN ANYTHING ─────────────────
+//
+// 100% MEANS THE GUIDE CAN BE BUILT NOW, and nothing else may produce it. That
+// is what "how much more the AI needs to have a result ready" asks, and it is
+// why the denominator is BLOCKING_SLOTS and not all eight: counting the optional
+// budget would cap an otherwise complete brief at 88% and a bar that never fills
+// is worse than no bar. The clamp below is the same rule from the other side —
+// a rounding that reaches 100 while the brief is not ready would promise a
+// button that is not there.
+//
+// ── AND A VAGUE ANSWER IS HALF AN ANSWER ─────────────────────────────
+//
+// "Sometime in October" fills `when` and does not settle it, which is why
+// tripBrief.js keeps `vague` as its own list. Counting it whole overstates what
+// Gemlyx knows; counting it as nothing throws away a real answer and makes the
+// bar jump backwards when somebody narrows a date they already gave. Half is
+// the honest reading, and it has the side effect Oliver's example implies: the
+// number moves in steps of about seven rather than fourteen.
+export const briefPercent = (brief) => {
+  const total = BLOCKING_SLOTS.length;
+  if (!total) return 0;
+  if (brief?.ready) return 100;
+  const known = BLOCKING_SLOTS.filter(k => brief?.known?.[k]);
+  const vague = known.filter(k => (brief?.vague || []).includes(k));
+  const score = known.length - (vague.length * 0.5);
+  const pct = Math.round((score / total) * 100);
+  // Never 100 without `ready`, and never below 0. The first is the promise; the
+  // second is only reachable if a future reader counts something negative, and
+  // a bar that renders at -14% is a worse bug than the one that caused it.
+  return Math.max(0, Math.min(99, pct));
+};
+
+// The words beside the bar. Here rather than in the render so the suite reads
+// the same sentence the screen does, same as progressLine above.
+export const percentLine = (brief) => {
+  const pct = briefPercent(brief);
+  if (brief?.ready) return "Ready to build";
+  const open = BLOCKING_SLOTS.filter(k => !brief?.known?.[k]);
+  const last = open.length === 1 ? (slotOf(open[0])?.label || "") : "";
+  if (last) return `${pct}% complete — I still need ${last}`;
+  // A vague answer is the other thing worth naming, because narrowing it is the
+  // cheapest way for somebody to move the bar.
+  const loose = BLOCKING_SLOTS.filter(k => brief?.known?.[k] && (brief?.vague || []).includes(k));
+  if (!open.length && loose.length) return `${pct}% complete — pin down ${slotOf(loose[0])?.label || "the dates"} and I can build`;
+  return `${pct}% complete`;
+};

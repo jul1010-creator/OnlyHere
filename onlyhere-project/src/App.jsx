@@ -59,6 +59,7 @@ import { cleanOffer, offerProblems, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFE
 import { aiDisclosureFor } from "./utils/aiDisclosure";
 import { SupportPage } from "./components/SupportPage";
 import { safetyClaimNote } from "./utils/safetyClaims";
+import { literalRenderings, literalNote, FALSE_FRIEND_RULE } from "./utils/literalDanish";
 import { missingSourcesNote } from "./utils/provenance";
 import { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, formatLogs, logChips, storeState } from "./utils/runLog";
 import { domainOf, isListingHost, scrapeTier, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE, MAX_TICKET_PAGES, isOwnSiteFor, urlNames, isKommuneHost } from "./utils/pageScan";
@@ -130,7 +131,7 @@ import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./
 import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch } from "./utils/ticketLink";
 import { placesNamedIn } from "./utils/chatPlaces";
 import { railPlaces, railCss, RAIL_CLASS, INLINE_CARDS_CLASS } from "./utils/chatRail";
-import { briefProgress, progressLine } from "./utils/briefPanel";
+import { briefProgress, progressLine, briefPercent, percentLine } from "./utils/briefPanel";
 import { EXAMPLE_GUIDE, EXAMPLE_GUIDE_PATH, hasExampleGuide } from "./data/exampleGuide";
 import { ChatPlaceCards } from "./components/ChatPlaceCards";
 // The sentence an entry already has about who it suits, rather than the first
@@ -173,7 +174,7 @@ import { EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventT
 import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, MARKS } from "./utils/sweeps";
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
 import { getSession, getStoredSession, captureRedirectSession, signOut as authSignOut, deleteMyData } from "./utils/auth";
-import { fetchCloudSaves, pushCloudSaves, mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink } from "./utils/userSaves";
+import { fetchCloudSaves, pushCloudSaves, mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink, syncFailureNote, SYNC } from "./utils/userSaves";
 import { loadImageCredits, allImageCredits, licenseUrl, creditIsRequired } from "./utils/imageCredits";
 import { PhotoCredit } from "./components/PhotoCredit";
 import { placeKindOf, kindLabel, isArea, PLACE_KINDS, KIND_LABEL } from "./utils/placeKind";
@@ -5741,6 +5742,20 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             // is the correction's job to have deleted these, and this is how
             // anyone finds out whether it did.
             ...selfContradictions(t),
+            // ── AND ENGLISH THAT WAS TRANSLATED TOO LITERALLY ────────
+            //
+            // Oliver, 26 Aug 2026, relaying a friend on the Museum Østjylland
+            // entry: it says "Middle Age Man" and means MEDIEVAL — the museum's
+            // exhibition is Middelaldermanden. looksUntranslated would pass that
+            // sentence without a murmur, because every word in it is English.
+            //
+            // Runs on the reader-facing prose, on BOTH passes, in the tray the
+            // founder already reads. Advisory by construction: "a middle-aged
+            // couple" is good English and none of this can be decided from the
+            // English alone. See utils/literalDanish.js.
+            ...(literalRenderings(readerText(t)).length
+              ? [literalNote(literalRenderings(readerText(t)))]
+              : []),
           ];
           note(`Glance fields${suffix}`, {
             provider: "google",
@@ -6048,11 +6063,35 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           const modelSaid = t.travelTime;
           if (h || mm) {
             t.travelTime = `${h ? `${h}h ` : ""}${mm ? `${mm}min` : ""}`.trim() + " 🚂";
-            decide("travelTime", {
-              winner: "Google Directions (measured)", loser: modelSaid ? `the model ("${modelSaid}")` : "",
-              rule: "A measured duration always replaces a written one. Distance and duration are Google's jurisdiction alone.",
-              value: t.travelTime,
-            });
+            // ── A DECISION IS SOMETHING CHANGING ────────────────────
+            //
+            // Oliver, 26 Aug 2026, reading seven run logs in a row: "it seemed
+            // like every draft was corrected on directions API." It did, and
+            // three of the seven were not corrections at all — the model wrote
+            // "50min 🚂", Google measured "50min 🚂", and the log recorded
+            // "believed Google Directions (measured), overruled the model
+            // ("50min 🚂")". Overruled it with its own answer.
+            //
+            // A decisions list where three of seven entries are agreements is a
+            // list nobody can skim for the ones that mattered, which is the same
+            // way a false "DID NOT LAND" made the correction banner unreadable.
+            //
+            // The agreement is still worth knowing and still gets a note: Google
+            // confirming a written duration is evidence about the draft. It is
+            // just not a decision, because nothing was decided.
+            if (modelSaid === t.travelTime) {
+              note("travelTime matched the measurement", {
+                provider: "google", detail: "Directions, transit, from Copenhagen",
+                outcome: "ok", used: true,
+                got: `the written ${t.travelTime} is what Google measured, so nothing was overruled`,
+              });
+            } else {
+              decide("travelTime", {
+                winner: "Google Directions (measured)", loser: modelSaid ? `the model ("${modelSaid}")` : "an empty field",
+                rule: "A measured duration always replaces a written one. Distance and duration are Google's jurisdiction alone.",
+                value: t.travelTime,
+              });
+            }
           }
         } else if (typeof t.travelTime !== "undefined" && Number.isFinite(Number(drivingMins)) && Number(drivingMins) > 0) {
           // ── AND THERE WAS SOMETHING TO MEASURE AGAINST ALL ALONG ──
@@ -6088,12 +6127,16 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           const modelSaid = t.travelTime;
           const dh = Math.floor(Number(drivingMins) / 60), dm = Number(drivingMins) % 60;
           t.travelTime = `${dh ? `${dh}h ` : ""}${dm ? `${dm}min` : ""}`.trim() + " 🚗";
-          decide("travelTime", {
-            winner: "Google Directions (measured, by road)",
-            loser: modelSaid ? `the model ("${modelSaid}")` : "an empty field",
-            rule: "Google returned no transit itinerary but did return a road route. A measured duration always replaces a written one, and the marker says which mode was measured.",
-            value: t.travelTime,
-          });
+          // Same rule as the transit branch above: an agreement is a note, not a
+          // decision. See the comment there.
+          if (modelSaid !== t.travelTime) {
+            decide("travelTime", {
+              winner: "Google Directions (measured, by road)",
+              loser: modelSaid ? `the model ("${modelSaid}")` : "an empty field",
+              rule: "Google returned no transit itinerary but did return a road route. A measured duration always replaces a written one, and the marker says which mode was measured.",
+              value: t.travelTime,
+            });
+          }
           note("travelTime measured by road", {
             provider: "google", detail: "Directions, driving mode, from Copenhagen",
             outcome: "ok", used: true,
@@ -6328,7 +6371,16 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
                   //
                   // The MANUAL correction path has had enforceScope guarding it
                   // all along. This one had nothing. See keepMeasured.
-                  const kept = keepMeasured(t, corrected);
+                  // ── THE OPERATOR'S OWN DATES ARE NOT REWRITABLE ──
+                  // Oliver, 26 Aug 2026: "what should contradict
+                  // Roskilde-festival.com's page? Some blogger from USA?"
+                  // Nothing should. __dateSource is the pipeline's own record
+                  // that it read these dates off the operator's page, and until
+                  // now it protected nothing. See keepMeasured in correction.js.
+                  const datesAreTheirs = t.__dateSource?.by === "official-site";
+                  const kept = keepMeasured(t, corrected, {
+                    alsoKeep: datesAreTheirs ? ["date", "dateStart", "dateEnd"] : [],
+                  });
                   // ── AND PROSE HAS TO STAY PROSE ─────────────────
                   // Oliver's preview screenshot: a town card whose description
                   // read "The claim is not confirmed by the checked sources."
@@ -9477,11 +9529,28 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     syncedOnceRef.current = true;
     (async () => {
       const cloud = await fetchCloudSaves(userSession);
-      if (!cloud) {
-        // Table missing or unreachable. Stay signed in and keep working from
-        // local storage rather than pretending the whole account is broken.
-        showToast("Signed in, but your saves could not sync right now", 3000);
-        
+      if (!cloud.ok) {
+        // ── AND IT ONLY SPEAKS WHEN SOMETHING IS AT STAKE ─────────
+        //
+        // Oliver, 26 Aug 2026: "saves don't sync. I haven't saved right now
+        // but" — with the warning printed over the entrance art on a sign-in
+        // where he had saved nothing. Four different failures used to arrive
+        // here as one `null` and get one sentence; syncFailureNote knows which
+        // one it was, and stays quiet when the person has nothing local that
+        // could be lost. See utils/userSaves.js.
+        //
+        // Staying signed in and working from local storage is unchanged: that
+        // was always the right behaviour and is the half this had right.
+        const readCount = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || "[]"); return Array.isArray(v) ? v.length : 0; } catch { return 0; } };
+        const note = syncFailureNote(cloud, {
+          localPlaces: readCount("gemlyx_saved_places"),
+          localGuides: readCount("gemlyx_saved_guides"),
+        });
+        if (note) showToast(note, 3000);
+        // The cause goes to the console whatever the traveller is told, because
+        // a missing table and a refused policy are founder problems and neither
+        // is visible from the screen.
+        if (cloud.detail) console.warn(`[gemlyx] saves sync ${cloud.why}: ${cloud.detail}`);
         return;
       }
       // ── THIS MERGE USED TO EAT THE GUIDE IT WAS SIGNED IN TO SAVE ──
@@ -11825,6 +11894,49 @@ If the conversation only covers a single day or a few stops with no explicit day
   // Redesign pass: the intake form was one long wall of fields. Dates + starting
   // point stay visible; everything else lives behind this "fine-tune" toggle.
   const [intakeMoreOpen, setIntakeMoreOpen] = useState(false);
+  // ── HOW CLOSE GEMLYX IS TO BEING ABLE TO BUILD ──────────────────────
+  //
+  // Oliver, 26 Aug 2026, with a red line drawn under the chat composer: "I want
+  // you to make a (eg.) '76% complete' depending on how much more the AI needs
+  // to have a result ready for the user."
+  //
+  // READ FROM THE FORM TOO, NOT JUST THE CHAT, and that is the whole reason
+  // this is a separate value from `liveBrief` above. liveBrief is set inside
+  // sendAI, so it does not exist until somebody has sent a message — and the
+  // fields this bar sits under are filled in BEFORE the first message. A
+  // completeness bar that reads 0% while three of the boxes above it are full
+  // is worse than none.
+  //
+  // readBrief already takes both halves, which is why this is a call and not a
+  // second reader: the same function App.jsx uses to decide whether the build
+  // button appears decides what this bar says, so the bar and the button cannot
+  // disagree about what is known.
+  //
+  // The date is deliberately NOT read from a clock inside readBrief. A relative
+  // answer ("next weekend") is judged against a day, and a memo that re-reads
+  // the clock on every keystroke would recompute the whole brief for nothing;
+  // `todayKey` changes once a day and nothing else does.
+  const todayKey = new Date().toDateString();
+  const liveIntakeBrief = useMemo(() => {
+    const turns = (aiMessages || []).slice(1).filter(m => m.role === "user" && !m.isError).map(m => m.text || "");
+    return readBrief({
+      travellerText: turns.join("\n"),
+      travellerTurns: turns,
+      today: new Date(todayKey),
+      asked: briefAsked,
+      intake: {
+        startPoint: intakeStartPoint,
+        arrival: intakeArrival,
+        departure: intakeDeparture,
+        travelers: intakeTravelers,
+        familyMode: intakeFamilyMode,
+        interest: intakeInterest,
+        transport: intakeTransport,
+        budgetText: intakeBudgetText,
+      },
+    });
+  }, [aiMessages, todayKey, briefAsked, intakeStartPoint, intakeArrival, intakeDeparture,
+      intakeTravelers, intakeFamilyMode, intakeInterest, intakeTransport, intakeBudgetText]);
   // THE FRONT DOOR — Oliver's vision: a brand page BEFORE Denmark's explore
   // page. Full-screen entrance with his animated logo (from gemlyxhero_2.html)
   // and the country picker; choosing Denmark drops you into the app. Shown on
@@ -13998,9 +14110,36 @@ ${languageBlock()}`;
                     style={{ flex: 1, border: `2px solid ${C.accent}`, borderRadius: 100, padding: "11px 16px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
                   <button onClick={sendAI} disabled={aiLoading} style={{ background: C.accent, border: "none", borderRadius: 100, width: 44, height: 44, cursor: "pointer", fontSize: 16, flexShrink: 0, color: C.onAccent }}>↗</button>
                 </div>
-                <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginTop: 8 }}>
-                  Mention who's traveling: kids, budget, a car. The more Gemlyx knows, the better the plan.
-                </div>
+                {/* ── HOW CLOSE THIS IS TO A GUIDE ────────────────────────
+                    Oliver, 26 Aug 2026, pointing at this exact spot. 100% means
+                    the guide can be built now and nothing else may produce it —
+                    see briefPercent in utils/briefPanel.js, where the denominator
+                    and the never-100-unless-ready clamp are argued out.
+
+                    NOTHING BEFORE THEY HAVE SAID ANYTHING. "0% complete" over an
+                    empty box is a form with a scoreboard on it, so the generic
+                    hint keeps that slot until there is something real to report,
+                    and then gets out of the way — a bar saying "I still need
+                    where you start" and a line saying "mention who's traveling"
+                    are two prompts competing for the same glance. */}
+                {briefPercent(liveIntakeBrief) > 0 ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 9, marginTop: 9 }}>
+                    <div style={{ flex: "0 0 84px", height: 5, borderRadius: 100, background: C.border, overflow: "hidden" }}>
+                      <div style={{
+                        width: `${briefPercent(liveIntakeBrief)}%`, height: "100%", borderRadius: 100,
+                        background: liveIntakeBrief.ready ? C.gold : C.accent,
+                        transition: "width .35s ease",
+                      }} />
+                    </div>
+                    <span style={{ fontSize: 10.5, fontWeight: 600, color: liveIntakeBrief.ready ? C.gold : C.muted }}>
+                      {percentLine(liveIntakeBrief)}
+                    </span>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginTop: 8 }}>
+                    Mention who's traveling: kids, budget, a car. The more Gemlyx knows, the better the plan.
+                  </div>
+                )}
                 {isStudio && !studioSession && (
                   <div style={{ background: C.surface, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "20px", marginTop: 18 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: C.gold, fontFamily: "'Fraunces', serif", marginBottom: 4 }}>🔒 Content Studio — log in</div>

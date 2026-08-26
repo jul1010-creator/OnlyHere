@@ -21,22 +21,85 @@ const headers = (session) => ({
   "Content-Type": "application/json",
 });
 
+// ── "SAVES DON'T SYNC. I HAVEN'T SAVED RIGHT NOW BUT" ───────────────
+//
+// Oliver, 26 Aug 2026, with a screenshot of "Signed in, but your saves could
+// not sync right now" printed over the entrance art — on a sign-in where he had
+// saved nothing at all.
+//
+// This function returned a bare `null` for FOUR different things, and the call
+// site had one sentence for all four:
+//
+//   no session          a token or a user id missing
+//   not an array        the table is not there, or Supabase returned an ERROR
+//                       object — a denied row policy, a bad key, an expired JWT
+//   a thrown fetch      the network is down
+//   and, correctly, an empty table is NOT null — a new account is { isNew }
+//
+// A missing table is a migration nobody has run. A denied policy is a
+// configuration fault. Neither is "your saves could not sync", and both are
+// FOUNDER problems being reported to a traveller as though their data were at
+// risk. The network case is the only one that sentence describes.
+//
+// It is the same shape as five other things found this week and written up in
+// HANDOFF_25AUG_NIGHT: A LIMIT HIT IS NOT A LIMIT REPORTED. Four causes, one
+// message, and the message names none of them.
+//
+// So the answer comes back with a REASON. Nothing about the merge below
+// changes: `ok: false` is still "keep working from local storage", which was
+// always the right behaviour and is the half this had right.
+export const SYNC = {
+  OK: "ok",
+  NO_SESSION: "no-session",   // signed in without a usable token or user id
+  NO_TABLE: "no-table",       // gemlyx_user_data is not there, or the read was refused
+  OFFLINE: "offline",         // the request never completed
+};
+
 export const fetchCloudSaves = async (session) => {
-  if (!session?.token || !session?.userId) return null;
+  if (!session?.token || !session?.userId) return { ok: false, why: SYNC.NO_SESSION };
   try {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/gemlyx_user_data?user_id=eq.${session.userId}&select=saved_places,saved_guides`,
       { headers: headers(session) }
     );
     const rows = await res.json();
-    if (!Array.isArray(rows)) return null;   // table missing, or an error object
-    if (rows.length === 0) return { places: [], guides: [], isNew: true };
+    // PostgREST answers an error with an OBJECT carrying `message` and `code`,
+    // and a missing table with 42P01. Both arrive here as "not an array", which
+    // is why they used to be indistinguishable — the detail is kept so a founder
+    // reading the console can tell a migration from a policy.
+    if (!Array.isArray(rows)) {
+      return { ok: false, why: SYNC.NO_TABLE, detail: String(rows?.message || rows?.code || res.status || "") };
+    }
+    if (rows.length === 0) return { ok: true, places: [], guides: [], isNew: true };
     return {
+      ok: true,
       places: Array.isArray(rows[0].saved_places) ? rows[0].saved_places : [],
       guides: Array.isArray(rows[0].saved_guides) ? rows[0].saved_guides : [],
       isNew: false,
     };
-  } catch { return null; }
+  } catch (e) { return { ok: false, why: SYNC.OFFLINE, detail: String(e?.message || e).slice(0, 120) }; }
+};
+
+// ── AND WHETHER TO SAY ANYTHING AT ALL ──────────────────────────────
+//
+// The half that answers Oliver's sentence directly. A warning is worth showing
+// when something a person made might not be safe. On a sign-in with nothing
+// saved locally, nothing is at risk, nothing was lost, and a banner about a
+// failure with no consequence is the thing that teaches somebody to ignore
+// banners — which this repository has now watched happen twice in one week.
+//
+// Returns "" for silence, so a call site can print it unconditionally.
+export const syncFailureNote = (result, { localPlaces = 0, localGuides = 0 } = {}) => {
+  if (!result || result.ok) return "";
+  const held = Number(localPlaces) + Number(localGuides);
+  if (!held) return "";     // nothing of theirs is at stake
+  if (result.why === SYNC.OFFLINE) {
+    return "Signed in. Your saves are on this device and will sync when the connection is back.";
+  }
+  // A missing table or a refused read is not going to fix itself by waiting, so
+  // it must not promise that it will. It says what is true — the saves are safe
+  // where they are — and does not invite them to keep retrying.
+  return "Signed in. Your saves are kept on this device; syncing to your account is not available right now.";
 };
 
 export const pushCloudSaves = async (session, places, guides) => {

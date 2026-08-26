@@ -157,7 +157,28 @@ export const isPipelineOwned = (key) => String(key || "").startsWith("__") || ME
 // has no standing to delete it.
 const SHOUTED_NOTE = /^(?:STOP, DO NOT PUBLISH|CHECK BEFORE PUBLISHING|PIPELINE CONTRADICTION|FIX BEFORE PUBLISHING)/;
 
-export const keepMeasured = (before, corrected) => {
+// ── AND A DATE THE OPERATOR PUBLISHED IS NOT UP FOR REWRITING ───────
+//
+// Oliver, 26 Aug 2026: "If their own website tells you a date, then there is no
+// page to contradict it.. what should contradict Roskilde-festival.com's page?
+// Some blogger from USA? Be reasonable."
+//
+// He is right, and MEASURED_FIELDS did not cover it. The list is travelTime,
+// ticketStatus, website, nearestStation, lat and lon — every value the pipeline
+// MEASURED. A date read off the operator's own page is measured in exactly the
+// same sense, and `__dateSource = { by: "official-site" }` is the pipeline
+// already writing down that it did the measuring. It just never protected it.
+//
+// So the invented-claim check, which searches the open web, could flag a date
+// the festival itself publishes, and the rewrite that follows was free to move
+// it. A US aggregator carrying last year's dates is enough to start that.
+//
+// `alsoKeep` rather than a sixth entry in MEASURED_FIELDS, because the
+// protection is CONDITIONAL: dateStart is ordinary rewritable prose on a draft
+// where nobody confirmed anything, and untouchable on one where the operator
+// did. The call site knows which, and this function should not have to guess.
+export const keepMeasured = (before, corrected, { alsoKeep = [] } = {}) => {
+  const locked = (k) => isPipelineOwned(k) || alsoKeep.includes(k);
   if (!corrected || typeof corrected !== "object") {
     return { patched: before, restored: [], why: "The correction returned nothing usable, so the draft is unchanged." };
   }
@@ -191,7 +212,7 @@ export const keepMeasured = (before, corrected) => {
   // back; restoring those is this function's ordinary job and not evidence of
   // anything. Counting them as losses made the refusal fire on a healthy
   // correction, which the suite caught immediately.
-  const beforeKeys = Object.keys(before || {}).filter(k => !isPipelineOwned(k));
+  const beforeKeys = Object.keys(before || {}).filter(k => !locked(k));
   const dropped = beforeKeys.filter(k => !(k in (corrected || {})));
   if (beforeKeys.length >= 5 && dropped.length > beforeKeys.length / 3) {
     return {
@@ -202,7 +223,7 @@ export const keepMeasured = (before, corrected) => {
     };
   }
   for (const k of keys) {
-    if (!isPipelineOwned(k)) continue;
+    if (!locked(k)) continue;
     if (JSON.stringify(before?.[k]) === JSON.stringify(out[k])) continue;
     restored.push(k);
     if (k in (before || {})) out[k] = before[k];

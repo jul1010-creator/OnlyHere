@@ -44,6 +44,7 @@
 import { GLANCE_FIELDS } from "./entryAudit";
 import { MEASURED_FIELDS } from "./correction";
 import { looksUntranslated, danishWordsIn } from "./languageBarrier";
+import { FALSE_FRIEND_RULE } from "./literalDanish";
 
 // Measured elsewhere, by code, from an API. Listed beyond MEASURED_FIELDS
 // because ticketStatus and the coordinates are owned the same way even though
@@ -113,7 +114,7 @@ IF THE RESEARCH DOES NOT STATE A FIELD, RETURN AN EMPTY STRING FOR IT. That is a
 
 Each value is a VALUE, not a sentence about a search. Never write "not found", "not listed", "could not be confirmed", "at the time of writing", "see website" or "check rejseplanen". If you would write any of those, return an empty string instead.
 
-WRITE EVERY VALUE IN ENGLISH. The research is usually in Danish and the entry is read in English, so translating is part of extracting, not a liberty you are taking: "Dagsbillet 395 kr" is "Day ticket 395 DKK", "gratis adgang" is "free entry", "2-3 timer" is "2 to 3 hours", "priser er eks. gebyrer" is "prices exclude booking fees". Danish proper nouns stay exactly as they are spelled, because a hotel, a street or a stage is called what it is called. A value left in Danish is a value that was not finished and it will be refused.
+WRITE EVERY VALUE IN ENGLISH. The research is usually in Danish and the entry is read in English, so translating is part of extracting, not a liberty you are taking: "Dagsbillet 395 kr" is "Day ticket 395 DKK", "gratis adgang" is "free entry", "2-3 timer" is "2 to 3 hours", "priser er eks. gebyrer" is "prices exclude booking fees". Danish proper nouns stay exactly as they are spelled, because a hotel, a street or a stage is called what it is called. A value left in Danish is a value that was not finished and it will be refused. ${FALSE_FRIEND_RULE}
 
 Keep the wording the source used for numbers and units. A price stays the price the page charges: never round it, never convert it, never turn a list of ticket tiers into an average. If the page states a range across tiers, give the range.
 
