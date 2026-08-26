@@ -5813,12 +5813,23 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           note(`Dates against the official site${suffix}`, {
             provider: "google", detail: "the operator's own pages, read for a date carrying a year",
             outcome: dc.confirmed ? "ok" : "empty", used: dc.confirmed,
+            // A HALF-MATCH IS ITS OWN ANSWER AND IT USED TO READ AS A PASS.
+            // The Roskilde run logged "confirmed on the site itself: 2027-07-03"
+            // when 2027-07-03 was the END of a range whose START was not on the
+            // site at all — which was exactly what the fact-check was disputing,
+            // and the line above it is what overruled the fact-check.
             got: dc.confirmed
               ? `confirmed on the site itself: ${dc.found.join(", ")}`
-              : scrapedSiteText.trim()
-                ? `the site's own text states no dated announcement matching ${[t.dateStart, t.dateEnd].filter(Boolean).join(" to ")}`
-                : "no operator page was read, so nothing here is confirmed by the operator",
+              : dc.partial
+                ? `HALF CONFIRMED: the site states ${dc.found.join(" and ")} and nothing matching ${dc.missing.join(" and ")}, so the operator has not confirmed this range`
+                : scrapedSiteText.trim()
+                  ? `the site's own text states no dated announcement matching ${[t.dateStart, t.dateEnd].filter(Boolean).join(" to ")}`
+                  : "no operator page was read, so nothing here is confirmed by the operator",
+            why: dc.partial ? dc.detail : "",
           });
+          // A half-match is a finding, not a footnote: it means the date a reader
+          // will plan a trip around is not the date the operator published.
+          if (dc.partial) noteToFounder(dc.detail);
           // ── A CONFIRMATION DOES NOT SURVIVE THE DATE IT CONFIRMED ──
           // On the second pass this is the case that matters. If the rewrite
           // moved the date, the stamp saying the operator confirmed it is now
@@ -6407,7 +6418,11 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
                     detail: "each flagged claim, against the draft that replaced the one it was flagged in",
                     outcome: landed.survived.length ? "failed" : "ok",
                     used: !landed.survived.length,
-                    why: landed.survived.length ? describeCorrection(landed).slice(0, 300) : "",
+                    // NOT SLICED. describeCorrection bounds its own list now, and the 300-character
+                    // slice that used to be here cut the message at "so the draft below" —
+                    // removing "do not read the banner above as a pass", which is the only
+                    // part of it anybody can act on. See utils/factCheckRead.js.
+                    why: landed.survived.length ? describeCorrection(landed) : "",
                     got: `${landed.gone} gone, ${landed.survived.length} still there, ${landed.uncheckable} not checkable in code`,
                   });
                   if (kept.restored.length) {

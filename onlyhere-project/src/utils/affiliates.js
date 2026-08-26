@@ -83,10 +83,39 @@ const q = (s) => encodeURIComponent(String(s || "").trim());
 const dateRange = (checkin, checkout) =>
   checkin && checkout ? { checkin, checkout } : {};
 
-export const bookingUrl = ({ area, country = "Denmark", checkin, checkout, adults = 2 } = {}) => {
+// ── A HOTEL NAME IS NOT AN ADDRESS ──────────────────────────────────
+//
+// Oliver, 26 Aug 2026, with a screenshot of the Limfjord guide's own link:
+// "you picked a hotel that wasn't available for that date." What Booking
+// actually returned was HOTEL PHØNIX IN HOLSTEBRO — a different hotel, in a
+// different town, 140 km from the one the guide is talking about, which is in
+// Aalborg. It then reported that the Holstebro one had no room that weekend,
+// which is true and completely beside the point.
+//
+// The search string was `${name}, Denmark`. Denmark has more than one Hotel
+// Phønix, so a bare name and a country is not a query that identifies a
+// building. `near` is the town, and it is the difference between a link that
+// opens the right property and one that opens a plausible stranger.
+//
+// AND HE IS RIGHT THAT THE AFFILIATE IS NOT THE ISSUE: "I don't know if being
+// affiliated to booking will help this situation." It would not. An aid
+// parameter on this URL would have earned a commission on the wrong hotel.
+//
+// Skipped when the area already names the town, so "Aalborg, Aalborg, Denmark"
+// cannot happen — Booking treats a repeated token as a weaker match, not a
+// stronger one.
+const withTown = (area, near) => {
+  const a = String(area || "").trim();
+  const t = String(near || "").trim();
+  if (!t) return a;
+  if (a.toLowerCase().includes(t.toLowerCase())) return a;
+  return `${a}, ${t}`;
+};
+
+export const bookingUrl = ({ area, near = "", country = "Denmark", checkin, checkout, adults = 2 } = {}) => {
   if (!area) return null;
   const d = dateRange(checkin, checkout);
-  return `https://www.booking.com/searchresults.html?ss=${q(`${area}, ${country}`)}` +
+  return `https://www.booking.com/searchresults.html?ss=${q(`${withTown(area, near)}, ${country}`)}` +
     (d.checkin ? `&checkin=${d.checkin}&checkout=${d.checkout}` : "") +
     `&group_adults=${adults}&no_rooms=1` +
     (BOOKING_AFFILIATE_ID ? `&aid=${BOOKING_AFFILIATE_ID}` : "");

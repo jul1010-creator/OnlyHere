@@ -282,3 +282,65 @@ export const bookingActions = (guide, lookupRealPlace) => {
   }
   return out;
 };
+
+// ── "WHY SO MUCH READ MORE?" ────────────────────────────────────────
+//
+// Oliver, 26 Aug 2026, with a screenshot of two consecutive Jelling stops, both
+// cut mid-sentence: "Only read more for stuff that can be irrelevant."
+//
+// The clamp was 160 characters. The writer prompt asks for a note of "2-3
+// sentences built from CONCRETE, SPECIFIC facts", which lands between 200 and
+// 380 characters in every real guide measured. So the clamp fired on
+// essentially every stop in the product, and what it hid was one sentence.
+//
+// That is the worst possible trade. The button costs a tap, costs a reflow, and
+// tells the reader the card is holding something back — for a saving of two
+// lines. And when every card has one, the one card that genuinely is holding
+// three paragraphs back looks exactly like the other eleven.
+//
+// ── SO THE CLAMP BECOMES A GUARD, NOT A DEFAULT ─────────────────────
+//
+// A note the writer produced as asked is shown whole. The clamp exists for the
+// case the prompt did not get: a note that came back at 700 characters, where
+// hiding the tail is a real kindness. Three conditions, and all three have to
+// hold, which is what makes it rare:
+//
+//   the note is longer than a well-behaved note ever is        (SHOW_WHOLE_MAX)
+//   there is a sentence end to cut at, so it never breaks a word
+//   and enough is left behind to be worth the tap              (MIN_HIDDEN)
+//
+// MIN_HIDDEN is the one doing his actual sentence. "Only read more for stuff
+// that can be irrelevant" is a statement about what is BEHIND the button, not
+// about what is in front of it.
+export const NOTE_SHOW_WHOLE_MAX = 420;
+export const NOTE_CLAMP_AT = 300;
+export const NOTE_MIN_HIDDEN = 90;
+
+// The last sentence end at or before `at`, or -1 when there is none to use.
+// Abbreviations are not chased here the way journey.js chases them: this only
+// decides where a card folds, and folding after "Aalborg St." costs nothing,
+// where getting a leg's sentence wrong costs a measurement.
+const sentenceEndBefore = (text, at) => {
+  let best = -1;
+  for (let i = 0; i < Math.min(at, text.length); i++) {
+    const c = text[i];
+    if (c !== "." && c !== "!" && c !== "?") continue;
+    const next = text[i + 1];
+    if (next && next !== " " && next !== "\n") continue;   // 3.900 kr is not an end
+    best = i + 1;
+  }
+  return best;
+};
+
+export const clampNote = (note) => {
+  const text = String(note || "").trim();
+  if (!text) return { shown: "", hidden: 0, clipped: false };
+  if (text.length <= NOTE_SHOW_WHOLE_MAX) return { shown: text, hidden: 0, clipped: false };
+  // Never mid-word, and never mid-sentence: the cut has to land somewhere the
+  // reader would have paused anyway, or the button reads as an interruption.
+  const cut = sentenceEndBefore(text, NOTE_CLAMP_AT);
+  if (cut <= 0) return { shown: text, hidden: 0, clipped: false };
+  const hidden = text.length - cut;
+  if (hidden < NOTE_MIN_HIDDEN) return { shown: text, hidden: 0, clipped: false };
+  return { shown: text.slice(0, cut).trimEnd(), hidden, clipped: true };
+};

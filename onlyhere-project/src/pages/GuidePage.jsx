@@ -25,9 +25,10 @@ import { dayWarnings, dayCrossings, tripWeatherWarning } from "../utils/weatherW
 import { askClaude } from "../utils/aiClient";
 import { testTravelerLine, isFerryText, daysUntil } from "../utils/helpers";
 import { aiDisclosureFor } from "../utils/aiDisclosure";
-import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen } from "../utils/guideReading";
+import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen, clampNote } from "../utils/guideReading";
 import { BOOKING_AFFILIATE_ID } from "../config";
-import { tiqetsBrowseUrl, partnerDisclosure, supportNote, partnerLinkCount, isPartnerLink, carRentalFits } from "../utils/affiliates";
+import { tiqetsBrowseUrl, partnerDisclosure, supportNote, partnerLinkCount, isPartnerLink, carRentalFits, bookingUrl, STAY_DISCLOSURE } from "../utils/affiliates";
+import { costLines, byUrgency, COST_KIND } from "../utils/costLedger";
 import { dayStart, dayKey, dayPlus } from "../utils/calendarDay";
 import { TripCalendarCard } from "../components/TripCalendarCard";
 import { StopChangeSheet } from "../components/StopChangeSheet";
@@ -139,7 +140,12 @@ export const humanMinutes = (m) => {
   return rest ? `${h}h ${rest}m` : `${h}h`;
 };
 
-export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
+// `now` is a PROP with a default rather than a Date() read inside the body, and
+// tests/render.mjs explains why better than a comment here can: "THE LIVE LAYER
+// IS A PURE FUNCTION OF (data, now)". The costs block below refuses a ticket for
+// an event that does not run on the traveller's dates, and that refusal cannot
+// be checked at all by an instrument that can only ever ask about today.
+export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date() }) => {
   const { guideId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -1130,43 +1136,72 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                   <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>{v}</span>
                 </div>
               ))}
-              {/* ── TICKETS, ONCE PER GUIDE ────────────────────────
-                  Oliver, 15 Aug 2026: "We need these implemented into
-                  essentials and the guide."
+              {/* ── WHAT YOU ACTUALLY PAY FOR ───────────────────────
+                  Oliver, 26 Aug 2026, on what used to be here — one browse link
+                  to Tiqets under a sentence about summer queues: "I'd rather you
+                  give them a list of what they have to pay for instead. Direct
+                  links. So Flixbus, attractions, events, etc. and also add what
+                  it is for." Then: "And obviously, include the price." Then, in
+                  capitals: "MAKE SURE THAT THE TICKETS AREN'T TAKEN."
 
-                  HERE AND NOT ON EVERY DAY CARD, which was the obvious place
-                  and is the wrong one. "Where to stay" repeats per day because
-                  the answer genuinely changes per day: a different town, a
-                  different date range, a different search. Tickets do not. The
-                  same booking link under all seven days is the same link seven
-                  times, and a reader learns to scroll past it, which costs the
-                  clicks it was added to earn.
+                  The rules that answer all three live in utils/costLedger.js,
+                  where they can be tested against a February trip and a June
+                  festival without a browser. This is only the drawing of them.
 
-                  A BROWSE LINK, and the wording has to match that. It goes to
-                  Tiqets and not to any one attraction, so it says "browse" and
-                  never promises a particular place. Once the deep link
-                  template is filled in, an attraction card can link to its own
-                  tickets and this stays what it is: the general one.
-
-                  Nothing renders when the link is not configured, rather than
-                  a dead row, and the disclosure is printed from the link
-                  itself rather than typed here, so it cannot say "this pays
-                  us" over a link that does not. */}
+                  A REFUSED LINE IS STILL A LINE. Something sold out, cancelled
+                  or not running on their dates keeps its price and its place on
+                  the list and loses only its checkout, because they still have
+                  to know it is there. */}
               {(() => {
-                const href = tiqetsBrowseUrl();
-                if (!href) return null;
-                const note = partnerDisclosure(href);
+                const lines = byUrgency(costLines({
+                  guide,
+                  rowFor: lookupRealPlace,
+                  dayDateFor: (n) => tripDayDate(guide._arrivalDate, n),
+                  today: now,
+                  mode: guide._mode || "",
+                  saidNoCar: !!guide._onlyWalking,
+                }));
+                if (!lines.length) return null;
+                const partnered = lines.filter(l => l.partner).map(l => l.href);
                 return (
                   <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
-                    <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>Tickets</span>
-                    <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>
-                      Denmark's bigger attractions take timed entry in summer, so the queue is the thing worth planning around rather than availability. Buy direct from the attraction where you can.
-                      <a href={href} target="_blank" rel={note ? "noreferrer sponsored nofollow" : "noreferrer"}
-                        style={{ display: "block", marginTop: 5, color: C.gold, fontWeight: 700, textDecoration: "none" }}>
-                        🎫 Browse Danish attraction tickets ↗
-                      </a>
-                      {note && <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4 }}>{note}</div>}
-                    </span>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>What you pay</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {lines.map((l, i) => (
+                        <div key={`${l.kind}-${l.name}-${i}`} style={{ paddingTop: i ? 9 : 0, marginTop: i ? 9 : 0, borderTop: i ? `1px solid ${C.border}` : "none" }}>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "0 8px", alignItems: "baseline" }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{l.name}</span>
+                            {l.price && (
+                              <span style={{ fontSize: 12.5, fontWeight: 700, color: l.price === "Free" ? C.light : C.gold }}>{l.price}</span>
+                            )}
+                          </div>
+                          {/* What it is for. The field that makes this a list
+                              rather than a row of logos. */}
+                          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 2 }}>{l.forWhat}</div>
+                          {l.refused
+                            ? <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{l.refused}</div>
+                            : l.href
+                              ? <a href={l.href} target="_blank" rel={l.partner ? "noreferrer sponsored nofollow" : "noreferrer"}
+                                  style={{ display: "inline-block", marginTop: 3, fontSize: 12, color: C.gold, fontWeight: 700, textDecoration: "none" }}>
+                                  {l.kind === COST_KIND.TRANSPORT || l.kind === COST_KIND.FERRY ? "Check times and fares" : l.kind === COST_KIND.STAY ? "Find a room" : l.kind === COST_KIND.CAR ? "Book the car" : "Buy tickets"} ↗
+                                </a>
+                              : null}
+                          {/* The price came off a named page on a stamped day,
+                              so both travel with it. A figure nobody can check
+                              is a figure nobody should believe. */}
+                          {l.priceFrom?.host && (
+                            <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
+                              {l.priceFrom.host}{l.priceFrom.at ? ` · checked ${l.priceFrom.at}` : ""}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {partnered.length > 0 && (
+                        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 8 }}>
+                          {partnerDisclosure(partnered[0])}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })()}
@@ -1718,12 +1753,19 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                 const nextStop = day.stops[stopIdx + 1];
                 const noteKey = `${dayIdx}-${stopIdx}`;
                 const noteOpen = !!openNotes[noteKey];
-                const NOTE_CLAMP = 160;
+                // ── "WHY SO MUCH READ MORE?" ─────────────────────────
+                // Oliver, 26 Aug 2026: "Only read more for stuff that can be
+                // irrelevant." The clamp was 160 characters against a note the
+                // writer is asked to make 2-3 sentences long, so it fired on
+                // every stop in the product and hid one sentence each time. The
+                // rule now lives in utils/guideReading.js, where it can be
+                // tested against real notes rather than guessed at here.
                 const note = stop.note || "";
-                const longNote = note.length > NOTE_CLAMP;
+                const clamped = clampNote(note);
+                const longNote = clamped.clipped;
                 const noteBlock = note ? (
                   <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginTop: 7 }}>
-                    {longNote && !noteOpen ? `${note.slice(0, NOTE_CLAMP).trimEnd()}… ` : `${note} `}
+                    {longNote && !noteOpen ? `${clamped.shown}… ` : `${note} `}
                     {longNote && (
                       <button onClick={e => { e.stopPropagation(); setOpenNotes(o => ({ ...o, [noteKey]: !noteOpen })); }}
                         style={{ background: "none", border: "none", padding: 0, color: C.gold, fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
@@ -1997,12 +2039,26 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
               // constant, empty until Oliver's Booking.com affiliate account
               // is approved; pasting the aid number there turns every Booking
               // link in the app into an affiliate link at once.
-              const bookingUrl = searchTerm
-                ? `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(searchTerm + ", Denmark")}` +
-                  (fmt(dayDate) ? `&checkin=${fmt(dayDate)}&checkout=${fmt(nextDate)}` : "") +
-                  `&group_adults=${adults}&no_rooms=1` +
-                  (BOOKING_AFFILIATE_ID ? `&aid=${BOOKING_AFFILIATE_ID}` : "")
-                : null;
+              // ── AND THE TOWN GOES IN THE SEARCH ────────────────────
+              //
+              // 26 Aug 2026. This built its own Booking URL inline, a FOURTH
+              // copy of a builder that already lives in utils/affiliates.js,
+              // and it had drifted: the search string was `${name}, Denmark`.
+              // Denmark has more than one Hotel Phønix, so the Limfjord guide's
+              // link opened the one in HOLSTEBRO and reported it full — a
+              // different hotel, in a different town, 140 km from the Aalborg
+              // one the sentence above it is describing.
+              //
+              // One builder now, and the town of the day's own stops goes in
+              // with the name. See bookingUrl in utils/affiliates.js.
+              const stayTown = (day.stops || []).map(x => x?.town).find(Boolean) || "";
+              const stayBookingUrl = bookingUrl({
+                area: searchTerm,
+                near: day.glance.recommendedStay ? (day.glance.stayArea || stayTown) : stayTown,
+                checkin: fmt(dayDate) || undefined,
+                checkout: fmt(dayDate) ? fmt(nextDate) : undefined,
+                adults,
+              });
               return (
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 12, padding: "12px 14px", marginTop: 16 }}>
                   <span style={{ fontSize: 14, flexShrink: 0 }}>🏡</span>
@@ -2013,10 +2069,22 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                     {day.glance.recommendedStay && (
                       <div style={{ marginTop: 3 }}><span style={{ color: C.gold, fontWeight: 700 }}>{day.glance.recommendedStay}</span></div>
                     )}
-                    {bookingUrl && (
-                      <a href={bookingUrl} target="_blank" rel="noreferrer" style={{ display: "block", marginTop: 5, color: C.gold, fontWeight: 700, textDecoration: "none" }}>
+                    {stayBookingUrl && (
+                      <a href={stayBookingUrl} target="_blank" rel="noreferrer" style={{ display: "block", marginTop: 5, color: C.gold, fontWeight: 700, textDecoration: "none" }}>
                         🔎 {day.glance.recommendedStay ? `See ${day.glance.recommendedStay} on Booking.com` : `Search stays near ${day.glance.stayArea}`} ↗
                       </a>
+                    )}
+                    {/* ── AND THE INLINE COPY WAS DODGING THIS CHECK ──────
+                        The suite sweeps every file for a link wrapper used
+                        without its disclosure, and this card never tripped it —
+                        because it built its own Booking URL by hand instead of
+                        calling bookingUrl(), so the sweep had nothing to match.
+                        Reaching for the shared door made the rule fire on the
+                        first run, which is the argument for shared doors in one
+                        sentence. First day only: the sentence is the same on
+                        all seven and a reader learns to scroll past a repeat. */}
+                    {stayBookingUrl && dayIdx === 0 && (
+                      <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4 }}>{STAY_DISCLOSURE}</div>
                     )}
                   </div>
                 </div>

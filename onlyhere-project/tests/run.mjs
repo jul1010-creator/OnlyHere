@@ -123,6 +123,8 @@ writeFileSync(entry, `
   export { writeInLanguage } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { guideLanguage, languageOfProse, ruledOutLanguages, briefSentences, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS, MARKER_FLOOR, MARKER_MARGIN } from ${JSON.stringify(join(root, "src/utils/travellerLanguage.js"))};
   export { railPlaces, railCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
+  export { costLines, byUrgency, linkGaps, readPrice, refuseTicket, REFUSAL, COST_KIND } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
+  export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, briefBlock, buildBlockedNote, MAX_ASKS_AT_ONCE } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { GREETING, openingThread, withTestBrief, withoutTestBrief, threadIsSound, TEST_BRIEF } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
@@ -13643,6 +13645,38 @@ rmSync(dir, { recursive: true, force: true });
     ok("a tourism board is never the operator",
        !isOwnSiteFor("https://www.visitaarhus.com/aarhus/marselisborg-dyrehave", DEER));
     ok("even on a .dk", !isOwnSiteFor("https://visitaarhus.dk/dyrehave", DEER));
+
+    // ── AND A PATH IS A HEADLINE ──────────────────────────────────
+    //
+    // Oliver, 26 Aug 2026, publishing the Roskilde Festival draft. The run log
+    // ranked "theseasonalevent.com (official, 2026) > roskilde-festival.dk
+    // (official, 2026)" — a content blog placed above the festival's own site —
+    // and then took the entry's price from it: "2600-2600 DKK is on
+    // theseasonalevent.com, the highest-ranked page read that states it." Two
+    // steps later a gate reported "Every price in this draft appears in the
+    // official site's own text", meaning the blog's.
+    //
+    // The URL was theseasonalevent.com/roskilde-festival-guide-tickets-camping.
+    // Every content site puts its subject in the slug, so the old rule made any
+    // article about a place into that place's own website.
+    {
+      const RF = ["roskilde", "festival"];
+      ok("a blog is not the operator because its slug names the place",
+        !isOwnSiteFor("https://theseasonalevent.com/roskilde-festival-guide-tickets-camping", RF));
+      ok("nor is a magazine", !isOwnSiteFor("https://www.timeout.com/copenhagen/things-to-do/tivoli-gardens", ["tivoli"]));
+      ok("nor a guide site with a tidy path", !isOwnSiteFor("https://example-guides.com/denmark/roskilde-festival/", RF));
+      // The positive control. Without this, the three above are satisfied by a
+      // rule that calls nothing official.
+      ok("but the festival's own domain still is", isOwnSiteFor("https://www.roskilde-festival.dk/en/tickets", RF));
+      ok("including a subdomain of it", isOwnSiteFor("https://faq.roskilde-festival.dk/", RF));
+      // And the case the path branch was actually written for survives, which is
+      // the whole reason it is narrowed rather than deleted.
+      ok("a kommune still speaks for the places inside it",
+        isOwnSiteFor("https://aarhus.dk/borger/natur/marselisborg-dyrehave/", DEER));
+      ok("and urlNames can be asked about the host alone",
+        urlNames("https://theseasonalevent.com/roskilde-festival", RF)
+        && !urlNames("https://theseasonalevent.com/roskilde-festival", RF, { hostOnly: true }));
+    }
     ok("and that is what isTourismHost is for", isTourismHost("https://visitsonderjylland.dk/x"));
     ok("oplev counts too", isTourismHost("https://oplev.esbjerg.dk/x"));
     ok("an ordinary site does not", !isTourismHost("https://aarhus.dk/x"));
@@ -19551,26 +19585,43 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is("and it is still the official site", linkLabel("https://tiqets.example.com/x"), "Official site");
     is("nothing is the official site of nothing in particular", linkLabel(""), "Official site");
   }
+  // ── AND THE BROWSE ROW IS GONE, REPLACED BY AN INVOICE ──────────
+  //
+  // Six assertions used to live here pinning a single Tiqets browse link:
+  // that it was called, that it was disclosed, that it appeared once, that it
+  // sat in essentials, and that its label said "browse" rather than promising
+  // one attraction. Every one of them was true and correct on 26 Aug 2026 when
+  // Oliver read the row and said: "I'd rather you give them a list of what they
+  // have to pay for instead. Direct links. So Flixbus, attractions, events,
+  // etc. and also add what it is for."
+  //
+  // They are replaced rather than kept, because a browse link and a costs list
+  // are not two features — the second one is what the first was standing in for.
   const guideSrc = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
-  ok("the guide offers tickets", /tiqetsBrowseUrl\(\)/.test(guideSrc));
-  ok("and discloses it", /partnerDisclosure\(href\)/.test(guideSrc));
-  // Nothing renders when the link is not configured, rather than an empty row
-  // with a label and no button. A source assertion because the browse link IS
-  // configured, so no call to the real function can reach the other branch, and
-  // mutation testing said so by deleting this guard and killing nothing.
-  ok("and renders nothing at all when there is no link", /if \(!href\) return null;/.test(guideSrc));
-  // ONCE PER GUIDE, NOT PER DAY. "Where to stay" repeats per day because the
-  // answer changes per day. The same ticket link under all seven days is the
-  // same link seven times, and a reader learns to scroll past it.
-  is("the ticket link is rendered once", (guideSrc.match(/tiqetsBrowseUrl\(\)/g) || []).length, 1);
-  // The bound is a proxy for "inside the same block" and it went from 4000 to
-  // 6000 on 21 Aug, when the DKK rate line was added to this block with its
-  // reasoning attached. Still a real assertion: the nearest day card is about
-  // 49,000 characters further on, so nothing outside this block can satisfy it.
+  ok("the guide lists what the trip actually costs", /costLines\(\{/.test(guideSrc));
+  ok("ordered so the things that stop being possible come first", /byUrgency\(costLines/.test(guideSrc));
+  // ONCE PER GUIDE, NOT PER DAY, which is the half of the old block that
+  // survives unchanged: "Where to stay" repeats per day because the answer
+  // changes per day, and a costs list does not.
+  is("the costs list is rendered once", (guideSrc.match(/costLines\(\{/g) || []).length, 1);
   ok("and it sits in the guide's own essentials block, not in a day card",
-    /Before you go[\s\S]{0,6000}tiqetsBrowseUrl\(\)/.test(guideSrc));
-  // It goes to Tiqets and not to any one attraction, so it must not promise one.
-  ok("a browse link says browse", /Browse Danish attraction tickets/.test(guideSrc));
+    /Before you go[\s\S]{0,8000}costLines\(\{/.test(guideSrc));
+  // Renders nothing rather than an empty labelled row, same as the browse link
+  // did. Mutation testing killed the old version of this guard, so it is kept.
+  ok("and renders nothing at all when there is nothing to pay for", /if \(!lines\.length\) return null;/.test(guideSrc));
+  // The disclosure is printed from the LINKS THAT ARE THERE, not typed, so it
+  // cannot say "this pays us" over a list that happens to contain none.
+  ok("the disclosure is computed from the partner links on the page",
+    /const partnered = lines\.filter\(l => l\.partner\)/.test(guideSrc));
+  ok("and it only appears when there is one", /\{partnered\.length > 0 && \(/.test(guideSrc));
+  // What it is for, which is the field that makes this a list rather than a row
+  // of logos, and the one Oliver asked for by name.
+  ok("every line says what it is for", /\{l\.forWhat\}/.test(guideSrc));
+  // A refused line keeps its place and loses only its checkout.
+  ok("a refused line prints its reason instead of a link", /l\.refused[\s\S]{0,200}\{l\.refused\}/.test(guideSrc));
+  // The price travels with where it was read and when. A figure nobody can
+  // check is a figure nobody should believe.
+  ok("a printed price carries its source", /\{l\.priceFrom\.host\}/.test(guideSrc));
 }
 
 // ── FINDING THE TICKET, AND REFUSING THE WRONG ONE ───────────────────
@@ -25869,6 +25920,88 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      claimLanded(QUOTED_FINDING, "a lunch reservation grants free entry to Tivoli", "park admission is separate").verdict, "gone");
   is("and catches a rewrite that kept it",
      claimLanded(QUOTED_FINDING, "a lunch reservation grants free entry", "still, a lunch reservation grants free entry").verdict, "survived");
+
+  // ── AND THE SAME BUG AGAIN, NINE DAYS LATER, TWO DIGITS WIDE ────
+  //
+  // Oliver, 26 Aug 2026, on the Roskilde Festival run: "roskilde festival was
+  // rejected by Google Gemini for 2027.. seriously?" and then, correctly, "the
+  // draft rather rejected Gemini."
+  //
+  // Step 46 read: 0 gone, 4 still there, on the draft's own words: "26",
+  // "dateStart"; "26", "dateEnd"; "camping", "Included with a full festival
+  // ticket"; "accommodationTip". All four false, from two holes.
+  //
+  // The block above fixed this for FOUR-DIGIT years and FIGURES is /\d{2,}/, so
+  // the day of the month walked straight through it. "26" is inside 2026, inside
+  // 2,600 DKK, and inside any house number, so it could never be reported gone.
+  {
+    const DRAFT_BEFORE = JSON.stringify({
+      dateStart: "2026-06-27", dateEnd: "2026-07-04",
+      camping: "Included with a full festival ticket",
+      ticketInfo: "Standard Full Festival Ticket: 2,600 DKK, including fee",
+    });
+    const DRAFT_AFTER = JSON.stringify({
+      dateStart: "2027-07-03", dateEnd: "2027-07-10",
+      camping: "Included with a full festival ticket",
+      ticketInfo: "Standard Full Festival Ticket: 2,600 DKK, including fee",
+    });
+    const DATE_FINDING = 'The "dateStart" field says the festival begins 26 June, but the official site says 3 July 2027.';
+
+    // THE BUG ITSELF: the dates were genuinely corrected, and this said they were not.
+    is("a two digit day is not a fingerprint for a sentence",
+      claimLanded(DATE_FINDING, DRAFT_BEFORE, DRAFT_AFTER).verdict, "uncheckable");
+    ok("so a corrected date no longer reads as a failed correction",
+      !describeCorrection(correctionLanded([DATE_FINDING], DRAFT_BEFORE, DRAFT_AFTER)).includes("DID NOT LAND"));
+
+    // THE SECOND HOLE. A finding names the field it is about, and the survival
+    // test searches JSON that carries its own keys, so the field name always
+    // survives however well the rewrite worked.
+    const FIELD_FINDING = 'The "accommodationTip" field names a single B&B and the site names none.';
+    // "uncheckable", not "gone", and that is the honest answer: with the field
+    // name excused there is no anchor left, so code cannot follow this finding
+    // at all. What matters is that it is no longer "survived", which is what it
+    // said on the Roskilde run about a field the rewrite had emptied.
+    is("a field name is structure, not the draft's own words",
+      claimLanded(FIELD_FINDING, JSON.stringify({ accommodationTip: "Roskilde Bed & Breakfast" }), JSON.stringify({ accommodationTip: "" })).verdict,
+      "uncheckable");
+    ok("and a finding about a field is never reported as a failed correction",
+      !describeCorrection(correctionLanded([FIELD_FINDING],
+        JSON.stringify({ accommodationTip: "Roskilde Bed & Breakfast" }),
+        JSON.stringify({ accommodationTip: "" }))).includes("DID NOT LAND"));
+    // And it is the KEY that is excused, not the word: the same token as a value
+    // is ordinary content and still anchors.
+    is("the same word as a value still anchors",
+      claimLanded('The draft claims "camping" is included and the site does not say so.',
+        JSON.stringify({ note: "camping is included" }), JSON.stringify({ note: "camping is included" })).verdict,
+      "survived");
+
+    // ── AND IT MUST STILL BITE ──────────────────────────────────
+    //
+    // Every assertion above loosens the check, so this is the one that stops the
+    // loosening from going all the way to "nothing ever fails".
+    const PRICE_NOT_FIXED = "The official site says the ticket is 327 DKK, not the 2,600 DKK in the draft.";
+    is("a price the rewrite did not touch is still caught",
+      claimLanded(PRICE_NOT_FIXED, DRAFT_BEFORE, DRAFT_AFTER).verdict, "survived");
+    ok("and the founder is told so", describeCorrection(correctionLanded([PRICE_NOT_FIXED], DRAFT_BEFORE, DRAFT_AFTER)).includes("DID NOT LAND"));
+  }
+
+  // ── THE WARNING MUST NOT BE CUT WHERE IT STOPS BEING ACTIONABLE ──
+  //
+  // The Roskilde run printed this message ending at "so the draft below",
+  // because App.jsx sliced it to 300 characters. What the slice removed was
+  // "Fix by hand or redraft, and do not read the banner above as a pass" — the
+  // only half anybody can act on, on the one run where it mattered.
+  {
+    const many = Array.from({ length: 12 }, (_, i) => `The draft says "${"phrase number " + i}" and the site does not.`);
+    const b = JSON.stringify({ note: many.map((_, i) => `phrase number ${i}`).join(" ") });
+    const msg = describeCorrection(correctionLanded(many, b, b));
+    ok("a dozen surviving claims still produce a finished sentence", /do not read the banner above as a pass\.$/.test(msg));
+    ok("and the list is what gets bounded, not the sentence", /and \d+ more/.test(msg));
+    ok("the count itself is never abbreviated", /12 flagged claims are still in the draft/.test(msg));
+    // The call site must no longer re-truncate it.
+    const appF = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("and App.jsx does not slice it back off", !/describeCorrection\(landed\)\.slice\(/.test(appF));
+  }
 }
 
 // ── ANYTHING BELOW THE SUMMARY IS NOT A TEST ──────────────────────
@@ -36904,6 +37037,315 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // "0 of 7" over an empty box is a form with a scoreboard on it.
   ok("nothing is shown before they have said anything", /liveBrief && briefProgress\(liveBrief\)\.done > 0/.test(appP));
   is("and the panel hands the count out with the sentence", typeof M.briefPanel(read("")).progress, "object");
+}
+
+
+// ── "GIVE THEM A LIST OF WHAT THEY HAVE TO PAY FOR" ─────────────────
+//
+// Oliver, 26 Aug 2026, replacing the Tiqets browse row: "Direct links. So
+// Flixbus, attractions, events, etc. and also add what it is for." And then, in
+// capitals: "MAKE SURE THAT THE TICKETS AREN'T TAKEN!!!!!!!!!!!!!" — which he
+// made concrete a minute later: "Don't tell them to order tickets from
+// Distortion, just for them to realise distortion is no longer available."
+//
+// So the assertions below are mostly about what the list REFUSES to do. A list
+// of buy links is a promise, and every line that cannot be honoured makes the
+// other lines less believable.
+{
+  const { costLines, byUrgency, linkGaps, readPrice, refuseTicket, REFUSAL, COST_KIND } = M;
+
+  // A February trip. Every date below is measured against these.
+  const FEB = new Date("2027-02-12T09:00:00Z");
+  const dayDateFor = (n) => new Date(Date.UTC(2027, 1, 11 + n));
+  const ROWS = {
+    // THE CASE HE NAMED. Distortion is a Copenhagen street festival in early
+    // June. Nobody has marked it sold out, because it has not gone on sale.
+    "Distortion": { _src: "event", date: "2027-06-02", dateEnd: "2027-06-06",
+      ticketUrl: "https://www.ticketmaster.dk/event/distortion-12345", ticketStatus: "on_sale",
+      __priceSource: { url: "https://cphdistortion.dk/billetter", host: "cphdistortion.dk", price: "450 DKK", at: "2026-08-20" } },
+    "Rosenborg Slot": { _src: "free",
+      ticketUrl: "https://www.tiqets.com/en/copenhagen-attractions/rosenborg-castle-tickets-p123456", ticketStatus: "on_sale",
+      __priceSource: { url: "https://kongernessamling.dk", host: "kongernessamling.dk", price: "145 DKK", at: "2026-08-19" } },
+    "Nationalmuseet": { _src: "free", ticketStatus: "free" },
+    "Louisiana": { _src: "free", ticketUrl: "https://www.tiqets.com/en/x-p9999", ticketStatus: "sold_out",
+      __priceSource: { url: "https://louisiana.dk", host: "louisiana.dk", price: "160 DKK", at: "2026-08-01" } },
+    "Møns Klint": { _src: "free",
+      __priceSource: { url: "https://moensklint.dk", host: "moensklint.dk", price: "110 DKK", at: "2026-08-20" } },
+    "Nyhavn": { _src: "town" },
+  };
+  const GUIDE = { days: [
+    { day: 1, stops: [{ name: "Rosenborg Slot" }, { name: "Nationalmuseet" }, { name: "Nyhavn" }], glance: { stayArea: "Indre By", legs: [] } },
+    { day: 2, stops: [{ name: "Distortion" }, { name: "Louisiana" }], glance: { legs: [{ how: "~1h20 by ferry" }] } },
+    { day: 3, stops: [{ name: "Møns Klint" }], glance: { legs: [] } },
+  ] };
+  const run = (extra = {}) => costLines({ guide: GUIDE, rowFor: (n) => ROWS[n] || null, dayDateFor, today: FEB, ...extra });
+  const lines = run({ mode: "driving" });
+  const by = (n) => lines.find(l => l.name === n);
+
+  // ── THE ONE HE SHOUTED ABOUT ─────────────────────────────────────
+  ok("a June festival on a February trip is on the list", !!by("Distortion"));
+  is("and it is not offered for sale", by("Distortion").href, "");
+  is("it says why, in words a traveller can act on", by("Distortion").refused, REFUSAL.off_window);
+  // The price still shows, because they would still have to pay it if it ran.
+  is("and the price survives the refusal", by("Distortion").price, "450 DKK");
+
+  // ORDER MATTERS INSIDE THE GATE. A festival that has not gone on sale carries
+  // no status at all, so reading ticketStatus first would find "unknown", pass,
+  // and print a checkout. The date is checked first, deliberately.
+  is("an undated edition is refused before its status is consulted",
+    refuseTicket({ row: { _src: "event", ticketStatus: "on_sale" }, when: { confirmed: false } }), REFUSAL.undated);
+
+  // ── SOLD OUT, CANCELLED, OFF SALE ────────────────────────────────
+  is("sold out loses its checkout", by("Louisiana").href, "");
+  is("and says so", by("Louisiana").refused, REFUSAL.sold_out);
+  is("cancelled is refused", refuseTicket({ row: { ticketStatus: "cancelled" } }), REFUSAL.cancelled);
+  // off_sale is NOT a sold-out confirmation and the wording must not claim it is.
+  is("off sale is refused without claiming it is sold out", refuseTicket({ row: { ticketStatus: "off_sale" } }), REFUSAL.off_sale);
+  ok("and the off-sale wording does not say sold out on its own", !/^Sold out/.test(REFUSAL.off_sale));
+
+  // ── WHAT SELLS NORMALLY STILL SELLS ──────────────────────────────
+  // Without this the assertions above are satisfied by refusing everything.
+  ok("a museum on sale keeps its link", !!by("Rosenborg Slot").href);
+  is("and is not refused", by("Rosenborg Slot").refused, "");
+  is("with the price that was actually read", by("Rosenborg Slot").price, "145 DKK");
+  is("and where it was read from", by("Rosenborg Slot").priceFrom.host, "kongernessamling.dk");
+  is("and when", by("Rosenborg Slot").priceFrom.at, "2026-08-19");
+  // Free is a real answer and the one line that makes the others believable.
+  is("free entry says free", by("Nationalmuseet").price, "Free");
+  is("and offers nothing to buy", by("Nationalmuseet").href, "");
+  is("and is not refused either, because nothing was refused", by("Nationalmuseet").refused, "");
+
+  // ── A PRICE IS READ, NEVER COMPOSED ──────────────────────────────
+  is("a measured price comes through verbatim",
+    readPrice({ __priceSource: { price: "145 DKK", host: "x.dk", at: "2026-08-19" } }).text, "145 DKK");
+  is("a price band is not a price", readPrice({ __priceSource: { price: "mid" } }), null);
+  is("and a row with no measured price has none", readPrice({ price: "160 DKK" }), null);
+
+  // ── INVENTORY_MAY_NOT_SELECT ─────────────────────────────────────
+  //
+  // The rule that matters most in this file: it reads a finished guide and may
+  // never add to it. Nothing is on the list because it is bookable.
+  {
+    const planned = new Set(GUIDE.days.flatMap(d => d.stops.map(s => s.name)));
+    const stops = lines.filter(l => l.kind === COST_KIND.ENTRY || l.kind === COST_KIND.EVENT);
+    ok("every priced stop on the list is a stop in the plan", stops.every(l => planned.has(l.name)));
+    ok("and there are some, so that is not vacuous", stops.length >= 4);
+    // A place with no price, no link and nothing to warn about earns no line:
+    // padding the list with those is the browse row again.
+    ok("a stop with nothing to pay is left off", !by("Nyhavn"));
+  }
+
+  // ── WHAT IT IS FOR, WHICH IS THE FIELD HE ASKED FOR BY NAME ──────
+  ok("every line says what it is for", lines.every(l => !!l.forWhat));
+  ok("a stop names its day", /Day 2/.test(by("Distortion").forWhat));
+
+  // ── THE OPERATORS, ONCE FOR THE TRIP ─────────────────────────────
+  {
+    const pt = byUrgency(run({ mode: "public transport" }));
+    const names = pt.filter(l => l.kind === COST_KIND.TRANSPORT).map(l => l.name);
+    is("a public transport trip lists the operators once each", names, ["DSB", "FlixBus", "Rejseplanen"]);
+    ok("and each says what it sells", pt.filter(l => l.kind === COST_KIND.TRANSPORT).every(l => /trains|coaches|operator/.test(l.forWhat)));
+    // No price. Both price dynamically by how far ahead you book, so any figure
+    // printed here is wrong for most readers.
+    ok("and none of them invents a fare", pt.filter(l => l.kind === COST_KIND.TRANSPORT).every(l => !l.price));
+    // A driving trip is not sold a seat by anybody.
+    ok("a driving trip is offered no rail operator", !lines.some(l => l.name === "DSB"));
+    ok("but it is offered a car", lines.some(l => l.kind === COST_KIND.CAR));
+    ok("and a walking trip is offered neither",
+      !byUrgency(run({ mode: "walk", saidNoCar: true })).some(l => l.kind === COST_KIND.CAR || l.name === "DSB"));
+  }
+  // A crossing gets the national planner and never a company name — Samsø alone
+  // is served by two operators from opposite sides of the country.
+  {
+    const ferry = lines.find(l => l.kind === COST_KIND.FERRY);
+    ok("a leg with a boat on it earns a crossing line", !!ferry);
+    ok("which names no ferry company", !/linjen|færgen|Molslinjen|Bornholms/i.test(ferry.name));
+  }
+
+  // ── ORDER: THE THINGS THAT STOP BEING POSSIBLE COME FIRST ────────
+  {
+    const ordered = byUrgency(lines);
+    const rank = (l) => (l.href && l.bookAhead ? 0 : l.href ? 1 : 2);
+    ok("the list never puts a less urgent line above a more urgent one",
+      ordered.every((l, i) => i === 0 || rank(ordered[i - 1]) <= rank(l)));
+    ok("and a refused line, which has nothing to click, is not first", rank(ordered[0]) === 0);
+  }
+
+  // ── AND THE GAPS GO TO OLIVER, NOT TO THE READER ─────────────────
+  //
+  // "Saying 'we have no link' to like Copenhagen's National Museum is near
+  // embarrassing." So no line says it, and the gap becomes a plan problem.
+  {
+    const gaps = linkGaps(lines);
+    ok("a priced stop with nowhere to buy is reported to the founder", gaps.some(g => /Møns Klint/.test(g)));
+    ok("and the reader-facing line says nothing about a missing link",
+      !/no link|couldn't find|we do not have/i.test(by("Møns Klint").refused + by("Møns Klint").forWhat));
+    ok("a refused line is not a link gap, because the link is not what is wrong",
+      !gaps.some(g => /Louisiana|Distortion/.test(g)));
+    ok("and free entry is not a gap either", !gaps.some(g => /Nationalmuseet/.test(g)));
+  }
+}
+
+// ── "WHY SO MUCH READ MORE?" ────────────────────────────────────────
+//
+// Oliver, 26 Aug 2026, with a screenshot of two consecutive stops both cut
+// mid-sentence: "Only read more for stuff that can be irrelevant."
+{
+  const { clampNote, NOTE_SHOW_WHOLE_MAX } = M;
+  // Two real notes off the live guide, both the length the writer prompt asks
+  // for ("2-3 sentences"). Both used to clamp, because the clamp was 160.
+  const REAL = [
+    "Det her er præcis det, I kom efter: de to runesten Gorm den Gamle rejste, og den store, hvor Harald Blåtand skriver, at han gjorde danerne kristne, Danmarks dåbsattest. Stenene står i glasmontrer ved kirken, og det er fladt hele vejen rundt. Højene bagved kan bestiges ad trapper.",
+    "Kridtklinterne rejser sig op til 128 meter over havet, hvidere end noget andet i Danmark. Udsigten fra kanten oppe ved skoven kræver ingen trapper, det er de omkring 500 trin ned til stranden, I skal holde jer fra. Gå langs kanten i det tempo, der passer jer.",
+  ];
+  for (const n of REAL) {
+    ok(`a note of the length the writer is asked for is shown whole (${n.length} chars)`, !clampNote(n).clipped);
+  }
+  ok("and those are genuinely long notes, so this is not a trivial pass", REAL.every(n => n.length > 250));
+
+  // The clamp is a guard against a note the prompt did not get, not a default.
+  const runaway = REAL.join(" ") + " " + REAL[0];
+  const c = clampNote(runaway);
+  ok("a runaway note still clamps", c.clipped);
+  ok("and hides enough to be worth the tap", c.hidden > 90);
+  // Never mid-word and never mid-sentence: the cut lands where a reader would
+  // have paused anyway, or the button reads as an interruption.
+  ok("the cut lands on a sentence end", /[.!?]$/.test(c.shown));
+  ok("and what is shown is the start of the note", runaway.startsWith(c.shown));
+  is("an empty note clamps to nothing", clampNote("").clipped, false);
+  // The floor is what makes it rare. If this ever drops back toward 160 every
+  // card in the product grows a button again.
+  ok("the threshold is well above a normal note", NOTE_SHOW_WHOLE_MAX >= 400);
+}
+
+
+// ── "YOU PICKED A HOTEL THAT WASN'T AVAILABLE FOR THAT DATE" ────────
+//
+// Oliver, 26 Aug 2026, with a screenshot of the Limfjord guide's own Where to
+// stay link. What Booking actually opened was HOTEL PHØNIX IN HOLSTEBRO — a
+// different hotel, in a different town, 140 km from the Aalborg one the
+// sentence above the link is describing — and then reported it full, which is
+// true and completely beside the point.
+//
+// The search string was `${name}, Denmark`. Denmark has more than one Hotel
+// Phønix. A bare name and a country is not a query that identifies a building.
+//
+// And his own read is the right one: "I don't know if being affiliated to
+// booking will help this situation." It would not. An aid parameter on that URL
+// would have earned a commission on the wrong hotel.
+{
+  const { bookingUrl } = M;
+  const ss = (url) => decodeURIComponent(new URL(url).searchParams.get("ss") || "");
+
+  is("a named hotel carries its town", ss(bookingUrl({ area: "Hotel Phønix", near: "Aalborg" })), "Hotel Phønix, Aalborg, Denmark");
+  // THE BUG ITSELF, stated as the thing that must no longer be produced.
+  ok("and no longer goes out as a bare name and a country",
+    ss(bookingUrl({ area: "Hotel Phønix", near: "Aalborg" })) !== "Hotel Phønix, Denmark");
+  // Booking treats a repeated token as a weaker match, not a stronger one.
+  is("a town that is already in the area is not repeated",
+    ss(bookingUrl({ area: "Aalborg havnefront", near: "Aalborg" })), "Aalborg havnefront, Denmark");
+  is("and matching is not case sensitive",
+    ss(bookingUrl({ area: "aalborg havnefront", near: "Aalborg" })), "aalborg havnefront, Denmark");
+  // No town known is the old behaviour, unchanged: an area search is still a
+  // useful search, and inventing a town would be a new way to be wrong.
+  is("no town, no change", ss(bookingUrl({ area: "Indre By" })), "Indre By, Denmark");
+  is("an empty area still builds nothing", bookingUrl({ area: "", near: "Aalborg" }), null);
+  // Dates travel or neither does — a half-filled range is worse than none.
+  {
+    const u = new URL(bookingUrl({ area: "Indre By", near: "Copenhagen", checkin: "2026-10-10", checkout: "2026-10-11" }));
+    is("the dates go in", u.searchParams.get("checkin"), "2026-10-10");
+    is("both of them", u.searchParams.get("checkout"), "2026-10-11");
+    is("and a lone checkin is dropped", new URL(bookingUrl({ area: "Indre By", checkin: "2026-10-10" })).searchParams.get("checkin"), null);
+  }
+  // ── AND THE GUIDE MUST REACH FOR THE SHARED DOOR ─────────────────
+  //
+  // The card built its own Booking URL inline — a FOURTH copy of this builder —
+  // which is how it drifted. It also meant the affiliate-disclosure sweep in
+  // this file had nothing to match on, so the card was invisible to a check it
+  // should always have been failing. Reaching for the shared door made that
+  // check fire on the first run.
+  {
+    const gp = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+    ok("the guide calls the one builder", /bookingUrl\(\{/.test(gp));
+    ok("and no longer hand-rolls a Booking search",
+      !/booking\.com\/searchresults\.html\?ss=\$\{encodeURIComponent/.test(gp));
+    ok("and it passes the town it knows", /near: day\.glance\.recommendedStay \? \(day\.glance\.stayArea \|\| stayTown\) : stayTown/.test(gp));
+  }
+}
+
+
+// ── "BUT ISN'T GEMINI CORRECT ABOUT ROSKILDE 2027?" ─────────────────
+//
+// Oliver, 26 Aug 2026. He was right and Claude was wrong, and this function is
+// where the wrongness lived.
+//
+// Roskilde Festival's own site says 26 June – 3 July 2027. The run logged
+// "confirmed on the site itself: 2027-07-03" — one date, the END of the range —
+// and the decision block then used that to overrule the invented-claim check:
+// "A date the operator publishes with the year on its own page settles the
+// question. Nothing that merely fails to find it can overturn it."
+//
+// One of the draft's two dates was on the operator's page. The other was not,
+// which was precisely the thing being disputed. `confirmed: true` on a half
+// match is how a correct fact-check got overruled by a draft.
+{
+  const { datesConfirmedBy } = M;
+  const SITE = "Roskilde Festival 26 June - 3 July 2027. Vi ses den 26. juni 2027 til den 3. juli 2027.";
+
+  // THE SHAPE THAT SHIPPED. One date lands, one does not.
+  {
+    const dc = datesConfirmedBy(SITE, "2027-07-03", "2027-07-10");
+    is("half a range is not confirmed", dc.confirmed, false);
+    is("it is its own state", dc.partial, true);
+    is("and it names the date the operator does not publish", dc.missing, ["2027-07-10"]);
+    ok("and says which one it did find", dc.found.includes("2027-07-03"));
+    // The sentence that armed the overruling only ships on a full match.
+    ok("a half match does not licence ignoring the fact-check",
+      !/describing its own search/.test(dc.detail));
+    ok("and says to check it by hand instead", /by hand before publishing/.test(dc.detail));
+  }
+
+  // THE POSITIVE CONTROL. Without this, every assertion above is satisfied by a
+  // function that confirms nothing, which would be a different bug of the same size.
+  {
+    const dc = datesConfirmedBy(SITE, "2027-06-26", "2027-07-03");
+    is("both dates on the operator's page is a confirmation", dc.confirmed, true);
+    is("with nothing missing", dc.missing, []);
+    ok("and it still overrules a search that found neither",
+      /describing its own search/.test(dc.detail));
+  }
+
+  // A one-day event stores the same date twice. That is ONE date, not a range
+  // half-confirmed by itself — which the old `want` array would have made of it.
+  {
+    const one = datesConfirmedBy(SITE, "2027-07-03", "2027-07-03");
+    is("a one-day event is not half of anything", one.confirmed, true);
+    // And it is stated once. Without the dedupe the verdict is identical and the
+    // sentence reads "states 2027-07-03 and 2027-07-03", which is what a
+    // surviving mutant pointed out: the dedupe is about the MESSAGE, so the
+    // message is what has to be asserted or the line can be deleted unnoticed.
+    is("and it is named once, not twice", one.found, ["2027-07-03"]);
+    ok("so the sentence does not repeat itself", !/(\d{4}-\d{2}-\d{2}) and \1/.test(one.detail));
+  }
+
+  // Neither found is neither found, and it is not "partial".
+  {
+    const dc = datesConfirmedBy(SITE, "2028-01-01", "2028-01-02");
+    is("no match is not a confirmation", dc.confirmed, false);
+    is("and not a partial one either", dc.partial, false);
+  }
+  is("no dates at all is nothing to confirm", datesConfirmedBy(SITE, "", "").confirmed, false);
+
+  // ── AND THE LOG MUST SAY WHICH ONE IT IS ────────────────────────
+  //
+  // "confirmed on the site itself: 2027-07-03" is the line Oliver read and
+  // believed, and it was true about one date and silent about the other.
+  {
+    const appD = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("a half match gets its own line, not the confirmed one", /HALF CONFIRMED/.test(appD));
+    ok("which names the date the operator does not publish", /nothing matching \$\{dc\.missing\.join/.test(appD));
+    ok("and it reaches the founder rather than only the log", /if \(dc\.partial\) noteToFounder\(dc\.detail\)/.test(appD));
+  }
 }
 
 // ── AND NOTHING MAY RUN AFTER THE SCOREBOARD ────────────────────────

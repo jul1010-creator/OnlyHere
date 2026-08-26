@@ -576,7 +576,10 @@ export const isTourismHost = (url) => {
 // The query string is deliberately excluded. A search page at aarhus.dk/soeg?q=
 // dyrehave names the place in a parameter and is a search result, not a document
 // about it.
-export const urlNames = (url, nameWords = []) => {
+// hostOnly drops the path from the haystack. See isOwnSiteFor below for why
+// that distinction had to exist: a path is a headline, and a headline is not a
+// domain.
+export const urlNames = (url, nameWords = [], { hostOnly = false } = {}) => {
   const words = (Array.isArray(nameWords) ? nameWords : []).map(w => String(w || "").trim()).filter(Boolean);
   if (!words.length) return false;
   let u;
@@ -587,7 +590,7 @@ export const urlNames = (url, nameWords = []) => {
   // making /marselisborg-dyrehave work and was doing nothing — a mutation removing
   // it changed no answer, which is the signature of a guard that is not guarding.
   const hostLabels = u.hostname.replace(/^www\./, "").split(".").filter(Boolean);
-  const pathParts = decodeURIComponent(u.pathname).split("/").filter(Boolean);
+  const pathParts = hostOnly ? [] : decodeURIComponent(u.pathname).split("/").filter(Boolean);
   const hay = [...hostLabels, ...pathParts].join(" ");
   // The ordinary case: the name stands as its own words somewhere in the URL.
   // Bounded, so "Ribe" is not named by ribers-gaard.dk and "Vejle" is not named
@@ -628,11 +631,33 @@ export const isOwnSiteFor = (url, nameWords = [], { placesWebsite = "" } = {}) =
   if (registered && (host === registered || host.endsWith(`.${registered}`))) return true;
   if (isTourismHost(url) || isListingHost(url) || isReferenceHost(url)) return false;
   if (!urlNames(url, nameWords)) return false;
-  // A kommune page naming the place IS the authority for it. Stated separately
-  // from the general case because it is the one this was written for, and because
-  // a kommune's front page must not qualify: aarhus.dk alone names no place, and
-  // urlNames above is what stops it.
-  return true;
+  // The host itself names the place: marselisborgdyrehave.dk, ribe-vikingecenter.dk.
+  // That is a statement of ownership and settles it.
+  if (urlNames(url, nameWords, { hostOnly: true })) return true;
+  // ── AND A PATH IS A HEADLINE ────────────────────────────────────
+  //
+  // Oliver, 26 Aug 2026, publishing the Roskilde Festival draft. Its run log
+  // ranked the sources "theseasonalevent.com (official, 2026) >
+  // roskilde-festival.dk (official, 2026)" — a content blog placed ABOVE the
+  // festival's own website, and then above it as the source of the price the
+  // entry ships: "2600-2600 DKK is on theseasonalevent.com, the highest-ranked
+  // page read that states it." The gate two steps later then reported "Every
+  // price in this draft appears in the official site's own text", meaning the
+  // blog's.
+  //
+  // The URL was theseasonalevent.com/roskilde-festival-guide-tickets-camping,
+  // and urlNames put the PATH in the haystack. Every content site on earth puts
+  // its subject in the slug, so that rule made any article about a place into
+  // that place's own website. The call site in App.jsx had already written down
+  // the rule it was breaking: "A host is the operator's when the HOST says so,
+  // or when Google's business listing registered it. A headline is not a domain."
+  //
+  // A path still counts for ONE kind of host, and this is the case the path
+  // branch was written for: a kommune speaks for the places inside it, so
+  // aarhus.dk/borger/natur/marselisborg-dyrehave is authority for the park while
+  // aarhus.dk alone names nothing. isKommuneHost is the same reader the rest of
+  // this file uses, rather than a second opinion about what a kommune is.
+  return isKommuneHost(url);
 };
 
 // officialHosts is what the pipeline has already decided is the operator's own

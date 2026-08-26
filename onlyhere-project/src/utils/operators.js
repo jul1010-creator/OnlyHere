@@ -170,6 +170,41 @@ export const operatorNote = ({ mode, how } = {}) => {
   return "";
 };
 
+// ── AND REJSEPLANEN CANNOT BE DEEP-LINKED FROM A PLACE NAME ─────────
+//
+// Oliver, 26 Aug 2026, with a screenshot of the "Check times on Rejseplanen"
+// link opening an EMPTY journey planner: the chip names a journey and then
+// makes the traveller retype both ends of it.
+//
+// Measured in a browser the same morning rather than guessed, because guessing
+// a URL format is what produced the two link bugs it was meant to fix:
+//
+//   /bin/query.exe/mn?S=<from>&Z=<to>&date=dd.mm.yy&time=HH:MM&start=1
+//
+// WORKS. It returns real departures for the given day and a buy-ticket button,
+// which is exactly what this chip has always been pretending to be.
+//
+// AND IT IS STILL NOT SAFE TO SHIP FROM A STOP NAME, which is the finding.
+// Rejseplanen matches against its own stop table, not free text:
+//
+//   Z=Egholm            resolved to EGHOLMVEJ IN NÆSTVED, 4h51 away, silently
+//   Z=Egholm, Aalborg   matched nothing and returned a disambiguation page
+//
+// Appending the town is what fixed the Booking.com link the same morning, and
+// here it makes things worse. So the two are not one rule.
+//
+// This is the standing ferry decision in a new place, and the reasoning at the
+// top of this file already covers it: a link that confidently sends somebody to
+// the wrong end of the country is worse than one that asks them to type.
+//
+// WHAT WOULD MAKE IT SAFE, for whoever builds it: the guide already HOLDS real
+// stop names, because Google's transit response names the boarding and
+// alighting stops — "Lindholm Høje (Vangen / Nørresundby)" and "Vesterbro
+// (Aalborg)" are both on the live page right now, under the leg chip. Those are
+// Rejseplanen's own names. Deep-link a leg we MEASURED, using the stops the
+// measurement named, and fall back to this plain planner link everywhere else.
+// The rule is: link the journey we measured, never the place we guessed.
+
 export const isLongLeg = (km) => Number(km) >= LONG_LEG_KM;
 
 // Sanity, asserted rather than assumed: a leg cannot be both short enough to

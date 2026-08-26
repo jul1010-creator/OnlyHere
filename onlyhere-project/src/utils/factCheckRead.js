@@ -202,15 +202,53 @@ export const datesIn = (text) => {
   return [...new Set(out)];
 };
 
+// ── HALF A RANGE IS NOT A CONFIRMED RANGE ───────────────────────────
+//
+// Oliver, 26 Aug 2026: "But isn't Gemini correct about Roskilde 2027?"
+//
+// He was right and I was wrong, and the evidence is in this function. The
+// festival's own site says 26 June – 3 July 2027. The Roskilde run logged
+// "confirmed on the site itself: 2027-07-03" — ONE date, the end of the range —
+// and then the decision block used it to overrule the invented-claim check:
+// "A date the operator publishes with the year on its own page settles the
+// question. Nothing that merely fails to find it can overturn it."
+//
+// `hits` was one of two. The draft's END date was on the site and its START
+// date was not, which is precisely what the checker was complaining about, and
+// this function answered a half-match with an unqualified `confirmed: true`.
+//
+// WORSE, IT ARMED THE OVERRULING ITSELF. The old detail ended: "A fact-check
+// that says it could not find these dates is describing its own search, not
+// this entry." That sentence is correct when every date matched and is a licence
+// to ignore a true finding when they did not. It only ships on a full match now.
+//
+// So `confirmed` means every date this draft carries was found on the operator's
+// page. A partial match gets its own state and names what is missing, because
+// "one of your two dates is not on their site" is a useful thing to be told and
+// the opposite of a confirmation.
 export const datesConfirmedBy = (siteText, dateStart, dateEnd) => {
-  const want = [dateStart, dateEnd].map(d => String(d || "").slice(0, 10)).filter(Boolean);
-  if (!want.length) return { confirmed: false, found: [], detail: "" };
+  // Deduped: a one-day event stores the same date twice and that is one date,
+  // not a range half-confirmed by itself.
+  const want = [...new Set([dateStart, dateEnd].map(d => String(d || "").slice(0, 10)).filter(Boolean))];
+  if (!want.length) return { confirmed: false, partial: false, found: [], missing: [], detail: "" };
   const found = datesIn(siteText);
   const hits = want.filter(d => found.includes(d));
-  if (!hits.length) return { confirmed: false, found, detail: "" };
+  const missing = want.filter(d => !found.includes(d));
+  if (!hits.length) return { confirmed: false, partial: false, found, missing, detail: "" };
+  if (missing.length) {
+    return {
+      confirmed: false,
+      partial: true,
+      found: hits,
+      missing,
+      detail: `The official site's own page states ${hits.join(" and ")}, and states nothing matching ${missing.join(" and ")}. That is HALF this draft's range, so the operator has not confirmed it: the date they publish and the date this draft carries are not the same date. Check ${missing.join(" and ")} against the operator's own page by hand before publishing, and do not read a fact-check disputing it as a failed search.`,
+    };
+  }
   return {
     confirmed: true,
+    partial: false,
     found: hits,
+    missing: [],
     detail: `The official site's own page states ${hits.join(" and ")}, with the year, so the date on this draft is confirmed by the operator. A fact-check that says it could not find these dates is describing its own search, not this entry.`,
   };
 };
@@ -353,12 +391,65 @@ const hasAnchor = (text, anchor) => String(text || "").toLowerCase().includes(St
 // Where the year was the only anchor, the finding becomes uncheckable, which is
 // already a state this file has, already reported honestly, and already says to
 // read it by eye.
-const LONE_YEAR = /^(?:1[5-9]\d{2}|20\d{2})$/;
-const anchorIsUseful = (anchor, finding) => {
+// ── AND THE RULE WAS RIGHT AND THE REGEX WAS TOO NARROW ─────────────
+//
+// Oliver, 26 Aug 2026, on the Roskilde Festival run: "roskilde festival was
+// rejected by Google Gemini for 2027.. seriously?" — and then, correctly:
+// "the draft rather rejected Gemini."
+//
+// Step 46 said THE CORRECTION DID NOT LAND, 0 gone, 4 still there, on the
+// draft's own words: "26", "dateStart"; "26", "dateEnd"; "camping",
+// "Included with a full festival ticket"; "accommodationTip".
+//
+// Every one of those four is a false alarm, and two separate holes made them.
+//
+// THE FIRST IS THIS FUNCTION, and the reasoning above it was already right:
+// "a four digit number is not a fingerprint for a sentence, it is a fingerprint
+// for a number." True of every number. The regex only covered FOUR-DIGIT years,
+// and FIGURES is /\d{2,}/ — so "26", the day of the month in "26 June", was an
+// anchor. "26" appears in almost any draft: inside 2026, inside 2,600 DKK,
+// inside a house number. It can essentially never be reported gone.
+//
+// So the rule generalises to what it always meant: A BARE NUMBER IS NOT AN
+// ANCHOR. A number with a unit still is, because "125 DKK" or "90 minutes"
+// surviving a correction genuinely means the value did — and prices keep
+// working, because the finding that carries "327" also carries "327 DKK".
+//
+// The cost of getting this wrong is stated in the comment above and it happened
+// exactly as predicted: it "teaches him to stop reading the line", and on
+// 26 August he read it, disbelieved it, and published — which was the right
+// call about this draft and the wrong habit to have taught him.
+const BARE_NUMBER = /^\d+$/;
+const UNIT_AFTER = "(?:dkk|kr|kroner|eur|usd|%|min|mins|minutes|hours?|hrs?|km|m\\b|people|guests|seats|rooms|km/t)";
+
+// ── AND A FIELD NAME IS NOT THE DRAFT'S OWN WORDS ───────────────────
+//
+// THE SECOND HOLE, and it is why "dateStart" and "accommodationTip" were listed
+// as claims that survived a rewrite. They are not claims. They are the names of
+// the fields the claims are about, quoted by the checker when it says which
+// field it is talking about.
+//
+// The survival test searches JSON.stringify(writtenFields(t)), which carries
+// every one of its own keys. So a finding phrased as `the "dateStart" field
+// says...` can NEVER come back gone, however perfectly the rewrite worked.
+//
+// Detected from the draft rather than from a hardcoded list, because a list of
+// field names in this file would be a fifth place for the field set to drift:
+// if the token appears in the BEFORE text as a JSON key, it is a key.
+const KEY_IN = (text, a) => {
+  try { return new RegExp(`"${a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"\\s*:`).test(String(text || "")); }
+  catch { return false; }
+};
+
+const anchorIsUseful = (anchor, finding, before) => {
   const a = String(anchor || "").trim();
-  if (!LONE_YEAR.test(a)) return true;
-  // A year attached to a unit or a currency in the finding is a value, not a date.
-  return new RegExp(`${a}\\s*(?:dkk|kr|kroner|eur|usd|%|min|mins|minutes|hours?|km|m\\b)`, "i").test(String(finding || ""));
+  if (!a) return false;
+  // A name the draft uses for one of its own fields is structure, not content.
+  if (KEY_IN(before, a)) return false;
+  if (!BARE_NUMBER.test(a)) return true;
+  // A number attached to a unit or a currency in the finding is a value, not a
+  // date and not a house number.
+  return new RegExp(`${a}\\s*${UNIT_AFTER}`, "i").test(String(finding || ""));
 };
 
 // "gone", "survived" or "uncheckable", and the third is its own answer for the
@@ -367,7 +458,7 @@ const anchorIsUseful = (anchor, finding) => {
 // would be the exact false reassurance this replaces.
 export const claimLanded = (finding, before, after) => {
   const anchors = anchorsOf(finding)
-    .filter(a => anchorIsUseful(a, finding))
+    .filter(a => anchorIsUseful(a, finding, before))
     .filter(a => hasAnchor(before, a));
   if (!anchors.length) return { finding, anchors: [], verdict: "uncheckable" };
   const survived = anchors.filter(a => hasAnchor(after, a));
@@ -387,6 +478,7 @@ export const correctionLanded = (findings, before, after) => {
 
 // The founder line, and the point of it is that the banner above it stops being
 // able to say "fixed" on its own authority.
+export const MAX_LISTED_CLAIMS = 6;
 export const describeCorrection = (r) => {
   const res = r || {};
   const survived = Array.isArray(res.survived) ? res.survived : [];
@@ -395,7 +487,23 @@ export const describeCorrection = (r) => {
       ? `${res.gone || 0} flagged claim${(res.gone || 0) === 1 ? "" : "s"} are gone from the draft. ${res.uncheckable} could not be checked in code, because ${res.uncheckable === 1 ? "the finding names" : "those findings name"} no figure and quote none of the draft's own words, so read ${res.uncheckable === 1 ? "it" : "them"} by eye rather than trusting this line.`
       : "";
   }
-  return `THE CORRECTION DID NOT LAND. ${survived.length} flagged claim${survived.length === 1 ? " is" : "s are"} still in the draft after the rewrite, on the draft's own words: ${survived.map(s => s.survived.map(a => `"${String(a).slice(0, 40)}"`).join(", ")).join("; ")}. The rewrite was asked to remove or replace ${survived.length === 1 ? "it" : "them"} and did not, so the draft below still carries ${survived.length === 1 ? "a claim" : "claims"} the checker contradicted. Fix by hand or redraft, and do not read the banner above as a pass.`;
+  // ── THE LIST IS BOUNDED SO THE SENTENCE CANNOT BE ───────────────
+  //
+  // 26 Aug 2026. The Roskilde run printed this message cut off mid-clause, at
+  // "so the draft below", because the call site sliced it to 300 characters.
+  // What the slice removed was "Fix by hand or redraft, and do not read the
+  // banner above as a pass" — the only actionable half, and the entire reason
+  // the message exists.
+  //
+  // A limit hit is not a limit reported, for the sixth time this month, and
+  // this one truncates a warning into something that reads like a shrug. So the
+  // GROWING part is bounded here, where the growth is, and the sentence around
+  // it is always complete. The caller no longer needs a slice and no longer has one.
+  const shown = survived.slice(0, MAX_LISTED_CLAIMS);
+  const more = survived.length - shown.length;
+  const list = shown.map(s => s.survived.map(a => `"${String(a).slice(0, 40)}"`).join(", ")).join("; ")
+    + (more > 0 ? `, and ${more} more` : "");
+  return `THE CORRECTION DID NOT LAND. ${survived.length} flagged claim${survived.length === 1 ? " is" : "s are"} still in the draft after the rewrite, on the draft's own words: ${list}. The rewrite was asked to remove or replace ${survived.length === 1 ? "it" : "them"} and did not, so the draft below still carries ${survived.length === 1 ? "a claim" : "claims"} the checker contradicted. Fix by hand or redraft, and do not read the banner above as a pass.`;
 };
 
 // ── THE CHECKER COULD NOT SEE THE RESEARCH IT WAS CHECKING ──────────
