@@ -272,8 +272,18 @@ The banned filler above is banned in every language, not only in English. "Charm
 ${nativeBlock(lang, "guide")}`;
 };
 
-// Same convenience wrapper, for the guide side.
-export const guideLanguageBlock = (nav) => writeInLanguage(readerLanguage(nav));
+// ── AND THE CONVENIENCE WRAPPER IS GONE, DELIBERATELY ───────────────
+//
+// guideLanguageBlock(nav) used to live here: writeInLanguage(readerLanguage(nav)),
+// one call, three call sites in App.jsx. It read the browser and nothing else,
+// and on 26 Aug 2026 it wrote ten days of Danish for two travellers who had
+// said in their first message that neither of them reads a word of it.
+//
+// It is not replaced by a better wrapper, because the wrapper WAS the problem:
+// it made "ask the device" the one-line answer and "ask the traveller" the long
+// one. writeInLanguage is still here and still exported, and the caller now has
+// to say which language it is passing — see utils/travellerLanguage.js, which
+// works that out from what the traveller actually wrote.
 
 // ── A REWRITE MAY NOT CHANGE THE LANGUAGE IT WAS HANDED ─────────────
 //

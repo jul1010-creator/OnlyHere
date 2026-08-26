@@ -50,11 +50,20 @@ const scan = (src, keepStrings) => {
   // an interpolation does not end the interpolation early. -1 = not in one.
   const tmpl = [];
   let mode = "code", inClass = false, lastSig = "", i = 0;
-  const keep = (ch) => { out.push(ch); if (!/\s/.test(ch)) lastSig = ch; };
-  const blank = (ch) => { out.push(ch === "\n" ? "\n" : " "); };
+  // THE LAST 16 CHARACTERS EMITTED, CARRIED FORWARD RATHER THAN RECOMPUTED.
+  // The keyword test below needs a few characters of context, and the obvious
+  // way to get them — out.join("").slice(-16) — is the same O(n^2) mistake the
+  // header of this file describes, one apostrophe at a time. Measured on the
+  // real App.jsx: 1,984 apostrophes over 1.5 MB, 1,210 ms with the join and
+  // 272 ms without it, for byte-identical output. Every write to `out` goes
+  // through push() so the tail cannot silently fall out of step with it.
+  let tail = "";
+  const push = (ch) => { out.push(ch); tail = tail.length < 16 ? tail + ch : tail.slice(-15) + ch; };
+  const keep = (ch) => { push(ch); if (!/\s/.test(ch)) lastSig = ch; };
+  const blank = (ch) => { push(ch === "\n" ? "\n" : " "); };
   // Everything that is not a comment: blanked in stripNonCode, written out as it
   // stands in stripComments. Comments call blank directly and are never kept.
-  const hide = (ch) => { if (keepStrings) out.push(ch); else blank(ch); };
+  const hide = (ch) => { if (keepStrings) push(ch); else blank(ch); };
   // A / that follows an operator or an opener cannot be division, so it opens a
   // regex literal — whose insides are full of quotes and backticks and have to
   // be opaque. This is the standard heuristic and it is good enough here; the
@@ -66,6 +75,14 @@ const scan = (src, keepStrings) => {
   // balanced and the largest function in the file could not be extracted at all.
   // Nothing real is lost: `a < /re/.test(b)` is not code anybody writes.
   const REGEX_CAN_START = /[(,=:[!&|?{};+\-*%^~]/;
+  // The keywords a quote may legitimately follow, so `return 'x'` still opens a
+  // string while `you're` does not.
+  const SQ_AFTER_WORD = /\b(?:return|typeof|case|in|of|do|else|yield|await|delete|void|throw|new|instanceof)\s+$/;
+  // `=>` is an opener too, and `>` cannot go in REGEX_CAN_START because of JSX.
+  // There is no `=> '...'` in the codebase today, which is exactly why it needs
+  // pinning: the first one written would otherwise leak a whole string literal
+  // into what stripNonCode calls code.
+  const ARROW_BEFORE = /=>\s*$/;
   while (i < n) {
     const c = src[i], c2 = src[i + 1];
     if (mode === "code") {
@@ -76,7 +93,28 @@ const scan = (src, keepStrings) => {
       if (c === "/" && c2 === "/") { mode = "line"; blank(c); i++; blank(c2); i++; continue; }
       if (c === "/" && c2 === "*") { mode = "block"; blank(c); i++; blank(c2); i++; continue; }
       if (c === "/" && (lastSig === "" || REGEX_CAN_START.test(lastSig))) { mode = "regex"; hide(c); i++; continue; }
-      if (c === "'") { mode = "sq"; hide(c); i++; continue; }
+      // ── AN APOSTROPHE IN JSX TEXT IS NOT A STRING ────────────────
+      //
+      // 26 Aug 2026. Writing "whenever you're ready" into a JSX text node turned
+      // two unrelated assertions red at once, in sections nothing had touched.
+      // The lone apostrophe looked like the start of a string literal, so
+      // everything up to the NEXT apostrophe was blanked — and in a 1.5MB file
+      // that is an enormous region the source checks then silently could not see.
+      //
+      // THE DANGEROUS HALF IS NOT THE FAILURE. A blanked region makes a
+      // `!test(...)` assertion PASS, so one contraction can quietly switch off
+      // every negative source check below it while the suite reads green. There
+      // are 27 of them already in App.jsx — "Can't miss out", "Who's traveling",
+      // "You're on the list" — so this has been true for a long time.
+      //
+      // Same heuristic the regex branch above already uses: a real string opener
+      // follows an operator, an opener, or nothing. `you're` follows a LETTER.
+      // The keyword list is what saves `return 'x'` and `typeof 'y'`, which are
+      // the cases where a letter legitimately precedes a quote.
+      if (c === "'" && (lastSig === "" || REGEX_CAN_START.test(lastSig) || ARROW_BEFORE.test(tail) || SQ_AFTER_WORD.test(tail))) {
+        mode = "sq"; hide(c); i++; continue;
+      }
+      if (c === "'") { keep(c); i++; continue; }
       if (c === '"') { mode = "dq"; hide(c); i++; continue; }
       if (c === "`") { mode = "tmpl"; tmpl.push(-1); hide(c); i++; continue; }
       if (c === "}" && tmpl.length && tmpl[tmpl.length - 1] === 0) {

@@ -163,7 +163,19 @@ export const stayTier = (text) => {
 // nothing out.
 const BUDGET_LEVELS = [
   { id: "tight", match: /\b(?:tight|cheap|shoestring|backpack(?:ing|er)?|hostel|as cheap as|saving money|watching (?:the )?(?:costs?|pennies)|not much (?:money|to spend))\b|\b(?:low|small|tight|limited|modest|strict)\s+budget\b|\bbudget\s+(?:is\s+)?(?:tight|small|low|limited|modest)\b|\bon a budget\b|\bbudget[- ]friendly\b/i },
-  { id: "generous", match: /\b(?:plenty of money|money is no|no budget limit|splash(?:ing)? out|treat ourselves|luxur(?:y|ious)|high end|five star|5 star|whatever it costs|price is not|don'?t mind (?:the )?(?:cost|price|spending)|happy to spend)\b|\b(?:big|large|generous|healthy|decent|good|no real)\s+budget\b|\bbudget\s+(?:is\s+)?(?:generous|big|large|healthy|not an issue|no (?:issue|object|problem))\b/i },
+  // ── "WE EAT WELL AND WE DON'T MIND PAYING FOR IT" ──────────────────
+  // 26 Aug 2026, the Winter Light brief. That sentence returned null, so
+  // budgetSays reached the accommodation prompt EMPTY, and the guide invented a
+  // budget for them: "Til din stramme dagsbudget er 71 Nyhavn Hotel til godt
+  // 3.900 kr. natten helt ude af rækkevidde, så kig efter et hostel." A hostel,
+  // three times, and their own booked hotel described as out of their reach.
+  //
+  // The pattern already had `don't mind the cost` and `don't mind spending`. It
+  // did not have `don't mind PAYING`, which is how people actually say it, and
+  // the phrase carried the whole meaning of the sentence. Widened here rather
+  // than in a second list, because a near-miss on this pattern is not a missing
+  // feature, it is the product telling somebody they are poorer than they are.
+  { id: "generous", match: /\b(?:plenty of money|money is no|no budget limit|splash(?:ing)? out|treat ourselves|luxur(?:y|ious)|high end|five star|5 star|whatever it costs|price is not|don'?t mind (?:the )?(?:cost|price|spending|paying)|don'?t mind what it costs|happy to (?:spend|pay)|worth paying for|not counting the pennies|can afford it)\b|\b(?:big|large|generous|healthy|decent|good|no real)\s+budget\b|\bbudget\s+(?:is\s+)?(?:generous|big|large|healthy|not an issue|no (?:issue|object|problem))\b/i },
   { id: "middling", match: /\b(?:moderate|mid[- ]?range|middling|reasonable|sensible|comfortable but not|nothing fancy)\b/i },
 ];
 
@@ -195,6 +207,70 @@ const RULED_OUT = {
 // the phrases that make a recommendation an instruction to economise, and they are
 // what contradicted him even where the tier itself might have been defensible.
 const ECONOMISING = /\b(?:budget[- ]friendly|budget option|if watching costs?|to save money|cheaper option|keep costs down|on a budget)\b/i;
+
+// ── A GUIDE MAY NOT INVENT A BUDGET FOR SOMEBODY ────────────────────
+//
+// The mismatch check above compares a recommendation against what they said.
+// It is switched OFF, entirely, when they said nothing — `level` is empty and
+// the function returns null on its first line. So the one case where the model
+// has nothing to go on is the one case nothing was watching.
+//
+// That is the shape Oliver named on the Aalborg town page, in his own words:
+// "it doesn't actively write that there is no annual festival. I assume it
+// looks at the unconfirmed and just makes it up from there?" An absence reached
+// a writer and came back as an assertion.
+//
+// The Winter Light guide is the same failure with money. Nothing was known, and
+// three separate days told the traveller about "dit stramme dagsbudget" — a
+// claim about THEM, in the second person, that no one had made.
+//
+// So this asks a different question from budgetTierMismatch: not "does the
+// recommendation fit their budget" but "does this sentence CHARACTERISE their
+// budget at all". When nothing was said, any answer to that is fabricated, and
+// the tier does not come into it.
+//
+// Danish as well as English, because the guide is legitimately written in the
+// traveller's language and a fabrication in Danish is still a fabrication. This
+// is the one place in this file that needs to read both.
+// ── AND THE LINE IS THEIR MEANS, NOT THE WORD "BUDGET" ──────────────
+//
+// The first version of this list flagged any second-person possessive next to
+// the word budget, and the suite caught it in one run: "Your budget goes much
+// further here than in Copenhagen, so a real hotel is in range" is the sentence
+// an EARLIER fix in this same file exists to produce. It explains why the tier
+// changed, using a true fact about Danish prices, and it says nothing whatever
+// about how much money they have.
+//
+// So what is fabricated is a claim about their MEANS — that the budget is tight,
+// that something is beyond it — and not the second person, and not the noun.
+const AFFORDABILITY = /\b(?:out of (?:your |their )?reach|beyond (?:your|their) (?:budget|means)|can'?t afford|cannot afford|ude af rækkevidde|har ikke råd)\b/i;
+const MONEY_NEARBY = /\b(?:budget|dagsbudget|kr|kroner|dkk|price|prices|pris|priser|cost|costs|natten|per night|afford|råd)\b/i;
+
+const BUDGET_CHARACTERISED = [
+  /\b(?:tight|small|limited|modest|strict|stramt|stramme|beskedent|begrænset|smalt|smalle)\s+(?:\w+\s+){0,2}(?:budget|dagsbudget|pengepung)\b/i,
+  /\bbudget\s+(?:is\s+)?(?:tight|small|limited|modest)\b/i,
+  /\bon a (?:tight |small |limited |modest )?budget\b/i,
+  /\bbudget[- ]friendly\b/i,
+  /\bif watching costs?\b/i,
+  /\b(?:på|med) et stramt\b/i,
+];
+
+// The phrase that did it, so a finding can quote the guide back rather than
+// asserting in the abstract. Null when the sentence says nothing about their
+// money, which is the normal case.
+export const budgetCharacterised = (accommodationText) => {
+  const text = clean(accommodationText);
+  if (!text) return null;
+  for (const re of BUDGET_CHARACTERISED) {
+    const m = re.exec(text);
+    if (m) return m[0].trim();
+  }
+  // "Out of reach" is about distance as often as about money, so it only counts
+  // as a claim about their means when the sentence is talking about money at all.
+  const afford = AFFORDABILITY.exec(text);
+  if (afford && MONEY_NEARBY.test(text)) return afford[0].trim();
+  return null;
+};
 
 export const budgetTierMismatch = (level, accommodationText) => {
   const lvl = clean(level);
@@ -296,6 +372,21 @@ export const stayProblems = (days, budgetSaid = "") => {
       if (seen.has(key)) return;
       seen.add(key);
       out.push(`Day ${d?.day || i + 1}: ${m.detail}`);
+    });
+  } else {
+    // ── AND THE ELSE BRANCH IS THE ONE THAT WAS MISSING ─────────────
+    // Every check above needed a level to compare against, so a brief that said
+    // nothing about money got no checking at all — which is backwards. Knowing
+    // nothing is when a writer invents, not when it behaves.
+    //
+    // Deduped the same way and for the same reason: three days all saying "your
+    // tight budget" is one thing wrong with the guide.
+    const seen = new Set();
+    list.forEach((d, i) => {
+      const phrase = budgetCharacterised(d?.glance?.accommodation);
+      if (!phrase || seen.has(phrase.toLowerCase())) return;
+      seen.add(phrase.toLowerCase());
+      out.push(`Day ${d?.day || i + 1}: this describes their budget ("${phrase}") and they never said anything about money. Recommend somewhere for a reason about the place, or say plainly that the price depends on when they book.`);
     });
   }
   const tiers = stayTiers(list);

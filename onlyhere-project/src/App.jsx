@@ -129,6 +129,8 @@ import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
 import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch } from "./utils/ticketLink";
 import { placesNamedIn } from "./utils/chatPlaces";
+import { railPlaces, railCss, RAIL_CLASS, INLINE_CARDS_CLASS } from "./utils/chatRail";
+import { briefProgress, progressLine } from "./utils/briefPanel";
 import { EXAMPLE_GUIDE, EXAMPLE_GUIDE_PATH, hasExampleGuide } from "./data/exampleGuide";
 import { ChatPlaceCards } from "./components/ChatPlaceCards";
 // The sentence an entry already has about who it suits, rather than the first
@@ -152,7 +154,8 @@ import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, 
 import { languageBarrier } from "./utils/languageBarrier";
 import { newStreamState, readStreamEvent, visibleText, streamContent, streamContentForApi, streamDiagnosis, streamTrace, ranOutThinking } from "./utils/streamRead";
 import { heroNeedsReplacing, heroPatch, heroStatusLine, isAbsolutePhoto } from "./utils/heroPhoto";
-import { languageBlock, guideLanguageBlock, readerLanguage, keepLanguageOf } from "./utils/readerLanguage";
+import { languageBlock, writeInLanguage, readerLanguage, keepLanguageOf } from "./utils/readerLanguage";
+import { guideLanguage, languageBarNote } from "./utils/travellerLanguage";
 import { echoInDraft, describeEcho, ECHO_RUN } from "./utils/echoCheck";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AffiliatePanel } from "./components/AffiliatePanel";
@@ -9155,7 +9158,11 @@ ${researchRules("festival", ev)}`
   // fetchExactDurations reads day.glance.legs[i].how to decide each leg's
   // transport mode, and that was always undefined, so every leg mode on every
   // guide has been a guess from the trip's primary mode. This has to run first.
-  const enrichGuideDays = async (days, travelMode, mixedModes, budgetSays = "") => {
+  // langBlock is passed IN rather than computed here, and that is the whole fix
+  // for 26 August's Danish guide. See utils/travellerLanguage.js: the caller is
+  // the only place that holds the traveller's own words, and the traveller's own
+  // words are the only honest answer to which language this is.
+  const enrichGuideDays = async (days, travelMode, mixedModes, budgetSays = "", langBlock = "") => {
     setGlancePending(days.length);
     const glances = new Array(days.length).fill(null);
     await Promise.all(days.map(async (day, idx) => {
@@ -9172,7 +9179,7 @@ ${researchRules("festival", ev)}`
         } catch { /* search down, Claude will fall back to safe wording */ }
         const enrichPrompt = `A traveler visits these stops in Denmark in this exact order: ${numbered}. Using ONLY the provided search context plus well-established Danish geography/transit knowledge, respond with ONLY strict JSON:
 {"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One specific sentence — name an actual area/neighbourhood to stay in if the context supports it (e.g. 'Stay near Koge harbour for an easy morning ride out'), not a generic 'stay overnight in [town]' with no reason given. CRITICAL: the place you suggest MUST be realistically close to where this day's stops actually are — never suggest a town in a different region or a different island just because it has good general transport links; proximity to THIS day's actual activities always wins over generic transit convenience. Only default to day-trip-from-Copenhagen phrasing if that is genuinely the better call for this specific day. RELOCATION DAYS ARE A SPECIFIC CASE, GET THIS RIGHT: if this day's OWN stops end with genuinely leaving for a new town (a departure/travel leg to somewhere the traveler will actually be based from for the following day(s)), the accommodation for THIS day must reflect where they'll ACTUALLY be sleeping that night — the destination they're traveling to, not the town they started the day in. Never write something like "stay near central Copenhagen" for a day whose last stop is "Departure to Aarhus" — that's recommending accommodation in a city they've already left by evening. Say where they'll really be. ACCOMMODATION TYPE, grounded in the real prices in the search context (never invent a specific price, only use ones actually present in context) and the traveler's stated daily budget: central Copenhagen is expensive — a tight budget there realistically means a hostel or budget guesthouse, not a hotel; the same budget in a smaller town elsewhere in Denmark often comfortably covers a real hotel, since prices outside the capital are typically lower. Weave the TYPE (hostel/hotel/guesthouse) into this sentence when the budget context makes one clearly more realistic than the other; if the budget is generous or genuinely unclear, don't force a type. ONE TRIP, ONE KIND OF TRAVELER — and if a day genuinely departs from that, the sentence has to say why IN THE SENTENCE. Oliver, 9 Aug 2026, on a real guide: \"It suggests hostels, but then gives a specific hotel??? Odd.\" Day 1 said book a hostel near Norreport, Day 3 said a comfortable hotel base in Odense, and on one budget BOTH were correct, because Copenhagen costs far more per night than Odense does. The reader could not know that, because neither sentence said it. Each day is written by its own separate call that cannot see the others, so YOU are the only place this can be caught: if the type you are about to write differs from what the same budget would buy in the capital, name the reason in the same breath (\"your nightly budget goes much further here than in Copenhagen, so a real hotel in the centre is comfortably in range\"). An unexplained jump between hostel and hotel does not read as good local knowledge, it reads as the guide contradicting itself. And the type in this sentence MUST match recommendedStay below: never write hostel here and return a hotel there.", "stayArea": "Just the specific area/neighbourhood/town name from the accommodation sentence above, 2-5 words, no extra description — e.g. 'Koge harbour' or 'central Odense' — used to build a real search link, so it must be an actual, findable place name, never invented.", "recommendedStay": "A REAL, SPECIFIC hotel or hostel name — ONLY if one is explicitly present in the search context, exactly as named there. This is the same never-guess rule as everything else here: if the search context does not name a specific real property, leave this an empty string and let the traveler search themselves — do NOT invent a plausible-sounding hotel name, do NOT reuse a generic chain name unless the context specifically confirms one exists in this area. An empty string is the correct, expected answer most of the time; only fill this when genuinely supported."}
-Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommend somewhere that contradicts it, and never tell them to economise when they have said they are not counting. A real guide he read offered "a budget-friendly hostel-style option if watching costs" to a family who had just said they had plenty of money. If the honest answer happens to be a cheaper place anyway, give a reason that is about the place and not about their wallet. ` : ""}always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no real map data): use realistic speeds — walking ~5 km/h (roughly 12 min/km), cycling ~15 km/h, city driving ~30 km/h even accounting for a short trip. Never guess something like "1 min by car" for two stops that aren't genuinely at the same address — sharing a city name is NOT the same as being adjacent (a campsite on the edge of a city and a museum in its center are commonly several km apart even though both say "Aarhus"). If you're not confident of the real distance between two specific stops, say "Check the route" rather than guessing a number that could be wrong by an order of magnitude. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is actually the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). Genuinely vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg genuinely can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't actually work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.`;
+Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommend somewhere that contradicts it, and never tell them to economise when they have said they are not counting. A real guide he read offered "a budget-friendly hostel-style option if watching costs" to a family who had just said they had plenty of money. If the honest answer happens to be a cheaper place anyway, give a reason that is about the place and not about their wallet. ` : `THEY HAVE SAID NOTHING ABOUT MONEY, SO YOU KNOW NOTHING ABOUT THEIR BUDGET. Do not describe it, do not guess at it, and do not write a sentence in the second person about what they can or cannot afford. "Your tight daily budget", "on a modest budget" and "out of reach for you" are all claims about a person who has not spoken. The paragraph above tells you what a tight budget buys in Copenhagen; that is background about the city, not a fact about them. Recommend an area for a reason about the PLACE, and if price is genuinely the point, say what the place costs rather than what they can afford. `}always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no real map data): use realistic speeds — walking ~5 km/h (roughly 12 min/km), cycling ~15 km/h, city driving ~30 km/h even accounting for a short trip. Never guess something like "1 min by car" for two stops that aren't genuinely at the same address — sharing a city name is NOT the same as being adjacent (a campsite on the edge of a city and a museum in its center are commonly several km apart even though both say "Aarhus"). If you're not confident of the real distance between two specific stops, say "Check the route" rather than guessing a number that could be wrong by an order of magnitude. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is actually the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). Genuinely vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg genuinely can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't actually work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.`;
         // RETRIED (Oliver, again: "no accommodation recommendations (Booking)"):
         // this single call is the only source of the Where to stay card and the
         // per-leg how-texts, and it previously got exactly one attempt — one
@@ -9191,7 +9198,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
           // the guide writer's. It produces the "Where to stay" sentence and
           // every leg description, which are two of the most-read lines on the
           // page, so leaving it out means a Danish guide with English legs.
-          `${enrichPrompt}\nEVERY PRICE YOU WRITE IS IN DKK. Never dollars, euros or pounds, and never a conversion in brackets: a traveller in Denmark is charged kroner and a converted figure matches nothing they will see. A price you can only give by converting is a price you do not have, so describe the place without one.${guideLanguageBlock()}\n\nRespond with ONLY the raw JSON object, no markdown code fences.\n\n${context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks."}`,
+          `${enrichPrompt}\nEVERY PRICE YOU WRITE IS IN DKK. Never dollars, euros or pounds, and never a conversion in brackets: a traveller in Denmark is charged kroner and a converted figure matches nothing they will see. A price you can only give by converting is a price you do not have, so describe the place without one.${langBlock}\n\nRespond with ONLY the raw JSON object, no markdown code fences.\n\n${context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks."}`,
           // TOKEN BUMP 350 → 900 (Oliver: "why does the accommodation/booking
           // affiliation keep getting removed"): 350 max_tokens was genuinely too
           // tight for this response — a 5-stop day needs 4 leg objects PLUS the
@@ -10363,6 +10370,30 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     // fixed in the same edit: both callers, one rule.
     const saidByTravellerForGuide = overrideConvoText
       || aiMessages.slice(1).filter(m => m.role === "user").map(m => m.text || "").join("\n");
+    // ── WHICH LANGUAGE THIS GUIDE IS IN, DECIDED HERE AND NOT IN A PROMPT ──
+    //
+    // 26 Aug 2026. The Winter Light brief said "Neither of us has a word of
+    // Danish" in its first message, in English, and the guide came back in
+    // Danish from end to end. Every call below used to splice
+    // guideLanguageBlock(), which reads navigator.language and nothing else, so
+    // a Danish phone wrote a Danish guide for two people who had just ruled
+    // Danish out — and the block's own escape clause ("write in the language the
+    // traveller used") was one English sentence underneath fifteen hundred words
+    // of instruction written in Danish.
+    //
+    // A prompt cannot win that argument with itself. So the decision moves into
+    // code: utils/travellerLanguage.js reads what they actually typed, honours
+    // any language they said they cannot read, and returns null when the answer
+    // is English — and a block that is never sent cannot be misread.
+    //
+    // ONE VALUE, THREE PROMPTS. The writer, the JSON repair and the per-day
+    // enrichment all used to call the navigator separately. That is how the
+    // Limfjord guide ended up Danish prose with English leg lines: three calls,
+    // three answers, one page. Computed once here and passed down.
+    const guideLangBlock = writeInLanguage(guideLanguage({
+      said: saidByTravellerForGuide,
+      lang: readerLanguage(),
+    })) + languageBarNote(saidByTravellerForGuide);
     if (!convoText.trim()) return;
     const mode = modeOverride === "plain" ? "plain" : "map";
     // Reopen instantly if this exact conversation already built a guide — avoids
@@ -10820,7 +10851,7 @@ CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stop
 CRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE ROUTE, NOT JUST EACH DAY INTERNALLY: this applies across the whole trip, not just within one day — Copenhagen/Zealand and Jutland are genuinely different regions connected only by a long bridge/ferry crossing or a flight, never a short hop. Don't send the trip deeper into one region for several days and then jump straight to the other with no bridging day (e.g. Day 1-2 further into Jutland, Day 3 suddenly Copenhagen). If a planning skeleton is provided below, its day-to-day order already accounts for this — follow it. If you're structuring the trip yourself (no skeleton, or it's missing this), order the days to move in one general direction across the country and minimize total region-crossings over the whole trip.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a genuine buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a genuine buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, genuinely adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything genuinely inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${chosenEventsBlock}${chosenExtrasBlock}${essentialsFacts}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's genuinely missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLanguageBlock()}`;
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${chosenEventsBlock}${chosenExtrasBlock}${essentialsFacts}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's genuinely missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
       // Guide-building is genuine multi-step reasoning (timing, geography, avoiding
       // duplicates, family-mode adjustments) — this is the one call in Detour worth
       // Opus's extra reasoning depth, and it already has a loading screen the person
@@ -10845,7 +10876,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       if (requestedDays && (!parsed.days || parsed.days.length < requestedDays)) {
         buildStage("Finishing the remaining days", 70);
         const retryResult = await askClaude(
-          `Turn the trip plan discussed in this conversation into strict JSON. The "days" array MUST contain EXACTLY ${requestedDays} entries — your last attempt returned only ${parsed.days?.length || 0}, which is wrong. Same shape as before: {"title": "...", "essentials": {"budgetReality": "...", "transportTip": "...", "keepInMind": "..."}, "days": [{"day": 1, "title": "...", "stops": [{"name": "...", "town": "...", "arrivalTime": "...", "suggestedStay": "...", "note": "..."}]}]}. Split every place discussed across all ${requestedDays} days in a sensible order — repeat a base town for a slower day if genuinely too few places were discussed, but never invent one that wasn't mentioned. Use only real place names actually mentioned in the conversation. Respond with ONLY the raw JSON object, no markdown code fences, nothing else.${guideLanguageBlock()}\n\nConversation:\n${convoText}`,
+          `Turn the trip plan discussed in this conversation into strict JSON. The "days" array MUST contain EXACTLY ${requestedDays} entries — your last attempt returned only ${parsed.days?.length || 0}, which is wrong. Same shape as before: {"title": "...", "essentials": {"budgetReality": "...", "transportTip": "...", "keepInMind": "..."}, "days": [{"day": 1, "title": "...", "stops": [{"name": "...", "town": "...", "arrivalTime": "...", "suggestedStay": "...", "note": "..."}]}]}. Split every place discussed across all ${requestedDays} days in a sensible order — repeat a base town for a slower day if genuinely too few places were discussed, but never invent one that wasn't mentioned. Use only real place names actually mentioned in the conversation. Respond with ONLY the raw JSON object, no markdown code fences, nothing else.${guideLangBlock}\n\nConversation:\n${convoText}`,
           6000,
           "claude-opus-4-8",
           true // expectJson — same prose-reply protection as the main build call
@@ -11098,7 +11129,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const budgetSays = budgetSaid
         ? (budgetSaid.source === "intake" ? budgetSaid.value : `${travellerBudget(intakeBudgetText) || travellerBudget((aiMessages || []).slice(1).filter(m => m.role === "user").map(m => m.text || "").join(" ")) || "not stated plainly"}`)
         : "";
-      const glances = await enrichGuideDays(parsed.days, travelMode, mixedModes, budgetSays);
+      const glances = await enrichGuideDays(parsed.days, travelMode, mixedModes, budgetSays, guideLangBlock);
       parsed.days = parsed.days.map((d, i) => (glances[i] ? { ...d, glance: glances[i] } : d));
 
       buildStage("Verifying exact locations and routes", 95);
@@ -11753,6 +11784,25 @@ If the conversation only covers a single day or a few stops with no explicit day
   // there is still enough one question later. So it latches, and the only thing
   // that can clear it is a new conversation.
   const [everReadyToBuild, setEverReadyToBuild] = useState(false);
+  // ── "IT IS STILL GOOD TO SHOW IF EVERYTHING IS COMPLETE OR NOT" ────
+  // Oliver, 26 Aug 2026. The brief is read once per turn inside sendAI and was
+  // thrown away the moment the prompt was built, so nothing on the screen could
+  // say how far along the conversation was. Kept here so the render can.
+  const [liveBrief, setLiveBrief] = useState(null);
+  // ── AND "NOT YET" HAS TO MEAN NOT YET ─────────────────────────────
+  // Holds the brief's signature at the moment they declined. The card stays down
+  // until the brief actually MOVES — a date, a place, a constraint — rather than
+  // coming back under the reply that just said "no rush at all". See
+  // briefSignature in utils/tripBrief.js for why that is the honest trigger.
+  // Holds how many messages there were when they declined. The card stays down
+  // until the TRAVELLER says something else — which is exactly what he was
+  // trying to do when he pressed it: "I clicked 'Not yet' because I wanted to
+  // say something." Once they have said it, offering again is responsive rather
+  // than nagging. A brief signature would be the finer rule and `brief` is not
+  // in scope at the render, and a variable that does not resolve is the bug the
+  // scope checker exists to catch. It caught this one.
+  const [buildDeclinedAt, setBuildDeclinedAt] = useState(null);
+  const travellerTurnCount = aiMessages.filter(m => m.role === "user" && !m.isError).length;
   const [intakeFamilyMode, setIntakeFamilyMode] = useState(false);
   const [intakeIncludeEvents, setIntakeIncludeEvents] = useState(false);
   const [detourTab, setDetourTab] = useState("sightseeing");
@@ -12776,6 +12826,7 @@ If the conversation only covers a single day or a few stops with no explicit day
           budgetText: intakeBudgetText,
         },
       });
+      setLiveBrief(brief);
       const askedThisTurn = nextAsks(brief).map(s => s.key);
       // ── SOMETHING TO GIVE BEFORE IT ASKS ──────────────────────────
       //
@@ -13649,8 +13700,23 @@ ${languageBlock()}`;
                   {aiDisclosureFor(typeof navigator === "undefined" ? null : navigator)}
                 </div>
 
+                {/* ── THE PICTURE BESIDE THE SENTENCE, NOT UNDER IT ──────
+                    Oliver, 26 Aug 2026: "Can you have it showing on the side of
+                    the chat panel? With such a small chat panel, it is more
+                    convenient that people can read while seeing the picture."
+
+                    The box below is 300px tall. A row of cards under a reply
+                    pushes the reply out of it, so the illustration arrives by
+                    removing what it illustrates.
+
+                    BOTH ARE RENDERED AND CSS SHOWS ONE. Which fits is a question
+                    about the viewport, and a media query answers it on every
+                    resize for nothing. See utils/chatRail.js, which owns the two
+                    class names and the breakpoint they share so they cannot
+                    drift apart in this file. */}
                 {aiMessages.length > 1 && (
-                  <div className="ai-msgs" style={{ maxHeight: 300, overflowY: "auto", marginBottom: 12, WebkitOverflowScrolling: "touch" }}>
+                  <div className="chat-with-rail">
+                  <div className="ai-msgs" style={{ flex: "1 1 auto", minWidth: 0, maxHeight: 300, overflowY: "auto", marginBottom: 12, WebkitOverflowScrolling: "touch" }}>
                     {aiMessages.map((m, idx) => ({ ...m, idx })).slice(1).filter(m => !m.hidden).map((m) => {
                       const isLatestAssistant = m.role === "assistant" && m.idx === aiMessages.length - 1;
                       const streaming = isLatestAssistant && m.idx > chatRevealedUpTo;
@@ -13683,9 +13749,16 @@ ${languageBlock()}`;
                             traveller's own words back at them is a mirror. */}
                         {m.role === "assistant" && !streaming && (
                           <ChatPlaceCards
+                            className={INLINE_CARDS_CLASS}
                             places={placesNamedIn(assistantText, previewPools({
                               towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
-                            }))}
+                            // ── A CARD IS FOR SOMETHING GEMLYX INTRODUCED ──
+                            // Oliver, 26 Aug: "there gotta be a reason to pop it
+                            // up. Not just because the name is mentioned." He was
+                            // looking at a reply that suggested Ribe and
+                            // mentioned Copenhagen because Copenhagen is where he
+                            // lands. Two cards, one of them useful.
+                            }), { alreadyKnown: aiMessages.filter(x => x.role === "user" && !x.isError).map(x => x.text).join("\n") })}
                             C={C}
                             onOpen={openStopDetail}
                             lang={readerLanguage()}
@@ -13704,6 +13777,58 @@ ${languageBlock()}`;
                         </div>
                       </div>
                     )}
+                  </div>
+                  {/* The rail carries ONE reply's worth: the most recent one
+                      that actually introduced somewhere. An empty reply leaves
+                      the last real one standing rather than blanking the panel
+                      while somebody is typing an answer to the question under
+                      it. railPlaces owns that walk. */}
+                  <div className={RAIL_CLASS}>
+                    <ChatPlaceCards
+                      layout="rail"
+                      places={railPlaces({
+                        messages: aiMessages.slice(1),
+                        placesFor: (text) => placesNamedIn(stripMarkdown(stripReadyMarker(text)), previewPools({
+                          towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
+                        }), { alreadyKnown: aiMessages.filter(x => x.role === "user" && !x.isError).map(x => x.text).join("\n") }),
+                      })}
+                      C={C}
+                      onOpen={openStopDetail}
+                      lang={readerLanguage()}
+                    />
+                  </div>
+                  </div>
+                )}
+
+                {/* ── HOW FAR ALONG THIS IS, WHICH THE SENTENCE CANNOT SAY ──
+                    Oliver, 26 Aug 2026: "we still haven't added in the method
+                    Layla uses with 4/5 questions answered or whatever. Yes we
+                    have filters and tick boxes. But it's still good to show if
+                    everything is complete or not."
+
+                    It reverses an earlier call in briefPanel.js that refused a
+                    ratio as robotic, and both are right about different things:
+                    a ratio INSTEAD of being understood is a progress bar where a
+                    sentence should be; a ratio BESIDE it answers the one
+                    question the sentence cannot, which is whether they are
+                    nearly done. The wording lives in progressLine so the suite
+                    reads the same words the screen does.
+
+                    Nothing is shown before they have said anything: "0 of 7" on
+                    an empty box is a form with a scoreboard on it. */}
+                {liveBrief && briefProgress(liveBrief).done > 0 && (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 8, marginBottom: 10,
+                    fontSize: 11, fontWeight: 600,
+                    color: briefProgress(liveBrief).ready ? C.gold : C.muted,
+                  }}>
+                    <div style={{ flex: "0 0 66px", height: 4, borderRadius: 100, background: C.border, overflow: "hidden" }}>
+                      <div style={{
+                        width: `${Math.round((briefProgress(liveBrief).done / briefProgress(liveBrief).total) * 100)}%`,
+                        height: "100%", background: C.gold, borderRadius: 100,
+                      }} />
+                    </div>
+                    <span>{progressLine(briefProgress(liveBrief))}</span>
                   </div>
                 )}
 
@@ -13745,10 +13870,32 @@ ${languageBlock()}`;
                     withheld marker now says what it is waiting for instead of
                     vanishing. Do not read this line as a guarantee that the
                     button cannot go missing. It is not one. */}
+                {/* ── AND A QUIET WAY BACK ────────────────────────────
+                    Standing the card down must not become the opposite dead
+                    end. This is one line where the 52px card was: reachable,
+                    and not a demand. Shown only after a decline, and only while
+                    the card itself is down, so the two can never both be on
+                    screen asking the same thing. */}
+                {!aiLoading && buildDeclinedAt !== null && travellerTurnCount <= buildDeclinedAt && everReadyToBuild && (
+                  <div style={{ textAlign: "center", marginBottom: 14 }}>
+                    <button onClick={() => setGuideModal("preview")}
+                      style={{ background: "none", border: "none", color: C.muted, fontSize: 12, fontWeight: 700, cursor: "pointer", padding: "6px 10px", fontFamily: "'Inter', sans-serif" }}>
+                      Build the guide when it suits you →
+                    </button>
+                  </div>
+                )}
+
                 {(() => {
                   if (aiLoading) return false;
-                  // The latch first, so a follow-up question cannot take the
-                  // button away again. See everReadyToBuild.
+                  // ── A DECLINE OUTRANKS THE LATCH ──────────────────
+                  // The latch exists so a follow-up QUESTION cannot take the
+                  // button away. It was never meant to override the traveller
+                  // pressing No, and until 26 Aug it did: Oliver pressed "Not
+                  // yet", was told "no rush at all", and was asked again one
+                  // line below. Down until the brief actually moves.
+                  if (buildDeclinedAt !== null && travellerTurnCount <= buildDeclinedAt) return false;
+                  // The latch, so a follow-up question cannot take the button
+                  // away again. See everReadyToBuild.
                   if (everReadyToBuild) return true;
                   const lastAssistantMsg = [...aiMessages].reverse().find(m => m.role === "assistant");
                   if (!lastAssistantMsg) return false;
@@ -13790,7 +13937,12 @@ ${languageBlock()}`;
                           style={{ flex: 1, minHeight: 52, background: C.gold, border: "none", borderRadius: 12, fontSize: 15, fontWeight: 800, color: C.onGold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                           Yes, build it
                         </button>
-                        <button onClick={() => { if (!aiLoading) sendAI("Not yet"); }} disabled={aiLoading}
+                        {/* STILL SENDS A TURN, which is the half the original
+                            got right: a No that silently closed the card would
+                            be a dead end. What is new is that it also stands the
+                            card DOWN, so the reply is an answer rather than a
+                            pause before the same question. */}
+                        <button onClick={() => { if (!aiLoading) { setBuildDeclinedAt(travellerTurnCount + 1); sendAI("Not yet"); } }} disabled={aiLoading}
                           style={{ flex: 1, minHeight: 52, background: "transparent", border: `1.5px solid ${C.fieldBorder}`, borderRadius: 12, fontSize: 15, fontWeight: 700, color: C.text, cursor: aiLoading ? "default" : "pointer", fontFamily: "'Inter', sans-serif", opacity: aiLoading ? 0.5 : 1 }}>
                           Not yet
                         </button>
@@ -18654,6 +18806,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         @keyframes gemlyxDotPulse { 0%, 80%, 100% { opacity: 0.25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
         @keyframes gemlyxMsgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         .gemlyx-msg-in { animation: gemlyxMsgIn 0.28s ease both; }
+        ${railCss()}
         .gemlyx-thinking-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: ${C.gold}; margin: 0 2px; animation: gemlyxDotPulse 1.1s ease infinite; }
         @media (min-width: 900px) { .mobile-only { display: none !important; } }
         @media (max-width: 899px) { .desktop-only { display: none !important; } }

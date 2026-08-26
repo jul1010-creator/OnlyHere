@@ -47,7 +47,22 @@ export const showablePhoto = (place) => {
   return { photo, credit };
 };
 
-export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null }) => {
+// ── TWO LAYOUTS, ONE CARD ───────────────────────────────────────────
+//
+// Oliver, 26 Aug 2026: "Can you have it showing on the side of the chat panel?
+// With such a small chat panel, it is more convenient that people can read
+// while seeing the picture."
+//
+// The card itself does not change — same photograph, same checked mark, same
+// credit, same door into the entry. What changes is whether they run across
+// under the reply or down the side of it, which is one flex-direction and one
+// width. A second component would be a second place for the licence credit rule
+// to be got wrong, and that rule is the one with a legal edge on it.
+//
+// "rail" is also the layout with room, so the name is allowed to wrap onto two
+// lines there instead of being cut with an ellipsis. Sideways, it cannot be.
+export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "row", className = "" }) => {
+  const rail = layout === "rail";
   const rows = (Array.isArray(places) ? places : [])
     .map(p => ({ place: p, shot: showablePhoto(p) }))
     .filter(x => x.shot);
@@ -55,7 +70,10 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null }) => {
 
   return (
     <div
-      style={{
+      className={className || undefined}
+      style={rail ? {
+        display: "flex", flexDirection: "column", gap: 10, width: "100%",
+      } : {
         display: "flex", gap: 8, marginTop: 8, marginLeft: 6,
         overflowX: "auto", paddingBottom: 2, maxWidth: "100%",
         scrollbarWidth: "none",
@@ -65,13 +83,17 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null }) => {
         <div
           key={`${place._src || "row"}-${place.name}`}
           onClick={() => onOpen && onOpen(place)}
-          style={{
+          style={rail ? {
+            width: "100%", background: C.surface,
+            border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden",
+            cursor: onOpen ? "pointer" : "default",
+          } : {
             flex: "0 0 auto", width: 124, background: C.surface,
             border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden",
             cursor: onOpen ? "pointer" : "default",
           }}
         >
-          <div style={{ position: "relative", height: 78, background: `${C.gold}18` }}>
+          <div style={{ position: "relative", height: rail ? 88 : 78, background: `${C.gold}18` }}>
             <img
               src={shot.photo}
               alt={place.name}
@@ -98,7 +120,13 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null }) => {
               name={place.name}
               style={{ color: C.text, textDecoration: "none" }}
             >
-              <div style={{
+              <div style={rail ? {
+                fontSize: 11.5, fontWeight: 700, color: C.text, lineHeight: 1.3,
+                // The rail has the height a row does not, so a long name wraps
+                // rather than being cut. "Østerlars Rundkirke" with an ellipsis
+                // through it is a name nobody can match against a road sign.
+                wordBreak: "break-word",
+              } : {
                 fontSize: 11.5, fontWeight: 700, color: C.text, lineHeight: 1.3,
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
               }}>{place.name}</div>

@@ -34,9 +34,41 @@ import { mentionsPlace, isRejectedPlace } from "./previewMatch";
 // with a sentence attached, and the sentence is the product.
 export const CHAT_PLACE_CAP = 3;
 
-export const placesNamedIn = (text, pools, { cap = CHAT_PLACE_CAP } = {}) => {
+// ── A CARD HAS TO BE WORTH POPPING UP ───────────────────────────────
+//
+// Oliver, 26 Aug 2026: "the towns just popping up randomly is stupid.. there
+// gotta be a reason to pop it up. Not just because the name is mentioned."
+//
+// He is looking at a reply that suggests Ribe for a proper Danish winter and
+// mentions Copenhagen because Copenhagen is where he lands. Two cards appeared.
+// One of them told him something.
+//
+// A NAME IN A SENTENCE IS NOT A RECOMMENDATION. This matched any published place
+// whose name occurred anywhere in the reply, so the arrival airport's city, the
+// town the traveller asked for by name, and a place mentioned only as route
+// mechanics all earned the same 210-pixel photograph as a genuine suggestion.
+//
+// The rule underneath his complaint: a card is for something GEMLYX INTRODUCED.
+// If the traveller named it themselves, they know what it is — a picture of it
+// is decoration, and decoration under every reply is the noise he has objected
+// to twice tonight in other forms.
+//
+// `alreadyKnown` is the traveller's own words. Injected rather than parsed here,
+// because App.jsx already holds them and a second reader of the same transcript
+// is how the arrival anchor once resolved to Copenhagen Airport on an Aalborg
+// brief.
+const mentions = (hay, name) => {
+  const n = String(name || "").trim().toLowerCase();
+  if (!n) return false;
+  return new RegExp(`(?:^|[^\\p{L}])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "iu").test(hay);
+};
+
+export const placesNamedIn = (text, pools, { cap = CHAT_PLACE_CAP, alreadyKnown = "" } = {}) => {
   const said = String(text || "");
   if (!said.trim()) return [];
+  // What the traveller has already named. A place they asked for is a place they
+  // do not need introducing to.
+  const theirs = String(alreadyKnown || "").toLowerCase();
   const list = Array.isArray(pools) ? pools : [];
   const hay = said.toLowerCase();
   const seen = new Set();
@@ -47,6 +79,10 @@ export const placesNamedIn = (text, pools, { cap = CHAT_PLACE_CAP } = {}) => {
     if (!name) continue;
     const key = name.toLowerCase();
     if (seen.has(key)) continue;
+    // THE RULE. Named by the traveller means no card: they know, and the picture
+    // is decoration. Named by Gemlyx and not by them is a suggestion, and a
+    // suggestion is exactly what a photograph is for.
+    if (theirs && mentions(theirs, name)) continue;
     // No photograph, no card. The entry may still be excellent; this is a
     // picture feature and an empty frame is worse than nothing.
     if (!String(p?.photo || "").trim()) continue;

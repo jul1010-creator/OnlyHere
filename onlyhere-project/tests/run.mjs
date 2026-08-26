@@ -81,7 +81,7 @@ writeFileSync(entry, `
   export { isAbsolutePhoto, heroNeedsReplacing, heroPatch, heroStatusLine } from ${JSON.stringify(join(root, "src/utils/heroPhoto.js"))};
   export { saveLabel, saveHint, savedLine, planFromSavedLabel } from ${JSON.stringify(join(root, "src/utils/savedTrip.js"))};
   export { CONSTRAINT_KINDS, constraintViolations, violationsOfKind, constraintNote, repairWorked, INVENTORY_MAY_NOT_SELECT } from ${JSON.stringify(join(root, "src/utils/constraintCheck.js"))};
-  export { briefPanel, briefSentence, briefGaps, willNotAssume, briefVagueNote, briefLines, whenPhrase, clauseFor, isAcknowledged, ACKNOWLEDGED } from ${JSON.stringify(join(root, "src/utils/briefPanel.js"))};
+  export { briefPanel, briefSentence, briefGaps, willNotAssume, briefVagueNote, briefLines, whenPhrase, clauseFor, isAcknowledged, ACKNOWLEDGED, briefProgress, progressLine } from ${JSON.stringify(join(root, "src/utils/briefPanel.js"))};
   export { EVIDENCE, EVIDENCE_RANK, EVIDENCE_LABEL, fieldSourceKey, PERISHABLE_FIELD_TOPIC, PERISHABLE_FIELDS, isPerishable, perishableTopic, evidenceOf, entryEvidence, evidenceCounts, unbackedPerishables, weakestClaim, evidenceNote, PERISHABLE_TOPICS_USED, PAGE_SCAN_TOPICS } from ${JSON.stringify(join(root, "src/utils/evidence.js"))};
   export { selfContradictions as selfContra, PROSE_FIELDS as AUDIT_PROSE_FIELDS, PROSE_LISTS } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink, GUIDE_SCAFFOLDING } from ${JSON.stringify(join(root, "src/utils/userSaves.js"))};
@@ -120,7 +120,10 @@ writeFileSync(entry, `
   export { placesNamedIn, CHAT_PLACE_CAP } from ${JSON.stringify(join(root, "src/utils/chatPlaces.js"))};
   export { isOwnRoute, RETURN_PARAM, captureRedirectSession, startGoogleSignIn } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
   export { GOOGLE_SIGN_IN } from ${JSON.stringify(join(root, "src/config.js"))};
-  export { writeInLanguage, guideLanguageBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
+  export { writeInLanguage } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
+  export { guideLanguage, languageOfProse, ruledOutLanguages, briefSentences, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS, MARKER_FLOOR, MARKER_MARGIN } from ${JSON.stringify(join(root, "src/utils/travellerLanguage.js"))};
+  export { railPlaces, railCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
+  export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, briefBlock, buildBlockedNote, MAX_ASKS_AT_ONCE } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { GREETING, openingThread, withTestBrief, withoutTestBrief, threadIsSound, TEST_BRIEF } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { CHAT_REPORT_KIND, CHAT_REPORT_VERSION, buildChatReport, chatReportFilename, turnReport, briefTimeline, intakeReport } from ${JSON.stringify(join(root, "src/utils/chatReport.js"))};
@@ -7609,6 +7612,89 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const { isFullPlanText, isReadyToBuild } = M;
 
   ok("the fallback is wired to the button", /isReadyToBuild\(lastAssistantMsg\.text\) \|\| isFullPlanText\(lastAssistantMsg\.text\)/.test(code));
+
+  // ── AN APOSTROPHE IN JSX TEXT BLINDS EVERY CHECK AFTER IT ────────
+  //
+  // Found 26 Aug 2026 by writing the words "whenever you're ready" into a JSX
+  // text node. Two assertions in this file went red at once, in unrelated
+  // sections, and neither had anything to do with the change.
+  //
+  // stripNonCode blanks comments and STRING LITERALS so a source assertion
+  // cannot match a phrase that only appears inside quotes. JSX text is not a
+  // string literal, but the lone apostrophe in "you're" looks exactly like the
+  // start of one, so everything after it up to the next apostrophe was blanked —
+  // and in a 1.5MB file that is an enormous region of code the checks then
+  // silently could not see.
+  //
+  // THE DANGEROUS HALF IS NOT THE FAILURE. A blanked region makes a `!test(...)`
+  // assertion PASS, so one contraction in the wrong place can quietly switch off
+  // every negative source check below it and the suite still reads green.
+  //
+  // THE FIX IS IN THE SCANNER, NOT IN THE COPY. The first version of this
+  // section demanded that no JSX text node anywhere contain an apostrophe, and
+  // it turned up 27 that already did — "Can't miss out", "Who's traveling",
+  // "You're on the list". Rewriting 27 pieces of user-facing English to keep a
+  // test harness working is the tail wagging the dog, and it would have to be
+  // done again by whoever next writes a contraction. So `scan` learned the
+  // difference instead, and what is pinned here is that it knows it.
+  //
+  // PIN THE RULE, NOT THE SHAPE: these check what the scanner DOES, on inputs
+  // written out in full, so the heuristic can be replaced by a real parser
+  // tomorrow without touching a line of this.
+  {
+    // 1. The failure that started it: code after a JSX contraction stays visible.
+    const jsx = `<p>whenever you're ready</p>\nconst MARKER_AFTER_JSX = 1;`;
+    ok("code after a JSX apostrophe is still visible to the scan",
+      /MARKER_AFTER_JSX/.test(stripNonCode(jsx)));
+    // And the dangerous half, stated as its own assertion because it is the one
+    // that reads GREEN when it is broken: a negative check must still be able
+    // to fail after a contraction.
+    // Stated separately because this is the half that reads GREEN when broken:
+    // a `!test(...)` over a blanked region passes without the code being gone.
+    // Here the code IS there, so the negative form must come out false.
+    ok("a negative check still bites after a JSX apostrophe",
+      !/STILL_HERE/.test(stripNonCode(`<p>don't</p>\nif (STILL_HERE) {}`)) === false);
+
+    // 2. The positive control. If apostrophes stopped opening strings ALTOGETHER
+    // the assertion above would also pass, and stripNonCode would be useless.
+    ok("a real single-quoted string is still blanked",
+      !/SECRET_STRING/.test(stripNonCode(`const a = 'SECRET_STRING';`)));
+    ok("and a double-quoted one still is too",
+      !/SECRET_DQ/.test(stripNonCode(`const a = "SECRET_DQ";`)));
+
+    // 3. The letters a quote may legitimately follow. Without the keyword list
+    // these leak their contents into what the scan calls code.
+    ok("return opens a string", !/RET_STRING/.test(stripNonCode(`const f = () => { return 'RET_STRING'; };`)));
+    ok("typeof opens a string", !/TYPEOF_STRING/.test(stripNonCode(`if (typeof 'TYPEOF_STRING') {}`)));
+    ok("case opens a string", !/CASE_STRING/.test(stripNonCode(`switch (x) { case 'CASE_STRING': break; }`)));
+    // An arrow is an opener too, and `>` deliberately cannot go in the operator
+    // set because every JSX closing tag ends with one. There is no `=> '...'` in
+    // the codebase today; this is here so the first one written does not leak.
+    ok("an arrow opens a string", !/ARROW_STRING/.test(stripNonCode(`const f = () => 'ARROW_STRING';`)));
+
+    // 4. stripComments is the other half of the same walk: it has to know it is
+    // inside a string for the same reasons, and keep the contents anyway.
+    ok("stripComments keeps what a reader sees", /KEPT_COPY/.test(stripComments(`const a = 'KEPT_COPY';`)));
+    ok("and still drops the comment quoting it", !/OLD_COPY/.test(stripComments(`// was 'OLD_COPY'\nconst a = 1;`)));
+
+    // 5. On the real file, not a fixture. Every JSX text node carrying an
+    // apostrophe must survive the scan character for character — if any one of
+    // them opened a string, the text itself would come back as spaces.
+    const raw = readFileSync(join(root, "src/App.jsx"), "utf8");
+    const stripped = stripNonCode(raw);
+    const swallowed = [];
+    for (const m of raw.matchAll(/>[^<>{}\n]{0,200}<\//g)) {
+      if (/^>\s*</.test(m[0]) || !/'/.test(m[0])) continue;
+      const at = m.index, end = at + m[0].length;
+      if (stripped.slice(at, end) !== m[0]) swallowed.push(m[0].trim().slice(0, 60));
+    }
+    is("no JSX contraction in App.jsx swallows its own text node", swallowed, []);
+    // 27 of them exist. If that count ever reads 0 the loop above is matching
+    // nothing and every assertion in this block is vacuous.
+    const carrying = [...raw.matchAll(/>[^<>{}\n]{0,200}<\//g)]
+      .filter((m) => !/^>\s*</.test(m[0]) && /'/.test(m[0])).length;
+    ok(`and there are ${carrying} of them to check, so the check is not vacuous`, carrying >= 20);
+  }
 
   // What the fallback catches: a real plan with no marker on it.
   const planNoMarker = "Day 1: Copenhagen, Nyhavn and the Round Tower.\nDay 2: train to Odense for H.C. Andersen's house.\nDay 3: Aarhus and Den Gamle By.";
@@ -23987,6 +24073,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // saved-guide assistant all had nothing.
 {
   const { writeInLanguage } = M;
+  const { guideLanguage, languageOfProse, ruledOutLanguages, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS } = M;
+  const { travellerBudget, budgetCharacterised, stayProblems } = M;
   const appL = readFileSync(join(root, "src/App.jsx"), "utf8");
   const da = writeInLanguage({ tag: "da-DK", name: "Danish" });
 
@@ -24028,13 +24116,155 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("nor does an unrecognised tag", writeInLanguage({ tag: "qq", name: "" }), "");
 
   // ── AND IT HAS TO REACH ALL FOUR PLACES THAT WRITE READER PROSE ──
-  is("the guide build and its retry both get it", (appL.match(/\$\{guideLanguageBlock\(\)\}/g) || []).length, 3);
+  is("the guide build and its retry both get it", (appL.match(/\$\{guideLangBlock\}/g) || []).length, 2);
+  ok("and it is computed once, from the traveller's own words", /const guideLangBlock = writeInLanguage\(guideLanguage\(\{[\s\S]{0,120}said: saidByTravellerForGuide/.test(appL));
+  ok("with the ruled-out-language note appended", /\}\)\) \+ languageBarNote\(saidByTravellerForGuide\)/.test(appL));
   // The enrichment call is the one that writes "Where to stay" and every leg,
   // which are two of the most-read lines on the page, and it has its own prompt
   // that never sees the writer's.
   ok("including the enrichment pass",
-     /EVERY PRICE YOU WRITE IS IN DKK[\s\S]{0,400}\$\{guideLanguageBlock\(\)\}/.test(appL));
+     /EVERY PRICE YOU WRITE IS IN DKK[\s\S]{0,400}\$\{langBlock\}/.test(appL));
+  ok("and it is handed the same one the writer used, not its own",
+     /enrichGuideDays\(parsed\.days, travelMode, mixedModes, budgetSays, guideLangBlock\)/.test(appL));
+  // The wrapper that read the browser and nothing else is gone, not merely unused.
+  ok("nothing reaches for the navigator-only wrapper any more",
+     !/guideLanguageBlock/.test(stripComments(appL)) &&
+     !/export const guideLanguageBlock/.test(readFileSync(join(root, "src/utils/readerLanguage.js"), "utf8")));
   ok("and the saved-guide assistant", /Respond to the traveler's last message\.\$\{languageBlock\(\)\}/.test(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8")));
+
+  // ── "NEITHER OF US HAS A WORD OF DANISH", AND TEN DAYS OF DANISH ──
+  //
+  // 26 Aug 2026, the Winter Light brief, live at /guide/ltpnhvjm333. The
+  // sentence is in the traveller's FIRST message, written in English, and the
+  // guide came back Danish from the money paragraph to the last stop note —
+  // with the weather blocks, the leg lines and the section headings still in
+  // English, so the document changes language twice a page.
+  //
+  // Everything above pins that a language instruction REACHES each prompt.
+  // Every one of those assertions passed on the day this happened, because they
+  // check that the prompt is told something and never what it is told. What
+  // follows checks the decision itself, which is now made in code.
+  {
+    const WINTER = "We're landing at Copenhagen Airport on Friday 12 February 2027 at 09:15, and flying home from Copenhagen on Sunday the 21st at 18:00. Just the two of us, both in our sixties. I use a walking stick and I can't manage more than about twenty minutes on my feet at a stretch. We're renting a car. We both drive. We have 71 Nyhavn Hotel booked for the first two nights and nothing after that. Neither of us has a word of Danish. We eat well and we don't mind paying for it.";
+    const DANISH_BROWSER = { tag: "da-DK", name: "Danish" };
+
+    // THE BUG ITSELF, in one line.
+    is("a Danish browser does not override a brief that ruled Danish out",
+      guideLanguage({ said: WINTER, lang: DANISH_BROWSER }), null);
+
+    // ── AND THIS IS THE ONE THAT ONLY THE RULED-OUT BRANCH CAN PASS ──
+    //
+    // Written after mutation testing showed the assertion above survives with
+    // the ruled-out check DELETED: the Winter Light brief is in English, so the
+    // typed-language branch underneath returns null on its own and the headline
+    // assertion passed for the wrong reason.
+    //
+    // A brief written IN Danish that says somebody in the party cannot read it
+    // is the case where the two branches disagree, and it is not a contrivance —
+    // it is a Dane planning a trip with a partner who has no Danish, which is
+    // the commonest mixed party this app will ever see.
+    const DANE_WITH_ENGLISH_PARTNER = "Vi er to personer, og vi kører i bil til Bornholm i februar. Min mand forstår ikke dansk, så guiden skal være på engelsk.";
+    is("a Danish brief that asks for English gets English",
+      guideLanguage({ said: DANE_WITH_ENGLISH_PARTNER, lang: DANISH_BROWSER }), null);
+    ok("and the branch that did it is the ruled-out one, not the typed one",
+      languageOfProse(DANE_WITH_ENGLISH_PARTNER) === "da");
+    // The negation belongs to the language it sits next to. Barring "engelsk"
+    // here would take away the language they just asked for.
+    is("a sentence naming two languages bars only the negated one",
+      ruledOutLanguages(DANE_WITH_ENGLISH_PARTNER), ["da"]);
+    is("and a sentence saying they DO speak it bars nothing",
+      ruledOutLanguages("We both speak Danish fluently."), []);
+
+    // The Limfjord brief, 25 Aug, which was written off at the time as
+    // ambiguous. It is not: a guide half the party cannot read has failed for
+    // that half, and English costs the Danish reader nothing.
+    is("one reader of Danish and one who has none is still an English guide",
+      guideLanguage({ said: "One of us reads Danish, the other doesn't at all. We fly into Billund.", lang: DANISH_BROWSER }), null);
+    is("and the ruling-out is found in either sentence shape",
+      ruledOutLanguages("Neither of us has a word of Danish."), ["da"]);
+    is("including the one that says somebody DOES read it",
+      ruledOutLanguages("One of us reads Danish, the other doesn't at all."), ["da"]);
+
+    // Nothing said about language: what they TYPED decides, which is what the
+    // prompt has claimed to do since 17 August and never did.
+    is("a brief typed in English is an English guide on a Danish phone",
+      guideLanguage({ said: "We fly into Billund on Thursday and out of Aalborg on Monday. Two adults and our son, he is 7. No car, so trains and buses only.", lang: DANISH_BROWSER }), null);
+    // And the other direction, which was the half that could never be fixed by
+    // reordering sentences: browser English, traveller wrote Danish.
+    is("a brief typed in Danish is a Danish guide on an English phone",
+      guideLanguage({ said: "Vi skal til Bornholm i februar, og vi vil gerne se Hammershus. Vi kører i bil, og vi har ikke booket hotel endnu.", lang: null }),
+      { tag: "da", name: "Danish" });
+
+    // The tick-box case readerLanguage.js carves out: nothing written at all,
+    // so the device is the only evidence there is.
+    is("a form with no sentence in it still follows the browser",
+      guideLanguage({ said: "", lang: DANISH_BROWSER }), DANISH_BROWSER);
+    is("and an English browser with an English brief adds nothing",
+      guideLanguage({ said: WINTER, lang: null }), null);
+    // A language nobody here can check is left exactly as it was.
+    is("a German brief on a German phone is untouched by any of this",
+      guideLanguage({ said: "Wir fliegen am Donnerstag nach Billund und mieten ein Auto.", lang: { tag: "de-DE", name: "German" } }),
+      { tag: "de-DE", name: "German" });
+
+    // The floor is what stops a two-word message deciding anything.
+    is("two markers is enough to call it", languageOfProse("We are flying to Aarhus"), "en");
+    is("one is not", languageOfProse("Aarhus and Ribe"), null);
+    is("and a mix with no clear winner is honest about it", languageOfProse("Aarhus og the"), null);
+    ok("the marker lists share no word", !EN_MARKERS.some(w => DA_MARKERS.includes(w)));
+
+    // The note that makes an English guide honest rather than merely English.
+    ok("a ruled-out language earns a note about the steps that still need it",
+      /cannot read Danish/i.test(languageBarNote(WINTER)) && /no English version/i.test(languageBarNote(WINTER)));
+    is("and a brief that ruled nothing out gets no note", languageBarNote("We fly into Billund on Thursday."), "");
+    ok("the note never promises to translate a name",
+      /Do not translate the name/.test(NO_DANISH_NOTE));
+  }
+
+  // ── AND THE GUIDE INVENTED A BUDGET FOR THEM TOO ─────────────────
+  //
+  // Same guide, same brief. "We eat well and we don't mind paying for it"
+  // returned null from travellerBudget, so budgetSays reached the accommodation
+  // prompt EMPTY — and three separate days told them about "din stramme
+  // dagsbudget", with their own booked hotel described as out of reach.
+  //
+  // Two faults in one sentence: a pattern that missed an ordinary phrase, and a
+  // check that switches itself off in exactly the case where a writer invents.
+  {
+    ok("don't mind paying reads as generous, like don't mind the cost already did",
+      travellerBudget("We eat well and we don't mind paying for it.") === "generous");
+    ok("and happy to pay does too", travellerBudget("Happy to pay for a good dinner.") === "generous");
+    ok("a tight budget is still tight", travellerBudget("We are on a tight budget.") === "tight");
+    ok("and a brief that says nothing still says nothing", travellerBudget("We land on Friday at 09:15.") === null);
+
+    // The phrase that shipped, quoted from the live guide.
+    is("the Danish sentence that shipped is caught",
+      budgetCharacterised("Til din stramme dagsbudget er 71 Nyhavn Hotel til godt 3.900 kr. natten helt ude af rækkevidde, så kig efter et hostel."),
+      "stramme dagsbudget");
+    is("and its English equivalent", budgetCharacterised("On a tight budget in the expensive centre a hostel is more realistic."), "tight budget");
+    is("a sentence about the PLACE is not a claim about their wallet",
+      budgetCharacterised("Stay in Ribe old town near the cathedral, so the night watchman's round starts at your door."), null);
+    // The sentence an EARLIER fix in accommodation.js exists to produce. It is
+    // second person, it contains the word budget, and it invents nothing: it
+    // explains a tier change with a true fact about Danish prices.
+    is("explaining why a tier changed is not inventing a budget",
+      budgetCharacterised("Your budget goes much further here than in Copenhagen, so a real hotel in central Odense is in range"), null);
+    // And out of reach only counts when the sentence is about money at all.
+    is("out of reach next to a room rate is a claim about their means",
+      budgetCharacterised("71 Nyhavn Hotel at 3.900 kr a night is out of reach, so look for a hostel."), "out of reach");
+    is("out of reach about a place is not", budgetCharacterised("Christiansø is out of reach without the ferry."), null);
+
+    // The gate that was off. stayProblems returned early on an empty budget,
+    // so the one case with nothing to check against was the one case unchecked.
+    const invented = stayProblems([{ day: 1, glance: { accommodation: "Til din stramme dagsbudget er hostel mere realistisk." } }], "");
+    ok("an invented budget is a finding when they said nothing about money",
+      invented.some(p => /never said anything about money/.test(p)));
+    const nothingWrong = stayProblems([{ day: 1, glance: { accommodation: "Bo i den gamle bymidte, tæt på domkirken." } }], "");
+    ok("and an ordinary sentence is not", !nothingWrong.some(p => /never said anything about money/.test(p)));
+    // It must not fire when they DID say something: that is the other check's job.
+    const saidTight = stayProblems([{ day: 1, glance: { accommodation: "On a tight budget a hostel is more realistic." } }], "We are on a tight budget.");
+    ok("saying it back to somebody who said it is not an invention",
+      !saidTight.some(p => /never said anything about money/.test(p)));
+  }
 
   // ── THE TWO DEFECTS INSIDE THE ONE ROUTE THAT DID HANDLE IT ──────
   const ask = readFileSync(join(root, "api/ask.js"), "utf8");
@@ -34288,7 +34518,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       const call = Math.max(head.lastIndexOf("askClaude("), head.lastIndexOf("askOpenAI("));
       if (call === -1) continue;                       // not fed by a model at all
       const between = app.slice(call, at);
-      out.push(/keepLanguageOf\(|languageBlock\(\)|guideLanguageBlock\(/.test(between));
+      out.push(/keepLanguageOf\(|languageBlock\(\)|guideLangBlock/.test(between));
     }
     return out;
   };
@@ -36584,6 +36814,214 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is("an ordinary reply is the same in both views", streamContent(t), streamContentForApi(t));
   }
   is("and nothing at all is nothing in both", streamContentForApi(feed([])), []);
+}
+
+
+// ── "IT IS STILL GOOD TO SHOW IF EVERYTHING IS COMPLETE OR NOT" ─────
+//
+// Oliver, 26 Aug 2026, asking for the affordance Layla has: "4/5 questions
+// answered or whatever."
+//
+// The thing that can go wrong is not the arithmetic. It is the count
+// disagreeing with the button underneath it — "7 of 7" over a screen that will
+// not build, or "6 of 7" over one that will. Those are two readers of the same
+// brief, which is the exact shape of half the bugs in this file, so every
+// assertion below checks the count AGAINST `ready` rather than on its own.
+{
+  const { briefProgress, progressLine, readBrief, BLOCKING_SLOTS } = M;
+  const appP = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const NOW = new Date("2026-08-26T09:00:00Z");
+  const read = (text) => readBrief({ travellerText: text, travellerTurns: [text], today: NOW, intake: {} });
+
+  // Nothing said: the denominator is the blocking list, never all eight.
+  {
+    const p = briefProgress(read(""));
+    is("an empty brief has done nothing", p.done, 0);
+    is("and counts against what actually blocks a build", p.total, BLOCKING_SLOTS.length);
+    ok("budget is not in the denominator", !BLOCKING_SLOTS.includes("budget"));
+  }
+
+  // The Winter Light brief, which is one slot short. This is the case Oliver's
+  // own chat report showed at 23:04 on 25 August: stillMissing ["stay"].
+  {
+    const WINTER = "We're landing at Copenhagen Airport on Friday 12 February 2027 at 09:15, and flying home from Copenhagen on Sunday the 21st at 18:00. Just the two of us, both in our sixties. I use a walking stick. We're renting a car. We both drive. We'd like Bornholm and Møns Klint, we eat well.";
+    const b = read(WINTER);
+    const p = briefProgress(b);
+    is("one slot short reads one short", p.total - p.done, p.open.length);
+    ok("and it is not claiming to be ready", p.ready === false && b.ready === false);
+    // The half that makes it a next step instead of a progress bar.
+    ok("a single open slot is named rather than counted", p.last.length > 0);
+    ok("and the line says what is still needed", /I still need/.test(progressLine(p)));
+  }
+
+  // ── THE COUNT AND THE BUTTON CANNOT DISAGREE ─────────────────────
+  //
+  // Checked across a spread of briefs rather than asserted once, because the
+  // failure is a specific brief where the two readers part company and any one
+  // example can miss it.
+  {
+    const briefs = [
+      "",
+      "Five days in Copenhagen.",
+      "Two of us, five days in Copenhagen in October, we like food, we'll take the train.",
+      "Two of us, five days from Copenhagen Airport, 8 to 12 October 2026, food and design, trains and buses, hotel already booked.",
+    ].map(read);
+    for (const b of briefs) {
+      const p = briefProgress(b);
+      ok(`a ready brief is a full count and only a ready brief is (${p.done}/${p.total})`, p.ready === (p.done === p.total));
+      ok("the count never runs backwards", p.done >= 0 && p.done <= p.total);
+    }
+  }
+
+  // A hard slot that was asked and dodged does not quietly count as done: that
+  // is the rule `ready` follows, and this has to follow the same one.
+  {
+    const dodged = readBrief({
+      travellerText: "Five days from Copenhagen Airport, food and design, we'll take trains, hotel booked, two of us.",
+      travellerTurns: ["Five days from Copenhagen Airport, food and design, we'll take trains, hotel booked, two of us."],
+      today: NOW, asked: ["when"], intake: {},
+    });
+    const p = briefProgress(dodged);
+    // Stated as the equality it is, not as an OR — the first version of this
+    // wrote `p.open.includes("when") || !dodged.known.when` and passed on the
+    // second half whatever the first did, which is an assertion that cannot fail.
+    ok("a dodged hard slot is not in known", !dodged.known.when);
+    ok("so it is open", p.open.includes("when"));
+    ok("and the count agrees with the button", p.ready === (p.done === p.total));
+    // tripBrief.js builds `unanswered` from slots that are NOT known, so it can
+    // never name one this count has already ticked off. Pinned because the code
+    // above used to union the two lists and nothing could tell.
+    ok("unanswered never names a slot that is known",
+      (dodged.unanswered || []).every(k => !dodged.known[k]));
+  }
+
+  // ── AND IT IS ON THE SCREEN ──────────────────────────────────────
+  //
+  // briefPanel.js sat in this repository with zero callers for three days, which
+  // is this project's signature bug: finished, correct code that nothing calls.
+  ok("the brief is kept for the render rather than thrown away", /setLiveBrief\(brief\)/.test(appP));
+  ok("and the chat panel draws it", /progressLine\(briefProgress\(liveBrief\)\)/.test(appP));
+  // "0 of 7" over an empty box is a form with a scoreboard on it.
+  ok("nothing is shown before they have said anything", /liveBrief && briefProgress\(liveBrief\)\.done > 0/.test(appP));
+  is("and the panel hands the count out with the sentence", typeof M.briefPanel(read("")).progress, "object");
+}
+
+// ── AND NOTHING MAY RUN AFTER THE SCOREBOARD ────────────────────────
+//
+// 26 Aug 2026, found by adding twenty-five assertions to the end of this file
+// and watching the total stay at exactly 10,920. They ran. They incremented
+// `passed`. The number had already been printed.
+//
+// It is the same shape as five other things found this week and written up in
+// HANDOFF_25AUG_NIGHT: A LIMIT HIT IS NOT A LIMIT REPORTED. The five before it
+// were in the product. This one is in the instrument that finds them, which
+// makes it the worst place for it — and the failure is silent in the direction
+// that matters, because a FAILING assertion down there still prints its FAIL
+// line at the very bottom, so the suite exits 1 with a scoreboard reading 0
+// failed. A red suite that says green is worse than a red suite.
+//
+// Anchored on the count, not on the position of a string: any ok/is call after
+// the print is the bug, wherever it is written.
+{
+  const self = readFileSync(fileURLToPath(import.meta.url), "utf8");
+  // stripCOMMENTS, not stripNonCode. The scoreboard's own text lives inside a
+  // template literal, which stripNonCode blanks — so the first version of this
+  // guard searched for a string that was a row of spaces by the time it looked,
+  // found nothing, and passed. Which is the very failure it exists to catch,
+  // written into the catcher. Comments still have to go, or this comment
+  // becomes the anchor.
+  const code = stripComments(self);
+  const scoreboard = code.lastIndexOf("} passed, ${");
+  ok("the scoreboard line is found at all, so this is not vacuous", scoreboard > 0);
+  const after = scoreboard < 0 ? "" : code.slice(scoreboard);
+  const stragglers = (after.match(/(?:^|[^\w.])(?:ok|is)\s*\(/g) || []).length;
+  is("no assertion runs after the scoreboard is printed", stragglers, 0);
+}
+
+// ── "CAN YOU HAVE IT SHOWING ON THE SIDE OF THE CHAT PANEL" ─────────
+//
+// Oliver, 26 Aug 2026: "With such a small chat panel, it is more convenient
+// that people can read while seeing the picture."
+//
+// Two things can go wrong here and neither is visible in a screenshot taken at
+// one width: the rail could show the wrong reply's places, and the rail and the
+// inline row could both be displayed at once, which is the same photograph
+// twice on a 300-pixel panel.
+{
+  const { renderSurface: rsr } = await import(pathToFileURL(join(root, "tests/render.mjs")).href);
+  const { railPlaces, railCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX } = M;
+  const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // ── WHICH REPLY THE RAIL IS SHOWING ──────────────────────────────
+  const finder = (text) =>
+    /Ribe/.test(text) ? [{ name: "Ribe" }] : /Gudhjem/.test(text) ? [{ name: "Gudhjem" }] : [];
+  const convo = [
+    { role: "assistant", text: "Hi! Tell me where you are heading." },
+    { role: "user", text: "Somewhere that feels like a proper Danish winter." },
+    { role: "assistant", text: "Ribe is the oldest town in Denmark and it is quiet in February." },
+  ];
+  is("the rail carries the reply that introduced somewhere",
+    railPlaces({ messages: convo, placesFor: finder }), [{ name: "Ribe" }]);
+  // The case that decides whether this is usable: Gemlyx asks a follow-up, which
+  // is most turns, and the picture must not vanish while they answer it.
+  is("a follow-up question leaves the last real one standing",
+    railPlaces({ messages: [...convo, { role: "user", text: "Ten days." }, { role: "assistant", text: "How are you getting around?" }], placesFor: finder }),
+    [{ name: "Ribe" }]);
+  is("and a newer introduction replaces it",
+    railPlaces({ messages: [...convo, { role: "assistant", text: "Gudhjem, then, for the harbour." }], placesFor: finder }),
+    [{ name: "Gudhjem" }]);
+  is("an error is not a reply", railPlaces({ messages: [...convo, { role: "assistant", isError: true, text: "Hit a snag near Gudhjem" }], placesFor: finder }), [{ name: "Ribe" }]);
+  is("and the traveller naming it themselves is not either",
+    railPlaces({ messages: [...convo, { role: "user", text: "What about Gudhjem?" }], placesFor: finder }), [{ name: "Ribe" }]);
+  is("no finder, no rail", railPlaces({ messages: convo }), []);
+
+  // ── EXACTLY ONE OF THE TWO IS DISPLAYED, AT EVERY WIDTH ──────────
+  //
+  // Both are rendered, because which one fits is a question about the viewport
+  // and a media query answers it for free on every resize. That is only safe
+  // while the CSS really does hide the other one, so the CSS is generated from
+  // the same constants the JSX uses and read back here.
+  const css = railCss();
+  ok("the rail is hidden by default, which is the phone", new RegExp(`\\.${RAIL_CLASS}\\s*\\{[^}]*display:\\s*none`).test(css));
+  ok("and shown above the breakpoint", new RegExp(`min-width:\\s*${RAIL_BREAKPOINT_PX}px[\\s\\S]*\\.${RAIL_CLASS}\\s*\\{[^}]*display:\\s*block`).test(css));
+  ok("where the inline row is hidden instead", new RegExp(`min-width:\\s*${RAIL_BREAKPOINT_PX}px[\\s\\S]*\\.${INLINE_CARDS_CLASS}\\s*\\{[^}]*display:\\s*none`).test(css));
+  ok("the stylesheet actually carries it", /\$\{railCss\(\)\}/.test(appR));
+  ok("the inline cards are marked so it can hide them", appR.includes("className={INLINE_CARDS_CLASS}"));
+  ok("and the rail is marked so it can show them", appR.includes("className={RAIL_CLASS}"));
+  // The rail is inside the flex row, not floating after it.
+  ok("the messages and the rail share one flex row", /<div className="chat-with-rail">[\s\S]{0,400}<div className="ai-msgs"/.test(appR));
+  ok("and the message list can shrink so the rail has room", /className="ai-msgs" style=\{\{ flex: "1 1 auto", minWidth: 0/.test(appR));
+
+  // ── AND THE CARD ITSELF STILL SAYS WHAT IT HAS TO ────────────────
+  //
+  // The licence credit is the one with a legal edge on it, and a second layout
+  // is exactly how a credit gets lost. Rendered in both.
+  const place = {
+    name: "Østerlars Rundkirke", _src: "free", emoji: "⛪",
+    photo: "https://upload.wikimedia.org/x.jpg",
+    __photoCredit: { photographer: "Bahnfrend", source: "wikimedia", license: "CC BY-SA 4.0" },
+  };
+  const C = { surface: "#111", border: "#222", gold: "#D9A441", text: "#fff", muted: "#888", onGold: "#20160A" };
+  for (const layout of ["row", "rail"]) {
+    const r = await rsr("src/components/ChatPlaceCards.jsx", "ChatPlaceCards", { places: [place], C, layout });
+    ok(`the ${layout} layout names the place`, r.says("Østerlars Rundkirke"));
+    ok(`and credits the photographer in the ${layout} layout`, r.says("Bahnfrend"));
+    ok(`and names the licence in the ${layout} layout`, r.says("CC BY-SA 4.0"));
+  }
+  // The rail has the height a row does not, so the name wraps instead of being
+  // cut. A truncated place name is one nobody can match against a road sign.
+  {
+    const railed = await rsr("src/components/ChatPlaceCards.jsx", "ChatPlaceCards", { places: [place], C, layout: "rail" });
+    const rowed = await rsr("src/components/ChatPlaceCards.jsx", "ChatPlaceCards", { places: [place], C, layout: "row" });
+    ok("the rail does not truncate a long name", !/text-overflow:ellipsis/.test(railed.html.replace(/\s/g, "")));
+    ok("and the row still does, because it cannot wrap sideways", /text-overflow:ellipsis/.test(rowed.html.replace(/\s/g, "")));
+  }
+  // A place with no usable photo produces no card in either layout, so the rail
+  // cannot become an empty grey column.
+  {
+    const noShot = await rsr("src/components/ChatPlaceCards.jsx", "ChatPlaceCards", { places: [{ name: "Somewhere", _src: "free" }], C, layout: "rail" });
+    is("no photograph, no card", noShot.html, "");
+  }
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

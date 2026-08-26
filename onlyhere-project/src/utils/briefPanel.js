@@ -63,7 +63,7 @@
 //
 // That behaviour already exists. It has never been shown to anybody, which is
 // what `willNotAssume` is for.
-import { BRIEF_SLOTS, HARD_SLOTS } from "./tripBrief";
+import { BRIEF_SLOTS, HARD_SLOTS, BLOCKING_SLOTS } from "./tripBrief";
 
 const said = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
 
@@ -285,6 +285,79 @@ export const briefLines = (brief) =>
 // ── AND WHAT THE WHOLE PANEL SAYS, IN ONE CALL ──────────────────────
 // A single shape so the render cannot assemble a different panel from the one
 // the suite checks. Same reason AI_CHAT_SURFACES is a named list.
+// ── "IT IS STILL GOOD TO SHOW IF EVERYTHING IS COMPLETE OR NOT" ─────
+//
+// Oliver, 26 Aug 2026: "we still haven't added in the method Layla uses with
+// 4/5 questions answered or whatever. Yes we have filters and tick boxes. But
+// it's still good to show if everything is complete or not."
+//
+// THIS REVERSES A DECISION MADE IN THIS FILE, and the old one is quoted rather
+// than deleted so nobody re-argues it from scratch: "Deliberately NOT a count
+// and NOT a fraction. '2 of 5 captured' is the thing Oliver called robotic, and
+// a ratio is the most robotic possible way to describe how well somebody has
+// been understood."
+//
+// Both are true, and they are answers to different questions. The objection was
+// to a ratio standing IN PLACE OF being understood — a progress bar where a
+// sentence should be. What he is asking for now is a ratio standing BESIDE it:
+// somebody four questions into a conversation cannot tell whether they are
+// nearly done or nowhere near, and the sentence, which is about what Gemlyx
+// heard, does not answer that. So the count goes on and the sentence stays.
+//
+// ── COUNTED AGAINST WHAT ACTUALLY BLOCKS A BUILD ────────────────────
+//
+// Not all eight slots. Budget is optional and always has been, so counting it
+// would show 7/8 on a brief that is complete and ready — a bar that never fills
+// is worse than no bar. The denominator is BLOCKING_SLOTS, which is the same
+// list `ready` is computed from, so "7 of 7" and "ready to build" cannot
+// disagree.
+//
+// ── AND IT NAMES THE LAST ONE ───────────────────────────────────────
+//
+// "6 of 7" tells somebody they are nearly there and not what to do about it.
+// The remaining slot's own label is right there, and one clause of it is the
+// difference between a progress bar and a next step. When several are open it
+// stays a count, because listing four things is the wall of questions the whole
+// intake design is trying not to be.
+export const briefProgress = (brief) => {
+  const total = BLOCKING_SLOTS.length;
+  const ready = !!brief?.ready;
+  // ── AND `unanswered` IS NOT A SECOND SOURCE ─────────────────────
+  //
+  // The first version unioned `brief.unanswered` in here, on the reasoning that
+  // a hard slot asked and dodged must not count as done. Mutation testing
+  // deleted the union and the suite stayed green, and reading tripBrief.js says
+  // why it had to: `unanswered = HARD_SLOTS.filter(k => !known[k] && asked)`.
+  // Every member is already absent from `known`, so the union could never add a
+  // key the first filter had not already found. The rule is real and it was
+  // being enforced twice.
+  //
+  // Left as one filter rather than two, because a second reader of the same
+  // question that happens to agree today is how two readers come to disagree
+  // later — which is the failure this whole file keeps finding elsewhere.
+  const stillOpen = BLOCKING_SLOTS.filter(k => !brief?.known?.[k]);
+  return {
+    done: ready ? total : Math.max(0, total - stillOpen.length),
+    total,
+    ready,
+    open: stillOpen,
+    // The label of the one thing left, or "" when it is none or many.
+    last: stillOpen.length === 1 ? (slotOf(stillOpen[0])?.label || "") : "",
+  };
+};
+
+// The sentence a reader sees. Kept here rather than in the render so the suite
+// reads the same words the screen does.
+export const progressLine = (progress) => {
+  const p = progress || {};
+  if (p.ready) return `Everything I need — ${p.total} of ${p.total}`;
+  const n = Math.max(0, Number(p.done) || 0);
+  if (p.last) return `${n} of ${p.total} — I still need ${p.last}`;
+  const left = Array.isArray(p.open) ? p.open.length : 0;
+  if (!left) return `${n} of ${p.total}`;
+  return `${n} of ${p.total} — ${left} still to go`;
+};
+
 export const briefPanel = (brief) => ({
   sentence: briefSentence(brief),
   lines: briefLines(brief),
@@ -292,7 +365,6 @@ export const briefPanel = (brief) => ({
   vague: briefVagueNote(brief),
   wontAssume: willNotAssume(brief),
   ready: !!brief?.ready,
-  // Deliberately NOT a count and NOT a fraction. "2 of 5 captured" is the thing
-  // Oliver called robotic, and a ratio is the most robotic possible way to
-  // describe how well somebody has been understood.
+  // The count sits BESIDE the sentence, never instead of it. See briefProgress.
+  progress: briefProgress(brief),
 });

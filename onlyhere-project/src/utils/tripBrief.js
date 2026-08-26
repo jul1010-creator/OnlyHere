@@ -673,3 +673,49 @@ export const briefBlock = (brief) => {
   lines.push("ANSWER WHAT THEY ASKED, THEN ASK. Do not settle anything that the question you are about to ask would change. Recommending places is answering. Deciding where they sleep, how many bases there are, which towns are in or out, or what the route looks like is not, while any of the above is still missing. If it would be a different plan depending on their answer, ask first and plan after.");
   return lines.join("\n");
 };
+
+// ── "NOT YET" HAS TO MEAN NOT YET ───────────────────────────────────
+//
+// Oliver, 26 Aug 2026: "I clicked 'Not yet' because I wanted to say something.
+// It then said 'no rush at all'. It then popped up almost immediately again like
+// 'wanna build a guide? Yes/no'."
+//
+// The card's own comment explains exactly why, and the reasoning was sound:
+//
+//   "NO IS NOT A DISMISS. It sends a turn, so Gemlyx keeps talking and asks what
+//    to change. A No that silently closed the card would be another dead end."
+//
+// True, and it produced a card that cannot be declined. "Not yet" sends a turn,
+// Gemlyx replies, aiLoading goes false, and `everReadyToBuild` — which LATCHES
+// on purpose, so a follow-up question cannot take the button away — is still
+// true. The card re-renders one line under the reply that just acknowledged the
+// decline. Press no, be told "no rush at all", and be asked again immediately.
+//
+// That is "constant bills floating on the screen" — his words about Layla,
+// eleven hours ago — in a different costume. A prompt you cannot say no to.
+//
+// ── SO WHAT BRINGS IT BACK ──────────────────────────────────────────
+//
+// Not a timer, and not the next reply. The honest trigger is that THE BRIEF
+// CHANGED: they added a date, a place, a constraint, anything the plan would be
+// built from. Offering again then is responsive. Offering again because they
+// said "no rush" is nagging.
+//
+// The signature is the filled slots and their values, so a turn that merely
+// chats leaves it identical and a turn that answers something does not.
+export const briefSignature = (brief) => {
+  const known = brief?.known && typeof brief.known === "object" ? brief.known : {};
+  return BRIEF_SLOTS
+    .map(s => {
+      const v = known[s.key];
+      if (!v) return `${s.key}:`;
+      const val = v.value instanceof Date ? v.value.toISOString() : String(v.value ?? "");
+      return `${s.key}:${val}`;
+    })
+    .join("|");
+};
+
+// True when the card should be offered again after a decline. Only when
+// something the plan is built from has actually moved.
+export const briefMovedOn = (declinedAt, brief) =>
+  !!declinedAt && briefSignature(brief) !== declinedAt;
