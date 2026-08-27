@@ -38,6 +38,8 @@
 // for the field at all. So this file reports that separately and never pretends
 // a renamed row is a finished row.
 
+import { entryPrice } from "./entryPrice";
+
 // The current heading vocabulary, as produced by shapeForLive in
 // studioContent.js and the paste-ready codegen in App.jsx. The test derives the
 // real set from that source and asserts this covers it, so this list cannot
@@ -151,12 +153,70 @@ export const bodyProblems = (payload) => {
   return problems;
 };
 
+// ── "LEGOLAND IS OBVIOUSLY NOT A FREE ENTRANCE, BUT THE DRAFT IS FINE" ─
+//
+// Oliver, 27 Aug 2026, asking for "a sweep fix on all the free".
+//
+// That sentence is this file's whole thesis said back to me, which is why the
+// sweep belongs here and not in a new one. The prose on those rows is good. The
+// renderer that printed FREE over them was fixed this morning. What is left is
+// ONE STORED FIELD on some number of rows, and the cost of putting it right is
+// nothing like the cost of a redraft.
+//
+// ── AND THERE ARE TWO KINDS, WHICH COST THE SAME AND READ DIFFERENTLY ─
+//
+// utils/entryPrice.js already answers what a row says about its own door, and
+// its three answers map straight onto what a person has to DO about each:
+//
+//   free true    it says free and means it. Nothing to do.
+//   free false   it names a fare. Nothing to do.
+//   free null    nobody has been told what entry costs — and this splits in two
+//                by whether the row is SILENT or MISLEADING.
+//
+// Legoland is the misleading kind. Its ticket line reads "Children under 2:
+// free entry", which is true, contains the word free, and says nothing about
+// the 419 kroner everyone else pays. That is the row that produced the badge,
+// and it is worse than an empty field because a person skimming it in Studio
+// reads the word "free" and moves on.
+//
+// Only attractions. A restaurant with no ticket line is not missing anything,
+// and a festival's price lives in its own fields.
+const PRICED_TYPES = new Set(["free"]);
+
+export const priceProblems = (payload, type) => {
+  if (!PRICED_TYPES.has(String(type || ""))) return [];
+  const { free, says } = entryPrice(payload);
+  if (free !== null) return [];
+  // A row with no ticket line at all has simply never been told. A row WITH one
+  // that still cannot answer is telling the reader about somebody else.
+  if (clean(says)) {
+    return [{
+      kind: "misleading-free",
+      cost: "one field",
+      says: clean(says),
+      detail: `The ticket line says "${clean(says)}", which is about who gets in free rather than what entry costs. Reads as a free attraction at a glance. One field, no redraft.`,
+    }];
+  }
+  return [{
+    kind: "no-entry-price",
+    cost: "one field",
+    says: "",
+    detail: "Nothing on this row says what entry costs, so the page says nothing about money. One field, no redraft.",
+  }];
+};
+
 // The whole picture in one call, so the Studio can say how big the job is
 // instead of him finding these one at a time by browsing his own live site,
 // which is how this one was found.
+//
+// `type` is passed to the price half because only attractions have a door. It
+// was already on the row here and only the body half ever used it.
 export const auditPublished = (rows) => {
   const list = (Array.isArray(rows) ? rows : [])
-    .map(r => ({ id: r?.id, name: r?.payload?.name || "(unnamed)", type: r?.type, problems: bodyProblems(r?.payload) }))
+    .map(r => ({
+      id: r?.id, name: r?.payload?.name || "(unnamed)", type: r?.type,
+      problems: [...bodyProblems(r?.payload), ...priceProblems(r?.payload, r?.type)],
+    }))
     .filter(r => r.problems.length > 0);
   const has = (k) => list.filter(r => r.problems.some(p => p.kind === k));
   return {
@@ -164,6 +224,8 @@ export const auditPublished = (rows) => {
     renameable: has("legacy-heading"),
     needWriting: has("no-reality-check"),
     unknown: has("unknown-heading"),
+    misleadingFree: has("misleading-free"),
+    noPrice: has("no-entry-price"),
     total: list.length,
   };
 };
@@ -176,5 +238,27 @@ export const describeAudit = (a) => {
   if (a.renameable.length) bits.push(`${a.renameable.length} still on the old headings, fixable for free`);
   if (a.needWriting.length) bits.push(`${a.needWriting.length} with no Reality Check, which needs real text`);
   if (a.unknown.length) bits.push(`${a.unknown.length} with a heading nothing recognises`);
-  return `${a.total} published ${a.total === 1 ? "entry" : "entries"} predate the current structure: ${bits.join("; ")}.`;
+  // ── AND THE PRICE HALF, SAID SEPARATELY ─────────────────────────
+  // Not folded into the sentence above, because that one is about entries that
+  // predate the current structure and these do not. A row can be perfectly
+  // modern and still never have been told what its door costs.
+  const money = [];
+  if (a.misleadingFree?.length) money.push(`${a.misleadingFree.length} whose ticket line names who gets in free but not what entry costs`);
+  if (a.noPrice?.length) money.push(`${a.noPrice.length} that say nothing about entry at all`);
+  const structural = bits.length
+    ? `${bits.length && a.total ? `${a.renameable.length + a.needWriting.length + a.unknown.length} ` : ""}published entries predate the current structure: ${bits.join("; ")}.`
+    : "";
+  const priced = money.length ? `${money.join(", and ")}. Each is one field, not a redraft.` : "";
+  return [structural, priced].filter(Boolean).join(" ") || "Every published entry uses the current structure.";
 };
+
+// ── THE LIST HE ACTUALLY WORKS FROM ─────────────────────────────────
+// Names and what each row says today, so the sweep is a worklist rather than a
+// count. Sorted misleading first: an empty field is a gap, and a field that
+// reads as "free" at a glance is a wrong answer already on the site.
+export const priceWorklist = (rows) =>
+  (Array.isArray(rows) ? rows : [])
+    .map(r => ({ id: r?.id, name: r?.payload?.name || "(unnamed)", problems: priceProblems(r?.payload, r?.type) }))
+    .filter(r => r.problems.length > 0)
+    .map(r => ({ id: r.id, name: r.name, kind: r.problems[0].kind, says: r.problems[0].says }))
+    .sort((a, b) => (a.kind === b.kind ? String(a.name).localeCompare(String(b.name)) : a.kind === "misleading-free" ? -1 : 1));

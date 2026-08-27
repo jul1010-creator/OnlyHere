@@ -545,19 +545,52 @@ export const reconcileTickets = (onFile, match) => {
 // log honest. "Perplexity was asked" then MEANS the cheap paths failed on this
 // event, which is a measurement worth having as the source list grows. Ask every
 // time and that signal disappears.
-export const TICKET_HUNT_PROMPT = (name, town) =>
-  `Using real, current web search, find WHERE TICKETS ARE SOLD for the Danish event "${name}"${town ? ` in ${town}` : ""}.
+// ── AND AN ATTRACTION IS NOT AN EVENT ───────────────────────────────
+//
+// 27 Aug 2026. This hunt was gated to festivals and has just been opened to
+// attractions, and sending the event-shaped question about Legoland would have
+// been the half-wired version of that: it asks after "the Danish event", warns
+// about last year's edition, and lists the ticket AGENTS Danish events sell
+// through. A museum uses none of them.
+//
+// Checked against the two operators that prompted this, the same day:
+// glyptoteket.dk's own visitor page states the free last Wednesday and no
+// price at all, because its prices live on billet.glyptoteket.dk — a ticket
+// SUBDOMAIN of the museum itself, which is the commonest shape here and one
+// nothing in the event wording would have gone looking for. legoland.dk keeps
+// its fares on /billetter-saesonpas/billetter/, a section of its own site.
+//
+// So the branch is about where each kind actually sells, and both halves keep
+// the rule that made this worth having: URLs it has really seen, never one
+// built from a pattern.
+const HUNT_RULES = `
+RULES:
+- Only URLs you have actually seen in your search results. Do not construct a URL from a pattern, and do not guess an id. A made-up link is worse than no link, because somebody will follow it.
+- If you cannot find one, say NONE. That is a real and useful answer.
+
+Answer with ONLY a JSON array of URL strings, best first, at most 4. No other text. If there are none, answer exactly: []`;
+
+export const TICKET_HUNT_PROMPT = (name, town, kind = "festival") => {
+  const where = town ? ` in ${town}` : "";
+  if (kind === "free" || kind === "attraction") {
+    return `Using real, current web search, find WHERE THE ADMISSION PRICE IS STATED for the Danish attraction "${name}"${where}.
+
+I do not want a price in your answer and I do not want a description. I want the URLs of the pages that state what it costs to get in, or where a person can buy a ticket.
+
+Look on the attraction's OWN site first. Danish museums and attractions usually keep fares on a page called billetter, priser, entré, besøg, praktisk info, plan your visit or tickets, and very often on a separate ticket subdomain of their own domain, like billet.<their-domain>. A great many of them state a free day or a free age band on their main visitor page and put the actual fare only on the ticket page, which is exactly the gap this search exists to close. If the attraction genuinely sells through a reseller, that page counts too.
+
+The page must be for THIS attraction and must be current, not an archived price list.
+${HUNT_RULES}`;
+  }
+  return `Using real, current web search, find WHERE TICKETS ARE SOLD for the Danish event "${name}"${where}.
 
 I do not want a price and I do not want a description. I want the URLs of the pages where a person can actually buy a ticket, or where the ticket price is stated.
 
 Look for the event's own ticket page and for whichever Danish ticket agent it uses. Danish events sell through many different ones: Billetto, Billetlugen, Billetexpressen, Madbillet, Ticketmaster, Safeticket, Ticketbutler, Place2Book, NemTilmeld, or a shop on the organiser's own domain. Do not assume it is any particular one.
 
-RULES:
-- Only URLs you have actually seen in your search results. Do not construct a URL from a pattern, and do not guess an event id. A made-up link is worse than no link, because somebody will follow it.
-- The page must be for THIS event, not the venue's front page and not last year's edition.
-- If you cannot find one, say NONE. That is a real and useful answer and it is a normal outcome for a small Danish event.
-
-Answer with ONLY a JSON array of URL strings, best first, at most 4. No other text. If there are none, answer exactly: []`;
+The page must be for THIS event, not the venue's front page and not last year's edition.
+${HUNT_RULES}`;
+};
 
 // Perplexity is asked for JSON and does not always give it. The citations come
 // back on every call regardless, so they are the fallback: a URL it cited is a

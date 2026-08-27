@@ -110,7 +110,7 @@ writeFileSync(entry, `
   export { lookupRealPlace, placeCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { directionsEndpoint, collapsedRoute } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { upgradeWorthIt, onFootMinutes, MIN_UPGRADE_SAVING, COLLAPSE_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
-  export { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
+  export { repairBody, headingsOf, bodyProblems, priceProblems, priceWorklist, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
   export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, missingRequired, cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS, cleanBornDate, birthYear, BORN_DATE_MIN, BORN_DATE_MAX, REQUIRED_PROFILE, REQUIRED_LABEL, AGE_BANDS, BORN_YEARS, bandForYear, ageFrom, underMinimumAge, MIN_ACCOUNT_AGE, TERMS_VERSION, holdProfile, takeHeldProfile, PENDING_PROFILE_KEY, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
   export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
@@ -15777,8 +15777,14 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
 
   // ── AN ESCALATION, NOT A STEP ────────────────────────────────────
   const appH = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("it runs only when nothing read so far priced the event",
-     /const needHunt = sType === "festival" && \(!priced \|\| priced\.kind === "concession-only"\);/.test(appH));
+  // ── PINNED TO THE ESCALATION, NOT TO WHO IS ELIGIBLE ─────────────
+  // This matched the whole line, `sType === "festival"` included, so opening
+  // the hunt to attractions on 27 Aug broke it while the thing it exists to
+  // protect — that the hunt is an escalation and not a step — was untouched.
+  // Which types may escalate is a different question and has its own assertions
+  // in the sweep block; this one is about WHEN.
+  ok("it runs only when nothing read so far priced it",
+     /const needHunt = [^;]*\(!priced \|\| priced\.kind === "concession-only"\);/.test(appH));
   // After the operator's own ticket link has been followed, so the cheap path
   // gets first refusal. readPage escalates to Firecrawl on the same reasoning.
   ok("and after the operator's own ticket link was followed",
@@ -37612,6 +37618,117 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the detail page draws the badge", /<AttractionBadge item=\{item\} C=\{C\} \/>/.test(dp));
     is("once, not once per section", (dp.match(/<AttractionBadge /g) || []).length, 1);
     ok("and the hardcoded chip is gone from it", !/· FREE/.test(dp));
+  }
+}
+
+// ── "A SWEEP FIX ON ALL THE FREE" ───────────────────────────────────
+//
+// Oliver, 27 Aug 2026: "Legoland is obviously not a free entrance, but the
+// draft is fine."
+//
+// Which is publishedRepair.js's own thesis said back to it, and why the sweep
+// lives there: the prose is good, the renderer was fixed this morning, and what
+// is left is ONE STORED FIELD on some number of rows.
+{
+  const { priceProblems, priceWorklist, auditPublished, describeAudit, TICKET_HUNT_PROMPT } = M;
+  const row = (name, ticketsGlance, type = "free") => ({
+    id: name.length, type,
+    payload: { name, ticketsGlance, blogBody: [{ type: "heading", content: "Being There" }, { type: "heading", content: "The Reality Check" }] },
+  });
+
+  // ── TWO KINDS, BECAUSE THEY READ DIFFERENTLY IN STUDIO ──────────
+  //
+  // An empty field is a gap. A field that says "free entry" about the under-2s
+  // is a wrong answer already on the site, and worse than the gap, because a
+  // person skimming the list reads the word free and moves on. Legoland's line
+  // is real: legoland.dk states "Børn under 2 år får gratis entré" on the same
+  // page as the 349 DKK fare.
+  is("a qualified free claim is the misleading kind",
+    priceProblems(row("Legoland", "Children under 2: free entry").payload, "free")[0].kind, "misleading-free");
+  is("and an empty ticket line is the silent kind",
+    priceProblems(row("Somewhere", "").payload, "free")[0].kind, "no-entry-price");
+  is("a row that names a fare is not a problem at all",
+    priceProblems(row("Rundetaarn", "Adults: 60 DKK").payload, "free").length, 0);
+  is("and neither is one that is genuinely free",
+    priceProblems(row("Davids Samling", "Free entry all year round").payload, "free").length, 0);
+  // ONLY ATTRACTIONS. A restaurant with no ticket line is not missing anything.
+  is("a restaurant is not swept", priceProblems({ name: "Alma", ticketsGlance: "" }, "food").length, 0);
+  is("nor a festival, whose price lives in its own fields", priceProblems({ name: "Roskilde" }, "festival").length, 0);
+  // The cost is the point of the whole file: this is a field, not a redraft.
+  ok("every price finding says it is one field",
+    priceProblems(row("Legoland", "Children under 2: free entry").payload, "free").every(p => p.cost === "one field"));
+  ok("and quotes what the row says, so it can be acted on",
+    /Children under 2/.test(priceProblems(row("Legoland", "Children under 2: free entry").payload, "free")[0].detail));
+
+  // ── THE WORKLIST, OFF THE REAL LIVE TICKET LINES ────────────────
+  //
+  // Every string below was read off gemlyxtravel.com on 27 Aug 2026. Not one of
+  // them is invented, and not one of them is false — which is the point. They
+  // are all true statements about who gets in free.
+  {
+    const LIVE = [
+      row("Legoland", "Children under 2: free entry"),
+      row("AROS", "Free entry for everyone under 18"),
+      row("Ny Carlsberg Glyptotek", "Free last Wednesday of month"),
+      row("Trelleborg", "Free entry year-round to the fortress ramparts"),
+      row("Christiansborg Slotshave", "Free (garden only, palace interiors cost extra)"),
+      row("Rundetaarn", "Adults: 60 DKK"),
+      row("Davids Samling", "Free entry all year round"),
+      row("Marselisborg Slotpark", "Free entry"),
+    ];
+    const wl = priceWorklist(LIVE);
+    is("five of these eight need a price", wl.length, 5);
+    ok("and the priced and the genuinely free are left alone",
+      !wl.some(r => ["Rundetaarn", "Davids Samling", "Marselisborg Slotpark"].includes(r.name)));
+    // MISLEADING FIRST. A gap can wait; a wrong answer already on the site cannot.
+    is("the misleading ones come first", wl[0].kind, "misleading-free");
+    ok("and each carries what the row says today", wl.every(r => r.kind === "no-entry-price" || !!r.says));
+    const a = auditPublished(LIVE);
+    is("the audit counts them", a.misleadingFree.length, 5);
+    ok("and the sentence separates them from the structural problems",
+      /names who gets in free but not what entry costs/.test(describeAudit(a)));
+    ok("and says what it costs to fix", /one field, not a redraft/.test(describeAudit(a)));
+  }
+
+  // ── AND THE PIPELINE STOPS PRODUCING THEM ───────────────────────
+  //
+  // The sweep fixes what is published. This is the half that stops the next
+  // one: the hunt that goes and finds the page where a price actually lives
+  // already existed, already detected this exact state by name, and was gated
+  // to festivals. Attractions never got it.
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the price hunt is no longer festivals only",
+      /HUNTS_FOR_A_PRICE = \["festival", "free"\]/.test(app));
+    ok("and still only runs when nothing read so far prices it",
+      /needHunt = HUNTS_FOR_A_PRICE\.includes\(sType\) && \(!priced \|\| priced\.kind === "concession-only"\)/.test(app));
+    // COSTS NOTHING ON A GENUINELY FREE ATTRACTION: ticketPriceOn returns
+    // {kind:"free"} for a page stating free entry with no fare, so `priced` is
+    // truthy and no call is made.
+    const { ticketPriceOn } = M;
+    ok("a free page prices as free, so no hunt is bought for it",
+      ticketPriceOn("Entry to the park is free entry all year round.")?.kind === "free");
+    // ── AND AN ATTRACTION IS ASKED THE RIGHT QUESTION ─────────────
+    // Sending the event wording to a museum would have been the half-wired
+    // version of widening the gate: it asks after "the Danish event" and lists
+    // the ticket AGENTS events sell through, and a museum uses none of them.
+    ok("the call site passes the type through", /TICKET_HUNT_PROMPT\(name, draftTown, sType\)/.test(app));
+    const forPlace = TICKET_HUNT_PROMPT("Glyptoteket", "Copenhagen", "free");
+    const forEvent = TICKET_HUNT_PROMPT("Roskilde Festival", "Roskilde", "festival");
+    ok("an attraction is asked about an attraction", /Danish attraction/.test(forPlace));
+    ok("and never about last year's edition", !/last year's edition/.test(forPlace));
+    ok("and never about the event ticket agents", !/Billetto/.test(forPlace));
+    // The shape that actually caused this: glyptoteket.dk's own visitor page
+    // states the free Wednesday and no price, because the fares are on
+    // billet.glyptoteket.dk. Nothing in the event wording looks for that.
+    ok("it knows prices often sit on a ticket subdomain", /billet\.<their-domain>/.test(forPlace));
+    ok("and it names the Danish words those pages use", /billetter/.test(forPlace) && /entré/.test(forPlace));
+    ok("a festival still gets the agents", /Billetto/.test(forEvent));
+    ok("and both keep the rule that made the hunt worth having",
+      [forPlace, forEvent].every(p => /Only URLs you have actually seen/.test(p)));
+    ok("and both still ask for JSON only", [forPlace, forEvent].every(p => /JSON array of URL strings/.test(p)));
+    // The default keeps every existing caller on the event wording.
+    ok("the default is the event shape", /Danish event/.test(TICKET_HUNT_PROMPT("X", "Y")));
   }
 }
 

@@ -4400,10 +4400,51 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         // draft as a price: the model finds the door, the code checks it opens.
         {
           const priced = findTicketPrice({ siteText: scrapedSiteText, listingText: listingSiteText });
-          const needHunt = sType === "festival" && (!priced || priced.kind === "concession-only");
+          // ── "A SWEEP FIX ON ALL THE FREE" ──────────────────────
+          //
+          // Oliver, 27 Aug 2026: "Legoland is obviously not a free entrance,
+          // but the draft is fine."
+          //
+          // He is right on both halves, and the reason the price is missing is
+          // sitting on this line. THIS HUNT WAS GATED TO FESTIVALS. Attractions
+          // never got it, so when the pages a draft happened to read did not
+          // price the door, nothing went looking for the page that does.
+          //
+          // Checked against the operators themselves, 27 Aug 2026, and this is
+          // not a research failure at all:
+          //
+          //   legoland.dk/billetter    "Online fra 349 DKK", "Ved indgangen
+          //                            519 DKK", and "Børn under 2 år får
+          //                            gratis entré" — all three on one page
+          //   glyptoteket.dk/besog     states the free last Wednesday and NO
+          //                            price; the price lives on the ticket
+          //                            subdomain, billet.glyptoteket.dk
+          //
+          // The extractor did its job. It read a page that stated a free
+          // condition and no fare, and returned the true thing it found, which
+          // is precisely what glanceExtract asks of it. What was missing is the
+          // step that says "this page prices nobody, go and find the one that
+          // does" — and that step already exists, already detects this exact
+          // state, and was switched off for this content type.
+          //
+          // `concession-only` is entryAudit's own name for it and its comment
+          // is the case exactly: every price on the page is a concession rate,
+          // which "is NOT 'the ticket costs 100': it means the page we read
+          // prices members and students and never says what everyone else pays."
+          //
+          // COSTS NOTHING ON A GENUINELY FREE ATTRACTION. ticketPriceOn returns
+          // {kind:"free"} for a page that says free entry with no fare on it, so
+          // `priced` is truthy and no hunt runs. The call is spent only where a
+          // door has a price nobody has found yet.
+          const HUNTS_FOR_A_PRICE = ["festival", "free"];
+          const needHunt = HUNTS_FOR_A_PRICE.includes(sType) && (!priced || priced.kind === "concession-only");
           if (needHunt) {
             try {
-              const hunt = await askPerplexity(TICKET_HUNT_PROMPT(name, draftTown));
+              // sType, so an attraction is asked about its own billetter page
+              // and a festival about the agent it sells through. Sending the
+              // event wording to a museum was the half-wired version of
+              // widening the gate above.
+              const hunt = await askPerplexity(TICKET_HUNT_PROMPT(name, draftTown, sType));
               // Named huntUrls rather than urls because the founder-source
               // loop above already has a local called urls, and the suite's
               // use-before-declare scan reads ORDER across the whole function:
