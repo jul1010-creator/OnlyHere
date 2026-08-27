@@ -85,6 +85,7 @@ writeFileSync(entry, `
   export { EVIDENCE, EVIDENCE_RANK, EVIDENCE_LABEL, fieldSourceKey, PERISHABLE_FIELD_TOPIC, PERISHABLE_FIELDS, isPerishable, perishableTopic, evidenceOf, entryEvidence, evidenceCounts, unbackedPerishables, weakestClaim, evidenceNote, PERISHABLE_TOPICS_USED, PAGE_SCAN_TOPICS } from ${JSON.stringify(join(root, "src/utils/evidence.js"))};
   export { selfContradictions as selfContra, PROSE_FIELDS as AUDIT_PROSE_FIELDS, PROSE_LISTS } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink, GUIDE_SCAFFOLDING, syncFailureNote, SYNC } from ${JSON.stringify(join(root, "src/utils/userSaves.js"))};
+  export { entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, SAYS_FREE, AMOUNT, isUnqualifiedFree } from ${JSON.stringify(join(root, "src/utils/entryPrice.js"))};
   export { literalRenderings, literalNote, looksLikeAName, FALSE_FRIENDS, FALSE_FRIEND_RULE, NAME_RULE } from ${JSON.stringify(join(root, "src/utils/literalDanish.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
@@ -37366,6 +37367,248 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("a refused line is not a link gap, because the link is not what is wrong",
       !gaps.some(g => /Louisiana|Distortion/.test(g)));
     ok("and free entry is not a gap either", !gaps.some(g => /Nationalmuseet/.test(g)));
+  }
+}
+
+// ── "ATTRACTIONS ALL SAY FREE" ──────────────────────────────────────
+//
+// Oliver, 27 Aug 2026, relaying the friend who found "middle-age man": "for
+// some reason, attractions all say 'free', we gotta do something about that."
+//
+// They did, in six places, and every one of them was reading the same thing:
+// the CATEGORY NAME. The attractions pool's Studio type is `free` because it
+// began as free-entrance attractions — data/freeEntrance.js is still called
+// that — so `_kind === "free" ? "Free" : ...` was a true sentence when it was
+// written, six times, independently. The pool now holds Legoland.
+//
+// This is the leak placeUrl.js already named for URLs in August: "a person
+// looking for Koldinghus is not looking for a free." A type name is a bucket.
+{
+  const { entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, isUnqualifiedFree } = M;
+
+  // ── THREE ANSWERS, AND THE THIRD IS THE ONE THAT WAS MISSING ────
+  //
+  // The old code had no "we have not been told": every attraction was free
+  // because every attraction was in the free bucket. A renderer that cannot say
+  // nothing will say something wrong.
+  is("a row that says free is free", entryPrice({ ticketsGlance: "Free" }).free, true);
+  is("in Danish too, because the research is Danish", entryPrice({ ticketsGlance: "Gratis adgang" }).free, true);
+  // "fri entré" ends in a non-word character. entryAudit.js warns about exactly
+  // this and the first draft of SAYS_FREE had a trailing \b and refused it.
+  is("and with the accent that a trailing word-boundary would refuse",
+    entryPrice({ ticketsGlance: "Fri entré" }).free, true);
+  is("a row that names a fare is not free", entryPrice({ ticketsGlance: "Day ticket 419 DKK" }).free, false);
+  is("a row that says nothing says nothing", entryPrice({ ticketsGlance: "" }).free, null);
+  is("and a missing row does not crash into a claim", entryPrice(null).free, null);
+  is("nor does a row with no price fields at all", entryPrice({ name: "Legoland", type: "Theme park" }).free, null);
+
+  // ── AN AMOUNT BEATS THE WORD FREE, ALWAYS ───────────────────────
+  //
+  // The Studio prompt already warns about this by name: "a palace's outdoor
+  // grounds might be free to walk while the indoor museum charges a real entry
+  // fee... it's telling someone something is free when part of it genuinely
+  // isn't." So the amount is read first and wins.
+  is("a partly free place reports the part that costs money",
+    entryPrice({ ticketsGlance: "Grounds free — indoor museum 125 DKK" }).free, false);
+  is("and so does a family ticket with a free under-3",
+    entryPrice({ ticketsGlance: "Day ticket 419 DKK, under 3 free" }).free, false);
+  // ── THE FAILURE UNDERNEATH THE FAILURE ──────────────────────────
+  //
+  // Every value below was read off the live site on 27 Aug 2026, from the
+  // attraction's own Tickets row. Every one of them is TRUE, and not one says
+  // the place is free — Legoland is a 419-krone theme park whose ticket line
+  // happens to mention the under-2s. Fixing the renderer alone would have left
+  // its badge saying FREE, because the row's own words do contain "free entry".
+  //
+  // entryAudit.js has the concept already and states it exactly: prices that
+  // are all concession rates are "NOT 'the ticket costs 100'". A free claim
+  // scoped to who, to when, or to which part is the same shape.
+  is("Legoland's under-2 concession is not a free attraction",
+    entryPrice({ ticketsGlance: "Children under 2: free entry" }).free, null);
+  is("nor is AROS being free for everyone under 18",
+    entryPrice({ ticketsGlance: "Free entry for everyone under 18" }).free, null);
+  is("nor is a fortress whose ramparts are free and whose museum is not",
+    entryPrice({ ticketsGlance: "Free entry year-round to the fortress ramparts" }).free, null);
+  is("nor is a palace garden with the interiors priced separately",
+    entryPrice({ ticketsGlance: "Free (garden only, palace interiors cost extra)" }).free, null);
+  is("and a bare figure beside the word free is not one either",
+    entryPrice({ ticketsGlance: "Adults 120, children free" }).free, null);
+  // AND IT STILL SAYS YES TO THE ONES THAT ARE, or the rule is just a mute
+  // button. All four of these are live values too.
+  for (const yes of ["Free entry", "Free entry all year round", "Gratis adgang", "Fri entré", "Free, donations welcome"])
+    is(`an unqualified free row is still free: "${yes}"`, entryPrice({ ticketsGlance: yes }).free, true);
+  // The trade taken deliberately, written down so nobody 'fixes' it back: this
+  // refuses some rows that really are free. Folketinget's tours genuinely cost
+  // nothing. Refusing means saying nothing, which is the safe direction — a
+  // reader told nothing goes and looks, a reader told FREE turns up with no
+  // money.
+  is("which does cost us a real free row now and then, on purpose",
+    entryPrice({ ticketsGlance: "Free guided tours; booking required" }).free, null);
+  // The rule on its own, because every assertion above reads it through a row.
+  ok("an unqualified claim is unqualified", isUnqualifiedFree("Free entry"));
+  ok("and a scoped one is not", !isUnqualifiedFree("Free entry for under 18s"));
+  ok("and no free claim at all is not one", !isUnqualifiedFree("Day ticket 419 DKK"));
+  // ── AND THE ORDER OF THOSE TWO IS LOAD BEARING ──────────────────
+  //
+  // Found by mutation, 27 Aug: moving the free-word test ABOVE the amount test
+  // broke nothing, because every priced example above happens to carry a two-to
+  // -four digit figure that the bare-figure guard catches on the way past. The
+  // two rules only come apart on a ONE digit fare, which the bare-figure guard
+  // is deliberately blind to ("open 7 days"). So the amount has to be read
+  // first, and this is the row that says so.
+  is("a one-digit fare still beats the word free",
+    entryPrice({ ticketsGlance: "Free for kids, 9 kr adults" }).free, false);
+  is("and the chip shows that fare rather than the word",
+    priceChip({ ticketsGlance: "Free for kids, 9 kr adults" }), "9 kr");
+  // ── A RANGE IS SHOWN FROM ITS BOTTOM, NOT ITS TOP ───────────────
+  // Faarup Sommerland's own live line. Only the 399 carries the currency, so
+  // reading the first complete amount prints the most expensive end of a range
+  // as the price. entryAudit settled this already: "what a reader plans around
+  // is the cheapest way through the gate."
+  is("a priced range shows the end a reader plans around",
+    priceChip({ ticketsGlance: "1-day ticket 229 to 399 DKK per person aged 3 to 64" }), "from 229 DKK");
+  ok("and never the expensive end alone",
+    !/^399/.test(priceChip({ ticketsGlance: "1-day ticket 229 to 399 DKK per person aged 3 to 64" })));
+
+  // ── AND A NUMBER THAT IS NOT MONEY IS NOT A PRICE ───────────────
+  // Reading a bare number as money is how a free museum starts charging, so
+  // nothing here is ever read as a fare.
+  is("a floor count is not a fare", entryPrice({ ticketsGlance: "Open 10 to 17, 3 floors" }).free, null);
+  ok("and none of it becomes a price on the card", !priceChip({ ticketsGlance: "Open 10 to 17, 3 floors" }));
+  // ── WHERE THE SUBTRACTION RULE IS BLUNT, AND WHY IT STAYS ───────
+  // "Free, open 7 days" is an unqualified free claim with opening hours stuck
+  // to it, and the rule reads the hours as a qualifier and says nothing. That
+  // is a real cost and it is the one being paid on purpose: the alternative is
+  // a list of innocent words, and every word added to that list is a word that
+  // lets "free entry to the fortress ramparts" through. None of the live rows
+  // look like this — hours do not belong in a ticket field, and studioContent
+  // settled on 11 Aug that stored hours are never rendered at all.
+  is("hours stuck to a free claim buy silence rather than a guess",
+    entryPrice({ ticketsGlance: "Free, open 7 days" }).free, null);
+
+  // ── AN ADD-ON IS NOT AN ENTRY FEE, AND NOT A FREE DOOR EITHER ───
+  is("a priced audio guide does not make the door cost money",
+    entryPrice({ ticketsGlance: "", extraCosts: "Audio guide 40 DKK" }).free, false === true ? false : null);
+  is("and it does not make the door free either",
+    entryPrice({ ticketsGlance: "", extraCosts: "Audio guide 40 DKK" }).free !== true, true);
+  is("but an add-on next to a free door leaves the door free",
+    entryPrice({ ticketsGlance: "Free", extraCosts: "Audio guide 40 DKK" }).free, true);
+
+  // ── IT MAY NEVER READ A TYPE, WHICH IS THE WHOLE POINT ──────────
+  //
+  // The one assertion that would have caught the original bug: two rows
+  // identical except for the bucket they sit in must get the same answer.
+  {
+    const words = { ticketsGlance: "Day ticket 419 DKK" };
+    is("the same row in the free bucket is still not free",
+      entryPrice({ ...words, _kind: "free", _src: "free", type: "free" }).free, false);
+    is("and a row with no price words is unknown whatever bucket it is in",
+      entryPrice({ _kind: "free", _src: "free", type: "free" }).free, null);
+    const src = readFileSync(join(root, "src/utils/entryPrice.js"), "utf8");
+    ok("and the file never reads a type at all",
+      !/\b(?:row|item|entry)\??\.(?:_kind|_src|type)\b/.test(stripNonCode(src)));
+  }
+
+  // ── THE CHIP ────────────────────────────────────────────────────
+  is("a free row gets the word", priceChip({ ticketsGlance: "Free" }), "Free");
+  is("an unknown row gets nothing to render", priceChip({ ticketsGlance: "" }), "");
+  is("a short price is shown as the row wrote it", priceChip({ priceNote: "150 kr" }), "150 kr");
+  // TOO LONG FOR A CHIP IS NOT THE SAME AS NOTHING TO SAY. Dropping it leaves
+  // the card silent about a place that charges, so the row's own first figure
+  // goes in instead.
+  {
+    const long = { ticketsGlance: "Day ticket 419 DKK, under 3 free" };
+    ok("a long price is not silently dropped", priceChip(long).length > 0);
+    ok("and what is shown is the row's own figure", /419/.test(priceChip(long)));
+    ok("and it fits", priceChip(long).length <= CHIP_MAX);
+    ok("and it never says the opposite of what the row says", !/free/i.test(priceChip(long)));
+  }
+
+  // ── THE CATEGORY GETS ITS PUBLIC WORD BACK ──────────────────────
+  is("the attractions bucket is called what a reader calls it", entryKindLabel("free"), "Attraction");
+  ok("and no label anywhere in the map is a price",
+    Object.values(ENTRY_KIND_LABEL).every(v => !/free|gratis|\d/i.test(v)));
+  is("an unknown kind falls back to what it was given", entryKindLabel("mystery", "Mystery"), "Mystery");
+  // The URL segment chose the same word in August. One vocabulary.
+  is("and it is the word the URL already uses", entryKindLabel("free").toLowerCase(), "attraction");
+
+  // ── AND NO RENDERER MAY BUILD A PRICE OUT OF A BUCKET AGAIN ─────
+  //
+  // The rule, scanned over the two files that had it. Not a search for the six
+  // old lines — a search for the SHAPE: a category test whose true-branch is a
+  // price word.
+  {
+    // ── stripComments, NOT stripNonCode, AND THAT IS THE POINT ────
+    //
+    // stripNonCode blanks string CONTENTS. Every assertion here is looking FOR
+    // a string — "Free", "Free entry" — so run through stripNonCode all four
+    // find nothing and pass, whatever the file says. Three of them did exactly
+    // that on the first run and only the fourth failed loudly enough to show
+    // it. tdz.mjs warns about this trap in its own header and the suite has
+    // been caught by it before.
+    //
+    // stripComments keeps the strings and drops the prose, which is what this
+    // needs: the comments above these lines quote the old code verbatim.
+    const files = ["src/App.jsx", "src/components/DetailPage.jsx"];
+    for (const f of files) {
+      const src = stripComments(readFileSync(join(root, f), "utf8"));
+      ok(`no price claim is built from a category name in ${f}`,
+        !/(?:_kind|_src|kind|type)\s*===\s*"free"\s*\?\s*"(?:Free|FREE)"/.test(src));
+      ok(`and no category map calls the bucket a price in ${f}`,
+        !/free:\s*"Free entry"/.test(src));
+      ok(`and the pool's own name is never printed as a fare in ${f}`,
+        !/[?:]\s*"🆓 Free to enter"/.test(src));
+    }
+    const ab = stripComments(readFileSync(join(root, "src/components/AttractionBadge.jsx"), "utf8"));
+    ok("the detail badge asks the row rather than the bucket",
+      /entryPrice\(item\)\.free === true/.test(ab));
+    ok("and it never tests the bucket itself", !/_kind|_src/.test(ab));
+    const av = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("and the card chip asks it too", /entryPrice\(item\)\.free === true \? "#4CAF50"/.test(av));
+    ok("and the card price slot reads the row's words", /item\._kind === "free" \? priceChip\(item\)/.test(av));
+  }
+
+  // ── AND WHAT THE SCREEN ACTUALLY SAYS ───────────────────────────
+  //
+  // A SURFACE THAT CANNOT BE RENDERED CANNOT BE CHECKED. Every assertion above
+  // is a pure function or a regex over source, and the bug Oliver's friend
+  // found was neither — it was a word on a page.
+  //
+  // DetailPage itself cannot be drawn here: it draws the map, Leaflet reads a
+  // real `document` at module scope, and standing up a fake DOM to get past
+  // that is what tests/render.mjs refuses by name. So the chip came out into
+  // its own file, exactly as the costs list did yesterday, and this draws the
+  // real component.
+  {
+    const { renderSurface } = await import(pathToFileURL(join(root, "tests/render.mjs")).href);
+    const CC = { surface: "#111", border: "#222", gold: "#D9A441", text: "#fff", light: "#ddd", muted: "#888" };
+    const draw = (item) => renderSurface("src/components/AttractionBadge.jsx", "AttractionBadge", { item, C: CC });
+    {
+      const r = await draw({ name: "Legoland", popularityTag: "Popular", ticketsGlance: "Day ticket 419 DKK" });
+      ok("a paid attraction still gets its chip", r.says("Common Attraction"));
+      ok("and is not told it is free", !/FREE/.test(r.text));
+    }
+    {
+      const r = await draw({ name: "Nationalmuseet", popularityTag: "Popular", ticketsGlance: "Free" });
+      ok("and a genuinely free one still says so", r.says("FREE"));
+    }
+    {
+      // The state that did not exist before: a row nobody has told us about.
+      const r = await draw({ name: "Somewhere", popularityTag: "Hidden Gem" });
+      ok("a row with no price words keeps the badge it earned", r.says("Hidden Gem"));
+      ok("and claims nothing about money", !/FREE/.test(r.text));
+    }
+    {
+      const r = await draw({ name: "Grounds", popularityTag: "Hidden Gem", ticketsGlance: "Grounds free — indoor museum 125 DKK" });
+      ok("and a partly free place is not called free", !/FREE/.test(r.text));
+    }
+    is("a row with no popularity tag draws nothing at all",
+      (await draw({ name: "Bare" })).text, "");
+    // The page still draws it, and only for the bucket that has one.
+    const dp = stripComments(readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8"));
+    ok("the detail page draws the badge", /<AttractionBadge item=\{item\} C=\{C\} \/>/.test(dp));
+    is("once, not once per section", (dp.match(/<AttractionBadge /g) || []).length, 1);
+    ok("and the hardcoded chip is gone from it", !/· FREE/.test(dp));
   }
 }
 

@@ -144,6 +144,12 @@ import { openingThread, withTestBrief, withoutTestBrief } from "./utils/chatThre
 import { downloadReport } from "./utils/previewReport";
 import { briefThemes , essentialsForTrip, essentialsBlock } from "./utils/interestFit";
 import { partnerDisclosure, linkLabel } from "./utils/affiliates";
+// ── "ATTRACTIONS ALL SAY FREE" ──────────────────────────────────────
+// Oliver, 27 Aug 2026. Five places in this file published a price claim built
+// out of the CATEGORY NAME: the attractions pool's Studio type is called
+// `free`, it used to mean it, and it holds Legoland now. See utils/entryPrice.js
+// for the whole argument; nothing in that file may read a type.
+import { entryPrice, priceChip, entryKindLabel } from "./utils/entryPrice";
 import { dayKey, dayStart, dayPlus } from "./utils/calendarDay";
 import { arrivalPoint } from "./utils/arrival";
 import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeForTown, barsOnStreet, townOfLocation } from "./utils/nightlife";
@@ -17157,7 +17163,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               <div style={{ padding: "9px 11px 11px" }}>
                                 <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.name}</div>
                                 <div style={{ fontSize: 11, color: C.muted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                  {[{ town: "Town", free: "Free entry", food: "Food", nightlife: "Nightlife", craft: "Workshop" }[x._src], x._where].filter(Boolean).join(" · ")}
+                                  {/* THE CATEGORY, NOT A PRICE. This map read
+                                      free: "Free entry", which is the Studio
+                                      type name being published as a fact about
+                                      money over a pool that now holds Legoland.
+                                      entryKindLabel is the same public word the
+                                      URL uses. See utils/entryPrice.js. */}
+                                  {[entryKindLabel(x._src, ""), x._where].filter(Boolean).join(" · ")}
                                 </div>
                               </div>
                             </button>
@@ -17410,7 +17422,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               { key: "type", label: "Type", primary: true, multi: true,
                 options: [
                   { value: "All", label: "All" },
-                  { value: "free", label: "🆓 Free to enter" },
+                  // The FACET is the category, so the label is the category's
+                  // public word. "Free to enter" described the pool back when
+                  // every row in it was; it now filters Legoland in under a
+                  // heading that says it costs nothing.
+                  { value: "free", label: "Attractions" },
                   { value: "craft", label: "🎟 Bookable" },
                   ...Object.keys(kindKeys).map(k => ({ value: k, label: k })),
                 ],
@@ -17613,8 +17629,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           <PhotoPlate photo={item.photo} name={item.name} color={item.color} />
 
                           <div style={{ position: "absolute", top: 8, left: 8, display: "flex", gap: 6, alignItems: "center" }}>
-                            <span style={{ background: "rgba(10,15,30,0.8)", color: item._kind === "free" ? "#4CAF50" : C.gold, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                              {item._kind === "free" ? "Free" : item.type}
+                            {/* The chip names the CATEGORY and the green was
+                                the price claim wearing a colour. Both came off
+                                _kind, which is the bucket's internal name and
+                                not a fact about what anything costs. Green is
+                                now earned by the row's own words or not at
+                                all. See utils/entryPrice.js. */}
+                            <span style={{ background: "rgba(10,15,30,0.8)", color: entryPrice(item).free === true ? "#4CAF50" : C.gold, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                              {entryKindLabel(item._kind, item.type)}
                             </span>
                             {item.popularityTag === "Hidden Gem" && <span style={{ background: "rgba(10,15,30,0.8)", color: C.gold, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>◆ Hidden Gem</span>}
                             {item.transportWarning && <span title="Limited public transport" style={{ background: "rgba(61,42,10,0.9)", color: "#FFB347", fontSize: 11, padding: "3px 7px", borderRadius: 100 }}>🚲</span>}
@@ -17632,7 +17654,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           {craftSort === "near" && isInDenmark(userCoords) ? (() => { const km = townKmFromUser(item._kind === "craft" ? item.location : item.city); return km != null ? ` · 📍 ${km < 10 ? km.toFixed(1) : Math.round(km)} km away` : ""; })() : ""}
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7 }}>
-                          <span style={{ fontSize: 11, color: C.gold, fontWeight: 700 }}>{item._kind === "free" ? "Free" : (item.price || "On request")}</span>
+                          {/* A price slot filled in from the category name.
+                              An attraction now shows what its own ticket field
+                              says, or nothing — silence is the honest answer
+                              when the row has not been told what it costs, and
+                              it is the answer this line never had. */}
+                          {(() => {
+                            const label = item._kind === "free" ? priceChip(item) : (item.price || "On request");
+                            return label ? <span style={{ fontSize: 11, color: C.gold, fontWeight: 700 }}>{label}</span> : null;
+                          })()}
                           {item.rating && <span style={{ fontSize: 11, color: C.gold, fontWeight: 700 }}>★ {item.rating}</span>}
                           {item._kind === "craft" ? (
                             item.bookingType === "online" ? (
@@ -17641,7 +17671,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               <span style={{ fontSize: 9, fontWeight: 700, color: C.muted, background: `${C.border}55`, padding: "2px 8px", borderRadius: 100 }}>Contact to book</span>
                             )
                           ) : (
-                            <span style={{ fontSize: 9, fontWeight: 700, color: "#4CAF50", background: "#4CAF5018", border: "1px solid #4CAF5044", padding: "2px 8px", borderRadius: 100 }}>🆓 Walk in</span>
+                            /* "Walk in" is about BOOKING and stays true of a
+                               place that charges at the gate. The 🆓 in front
+                               of it is a price claim, so it is spent only where
+                               the row has actually said the door is free. */
+                            <span style={{ fontSize: 9, fontWeight: 700, color: "#4CAF50", background: "#4CAF5018", border: "1px solid #4CAF5044", padding: "2px 8px", borderRadius: 100 }}>{entryPrice(item).free === true ? "🆓 Walk in" : "Walk in, no booking"}</span>
                           )}
                         </div>
                         <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{(item.desc || "").slice(0, 90)}{(item.desc || "").length > 90 ? "…" : ""}</div>

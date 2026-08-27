@@ -3,6 +3,11 @@ import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow, ext
 import { byEventDate } from "../utils/eventDates";
 import { relationLine, kindLabel, areasInside } from "../utils/placeKind";
 import { ticketBadge } from "../utils/tickets";
+// ── "ATTRACTIONS ALL SAY FREE" ────────────────────────────────────
+// Oliver, 27 Aug 2026. The badge below appended a literal "· FREE" to every
+// attraction in the pool, because the pool's Studio type is called `free` and
+// it used to mean it. It holds Legoland now. See utils/entryPrice.js.
+import { AttractionBadge } from "./AttractionBadge";
 import { AtAGlanceCard } from "./AtAGlanceCard";
 import { GemlyxFindCard } from "./GemlyxFindCard";
 import { InstagramEmbed } from "./InstagramEmbed";
@@ -235,11 +240,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             👥 {item.crowd}
           </div>
         )}
-        {kind === "free" && item.popularityTag && (
-          <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: item.popularityTag === "Hidden Gem" ? C.gold : C.muted, background: item.popularityTag === "Hidden Gem" ? `${C.gold}22` : C.surface, border: `1px solid ${item.popularityTag === "Hidden Gem" ? C.gold : C.border}`, padding: "5px 12px", borderRadius: 100, marginBottom: 18 }}>
-            {item.popularityTag === "Hidden Gem" ? "◆ Hidden Gem" : "○ Common Attraction"} · FREE
-          </div>
-        )}
+        {kind === "free" && <AttractionBadge item={item} C={C} />}
         {kind === "food" && (
           <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: color, background: `${color}18`, padding: "5px 12px", borderRadius: 100 }}>{item.category}</span>
