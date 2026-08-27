@@ -109,8 +109,27 @@ export const FALSE_FRIENDS = [
     id: "slot",
     // "Rosenborg Slot" is the building's name and correct. A lowercase "the
     // slot" is a machine that takes coins.
+    //
+    // ── AND, MUCH MORE OFTEN, AN APPOINTMENT ──────────────────────
+    // The audit of all 138 published pages on 26 Aug 2026 turned up exactly two
+    // hits, and one of them was this rule firing on Folketinget:
+    //
+    //   "school classes and larger groups can wait five to six months for a slot"
+    //
+    // Which is correct English and the commonest sense of the word. The rule
+    // matched "a slot" anywhere, so on a site whose entries are largely about
+    // BOOKING things it was going to keep finding tour bookings forever.
+    //
+    // A false positive is not free here. This file is advisory by design, and
+    // the reason written at the top is that "a checker that blocks on a guess is
+    // a checker that gets switched off" — a checker that cries wolf is switched
+    // off the same way, just more slowly. So the rule now asks for the thing
+    // that would actually be true of a mistranslated castle: it is a BUILDING,
+    // so either it is doing something a building does, or somebody is standing
+    // at it. Narrower and right beats wider and noisy, on a signal nobody can
+    // confirm from the English alone.
     nameSafe: true,
-    wrong: /\b(?:the|a)\s+slot\b(?!\s+machine)/i,
+    wrong: /\b(?:at|in|inside|to|around|behind|near|from)\s+the\s+slot\b(?!\s+machine)|\b(?:the|a)\s+slot\b(?!\s+machine)(?=\s+(?:is|was|are|were|has|had|dates|stands|sits|lies|itself|grounds|courtyard|chapel|tower|opens|opened|closes|closed|houses)\b)/i,
     right: "castle or palace",
     why: "Danish 'slot' is a CASTLE or palace. As an English common noun a slot is an opening or a machine. The NAME (Rosenborg Slot) stays exactly as it is.",
   },

@@ -844,6 +844,25 @@ export const arrivalRow = (value, kind) => {
   // rather than assumed: in "københavn" the h follows an n, which is a word
   // character, so no boundary exists there. It holds.)
   if (/airport|lufthavn/.test(v)) return { icon: "✈️", label: "Nearest Airport", value };
+  // ── AND A BUSTERMINAL IS A BUS STATION ─────────────────────────
+  // Found 26 Aug 2026 reading the live Museum Østjylland page, which said
+  //
+  //     ⛴  Ferry Terminal:  Randers Busterminal
+  //
+  // Randers sits 25 km up a fjord and its busterminal is a bus station. The
+  // ferry branch below matched the bare word "terminal" sitting inside the
+  // Danish compound "busterminal" and drew a boat over a bus stop.
+  //
+  // EXACTLY THE "lufthavn" BUG SIX LINES UP, and it takes the same fix: the
+  // word that decides has to be the word that means it. "Terminal" on its own
+  // names no mode at all — airports, coaches and boats all have them — so it
+  // may only stand for a quay when nothing else in the value says otherwise.
+  // Tested before the ferry branch rather than folded into it, because this
+  // has to beat the explicit ferry words too: a value reading "Bus terminal at
+  // the harbour" is somewhere you catch a bus.
+  if (/\bbus\s?terminal|busterminal|rutebilstation|coach\s?terminal|\bbusstation\b|\bbusstationen\b/.test(v)) {
+    return { icon: "🚌", label: "Nearest Bus Stop", value };
+  }
   if (/ferry|færge|faerge|terminal|\bhavn(en)?\b|harbour|harbor|quay|kaj\b/.test(v)) {
     return { icon: "⛴", label: "Ferry Terminal", value };
   }
@@ -905,12 +924,43 @@ export const arrivalRow = (value, kind) => {
 //
 // EACH LEG GETS ITS OWN DAY, because a five-day trip crosses a weekend and day
 // four's Sunday bus is a different question from day one's Wednesday train.
-export const transitDepartureAnchor = (tripDate, dayOffset = 0) => {
+// ── AND THE RIGHT HOUR OF IT, NOT ALWAYS NINE IN THE MORNING ────────
+//
+// Oliver, 26 Aug 2026, on the Lindholm entry: "So I live in Lindholm, and can
+// confirm it is true. However, the time shown is quite off."
+//
+// It was, and for the same reason the day used to be wrong. Every leg of every
+// itinerary was asked about 09:00, including the one the plan puts at 19:30.
+// In Denmark that gap is the whole answer: a regional route running four times
+// an hour at nine runs hourly after seven, several stop entirely in the
+// evening, and a connection that exists at nine simply does not exist at ten at
+// night. Nine o'clock is the morning peak — the most flattering hour in the
+// timetable — so anchoring everything there does not produce a random error, it
+// produces a consistently optimistic one.
+//
+// The plan already knows the answer: every stop carries an arrivalTime, which
+// is what the page prints beside it. HOUR_OF reads that and nothing else, so
+// this cannot invent a time for a leg the plan never placed.
+//
+// PARSED, NOT TRUSTED. The field is model-written free text and arrives as
+// "9:00", "~14:25", "09.30" and, often enough, as prose. Anything that does not
+// read as a clock time leaves the anchor exactly where it was, because 09:00 is
+// a defensible default and a misparsed 1 a.m. is not.
+export const HOUR_OF = (arrivalTime) => {
+  const m = /(?:^|\D)([01]?\d|2[0-3])[:.]([0-5]\d)(?:\D|$)/.exec(String(arrivalTime || ""));
+  if (!m) return null;
+  return { h: Number(m[1]), m: Number(m[2]) };
+};
+
+export const transitDepartureAnchor = (tripDate, dayOffset = 0, atTime = null) => {
+  const at = HOUR_OF(atTime);
+  const hh = at ? at.h : 9;
+  const mm = at ? at.m : 0;
   if (tripDate) {
     const d = new Date(tripDate);
     if (!Number.isNaN(d.getTime())) {
       d.setDate(d.getDate() + (Number(dayOffset) || 0));
-      d.setHours(9, 0, 0, 0);
+      d.setHours(hh, mm, 0, 0);
       // Google rejects a departure_time in the past, so a trip already under
       // way, or one whose date has slipped, falls back rather than erroring.
       // Falling back is honest: it is a generic answer, and it says so by being
@@ -919,15 +969,15 @@ export const transitDepartureAnchor = (tripDate, dayOffset = 0) => {
     }
   }
   const d = new Date();
-  d.setHours(9, 0, 0, 0);
+  d.setHours(hh, mm, 0, 0);
   do { d.setDate(d.getDate() + 1); } while (d.getDay() !== 2);
   return Math.floor(d.getTime() / 1000);
 };
 
 // Appends the anchor only for a transit leg, so call sites stay one-liners and
 // cannot accidentally anchor a driving query.
-export const departureParam = (mode, tripDate, dayOffset) =>
-  (mode === "transit" ? `&departure_time=${transitDepartureAnchor(tripDate, dayOffset)}` : "");
+export const departureParam = (mode, tripDate, dayOffset, atTime = null) =>
+  (mode === "transit" ? `&departure_time=${transitDepartureAnchor(tripDate, dayOffset, atTime)}` : "");
 
 // ── Is this domain literally the place's own name ───────────────────
 // Oliver, 6 Aug 2026, on the Aarhus Festuge draft that published with an empty

@@ -46,6 +46,15 @@ import { dayStart, dayLabel } from "./calendarDay";
 // One threshold for "too old to state as current", shared with the page reader
 // rather than redeclared here. See journeyStamp.
 import { MAX_FACT_AGE_MONTHS } from "./pageScan";
+// ── ONE LIST OF FERRY WORDS, READ TWICE ─────────────────────────────
+// FERRY_TEXT is the union seven separate patterns in this codebase were each
+// reaching for, and helpers.js records what the split cost: a leg saying "boat"
+// made the trip summary announce a crossing while the book-before-you-go list
+// left it out, from two reads of the SAME field 34 lines apart. This file had
+// an eighth copy, below, and it was missing "boat" and "sail" exactly as the
+// others had been. geo.js makes the argument in one line: two lists of Danish
+// transport nouns will always drift, and one list read twice cannot.
+import { FERRY_TEXT } from "./helpers";
 
 const mins = (s) => (Number.isFinite(Number(s?.mins)) ? Number(s.mins) : 0);
 
@@ -638,7 +647,7 @@ export const lastLegProblems = (prose, { stop, walkMinutes } = {}) => {
 const VEHICLE_FAMILY = [
   [/\b(?:bus(?:sen|ser|es)?|coach|shuttle|rutebil)\b/i, "road"],
   [/\b(?:train|rail|s-?train|s-?tog|lokaltog|letbane|metro(?:en)?|tram|tog(?:et|ene)?|lyntog|intercity)\b/i, "rail"],
-  [/\b(?:ferry|ferries|f[æa]erge[nr]?|færge[nr]?)\b/i, "water"],
+  [FERRY_TEXT, "water"],
 ];
 
 const familyOf = (word) => (VEHICLE_FAMILY.find(([re]) => re.test(String(word || ""))) || [])[1] || "";

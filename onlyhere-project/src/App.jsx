@@ -9882,7 +9882,15 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
           // Empty is the honest input: nothing describes this leg yet, so
           // resolveLegMode decides from the trip mode and the distance, which is
           // exactly what the render side does.
-          legs.push([prevLast.name, firstHere.name, "", Math.max(0, (Number(day.day) || di + 1) - 1)]);
+          // ── AND THE HOUR IS THE DESTINATION'S, NOT THE ORIGIN'S ──
+          //
+          // Every other leg is anchored to where the traveller is standing when
+          // they set off. This one is the exception and it has to be: they slept
+          // between these two stops, so the origin's arrival time is yesterday
+          // evening and the journey is tomorrow. firstHere is the stop on the
+          // day this leg is routed for, so its clock is the one that belongs to
+          // the timetable being asked about.
+          legs.push([prevLast.name, firstHere.name, "", Math.max(0, (Number(day.day) || di + 1) - 1), firstHere.arrivalTime || ""]);
         }
       }
       for (let i = 0; i < day.stops.length - 1; i++) {
@@ -9895,7 +9903,12 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
         // days carry no `day` number every intra-day leg was routed as day one:
         // a Sunday bus priced as a Wednesday one, which is the exact bug
         // transitDepartureAnchor exists to prevent.
-        legs.push([day.stops[i].name, day.stops[i + 1].name, day.glance?.legs?.[i]?.how || "", Math.max(0, (Number(day.day) || di + 1) - 1)]);
+        // ── AND ITS OWN HOUR, NOT NINE IN THE MORNING ──────────────
+        // The origin's arrivalTime is when the traveller is standing there, so
+        // it is the closest thing the plan holds to when they set off for the
+        // next stop. See transitDepartureAnchor: an evening leg priced as a
+        // nine-o'clock one is optimistic in one direction every time.
+        legs.push([day.stops[i].name, day.stops[i + 1].name, day.glance?.legs?.[i]?.how || "", Math.max(0, (Number(day.day) || di + 1) - 1), day.stops[i].arrivalTime || ""]);
       }
     });
     // Resolves BOTH already-known coords (towns/landmarks/prior geocodes) and this
@@ -9957,7 +9970,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       if (collapsedRoute(a, b, sentAsCoords)) return false;
       return true;
     };
-    await Promise.all(legs.map(async ([origin, dest, how, dayOffset = 0]) => {
+    await Promise.all(legs.map(async ([origin, dest, how, dayOffset = 0, atTime = ""]) => {
       // Same shared function the render uses — guarantees fetch and display can
       // never disagree on mode, and therefore never miss each other's cache entry.
       let legMode = resolveLegMode(how, primaryMode, origin, dest, onlyWalking, freshGeo);
@@ -9987,7 +10000,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       const originParam = originEnd.param, destParam = destEnd.param;
       const sentAsCoords = originEnd.fromCoords && destEnd.fromCoords;
       try {
-        const res = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${legMode}${departureParam(legMode, tripDate, dayOffset)}`);
+        const res = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${legMode}${departureParam(legMode, tripDate, dayOffset, atTime)}`);
         const data = await res.json();
         if (usable(data, originCoord, destCoord, sentAsCoords)) {
           // ABSURD-WALK GUARD (Oliver's screenshots: a leg shipped as "1 hour
@@ -10003,7 +10016,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
           if (legMode === "walking" && !onlyWalking && data.durationMinutes > WALK_MAX_MINUTES) {
             const upgrade = primaryMode === "bike" ? "bicycling" : primaryMode === "car" ? "driving" : "transit";
             try {
-              const ures = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${upgrade}${departureParam(upgrade, tripDate, dayOffset)}`);
+              const ures = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${upgrade}${departureParam(upgrade, tripDate, dayOffset, atTime)}`);
               const udata = await ures.json();
               // AND THE RE-ROUTE HAS TO BEAT THE WALK IT REPLACES. This used to
               // accept any answer that was not an error, which put a 32 minute

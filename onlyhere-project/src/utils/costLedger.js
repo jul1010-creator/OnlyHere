@@ -192,28 +192,52 @@ const transportLines = ({ mode = "", ferryDays = [], travelDays = [] } = {}) => 
   const out = [];
   const publicTransport = /public transport|train|bus|tog|offentlig/.test(m);
   if (publicTransport && travelDays.length) {
-    const forWhat = `The long hops on day ${travelDays.join(", day ")}`;
-    for (const op of [OPERATORS.dsb, OPERATORS.flixbus, OPERATORS.rejseplanen]) {
+    const onDays = `The long hops on day ${travelDays.join(", day ")}`;
+    // ── A HEADING ON THIS LIST NAMES A CHARGE ─────────────────────
+    //
+    // Found 26 Aug 2026 reading the deployed block on guide q3xuswczshx. The
+    // ferry line's heading was "Rejseplanen", set from OPERATORS because every
+    // other caller of that table wants the operator's NAME. Under a heading
+    // that says WHAT YOU PAY, that is a claim about who is being paid, and
+    // Rejseplanen is not paid anything: it is a free national search that
+    // covers every operator including the boats, which is exactly why
+    // operators.js hands a crossing to it rather than naming a ferry company.
+    //
+    // So the link stays where operators.js put it and the heading stops
+    // borrowing its name. DSB and FlixBus keep theirs, because those two really
+    // are who the money goes to, and Oliver asked for them by name: "perhaps
+    // refer them to Flixbus or DSB".
+    const rows = [
+      { op: OPERATORS.dsb, name: OPERATORS.dsb.name, what: `${OPERATORS.dsb.what}. ${onDays}.` },
+      { op: OPERATORS.flixbus, name: OPERATORS.flixbus.name, what: `${OPERATORS.flixbus.what}. ${onDays}.` },
+      {
+        op: OPERATORS.rejseplanen,
+        name: "Local buses and regional trains",
+        what: "The legs neither of those sells: city buses, the metro, the short regional hops. Rejseplanen prices every operator in one search.",
+      },
+    ];
+    for (const r of rows) {
       out.push({
         kind: COST_KIND.TRANSPORT,
-        name: op.name,
+        name: r.name,
         day: travelDays[0],
-        forWhat: `${op.what}. ${forWhat}.`,
+        forWhat: r.what,
         price: "",
         priceFrom: null,
-        href: op.url,
+        href: r.op.url,
         partner: false,
         refused: "",
-        bookAhead: op.id !== "rejseplanen",
+        bookAhead: r.op.id !== "rejseplanen",
       });
     }
   }
   if (ferryDays.length) {
     out.push({
       kind: COST_KIND.FERRY,
-      name: OPERATORS.rejseplanen.name,
+      // The crossing, not the planner. See the note above.
+      name: `The ferry on day ${ferryDays.join(" and day ")}`,
       day: ferryDays[0],
-      forWhat: `The crossing on day ${ferryDays.join(" and day ")}. Book the boat, not just the bed: Danish crossings run a handful of times a day and some islands are served from more than one port.`,
+      forWhat: "Book the boat, not just the bed: Danish crossings run a handful of times a day, some islands are served from more than one port, and summer sailings sell out. Rejseplanen covers every operator including the boats.",
       price: "",
       priceFrom: null,
       href: OPERATORS.rejseplanen.url,

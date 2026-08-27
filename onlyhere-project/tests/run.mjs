@@ -75,7 +75,7 @@ writeFileSync(entry, `
   export { withoutNonModes, travelModeKey as travelModeKeyForTest } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, stripMarkdown, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
-  export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { arrivalRow, transitDepartureAnchor, departureParam, HOUR_OF, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { icsEscape, icsFold, icsStamp, stayMinutes, DEFAULT_STAY_MINUTES, icsUid, stopEvent, guideEvents, buildIcs, icsFilename } from ${JSON.stringify(join(root, "src/utils/calendarExport.js"))};
   export { isAbsolutePhoto, heroNeedsReplacing, heroPatch, heroStatusLine } from ${JSON.stringify(join(root, "src/utils/heroPhoto.js"))};
@@ -265,7 +265,7 @@ try {
 // as the protocol. See the note in tests/render.mjs: both faults broke the
 // pre-push hook on Oliver's machine on 25 Aug while passing here.
 const M = await import(pathToFileURL(bundle).href);
-const { arrivalRow, transitDepartureAnchor, departureParam, auditEntry, auditAll, mergeSaves, licenseUrl, creditIsRequired } = M;
+const { arrivalRow, transitDepartureAnchor, departureParam, HOUR_OF, auditEntry, auditAll, mergeSaves, licenseUrl, creditIsRequired } = M;
 
 // ── READING A TYPE GATE BY ITS VALUE, NOT BY ITS SPELLING ──────────
 //
@@ -318,6 +318,22 @@ is("arrivalRow ferry terminal", arrivalRow("Sælvig Ferry Terminal").label, "Fer
 is("arrivalRow danish havn", arrivalRow("Hou Havn").label, "Ferry Terminal");
 is("arrivalRow danish faerge", arrivalRow("Odden Færgehavn").label, "Ferry Terminal");
 is("arrivalRow ferry beats bus", arrivalRow("Bus to Sælvig Ferry Terminal").label, "Ferry Terminal");
+// ── "FERRY TERMINAL: RANDERS BUSTERMINAL" ──────────────────────────
+// Read off the live Museum Østjylland page, 26 Aug 2026. Randers is 25 km up a
+// fjord and its busterminal is a bus station; the ferry branch matched the bare
+// word "terminal" inside the Danish compound and drew a boat over it. Same
+// shape as the lufthavn bug: the word that decides has to be the word that
+// means it.
+is("a danish busterminal is a bus stop, not a quay", arrivalRow("Randers Busterminal").label, "Nearest Bus Stop");
+is("and so is the spaced english form", arrivalRow("Aalborg bus terminal").label, "Nearest Bus Stop");
+is("and a coach terminal", arrivalRow("Coach terminal").label, "Nearest Bus Stop");
+// The one that decides this is a rule and not a special case: a bus terminal
+// standing on a quay is still somewhere you catch a bus.
+is("a bus terminal at a harbour is still a bus stop", arrivalRow("Bus terminal at the harbour").label, "Nearest Bus Stop");
+// And the word still means a quay when nothing argues otherwise, so the fix
+// took nothing away.
+is("a bare terminal is still read as a quay", arrivalRow("Rønne Terminal").label, "Ferry Terminal");
+is("and the value is never rewritten", arrivalRow("Randers Busterminal").value, "Randers Busterminal");
 is("arrivalRow bus stop", arrivalRow("Bus stop at the village square").label, "Nearest Bus Stop");
 is("arrivalRow rutebilstation", arrivalRow("Rutebilstation").label, "Nearest Bus Stop");
 is("arrivalRow airport", arrivalRow("Kastrup Airport").label, "Nearest Airport");
@@ -2043,6 +2059,35 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     is("walking too", departureParam("walking", iso), "");
     ok("transit does carry one", /&departure_time=\d+/.test(departureParam("transit", iso)));
 
+    // ── "THE TIME SHOWN IS QUITE OFF" ──────────────────────────────
+    //
+    // Oliver, 26 Aug 2026, on the Lindholm entry: he lives there, confirmed the
+    // route was real, and said the time was wrong. It was: every leg of every
+    // itinerary was asked about 09:00, including the one the plan puts at 19:30.
+    // Nine is the morning peak, the most flattering hour in the timetable, so
+    // this was not a random error — it was an optimistic one, every time.
+    is("a leg the plan puts in the evening is asked about the evening",
+      hourOf(transitDepartureAnchor(iso, 0, "19:30")), 19);
+    is("and the minutes come with it, because a timetable has them",
+      new Date(transitDepartureAnchor(iso, 0, "19:30") * 1000).getMinutes(), 30);
+    is("the tilde the writer likes does not stop it", hourOf(transitDepartureAnchor(iso, 0, "~14:25")), 14);
+    is("nor a full stop, which Danish uses", hourOf(transitDepartureAnchor(iso, 0, "09.45")), 9);
+    // PARSED, NOT TRUSTED. arrivalTime is model-written free text and often is
+    // not a clock at all. A misparsed 1 a.m. is worse than the old default, so
+    // anything unreadable leaves the anchor exactly where it was.
+    is("prose leaves the default alone", hourOf(transitDepartureAnchor(iso, 0, "late morning")), 9);
+    is("so does an empty field", hourOf(transitDepartureAnchor(iso, 0, "")), 9);
+    is("and so does a number that is not a time", hourOf(transitDepartureAnchor(iso, 0, "2 hours")), 9);
+    is("a 25th hour is not a time either", hourOf(transitDepartureAnchor(iso, 0, "25:00")), 9);
+    // The day must survive the hour: this is the older fix and the new one must
+    // not quietly undo it.
+    is("and the leg still lands on its own day", dayOf(transitDepartureAnchor(iso, 1, "19:30")), 1);
+    // The parser on its own, because every assertion above reads it through a clock.
+    is("HOUR_OF reads a plain time", HOUR_OF("7:05"), { h: 7, m: 5 });
+    is("and refuses what is not one", HOUR_OF("sometime after lunch"), null);
+    ok("the hour reaches the query string", /&departure_time=\d+/.test(departureParam("transit", iso, 0, "19:30")));
+    ok("and a driving leg still refuses one whatever hour it is handed", departureParam("driving", iso, 0, "19:30") === "");
+
     // ── WIRED, WHICH IS WHERE IT WAS BROKEN ────────────────────────
     const app6 = readFileSync(join(root, "src/App.jsx"), "utf8");
     // ── ASKED AS A RELATIONSHIP, NOT AS TWO TRANSCRIPTS ─────────────
@@ -2093,8 +2138,27 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // cross-day push added that day had the right fallback and this one did not,
     // so on a guide whose days carry no number every intra-day leg was routed as
     // day one and a Sunday bus was priced as a Wednesday one.
-    ok("each leg carries its own day number", /legs\.push\(\[day\.stops\[i\]\.name, day\.stops\[i \+ 1\]\.name, day\.glance\?\.legs\?\.\[i\]\?\.how \|\| "", Math\.max\(0, \(Number\(day\.day\) \|\| di \+ 1\) - 1\)\]\);/.test(app6));
-    ok("and both routing calls use it", (app6.match(/departureParam\((?:legMode|upgrade), tripDate, dayOffset\)/g) || []).length === 2);
+    // ── PINNED TO THE DAY EXPRESSION, NOT TO THE WHOLE CALL ────────
+    // These two matched the entire push and the entire departureParam call,
+    // character for character, so adding a FIFTH argument to each on 26 Aug
+    // broke both of them while the thing they exist to protect — the day — was
+    // untouched. An assertion that fails when something unrelated is added
+    // beside it is pinning the shape. The day is the rule; what travels next to
+    // it is not this assertion's business.
+    ok("each leg carries its own day number",
+       /legs\.push\(\[day\.stops\[i\]\.name,[^;]*Math\.max\(0, \(Number\(day\.day\) \|\| di \+ 1\) - 1\)/.test(app6));
+    ok("and both routing calls use it", (app6.match(/departureParam\((?:legMode|upgrade), tripDate, dayOffset\b/g) || []).length === 2);
+    // ── AND THE HOUR, WHICH IS THE SAME BUG ON A SMALLER CLOCK ─────
+    // "The time shown is quite off" — every leg was asked about 09:00, the
+    // morning peak, including the ones the plan puts in the evening. Both
+    // pushes now carry the clock time of the stop whose day the leg is routed
+    // for: the origin's for a leg inside a day, the destination's for the
+    // overnight move, because the traveller slept in between.
+    ok("an intra-day leg carries the hour it is actually made at",
+       /legs\.push\(\[day\.stops\[i\]\.name,[^;]*day\.stops\[i\]\.arrivalTime \|\| ""\]\)/.test(app6));
+    ok("and the overnight leg carries the hour it lands at",
+       /legs\.push\(\[prevLast\.name,[^;]*firstHere\.arrivalTime \|\| ""\]\)/.test(app6));
+    ok("and both routing calls pass it on", (app6.match(/departureParam\((?:legMode|upgrade), tripDate, dayOffset, atTime\)/g) || []).length === 2);
     // The bug in one line: no transit call may anchor to nothing any more.
     ok("no transit call is left on the generic anchor", !/departureParam\(legMode\)|departureParam\(upgrade\)/.test(app6));
   }
@@ -26932,7 +26996,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const appO = readFileSync(join(root, "src/App.jsx"), "utf8");
     ok("every cross-day leg is measured now, not only the single-stop ones",
        !/if \(day\.stops\.length === 1 && di > 0\) \{/.test(stripNonCode(appO)));
-    ok("the pair is built for every day after the first", /if \(di > 0\) \{[\s\S]{0,1600}legs\.push\(\[prevLast\.name, firstHere\.name/.test(appO));
+    // The window is a distance, not a rule, so it is written wide enough that
+    // adding a comment between the guard and the push does not read as the push
+    // having moved out of the guard — which is what happened on 26 Aug.
+    ok("the pair is built for every day after the first", /if \(di > 0\) \{[\s\S]{0,3000}legs\.push\(\[prevLast\.name, firstHere\.name/.test(appO));
     // ── AND IT CARRIES NO how-TEXT, BECAUSE THERE IS NONE FOR IT ───
     // It passed `day.glance.legs[0].how`, which describes the journey from the
     // NEXT day's first stop to its second: a different journey. Harmless under
@@ -30917,6 +30984,42 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // accusation, and a gate that cries wolf gets switched off.
   is("a one letter line is never matched", vehicleMismatches("Take a bus. A is fine.", LEGS).length, 0);
   is("and no legs means no accusations", vehicleMismatches("then bus 950R", []).length, 0);
+  // ── ONE LIST OF FERRY WORDS, READ TWICE ─────────────────────────
+  //
+  // This file's water pattern was an EIGHTH private copy of the ferry
+  // vocabulary, and like the seven before it, it was missing "boat" — the exact
+  // word whose absence made the trip summary announce a crossing the
+  // book-before-you-go list left out, from two reads of the same field 34 lines
+  // apart. It now reads FERRY_TEXT, which is the union of all of them.
+  //
+  // Failing quietly is what made this one hard to see: a missing word here
+  // produces no false accusation, only a check that never fires. So the
+  // assertion is about the word, not about the pattern.
+  {
+    const FERRY_LEGS = [{ vehicle: "ferry", line: "66", from: "Hou", to: "Sælvig", mins: 65 }];
+    is("a ferry called a bus is caught", vehicleMismatches("then bus 66 across to Sælvig.", FERRY_LEGS).length, 1);
+    is("and a ferry called a ferry is not", vehicleMismatches("then the ferry 66 across to Sælvig.", FERRY_LEGS).length, 0);
+    is("nor is the same crossing called a boat", vehicleMismatches("then the boat 66 across to Sælvig.", FERRY_LEGS).length, 0);
+    // ── AND THE ONE THAT ACTUALLY SEPARATES THE TWO PATTERNS ──────
+    //
+    // Written down because the first version of this block did not. Three
+    // assertions above it read "boat" against a leg Google measured AS a ferry,
+    // and both patterns answer that identically: the old one finds no vehicle
+    // word and stays silent, the new one finds "water" and agrees. Zero either
+    // way. They were pinning nothing, and the mutant that put the eighth
+    // private copy back survived all three.
+    //
+    // The difference only shows where "boat" is the word the DRAFT uses and the
+    // measurement says something else. That is a missed catch under the old
+    // pattern and a finding under the new one, which is the whole point of
+    // consolidating them.
+    is("a train the draft calls a boat is caught, which the private copy missed",
+      vehicleMismatches("then the boat 950R into Gilleleje Øst.", LEGS).length, 1);
+    is("and a train the draft calls a sailing, for the same reason",
+      vehicleMismatches("then the sailing 950R into Gilleleje Øst.", LEGS).length, 1);
+    ok("and it still names the measurement it disagrees with",
+      /measured that leg as a train/.test(vehicleMismatches("then the boat 950R into Gilleleje Øst.", LEGS)[0] || ""));
+  }
   {
     const jr = readFileSync(join(root, "src/utils/journey.js"), "utf8");
     ok("the guide checks the vehicle as well as the duration", /vehicleMismatches\(text, rides\)/.test(jr));
@@ -37109,7 +37212,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // of buy links is a promise, and every line that cannot be honoured makes the
 // other lines less believable.
 {
-  const { costLines, byUrgency, linkGaps, readPrice, refuseTicket, REFUSAL, COST_KIND } = M;
+  const { costLines, byUrgency, linkGaps, readPrice, refuseTicket, REFUSAL, COST_KIND, OPERATORS } = M;
 
   // A February trip. Every date below is measured against these.
   const FEB = new Date("2027-02-12T09:00:00Z");
@@ -37199,9 +37302,31 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── THE OPERATORS, ONCE FOR THE TRIP ─────────────────────────────
   {
     const pt = byUrgency(run({ mode: "public transport" }));
-    const names = pt.filter(l => l.kind === COST_KIND.TRANSPORT).map(l => l.name);
-    is("a public transport trip lists the operators once each", names, ["DSB", "FlixBus", "Rejseplanen"]);
-    ok("and each says what it sells", pt.filter(l => l.kind === COST_KIND.TRANSPORT).every(l => /trains|coaches|operator/.test(l.forWhat)));
+    const tl = pt.filter(l => l.kind === COST_KIND.TRANSPORT);
+    is("a public transport trip lists three ways of paying for it", tl.length, 3);
+    is("each pointing somewhere different", new Set(tl.map(l => l.href)).size, 3);
+    ok("and each says what it sells", tl.every(l => /trains|coaches|buses/.test(l.forWhat)));
+    // ── A HEADING ON THIS LIST NAMES A CHARGE ─────────────────────
+    //
+    // Found on the deployed block, 26 Aug 2026: the ferry line was headed
+    // "Rejseplanen", because operators.js hands a crossing to the national
+    // planner and the line took its name from the same field. Under WHAT YOU
+    // PAY a heading reads as the payee, and nobody pays Rejseplanen — it is a
+    // free search. The link is right and stays; the heading was the bug.
+    //
+    // This is the rule and not the shape: it does not care what the new
+    // headings say, only that no heading anywhere on the list is the name of
+    // something that takes no money.
+    {
+      const planners = [OPERATORS.rejseplanen.name, "Google Maps", "Rejsebillet"];
+      const all = byUrgency(run({ mode: "public transport" }));
+      ok("no line on a list of what you pay is headed by a free journey planner",
+        all.every(l => !planners.some(n => l.name.trim().toLowerCase() === n.toLowerCase())));
+      ok("and the planner is still where the crossing sends them",
+        all.some(l => l.kind === COST_KIND.FERRY && l.href === OPERATORS.rejseplanen.url));
+      ok("and still named in the words, so they know where they are going",
+        all.some(l => l.kind === COST_KIND.FERRY && /Rejseplanen/.test(l.forWhat)));
+    }
     // No price. Both price dynamically by how far ahead you book, so any figure
     // printed here is wrong for most readers.
     ok("and none of them invents a fare", pt.filter(l => l.kind === COST_KIND.TRANSPORT).every(l => !l.price));
@@ -37217,6 +37342,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const ferry = lines.find(l => l.kind === COST_KIND.FERRY);
     ok("a leg with a boat on it earns a crossing line", !!ferry);
     ok("which names no ferry company", !/linjen|færgen|Molslinjen|Bornholms/i.test(ferry.name));
+    ok("and names the crossing rather than the search that finds it", /ferry/i.test(ferry.name));
   }
 
   // ── ORDER: THE THINGS THAT STOP BEING POSSIBLE COME FIRST ────────
@@ -37826,8 +37952,29 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     "Ribe Domkirke is the oldest cathedral in Denmark, and the churchyard behind it is quiet.",
     "Rosenborg Slot was built by Christian IV.",
     "Kongens Have is behind it and stays open until sunset.",
+    // ── OFF THE AUDIT OF ALL 138 PUBLISHED PAGES, 26 AUG 2026 ─────
+    //
+    // The sweep found exactly two flagged pages and one of them was this
+    // sentence, off the live Folketinget entry. It is correct English and the
+    // commonest sense of the word, and on a site whose entries are largely
+    // about booking things the old rule was going to keep finding tour
+    // bookings forever. A checker that cries wolf gets switched off the same
+    // way one that blocks does, only more slowly.
+    "Tours are free but school classes and larger groups can wait five to six months for a slot.",
+    "Book a slot online before you go, because the guided ones fill up.",
+    "There is usually a slot free on a weekday morning.",
     "",
   ]) is(`correct English is left alone: "${clean.slice(0, 44)}"`, literalRenderings(clean).length, 0);
+  // ── AND THE NARROWING TOOK NOTHING REAL AWAY ─────────────────────
+  // The rule now asks for the thing that would be true of a mistranslated
+  // castle: it is a BUILDING, so either it is doing something a building does
+  // or somebody is standing at it. Both branches, or the fix is a deletion.
+  for (const literal of [
+    "The slot is open every day except Monday.",
+    "The slot dates from 1560 and the grounds are free.",
+    "The best view is from the courtyard at the slot.",
+  ]) ok(`a slot that is a building is still caught: "${literal.slice(0, 40)}"`,
+    literalRenderings(literal).some(x => x.id === "slot"));
   // The same entry gets the common noun RIGHT four lines from the name it got
   // wrong, which is what makes the name the whole story rather than the word.
   is("the sentence that is already correct stays correct",
