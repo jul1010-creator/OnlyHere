@@ -60,6 +60,16 @@ import { aiDisclosureFor } from "./utils/aiDisclosure";
 import { SupportPage } from "./components/SupportPage";
 import { safetyClaimNote } from "./utils/safetyClaims";
 import { literalRenderings, literalNote, FALSE_FRIEND_RULE } from "./utils/literalDanish";
+// ── "THE AI ENDS UP WRITING ABOUT THE HOSTEL" ───────────────────────
+// Oliver, 27 Aug 2026. A bar inside a hostel is a real Danish venue and the bar
+// is why it is in this pool; the research is all about the beds. See
+// utils/venueSubject.js — the subject is the bar, the hostel is context.
+import { stayDriftNote, LODGING_NOTES_RULE, isLodgingType } from "./utils/venueSubject";
+// ── "AREN'T NIGHTLIFE BEING WRITTEN BY OPENAI?" ─────────────────────
+// Oliver, 27 Aug 2026, inferring the model from the voice — which he had to,
+// because it was the one origin in this app that nothing recorded. Every other
+// one does: __priceSource, __dateSource, __journey. See utils/modelProvenance.js.
+import { modelProvenanceNote } from "./utils/modelProvenance";
 import { missingSourcesNote } from "./utils/provenance";
 import { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, formatLogs, logChips, storeState } from "./utils/runLog";
 import { domainOf, isListingHost, scrapeTier, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE, MAX_TICKET_PAGES, isOwnSiteFor, urlNames, isKommuneHost } from "./utils/pageScan";
@@ -150,6 +160,12 @@ import { partnerDisclosure, linkLabel } from "./utils/affiliates";
 // `free`, it used to mean it, and it holds Legoland now. See utils/entryPrice.js
 // for the whole argument; nothing in that file may read a type.
 import { entryPrice, priceChip, entryKindLabel } from "./utils/entryPrice";
+// ── "HIGH-END" AND "CASUAL" ─────────────────────────────────────────
+// Oliver, 27 Aug 2026, relaying his friend. The axis every nightlife row was
+// missing: the fields all say what FORMAT a place is, none says what REGISTER.
+// See utils/venueStyle.js — it is utils/foodStyle.js, rule for rule.
+import { venueStyleOf, showVenueStyleFacet, stylesPresent, VENUE_STYLE_LABEL } from "./utils/venueStyle";
+import { VenueStyleChip } from "./components/VenueStyleChip";
 import { dayKey, dayStart, dayPlus } from "./utils/calendarDay";
 import { arrivalPoint } from "./utils/arrival";
 import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeForTown, barsOnStreet, townOfLocation } from "./utils/nightlife";
@@ -871,6 +887,10 @@ function GemlyxApp() {
   const [foodStyleSel, setFoodStyleSel] = useState(null);
   const [foodSort, setFoodSort] = useState("az");         // "az" | "price"
   const [nightlifeTab, setNightlifeTab] = useState("Local");
+  // High-end / casual, the axis his friend asked for on 27 Aug. null is "All",
+  // and it is null rather than "All" so that a control which stops rendering
+  // cannot leave a filter applied behind it. See utils/venueStyle.js.
+  const [nightlifeStyle, setNightlifeStyle] = useState(null);
   const [nightlifeTownView, setNightlifeTownView] = useState(null); // null = showing towns; a town name = showing that town's venues
   // ── THE LEVEL BETWEEN A TOWN AND A BAR ────────────────────────────
   // Oliver, 15 Aug 2026: "So Copenhagen -> Gothersgade -> List of bars.. like
@@ -4666,7 +4686,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       setStudioStage({ label: "Organizing the research notes", percent: 62 });
       const structureResult = await withRetry(
         () => askOpenAI(
-          `You're organizing raw research into notes for a writer — NOT writing final prose yourself, just sorting real facts under clear headings so the writer's job narrows to pure wording. This is for a "${sType}" entry about "${name}" in a Danish travel guide. Read the raw research below and organize it into plain point-form notes under headings matching what needs to be written (use your judgment on what headings fit this content type — e.g. for a town: character/atmosphere facts, things-to-do facts, getting-there-and-downsides facts; for a restaurant: vibe facts, how-it's-made facts, price/wait/reality facts). Include ONLY facts actually present in the research — never invent to fill a heading, leave it sparse instead. Keep every specific number, name, date, and price exactly as found. Be concise — notes, not paragraphs.\n\nRaw research:\n${rawResearch}`,
+          `You're organizing raw research into notes for a writer — NOT writing final prose yourself, just sorting real facts under clear headings so the writer's job narrows to pure wording. This is for a "${sType}" entry about "${name}" in a Danish travel guide. Read the raw research below and organize it into plain point-form notes under headings matching what needs to be written (use your judgment on what headings fit this content type — e.g. for a town: character/atmosphere facts, things-to-do facts, getting-there-and-downsides facts; for a restaurant: vibe facts, how-it's-made facts, price/wait/reality facts). Include ONLY facts actually present in the research — never invent to fill a heading, leave it sparse instead. Keep every specific number, name, date, and price exactly as found. Be concise — notes, not paragraphs.${isLodgingType(sType) ? LODGING_NOTES_RULE : ""}\n\nRaw research:\n${rawResearch}`,
           // 1200 → 3000 (Oliver's console: "OpenAI returned no text" 3/3 on this
           // exact stage): gpt-5.6-sol is a reasoning model whose internal
           // reasoning shares this same budget, and organizing a large research
@@ -5762,6 +5782,24 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             ...(literalRenderings(readerText(t)).length
               ? [literalNote(literalRenderings(readerText(t)))]
               : []),
+            // ── AND A NIGHTLIFE ENTRY THAT REVIEWED THE HOSTEL ───────
+            //
+            // Oliver, 27 Aug 2026: "there are quite a few 'nightlife bars' that
+            // are hostels.. we need to avoid that the AI end up writing about
+            // the hostel, rather than it as a nightlife and hostel."
+            //
+            // Only fires on a venue that IS one — a bodega's entry can say the
+            // word dorm and mean something else. Reports two things: prose that
+            // has drifted into a booking review, and the one fact a bar inside a
+            // hostel has to answer and usually does not, which is whether
+            // somebody not staying there can walk in. Advisory, in the tray the
+            // founder already reads. See utils/venueSubject.js.
+            ...(stayDriftNote(t, readerText(t)) ? [stayDriftNote(t, readerText(t))] : []),
+            // ── AND WHICH MODEL WROTE WHICH PART ─────────────────────
+            // Not a problem report — a provenance line, in the tray where the
+            // other origins already print. It answers the question Oliver had
+            // to answer by reading the prose and guessing.
+            modelProvenanceNote(t),
           ];
           note(`Glance fields${suffix}`, {
             provider: "google",
@@ -17850,8 +17888,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, marginTop: 2 }}>{spot.category} · {spot.location}</div>
                   </div>
                 </div>
-                <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: spot.color, background: `${spot.color}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 12 }}>
-                  👥 {spot.crowd}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+                  <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: spot.color, background: `${spot.color}18`, padding: "5px 12px", borderRadius: 100 }}>
+                    👥 {spot.crowd}
+                  </span>
+                  {/* Who is in there, and how dressed up they are. Nothing at
+                      all when the row has not said — see utils/venueStyle.js on
+                      why "Nightclub" is deliberately not an answer. */}
+                  <VenueStyleChip item={spot} C={C} />
                 </div>
                 <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65, marginBottom: 10, maxWidth: 560 }}>{(spot.desc || "").slice(0, 100)}{(spot.desc || "").length > 100 ? "…" : ""}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 13, fontWeight: 700 }}>
@@ -18066,10 +18110,53 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     ))}
                   </div>
 
-                  {looseSpots.filter(f => f.type === nightlifeTab).length === 0 && (
-                    <div style={{ fontSize: 13, color: C.muted, padding: "20px 0", textAlign: "center" }}>No {nightlifeTab.toLowerCase()} spots in {nightlifeTownView} yet, try the other tab.</div>
-                  )}
-                  {looseSpots.filter(f => f.type === nightlifeTab).slice().sort(byName).map(spotRow)}
+                  {/* ── STYLE, THE SECOND AXIS ───────────────────────
+                      Oliver, 27 Aug 2026: his friend asked for "high-end" and
+                      "casual". A pill row rather than a second stack of
+                      underline tabs, because it is a different question from
+                      Local/International and two identical tab rows read as one
+                      control that has stopped working.
+
+                      showVenueStyleFacet decides whether it appears at all, and
+                      it has two gates: it must be able to classify half the
+                      rows, and at least two styles must actually be present. On
+                      today's six venues five read casual and Hive reads as
+                      nothing, so this renders NOTHING until somebody states
+                      venueStyle on Hive — a filter whose only option is the
+                      list you are already looking at is a tap that does
+                      nothing. See utils/venueStyle.js. */}
+                  {(() => {
+                    const inTab = looseSpots.filter(f => f.type === nightlifeTab);
+                    if (!showVenueStyleFacet(inTab)) return null;
+                    const opts = ["All", ...stylesPresent(inTab)];
+                    return (
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+                        {opts.map(o => (
+                          <button key={o} onClick={() => setNightlifeStyle(o === "All" ? null : o)}
+                            style={{ background: (nightlifeStyle || "All") === o ? `${C.gold}1e` : "none", border: `1px solid ${(nightlifeStyle || "All") === o ? `${C.gold}66` : C.border}`, color: (nightlifeStyle || "All") === o ? C.gold : C.muted, borderRadius: 100, padding: "6px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                            {o === "All" ? "All" : VENUE_STYLE_LABEL[o]}
+                            {o !== "All" ? ` (${inTab.filter(f => venueStyleOf(f) === o).length})` : ""}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  {(() => {
+                    const inTab = looseSpots.filter(f => f.type === nightlifeTab);
+                    // The style narrows only where the control is actually on
+                    // screen. A filter the reader cannot see must never be
+                    // silently removing rows from under them.
+                    const styled = (nightlifeStyle && showVenueStyleFacet(inTab))
+                      ? inTab.filter(f => venueStyleOf(f) === nightlifeStyle)
+                      : inTab;
+                    if (inTab.length === 0) {
+                      return <div style={{ fontSize: 13, color: C.muted, padding: "20px 0", textAlign: "center" }}>No {nightlifeTab.toLowerCase()} spots in {nightlifeTownView} yet, try the other tab.</div>;
+                    }
+                    if (styled.length === 0) {
+                      return <div style={{ fontSize: 13, color: C.muted, padding: "20px 0", textAlign: "center" }}>Nothing {String(VENUE_STYLE_LABEL[nightlifeStyle] || "").toLowerCase()} on this tab in {nightlifeTownView} yet.</div>;
+                    }
+                    return styled.slice().sort(byName).map(spotRow);
+                  })()}
                   </>)}
                   </>
                   )}

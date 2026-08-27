@@ -8,6 +8,9 @@ import { ticketBadge } from "../utils/tickets";
 // attraction in the pool, because the pool's Studio type is called `free` and
 // it used to mean it. It holds Legoland now. See utils/entryPrice.js.
 import { AttractionBadge } from "./AttractionBadge";
+// ── "HIGH-END" AND "CASUAL" ───────────────────────────────────────
+// Oliver, 27 Aug 2026, relaying his friend. See utils/venueStyle.js.
+import { VenueStyleChip } from "./VenueStyleChip";
 import { AtAGlanceCard } from "./AtAGlanceCard";
 import { GemlyxFindCard } from "./GemlyxFindCard";
 import { InstagramEmbed } from "./InstagramEmbed";
@@ -235,9 +238,17 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           </div>
         )}
 
-        {kind === "nightlife" && item.crowd && (
-          <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: color, background: `${color}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 18 }}>
-            👥 {item.crowd}
+        {kind === "nightlife" && (item.crowd || true) && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 18 }}>
+            {item.crowd && (
+              <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: color, background: `${color}18`, padding: "5px 12px", borderRadius: 100 }}>
+                👥 {item.crowd}
+              </span>
+            )}
+            {/* Beside the crowd, because they are the two halves of one
+                question: who is in there, and how dressed up are they. Draws
+                nothing at all when the row has not said. */}
+            <VenueStyleChip item={item} C={C} />
           </div>
         )}
         {kind === "free" && <AttractionBadge item={item} C={C} />}

@@ -138,7 +138,14 @@ const shapeForLiveFields = (type, t) => {
     blogBody: [
       ...bbData([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]]),
     ] };
-  if (type === "night") { const isClub = !!t.isClub; return { name: t.name, type: t.type || "Local", crowd: t.crowd || "", emoji: t.emoji || "🍺", category: t.category || "", priceNote: t.priceNote || "", location: t.location || "", isClub, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#5D4037", gemlyxFind: t.gemlyxFind || "",
+  // ── venueStyle SHIPS, OR THE FIELD IS A PROMPT THAT GOES NOWHERE ──
+  // 27 Aug 2026. This shape is the publish gate: a field the draft schema asks
+  // for and this line does not carry is dropped on the way to Supabase, spends
+  // prompt for nothing and invites an invention nothing downstream can catch.
+  // That already happened once — nearestStation was asked of restaurants, food
+  // streets and bars, and dropped for all three. "" is the honest empty, and
+  // venueStyleOf reads it as "nobody has said" rather than guessing.
+  if (type === "night") { const isClub = !!t.isClub; return { name: t.name, type: t.type || "Local", crowd: t.crowd || "", emoji: t.emoji || "🍺", category: t.category || "", venueStyle: t.venueStyle || "", priceNote: t.priceNote || "", location: t.location || "", isClub, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#5D4037", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
       ...bbData(isClub ? [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["When Do People Enter", t.whenEnter], ["The Reality Check", t.realityCheck]]
                         : [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["Before Dark", t.beforeDark], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]]),

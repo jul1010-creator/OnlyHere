@@ -85,6 +85,9 @@ writeFileSync(entry, `
   export { EVIDENCE, EVIDENCE_RANK, EVIDENCE_LABEL, fieldSourceKey, PERISHABLE_FIELD_TOPIC, PERISHABLE_FIELDS, isPerishable, perishableTopic, evidenceOf, entryEvidence, evidenceCounts, unbackedPerishables, weakestClaim, evidenceNote, PERISHABLE_TOPICS_USED, PAGE_SCAN_TOPICS } from ${JSON.stringify(join(root, "src/utils/evidence.js"))};
   export { selfContradictions as selfContra, PROSE_FIELDS as AUDIT_PROSE_FIELDS, PROSE_LISTS } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink, GUIDE_SCAFFOLDING, syncFailureNote, SYNC } from ${JSON.stringify(join(root, "src/utils/userSaves.js"))};
+  export { whoWrote, modelProvenanceNote, DRAFT_STAGES, readerFacingStages, WRITER, EXTRACTOR, MEASURED } from ${JSON.stringify(join(root, "src/utils/modelProvenance.js"))};
+  export { venueStyleOf, venueStyleLabel, VENUE_STYLES, VENUE_STYLE_LABEL, unstyledVenues, venueStyleCoverage, stylesPresent, showVenueStyleFacet, buildNightlifeStyleFacet, VENUE_STYLE_COVERAGE_MIN } from ${JSON.stringify(join(root, "src/utils/venueStyle.js"))};
+  export { looksLikeLodging, stayDrift, stayDriftNote, publicAccessAnswered, STAY_TERMS, LODGING_RULE, LODGING_NOTES_RULE, LODGING_WORDS, isLodgingType, LODGING_TYPES } from ${JSON.stringify(join(root, "src/utils/venueSubject.js"))};
   export { entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, SAYS_FREE, AMOUNT, isUnqualifiedFree } from ${JSON.stringify(join(root, "src/utils/entryPrice.js"))};
   export { literalRenderings, literalNote, looksLikeAName, FALSE_FRIENDS, FALSE_FRIEND_RULE, NAME_RULE } from ${JSON.stringify(join(root, "src/utils/literalDanish.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
@@ -37609,6 +37612,368 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the detail page draws the badge", /<AttractionBadge item=\{item\} C=\{C\} \/>/.test(dp));
     is("once, not once per section", (dp.match(/<AttractionBadge /g) || []).length, 1);
     ok("and the hardcoded chip is gone from it", !/· FREE/.test(dp));
+  }
+}
+
+// ── "AREN'T NIGHTLIFE BEING WRITTEN BY OPENAI?" ─────────────────────
+//
+// Oliver, 27 Aug 2026, and then: "nightlife was clearly written by OpenAI and
+// not claude." He was reading entries and inferring the model from the voice —
+// which he had to, because it was the one origin in this app that nothing
+// recorded. A price carries __priceSource, a date carries __dateSource, a
+// travel time carries __journey, and provenance.js prints all three.
+{
+  const { whoWrote, modelProvenanceNote, DRAFT_STAGES, readerFacingStages, WRITER, EXTRACTOR, MEASURED,
+          EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT } = M;
+
+  // A real nightlife draft, field for field.
+  const NIGHT = {
+    name: "Hive", type: "International", crowd: "Stylish local and international crowd",
+    category: "Nightclub", location: "Indre By, Copenhagen", isClub: true,
+    desc: "A paragraph about the room.", whoFor: "People who dress up.",
+    bestTime: "After midnight.", realityCheck: "Blunt sentences.",
+    priceNote: "Cover 100 DKK", accessibility: "Step-free entrance",
+    gemlyxFind: "The back room.", __priceSource: { host: "hive.dk" },
+  };
+  const w = whoWrote(NIGHT);
+
+  // ── THE ANSWER TO THE QUESTION HE ASKED ─────────────────────────
+  is("the prose is Claude's", w[WRITER].includes("desc") && w[WRITER].includes("whoFor") && w[WRITER].includes("realityCheck"), true);
+  is("and exactly two values on a nightlife entry are OpenAI's", w[EXTRACTOR], ["priceNote", "accessibility"]);
+  ok("the description is not one of them", !w[EXTRACTOR].includes("desc"));
+  // crowd is the entry's VOICE, and glanceExtract sends it back to the writer by
+  // name: "an extractor handed 'tag' returns whatever noun phrase the page used
+  // about itself, which is a tourism board writing Gemlyx's card for it."
+  ok("and neither is the crowd", w[WRITER].includes("crowd"));
+  ok("nor the Gemlyx Find, which is judgement", w[WRITER].includes("gemlyxFind"));
+
+  // ── DERIVED, NEVER WRITTEN DOWN TWICE ───────────────────────────
+  //
+  // glanceExtract.js states the rule: "Every list in this codebase that was
+  // written down twice has drifted, three of them found in one night." So this
+  // asserts the derivation rather than a hand-copied answer — a field that
+  // moves between models moves here in the same commit or it does not move.
+  for (const f of EXTRACTABLE_GLANCE)
+    is(`${f} is credited to the extractor`, whoWrote({ [f]: "x" })[EXTRACTOR], [f]);
+  for (const f of EDITORIAL_GLANCE)
+    is(`${f} is credited to the writer`, whoWrote({ [f]: "x" })[WRITER], [f]);
+  for (const f of NEVER_EXTRACT.filter(x => x !== "name"))
+    is(`${f} is credited to neither, because code measured it`, whoWrote({ [f]: "x" })[MEASURED], [f]);
+
+  // ── AND IT CREDITS NOBODY WITH AN EMPTY STRING ──────────────────
+  is("an unfilled field is claimed by no model", whoWrote({ priceNote: "", desc: "" })[EXTRACTOR], []);
+  is("nor is an empty array", whoWrote({ thingsToKnow: [] })[WRITER], []);
+  is("but a filled list is the writer's", whoWrote({ thingsToKnow: ["a"] })[WRITER], ["thingsToKnow"]);
+  is("machinery is not content", whoWrote({ __priceSource: { a: 1 }, id: 3, name: "x" })[WRITER], []);
+  is("and a missing draft answers rather than throwing", whoWrote(null)[WRITER], []);
+
+  // ── THE LINE HE READS ───────────────────────────────────────────
+  {
+    const note = modelProvenanceNote(NIGHT);
+    ok("it says the prose is Claude's", /prose is Claude's/.test(note));
+    ok("and names the fields rather than counting them", /priceNote/.test(note) && /accessibility/.test(note));
+    // THE STAGE THAT ACTUALLY MATTERS, said out loud. Claude writes from notes
+    // OpenAI chose, and it cannot put back a fact the organiser threw away —
+    // which is the hostel-bar failure exactly.
+    ok("and it names the stage nobody could see", /which facts survived/.test(note));
+    const allClaude = modelProvenanceNote({ desc: "x", whoFor: "y" });
+    ok("an entry with no extracted values says so plainly", /every word of it is Claude's/.test(allClaude));
+  }
+
+  // ── AND THE PIPELINE STILL DOES WHAT THIS FILE SAYS ─────────────
+  //
+  // Or the file becomes a comment that used to be true. Each declared stage
+  // names the call it is made with, and this checks the call is really there.
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    is("six stages are declared", DRAFT_STAGES.length, 6);
+    ok("every stage names a real call", DRAFT_STAGES.every(s => new RegExp(`\\b${s.call}\\(`).test(app)));
+    ok("and explains itself", DRAFT_STAGES.every(s => !!s.what && !!s.id));
+    // THE HEADLINE CLAIM, PINNED: the writing stage is Claude's. If anybody ever
+    // routes the schema prompt through OpenAI, this is the assertion that says so.
+    const write = DRAFT_STAGES.find(s => s.id === "write");
+    is("the writing stage is Claude's", write.model, WRITER);
+    ok("and the schema prompt really is sent to Claude",
+      /askClaude\(\s*`\$\{prompts\[sType\]\}/.test(app));
+    ok("and never to OpenAI", !/askOpenAI\([^)]{0,40}prompts\[sType\]/.test(app));
+    // Of the three stages a reader can see, two are the writer's and the third
+    // writes values rather than sentences.
+    const rf = readerFacingStages();
+    is("three stages reach the reader", rf.length, 3);
+    is("two of them are Claude", rf.filter(s => s.model === WRITER).length, 2);
+    ok("and the founder's tray prints the provenance", /modelProvenanceNote\(t\)/.test(app));
+  }
+}
+
+// ── "HIGH-END" AND "CASUAL" ─────────────────────────────────────────
+//
+// Oliver, 27 Aug 2026, relaying his friend. Every nightlife field says what
+// FORMAT a place is — "Bodega with a dance floor", "Party pub", "Nightclub" —
+// and none says what REGISTER, which is the question somebody actually asks
+// before going out: do I need to change out of my trainers.
+{
+  const { venueStyleOf, venueStyleLabel, VENUE_STYLES, VENUE_STYLE_LABEL, unstyledVenues,
+          venueStyleCoverage, stylesPresent, showVenueStyleFacet, buildNightlifeStyleFacet } = M;
+
+  // ── THE SIX PUBLISHED ROWS, READ OFF THE SITE 27 AUG 2026 ───────
+  //
+  // Not invented fixtures. These are the live categories, and the sixth is the
+  // whole design: Hive is Copenhagen's dressy club and the only high-end venue
+  // in the pool, and its category says "Nightclub", which settles nothing — a
+  // sticky-floored student club is also a nightclub.
+  const LIVE = [
+    { name: "Heidi's Bier Bar", category: "Party bar (Alpine/après-ski)", type: "International" },
+    { name: "Jomfru Ane Gade", category: "Bar street", type: "Local" },
+    { name: "Gothersgade", category: "Bar street", type: "Local" },
+    { name: "Farfar's Bodega", category: "Bodega with a dance floor", type: "Local" },
+    { name: "Old Irish Pub", category: "Party pub", type: "International" },
+    { name: "Hive", category: "Nightclub", type: "International" },
+  ];
+  for (const v of LIVE.filter(x => x.name !== "Hive"))
+    is(`a live row reads casual: ${v.name}`, venueStyleOf(v), "casual");
+  // THE ONE IT REFUSES, AND IT REFUSES IT ON PURPOSE. placeKind.js's standing
+  // rule: "A place is only a village if somebody SAID it is a village."
+  is("a nightclub's format does not settle its register", venueStyleOf({ category: "Nightclub" }), null);
+  is("and a jazz club's does not either", venueStyleOf({ category: "Jazz club" }), null);
+
+  // ── A STATED FIELD WINS OUTRIGHT ────────────────────────────────
+  // Which is how Hive gets an answer: somebody states it, because a door policy
+  // is a real fact about a door and not something to read off a word.
+  is("a stated style beats the category", venueStyleOf({ category: "Nightclub", venueStyle: "highend" }), "highend");
+  is("and it is read forgivingly, since a person types it", venueStyleOf({ category: "Nightclub", venueStyle: "High-End" }), "highend");
+  is("but a value that is not one of the two is not invented into one",
+    venueStyleOf({ category: "Nightclub", venueStyle: "fancy" }), null);
+
+  // ── THE KEYWORD READ, BOTH DIRECTIONS ───────────────────────────
+  for (const c of ["Cocktail bar", "Vinbar", "Champagne bar", "Speakeasy", "Rooftop bar"])
+    is(`high-end reads from the category: ${c}`, venueStyleOf({ category: c }), "highend");
+  for (const c of ["Værtshus", "Sports bar", "Dive bar", "Brewpub", "Studenterbaren", "Bodega"])
+    is(`casual reads from the category: ${c}`, venueStyleOf({ category: c }), "casual");
+  // HIGH-END FIRST, or the last generic word in a category files a champagne
+  // room as a boozer. Same order foodStyle checks `fine` first for.
+  is("the specific bucket wins over the generic word inside it",
+    venueStyleOf({ category: "Cocktail bar and pub" }), "highend");
+  // Danish welds the modifier on the front and the head last, so the right edge
+  // does the work and the definite and plural endings are allowed after it.
+  is("a Danish compound is read by its head", venueStyleOf({ category: "Studenterbaren" }), "casual");
+  is("and a plural one", venueStyleOf({ category: "Vinbarer" }), "highend");
+
+  // ── AND THE PRICE IS NOT AN INPUT ───────────────────────────────
+  //
+  // foodStyle's reason, plus one that is sharper here: a bodega beer and an
+  // airport beer cost the same and are two different evenings. Cheap is not
+  // casual and expensive is emphatically not high-end.
+  is("a cheap cocktail bar is still high-end",
+    venueStyleOf({ category: "Cocktail bar", priceNote: "Beers from 30 DKK" }), "highend");
+  is("and an expensive bodega is still casual",
+    venueStyleOf({ category: "Bodega", priceNote: "Beers 95 DKK" }), "casual");
+  {
+    const src = readFileSync(join(root, "src/utils/venueStyle.js"), "utf8");
+    ok("and the file never reads a price field at all",
+      !/\b(?:entry|e)\??\.(?:priceNote|price|ticketsGlance)\b/.test(stripNonCode(src)));
+  }
+
+  // ── AN UNCLASSIFIED ROW IS CLAIMED BY NOTHING ───────────────────
+  is("the pool's coverage is what it is, not what we wish", Math.round(venueStyleCoverage(LIVE) * 100), 83);
+  is("and the row it cannot answer for is listable", unstyledVenues(LIVE).map(v => v.name), ["Hive"]);
+  is("a label for an unknown row is empty, never a guess", venueStyleLabel({ category: "Nightclub" }), "");
+
+  // ── TWO GATES, AND THE SECOND IS THE ONE THAT BITES TODAY ───────
+  //
+  // Coverage is 83%, comfortably over the half foodStyle set. The control still
+  // must not render, because only ONE style is present: a filter offering
+  // "Casual (5)" and nothing else is the list you are already looking at.
+  // foodStyle states this rule on its own Type dropdown — "with nothing
+  // published as a food street, 'Restaurants' means everything and the control
+  // is a tap that does nothing."
+  is("only one style is present in what is published today", stylesPresent(LIVE), ["casual"]);
+  ok("so the control stays off the page", !showVenueStyleFacet(LIVE));
+  is("and declares no facet", buildNightlifeStyleFacet(LIVE).length, 0);
+  // AND IT TURNS ON THE MOMENT THERE IS SOMETHING TO CHOOSE BETWEEN, which is
+  // when somebody states venueStyle on Hive.
+  {
+    const withHive = LIVE.map(v => v.name === "Hive" ? { ...v, venueStyle: "highend" } : v);
+    ok("stating it on one row turns the control on", showVenueStyleFacet(withHive));
+    is("and both styles are offered", stylesPresent(withHive), ["highend", "casual"]);
+    const facet = buildNightlifeStyleFacet(withHive)[0];
+    is("under one label", facet.label, "Style");
+    is("with All in front", facet.options[0].value, "All");
+    // THE FACET FILTERS, rather than merely existing. This is the difference
+    // foodStyle's comment names: a facet declared in App.jsx can only be tested
+    // by a regex over its own source.
+    is("and High-end returns the high-end one", withHive.filter(v => facet.test(v, "highend")).map(v => v.name), ["Hive"]);
+    is("and Casual returns the other five", withHive.filter(v => facet.test(v, "casual")).length, 5);
+  }
+  // A pool this cannot classify at all never gets a control, whatever else is
+  // true of it.
+  ok("an unclassifiable pool gets no control",
+    !showVenueStyleFacet([{ category: "Nightclub" }, { category: "Jazz club" }, { category: "Nightclub" }]));
+  ok("and an empty one does not either", !showVenueStyleFacet([]));
+
+  // ── THE LABELS ──────────────────────────────────────────────────
+  // His friend's words, and Oliver relayed them in those words.
+  is("the labels are the words he was given", VENUE_STYLES.map(s => VENUE_STYLE_LABEL[s]), ["High-end", "Casual"]);
+
+  // ── AND WHAT THE SCREEN SAYS ────────────────────────────────────
+  // DetailPage draws the map and cannot be rendered here, so the chip is its
+  // own file. Same move as AttractionBadge this morning.
+  {
+    const { renderSurface } = await import(pathToFileURL(join(root, "tests/render.mjs")).href);
+    const CC = { surface: "#111", border: "#222", gold: "#D9A441", text: "#fff", light: "#ddd", muted: "#888" };
+    const chip = (item) => renderSurface("src/components/VenueStyleChip.jsx", "VenueStyleChip", { item, C: CC });
+    is("a nightclub nobody has classified draws no chip at all", (await chip({ category: "Nightclub" })).text, "");
+    ok("a bodega says casual", (await chip({ category: "Bodega" })).says("Casual"));
+    ok("a cocktail bar says high-end", (await chip({ category: "Cocktail bar" })).says("High-end"));
+    ok("and a stated one is drawn from what was stated",
+      (await chip({ category: "Nightclub", venueStyle: "highend" })).says("High-end"));
+    // The colour is doing the same job as the word, so it may only come from
+    // the same answer.
+    ok("high-end earns the gold", /D9A441/.test((await chip({ category: "Cocktail bar" })).html));
+    ok("and casual does not", !/D9A441/.test((await chip({ category: "Bodega" })).html));
+  }
+
+  // ── THE WIRING, WHICH IS WHERE FOUR FEATURES DIED THIS MONTH ────
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the venue card draws the chip", /<VenueStyleChip item=\{spot\} C=\{C\} \/>/.test(app));
+    ok("the style control is gated on the same function the tests use", /showVenueStyleFacet\(inTab\)/.test(app));
+    // A FILTER THE READER CANNOT SEE MUST NOT BE REMOVING ROWS. The control
+    // hides itself on today's data, so the narrowing has to hide with it.
+    ok("and the narrowing is gated on it too",
+      /nightlifeStyle && showVenueStyleFacet\(inTab\)/.test(app));
+    // venueStyle has to survive the publish shape or the schema is prompt spent
+    // for nothing — nearestStation was asked of three types and dropped for all
+    // three, which is the precedent this line exists against.
+    const shape = stripComments(readFileSync(join(root, "src/utils/studioContent.js"), "utf8"));
+    ok("and a published nightlife row carries venueStyle", /venueStyle: t\.venueStyle \|\| ""/.test(shape));
+    const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
+    ok("and the draft is asked for it", /"venueStyle"/.test(prompts));
+  }
+}
+
+// ── "THE AI ENDS UP WRITING ABOUT THE HOSTEL" ───────────────────────
+//
+// Oliver, 27 Aug 2026: "there are quite a few 'nightlife bars' that are
+// hostels.. we need to avoid that the AI end up writing about the hostel,
+// rather than it as a nightlife and hostel."
+//
+// The research for a hostel bar is overwhelmingly about the beds, because that
+// is what the internet has to say about a hostel. The draft follows its sources
+// and files a booking review under Nightlife.
+{
+  const { looksLikeLodging, stayDrift, stayDriftNote, publicAccessAnswered, STAY_TERMS, LODGING_RULE, LODGING_NOTES_RULE, isLodgingType } = M;
+
+  // ── WHICH VENUES THIS IS EVEN ABOUT ─────────────────────────────
+  ok("a hostel bar is one", looksLikeLodging({ name: "Steel House Copenhagen", category: "Hostel bar" }));
+  ok("a Danish vandrerhjem is one", looksLikeLodging({ name: "Danhostel Ribe", category: "Vandrerhjem" }));
+  ok("a kro is one", looksLikeLodging({ name: "Den Gamle Kro", category: "Kro" }));
+  ok("a bodega is not", !looksLikeLodging({ name: "Farfar's Bodega", category: "Bodega with a dance floor" }));
+  ok("and neither is a nightclub", !looksLikeLodging({ name: "Hive", category: "Nightclub" }));
+
+  // ── THE DRIFT ───────────────────────────────────────────────────
+  const REVIEW = "The bar sits just off reception. Dorms from 220 DKK per night, check-in from 3pm, and breakfast is included. It gets busy from 9pm.";
+  {
+    const f = stayDrift(REVIEW).map(x => x.id);
+    ok("beds are caught", f.includes("dorm"));
+    ok("a room rate is caught", f.includes("nightly-rate"));
+    ok("check-in is caught", f.includes("checkin"));
+    ok("and breakfast is caught however the sentence is built", f.includes("breakfast"));
+  }
+  // ONE FINDING PER TERM, NOT PER OCCURRENCE. Three mentions of dorms is one
+  // thing to fix — the same rule literalRenderings applies to false friends.
+  is("three mentions of one thing is one finding",
+    stayDrift("Dorms upstairs. The dorms are cheap. Dorm beds from 200.").length, 1);
+
+  // ── AND THE WORDS IT DELIBERATELY DOES NOT FLAG ─────────────────
+  //
+  // This is the half Oliver was precise about: "rather than it AS A NIGHTLIFE
+  // AND HOSTEL". A rule that suppressed the word hostel would delete the one
+  // thing a traveller standing outside actually needs.
+  const GOOD = "The bar is off the lobby of a hostel, and non-guests are welcome — you do not need to be staying to drink here. Reception will point you through. Fills after 9pm with travellers and locals over 40-krone beers.";
+  is("saying it is inside a hostel is not drift", stayDrift(GOOD).length, 0);
+  ok("and neither is sending them past reception", !stayDrift("Walk past reception and it is on your left.").length);
+
+  // ── THE ONE FACT THIS KIND OF VENUE HAS TO ANSWER ───────────────
+  ok("an entry that answers it is recognised", publicAccessAnswered(GOOD));
+  ok("in Danish too", publicAccessAnswered("Baren er åben for alle, også ikke-boende."));
+  ok("and one that never mentions it is not", !publicAccessAnswered(REVIEW));
+
+  // ── THE NOTE THE FOUNDER READS ──────────────────────────────────
+  {
+    const note = stayDriftNote({ name: "Steel House", category: "Hostel bar" }, REVIEW);
+    ok("a hostel bar written as a hostel is reported", !!note);
+    ok("and it quotes what the entry actually says, so it can be acted on", /Dorms/.test(note));
+    ok("and it names the missing fact", /NOT staying/.test(note));
+    // A clean hostel-bar entry is silent.
+    is("a hostel bar written as a bar is not reported",
+      stayDriftNote({ name: "Steel House", category: "Hostel bar" }, GOOD), "");
+    // AND IT ONLY EVER FIRES ON A VENUE THAT IS ONE. A bodega's entry can use
+    // one of these words and mean something else entirely.
+    is("the same prose under a bodega is not reported",
+      stayDriftNote({ name: "Farfar's Bodega", category: "Bodega" }, REVIEW), "");
+  }
+
+  // ── THE RULE THE DRAFT IS GIVEN ─────────────────────────────────
+  //
+  // The detector is the net; this is the half that stops it happening, because
+  // catching a hostel review after the fact still costs a redraft. Written as
+  // what TO do: "do not write about the hostel" produces an entry that dodges
+  // the word, and the word is load-bearing.
+  ok("the rule tells it what the subject is", /YOU ARE WRITING ABOUT THE BAR/.test(LODGING_RULE));
+  ok("and names the fact it must answer", /NOT STAYING THERE WALK IN/i.test(LODGING_RULE));
+  ok("and it still allows the hostel to be named", /DO say/.test(LODGING_RULE));
+  {
+    const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
+    ok("and the nightlife prompt actually carries it", /\$\{LODGING_RULE\}/.test(prompts));
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("and the audit runs the detector on the reader-facing prose",
+      /stayDriftNote\(t, readerText\(t\)\)/.test(app));
+  }
+  // Every term has a reason a person can read, or the finding is unactionable.
+  ok("every term explains itself", STAY_TERMS.every(t => !!t.why && !!t.id));
+
+  // ── AND THE STAGE BEFORE THE WRITER ─────────────────────────────
+  //
+  // Oliver, 27 Aug 2026: "aren't nightlife being written by OpenAI?"
+  //
+  // Not quite, and the real answer is the more useful one. App.jsx splits it
+  // "OpenAI structures, Claude writes": OpenAI sorts the raw research into
+  // point-form notes under headings it chooses, and Claude writes the prose
+  // from those notes. So LODGING_RULE does reach the writer — and reaches it
+  // too late to matter on its own, because for a hostel bar the notes have
+  // already come back organised as Rates, Check-in, Rooms and Breakfast. The
+  // most conscientious writer alive cannot put back a fact nobody kept.
+  ok("the organiser is told what to keep", /DROP room rates/.test(LODGING_NOTES_RULE));
+  ok("and told the two things the writer cannot put back",
+    /cannot put back what you leave out/.test(LODGING_NOTES_RULE));
+  // A bar street can be a hostel bar's street; a restaurant inside a hotel is a
+  // different problem with a different answer.
+  ok("nightlife venues get the steer", isLodgingType("night"));
+  ok("and bar streets", isLodgingType("nightStreet"));
+  ok("but not restaurants", !isLodgingType("food"));
+  ok("nor towns", !isLodgingType("town"));
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    // ── AND IT IS SPLICED INTO THE STRUCTURING CALL, NOT THE WRITER'S ──
+    // The two rules are worded for two different jobs and swapping them would
+    // tell the organiser what the subject is and the writer what to discard.
+    ok("the structuring prompt carries the notes rule",
+      /\$\{isLodgingType\(sType\) \? LODGING_NOTES_RULE : ""\}/.test(app));
+    // ── AND IT IS IN THE OpenAI CALL, NOT THE CLAUDE ONE ──────────
+    // Which call a prompt string sits in is the whole point of this pair, and
+    // the first version of this assertion took the FIRST askOpenAI in a 1.6MB
+    // file rather than the one this string is inside. The rule is "the nearest
+    // preceding call is the OpenAI one", so that is what is asked.
+    // The USE, not the import — the first mention of the name in this file is
+    // the import line at the top, which sits before every call there is.
+    const at = app.indexOf("isLodgingType(sType) ? LODGING_NOTES_RULE");
+    ok("the notes rule is spliced into a prompt at all", at > 0);
+    const oa = app.lastIndexOf("askOpenAI(", at);
+    const ac = app.lastIndexOf("askClaude(", at);
+    ok("inside the OpenAI call and not the Claude one", oa > ac);
+    ok("and close enough to be that call's own prompt", at - oa < 3000);
+    ok("and the writer's own rule is still on the nightlife prompt",
+      /\$\{LODGING_RULE\}/.test(readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8")));
   }
 }
 
