@@ -31,7 +31,7 @@ import { freeEntrance } from "./data/freeEntrance";
 import { nightlifeSpots } from "./data/nightlife";
 import { nightlifeTowns } from "./data/nightlifeTowns";
 import { nightlifeStreets } from "./data/nightlifeStreets";
-import { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit } from "./utils/publishedRepair";
+import { repairBody, headingsOf, bodyProblems, priceProblems, auditPublished, describeAudit } from "./utils/publishedRepair";
 import { blockingCoordProblems, coordProblems, coordAudit, describeCoordAudit } from "./utils/coordCheck";
 import { fetchProfile, saveProfile, takeHeldProfile, profileForPrompt, isBlank as profileIsBlank, homeCurrency } from "./utils/profile";
 // The half of the account that learns rather than being typed. See
@@ -1617,18 +1617,106 @@ function GemlyxApp() {
   const [healthOpen, setHealthOpen] = useState(false);
   const [repairBusy, setRepairBusy] = useState(null);
   const [repairNote, setRepairNote] = useState(null);
+  // ── "IT JUST SAYS THERE IS NOTHING TO CHANGE" ───────────────────
+  //
+  // Oliver, 27 Aug 2026, pressing this on an attraction whose price is wrong.
+  //
+  // The message was "already uses the current headings", which was TRUE and
+  // read as "nothing is wrong with this row" — on a row the audit two panels up
+  // was flagging at that exact moment. I added priceProblems to the REPORT this
+  // morning and never to the BUTTON, which is the wiring failure this file
+  // names against itself over and over: a feature finished from every angle
+  // except the one somebody presses.
+  //
+  // So the button now answers for the whole row. A rename it cannot do is still
+  // reported the same way a missing Reality Check already was: plainly, and as
+  // the thing a rename was never going to fix.
+  const otherwiseWrong = (row) => {
+    const p = priceProblems(row?.payload, row?.type);
+    if (!p.length) return "";
+    return p[0].kind === "misleading-free"
+      ? ` Its ticket line still says "${p[0].says}", which is about who gets in free rather than what entry costs. A rename cannot fix that: press Find the price.`
+      : " It still says nothing about what entry costs. A rename cannot fix that: press Find the price.";
+  };
   const repairRowHeadings = async (row) => {
     setRepairBusy(row.id); setRepairNote(null);
     try {
       const { body, renamed, changed } = repairBody(row.payload?.blogBody);
-      if (!changed) { setRepairNote(`${row.payload?.name || "That entry"} already uses the current headings.`); return; }
+      if (!changed) {
+        const other = otherwiseWrong(row);
+        setRepairNote(`${row.payload?.name || "That entry"} already uses the current headings.${other || " Nothing else on it needs changing either."}`);
+        return;
+      }
       await patchContentPayload(row, { ...(row.payload || {}), blogBody: body });
       // Named, not counted, and it says plainly what a rename could not do.
       const stillNoVerdict = !headingsOf(body).some(h => /reality check/i.test(h));
-      setRepairNote(`${row.payload?.name}: renamed ${renamed.map(r => `"${r.from}" to "${r.to}"`).join(", ")}.${stillNoVerdict ? " It still has no Reality Check, which a rename cannot write." : ""}`);
+      setRepairNote(`${row.payload?.name}: renamed ${renamed.map(r => `"${r.from}" to "${r.to}"`).join(", ")}.${stillNoVerdict ? " It still has no Reality Check, which a rename cannot write." : ""}${otherwiseWrong(row)}`);
     } catch (e) {
       setRepairNote(`Could not repair ${row.payload?.name || "that entry"}: ${e.message}`);
     } finally { setRepairBusy(null); }
+  };
+
+  // ── ONE FIELD, NOT A REDRAFT ────────────────────────────────────
+  //
+  // Oliver, 27 Aug: "Legoland is obviously not a free entrance, but the draft is
+  // fine", and on 10 Aug, about the thing this whole file exists to avoid: "I'm
+  // tired of wasting time and money on redrafting these things."
+  //
+  // So this fetches a price and writes ONE FIELD. It never touches a paragraph,
+  // never calls the writer, and never invents: the figure is read off a page by
+  // ticketPriceOn, exactly as it is during a draft, and if no page prices the
+  // door then nothing is written and it says so.
+  //
+  // THE ORDER IS CHEAPEST FIRST. The row's own website is already stored and
+  // usually has the answer, so it gets first refusal; the Perplexity hunt runs
+  // only when that page prices nobody, which is the same escalation rule the
+  // draft pipeline uses and the same condition — see needHunt.
+  const [priceBusy, setPriceBusy] = useState(null);
+  const findRowPrice = async (row) => {
+    setPriceBusy(row.id); setRepairNote(null);
+    const name = row?.payload?.name || "That entry";
+    try {
+      const town = row?.payload?.town || row?.payload?.city || "";
+      const read = async (url) => {
+        if (!url) return null;
+        try {
+          const res = await studioFetch(`/api/scan-source?fresh=1&url=${encodeURIComponent(url)}`);
+          const data = await res.json();
+          const text = String(data?.text || "");
+          if (!text.trim()) return null;
+          const priced = ticketPriceOn(text);
+          // concession-only is not a price. entryAudit: "it means the page we
+          // read prices members and students and never says what everyone else
+          // pays" — which is the exact state that put us here.
+          if (!priced || priced.kind !== "price") return null;
+          return { url, priced };
+        } catch { return null; }
+      };
+      let hit = await read(row?.payload?.website);
+      if (!hit) {
+        const hunt = await askPerplexity(TICKET_HUNT_PROMPT(name, town, row?.type));
+        const urls = hunt?.error ? [] : ticketHuntUrls(hunt);
+        for (const u of urls.slice(0, 3)) { hit = await read(u); if (hit) break; }
+      }
+      if (!hit) {
+        setRepairNote(`No page found that states what entry to ${name} costs. Nothing changed — a price nobody has read is worse than an empty field.`);
+        return;
+      }
+      const { lo, hi, currency } = hit.priced;
+      // The row's own words, in the shape the rest of the app reads: a range
+      // stays a range, and the currency is the page's own.
+      const value = lo === hi ? `${lo} ${currency}` : `${lo} to ${hi} ${currency}`;
+      await patchContentPayload(row, {
+        ...(row.payload || {}),
+        ticketsGlance: value,
+        // Stamped the same way a draft stamps it, so provenance.js can print it
+        // and nothing downstream can tell this apart from a drafted price.
+        __priceSource: { url: hit.url, host: domainOf(hit.url), price: value, at: new Date().toISOString() },
+      });
+      setRepairNote(`${name}: entry is ${value}, read off ${domainOf(hit.url)}. One field changed, the writing is untouched.`);
+    } catch (e) {
+      setRepairNote(`Could not read a price for ${name}: ${e.message}`);
+    } finally { setPriceBusy(null); }
   };
   // ── CREDIT AN UPLOADED IMAGE (Oliver, Aug 5: "I need to be able to put
   // credits when I input media") ──────────────────────────────────
@@ -14807,6 +14895,24 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                     <button onClick={() => repairRowHeadings(row)} disabled={repairBusy === row.id}
                                       style={{ background: "#FFB34722", border: "1px solid #FFB34766", color: "#FFB347", borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
                                       {repairBusy === row.id ? "…" : "🏷 Fix headings (free)"}
+                                    </button>
+                                  )}
+                                  {/* ── AND THE ONE HE COULD NOT PRESS ──────
+                                      "I can't sweep the free away. It just says
+                                      there is nothing to change." He was right
+                                      and the button was the problem: Fix
+                                      headings only appears where a RENAME would
+                                      do something, so on an attraction with a
+                                      wrong price there was no button at all,
+                                      and pressing it anywhere else reported on
+                                      headings and stayed silent about this.
+                                      Offered on exactly the rows priceProblems
+                                      flags, so it is never a control that does
+                                      nothing. */}
+                                  {priceProblems(row.payload, row.type).length > 0 && (
+                                    <button onClick={() => findRowPrice(row)} disabled={priceBusy === row.id}
+                                      style={{ background: `${C.gold}22`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
+                                      {priceBusy === row.id ? "…" : "💰 Find the price"}
                                     </button>
                                   )}
                                   <button onClick={() => { setMediaEditId(v => v === row.id ? null : row.id); setMediaError(null); setMediaReelInput(""); }}

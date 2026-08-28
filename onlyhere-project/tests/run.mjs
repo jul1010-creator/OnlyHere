@@ -34362,9 +34362,20 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   {
     const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
     const calls = app.match(/\/api\/scan-source\?/g) || [];
-    const marked = app.match(/\/api\/scan-source\?\$\{editingId !== null \? "fresh=1&" : ""\}/g) || [];
+    const conditional = app.match(/\/api\/scan-source\?\$\{editingId !== null \? "fresh=1&" : ""\}/g) || [];
+    // ── PINNED TO THE RULE, NOT TO THE EXPRESSION ─────────────────
+    // The rule is that no call about a row which already exists may be served
+    // from the cache. The draft path expresses that conditionally, because it
+    // does not know yet whether this is a redraft. The price repair added on
+    // 27 Aug is only ever run on a published row, so it is UNCONDITIONALLY
+    // fresh — which satisfies the rule harder, and broke an assertion that was
+    // matching the conditional's exact characters.
+    const alwaysFresh = app.match(/\/api\/scan-source\?fresh=1&/g) || [];
     ok("there are scan-source calls to check", calls.length >= 4);
-    is("and every one of them marks a redraft", marked.length, calls.length);
+    is("and every one of them refuses the cache on an existing row",
+      conditional.length + alwaysFresh.length, calls.length);
+    ok("the draft path decides it from editingId", conditional.length >= 4);
+    ok("and the repair path, which is only ever a redraft, is always fresh", alwaysFresh.length >= 1);
   }
 }
 
@@ -37688,6 +37699,57 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("and the sentence separates them from the structural problems",
       /names who gets in free but not what entry costs/.test(describeAudit(a)));
     ok("and says what it costs to fix", /one field, not a redraft/.test(describeAudit(a)));
+  }
+
+  // ── "I CAN'T SWEEP THE FREE AWAY" ───────────────────────────────
+  //
+  // Oliver, 27 Aug 2026: "It just says there is nothing to change."
+  //
+  // He was right, and the button was the problem. priceProblems went into the
+  // REPORT this morning and never into the thing he presses, so Fix headings
+  // answered about headings and stayed silent about the row it was sitting on —
+  // and on an attraction with no legacy headings there was no button at all.
+  // The exact wiring failure this codebase names against itself: finished from
+  // every angle except the one somebody touches.
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    // The message answers for the WHOLE row now, not only for the rename.
+    // ── PINNED TO THE MESSAGE, NOT TO THE CALL ────────────────────
+    //
+    // Found by mutation, 27 Aug: the first version of these two asserted that
+    // otherwiseWrong(row) was CALLED twice, and putting the old silent message
+    // back left both calls in place — the no-rename branch still computed
+    // `other` and then dropped it on the floor. A value computed and never read
+    // is this codebase's oldest failure and I had just written an assertion
+    // that could not see it. So both now pin the SENTENCE.
+    ok("the silent branch says what a rename cannot fix",
+      /already uses the current headings\.\$\{other/.test(app));
+    ok("and so does the branch that renamed something",
+      /a rename cannot write\." : ""\}\$\{otherwiseWrong\(row\)\}/.test(app));
+    ok("and it quotes the ticket line back", /which is about who gets in free rather than what entry costs/.test(app));
+    // AND THERE IS SOMETHING TO PRESS. A report with no action is how this got
+    // read as "nothing is wrong".
+    ok("a price repair exists", /const findRowPrice = async \(row\)/.test(app));
+    ok("offered on exactly the rows the sweep flags, so it is never a dead control",
+      /priceProblems\(row\.payload, row\.type\)\.length > 0 &&/.test(app));
+    // ── AND IT IS ONE FIELD, WHICH IS THE WHOLE POINT ─────────────
+    // "Legoland is obviously not a free entrance, but the draft is fine." So no
+    // paragraph is touched and no writer is called.
+    const body = app.slice(app.indexOf("const findRowPrice"), app.indexOf("const findRowPrice") + 3000);
+    ok("it writes the ticket line", /ticketsGlance: value/.test(body));
+    ok("and stamps where the figure came from", /__priceSource: \{ url: hit\.url, host: domainOf\(hit\.url\)/.test(body));
+    ok("and never calls the writer", !/askClaude|askOpenAI/.test(body));
+    ok("and never touches the prose", !/blogBody|desc:/.test(body));
+    // THE FIGURE IS READ, NEVER COMPOSED. ticketPriceOn is the same reader the
+    // draft uses, and concession-only is explicitly refused — it is the state
+    // that produced this whole problem.
+    ok("the price is read off a page", /ticketPriceOn\(text\)/.test(body));
+    ok("and a concession-only page is refused", /priced\.kind !== "price"/.test(body));
+    ok("and finding nothing changes nothing", /Nothing changed/.test(body));
+    // CHEAPEST FIRST: the row's own website before any paid hunt.
+    ok("the row's own website gets first refusal", /read\(row\?\.payload\?\.website\)/.test(body));
+    ok("and the hunt runs only after it", body.indexOf("payload?.website") < body.indexOf("TICKET_HUNT_PROMPT"));
+    ok("and the hunt is asked as the row's own kind", /TICKET_HUNT_PROMPT\(name, town, row\?\.type\)/.test(body));
   }
 
   // ── AND THE PIPELINE STOPS PRODUCING THEM ───────────────────────
