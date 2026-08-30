@@ -37701,6 +37701,59 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("and says what it costs to fix", /one field, not a redraft/.test(describeAudit(a)));
   }
 
+  // ── RUNGSTED IS NOT RINGSTED ────────────────────────────────────
+  //
+  // Oliver's run log, 30 Aug 2026, drafting Rungsted Festival. Step one came
+  // back "Ringsted Lystanlæg, 4100 Ringsted" — a town sixty kilometres inland
+  // from the North Zealand harbour being drafted — and the line accepted it on
+  // Number.isFinite alone.
+  //
+  // The cost is in the rest of that log: sources "scoped to Ringsted", the
+  // arrival point at Ringsted Central Train Station, the journey measured to
+  // Ringsted and published as travelTime, and then thirteen UNVERIFIED findings
+  // against the writer's CORRECT sentences about Rungsted Havn, because they
+  // were checked against research about the wrong town.
+  {
+    const { listingMatchesSubject, describeListingRefusal } = M;
+    // The matcher already refused this, at a different step in the same draft.
+    ok("the real mismatch is caught", !listingMatchesSubject("Rungsted Festival", "", "Ringsted Lystanlæg"));
+    ok("and so is the near-identical name", !listingMatchesSubject("Rungsted Festival", "", "Ringsted Festival"));
+    // AND IT STILL ACCEPTS THE ONES IT SHOULD, or the guard is a mute button.
+    ok("the same place under its own spelling is fine", listingMatchesSubject("Rungsted Festival", "", "Rungsted Festival"));
+    ok("a fuller registered name is fine", listingMatchesSubject("Legoland", "Billund", "LEGOLAND Billund Resort"));
+    ok("and a town typed into the box is dropped before comparing", listingMatchesSubject("Rundetaarn Copenhagen", "Copenhagen", "Rundetårn"));
+
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    // ── THE RULE EXISTED AND ONE CALL SITE NEVER ASKED ────────────
+    // Its refusal message promises the exact outcome the coordinate line was
+    // breaking: "no website, no address, no hours, no coordinate."
+    ok("the refusal message still promises no coordinate",
+      /no address, no hours, no coordinate/.test(readFileSync(join(root, "src/utils/placeChoice.js"), "utf8")));
+    ok("and the coordinate now asks the same question the listing does",
+      /listingMatchesSubject\(name, draftTown, pd\.name \|\| pd\.address\)/.test(app));
+    // A coordinate is only taken when it passed. Number.isFinite alone is what
+    // let Ringsted through.
+    ok("nothing is taken from a refused lookup", /if \(placesAbout\) \{/.test(app));
+    // Finiteness is necessary and no longer sufficient, which is the whole
+    // change: Ringsted's coordinate was a perfectly finite number.
+    ok("and finiteness alone no longer admits one",
+      /const placesOk = pr\.ok && !pd\.error && Number\.isFinite/.test(app)
+      && /const placesAbout = placesOk && listingMatchesSubject/.test(app));
+    // BOTH CALL SITES, or the pair drifts again. The hours step had it first.
+    is("both Google answers are checked against the subject",
+      (app.match(/listingMatchesSubject\(/g) || []).length, 2);
+    // A REFUSAL IS A DECISION, not a silence. The log has to be able to tell
+    // "Google had nothing" from "Google had a different town".
+    ok("the refusal is written into the decision log",
+      /whether Google's coordinate is about this place/.test(app));
+    // "Google had nothing" and "Google had a different town" are different
+    // facts and the note has to be able to tell them apart, or the log reads
+    // like an ordinary miss on the draft this exists to prevent.
+    ok("and the note says which of the two happened",
+      /a search scoped to the wrong town reads as a normal draft/.test(app));
+    ok("the refusal text names the listing", /Ringsted Lystanlæg/.test(describeListingRefusal("Rungsted Festival", "", "Ringsted Lystanlæg")));
+  }
+
   // ── "I CAN'T SWEEP THE FREE AWAY" ───────────────────────────────
   //
   // Oliver, 27 Aug 2026: "It just says there is nothing to change."

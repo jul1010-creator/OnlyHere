@@ -2581,6 +2581,9 @@ Say which answer came from which source, so a fact from a vouched page and a fac
     // for that. Google Places answered "Jomfru Ane Gade, 9000 Aalborg" at 0.8
     // seconds and the answer was used to build a log string and dropped.
     let placesName = "";
+    // Why the coordinate was refused, so the note below can say it. Empty when
+    // Google simply had nothing, which is a different fact.
+    let placesRefused = "";
     // ── WHERE IT IS, BEFORE ANYTHING IS SEARCHED ──────────────────────
     //
     // Oliver, 13 Aug 2026: "So when doing research, make maps be one of the
@@ -2653,13 +2656,61 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         try {
           const pr = await studioFetch(`/api/places-locate?name=${encodeURIComponent(draftTown ? `${name}, ${draftTown}` : name)}`);
           const pd = await pr.json();
-          if (pr.ok && !pd.error && Number.isFinite(pd.lat) && Number.isFinite(pd.lon)) {
+          // ── RUNGSTED IS NOT RINGSTED ────────────────────────────
+          //
+          // Oliver's run log, 30 Aug 2026, drafting Rungsted Festival. Step one:
+          //
+          //   55.4472, 11.7973 via Google Places, which found it as
+          //   "Ringsted Lystanlæg, 4100 Ringsted", Midt- og Vestsjælland
+          //
+          // Rungsted is a harbour on the North Zealand coast. Ringsted is a
+          // town sixty kilometres inland. One letter, and this line accepted it
+          // on nothing but Number.isFinite.
+          //
+          // WHAT A WRONG COORDINATE COSTS, from that same log: the founder
+          // sources were "scoped to Ringsted", the arrival point came back as
+          // Ringsted Central Train Station, the journey was measured to Ringsted
+          // and published as the travel time, and then the fact-checker marked
+          // the writer's CORRECT sentences about Rungsted Havn as UNVERIFIED,
+          // because it was checking them against research about the wrong town.
+          // Thirteen findings, every one of them backwards.
+          //
+          // ── AND THE RULE ALREADY EXISTED, ONE CALL AWAY ─────────
+          //
+          // listingMatchesSubject refused "Ringsted Festival" for this same
+          // draft, at the opening-hours step, under a rule already written down:
+          // "A listing is only usable when its own name is the name of the thing
+          // being drafted." Its refusal message even promises the outcome this
+          // line was quietly breaking — "Nothing was taken from it: no website,
+          // no address, no hours, NO COORDINATE."
+          //
+          // Same provider, same wrong match, same draft. One call site asked and
+          // one never did, and the one that never did runs first and scopes
+          // everything after it.
+          //
+          // REFUSING IS THE SAFE DIRECTION and the log already handles it: with
+          // no coordinate the draft says so plainly and leaves the place-scoped
+          // sources out. A missing region costs a weaker search. A wrong one
+          // costs a whole draft about the wrong town, silently.
+          const placesOk = pr.ok && !pd.error && Number.isFinite(pd.lat) && Number.isFinite(pd.lon);
+          const placesAbout = placesOk && listingMatchesSubject(name, draftTown, pd.name || pd.address);
+          if (placesOk && !placesAbout) {
+            decide("whether Google's coordinate is about this place", {
+              winner: "nothing",
+              loser: `Google Places' "${String(pd.name || pd.address || "").slice(0, 60)}"`,
+              rule: "A coordinate is only usable when the place Google found is the place being drafted. One letter apart is a different town, and a wrong coordinate scopes every search that follows it.",
+              value: `${name} (${sType})`,
+            });
+          }
+          if (placesAbout) {
             coords = { lat: pd.lat, lon: pd.lon };
             via = `Google Places, which found it as "${String(pd.address || pd.name || name).slice(0, 90)}"`;
             // KEPT, not only logged. This is the spelling the rest of the internet
             // uses, and the relevance filter is the one thing that needs it.
             if (pd.name) placesName = String(pd.name).trim();
             if (pd.town && !draftTown) draftTown = pd.town;
+          } else if (placesOk) {
+            placesRefused = describeListingRefusal(name, draftTown, pd.name || pd.address);
           }
         } catch { /* named in the log below, never fatal: a draft with no coordinate still runs */ }
       }
@@ -2681,7 +2732,9 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         outcome: placed ? "ok" : "empty",
         got: placed
           ? `${placed.lat.toFixed(4)}, ${placed.lon.toFixed(4)} via ${via}, ${describeRegion(placed.lat, placed.lon, precise)}`
-          : `nothing placed "${name}"${draftTown ? ` or "${name}, ${draftTown}"` : ""}, so no region is known and every place-scoped source will be left out`,
+          : placesRefused
+            ? `${placesRefused} No region is known, so every place-scoped source is left out — which is the safe half of this: a search scoped to the wrong town reads as a normal draft and is wrong all the way down.`
+            : `nothing placed "${name}"${draftTown ? ` or "${name}, ${draftTown}"` : ""}, so no region is known and every place-scoped source will be left out`,
         why: placed ? "" : "A place-scoped source is excluded when the place is unknown, deliberately: including the wrong town's tourist board costs money on every research call and invites its page being read as an authority here.",
         used: !!placed,
       });
