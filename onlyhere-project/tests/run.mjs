@@ -15254,8 +15254,15 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
 
   // ── THE WIRING ───────────────────────────────────────────────────
   const appT = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // ── PINNED TO THE RULE, NOT TO THE ARGUMENT LIST ─────────────────
+  // This matched the inline object character for character, so adding the
+  // hosts to it on 30 Aug broke an assertion whose subject — the finder runs on
+  // the reader text, inside the same gate as the trace, over both the
+  // operator's pages and the listings — was untouched.
   ok("the finder runs inside the same gate as the trace",
-     /const misses = priceMisses\(readerText\(t\), \{ siteText: scrapedSiteText, listingText: listingSiteText \}\);/.test(appT));
+     /const misses = priceMisses\(readerText\(t\), priceOpts\);/.test(appT));
+  ok("over the operator's pages and the listings alike",
+     /siteText: scrapedSiteText, listingText: listingSiteText/.test(appT));
   // Inside gateDraft, so it runs AGAIN after the auto-correction. Fifth standing
   // rule: checking a draft does not check what replaced it.
   ok("and therefore again after the correction",
@@ -37700,6 +37707,170 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       /names who gets in free but not what entry costs/.test(describeAudit(a)));
     ok("and says what it costs to fix", /one field, not a redraft/.test(describeAudit(a)));
   }
+
+  // ── "empty · discarded" OVER A PRICE WE FOUND ───────────────────────
+//
+// Oliver's run log, 30 Aug 2026, drafting Vanvittig Verdenshistorie - AARHUS:
+//
+//   31. What the pages say a ticket costs  [fetch · empty · discarded]
+//       got: 280 DKK, from a ticket shop or calendar
+//
+// Empty, discarded, and a price. And his reply: "the 'arguement' with the draft
+// is still bad... It shouldn't be difficult to check the cost."
+//
+// The step's LOGIC was right. A page states 280 and the draft states nothing,
+// which is a miss and went to him as a founder note. Two things about it were
+// not: the outcome it reported itself with, and the fact that it would not say
+// WHERE the 280 came from.
+{
+  const { findTicketPrice, priceMisses, OUTCOMES, summariseLog, formatLog } = M;
+
+  // ── IT NAMES THE PAGE NOW ───────────────────────────────────────
+  //
+  // akkc.dk is Aalborg Kongres & Kultur Center — the AALBORG venue of a touring
+  // show, on a draft about the AARHUS date. Whether 280 DKK is even this show's
+  // price is a question he could not ask, because the finding would not say.
+  // The array that fixes it already existed at the call site, and its own
+  // comment says why it is kept: "so the log can say WHICH calendar answered".
+  const OPTS = {
+    siteText: "",
+    listingText: "Vanvittig Verdenshistorie. Billetter fra 280 kr. Køb billet her.",
+    listingHosts: ["akkc.dk"],
+  };
+  {
+    const found = findTicketPrice(OPTS);
+    is("the price is still found", found.lo, 280);
+    is("and it carries the host it came from", found.listingHosts, ["akkc.dk"]);
+    const m = priceMisses("", OPTS);
+    is("a draft with no price is still a miss", m.length, 1);
+    ok("and the miss names the page", /akkc\.dk/.test(m[0].detail));
+    ok("rather than calling it a ticket shop", !/A ticket shop or calendar states a ticket price/.test(m[0].detail));
+  }
+  // AND IT FALLS BACK when the run did not record a host, so every existing
+  // caller keeps working rather than inventing a page it was never given.
+  {
+    const m = priceMisses("", { siteText: "", listingText: "Billetter 280 kr." });
+    ok("an unnamed source still reads as one", /A ticket shop or calendar/.test(m[0].detail));
+  }
+  // The operator's own page is named too, and still outranks a listing.
+  {
+    const m = priceMisses("", { siteText: "Entré 150 kr.", siteHosts: ["akkc.dk"], listingText: "Billetter 280 kr.", listingHosts: ["billetto.dk"] });
+    ok("the operator's page is named", /akkc\.dk/.test(m[0].detail));
+    ok("and it is the operator's figure that is reported", /150/.test(m[0].detail));
+  }
+
+  // ── AND A FOUND GAP IS NOT AN EMPTY RESULT ──────────────────────
+  //
+  // "ok" would say the draft is fine. "empty" says nothing was found. The truth
+  // is the third thing, and it had no way to say it.
+  ok("the log has an outcome for it", OUTCOMES.includes("found"));
+  // ── AND THE RECORDER ACCEPTS IT, WHICH IS THE ACTUAL TRAP ───────
+  //
+  // Found by mutation on my own test, 30 Aug: entry() maps anything not on
+  // OUTCOMES to "ok", so adding the outcome at the call site and forgetting
+  // this list records a missing price as a CLEAN PASS. The assertions below it
+  // build a log object literally, so they never run entry() and never see that.
+  // This one goes through the real recording path.
+  {
+    const { startLog, note: rnote, endLog } = M;
+    startLog("Outcome round-trip", "x");
+    rnote("What the pages say a ticket costs", { provider: "fetch", outcome: "found", used: false, got: "280 DKK", why: "a page states it and the draft does not" });
+    const rec = endLog();
+    is("a found gap survives the recorder as itself", rec.steps[0].outcome, "found");
+    ok("and is not silently downgraded to a clean pass", rec.steps[0].outcome !== "ok");
+  }
+  {
+    // ── AN UNKNOWN OUTCOME BECOMES "ok", WHICH IS THE TRAP ────────
+    // entry() falls back to "ok" for anything not on OUTCOMES. Adding the
+    // outcome at the call site and not to the list would have recorded this
+    // miss as a CLEAN PASS — quieter than the bug it was fixing. Asserted
+    // directly, because that is the failure mode and it is silent.
+    const log = {
+      label: "Studio draft", subject: "X (festival)", startedAt: "now", ms: 1000,
+      steps: [
+        { step: "What the pages say a ticket costs", provider: "fetch", outcome: "found", used: false, at: 100,
+          got: "280 DKK, from akkc.dk", why: "akkc.dk states a ticket price of 280 DKK and this draft states none." },
+        { step: "Something fine", provider: "google", outcome: "ok", used: true, at: 200, got: "yes" },
+      ],
+    };
+    const sum = summariseLog(log);
+    is("a found gap is counted as itself", sum.found, 1);
+    is("and not as a clean pass", sum.ok, 1);
+    is("nor as nothing", sum.empty, 0);
+    const text = formatLog(log);
+    ok("it is shouted, not whispered", /FOUND A GAP/.test(text));
+    ok("and never reads as empty", !/What the pages say a ticket costs {2}\[fetch · empty/.test(text));
+    // THE REASON IS THE FINDING. why only printed for skipped and failed, so
+    // the figure printed and what was wrong with it did not.
+    ok("and the reason prints, which is the whole point", /akkc\.dk states a ticket price of 280 DKK/.test(text));
+    ok("and the header counts it", /1 found a gap in the draft/.test(text));
+  }
+  // ── A PAGE THAT WILL NOT OPEN IS STILL A DOOR ──────────────────
+  //
+  // Oliver: "let me have a button where I can click if it's ticketmaster.com",
+  // and "Have an affiliate link under, if possible."
+  //
+  // He should not need the button. His own log, step 21, found
+  // ticketmaster.dk/event/vanvittig-verdenshistorie-billetter/369125199 and
+  // Firecrawl could not read it — the same almost-no-text failure it hit on the
+  // Rungsted draft an hour before. Eleven steps later the same run said "No
+  // ticket link ... No ticket page found". A reader got no way to buy.
+  {
+    const { isBookableTicketUrl } = M;
+    const { affiliateHref, isPartnerLink, ticketDisclosure } = M;
+    const REAL = "https://www.ticketmaster.dk/event/vanvittig-verdenshistorie-billetter/369125199";
+    // WHETHER A URL SELLS TICKETS IS ANSWERABLE FROM THE URL. That is what
+    // makes keeping an unreadable one safe, and it is already this module's job.
+    ok("a real event page is bookable without reading it", isBookableTicketUrl(REAL));
+    ok("a front page is not", !isBookableTicketUrl("https://www.ticketmaster.dk/"));
+    ok("a search is not", !isBookableTicketUrl("https://www.ticketmaster.dk/search?q=x"));
+    // The artist page is the one the Rungsted run actually read, and it sells
+    // nothing for a given date.
+    ok("and an artist page is not", !isBookableTicketUrl("https://www.ticketmaster.dk/artist/rungsted-festival-tickets/1355684"));
+    // ── AND THE AFFILIATE LINK HE ASKED FOR FALLS OUT OF IT ───────
+    // Ticketmaster's is the one programme this app has a template configured
+    // for, so a ticketUrl on that host becomes a tracked link with no second
+    // mechanism and no extra button.
+    ok("the link is wrapped for the programme", /ticketmaster\.evyy\.net/.test(affiliateHref(REAL)));
+    ok("and reads as a partner link, so the disclosure fires", isPartnerLink(affiliateHref(REAL)));
+    ok("and the disclosure says what it is", /commission/i.test(ticketDisclosure(REAL) || ""));
+
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    // KEPT ONLY WHEN THE READ FAILED AND THE SHAPE PASSES.
+    ok("an unreadable but bookable ticket page is kept as a link",
+      /if \(!hData\.text && isBookableTicketUrl\(u\) && !unreadTicketUrls\.includes\(u\)\)/.test(app));
+    ok("and it becomes the ticket link when nothing readable did",
+      /t\.ticketUrl = fallback;/.test(app));
+    // ── AND IT CONTRIBUTES NOTHING ELSE, WHICH IS THE SAFETY ──────
+    // "THE DISCARD IS THE POINT" is right about a PRICE. Nothing may read a
+    // fact off a page nobody read, so the URL must not reach pagesByUrl,
+    // listingSiteText, listingDomains or the context blob.
+    {
+      // Stated as what it is rather than as a window around it: the branch that
+      // keeps an unreadable URL does exactly one thing, so there is no room in
+      // it for the URL to become text, a price or a source. A window would have
+      // to guess how far away "nowhere else" ends, and the first version of
+      // this guessed wrong and caught the legitimate branch two lines below.
+      ok("the branch that keeps it does nothing but keep it",
+        /if \(!hData\.text && isBookableTicketUrl\(u\) && !unreadTicketUrls\.includes\(u\)\) \{\s*unreadTicketUrls\.push\(u\);\s*\}/.test(app));
+      ok("and the text half still requires a real read", /if \(hData\.text && real\) \{\s*pagesByUrl\[u\] = hData\.text;/.test(app));
+      is("the unread list is only ever written in that one place",
+        (app.match(/unreadTicketUrls\.push\(/g) || []).length, 1);
+    }
+    ok("the note says the page would not open", /could not be read, so nothing was priced or dated from it/.test(app));
+    ok("and why withholding it was worse", /left a reader with no way to buy at all/.test(app));
+  }
+
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the step reports a found gap rather than an empty result",
+      /outcome: !wanted \? "empty" : misses\.length \? "found" : "ok"/.test(app));
+    ok("and the hosts the run recorded are handed to the reader",
+      /listingHosts: \[\.\.\.new Set\(listingDomains\)\]/.test(app));
+    ok("and the operator's hosts too", /siteHosts: \[\.\.\.new Set\(officialHosts\)\]/.test(app));
+    ok("and the got line names the page instead of the category", /const priceFrom = \(w\) =>/.test(app));
+  }
+}
 
   // ── RUNGSTED IS NOT RINGSTED ────────────────────────────────────
   //

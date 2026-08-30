@@ -37,7 +37,32 @@
 // three into a blank is exactly how nine silent failures looked like a working
 // pipeline.
 
-export const OUTCOMES = ["ok", "empty", "failed", "skipped"];
+// ── AND A FIFTH, WHICH WAS BEING RECORDED AS ITS OPPOSITE ───────────
+//
+// Oliver's run log, 30 Aug 2026, drafting Vanvittig Verdenshistorie - Aarhus:
+//
+//   31. What the pages say a ticket costs  [fetch · empty · discarded]
+//       got: 280 DKK, from a ticket shop or calendar
+//
+// Empty, discarded, and a price. The step had done its job perfectly — a page
+// states 280 DKK, the draft states nothing, and that gap went to him as a
+// founder note. It had no honest outcome to report itself with. "ok" would say
+// the draft is fine, "empty" says nothing was found, and the truth is the third
+// thing: SOMETHING WAS FOUND AND THE DRAFT IS MISSING IT.
+//
+// He read "empty · discarded" on the one line in a 49-step run that was worth
+// acting on, and concluded the pipeline was being obtuse about a cost anybody
+// could look up. He was reading it correctly. The label was wrong.
+//
+// This is the same argument the file already makes one paragraph up, one rung
+// further along: a step that did not run is not a step that found nothing, and
+// A STEP THAT FOUND A PROBLEM IS NOT A STEP THAT FOUND NOTHING EITHER.
+//
+// ── AND AN UNKNOWN OUTCOME BECOMES "ok", WHICH IS WHY THIS IS HERE ──
+// entry() below falls back to "ok" for anything not on this list. Adding the
+// outcome at the call site without adding it here would have recorded the miss
+// as a clean pass — quieter than the bug it was fixing, and invisible.
+export const OUTCOMES = ["ok", "empty", "failed", "skipped", "found"];
 
 // One entry per step. `used` is the honest half: a step can succeed and have
 // its answer thrown away, which is invisible in a cost meter and is the thing
@@ -155,6 +180,7 @@ export const summariseLog = (log) => {
     empty: by("empty").length,
     failed: by("failed").length,
     skipped: by("skipped").length,
+    found: by("found").length,
     // The number that matters: steps that ran, succeeded, and were thrown away.
     discarded: steps.filter(s => s.used === false).length,
     lastAt,
@@ -170,11 +196,14 @@ export const summariseLog = (log) => {
 export const formatLog = (log) => {
   if (!log) return "";
   const s = summariseLog(log);
-  const mark = { ok: "ok", empty: "empty", failed: "FAILED", skipped: "skipped" };
+  // FOUND is shouted like FAILED, because it is the line he has to act on and
+  // it was previously the quietest line on the page.
+  const mark = { ok: "ok", empty: "empty", failed: "FAILED", skipped: "skipped", found: "FOUND A GAP" };
   const lines = [
     `${s.label}${s.subject ? `: ${s.subject}` : ""}`,
     `${log.startedAt || ""}${s.ms != null ? `  ·  ${(s.ms / 1000).toFixed(1)}s` : ""}`,
     `${s.total} steps  ·  ${s.ok} ok, ${s.empty} found nothing, ${s.failed} failed, ${s.skipped} skipped`
+      + (s.found ? `  ·  ${s.found} found a gap in the draft` : "")
       // Was "1 answered and were discarded".
       + (s.discarded ? `  ·  ${s.discarded} answered and ${s.discarded === 1 ? "was" : "were"} discarded` : ""),
     `providers: ${s.providers.join(", ") || "none"}`,
@@ -199,7 +228,9 @@ export const formatLog = (log) => {
     if (st.detail) lines.push(`     asked: ${st.detail}`);
     if (st.got) lines.push(`     got:   ${st.got}`);
     // The reason is the point of the whole file for these two.
-    if (st.why && (st.outcome === "skipped" || st.outcome === "failed")) lines.push(`     why:   ${st.why}`);
+    // "found" joins these two: the reason IS the finding, and printing the
+    // figure without saying what is wrong with it is how this read as noise.
+    if (st.why && (st.outcome === "skipped" || st.outcome === "failed" || st.outcome === "found")) lines.push(`     why:   ${st.why}`);
   });
   if ((log.decisions || []).length) {
     lines.push("", "DECISIONS (where two sources disagreed and something picked)");

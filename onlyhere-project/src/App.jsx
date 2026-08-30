@@ -3967,6 +3967,10 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // listing", which is the same unactionable shape as "a source was
       // blocked" that the scan log already fixed.
       const listingDomains = [];
+      // Ticket pages a hunt named and no reader could stand up. They price
+      // nothing and date nothing; they are kept only so a working buy link is
+      // not thrown away with the failed read. See the note at the hunt.
+      const unreadTicketUrls = [];
       const staleSkipped = [];
       // Which hosts THIS RUN decided were the operator's own, rather than a
       // guess made inside the ranker. Feeds rankSource, so "official" means
@@ -4625,6 +4629,40 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
                     why: hData.text && !real ? "A page a model named is a lead. It only counts once something here has read a price off it." : "",
                     used: !!real,
                   });
+                  // ── A PAGE THAT WILL NOT BE READ IS STILL A DOOR ──────
+                  //
+                  // Oliver, 30 Aug 2026: "It shouldn't be difficult to check the
+                  // cost. If it's really that bad, let me have a button where I
+                  // can click if it's ticketmaster.com" — and then: "Have an
+                  // affiliate link under, if possible."
+                  //
+                  // He should not need the button, and this is why. In his own
+                  // log, step 21 found
+                  //   https://www.ticketmaster.dk/event/vanvittig-verdenshistorie-billetter/369125199
+                  // and Firecrawl could not read it (almost-no-text, which is
+                  // what Ticketmaster looks like to a scraper — it failed the
+                  // same way on the Rungsted draft an hour earlier). Eleven
+                  // steps later the log said "No ticket link ... No ticket page
+                  // found". Both sentences were written by the same run.
+                  //
+                  // The discard rule above is right ABOUT A PRICE: a page a
+                  // model named and nothing could read has proved no figure.
+                  // It is being applied to the LINK as well, and a link is a
+                  // different claim. Whether a URL sells tickets for this event
+                  // is answerable from the URL — isBookableTicketUrl already
+                  // refuses a front page, a search and a category listing — and
+                  // an unreadable page is not a broken one.
+                  //
+                  // So the URL is kept as a LINK CANDIDATE ONLY. It contributes
+                  // no text, no price and no date; nothing downstream can read a
+                  // fact off a page nobody read. And once it is the ticketUrl,
+                  // affiliateHref wraps it: Ticketmaster's programme is the one
+                  // affiliate template this app has configured, so his "have an
+                  // affiliate link under" falls out of it rather than needing a
+                  // second mechanism.
+                  if (!hData.text && isBookableTicketUrl(u) && !unreadTicketUrls.includes(u)) {
+                    unreadTicketUrls.push(u);
+                  }
                   if (hData.text && real) {
                     pagesByUrl[u] = hData.text;
                     listingSiteText += ` ${hData.text}`;
@@ -5652,18 +5690,53 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // It appends to the same gate rather than living beside it, so it runs
         // AGAIN after the auto-correction. The fifth standing rule: checking a
         // draft does not check what replaced it.
-        const misses = priceMisses(readerText(t), { siteText: scrapedSiteText, listingText: listingSiteText });
-        const wanted = findTicketPrice({ siteText: scrapedSiteText, listingText: listingSiteText });
+        // listingDomains and officialHosts are the run's own record of WHICH
+        // pages answered, and its comment says why it is kept: "so the log can
+        // say WHICH calendar answered rather than 'a listing'". Passed here so
+        // the finding names akkc.dk instead of "a ticket shop or calendar" —
+        // which on a touring show is the difference between a price he can
+        // check and a price he cannot place.
+        const priceOpts = {
+          siteText: scrapedSiteText, listingText: listingSiteText,
+          siteHosts: [...new Set(officialHosts)], listingHosts: [...new Set(listingDomains)],
+        };
+        const misses = priceMisses(readerText(t), priceOpts);
+        const wanted = findTicketPrice(priceOpts);
+        // ── "empty · discarded" OVER A PRICE WE FOUND ───────────
+        //
+        // Oliver, 30 Aug 2026, reading this exact line on the Aarhus draft:
+        // "the 'arguement' with the draft is still bad... It shouldn't be
+        // difficult to check the cost."
+        //
+        // The log said, on one line:
+        //
+        //   31. What the pages say a ticket costs  [fetch · empty · discarded]
+        //       got: 280 DKK, from a ticket shop or calendar
+        //
+        // Empty, discarded, and a price. The LOGIC was right — a page states
+        // 280 and the draft states nothing, which is a miss and goes to him as
+        // a founder note. The LABEL was a lie, and it was on the single most
+        // actionable line in a 49-step run. He read "discarded" and concluded
+        // the pipeline was being obtuse about a cost anyone could look up.
+        //
+        // A found price the draft is missing is not an empty result. It is a
+        // finding, and it now says so where he is looking.
+        const priceFrom = (w) => (w.from === "official-site"
+          ? (w.siteHosts?.[0] || "the operator's own page")
+          : (w.listingHosts?.[0] || "a ticket shop or calendar"));
         note(`What the pages say a ticket costs${suffix}`, {
           provider: "fetch",
           detail: "the operator's own page first, then a ticket shop or calendar, per the source order",
-          outcome: !wanted ? "empty" : misses.length ? "empty" : "ok",
+          outcome: !wanted ? "empty" : misses.length ? "found" : "ok",
           got: wanted
             ? (wanted.free
-                ? `${wanted.from === "official-site" ? "the operator's own page" : "a ticket shop or calendar"} says entry is free`
-                : `${wanted.lo}${wanted.hi !== wanted.lo ? ` to ${wanted.hi}` : ""} ${String(wanted.currency).toUpperCase()}, from ${wanted.from === "official-site" ? "the operator's own page" : "a ticket shop or calendar"}`)
+                ? `${priceFrom(wanted)} says entry is free`
+                : `${wanted.lo}${wanted.hi !== wanted.lo ? ` to ${wanted.hi}` : ""} ${String(wanted.currency).toUpperCase()}, from ${priceFrom(wanted)}`)
             : "no page we read states a ticket price, which is a real answer and not a failure",
           why: misses.length ? misses[0].detail : "",
+          // A miss is not "used" in the draft, and it is emphatically not
+          // nothing. The outcome above carries that; this stays honest about
+          // whether the figure reached the entry.
           used: !!wanted && !misses.length,
         });
         // noteToFounder, not uncertainties: __notes is a __ field and
@@ -5785,6 +5858,21 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
               detail: picked.slice(0, 120),
               outcome: "ok",
               got: "a bookable ticket page for this entry, vetted against its own text",
+              used: true,
+            });
+          } else if (unreadTicketUrls.length) {
+            // Nothing readable produced a link, and a hunt named a bookable one
+            // it could not open. The shape of the URL is the whole warrant here
+            // and the note says so plainly, because a link this app cannot
+            // corroborate from a page is a weaker thing than one it can.
+            const fallback = unreadTicketUrls[0];
+            t.ticketUrl = fallback;
+            note("The ticket link, from a page that would not open", {
+              provider: "fetch",
+              detail: fallback.slice(0, 120),
+              outcome: "ok",
+              got: `${domainOf(fallback)} could not be read, so nothing was priced or dated from it. The address is a bookable ticket page for this event, which is a fact about the URL and does not need the page to open.`,
+              why: "A scraper failing on Ticketmaster says nothing about whether the link works. Withholding it left a reader with no way to buy at all.",
               used: true,
             });
           } else if (candidates.length) {

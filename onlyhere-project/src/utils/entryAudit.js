@@ -1057,23 +1057,49 @@ export const ticketPriceOn = (text) => {
 // footnote: a price from the operator can be stated flatly, a price from a
 // reseller has to say where it came from. Same split tracePrices already draws
 // between `traced` and `listed`, reused rather than reinvented.
-export const findTicketPrice = ({ siteText = "", listingText = "" } = {}) => {
+// ── AND WHICH PAGE, BECAUSE "A LISTING" IS NOT ACTIONABLE ───────────
+//
+// Oliver's run log, 30 Aug 2026, drafting Vanvittig Verdenshistorie - AARHUS.
+// A price was found and reported as "a ticket shop or calendar states a ticket
+// price of 280 DKK". It came from akkc.dk, which is Aalborg Kongres & Kultur
+// Center — the AALBORG venue of a touring show, on a draft about the Aarhus
+// date. Whether 280 DKK is this show's price is a question he could not even
+// ask, because the finding would not say where it came from.
+//
+// The array to fix it already exists at the call site and its own comment says
+// why: listingDomains is "named, so the log can say WHICH calendar answered
+// rather than 'a listing', which is the same unactionable shape as 'a source
+// was blocked' that the scan log already fixed." It was never passed here.
+//
+// Optional, and every existing caller keeps working without it — the phrase
+// falls back to the old wording rather than inventing a host it was not given.
+export const findTicketPrice = ({ siteText = "", listingText = "", siteHosts = [], listingHosts = [] } = {}) => {
+  const hosts = { siteHosts, listingHosts };
   const site = ticketPriceOn(siteText);
-  if (site && site.kind !== "concession-only") return { ...site, from: "official-site", why: "the operator's own page states it" };
+  if (site && site.kind !== "concession-only") return { ...site, ...hosts, from: "official-site", why: "the operator's own page states it" };
   const listing = ticketPriceOn(listingText);
-  if (listing && listing.kind !== "concession-only") return { ...listing, from: "listing", why: "a ticket shop or calendar states it and the operator's own page does not" };
+  if (listing && listing.kind !== "concession-only") return { ...listing, ...hosts, from: "listing", why: "a ticket shop or calendar states it and the operator's own page does not" };
   // ── AND THIS IS THE ORDER THAT FIXES THE FOOD FESTIVAL CASE ──────
   // The operator's page carried ONLY the IDA-members rate, so it no longer wins
   // outright, and the agent's page carries the table anyone can buy from. His
   // hierarchy is untouched: the operator still outranks the reseller on any
   // price they BOTH state. It stops outranking it on a price it does not state.
   const only = site || listing;
-  if (only) return { ...only, from: site ? "official-site" : "listing", why: "the only prices on the page are concession rates" };
+  if (only) return { ...only, ...hosts, from: site ? "official-site" : "listing", why: "the only prices on the page are concession rates" };
   return null;
 };
 
 const moneyText = (p) => `${p.lo}${p.hi !== p.lo ? ` to ${p.hi}` : ""} ${String(p.currency).toUpperCase()}${p.when ? ` ${p.when}` : ""}`;
-const whoSaid = (from) => (from === "official-site" ? "The operator's own page" : "A ticket shop or calendar");
+// Names the page when the run told us which one, and falls back to the old
+// phrase when it did not. A host is the difference between a finding he can
+// act on and one he can only wonder about: "akkc.dk states 280 DKK" is
+// checkable in one click, "a ticket shop states 280 DKK" is not.
+const whoSaid = (from, found = null) => {
+  const hosts = from === "official-site" ? found?.siteHosts : found?.listingHosts;
+  const named = (Array.isArray(hosts) ? hosts : []).filter(Boolean);
+  if (named.length) return named.length === 1 ? named[0] : `${named[0]} (of ${named.length} pages read)`;
+  return from === "official-site" ? "The operator's own page" : "A ticket shop or calendar";
+};
 
 // ── THE FINDING, WHICH IS THE POINT OF ALL OF THIS ──────────────────
 // A draft with no price beside a page that states one is the case that used to
@@ -1092,7 +1118,7 @@ export const priceMisses = (draftText, opts) => {
     const rates = found.all.map(moneyText).join(", ");
     return [{
       severity: "medium", field: "ticketInfo",
-      detail: `${whoSaid(found.from)} prices only concessions (${rates}) and never says what general admission costs. Do not use these figures as the ticket price; the ordinary price is on a page nothing has read yet, usually the ticket agent the operator links to.`,
+      detail: `${whoSaid(found.from, found)} prices only concessions (${rates}) and never says what general admission costs. Do not use these figures as the ticket price; the ordinary price is on a page nothing has read yet, usually the ticket agent the operator links to.`,
     }];
   }
   const stated = pricesIn(String(draftText || "")).filter(p => p.currency);
@@ -1100,20 +1126,20 @@ export const priceMisses = (draftText, opts) => {
   if (found.free) {
     return saysFree || stated.length ? [] : [{
       severity: "medium", field: "ticketInfo",
-      detail: `${whoSaid(found.from)} says entry is free and this draft does not say so. Free is an answer a reader plans around, and leaving it out reads as unknown.`,
+      detail: `${whoSaid(found.from, found)} says entry is free and this draft does not say so. Free is an answer a reader plans around, and leaving it out reads as unknown.`,
     }];
   }
   if (stated.some(p => p.lo === found.lo && p.hi === found.hi)) return [];
   if (!stated.length) {
     return [{
       severity: "high", field: "ticketInfo",
-      detail: `${whoSaid(found.from)} states a ticket price of ${moneyText(found)} and this draft states none. Nothing in this run had gone looking for a price before, so a missing one has always read as a clean pass.`,
+      detail: `${whoSaid(found.from, found)} states a ticket price of ${moneyText(found)} and this draft states none. Nothing in this run had gone looking for a price before, so a missing one has always read as a clean pass.`,
     }];
   }
   return [{
     severity: found.from === "official-site" ? "high" : "medium",
     field: "ticketInfo",
-    detail: `${whoSaid(found.from)} states ${moneyText(found)} and this draft states ${stated.map(moneyText).join(", ")}. ${found.from === "official-site" ? "The operator's own page outranks everything else on its own price." : "Worth checking which edition, or which ticket type, each figure is for."}`,
+    detail: `${whoSaid(found.from, found)} states ${moneyText(found)} and this draft states ${stated.map(moneyText).join(", ")}. ${found.from === "official-site" ? "The operator's own page outranks everything else on its own price." : "Worth checking which edition, or which ticket type, each figure is for."}`,
   }];
 };
 
