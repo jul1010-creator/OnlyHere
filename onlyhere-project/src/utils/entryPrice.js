@@ -216,3 +216,90 @@ export const ENTRY_KIND_LABEL = {
   town: "Town",
 };
 export const entryKindLabel = (kind, fallback = "") => ENTRY_KIND_LABEL[String(kind || "")] || fallback;
+
+// ── "WHAT DO WE DO ABOUT THE 'FREE' AND 'WALK IN NO BOOKING'" ───────
+//
+// Oliver, 1 Sep 2026, looking at the Attractions grid. The first half of that
+// question was already answered — entryPrice above gives three answers and a
+// qualified free prints nothing. The second half had never been asked.
+//
+// "Walk in, no booking" was a HARDCODED STRING. Not a wrong reading of a
+// field: there is no booking field on an attraction row anywhere in the schema,
+// and nothing was ever consulted. Every non-craft card in the grid carried it,
+// always.
+//
+// It is the same fault as the FREE one and worse in two ways.
+//
+//   IT GOT LOUDER AS WE KNEW LESS. The ternary read `free === true ? "🆓 Walk
+//   in" : "Walk in, no booking"`, so a row whose door is confirmed free got the
+//   softer chip and a row we knew NOTHING about got the bolder claim. The
+//   strongest sentence on the least evidence.
+//
+//   AND THE SITE CONTRADICTED ITSELF. The essentials Oliver asked for in August
+//   tell a reader "Denmark's bigger attractions take timed entry in summer".
+//   AROS Aarhus Art Museum sells timed entry in summer, and its card said "Walk
+//   in, no booking".
+//
+// So booking gets the same three answers money already has, in the same order
+// and for the same reason: an explicit "book ahead" beats an explicit "walk
+// in", because being turned away at a door is the expensive mistake and being
+// told to book something you did not need to is the cheap one.
+//
+//   true    the row says you can turn up
+//   false   the row says something has to be booked or timed
+//   null    the row does not say, and the card says nothing
+//
+// A craft workshop is not read here. It has had a real `bookingType` field
+// since it was written, the card already renders it, and a second opinion about
+// the same question is how two answers start disagreeing.
+export const BOOKING_FIELDS = ["ticketsGlance", "bookingNote", "ticketInfo", "price", "priceNote", "desc"];
+
+// Danish first, and both halves anchored on a NOUN or a full phrase rather than
+// a loose verb: "book" alone appears in "book a table at the café", which is
+// not a statement about the door.
+export const NEEDS_BOOKING = /\b(?:timed\s+entry|timed\s+ticket|time\s?slot|tidsbestilling|tidsbestemt|book\s+(?:ahead|in\s+advance|a\s+ticket|online|your\s+ticket)|pre-?book|advance\s+booking|booking\s+(?:required|essential|necessary)|reservation\s+(?:required|essential)|forudbestilling|skal\s+bookes|skal\s+bestilles|kr[æa]ver\s+booking|kun\s+efter\s+aftale|by\s+appointment|guided\s+tour\s+only|kun\s+med\s+rundvisning)\b/i;
+
+// The other direction, said in words rather than inferred from the absence of
+// the first. That distinction is the whole point: a row that says nothing is
+// not a row that says you can walk in.
+export const WALK_IN = /\b(?:no\s+(?:booking|ticket|reservation)\s+(?:required|needed|necessary)|walk[\s-]?in(?:s)?\s+welcome|just\s+turn\s+up|ingen\s+booking|ingen\s+tidsbestilling|kr[æa]ver\s+ikke\s+booking|fri\s+adgang\s+uden\s+booking|drop[\s-]?in)\b/i;
+
+const bookingText = (row) => BOOKING_FIELDS
+  .map(f => String((row && row[f]) == null ? "" : row[f]))
+  .filter(Boolean)
+  .join(" · ");
+
+export const entryBooking = (row) => {
+  const says = bookingText(row);
+  if (!says.trim()) return { walkIn: null, says: "" };
+  // ── THE WALK-IN PHRASE IS CUT OUT BEFORE THE BOOKING TEST ────────
+  //
+  // Caught on the first probe, and it is the same trap as "free for children
+  // under 18": the qualifier is the meaning. "No booking required" CONTAINS
+  // "booking required", so a plain NEEDS_BOOKING test read a row that says you
+  // can turn up and told the reader to book ahead — the exact opposite of what
+  // the row says, which is the one direction worth being careful about here.
+  //
+  // A negative lookbehind would fix that one phrase. Removing the walk-in
+  // statements first fixes the shape: they are complete sentences, so what is
+  // LEFT is whatever else the row demands.
+  //
+  // And it keeps the order that matters. Booking still beats walk-in, which is
+  // the mirror of "an amount beats the word free": "grounds are drop-in, the
+  // tower needs a timed ticket" loses the drop-in and keeps the timed ticket,
+  // so it answers false. Being turned away at a door is the expensive mistake.
+  const saidWalkIn = WALK_IN.test(says);
+  const rest = says.replace(new RegExp(WALK_IN.source, "gi"), " ");
+  if (NEEDS_BOOKING.test(rest)) return { walkIn: false, says };
+  if (saidWalkIn) return { walkIn: true, says };
+  return { walkIn: null, says };
+};
+
+// What the card prints, or "" for the answer nobody has given. Kept here beside
+// priceChip so the two claims on one card are written in one file.
+export const bookingChip = (row) => {
+  const { walkIn } = entryBooking(row);
+  if (walkIn === true) return "Walk in, no booking";
+  if (walkIn === false) return "Book ahead";
+  return "";
+};

@@ -157,13 +157,13 @@ import { partnerDisclosure, linkLabel } from "./utils/affiliates";
 // ── "SOME THINGS ARE ESSENTIALS WHILE OTHERS ARE TIPS" ──────────────
 // Oliver, 30 Aug 2026. See utils/essentialKind.js: the categories were never
 // the problem, two documents sharing one list were.
-import { essentialsOnly, tipsOnly, categoriesPresent, linksOf, isMerged } from "./utils/essentialKind";
+import { essentialsOnly, tipsOnly, categoriesPresent, linksOf, isMerged, ESSENTIAL_KINDS, ESSENTIAL_KIND_LABEL, KIND_RULE, cleanKind, kindPatch, hasKindChange, kindStated } from "./utils/essentialKind";
 // ── "ATTRACTIONS ALL SAY FREE" ──────────────────────────────────────
 // Oliver, 27 Aug 2026. Five places in this file published a price claim built
 // out of the CATEGORY NAME: the attractions pool's Studio type is called
 // `free`, it used to mean it, and it holds Legoland now. See utils/entryPrice.js
 // for the whole argument; nothing in that file may read a type.
-import { entryPrice, priceChip, entryKindLabel } from "./utils/entryPrice";
+import { entryPrice, entryBooking, priceChip, entryKindLabel } from "./utils/entryPrice";
 // ── "HIGH-END" AND "CASUAL" ─────────────────────────────────────────
 // Oliver, 27 Aug 2026, relaying his friend. The axis every nightlife row was
 // missing: the fields all say what FORMAT a place is, none says what REGISTER.
@@ -1225,6 +1225,44 @@ function GemlyxApp() {
       
     } catch (e) { setBodyError(String(e.message || e)); }
     setBodySaving(false);
+  };
+
+  // ── AND THE SAME DOOR FOR AN ESSENTIAL'S TWO LISTS ────────────────
+  // Oliver, 1 Sep 2026: "Nightpay is more of a tip though.." Nightpay is a
+  // published row whose kind was never storable, so there was no way to move it
+  // that did not mean redrafting the entry. One field, one PATCH, same shape as
+  // the place editor above and for the same stated reason.
+  const [kindEditId, setKindEditId] = useState(null);
+  const [kindDraft, setKindDraft] = useState("");
+  const [kindSaving, setKindSaving] = useState(false);
+  const [kindError, setKindError] = useState(null);
+
+  const openKindEdit = (row) => {
+    setKindEditId(v => (v === row.id ? null : row.id));
+    setKindDraft(cleanKind((row.payload || {}).kind));
+    setKindError(null);
+  };
+
+  const saveKindEdit = async (row) => {
+    const patch = kindPatch(row.payload || {}, kindDraft);
+    if (!Object.keys(patch).length) { setKindEditId(null); return; }
+    setKindSaving(true); setKindError(null);
+    try {
+      const merged = { ...(row.payload || {}), ...patch };
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(row.id)}`, {
+        method: "PATCH",
+        headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ payload: merged }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setKindError(studioErrorMessage("this entry", res.status, body)); setKindSaving(false); return; }
+      setManageItems(prev => (prev || []).map(r => (r.id === row.id ? { ...r, payload: merged } : r)));
+      setKindEditId(null);
+      showToast(merged.kind
+        ? `Saved. ${merged.name} is now under ${merged.kind === "tip" ? "Tips" : "Essentials"}. Visitors see it on their next load.`
+        : `Saved. ${merged.name} is unplaced again, so it shows under Essentials until you place it.`, 3500);
+    } catch (e) { setKindError(String(e.message || e)); }
+    setKindSaving(false);
   };
 
   const openPlaceEdit = (row) => {
@@ -5179,7 +5217,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isFoodStreet: true, emoji: ${J(t.emoji || "🍜")}, category: ${J(t.category || "Food market")}, location: ${J(t.location)}, price: ${J(t.price)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.\n// 4) This is a Food Street/market — isFoodStreet: true is what puts it in the "Food Streets" tab on the live Food page instead of "Restaurants".`;
       } else if (sType === "essential") {
         const nextId = Math.max(0, ...essentials.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`export const essentials = [\` in src/data/essentials.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, category: ${J(t.category || "Transport")}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, howTo: ${J(t.howTo)}, price: ${J(t.price)}, link: ${t.link ? J(t.link) : "null"}${t.linkAndroid ? `, linkAndroid: ${J(t.linkAndroid)}` : ""}, tip: ${J(t.tip)}${t.visitorNote ? `, visitorNote: ${J(t.visitorNote)}` : ""}, verified: ${J(stamp)} },\n\n// 2) VERIFY the price and that the system still works this way before committing. This is the type that goes stale fastest.`;
+        code = `// 1) Ctrl+F for \`export const essentials = [\` in src/data/essentials.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, category: ${J(t.category || "Transport")}, kind: ${J(cleanKind(t.kind) || "essential")}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, howTo: ${J(t.howTo)}, price: ${J(t.price)}, link: ${t.link ? J(t.link) : "null"}${t.linkAndroid ? `, linkAndroid: ${J(t.linkAndroid)}` : ""}, tip: ${J(t.tip)}${t.visitorNote ? `, visitorNote: ${J(t.visitorNote)}` : ""}, verified: ${J(stamp)} },\n\n// 2) VERIFY the price and that the system still works this way before committing. This is the type that goes stale fastest.`;
       } else {
         const nextId = Math.max(0, ...nightlifeSpots.map(x => x.id)) + 1;
         const isClub = !!t.isClub;
@@ -15089,6 +15127,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                     style={{ background: mediaEditId === row.id ? `${C.gold}22` : "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
                                     🖼 Media
                                   </button>
+                                  {row.type === "essential" && (
+                                    <button onClick={() => openKindEdit(row)}
+                                      style={{ background: kindEditId === row.id ? `${C.gold}22` : "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
+                                      {kindStated(row.payload || {}) ? "🧭 Essential or tip" : "🧭 Unplaced"}
+                                    </button>
+                                  )}
                                   {row.type === "town" && (
                                     <button onClick={() => openPlaceEdit(row)}
                                       style={{ background: placeEditId === row.id ? `${C.gold}22` : "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
@@ -15195,6 +15239,38 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   </div>
                                 );
                               })()}
+                              {kindEditId === row.id && (() => {
+                                const pl = row.payload || {};
+                                const changed = hasKindChange(pl, kindDraft);
+                                return (
+                                  <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px", marginBottom: 10 }}>
+                                    <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 5 }}>Which list</div>
+                                    <select value={kindDraft} onChange={e => setKindDraft(e.target.value)}
+                                      style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 12, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", width: "100%", cursor: "pointer" }}>
+                                      <option value="">Not placed (shows under Essentials)</option>
+                                      {ESSENTIAL_KINDS.map(k => <option key={k} value={k}>{ESSENTIAL_KIND_LABEL[k]}</option>)}
+                                    </select>
+                                    <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8, lineHeight: 1.55 }}>{KIND_RULE}</div>
+                                    {!kindStated(pl) && (
+                                      <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.55, marginTop: 8 }}>
+                                        ⚠ Nobody has placed this one, so it is showing under Essentials by default rather than because anyone decided it belongs there.
+                                      </div>
+                                    )}
+                                    {kindError && <div style={{ fontSize: 11, color: "#E57373", marginTop: 8 }}>{kindError}</div>}
+                                    <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
+                                      <button onClick={() => saveKindEdit(row)} disabled={kindSaving || !changed}
+                                        style={{ background: changed ? C.gold : C.surface, border: "none", color: changed ? "#0A0F1E" : C.muted, borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: changed ? "pointer" : "default" }}>
+                                        {kindSaving ? "Saving…" : changed ? "Save" : "No change"}
+                                      </button>
+                                      <button onClick={() => setKindEditId(null)}
+                                        style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
                               {placeEditId === row.id && (() => {
                                 const pl = row.payload || {};
                                 const preview = { name: pl.name, ...placeDraft };
@@ -17736,7 +17812,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             // hundreds of times for one open panel.
             const withIsland = (i) => ({ ...i, _island: islandOf(i, kommuneNameAt(i.__lat ?? i.lat, i.__lon ?? i.lon)) });
             const combined = [
-              ...freeEntrance.map(a => withIsland({ ...a, _kind: "free", _price: "Free", _city: cityOf(a) })),
+              ...freeEntrance.map(a => withIsland({ ...a, _kind: "free", _city: cityOf(a) })),
               ...craftItems.map(c => withIsland({ ...c, _kind: "craft", _price: c.price || "See website", _city: cityOf(c) })),
             ];
             const kindKeys = { Blacksmithing: ["blacksmith"], Ceramics: ["ceramic", "pottery"], Jewellery: ["jewellery"], Leather: ["leather"], Textiles: ["textile", "dyeing", "felting"], Woodwork: ["wood"], Candy: ["candy"] };
@@ -18029,8 +18105,20 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             /* "Walk in" is about BOOKING and stays true of a
                                place that charges at the gate. The 🆓 in front
                                of it is a price claim, so it is spent only where
-                               the row has actually said the door is free. */
-                            <span style={{ fontSize: 9, fontWeight: 700, color: "#4CAF50", background: "#4CAF5018", border: "1px solid #4CAF5044", padding: "2px 8px", borderRadius: 100 }}>{entryPrice(item).free === true ? "🆓 Walk in" : "Walk in, no booking"}</span>
+                               the row has actually said the door is free.
+                               ── AND THE BOOKING HALF SAID IT UNCONDITIONALLY ──
+                               Oliver, 1 Sep 2026: "What do we do about the
+                               'free' and 'walk in no booking?" The else-branch
+                               here was a hardcoded string on every card, with no
+                               field behind it — see entryBooking for the whole
+                               story. It now says nothing unless the row does. */
+                            (() => {
+                              const book = entryBooking(item).walkIn;
+                              if (book === null) return null;
+                              const free = entryPrice(item).free === true;
+                              const tone = book ? "#4CAF50" : "#FFB347";
+                              return <span style={{ fontSize: 9, fontWeight: 700, color: tone, background: `${tone}18`, border: `1px solid ${tone}44`, padding: "2px 8px", borderRadius: 100 }}>{book ? (free ? "🆓 Walk in" : "Walk in, no booking") : "Book ahead"}</span>;
+                            })()
                           )}
                         </div>
                         <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{(item.desc || "").slice(0, 90)}{(item.desc || "").length > 90 ? "…" : ""}</div>

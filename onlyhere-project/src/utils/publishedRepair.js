@@ -38,7 +38,7 @@
 // for the field at all. So this file reports that separately and never pretends
 // a renamed row is a finished row.
 
-import { entryPrice } from "./entryPrice";
+import { entryPrice, entryBooking } from "./entryPrice";
 
 // The current heading vocabulary, as produced by shapeForLive in
 // studioContent.js and the paste-ready codegen in App.jsx. The test derives the
@@ -205,6 +205,33 @@ export const priceProblems = (payload, type) => {
   }];
 };
 
+// ── AND WHETHER THE DOOR IS OPEN, WHICH NOTHING EVER ASKED ──────────
+//
+// Oliver, 1 Sep 2026: "What do we do about the 'free' and 'walk in no
+// booking?" The booking half was a hardcoded chip with no field behind it (see
+// entryBooking). Closing that means every existing row now says nothing about
+// booking, which is honest and is also a hole in the product: a reader planning
+// a summer day at AROS still needs to know it sells timed entry.
+//
+// Same shape as the price half deliberately, and for the reason that half
+// states: this is "one field, not a redraft". It is listed separately from the
+// price gaps because a row can know exactly what it costs and still never have
+// been asked whether you can turn up.
+//
+// ONLY ATTRACTIONS. A craft workshop has carried a real bookingType since it
+// was written and its card renders it; asking the question twice is how two
+// answers start disagreeing.
+export const bookingProblems = (payload, type) => {
+  if (!PRICED_TYPES.has(String(type || ""))) return [];
+  if (entryBooking(payload).walkIn !== null) return [];
+  return [{
+    kind: "no-booking-answer",
+    cost: "one field",
+    says: "",
+    detail: "Nothing on this row says whether you can turn up or have to book, so the card says nothing either. One field, no redraft.",
+  }];
+};
+
 // The whole picture in one call, so the Studio can say how big the job is
 // instead of him finding these one at a time by browsing his own live site,
 // which is how this one was found.
@@ -215,7 +242,7 @@ export const auditPublished = (rows) => {
   const list = (Array.isArray(rows) ? rows : [])
     .map(r => ({
       id: r?.id, name: r?.payload?.name || "(unnamed)", type: r?.type,
-      problems: [...bodyProblems(r?.payload), ...priceProblems(r?.payload, r?.type)],
+      problems: [...bodyProblems(r?.payload), ...priceProblems(r?.payload, r?.type), ...bookingProblems(r?.payload, r?.type)],
     }))
     .filter(r => r.problems.length > 0);
   const has = (k) => list.filter(r => r.problems.some(p => p.kind === k));
@@ -226,6 +253,7 @@ export const auditPublished = (rows) => {
     unknown: has("unknown-heading"),
     misleadingFree: has("misleading-free"),
     noPrice: has("no-entry-price"),
+    noBooking: has("no-booking-answer"),
     total: list.length,
   };
 };
@@ -245,6 +273,10 @@ export const describeAudit = (a) => {
   const money = [];
   if (a.misleadingFree?.length) money.push(`${a.misleadingFree.length} whose ticket line names who gets in free but not what entry costs`);
   if (a.noPrice?.length) money.push(`${a.noPrice.length} that say nothing about entry at all`);
+  // Its own sentence, not folded into the money one: "you can turn up" and
+  // "it costs 150" are two different things a reader needs, and a row can have
+  // one without the other.
+  if (a.noBooking?.length) money.push(`${a.noBooking.length} that never say whether you can walk in or have to book`);
   const structural = bits.length
     ? `${bits.length && a.total ? `${a.renameable.length + a.needWriting.length + a.unknown.length} ` : ""}published entries predate the current structure: ${bits.join("; ")}.`
     : "";
@@ -256,6 +288,13 @@ export const describeAudit = (a) => {
 // Names and what each row says today, so the sweep is a worklist rather than a
 // count. Sorted misleading first: an empty field is a gap, and a field that
 // reads as "free" at a glance is a wrong answer already on the site.
+export const bookingWorklist = (rows) =>
+  (Array.isArray(rows) ? rows : [])
+    .map(r => ({ id: r?.id, name: r?.payload?.name || "(unnamed)", problems: bookingProblems(r?.payload, r?.type) }))
+    .filter(r => r.problems.length > 0)
+    .map(r => ({ id: r.id, name: r.name, kind: r.problems[0].kind, says: "" }))
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
 export const priceWorklist = (rows) =>
   (Array.isArray(rows) ? rows : [])
     .map(r => ({ id: r?.id, name: r?.payload?.name || "(unnamed)", problems: priceProblems(r?.payload, r?.type) }))

@@ -6,6 +6,7 @@
 // helpers; shapeForLive turns a raw AI draft into the exact object shape each
 // hardcoded data array (towns/events/freeEntrance/foodSpots/etc.) expects.
 import { normaliseTicketStatus } from "./tickets";
+import { cleanKind } from "./essentialKind";
 import { isBookableTicketUrl } from "./ticketLink";
 import { cleanOffer, offerProblems } from "./offer";
 import { placeCoords } from "./guideEnrichment";
@@ -130,6 +131,11 @@ const shapeForLiveFields = (type, t) => {
   // built on. The booking branch already uses "" for the same field.
   if (type === "free") return { name: t.name, popularityTag: t.popularityTag || "", city: t.city || "", type: t.type || "", emoji: t.emoji || "✨", desc: t.desc, website: t.website || "", color: t.color || "#2E7D32",
     ticketsGlance: t.ticketsGlance || "", extraCosts: t.extraCosts || "", accessibility: t.accessibility || "", nearestStation: t.nearestStation || "", gemlyxFind: t.gemlyxFind || "",
+    // ── WHETHER THE DOOR IS OPEN ──────────────────────────────────
+    // The field the "Walk in, no booking" chip never had. It was a hardcoded
+    // string on every attraction card with nothing behind it; entryBooking
+    // reads this, and an empty value is the honest answer that prints nothing.
+    bookingNote: t.bookingNote || "",
     blogBody: [
       ...bbData([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]]),
       ...bulletsBlock("Things to Know", t.thingsToKnow),
@@ -185,6 +191,18 @@ const shapeForLiveFields = (type, t) => {
   if (type === "essential") return { name: t.name, category: t.category || "Transport", emoji: t.emoji || "✨",
     desc: t.desc || "", howTo: t.howTo || "", price: t.price || "", link: t.link || null, linkAndroid: t.linkAndroid || "", tip: t.tip || "",
     visitorNote: t.visitorNote || "",
+    // ── AND WHICH OF THE TWO LISTS IT BELONGS ON ──────────────────
+    //
+    // Oliver, 1 Sep 2026: "Nightpay is more of a tip though.." Nightpay was
+    // published through Studio, and this allow-list had no `kind` on it, so the
+    // field could not reach the database however it was set. kindOf then read
+    // the absence and returned the safe default, and the row was stuck as an
+    // essential with no way to move it short of rewriting the whole entry.
+    //
+    // cleanKind, not the raw value: anything outside the vocabulary stores as
+    // "" and stays among the unplaced rows, rather than a typo silently
+    // becoming a judgement. "" is a real state and kindStated is what reads it.
+    kind: cleanKind(t.kind),
     blogBody: [
       ...bbData([["How It Works", t.howTo], ["The Reality Check", t.realityCheck]]),
     ] };

@@ -26,6 +26,27 @@ const clean = (v) => String(v == null ? "" : v).trim().toLowerCase();
 
 export const ESSENTIAL_KINDS = ["essential", "tip"];
 
+// ── THE SPLIT, WRITTEN DOWN ONCE ────────────────────────────────────
+//
+// Said in one place because three readers need the same sentence: the model
+// drafting a new row, the founder placing a published one, and whoever changes
+// this next. The test above the code is Oliver's own: "some things are
+// essentials while others are tips."
+//
+// An ESSENTIAL is something a visitor has to get right or they are fined,
+// stranded, or unable to pay. A TIP makes the trip better and costs nothing to
+// skip. The reader arriving the night before their flight wants the first list
+// and is reading past the second.
+export const KIND_RULE = 'An ESSENTIAL is something a visitor has to sort out or they are fined, stranded, or unable to pay for something. A TIP makes the trip better but nothing goes wrong if they skip it. Ask which list a person reading the night before their flight needs: if missing this costs them money or strands them, it is an essential; if it only means a slightly worse trip, it is a tip.';
+
+// NAMED ESSENTIAL_KIND_LABEL, not KIND_LABEL, because placeKind.js already
+// exports that name for a different question — Town, District, Area, about
+// where a place sits inside another one. App.jsx imports both, and the build
+// refused the collision outright. entryPrice.js hit exactly this and wrote the
+// rule down: "Two exports with one name, imported into one file, is a rename
+// waiting to pick the wrong one."
+export const ESSENTIAL_KIND_LABEL = { essential: "Essential — goes wrong if they miss it", tip: "Tip — makes the trip better" };
+
 export const kindOf = (row) => {
   const k = clean(row && row.kind);
   return ESSENTIAL_KINDS.includes(k) ? k : "essential";
@@ -75,3 +96,31 @@ export const linksOf = (row) => {
 };
 
 export const isMerged = (row) => linksOf(row).length > 1;
+
+// ── AND A PUBLISHED ROW CAN BE MOVED WITHOUT REDRAFTING IT ──────────
+//
+// Oliver, 1 Sep 2026: "Nightpay is more of a tip though.." — about a row
+// published through Studio months ago, which has no `kind` on it at all and so
+// takes the default. There was no way for him to move it: `kind` was not in
+// shapeForLive's allow-list, so even editing it would have been stripped on the
+// way to the database, and redrafting the whole entry to change one word is not
+// an edit, it is a rewrite.
+//
+// The same shape as placePatch, deliberately, and for the same stated reason:
+// "A PATCH that resends the whole payload is how an unrelated field gets
+// clobbered by whatever the panel happened to be holding." Only the field that
+// changed, and only a value in the vocabulary.
+//
+// EMPTY IS A REAL CHOICE and it is not the same as "essential". It puts the row
+// back among the unplaced ones, where unsortedEssentials can find it, rather
+// than asserting a judgement nobody made. The reader sees the same tab either
+// way — that is what the default is for — but the founder view can tell them
+// apart, which is the whole reason kindStated exists.
+export const cleanKind = (v) => (ESSENTIAL_KINDS.includes(clean(v)) ? clean(v) : "");
+
+export const kindPatch = (row, next) => {
+  const want = cleanKind(next);
+  return want === cleanKind(row && row.kind) ? {} : { kind: want };
+};
+
+export const hasKindChange = (row, next) => Object.keys(kindPatch(row, next)).length > 0;

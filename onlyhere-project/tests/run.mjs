@@ -88,7 +88,7 @@ writeFileSync(entry, `
   export { whoWrote, modelProvenanceNote, DRAFT_STAGES, readerFacingStages, WRITER, EXTRACTOR, MEASURED } from ${JSON.stringify(join(root, "src/utils/modelProvenance.js"))};
   export { venueStyleOf, venueStyleLabel, VENUE_STYLES, VENUE_STYLE_LABEL, unstyledVenues, venueStyleCoverage, stylesPresent, showVenueStyleFacet, buildNightlifeStyleFacet, VENUE_STYLE_COVERAGE_MIN } from ${JSON.stringify(join(root, "src/utils/venueStyle.js"))};
   export { looksLikeLodging, stayDrift, stayDriftNote, publicAccessAnswered, STAY_TERMS, LODGING_RULE, LODGING_NOTES_RULE, LODGING_WORDS, isLodgingType, LODGING_TYPES } from ${JSON.stringify(join(root, "src/utils/venueSubject.js"))};
-  export { entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, SAYS_FREE, AMOUNT, isUnqualifiedFree } from ${JSON.stringify(join(root, "src/utils/entryPrice.js"))};
+  export { entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, SAYS_FREE, AMOUNT, isUnqualifiedFree, entryBooking, bookingChip, BOOKING_FIELDS, NEEDS_BOOKING, WALK_IN } from ${JSON.stringify(join(root, "src/utils/entryPrice.js"))};
   export { literalRenderings, literalNote, looksLikeAName, FALSE_FRIENDS, FALSE_FRIEND_RULE, NAME_RULE } from ${JSON.stringify(join(root, "src/utils/literalDanish.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
@@ -111,8 +111,8 @@ writeFileSync(entry, `
   export { directionsEndpoint, collapsedRoute } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { upgradeWorthIt, onFootMinutes, MIN_UPGRADE_SAVING, COLLAPSE_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { essentials } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
-  export { ESSENTIAL_KINDS, kindOf, kindStated, essentialsOnly, tipsOnly, unsortedEssentials, categoriesPresent, linksOf, isMerged } from ${JSON.stringify(join(root, "src/utils/essentialKind.js"))};
-  export { repairBody, headingsOf, bodyProblems, priceProblems, priceWorklist, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
+  export { ESSENTIAL_KINDS, ESSENTIAL_KIND_LABEL, KIND_RULE, kindOf, kindStated, cleanKind, kindPatch, hasKindChange, essentialsOnly, tipsOnly, unsortedEssentials, categoriesPresent, linksOf, isMerged } from ${JSON.stringify(join(root, "src/utils/essentialKind.js"))};
+  export { repairBody, headingsOf, bodyProblems, priceProblems, priceWorklist, bookingProblems, bookingWorklist, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
   export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, missingRequired, cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS, cleanBornDate, birthYear, BORN_DATE_MIN, BORN_DATE_MAX, REQUIRED_PROFILE, REQUIRED_LABEL, AGE_BANDS, BORN_YEARS, bandForYear, ageFrom, underMinimumAge, MIN_ACCOUNT_AGE, TERMS_VERSION, holdProfile, takeHeldProfile, PENDING_PROFILE_KEY, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
   export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
@@ -216,7 +216,7 @@ writeFileSync(entry, `
   export { PARTS as PARTS_FOR_TEST } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { hasPassword } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
   export { NOTICED_LABEL, ME_SECTIONS, meSectionFor, DEFAULT_ME_SECTION } from ${JSON.stringify(join(root, "src/components/AboutMePage.jsx"))};
-  export { placeKindOf, kindLabel, isArea, baseTownFor, relationLine, collapseToParent, areasInside, dayTripsFrom, PLACE_KINDS } from ${JSON.stringify(join(root, "src/utils/placeKind.js"))};
+  export { placeKindOf, kindLabel, KIND_LABEL, isArea, baseTownFor, relationLine, collapseToParent, areasInside, dayTripsFrom, PLACE_KINDS } from ${JSON.stringify(join(root, "src/utils/placeKind.js"))};
   export { SWEEP_INTENT, SWEEP_PROMPT } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT, correctionLanded, claimLanded, describeCorrection } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
@@ -39749,6 +39749,171 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const noShot = await rsr("src/components/ChatPlaceCards.jsx", "ChatPlaceCards", { places: [{ name: "Somewhere", _src: "free" }], C, layout: "rail" });
     is("no photograph, no card", noShot.html, "");
   }
+}
+
+// ── "TAX-FREE SHOPPING IS AN ESSENTIAL. NIGHTPAY IS MORE OF A TIP" ──
+//
+// Oliver, 1 Sep 2026. Two rows, and only one of them was changeable.
+{
+  const { essentials, kindOf, kindStated, cleanKind, kindPatch, hasKindChange,
+          essentialsOnly, tipsOnly, unsortedEssentials, ESSENTIAL_KINDS, ESSENTIAL_KIND_LABEL, KIND_RULE } = M;
+
+  // ── THE ONE THAT WAS JUST A WORD ─────────────────────────────────
+  // A 25% VAT refund on everything you carry home is money, and missing it
+  // costs money — which is the test KIND_RULE states.
+  const taxFree = essentials.find(r => /Tax-Free/i.test(r.name));
+  ok("the tax-free row is still there", !!taxFree);
+  is("and it is an essential", kindOf(taxFree), "essential");
+  ok("it shows on the Essentials tab", essentialsOnly(essentials).some(r => r === taxFree));
+  ok("and not on Tips", !tipsOnly(essentials).some(r => r === taxFree));
+  // Every hardcoded row states its kind, so none of them is riding the default.
+  // The default exists for rows published through Studio, not for this file.
+  is("no hardcoded row is left to the default", unsortedEssentials(essentials).map(r => r.name), []);
+
+  // ── AND THE ONE THAT COULD NOT BE MOVED AT ALL ───────────────────
+  //
+  // "Nightpay is more of a tip though.." Nightpay is published through Studio,
+  // and `kind` was not in shapeForLive's allow-list, so the field could not
+  // reach the database however it was set. kindOf read the absence, returned
+  // the safe default, and the row was stuck as an essential with no way out
+  // short of rewriting the whole entry.
+  const nightpayish = { name: "Nightpay", category: "Nightlife" };
+  is("an unplaced row still shows under Essentials", kindOf(nightpayish), "essential");
+  ok("but it is not claiming anybody decided that", kindStated(nightpayish) === false);
+  ok("so it is findable as unplaced", unsortedEssentials([nightpayish]).length === 1);
+
+  // The patch: one field, only when it changed, only a value in the vocabulary.
+  is("moving it to tips is one field", kindPatch(nightpayish, "tip"), { kind: "tip" });
+  is("and setting what it already is changes nothing", kindPatch({ kind: "tip" }, "tip"), {});
+  is("a value outside the vocabulary is not stored", kindPatch(nightpayish, "sort-of"), {});
+  is("clearing it back to unplaced is a real change", kindPatch({ kind: "tip" }, ""), { kind: "" });
+  ok("and the button knows when there is something to save",
+     hasKindChange(nightpayish, "tip") && !hasKindChange({ kind: "tip" }, "tip"));
+  // A PATCH THAT RESENDS THE WHOLE PAYLOAD is how an unrelated field gets
+  // clobbered — placePatch's own words, and the reason this returns a patch
+  // rather than a row.
+  is("the patch carries nothing but the kind", Object.keys(kindPatch({ name: "Nightpay", desc: "long text" }, "tip")), ["kind"]);
+  is("cleanKind reads the vocabulary and nothing else",
+     [cleanKind("tip"), cleanKind("TIP"), cleanKind(" essential "), cleanKind("nonsense"), cleanKind(null)],
+     ["tip", "tip", "essential", "", ""]);
+
+  // ── AND IT HAS TO SURVIVE THE TRIP TO THE DATABASE ──────────────
+  //
+  // This is the half that was actually missing. Everything above worked in
+  // memory and none of it could ever have reached a published row.
+  const shaped = M.shapeForLive("essential", { name: "Nightpay", desc: "d", howTo: "h", kind: "tip" });
+  is("a published essential carries its kind", shaped.kind, "tip");
+  is("and a rubbish one lands unplaced rather than asserting a judgement",
+     M.shapeForLive("essential", { name: "X", kind: "sort-of" }).kind, "");
+  is("an unanswered one too", M.shapeForLive("essential", { name: "X" }).kind, "");
+  // The writer is asked, so a new row arrives with an opinion instead of
+  // inheriting the default the way Nightpay did.
+  ok("the draft prompt asks which list it belongs on",
+     /"kind": "EXACTLY one of: essential, tip/.test(M.studioPrompts("Nightpay").essential));
+  ok("and gives the same rule the founder sees", /costs them money or strands them/.test(KIND_RULE));
+  ok("both kinds have a label for the picker",
+     ESSENTIAL_KINDS.every(k => !!ESSENTIAL_KIND_LABEL[k]));
+  // Named ESSENTIAL_KIND_LABEL because placeKind.js already exports KIND_LABEL
+  // for a different question — Town, District, Area — and App.jsx imports both.
+  // The build refused the collision outright, which is the only reason it was
+  // caught; entryPrice.js wrote the rule down after the same near-miss: "Two
+  // exports with one name, imported into one file, is a rename waiting to pick
+  // the wrong one."
+  ok("the two label tables are genuinely different questions",
+     Object.keys(M.KIND_LABEL).join() === "city,town,village,area"
+     && Object.keys(ESSENTIAL_KIND_LABEL).join() === "essential,tip");
+}
+
+// ── "WHAT DO WE DO ABOUT THE 'FREE' AND 'WALK IN NO BOOKING'" ───────
+//
+// Oliver, 1 Sep 2026, on the Attractions grid: "I mean, being free for children
+// under 18 doesn't mean free.."
+//
+// The free half was already answered. The booking half was a HARDCODED STRING
+// on every attraction card, with no field behind it anywhere in the schema.
+{
+  const { entryPrice, priceChip, entryBooking, bookingChip, BOOKING_FIELDS } = M;
+
+  // The free half, restated here because his question pairs them and a reader
+  // of this block should see both answers together.
+  is("free for children is not a free attraction", entryPrice({ price: "Free for children under 18" }).free, null);
+  is("and the card says nothing rather than guessing", priceChip({ price: "Free for children under 18" }), "");
+  is("while a plain free door still says Free", priceChip({ price: "Free entry" }), "Free");
+
+  // ── THE BOOKING HALF: THREE ANSWERS, AND SILENCE IS ONE ──────────
+  is("a row that says nothing gets no chip", bookingChip({ desc: "A ruined medieval castle on a peninsula." }), "");
+  is("an empty row gets no chip", bookingChip({}), "");
+  // THE ONE THAT WAS ON THE SCREENSHOT. Its card said "Walk in, no booking".
+  is("AROS with nothing on file no longer claims you can walk in",
+     bookingChip({ name: "ARoS Aarhus Art Museum", ticketsGlance: "150 DKK" }), "");
+  is("and when it does say, the card says it", bookingChip({ bookingNote: "Timed entry, book ahead" }), "Book ahead");
+  is("the other direction too", bookingChip({ bookingNote: "No booking required" }), "Walk in, no booking");
+  is("in Danish", bookingChip({ bookingNote: "Tidsbestilling påkrævet" }), "Book ahead");
+
+  // ── THE NEGATION TRAP, WHICH THE FIRST VERSION WALKED INTO ───────
+  //
+  // "No booking required" CONTAINS "booking required". A plain NEEDS_BOOKING
+  // test read a row saying you can turn up and printed "Book ahead" — the exact
+  // opposite of the row, in the one direction worth being careful about. Same
+  // trap as "free for children under 18": the qualifier is the meaning.
+  is("a row saying no booking is needed is not a row saying book",
+     entryBooking({ bookingNote: "No booking required" }).walkIn, true);
+  is("nor is one saying no ticket is needed",
+     entryBooking({ bookingNote: "No ticket needed" }).walkIn, true);
+  // AND THE ORDER STILL HOLDS. Booking beats walk-in when both are genuinely
+  // said, the mirror of "an amount beats the word free": being turned away at a
+  // door is the expensive mistake.
+  is("a partly-bookable place answers book ahead",
+     entryBooking({ bookingNote: "Grounds are drop-in, the tower needs a timed ticket" }).walkIn, false);
+
+  // NOT EVERY SENTENCE WITH "BOOK" IN IT IS ABOUT THE DOOR.
+  is("booking a table afterwards is not booking entry",
+     entryBooking({ desc: "Book a table at the café afterwards." }).walkIn, null);
+
+  // The 🆓 is a PRICE claim and the chip is a BOOKING claim, so the free word
+  // is only spent where the row actually priced the door at nothing.
+  is("a free walk-in gets the free wording",
+     [entryPrice({ ticketsGlance: "Free", bookingNote: "No booking required" }).free,
+      bookingChip({ ticketsGlance: "Free", bookingNote: "No booking required" })],
+     [true, "Walk in, no booking"]);
+
+  // ── AND IT READS A FIELD, WHICH IS THE WHOLE POINT ──────────────
+  // The old chip read nothing at all. If BOOKING_FIELDS ever empties, every
+  // answer becomes null and this block would still pass on the nulls alone.
+  ok("there are fields behind it", BOOKING_FIELDS.length >= 3 && BOOKING_FIELDS.includes("bookingNote"));
+  ok("and the one the writer fills is among them", BOOKING_FIELDS.includes("bookingNote"));
+  // It has to survive the trip to the database, or the chip is null forever.
+  is("a published attraction carries its booking answer",
+     M.shapeForLive("free", { name: "X", desc: "d", bookingNote: "Timed entry, book ahead" }).bookingNote,
+     "Timed entry, book ahead");
+  ok("and the draft prompt asks for it, empty when the page does not say",
+     /"bookingNote":/.test(M.studioPrompts("X").free) && /EMPTY STRING when the context does not say/.test(M.studioPrompts("X").free));
+
+  // ── THE CARD ITSELF, WHICH IS WHERE THE STRING LIVED ────────────
+  const appB = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the card asks entryBooking rather than asserting", /const book = entryBooking\(item\)\.walkIn;/.test(appB));
+  ok("and renders nothing when nobody has answered", /if \(book === null\) return null;/.test(appB));
+  // The dead assumption in the data layer: every attraction was stamped
+  // _price: "Free" on its way into the grid. Nothing read it, which is the only
+  // reason it was not a third place saying Free.
+  ok("no attraction is stamped free on the way in", !/_kind: "free", _price: "Free"/.test(appB));
+
+  // ── AND THE ROWS THAT CANNOT ANSWER YET ARE A WORKLIST ──────────
+  const rows = [
+    { id: 1, type: "free", payload: { name: "ARoS", ticketsGlance: "150 DKK" } },
+    { id: 2, type: "free", payload: { name: "Kalø Slotsruin", bookingNote: "No booking required" } },
+    { id: 3, type: "town", payload: { name: "Aarhus" } },
+  ];
+  is("a row nobody has asked is on the list", M.bookingWorklist(rows).map(r => r.name), ["ARoS"]);
+  is("and it is one field, not a redraft", M.bookingProblems(rows[0].payload, "free")[0].cost, "one field");
+  is("a row that answered is not on it", M.bookingProblems(rows[1].payload, "free"), []);
+  // ONLY ATTRACTIONS. A craft workshop has carried a real bookingType since it
+  // was written and its card renders it; asking twice is how two answers start
+  // disagreeing.
+  is("a town has no door to ask about", M.bookingProblems(rows[2].payload, "town"), []);
+  ok("and the audit counts it separately from the money gaps",
+     M.auditPublished(rows).noBooking.length === 1);
+  ok("saying so in words", /never say whether you can walk in or have to book/.test(M.describeAudit(M.auditPublished(rows))));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
