@@ -876,6 +876,33 @@ const TICKET_WORD = /\b(?:billet(?:ter|priser|pris|salg)?|entrepris|entre|adgang
 // inside a sentence want different words.
 const BESIDE_THE_TICKET = /\b(?:camping|parkering|parking|shuttle|shuttlebus|natbus|garderobe|cloakroom|merch(?:andise)?|billetgebyr|gebyr|fee|forsikring|insurance|leje|rental|depositum|deposit)\b/;
 
+// ── AND A TICKET TO SOMETHING INSIDE IT IS NOT ADMISSION ────────────
+//
+// BESIDE_THE_TICKET catches what is sold ALONGSIDE the ticket. This catches
+// what is sold INSTEAD of it: a separately ticketed activity that happens
+// within the place or the festival. A museum page reading "Entré 180 kr.
+// Rundvisning 50 kr." offers two real prices, and the lowest-open-price rule
+// takes the 50 — publishing a guided tour as the cost of getting in.
+//
+// Every one of these names an activity you attend, not a way through the gate,
+// and the distinction is the whole care of this list:
+//
+//   IN, deliberately: rundvisning, omvisning, guided tour — a tour of the place
+//   you have already paid to enter. workshop, kursus, foredrag, smagning — a
+//   scheduled thing with its own door.
+//
+//   OUT, deliberately: dagsbillet, partout, enkeltbillet, and every other way
+//   of slicing admission itself. This file's own comment says why — "a ticket
+//   page lists day and multi-day and what a reader plans around is the cheapest
+//   way through the gate" — and a day ticket IS through the gate.
+//
+//   OUT, reluctantly: "koncert". A music festival's page says it in every
+//   second sentence about its own programme, and catching it would throw away
+//   the admission price on exactly the pages this app writes about most. A
+//   single-concert ticket priced on a festival page is a real miss and it stays
+//   a miss rather than being paid for with false positives everywhere else.
+const A_THING_INSIDE = /\b(?:rundvisning(?:er)?|omvisning(?:er)?|guided\s+(?:tour|walk)|guidet\s+tur|workshop(?:s)?|kursus|kurser|course|foredrag|lecture|smagning|tasting|sejltur|boat\s+trip)\b/;
+
 // How far before a figure the ticket word may sit. Wide enough for "Billetter
 // til festivalen koster 400 kr." and narrow enough that a price four sentences
 // later is not attributed to it.
@@ -982,6 +1009,11 @@ const afterWindow = (t, at, len, nextAt) => {
 const ancillaryAround = (t, at, len, nextAt) =>
   BESIDE_THE_TICKET.test(sentenceBefore(t, at)) || BESIDE_THE_TICKET.test(afterWindow(t, at, len, nextAt));
 
+// Same two windows, same boundaries, for the same reason: Danish price tables
+// write the label on either side of the figure.
+const insideAround = (t, at, len, nextAt) =>
+  A_THING_INSIDE.test(sentenceBefore(t, at)) || A_THING_INSIDE.test(afterWindow(t, at, len, nextAt));
+
 const conditionAround = (t, at, len, nextAt) => {
   const before = sentenceBefore(t, at);
   // Same window, same swallowed-full-stop problem, which was latent here only
@@ -1021,7 +1053,14 @@ export const ticketPriceOn = (text) => {
     // booking fee got reported as the price of Roskilde Festival.
     const width = p.len ?? (String(p.hi === p.lo ? p.lo : p.hi).length + 6);
     if (ancillaryAround(t, p.at, width, all[i + 1]?.at)) continue;
-    found.push({ ...p, concession: CONCESSION.test(sentence), when: conditionAround(t, p.at, width, all[i + 1]?.at) });
+    found.push({
+      ...p,
+      concession: CONCESSION.test(sentence),
+      // Carried rather than dropped, exactly like `concession`: the figure is
+      // real and a page that prices ONLY guided tours has told us something.
+      inside: insideAround(t, p.at, width, all[i + 1]?.at),
+      when: conditionAround(t, p.at, width, all[i + 1]?.at),
+    });
   }
   if (found.length) {
     // THE LOWEST ANYONE CAN BUY. Lowest overall was the first version and it
@@ -1029,7 +1068,7 @@ export const ticketPriceOn = (text) => {
     // in. Among general-admission figures the lowest is still right: a ticket
     // page lists day and multi-day and what a reader plans around is the
     // cheapest way through the gate. The full set travels alongside either way.
-    const open = found.filter(p => !p.concession);
+    const open = found.filter(p => !p.concession && !p.inside);
     if (open.length) {
       const lo = open.reduce((a, b) => (b.lo < a.lo ? b : a));
       return { kind: "price", lo: lo.lo, hi: lo.hi, currency: lo.currency, when: lo.when || "", all: found, free: false };
@@ -1038,6 +1077,13 @@ export const ticketPriceOn = (text) => {
     // is NOT "the ticket costs 100": it means the page we read prices members
     // and students and never says what everyone else pays. Reported as its own
     // kind so a caller can go and look elsewhere rather than publish it.
+    //
+    // Same shape, one step along: every price on the page is for an activity
+    // inside rather than for getting in. A museum's tours-and-workshops page is
+    // exactly that, and "the entry costs 50" is the wrong reading of it.
+    if (found.every(p => p.inside)) {
+      return { kind: "inside-only", lo: null, hi: null, currency: found[0].currency, when: "", all: found, free: false };
+    }
     return { kind: "concession-only", lo: null, hi: null, currency: found[0].currency, when: "", all: found, free: false };
   }
   // Only reached when no price was found, so a page saying "free for children,
@@ -1045,6 +1091,18 @@ export const ticketPriceOn = (text) => {
   if (saysFreeIn(t)) return { kind: "free", lo: 0, hi: 0, currency: null, all: [], free: true };
   return null;
 };
+
+// ── A KIND THAT IS NOT AN ADMISSION PRICE ───────────────────────────
+//
+// Two of them now, and adding the second is what showed the first was being
+// compared against by literal in six places. Every one of them would have let
+// "inside-only" straight through as a ticket price, which is the exact fault
+// the kind was invented to stop, one word later.
+//
+// So: one set, one predicate, and the six call sites ask the question instead
+// of each holding an opinion about which strings mean "no answer yet".
+export const NOT_ADMISSION = new Set(["concession-only", "inside-only"]);
+export const pricesAdmission = (found) => !!found && !NOT_ADMISSION.has(found.kind);
 
 // ── WHOSE PAGE SAID IT, WHICH IS THE REST OF THE ANSWER ─────────────
 // Oliver, 12 Aug 2026: "I want to make it clear that the tickets on the official
@@ -1076,9 +1134,9 @@ export const ticketPriceOn = (text) => {
 export const findTicketPrice = ({ siteText = "", listingText = "", siteHosts = [], listingHosts = [] } = {}) => {
   const hosts = { siteHosts, listingHosts };
   const site = ticketPriceOn(siteText);
-  if (site && site.kind !== "concession-only") return { ...site, ...hosts, from: "official-site", why: "the operator's own page states it" };
+  if (pricesAdmission(site)) return { ...site, ...hosts, from: "official-site", why: "the operator's own page states it" };
   const listing = ticketPriceOn(listingText);
-  if (listing && listing.kind !== "concession-only") return { ...listing, ...hosts, from: "listing", why: "a ticket shop or calendar states it and the operator's own page does not" };
+  if (pricesAdmission(listing)) return { ...listing, ...hosts, from: "listing", why: "a ticket shop or calendar states it and the operator's own page does not" };
   // ── AND THIS IS THE ORDER THAT FIXES THE FOOD FESTIVAL CASE ──────
   // The operator's page carried ONLY the IDA-members rate, so it no longer wins
   // outright, and the agent's page carries the table anyone can buy from. His
@@ -1119,6 +1177,17 @@ export const priceMisses = (draftText, opts) => {
     return [{
       severity: "medium", field: "ticketInfo",
       detail: `${whoSaid(found.from, found)} prices only concessions (${rates}) and never says what general admission costs. Do not use these figures as the ticket price; the ordinary price is on a page nothing has read yet, usually the ticket agent the operator links to.`,
+    }];
+  }
+  // The same gap with a different cause, and it needs its own sentence: a page
+  // pricing a guided tour and a workshop has not priced the door. Saying
+  // "concessions" about it would send somebody looking for a students' rate
+  // that is not what is wrong.
+  if (found.kind === "inside-only") {
+    const rates = found.all.map(moneyText).join(", ");
+    return [{
+      severity: "medium", field: "ticketInfo",
+      detail: `${whoSaid(found.from, found)} prices only things that happen inside — tours, workshops, talks (${rates}) — and never says what it costs to get in. Do not use these as the entry price; they are what you pay ON TOP of admission, and the admission figure is on a page nothing has read yet.`,
     }];
   }
   const stated = pricesIn(String(draftText || "")).filter(p => p.currency);

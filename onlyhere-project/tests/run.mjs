@@ -51,7 +51,7 @@ writeFileSync(entry, `
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, dateRangesInText, isoDay, anchoredEdition, venueRatherThanEvent, PROGRAMME_DATES, dateMentions, labelledAt, CALENDAR_DATES, DATE_LABEL_WINDOW, looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER, OFFICE_CONTEXT_WINDOW, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
+  export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, dateRangesInText, isoDay, anchoredEdition, venueRatherThanEvent, PROGRAMME_DATES, dateMentions, labelledAt, otherLabelAt, CALENDAR_DATES, DATE_LABEL_WINDOW, looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER, OFFICE_CONTEXT_WINDOW, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES, bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK, linksInMarkdown, ticketLinksFromMarkdown, scoreTicketLinks } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
@@ -110,6 +110,8 @@ writeFileSync(entry, `
   export { lookupRealPlace, placeCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { directionsEndpoint, collapsedRoute } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { upgradeWorthIt, onFootMinutes, MIN_UPGRADE_SAVING, COLLAPSE_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { essentials } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
+  export { ESSENTIAL_KINDS, kindOf, kindStated, essentialsOnly, tipsOnly, unsortedEssentials, categoriesPresent, linksOf, isMerged } from ${JSON.stringify(join(root, "src/utils/essentialKind.js"))};
   export { repairBody, headingsOf, bodyProblems, priceProblems, priceWorklist, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
   export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, missingRequired, cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS, cleanBornDate, birthYear, BORN_DATE_MIN, BORN_DATE_MAX, REQUIRED_PROFILE, REQUIRED_LABEL, AGE_BANDS, BORN_YEARS, bandForYear, ageFrom, underMinimumAge, MIN_ACCOUNT_AGE, TERMS_VERSION, holdProfile, takeHeldProfile, PENDING_PROFILE_KEY, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
   export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
@@ -201,7 +203,7 @@ writeFileSync(entry, `
   export { coverageByPart, thinnestParts, coverageSummary, discoveryFraming, isAlreadyCovered, splitAlreadyCovered } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget, placeFromText, candidateFitsTarget, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { checkPlan, titlePromises, MAX_DAY_KM, dayCeilingKm } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
-  export { isOwnSiteFor, urlNames, isKommuneHost, isTourismHost, KOMMUNE_HOSTS } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
+  export { isOwnSiteFor, urlNames, isKommuneHost, isTownWord, ownershipWords, subjectIsEvent, EVENT_SUBJECT_TYPES, isTourismHost, KOMMUNE_HOSTS } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { detectLegMode as detectLegModeX, isFerryText } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fold as foldName } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
@@ -226,10 +228,10 @@ writeFileSync(entry, `
   export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { keepLanguageOf } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
-  export { datesFromListings } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
+  export { datesFromListings, cityRankOf, cityWanted, CITY_MATCH, CITY_UNKNOWN, CITY_DIFFERENT } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, PRICE_NOT_PUBLISHED, PRICE_UNKNOWN } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { sourceFit, describeSourceFit, LIVING_TYPES } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
-  export { costContradictions, bareOccurrence, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, priceMisses, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { costContradictions, bareOccurrence, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, priceMisses, pricesAdmission, NOT_ADMISSION, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 // ── ESBUILD THROUGH ITS NODE API, NOT ITS BINARY ────────────────────
 // This spawned node_modules/.bin/esbuild, located with existsSync. That works
@@ -8298,7 +8300,24 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ok("the two that used to vanish are there",
       ESSENTIAL_CATEGORY_NAMES.includes("Culture & Etiquette") && ESSENTIAL_CATEGORY_NAMES.includes("Solo Travel"));
     ok("the prompt builds its list from them", /EXACTLY one of: \$\{ESSENTIAL_CATEGORY_NAMES\.join/.test(readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8")));
-    ok("and the page loops over the same list", /\{ESSENTIAL_CATEGORIES\.map\(\(\{ cat, anchor \}\) =>/.test(app));
+    // ── PINNED TO THE DERIVATION, NOT TO THE EXPRESSION ────────────
+    // The rule is that the page's headings come from the SAME list the prompt
+    // is built from, so a category cannot exist in one and not the other. On
+    // 30 Aug the loop started rendering only the categories the current tab's
+    // rows actually use — still derived from ESSENTIAL_CATEGORIES, still
+    // incapable of inventing one — and this assertion broke on the characters.
+    ok("and the page's headings are derived from the same list",
+      /const cats = categoriesPresent\(rows, ESSENTIAL_CATEGORIES\);/.test(app));
+    ok("and the loop renders those and nothing else", /\{cats\.map\(\(\{ cat, anchor \}\) =>/.test(app));
+    // The filter can only ever narrow: categoriesPresent picks FROM the list it
+    // is given, so a heading the prompt has never heard of cannot appear.
+    {
+      const { categoriesPresent } = M;
+      const picked = categoriesPresent([{ category: "Transport" }, { category: "Invented" }], ESSENTIAL_CATEGORIES);
+      is("a row naming an unknown category adds no heading", picked.map(c => c.cat), ["Transport"]);
+      ok("and every heading it returns is one of the declared ones",
+        picked.every(c => ESSENTIAL_CATEGORY_NAMES.includes(c.cat)));
+    }
     // Every anchor is unique, since the Solo Travel chip used to point at a
     // hardcoded prose block that read no data.
     const anchors = ESSENTIAL_CATEGORIES.map(c => c.anchor);
@@ -10629,6 +10648,62 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("a different edition is never strong", nextYear.confidence, "weak");
   is("a wrong festival is no match at all", matchEvent(onFile, [raw({ name: "Aarhus Festuge" })]).confidence, "none");
 
+  // ── AND A WRONG CITY IS NOT A STRONG MATCH, 31 AUG 2026 ──────────
+  //
+  // The city rank went into the SORT and never into this gate, so it changed
+  // which listing was picked and not what the pipeline would claim about it.
+  // "strong" is not a label — it is what writes `source: "ticketmaster"` and the
+  // listing's own URL onto the row — so a touring show whose Copenhagen night
+  // falls a few days from its Aarhus night would have published Copenhagen's
+  // ticket link on the Aarhus page and called it confirmed.
+  const tourRaw = (city, localDate) => raw({
+    name: "Vanvittig Verdenshistorie",
+    dates: { status: { code: "onsale" }, start: { localDate } },
+    _embedded: { venues: [{ name: "Musikhuset", city: { name: city } }] },
+  });
+  const wrongCity = matchEvent(
+    { name: "Vanvittig Verdenshistorie", city: "Aarhus", date: "2026-09-12" },
+    [tourRaw("København", "2026-09-14")]);
+  is("a listing in another city is never a confirmed edition", wrongCity.confidence, "weak");
+  ok("and the reason says which city it actually found",
+    /K\u00f8benhavn/.test(wrongCity.why) && /Aarhus/.test(wrongCity.why));
+  // NOT A MUTE BUTTON: the listing is real and a human should see it.
+  ok("the listing is still handed back", wrongCity.event?.localDate === "2026-09-14");
+  // The right city on a near date is still exactly as strong as it was.
+  is("the entry's own city on the same date is still strong",
+    matchEvent({ name: "Vanvittig Verdenshistorie", city: "Aarhus", date: "2026-09-12" },
+      [tourRaw("Aarhus", "2026-09-12")]).confidence, "strong");
+  // And the right city outranks the wrong one even when the wrong one is nearer
+  // the date on file — which is what the sort was for, and now the gate agrees.
+  const both = matchEvent({ name: "Vanvittig Verdenshistorie", city: "Aarhus", date: "2026-09-12" },
+    [tourRaw("København", "2026-09-12"), tourRaw("Aarhus", "2026-09-15")]);
+  is("the right city wins even on a worse date", both.event?.city, "Aarhus");
+  is("and that is a strong match", both.confidence, "strong");
+  // ── AND "NOTHING TO COMPARE" IS NOT "AGREES" ────────────────────
+  //
+  // cityRankOf has three answers and the middle one earns its place here. The
+  // file's own doctrine: "A listing in the right city three weeks out beats one
+  // in the wrong city on the right day." A listing carrying NO city must not
+  // borrow that win — it sorts behind a real city match, so the Aarhus listing
+  // two days later still outranks the anonymous one on the exact date.
+  const named0 = matchEvent({ name: "Vanvittig Verdenshistorie", city: "Aarhus", date: "2026-09-12" }, [
+    { id: "Z0", name: "Vanvittig Verdenshistorie", url: "https://tm.dk/a",
+      dates: { status: { code: "onsale" }, start: { localDate: "2026-09-12" } },
+      _embedded: { venues: [{ name: "Et sted" }] } },
+    tourRaw("Aarhus", "2026-09-14"),
+  ]);
+  is("a named city outranks an anonymous listing on a better date", named0.event?.city, "Aarhus");
+  // And the sentence it writes cannot claim a city it does not have.
+  const anon = matchEvent({ name: "Roskilde Festival", city: "Roskilde", date: "2026-06-27" },
+    [raw({ _embedded: { venues: [{ name: "Dyrskuepladsen" }] } })]);
+  ok("a strong match with no city names no city", !/ in \s|in\s{2}|in $/.test(anon.why));
+
+  // A listing with no city on it is not evidence of a mismatch. This is the
+  // ordinary Danish case and it must not be demoted.
+  is("a listing that names no city is judged on its date alone",
+    matchEvent({ name: "Roskilde Festival", city: "Roskilde", date: "2026-06-27" },
+      [raw({ _embedded: { venues: [{ name: "Dyrskuepladsen" }] } })]).confidence, "strong");
+
   // ── THE SHUTTLE BUS ────────────────────────────────────────────
   // Straight out of Oliver's first working probe, 12 Aug. Two of the five
   // Danish events Ticketmaster returned were these:
@@ -10678,8 +10753,34 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // THE CENTRAL ONE. offsale is allowed to replace a DEFAULT and is never
   // allowed to become sold_out, anywhere, in any field.
   const off = matchEvent(onFile, [raw({ dates: { status: { code: "offsale" }, start: { localDate: "2026-06-27" } } })]);
-  const offRec = reconcileTickets(filed("on_sale"), off);
+  // ── AND THE DEFAULT IS AN EMPTY FIELD, NOT A STATED ON_SALE ──────
+  //
+  // 31 Aug 2026. This assertion used to be run on filed("on_sale") under a
+  // comment calling it "the default", and that is the bug it was hiding.
+  // normaliseTicketStatus("") is "unknown"; anything reaching "on_sale" is
+  // something a writer wrote off the operator's own page. So the ambiguous
+  // value was overwriting the certain one, and a reader was told tickets were
+  // not available while the festival was selling them.
+  const offRec = reconcileTickets(filed(""), off);
   is("off sale replaces the default", offRec.status, "off_sale");
+  ok("which is an empty field, and it reads as unknown", M.normaliseTicketStatus("") === "unknown");
+  // THE ONE THAT MATTERS. offsale means, in Ticketmaster's own data, one of
+  // three things without saying which — and it is one seller's allocation. The
+  // file already picked the direction two branches up: "A wrong sold-out talks a
+  // reader out of a trip that would have worked."
+  const stated = reconcileTickets(filed("on_sale"), off);
+  is("a stated on-sale is not overwritten by an ambiguous off-sale", stated.status, "on_sale");
+  ok("and nothing is recorded as changed", stated.changed === false);
+  ok("but it is raised, at a severity worth opening",
+     stated.findings.some(f => f.severity === "medium" && /off sale/i.test(f.detail)));
+  ok("and the finding says it is one seller, not the event",
+     stated.findings.some(f => /one seller's allocation/.test(f.detail)));
+  // The verdict string is unchanged, because two consumers compare against it
+  // by literal and renaming it dropped both silently.
+  is("the verdict is still the one its readers key on", stated.verdict, "off-sale");
+  ok("and the model is told the entry was left alone",
+     /THIS ENTRY SAYS TICKETS ARE ON SALE AND IT WAS LEFT THAT WAY/.test(ticketsForPrompt(stated)));
+  ok("while the written case says no such thing", !/LEFT THAT WAY/.test(ticketsForPrompt(offRec)));
   // Stated as the invariant rather than as one example: whatever is on file,
   // an offsale listing can never turn it into a sold-out claim. The first
   // version of this assertion tested the PROMPT for the words "sold out", which
@@ -10759,8 +10860,20 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // suite five times now.
   ok("festivals, and only festivals, are looked up",
      /if \(sType === "festival"\) \{[\s\S]{0,400}await studioFetch\(`\/api\/tickets\?name=/.test(app6));
+  // ── PINNED TO THE DATE, NOT TO THE ARGUMENT LIST ─────────────────
+  // The rule is that the late match uses the date the DRAFT produced rather
+  // than the one the search started with. Adding the city beside it on 31 Aug
+  // broke this on the characters while the date it protects was untouched.
   ok("the result is re-matched against the model's own date",
-     /matchEvent\(\{ name, date: t\.dateStart \|\| hint\?\.dates \|\| "" \}/.test(app6));
+     /matchEvent\(\{ name, date: t\.dateStart \|\| hint\?\.dates \|\| ""/.test(app6));
+  // ── AND AGAINST THE CITY, WHICH IS WHAT SETTLES A TOURING SHOW ───
+  // "Ticketmaster has no confirmed listing for this festival? It most certainly
+  // does." It did, twice, and nothing could tell which was the Aarhus one.
+  ok("and against the town it is in", /city: t\.town \|\| t\.city \|\| draftTown/.test(app6));
+  ok("the early match gets it too", /matchEvent\(\{ name, date: hint\?\.dates \|\| "", city: draftTown \}/.test(app6));
+  // The step that proves the lookup ran is named for what it does, because the
+  // one he could not find in a 47-step log was this one.
+  ok("the search reads as a search", /note\("Ticketmaster, searched by name"/.test(app6));
   ok("a measured status is a recorded decision", /winner: "Ticketmaster's own listing"/.test(app6));
   // The honest half. Without this the run log cannot tell a guess from a fact.
   ok("and so is the absence of one", /the status is WRITTEN, not measured/.test(app6));
@@ -13679,8 +13792,16 @@ rmSync(dir, { recursive: true, force: true });
   // The judgement itself moved out of this file on 19 Aug and is tested for real
   // below rather than grepped for here. The Google-registered-URL half used to be
   // spelled out at this call site AND inside hostNames; isOwnSiteFor owns both.
+  // ── PINNED TO THE DELEGATION, NOT TO THE OPTIONS OBJECT ────────
+  // The rule is that this call site makes no ownership judgement of its own —
+  // isOwnSiteFor owns it. Adding `type` beside placesWebsite on 31 Aug broke
+  // this on the characters while the delegation it protects was untouched.
   ok("and that judgement is the tested one, not a hostname split here",
-     /const hostNames = \(u\) => isOwnSiteFor\(u, nameWords, \{ placesWebsite \}\);/.test(codeR));
+     /const hostNames = \(u\) => isOwnSiteFor\(u, nameWords, \{ placesWebsite/.test(codeR));
+  // ── AND THE TYPE REACHES IT ────────────────────────────────────
+  // A kommune speaks for the places inside it and not for a touring show in its
+  // programme. isOwnSiteFor cannot apply that without knowing which it has.
+  ok("and it is told what kind of thing this is", /isOwnSiteFor\(u, nameWords, \{ placesWebsite, type: sType \}\)/.test(codeR));
   ok("no hostname-splitting survives in this file's official test",
      !/hostname\.replace\(\/\^www\\\.\/, ""\)\.split\("\."\)\[0\]/.test(codeR));
   ok("so a page that merely mentions it cannot become the operator",
@@ -15359,6 +15480,48 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   const officialPage = "Entré for IDA-medlemmer: 100 kr. Læs mere om festivalen her.";
   is("a page pricing only members does not price a ticket",
      ticketPriceOn(officialPage)?.kind, "concession-only");
+
+  // ── AND A TICKET TO SOMETHING INSIDE IT IS NOT ADMISSION ─────────
+  //
+  // The same fault as the IDA-members rate, one word along. "Take the lowest
+  // anyone can buy" is right among ways through the GATE, and a guided tour is
+  // not one: you buy it after you are already in. A museum page reading "Entré
+  // 180 kr. Rundvisning 50 kr." published the 50 as the cost of getting in.
+  const museum = "Entré for voksne 180 kr. Rundvisning 50 kr. Workshop for børn 90 kr.";
+  is("a guided tour does not become the entry price", ticketPriceOn(museum)?.lo, 180);
+  ok("and the tour is still carried, because the figure is real",
+     ticketPriceOn(museum)?.all?.some(p => p.lo === 50));
+  // A page that prices ONLY things inside has not priced the door, and that is
+  // its own state rather than a concession rate or an absence.
+  // The heading is what makes these figures reachable at all — TICKET_WORD has
+  // to see "priser" somewhere in the window, exactly as it does on a real
+  // museum page where one price table carries every line. Written that way on
+  // purpose: the first version of this fixture had no heading, returned null
+  // for want of a ticket word, and would have shipped an "inside-only" kind
+  // that essentially never fires.
+  const toursOnly = "Priser: Rundvisning 50 kr. Foredrag 75 kr.";
+  is("a tours-and-workshops page is its own answer", ticketPriceOn(toursOnly)?.kind, "inside-only");
+  is("and it states no admission figure", ticketPriceOn(toursOnly)?.lo, null);
+  ok("so it is not a price anybody may publish", !M.pricesAdmission(ticketPriceOn(toursOnly)));
+  ok("with a sentence that says what is actually missing",
+     M.priceMisses("", { siteText: toursOnly, siteHosts: ["m.dk"] })
+      .some(f => /ON TOP of admission/.test(f.detail)));
+  ok("and not the concessions sentence, which points at the wrong gap",
+     M.priceMisses("", { siteText: toursOnly, siteHosts: ["m.dk"] })
+      .every(f => !/only concessions/.test(f.detail)));
+  ok("English pages read the same way",
+     ticketPriceOn("Priser: Workshop 90 kr. Guided tour 60 kr.")?.kind === "inside-only");
+  // ── AND THE WAYS THROUGH THE GATE ARE UNTOUCHED ──────────────────
+  // This file's own reasoning for lowest-wins: "a ticket page lists day and
+  // multi-day and what a reader plans around is the cheapest way through the
+  // gate." A day ticket IS through the gate and must stay the answer.
+  is("a day ticket is still the cheapest way in",
+     ticketPriceOn("Billetpriser: Partout 1200 kr, dagsbillet 400 kr.")?.lo, 400);
+  // DELIBERATELY OUT: "koncert". A music festival says it in every second
+  // sentence about its own programme, and catching it would throw the admission
+  // price away on exactly the pages this app writes about most.
+  is("a festival that calls its ticket a concert ticket keeps its price",
+     ticketPriceOn("Billetter til koncerten koster 350 kr.")?.lo, 350);
   is("and it does not report a figure at all", ticketPriceOn(officialPage)?.lo, null);
   const agentPage = "Dagsbillet voksen 110 kr i forsalg. Ved indgangen koster dagsbilletten 140 kr. Partout 170 kr. Studerende 80 kr.";
   is("the agent's general-admission price is what answers", ticketPriceOn(agentPage)?.lo, 110);
@@ -15790,8 +15953,41 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // protect — that the hunt is an escalation and not a step — was untouched.
   // Which types may escalate is a different question and has its own assertions
   // in the sweep block; this one is about WHEN.
+  // ── PINNED TO THE RULE, NOT TO THE SHAPE, 31 AUG 2026 ───────────
+  // This matched the literal expression `(!priced || priced.kind ===
+  // "concession-only")`, so adding a SECOND kind that is not a price — a page
+  // that prices only guided tours — broke the assertion while leaving the rule
+  // it protects exactly as true. The rule is "escalate when nothing read so far
+  // has told us the admission price"; the list of ways a page can fail to tell
+  // us is a growing thing and not what this line is about. Both halves are
+  // asserted, so a needHunt that hunts always, or never, still goes red.
   ok("it runs only when nothing read so far priced it",
-     /const needHunt = [^;]*\(!priced \|\| priced\.kind === "concession-only"\);/.test(appH));
+     /const needHunt = [^;]*!pricesAdmission\(priced\)/.test(appH));
+  ok("and pricesAdmission is what says so, for every kind that is not one",
+     M.pricesAdmission({ kind: "price", lo: 100 }) === true
+     && M.NOT_ADMISSION.size >= 2
+     && [...M.NOT_ADMISSION].every(k => M.pricesAdmission({ kind: k }) === false)
+     && M.pricesAdmission(null) === false);
+  // ── AND EVERY PLACE THAT ASKS, ASKS THE SAME WAY ─────────────────
+  //
+  // Six call sites compared against the literal "concession-only", which is how
+  // adding a second not-a-price kind would have let it straight through five of
+  // them. They go through the predicate now, and these are the two that no
+  // render can reach — they sit inside a long async draft loop — so they are
+  // pinned to the CALL, with the rule itself pinned behaviourally above. A
+  // mutant putting `!!found` back survived until this line existed.
+  ok("the Perplexity ticket page is judged by it too",
+     /const real = pricesAdmission\(found\);/.test(appH));
+  // ...and it is what decides the log, not just the draft. A page that priced
+  // only tours reading "ok · used" is the same "found and discarded" shape this
+  // log was rebuilt to stop.
+  ok("and that answer is what the run log records",
+     /outcome: !hData\.text \? "failed" : real \? "ok" : "empty"/.test(appH)
+     && /used: !!real,/.test(appH));
+  // The operator's own ticket-agent line has its own wording for the state, so
+  // "prices only concessions" is not printed about a page that priced tours.
+  ok("and the ticket agent's line says which of the two it was",
+     /prices only tours and workshops, so it does not say what it costs to get in/.test(appH));
   // After the operator's own ticket link has been followed, so the cheap path
   // gets first refusal. readPage escalates to Firecrawl on the same reasoning.
   ok("and after the operator's own ticket link was followed",
@@ -18049,6 +18245,73 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
     datesFromListings([{ e: { localDate: "2025-08-16" } }], today), null);
   ok("and a past one is dropped while an upcoming one stands",
     datesFromListings([{ e: { localDate: "2025-08-16" } }, { e: { localDate: "2026-08-16" } }], today)?.start === "2026-08-16");
+  // ── AND A TOUR IS NOT A FESTIVAL, 31 AUG 2026 ────────────────────
+  //
+  // The three listings above are one festival in one harbour across three days,
+  // and fusing them is the right answer. These are not. "Vanvittig
+  // Verdenshistorie" is a touring show: one night in Aarhus, another the
+  // following week in Odense, the same name on both. Every rule above says one
+  // run — same name, both upcoming, nine days apart, inside the fortnight — and
+  // the offer went into dateStart and dateEnd on the branch that by definition
+  // has nothing else to check it against. A week-long festival that does not
+  // exist, published with a date range nobody can attend.
+  const tour = [
+    { e: { localDate: "2026-09-12", city: "Aarhus" } },
+    { e: { localDate: "2026-09-21", city: "Odense" } },
+  ];
+  const sept = new Date(2026, 8, 1);
+  const aarhus = datesFromListings(tour, sept, { town: "Aarhus" });
+  is("the entry's own city decides which listings are its run", aarhus?.start, "2026-09-12");
+  is("so the other city's night is not the end of a run", aarhus?.end, "");
+  is("and the count is the listings this entry has, not the tour's", aarhus?.listings, 1);
+  is("the other stop reads its own night the same way",
+    datesFromListings(tour, sept, { town: "Odense" })?.start, "2026-09-21");
+  // ── WITHOUT LOSING THE CASE IT WAS WRITTEN FOR ───────────────────
+  // A venue that does not name its town is not evidence of a mismatch. Kaløvig
+  // above is exactly that — no city on any listing — and refusing to offer a
+  // date there would lose the bug this whole function exists to fix.
+  is("a listing with no city still counts", datesFromListings(tour.map(x => ({ e: { localDate: x.e.localDate } })), sept, { town: "Aarhus" })?.listings, 2);
+  is("and so does one where the entry names no town", datesFromListings(tour, sept, {})?.listings, 2);
+  is("nor does a city nobody matches silence the offer",
+    datesFromListings(tour, sept, { town: "Skagen" })?.listings, 2);
+  // A LISTING WITH NO CITY IS NOT A LISTING IN THE WRONG CITY, and that is why
+  // this excludes the known-wrong instead of keeping only the known-right. Here
+  // the September night carries no city and the other one is Odense: the first
+  // might be ours, the second is not.
+  const halfKnown = [{ e: { localDate: "2026-09-12" } }, { e: { localDate: "2026-09-21", city: "Odense" } }];
+  is("an absent city is kept while a wrong one is dropped",
+    datesFromListings(halfKnown, sept, { town: "Aarhus" })?.listings, 1);
+  is("so the run does not stretch to the other city's night",
+    datesFromListings(halfKnown, sept, { town: "Aarhus" })?.end, "");
+
+  // A REAL MULTI-DAY FESTIVAL IS STILL ONE RUN, which is the thing the city
+  // filter must not cost: eight listings in one city across a week fuse exactly
+  // as before, because they agree on the city.
+  const roskilde = ["2026-06-27", "2026-06-28", "2026-06-29"].map(d => ({ e: { localDate: d, city: "Roskilde" } }));
+  is("a festival's own days still fuse into one run",
+    datesFromListings(roskilde, new Date(2026, 5, 1), { town: "Roskilde" })?.end, "2026-06-29");
+
+  // ── AND THE ENTRY HAS TO REACH THE OFFER ────────────────────────
+  //
+  // Every assertion above calls datesFromListings directly, and mutation
+  // testing said what that is worth: dropping `onFile` at the ONE call site in
+  // this file killed nothing. A fixed function the caller does not hand the
+  // entry to is a fixed function that never runs. dateOffer is the only
+  // production path into it, and it is on the no-date branch — the branch with
+  // nothing else to check the answer against, which is exactly where a
+  // fabricated week-long run would have gone straight into the row.
+  const tourRawE = (city, localDate) => ({
+    id: "Z9", name: "Vanvittig Verdenshistorie", url: "https://tm.dk/v",
+    dates: { status: { code: "onsale" }, start: { localDate } },
+    _embedded: { venues: [{ name: "Musikhuset", city: { name: city } }] },
+  });
+  const tourOffer = matchEvent(
+    { name: "Vanvittig Verdenshistorie", town: "Aarhus", date: "", today: sept },
+    [tourRawE("Aarhus", "2026-09-12"), tourRawE("Odense", "2026-09-21")]).dateOffer;
+  is("the offer a dateless tour entry gets is its own night", tourOffer?.start, "2026-09-12");
+  is("and it is one night, not a week-long festival", tourOffer?.end, "");
+  is("counted from its own city's listings", tourOffer?.listings, 1);
+
   // A DRAFT THAT HAS A DATE IS NEVER OVERWRITTEN by an unconfirmed listing.
   ok("a draft with a date gets no offer",
     !matchEvent({ name: "Kaløvig Havnefestival", date: "2026-08-15", today }, tmListings).dateOffer);
@@ -30620,7 +30883,77 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // rule below is what catches Skanderborg, and it is the reason there are two
   // nets rather than one.
   ok("a lone unlabelled date is still read, because most pages are that",
-     !!anchoredEdition("Smukfest. Billetsalget åbner 04.11.26.", today).found);
+     !!anchoredEdition("Smukfest er tilbage i bøgeskoven 05.08.27.", today).found);
+
+  // ── UNLESS THE PAGE SAYS WHAT THE DATE IS FOR, 31 AUG 2026 ───────
+  //
+  // The fixture this assertion used to run on was "Smukfest. Billetsalget åbner
+  // 04.11.26." — a sale-opening date, accepted as the festival's own, with the
+  // comment above explaining why that was the right trade. Half of it still is:
+  // refusing every lone unlabelled date would cost forty rows. But that
+  // paragraph leans on "the month rule below is what catches Skanderborg", and
+  // the month rule compares against the date already on file. A NEW draft has
+  // no date on file. It has no slot, no second net, and nothing between a
+  // ticket-sale date and dateStart.
+  //
+  // Oliver, 30 Aug 2026, on Rungsted: "the 2027 early bird is indeed possible
+  // to find on ticketmaster.dk". An early bird is a sale date, in the future,
+  // and frequently the only parseable date on a ticket page.
+  //
+  // So the trade is kept and narrowed: a lone unlabelled date is still read,
+  // and a lone date the page has LABELLED as something other than the event is
+  // not. This is a different question from "is it labelled as the event's".
+  is("a lone date labelled as a ticket sale is not the festival's",
+     anchoredEdition("Smukfest. Billetsalget åbner 04.11.26.", today).found, null);
+  is("and it says so, rather than reporting an empty page",
+     anchoredEdition("Smukfest. Billetsalget åbner 04.11.26.", today).why, "only-other-dates");
+  ok("in words a person can act on", /ticket sale or a deadline/.test(M.CHECK_STEP_WORDS["only-other-dates"]));
+  // NOR IS IT AN EXTRA DATE THAT SPOILS A GOOD ONE. Removed before the count,
+  // so a page with a sale date AND the festival's own dates reads the festival's
+  // instead of refusing the pair as a calendar.
+  const saleAndReal = anchoredEdition("Smukfest. Billetsalget åbner 04.11.26. Vi ses i bøgeskoven 04.08.27.", today);
+  is("a sale date beside a real one does not make a calendar", saleAndReal.found?.start?.getFullYear?.(), 2027);
+  is("and the trace says how many it set aside", saleAndReal.decoys, 1);
+  // ── THE TWO LABELS CANNOT BOTH REACH ONE DATE ───────────────────
+  //
+  // otherLabelAt opened with a guard letting the event's own label win. The
+  // mutant that deleted it killed nothing, because both patterns are anchored
+  // `\W{0,12}$` — each needs its own word LAST, with no other word between it
+  // and the date — and the vocabularies share none. The guard could not run, so
+  // it is gone, and this is the property that replaced it. If somebody adds a
+  // word to both lists or drops an anchor, this goes red.
+  const EVENT_LABELS = ["Datoer:", "Dates:", "Afholdes", "Finder sted", "When:", "Takes place"];
+  const SALE_LABELS = ["Billetsalget åbner", "Deadline", "On sale", "Tilmeldingsfrist", "Forsalg", "Sidste frist"];
+  ok("every event label reads as the event's and not as a sale",
+     EVENT_LABELS.every(a => M.labelledAt(`${a} 04.08.27`, a.length + 1) && !M.otherLabelAt(`${a} 04.08.27`, a.length + 1)));
+  ok("and every sale label the other way round",
+     SALE_LABELS.every(b => M.otherLabelAt(`${b} 04.08.27`, b.length + 1) && !M.labelledAt(`${b} 04.08.27`, b.length + 1)));
+  // Which is the property the page-level behaviour rests on: a sale word EARLIER
+  // in the sentence cannot reach past the event's own label.
+  ok("so a sale word before the event's label does not disqualify the date",
+     !!anchoredEdition("Billetsalg. Datoer: 04.08.27.", today).found);
+  // ── AND THAT ONE PASSES FOR THE WRONG REASON ON ITS OWN ─────────
+  //
+  // anchoredEdition returns on the labelled branch before decoys are consulted,
+  // so the line above is answered by the ordering and not by the anchor: the
+  // mutant that dropped `\W{0,12}$` from OTHER_LABEL left it green. The anchor
+  // only decides where there is nothing labelled to short-circuit it — which is
+  // most festival pages, and they mention ticket sales constantly.
+  //
+  // "Billetsalg i bøgeskoven 04.08.27" is a real festival's real date with a
+  // sale word three words upstream. Anchored, "bøgeskoven" stands between them
+  // and the date is read. Unanchored, the word is merely somewhere in the
+  // window, the date is written off as a sale date, and a festival that says
+  // where to buy tickets loses its date for saying so.
+  ok("an unlabelled date keeps its date when a sale word is merely nearby",
+     !!anchoredEdition("Billetsalg i bøgeskoven 04.08.27.", today).found);
+  is("while a sale word standing right against it still disqualifies it",
+     anchoredEdition("Billetsalg 04.08.27.", today).found, null);
+  // AND IT IS THE NOUN, NEVER THE VERB. "Festivalen starter 4. august" is the
+  // event date written the ordinary Danish way, and must not be mistaken for
+  // "salget starter".
+  ok("a festival that starts on a date still has that date",
+     !!anchoredEdition("Festivalen starter 04.08.27 i bøgeskoven.", today).found);
   // AND THE SECOND NET, which catches it even if a page did label the wrong one.
   // An annual festival keeps its slot in the year.
   is("a November date for an August festival is refused",
@@ -34332,6 +34665,42 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("a page with no dates at all is unchanged", factAge(noYearAtAll, now).perishableOk === true);
     ok("and still undated", factAge(noYearAtAll, now).dated === false);
   }
+
+  // ── UNLESS THE NEWER YEAR HAS NOT HAPPENED YET, 31 AUG 2026 ──────
+  //
+  // The line above is the claim this block rested on, and it was wrong by one
+  // word: a stale page has no newer year "by definition" only if the year has
+  // to be in the PAST. Pages write about the future constantly, and one
+  // sentence of it defeated both gates at once — the future year made the real
+  // timestamp look like prose, so the age test was skipped, and then it was
+  // newer than this year, so the year test could not call the page old either.
+  {
+    const goal = "Museet blev indviet 12. marts 2006. Vi er klimaneutrale i 2030. Entré 15 kroner.";
+    const a = factAge(goal, now);
+    ok("a climate goal in 2030 does not make a 2006 page current", a.perishableOk === false);
+    ok("and the page is still aged from the date it really carries", Math.round(a.ageMonths) > 200);
+    ok("which is the same answer it gives without that sentence",
+       factAge("Museet blev indviet 12. marts 2006. Entré 15 kroner.", now).perishableOk === false);
+  }
+  // AND THE OTHER DIRECTION, which matters more often: a festival announcing
+  // next year's dates is the most ordinary page this app reads, and a future
+  // year must not make a fresh page look old either.
+  {
+    const announcing = "Opdateret 3. august 2026. Vi ses igen i 2027. Billetter 400 kr.";
+    const a = factAge(announcing, now);
+    ok("next year's dates do not age a page written this month", a.perishableOk === true);
+    ok("and it is still read as dated, from its real timestamp", a.dated === true);
+  }
+  {
+    const onlyFuture = "Vi ses i 2027. Entré 20 kroner.";
+    const a = factAge(onlyFuture, now);
+    ok("a page whose only year has not happened cannot be aged", a.perishableOk === true);
+    ok("and says so rather than claiming it carries that year",
+       /no date and no year/.test(a.why));
+  }
+  // THE BOUNDARY. This year is a timestamp; next year is not.
+  ok("the current year is still evidence about the page",
+     /carries 2026/.test(factAge("Priser gældende 2026. Entré 15 kroner.", now).why));
 }
 
 // ── A REDRAFT MAY NOT BE ANSWERED FROM YESTERDAY ───────────────────
@@ -37708,7 +38077,212 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("and says what it costs to fix", /one field, not a redraft/.test(describeAudit(a)));
   }
 
-  // ── "empty · discarded" OVER A PRICE WE FOUND ───────────────────────
+  // ── "IT ISN'T FREE ON TICKETMASTER" ─────────────────────────────────
+//
+// Oliver, 31 Aug 2026, on an entry for "Vanvittig Verdenshistorie - Aarhus" —
+// a paid touring theatre show — published as Free entry.
+//
+// The page that priced it at nothing was krop.aarhus.dk, Aarhus Kommune's KROP
+// festival programme, which lists ONE DATE of the tour as a free programme
+// item. isOwnSiteFor called it the operator's own site, so its "gratis"
+// outranked the people actually selling the ticket.
+//
+// TWO DOORS, and the first fix I wrote missed both. It reached true on the
+// HOST-ONLY branch, because the entry is called "... - Aarhus", so "aarhus" is
+// one of its own name words and the host label "aarhus" equals it. It would
+// then have reached true on the kommune branch below anyway.
+{
+  const { isOwnSiteFor, isTownWord, ownershipWords, subjectIsEvent, EVENT_SUBJECT_TYPES } = M;
+  const KROP = "https://krop.aarhus.dk/program-2026/vanvittig-verdenshistorie-kropsidealer";
+  const WORDS = ["vanvittig", "verdenshistorie", "aarhus"];
+
+  ok("the page that caused this is no longer the operator's own site",
+    !isOwnSiteFor(KROP, WORDS, { type: "festival" }));
+  // DOOR ONE: a city agreeing with a city is not ownership. By the old rule
+  // every page on aalborg.dk was the operator's site for "Aalborg Karneval".
+  ok("a city domain does not own an event named after the city",
+    !isOwnSiteFor("https://www.aalborg.dk/oplevelser/det-sker", ["aalborg", "karneval"], { type: "festival" }));
+  ok("nor does its front page", !isOwnSiteFor("https://www.aalborg.dk/", ["aalborg", "karneval"], { type: "festival" }));
+  // DOOR TWO: "a kommune speaks for the PLACES inside it" is the branch's own
+  // reasoning and it still holds — for places. A touring show is not one.
+  ok("a kommune still speaks for a park it runs",
+    isOwnSiteFor("https://www.aarhus.dk/borger/natur/marselisborg-dyrehave", ["marselisborg", "dyrehave"], { type: "free" }));
+  ok("but not for an event that merely plays there",
+    !isOwnSiteFor("https://www.aarhus.dk/oplevelser/kalender/vanvittig-verdenshistorie", WORDS, { type: "festival" }));
+
+  // ── AND IT IS NOT A MUTE BUTTON ─────────────────────────────────
+  //
+  // Every one of these was the operator's own site before and must still be, or
+  // the fix has cost more than the bug. The two the file names by name are here
+  // because its comments cite them as the cases the host branch exists for.
+  ok("marselisborgdyrehave.dk still owns itself",
+    isOwnSiteFor("https://www.marselisborgdyrehave.dk/", ["marselisborg", "dyrehave"], { type: "free" }));
+  ok("ribe-vikingecenter.dk still owns itself",
+    isOwnSiteFor("https://www.ribe-vikingecenter.dk/", ["ribe", "vikingecenter"], { type: "free" }));
+  ok("a festival's own domain still outranks everything",
+    isOwnSiteFor("https://www.roskilde-festival.dk/", ["roskilde", "festival"], { type: "festival" }));
+  ok("and so does Distortion's", isOwnSiteFor("https://www.cphdistortion.dk/", ["cphdistortion", "distortion"], { type: "festival" }));
+  // Google's registered URL is the owner's own statement and outranks all of
+  // this, event or not — that branch runs first and must be untouched.
+  ok("a registered business URL still settles it outright",
+    isOwnSiteFor("https://krop.aarhus.dk/x", WORDS, { type: "festival", placesWebsite: "https://krop.aarhus.dk" }));
+
+  // ── THE WORD TEST, WHICH IS WHERE THE FIRST FIX WENT WRONG ──────
+  //
+  // My first version asked whether the NAME contained a non-town word. The name
+  // does ("vanvittig"), while the HOST matched on "aarhus" — the same wrong
+  // answer through a longer sentence. The question is which word the host said.
+  ok("a kommune name is a town word", isTownWord("Aarhus") && isTownWord("Aalborg"));
+  ok("folded, so København meets kobenhavn", isTownWord("København"));
+  ok("and a show's name is not", !isTownWord("Verdenshistorie") && !isTownWord("Vikingecenter"));
+  is("ownership words drop the town and keep the rest",
+    ownershipWords(["vanvittig", "verdenshistorie", "aarhus"]), ["vanvittig", "verdenshistorie"]);
+  ok("and a place is not", !subjectIsEvent("free") && !subjectIsEvent("town") && !subjectIsEvent(""));
+
+  // ── ONE CASE EACH DOOR CATCHES ALONE ────────────────────────────
+  //
+  // Every assertion above dies if EITHER door is reopened, which is true to the
+  // bug — krop.aarhus.dk came through both, so closing one leaves it walking
+  // through the other — but it means the suite cannot say WHICH door a future
+  // edit reopened. These two can. Each is reachable by exactly one branch, so
+  // it fails alone and names the branch that broke.
+  //
+  // Door one only: not a kommune host, so the kommune branch answers false
+  // whatever its precondition says. The host label is a town word and nothing
+  // else, and the type is a place, so only the ownership-words filter refuses it.
+  ok("door one alone: a town word in someone else's domain is not ownership",
+    !isOwnSiteFor("https://aalborg.rejseblog.dk/kildeparken", ["aalborg", "kildeparken"], { type: "free" }));
+  // Door two only: the name shares no word with the host, so the host-only
+  // branch never matches and cannot be the thing refusing it. It clears the
+  // full urlNames gate on the PATH, reaches the kommune branch, and only the
+  // event precondition stands between it and "the operator's own page".
+  ok("door two alone: a kommune's calendar does not own the show it lists",
+    !isOwnSiteFor("https://www.aarhus.dk/kultur/kalender/vanvittig-verdenshistorie",
+      ["vanvittig", "verdenshistorie"], { type: "festival" }));
+
+  // ── AND THE SET CANNOT DRIFT INTO FICTION ───────────────────────
+  //
+  // I wrote `["festival", "event"]` and this app has no "event" type. Deleting
+  // it killed one assertion and that assertion was the set reading itself back.
+  // The invariant, not the membership, is what is worth pinning: every type this
+  // gate excludes must be a type the app can actually produce.
+  ok("every event-subject type is a real content type",
+    [...EVENT_SUBJECT_TYPES].every(t => M.CONTENT_TYPES.includes(t)));
+  ok("and festival is one of them", subjectIsEvent("festival"));
+}
+
+// ── "SOME THINGS ARE ESSENTIALS WHILE OTHERS ARE TIPS" ──────────────
+//
+// Oliver, 30 Aug 2026: "I find that essentials is a long list and could be put
+// into categories better. Perhaps, we should have one more navi called 'tips'
+// instead?" And, in the same message: "Kombardo Expressen and Flixbus could
+// technically be in same 'apartment'", and "I want you to include rejsekort
+// into essentials."
+//
+// The list was ALREADY categorised, which is why categorising it harder would
+// not have helped: fourteen rows across eight categories is two items a
+// heading. Two documents were sharing one list.
+{
+  const { ESSENTIAL_KINDS, kindOf, kindStated, essentialsOnly, tipsOnly, unsortedEssentials, linksOf, isMerged, essentials } = M;
+
+  // ── THE SPLIT, ON THE REAL ROWS ─────────────────────────────────
+  is("nothing is left unplaced", unsortedEssentials(essentials).map(r => r.name), []);
+  ok("both halves have something in them", essentialsOnly(essentials).length > 0 && tipsOnly(essentials).length > 0);
+  is("and every row is in exactly one of them",
+    essentialsOnly(essentials).length + tipsOnly(essentials).length, essentials.length);
+  // THE LIST GOT SHORTER, which was the complaint. Fourteen cards became twelve
+  // without a fact being dropped: two merges, one new entry.
+  ok("the whole list is shorter than the fourteen he was looking at", essentials.length < 14);
+  ok("and each tab is shorter still", Math.max(essentialsOnly(essentials).length, tipsOnly(essentials).length) < essentials.length);
+
+  // The ones that genuinely strand you belong on the short list.
+  const essNames = essentialsOnly(essentials).map(r => r.name);
+  const tipNames = tipsOnly(essentials).map(r => r.name);
+  ok("the fine warning is an essential", essNames.some(n => /Transit Fine/i.test(n)));
+  ok("so is paying for things", essNames.some(n => /Cards & Mobile/i.test(n)));
+  ok("and getting a ticket", essNames.some(n => /Getting a Ticket/i.test(n)));
+  ok("the Copenhagen Card is a tip, not a requirement", tipNames.some(n => /Copenhagen Card/i.test(n)));
+  ok("and so is a walk down Strøget", tipNames.some(n => /Overtourism/i.test(n)));
+
+  // ── AN UNPLACED ROW IS AN ESSENTIAL, NOT A TIP ──────────────────
+  //
+  // liveContent pushes Studio-published rows into this same array and they
+  // carry no `kind`. The default has to be the safe direction: an essential
+  // shown as a tip is a warning somebody missed; a tip shown as an essential is
+  // only noise.
+  is("a published row with no kind lands on the short list", kindOf({ name: "New" }), "essential");
+  ok("and is findable rather than merely wrong", unsortedEssentials([{ name: "New" }]).length === 1);
+  ok("a stated kind is read case-insensitively, because a person types it", kindOf({ kind: "Tip" }) === "tip");
+  ok("and a value that is neither falls to the safe default", kindOf({ kind: "maybe" }) === "essential");
+  is("there are exactly two kinds", ESSENTIAL_KINDS, ["essential", "tip"]);
+
+  // ── REJSEKORT, WHICH HE ASKED FOR BY NAME ───────────────────────
+  {
+    const ticket = essentials.find(r => /Getting a Ticket/i.test(r.name));
+    ok("it is on the essentials tab", kindOf(ticket) === "essential");
+    const labels = linksOf(ticket).map(l => l.label);
+    ok("and Rejsekort is one of the three apps on it", labels.some(l => /Rejsekort/i.test(l)));
+    ok("with DOT", labels.some(l => /DOT/i.test(l)));
+    ok("and DSB", labels.some(l => /DSB/i.test(l)));
+    const words = `${ticket.desc} ${ticket.howTo} ${ticket.tip}`;
+    // ── THE FROZEN WORDING, AND BOTH HALVES OF IT ─────────────────
+    // Checked against rejsekort.dk on 10 Aug 2026 and already carried by the
+    // guide prompt. Two things are easy to get wrong in opposite directions.
+    ok("the app is not described as residents-only", /open to visitors|not residents only/i.test(words));
+    ok("and the discontinued card is dated rather than vague", /28 May 2026/.test(words));
+    ok("what is genuinely unconfirmed is not asserted either way",
+      /not something we have been able to confirm/i.test(words));
+    ok("and the reason to prefer a fixed ticket is checking out, not eligibility",
+      /nothing to remember at the other end|check in AND out/i.test(words));
+  }
+
+  // ── THE MERGES ──────────────────────────────────────────────────
+  {
+    const buses = essentials.find(r => /Long-Distance Buses/i.test(r.name));
+    ok("FlixBus and Kombardo share one card", isMerged(buses));
+    const labels = linksOf(buses).map(l => l.label);
+    ok("both operators are named", labels.some(l => /Flix/i.test(l)) && labels.some(l => /Kombardo/i.test(l)));
+    ok("and each keeps its own link", linksOf(buses).every(l => /^https?:\/\//.test(l.url)));
+    // NO FACT WAS LOST IN THE MERGE. These were the distinguishing details on
+    // the two old cards, and the Bornholm through-ticket is the whole reason a
+    // reader would pick one over the other.
+    const words = `${buses.desc} ${buses.howTo} ${buses.tip}`;
+    ok("the 7 domestic routes survive", /7 domestic routes|7 routes/i.test(words));
+    ok("the international ones do", /Hamburg/.test(words) && /Oslo/.test(words) && /Stockholm/.test(words));
+    ok("the Bornholm through-ticket does", /R(ø|o)nne|Bornholm/i.test(words));
+    ok("and the price-rises-with-time warning does", /rise the closer|triple/i.test(words));
+    ok("the merged card is a tip, since neither is required", kindOf(buses) === "tip");
+  }
+  // BOTH SHAPES RENDER. Twelve rows already carry a single `link` and are
+  // correct; rewriting them to introduce a field they do not need is how a
+  // tidy-up breaks published content.
+  is("a single-link row is not treated as merged", isMerged({ link: "https://x.dk" }), false);
+  is("and still yields its one link", linksOf({ link: "https://x.dk" }).map(l => l.url), ["https://x.dk"]);
+  is("a row with neither yields none", linksOf({}), []);
+
+  // ── THE WIRING ──────────────────────────────────────────────────
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("Tips is in the nav", /\{ id: "tips", label: "Tips", ico: "bulb" \}/.test(app));
+    ok("and in the swipe order, next to Essentials",
+      /"home", "essentials", "tips", "attractions"/.test(app));
+    // ONE RENDER, TWO TABS. Copying the block is how the two start disagreeing
+    // about what a card looks like.
+    ok("both tabs are drawn by one block", /\(tab === "essentials" \|\| tab === "tips"\)/.test(app));
+    is("and the card markup exists once", (app.match(/How to get it/g) || []).length, 1);
+    ok("the tab decides which rows", /const rows = onTips \? tipsOnly\(essentials\) : essentialsOnly\(essentials\)/.test(app));
+    // The fine warning is pinned to the top of Essentials and must not follow
+    // the reader onto Tips.
+    ok("the fine warning stays on the tab it belongs to", /onTips \? \[\] : essentials\.filter\(e => e\.id === 7\)/.test(app));
+    // AND THE MERGED OPERATORS ARE DRAWN, or Kombardo and Rejsekort are in the
+    // data and invisible — which is this project's signature failure.
+    ok("a merged card draws its operators", /\{isMerged\(item\) && \(/.test(app));
+    ok("each with its own link", /linksOf\(item\)\.map\(\(l, li\) =>/.test(app));
+    ok("and its Android store link where there is one", /l\.android && \(/.test(app));
+  }
+}
+
+// ── "empty · discarded" OVER A PRICE WE FOUND ───────────────────────
 //
 // Oliver's run log, 30 Aug 2026, drafting Vanvittig Verdenshistorie - AARHUS:
 //
@@ -37987,7 +38561,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the price hunt is no longer festivals only",
       /HUNTS_FOR_A_PRICE = \["festival", "free"\]/.test(app));
     ok("and still only runs when nothing read so far prices it",
-      /needHunt = HUNTS_FOR_A_PRICE\.includes\(sType\) && \(!priced \|\| priced\.kind === "concession-only"\)/.test(app));
+      /needHunt = HUNTS_FOR_A_PRICE\.includes\(sType\) && !pricesAdmission\(priced\)/.test(app));
     // COSTS NOTHING ON A GENUINELY FREE ATTRACTION: ticketPriceOn returns
     // {kind:"free"} for a page stating free entry with no fare, so `priced` is
     // truthy and no call is made.

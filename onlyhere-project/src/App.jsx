@@ -47,7 +47,7 @@ import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filt
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured, TICKET_HUNT_PROMPT, ticketHuntUrls } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT, correctionLanded, describeCorrection } from "./utils/factCheckRead";
-import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, launderedAbsence, priceSource, priceMisses, findTicketPrice, ticketPriceOn, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit, VENUE_KINDS, UNCONFIRMED_IDENTITY, UNVERIFIED_PROSE } from "./utils/entryAudit";
+import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, launderedAbsence, priceSource, priceMisses, findTicketPrice, ticketPriceOn, pricesAdmission, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit, VENUE_KINDS, UNCONFIRMED_IDENTITY, UNVERIFIED_PROSE } from "./utils/entryAudit";
 import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM, upgradeWorthIt, onFootMinutes } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems, travellerBudget, budgetTierMismatch } from "./utils/accommodation";
@@ -154,6 +154,10 @@ import { openingThread, withTestBrief, withoutTestBrief } from "./utils/chatThre
 import { downloadReport } from "./utils/previewReport";
 import { briefThemes , essentialsForTrip, essentialsBlock } from "./utils/interestFit";
 import { partnerDisclosure, linkLabel } from "./utils/affiliates";
+// ── "SOME THINGS ARE ESSENTIALS WHILE OTHERS ARE TIPS" ──────────────
+// Oliver, 30 Aug 2026. See utils/essentialKind.js: the categories were never
+// the problem, two documents sharing one list were.
+import { essentialsOnly, tipsOnly, categoriesPresent, linksOf, isMerged } from "./utils/essentialKind";
 // ── "ATTRACTIONS ALL SAY FREE" ──────────────────────────────────────
 // Oliver, 27 Aug 2026. Five places in this file published a price claim built
 // out of the CATEGORY NAME: the attractions pool's Studio type is called
@@ -4275,7 +4279,10 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         // the operator's own site. Both directions are fixed in one place now:
         // isOwnSiteFor reads the host AND the path with bounded matching, and
         // refuses a tourism board, a ticket calendar and an encyclopedia outright.
-        const hostNames = (u) => isOwnSiteFor(u, nameWords, { placesWebsite });
+        // sType, because the kommune branch inside only holds for the PLACES a
+        // kommune runs. A touring show in its festival programme is not one, and
+        // that is the door the Vanvittig "Free entry" came through.
+        const hostNames = (u) => isOwnSiteFor(u, nameWords, { placesWebsite, type: sType });
         const pageNames = (u) => containsName(urlText[u] || "", name);
         const nameMatched = usable.filter(u => hostNames(u) || pageNames(u));
         // A venue keeps the strict single name-matched site. A town or festival
@@ -4507,7 +4514,9 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
                 : priced
                   ? (priced.kind === "concession-only"
                       ? "prices only concessions, so it does not say what general admission costs"
-                      : priced.free ? "says entry is free" : `${priced.lo} ${String(priced.currency).toUpperCase()}${priced.when ? ` ${priced.when}` : ""}`)
+                      : priced.kind === "inside-only"
+                        ? "prices only tours and workshops, so it does not say what it costs to get in"
+                        : priced.free ? "says entry is free" : `${priced.lo} ${String(priced.currency).toUpperCase()}${priced.when ? ` ${priced.when}` : ""}`)
                   : "read, but it states no ticket price",
               why: tData.text ? "" : "The operator names this as where its tickets are sold, so a failure here is the one page most worth knowing about.",
               used: !!priced,
@@ -4582,7 +4591,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           // `priced` is truthy and no hunt runs. The call is spent only where a
           // door has a price nobody has found yet.
           const HUNTS_FOR_A_PRICE = ["festival", "free"];
-          const needHunt = HUNTS_FOR_A_PRICE.includes(sType) && (!priced || priced.kind === "concession-only");
+          const needHunt = HUNTS_FOR_A_PRICE.includes(sType) && !pricesAdmission(priced);
           if (needHunt) {
             try {
               // sType, so an attraction is asked about its own billetter page
@@ -4613,7 +4622,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
                   const hRes = await studioFetch(`/api/scan-source?${editingId !== null ? "fresh=1&" : ""}url=${encodeURIComponent(u)}`);
                   const hData = await hRes.json();
                   const found = hData.text ? ticketPriceOn(hData.text) : null;
-                  const real = found && found.kind !== "concession-only";
+                  const real = pricesAdmission(found);
                   note(`Ticket page from Perplexity: ${domainOf(u)}`, {
                     provider: hData.via || "fetch",
                     detail: u.slice(0, 120),
@@ -4826,10 +4835,23 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
             });
           } else {
             ticketCandidates = Array.isArray(td?.events) ? td.events : [];
-            const early = matchEvent({ name, date: hint?.dates || "" }, ticketCandidates);
+            // ── THE CITY, WHICH SETTLES A TOURING SHOW ────────────
+            // Oliver, 31 Aug 2026: "Ticketmaster has no confirmed listing for
+            // this festival? It most certainly does." It did — two of them —
+            // and neither the early match nor the late one had any way to tell
+            // which was the Aarhus one, because both ranked on name and date
+            // and never on the city sitting on every candidate. See matchEvent.
+            const early = matchEvent({ name, date: hint?.dates || "", city: draftTown }, ticketCandidates);
             const rec = reconcileTickets({ ticketStatus: "", date: hint?.dates || "" }, early);
             ticketText = ticketsForPrompt(rec);
-            note("Ticket status from Ticketmaster", {
+            // ── NAMED FOR WHAT IT DOES ──────────────────────────
+            // Oliver, reading this same log: "It didn't seem on the trace that
+            // it even decided to seek through ticketmaster." It did, on this
+            // line, and it reported two listings. "Ticket status from
+            // Ticketmaster" reads as a field being filled rather than a search
+            // being run, so the one step that proves the lookup happened was
+            // the one he could not find.
+            note("Ticketmaster, searched by name", {
               provider: "ticketmaster", detail: `listings for "${name}" in Denmark`,
               outcome: ticketCandidates.length ? "ok" : "empty",
               used: !!ticketText,
@@ -6194,7 +6216,9 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       }
 
       if (sType === "festival") {
-        const match = matchEvent({ name, date: t.dateStart || hint?.dates || "" }, ticketCandidates);
+        // Same city, and this is the match that matters: it runs after the date
+        // has been confirmed off the operator's own site, so it has both halves.
+        const match = matchEvent({ name, date: t.dateStart || hint?.dates || "", city: t.town || t.city || draftTown }, ticketCandidates);
         const rec = reconcileTickets({ ticketStatus: t.ticketStatus, date: t.dateStart || "" }, match);
         const modelSaid = t.ticketStatus || "(nothing, so it would have been filed as on sale)";
         if (rec.changed) {
@@ -12960,13 +12984,18 @@ If the conversation only covers a single day or a few stops with no explicit day
   // "roadtrips" removed as its own tab — folded into Gemlyx Detour's existing
   // "🚗 Road Trip" quick-start (same roadTrips data), per Oliver's call to stop
   // having two separate places to find a road trip.
-  const TAB_ORDER = ["home", "essentials", "attractions", "events", "food", "nightlife", "visits", "ai"];
+  // ── "PERHAPS WE SHOULD HAVE ONE MORE NAVI CALLED TIPS" ────────────
+  // Oliver, 30 Aug 2026: "some things are essentials while others are tips."
+  // Tips sits directly after Essentials because the two are one shelf split in
+  // half, and a reader who guesses wrong should find the other one next door.
+  const TAB_ORDER = ["home", "essentials", "tips", "attractions", "events", "food", "nightlife", "visits", "ai"];
   // Single source of truth for nav labels — same order as TAB_ORDER, so swipe and nav can never drift apart again.
   // Redesign pass: emoji removed from nav — `ico` names map to the drawn icon
   // set in components/Icon.jsx, rendered next to the plain-text label.
   const NAV_ITEMS = [
     { id: "home", label: "Explore", ico: "compass" },
     { id: "essentials", label: "Essentials", ico: "map" },
+    { id: "tips", label: "Tips", ico: "bulb" },
     { id: "attractions", label: "Attractions", ico: "ticket" },
     { id: "events", label: "Events", ico: "calendar" },
     { id: "food", label: "Food", ico: "utensils" },
@@ -19046,16 +19075,36 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           )}
 
           {/* ── ESSENTIALS ───────────────────────────────────── */}
-          {tab === "essentials" && (
+          {/* ── ONE RENDER, TWO TABS ──────────────────────────────────
+              Oliver, 30 Aug 2026, on a fourteen-item list under eight
+              categories: "some things are essentials while others are tips."
+              He is right, and the categories were never the problem — two items
+              a heading is not a structure, it is the same list with more
+              furniture. What was actually in there is two documents: sort this
+              out or you will be fined and stranded, and this will make the trip
+              better.
+
+              DRAWN ONCE. Copying this block for a second tab is how the two
+              start disagreeing about what a card looks like, which is the same
+              argument spotRow makes on the nightlife page. The tab decides
+              which rows and which heading; everything below is shared. */}
+          {(tab === "essentials" || tab === "tips") && (() => {
+            const onTips = tab === "tips";
+            const rows = onTips ? tipsOnly(essentials) : essentialsOnly(essentials);
+            // Only the categories THIS tab's rows actually use. A chip that
+            // scrolls a reader to an empty heading is worse than no chip, and
+            // split across two tabs most of the eight are empty on either.
+            const cats = categoriesPresent(rows, ESSENTIAL_CATEGORIES);
+            return (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text }}>✓ Travel Essentials</div>
-                <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Everything you need to travel Denmark like a local</div>
+                <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text }}>{onTips ? "✦ Tips" : "✓ Travel Essentials"}</div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{onTips ? "Worth knowing. None of it will strand you, all of it makes the trip better." : "The short list. Sort these before you go, or they cost you money on the day."}</div>
               </div>
-              <PageHero src="/checklist.jpg" emoji="✓" color="#2E7D32" />
+              <PageHero src="/checklist.jpg" emoji={onTips ? "✦" : "✓"} color={onTips ? "#B8860B" : "#2E7D32"} />
 
-              {/* Fine warning — always first */}
-              {essentials.filter(e => e.id === 7).map(item => (
+              {/* Fine warning — always first, and only on the tab it belongs to */}
+              {(onTips ? [] : essentials.filter(e => e.id === 7)).map(item => (
                 <div key={item.id} id="ess-safety" style={{ background: "#3D2A0A", borderRadius: 14, padding: "16px", marginBottom: 20, border: "1px solid #FFB347", scrollMarginTop: 90 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                     <span style={{ fontSize: 22 }}>{item.emoji}</span>
@@ -19080,7 +19129,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     the Solo Travel chip pointed at prose. */}
                 {[
                   { id: "ess-weather", icon: "🌤", label: "Weather", color: "#1565C0" },
-                  ...ESSENTIAL_CATEGORIES.map(c => ({ id: c.anchor, icon: c.icon, label: c.cat, color: c.color })),
+                  ...cats.map(c => ({ id: c.anchor, icon: c.icon, label: c.cat, color: c.color })),
                   { id: "ess-faq", icon: "❓", label: "FAQ", color: "#455A64" },
                 ].map(s => (
                   <button key={s.id} onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
@@ -19107,10 +19156,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   This is the project's signature bug one level down inside a
                   content type, and the loop is derived from the same list the
                   prompt is built from now, so the two cannot come apart. */}
-              {ESSENTIAL_CATEGORIES.map(({ cat, anchor }) => (
+              {cats.map(({ cat, anchor }) => (
                 <div key={cat} id={anchor} style={{ marginBottom: 20, scrollMarginTop: 90 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>{cat}</div>
-                  {essentials.filter(e => e.category === cat && e.id !== 7).map(item => (
+                  {rows.filter(e => e.category === cat && e.id !== 7).map(item => (
                     <div key={item.id} style={{ background: C.surface, borderRadius: 14, padding: "14px 16px", marginBottom: 10, border: `1px solid ${C.border}` }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                         <span style={{ fontSize: 22 }}>{item.emoji}</span>
@@ -19124,7 +19173,44 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, marginBottom: 3 }}>How to get it</div>
                         <div style={{ fontSize: 11, color: C.text, lineHeight: 1.5 }}>{item.howTo}</div>
                       </div>
-                      <div style={{ fontSize: 11, color: C.muted, fontStyle: "italic", marginBottom: item.link ? 8 : 0 }}>💡 {item.tip}</div>
+                      <div style={{ fontSize: 11, color: C.muted, fontStyle: "italic", marginBottom: (item.link || isMerged(item)) ? 8 : 0 }}>💡 {item.tip}</div>
+                      {/* ── A MERGED CARD DRAWS ITS OPERATORS ──────────────
+                          Oliver: "Kombardo Expressen and Flixbus could
+                          technically be in same 'apartment'." They are, and so
+                          are the three ticket apps with Rejsekort among them.
+                          Each one keeps its own name, its own note and its own
+                          link, because the whole value of merging is that a
+                          reader compares them in one place rather than scrolling
+                          between two cards to find out which is which.
+
+                          Drawn from linksOf, which reads both the old single
+                          `link` shape and the new `links` array — twelve rows
+                          that are already correct do not get rewritten to
+                          introduce a field they do not need. */}
+                      {isMerged(item) && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 4 }}>
+                          {linksOf(item).map((l, li) => (
+                            <div key={li} style={{ background: C.bg, borderRadius: 8, padding: "9px 11px" }}>
+                              <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>{l.label}</span>
+                                {l.note && <span style={{ fontSize: 11, color: C.muted, lineHeight: 1.5 }}>{l.note}</span>}
+                              </div>
+                              <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 5, flexWrap: "wrap" }}>
+                                <a href={externalHref(l.url)} target="_blank" rel="noreferrer"
+                                  style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>
+                                  {linkLabel(l.url)} ↗
+                                </a>
+                                {l.android && (
+                                  <a href={externalHref(l.android)} target="_blank" rel="noreferrer"
+                                    style={{ fontSize: 11.5, fontWeight: 700, color: C.muted, textDecoration: "none" }}>
+                                    Android ↗
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       {item.link && (() => {
                         // ── ONE DISCLOSURE FOR THE ROW, NOT ONE PER BRANCH ──
                         //
@@ -19234,7 +19320,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 </div>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* ── MAP ──────────────────────────────────────────── */}
           {tab === "map" && (

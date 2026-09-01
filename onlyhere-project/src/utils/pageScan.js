@@ -3,6 +3,7 @@ import { MONTHS } from "./factCheckRead";
 // cannot sit beside ø. See ticketLinks.
 import { fold, containsName } from "./danishNames";
 import { KOMMUNER, K } from "../data/kommuner";
+import { CONTENT_TYPES } from "./sourcePolicy";
 
 // ── WAS THAT A PAGE, OR A WALL? ─────────────────────────────────────
 //
@@ -552,6 +553,17 @@ export const KOMMUNE_HOSTS = new Set([
   }),
 ]);
 
+// ── WHICH OF A NAME'S WORDS COULD SIGNAL OWNERSHIP ──────────────────
+// A town name cannot: it is where a thing is, not who runs it. Everything else
+// can. Folded, because KOMMUNE_HOSTS is built from the same rows folded the
+// same way, and "København" has to meet "kobenhavn".
+const TOWN_WORDS = new Set(
+  KOMMUNER.map(row => fold(String(row[K.name] || "")).replace(/[^a-z0-9]/g, "")).filter(Boolean)
+);
+export const isTownWord = (w) => TOWN_WORDS.has(fold(String(w || "")).replace(/[^a-z0-9]/g, ""));
+export const ownershipWords = (nameWords) =>
+  (Array.isArray(nameWords) ? nameWords : []).map(w => String(w || "").trim()).filter(w => w && !isTownWord(w));
+
 export const isKommuneHost = (url) => {
   const host = hostOf(url);
   if (!host) return false;
@@ -622,7 +634,34 @@ export const urlNames = (url, nameWords = [], { hostOnly = false } = {}) => {
 // with a hostname split. Ordered, because the exclusions have to win: a tourism
 // board that happens to carry the name in its domain is not the operator, and
 // neither is a ticket calendar.
-export const isOwnSiteFor = (url, nameWords = [], { placesWebsite = "" } = {}) => {
+// The two Studio types that are a thing happening rather than a place standing
+// still. Named here rather than tested inline so the one rule above cannot
+// drift from whatever else comes to depend on it.
+// Named EVENT_SUBJECT_TYPES, not EVENT_TYPES, because eventTypes.js already
+// exports an EVENT_TYPES and it means something else entirely: the vocabulary a
+// festival is TAGGED with (music, art, market). This is the Studio row type —
+// whether the SUBJECT of the draft is a thing happening or a place standing
+// still. The bundler refused the duplicate name and was right to: in the test
+// namespace one would have silently shadowed the other, and an assertion about
+// the tag vocabulary would have been answered by a two-element set of row types.
+//
+// ── AND IT IS READ FROM THE REAL VOCABULARY ─────────────────────────
+//
+// The first version of this line was `new Set(["festival", "event"])`, and
+// there is no "event" type in this app — CONTENT_TYPES has never had one. I
+// invented half the set. Mutation testing is what said so: deleting "event"
+// killed exactly one assertion, and it was the one that reads the set back to
+// itself. A member no behaviour can reach is decoration, and decoration in a
+// gate is worse than nothing, because it reads like coverage.
+//
+// So the set is filtered through CONTENT_TYPES. A type that is not in the app's
+// vocabulary cannot be listed here, and the day somebody adds a real "event"
+// type they get this branch by naming it — not by having guessed it early.
+const EVENT_SUBJECT_NAMES = ["festival", "event"];
+export const EVENT_SUBJECT_TYPES = new Set(EVENT_SUBJECT_NAMES.filter(t => CONTENT_TYPES.includes(t)));
+export const subjectIsEvent = (t) => EVENT_SUBJECT_TYPES.has(String(t || "").trim());
+
+export const isOwnSiteFor = (url, nameWords = [], { placesWebsite = "", type = "" } = {}) => {
   const host = hostOf(url);
   if (!host) return false;
   // Google's registered URL is not a guess about which site belongs to this
@@ -633,7 +672,35 @@ export const isOwnSiteFor = (url, nameWords = [], { placesWebsite = "" } = {}) =
   if (!urlNames(url, nameWords)) return false;
   // The host itself names the place: marselisborgdyrehave.dk, ribe-vikingecenter.dk.
   // That is a statement of ownership and settles it.
-  if (urlNames(url, nameWords, { hostOnly: true })) return true;
+  //
+  // ── UNLESS THE ONLY WORD IT MATCHED IS A TOWN ───────────────────
+  //
+  // Oliver, 31 Aug 2026, on an entry published as "Free entry": "It isn't free
+  // on Ticketmaster." It is a paid touring show, and the page that priced it at
+  // nothing was krop.aarhus.dk — Aarhus Kommune's KROP festival programme,
+  // which lists one date of the tour as a free programme item.
+  //
+  // It reached this line and returned true HERE, on the host-only branch, not
+  // on the kommune branch below that was written for exactly this host. The
+  // entry is called "Vanvittig Verdenshistorie - Aarhus", so "aarhus" is one of
+  // its own name words, and the host label "aarhus" equals it. A city agreeing
+  // with a city is not a statement of ownership: by that rule every page on
+  // aalborg.dk is the operator's own site for "Aalborg Karneval", and any
+  // programme, calendar or news page on a city domain speaks for every event
+  // held in that city.
+  //
+  // So a host-only match has to rest on at least one word that is NOT just a
+  // town name. marselisborgdyrehave.dk still matches on "dyrehave",
+  // ribe-vikingecenter.dk on "vikingecenter", and aarhus.dk on nothing.
+  //
+  // KOMMUNER is the list this file already builds KOMMUNE_HOSTS from, so the
+  // set of Danish town words is read from the same place rather than from a
+  // second opinion about which words are towns.
+  // Asked of the OWNERSHIP WORDS, not of the whole name. The first version of
+  // this asked whether the name CONTAINED a non-town word, which krop.aarhus.dk
+  // passed on "vanvittig" while having matched on "aarhus" — the same wrong
+  // answer through a longer sentence. The question is which word the HOST said.
+  if (urlNames(url, ownershipWords(nameWords), { hostOnly: true })) return true;
   // ── AND A PATH IS A HEADLINE ────────────────────────────────────
   //
   // Oliver, 26 Aug 2026, publishing the Roskilde Festival draft. Its run log
@@ -657,8 +724,26 @@ export const isOwnSiteFor = (url, nameWords = [], { placesWebsite = "" } = {}) =
   // aarhus.dk/borger/natur/marselisborg-dyrehave is authority for the park while
   // aarhus.dk alone names nothing. isKommuneHost is the same reader the rest of
   // this file uses, rather than a second opinion about what a kommune is.
+  //
+  // ── "THE PLACES INSIDE IT" IS THE LOAD-BEARING HALF ─────────────
+  //
+  // 31 Aug 2026, and this is the second door the same draft came through. A
+  // kommune runs parks, beaches, libraries and museums, and on those it really
+  // is the authority — that is the sentence above and it still holds. It does
+  // NOT run a commercial touring show that plays one night in its programme,
+  // and krop.aarhus.dk/program-2026/vanvittig-verdenshistorie is exactly that:
+  // Aarhus Kommune's KROP festival programme, listing one date of a paid tour
+  // as a free programme item. Its "gratis" was published as the show's price
+  // with the operator's own authority behind it.
+  //
+  // So the branch keeps its reasoning and gains its own precondition: an EVENT
+  // is not one of the places inside a kommune. A festival a kommune genuinely
+  // runs still reaches the reader through every other source this pipeline
+  // ranks; what it loses is the right to outrank the people selling the ticket.
+  if (subjectIsEvent(type)) return false;
   return isKommuneHost(url);
 };
+
 
 // officialHosts is what the pipeline has already decided is the operator's own
 // site, rather than a guess made here. Passing none is fine: nothing is ranked
@@ -848,7 +933,27 @@ export const factAge = (text, nowMs) => {
   // Conservative in the direction that matters: a genuinely stale page has no
   // newer year on it, so nothing here can make one look fresh. It only stops a
   // page being called old on the strength of a sentence about 2006.
-  const newestYear = newestYearIn(text);
+  // ── AND A YEAR IN THE FUTURE IS NOT A TIMESTAMP ─────────────────
+  //
+  // 31 Aug 2026. The rule above says a year newer than the newest full date
+  // means "that full date is prose, and the year is the better evidence about
+  // the page". It is, for a year that could be WHEN THE PAGE WAS WRITTEN. A
+  // page cannot have been written in 2030.
+  //
+  // "Vi er klimaneutrale i 2030" is one sentence on a museum's about page, and
+  // it defeated both gates at once: it made the real 2019 timestamp look like
+  // prose, so the age test was skipped, and then it was newer than this year,
+  // so the year test could not call it old either. A page last touched seven
+  // years ago passed as current, and this function's whole job is to stop that.
+  //
+  // Both directions are closed by one cap, and both are right for the same
+  // reason: a future year says nothing about when a page was written. It cannot
+  // make an old page look fresh, and it must not make a fresh one look old —
+  // which matters here more than anywhere, because a festival announcing its
+  // 2027 dates is the most ordinary page this app reads.
+  const nowYear = new Date(now).getUTCFullYear();
+  const seenYear = newestYearIn(text);
+  const newestYear = seenYear !== null && seenYear <= nowYear ? seenYear : null;
   const datedYear = newest === null ? null : new Date(newest).getUTCFullYear();
   const dateIsProse = newest !== null && newestYear !== null && newestYear > datedYear;
   if (newest !== null && !dateIsProse) {
@@ -864,7 +969,6 @@ export const factAge = (text, nowMs) => {
   // this codebase follows. It passes, and it is marked undated so the caller
   // can say so rather than implying it was checked.
   const year = newestYear;
-  const nowYear = new Date(now).getUTCFullYear();
   if (year === null) return { ageMonths: null, perishableOk: true, dated: false, why: "no date and no year on the page, so it cannot be aged" };
   if (year < nowYear) return { ageMonths: (nowYear - year) * 12, perishableOk: false, dated: false, why: `the newest year on this page is ${year}, so nothing on it can be inside ${MAX_FACT_AGE_MONTHS} months` };
   return { ageMonths: null, perishableOk: true, dated: false, why: `the page carries ${year} but states no day, so its exact age is unknown` };

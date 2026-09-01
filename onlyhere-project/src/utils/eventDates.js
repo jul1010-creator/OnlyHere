@@ -610,6 +610,11 @@ export const CHECK_STEP_WORDS = {
   // and none of it was this event, and reporting that as an empty page sends
   // somebody to check a site that is working perfectly.
   "many-dates-none-labelled": "the page lists several future dates and never says which one is this event's, so none of them was used",
+  // NOT "states no date" either, and the difference is where somebody looks
+  // next. The page had dates and told us what they were for — a ticket sale, a
+  // deadline — so the answer is that this page does not carry the event's own
+  // date, not that it carries none.
+  "only-other-dates": "every future date on the page belongs to a ticket sale or a deadline rather than to the event itself, so none of them was used",
   "no-text": "the page returned almost no readable text",
   "unreadable": "the page could not be read",
   // NOT A PAGE PROBLEM AT ALL. This one is our own endpoint refusing the request
@@ -715,6 +720,50 @@ const DATE_LABEL = /(?:datoer?|dato|hvorn[aå]r|afholdes|finder\s+sted|l[oø]ber
 // expecting it to.
 export const DATE_LABEL_WINDOW = 40;
 
+// ── AND A DATE CAN BE LABELLED AS SOMETHING ELSE ────────────────────
+//
+// The mirror of DATE_LABEL, and the gap it closes is the one-date branch below.
+// A page with a single future date on it is accepted unlabelled, because most
+// festival pages are exactly that. But the single most prominent future date on
+// a TICKET page is usually not the event: it is the day the tickets go on sale.
+//
+// Oliver, 30 Aug 2026, on Rungsted: "The prices are taken from 2026 data, but
+// the 2027 early bird is indeed possible to find on ticketmaster.dk". An early
+// bird has a sale-opening date, it is in the future, it is often the only date
+// a ticket page states in a parseable form, and this branch would have written
+// it into dateStart as the day the festival happens.
+//
+// Same anchoring discipline as DATE_LABEL: `\W{0,12}$` means the word has to sit
+// within a dozen punctuation characters of the date with no other word between,
+// so "Billetsalg til festivalen. Datoer: 12. september" cannot be caught by it.
+// The NOUN is required, never the verb: "starter" alone is how a Dane writes
+// "Festivalen starter 12. september", which is the event date itself.
+const OTHER_LABEL = /(?:billetsalg(?:et)?|salgsstart|salget\s+[aå]bner|forsalg(?:et)?|i\s+salg|til\s+salg|on\s+sale|sales?\s+starts?|tickets?\s+(?:go\s+on\s+sale|available\s+from)|tilmeldingsfrist|ans[oø]gningsfrist|sidste\s+frist|frist|deadline|offentligg[oø]res|annonceres|announced|registration\s+(?:opens?|closes?)|applications?\s+close)\W{0,12}$/i;
+
+// A date the page labels as belonging to something OTHER than the event.
+//
+// ── AND IT HAS NO "THE EVENT'S LABEL WINS" GUARD, DELIBERATELY ──────
+//
+// The first version opened with `if (labelledAt(t, at)) return false;`, on the
+// reasoning that being sure a date is the event's should outrank being
+// suspicious of a word near it. Mutation testing deleted that line and killed
+// nothing, and the reason is worth writing down rather than papering over with
+// a fixture built to reach it: BOTH patterns are anchored `\W{0,12}$`, so each
+// needs ITS OWN word to be the last one before the date, with no other word in
+// between. The two vocabularies share no word, so no slice can satisfy both.
+// The guard could never run.
+//
+// A branch that cannot run is decoration, and decoration in a gate is worse
+// than nothing because it reads like care. So the guard is gone and the
+// property that made it pointless is asserted instead: if somebody adds a word
+// to both lists, or drops an anchor, that assertion goes red and this comment
+// is what they will find.
+export const otherLabelAt = (text, at) => {
+  if (!Number.isFinite(at) || at < 0) return false;
+  const t = String(text || "");
+  return OTHER_LABEL.test(t.slice(Math.max(0, at - DATE_LABEL_WINDOW), at));
+};
+
 // A page with this many future dates is a calendar, whatever else it is.
 export const CALENDAR_DATES = 2;
 
@@ -737,21 +786,39 @@ export const anchoredEdition = (text, today) => {
   const future = dateRangesInText(t)
     .filter(r => r.end.getTime() >= floor)
     .sort((a, b) => a.start.getTime() - b.start.getTime());
-  if (!future.length) return { found: null, why: "no-date-in-text", labelled: false, candidates: 0 };
+  if (!future.length) return { found: null, why: "no-date-in-text", labelled: false, candidates: 0, decoys: 0 };
 
   const labelled = future.filter(r => labelledAt(t, r.at));
   // A labelled date wins outright, however many others are on the page. This is
   // the Distortion case: cphdistortion.dk/tickets says "Dates: 2-6 June 2027"
   // in the middle of a page that also carries last year's recap.
-  if (labelled.length) return { found: labelled[0], why: "", labelled: true, candidates: future.length };
+  if (labelled.length) return { found: labelled[0], why: "", labelled: true, candidates: future.length, decoys: 0 };
+
+  // ── AND THE DATES THE PAGE SAYS ARE SOMETHING ELSE ──────────────
+  //
+  // Removed BEFORE the count, not after, and that is the half worth spelling
+  // out. A ticket page that says "Billetsalg starter 1. oktober" and then gives
+  // the festival's own dates unlabelled has TWO future dates on it, which the
+  // rule below refuses as a calendar. Taking the sale date out first leaves one
+  // candidate and the right answer. Removing them afterwards would only have
+  // fixed the single-date page and left the two-date page rejecting a date it
+  // could read perfectly well.
+  const decoys = future.filter(r => otherLabelAt(t, r.at));
+  const own = future.filter(r => !decoys.includes(r));
+
+  // Every date on the page belongs to a ticket sale or a deadline. That is not
+  // "no date found" — the page had dates and said what they were for — so it
+  // says so, rather than sending a reader off to look for a page that has
+  // already been read.
+  if (!own.length) return { found: null, why: "only-other-dates", labelled: false, candidates: future.length, decoys: decoys.length };
 
   // One future date and nothing to confuse it with. Most festival pages.
-  if (future.length < CALENDAR_DATES) return { found: future[0], why: "", labelled: false, candidates: 1 };
+  if (own.length < CALENDAR_DATES) return { found: own[0], why: "", labelled: false, candidates: 1, decoys: decoys.length };
 
   // Several, and the page never says which. REFUSED, and the count is carried so
   // the trace can say what it saw rather than "nothing found": on a venue's
   // concert calendar there was plenty found and none of it was this event.
-  return { found: null, why: "many-dates-none-labelled", labelled: false, candidates: future.length };
+  return { found: null, why: "many-dates-none-labelled", labelled: false, candidates: own.length, decoys: decoys.length };
 };
 
 // ── AND A CALENDAR WITH NO EVENT IS USUALLY A VENUE ─────────────────

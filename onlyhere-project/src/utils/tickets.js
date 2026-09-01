@@ -335,9 +335,59 @@ const asDay = (d) => {
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime() : null;
 };
 
-export const datesFromListings = (named, today = new Date()) => {
+// ── ONE READER FOR "IS THIS THE RIGHT CITY" ─────────────────────────
+//
+// Hoisted out of matchEvent because datesFromListings needs the same answer and
+// a second opinion about what counts as the same city is exactly how the two
+// drift apart. Three answers, not two: 0 the cities agree, 2 they are known to
+// differ, 1 there is nothing to compare. The neutral answer is the important
+// one — a listing with no city on it is not evidence of a mismatch, and a venue
+// in a suburb may not name the city the entry does.
+export const CITY_MATCH = 0, CITY_UNKNOWN = 1, CITY_DIFFERENT = 2;
+export const cityWanted = (onFile) => fold(String(onFile?.city || onFile?.town || "").trim());
+export const cityRankOf = (e, wantCity) => {
+  const got = fold(String(e?.city || "").trim());
+  if (!wantCity || !got) return CITY_UNKNOWN;
+  return got === wantCity || got.includes(wantCity) || wantCity.includes(got) ? CITY_MATCH : CITY_DIFFERENT;
+};
+
+export const datesFromListings = (named, today = new Date(), onFile = null) => {
   const floor = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  const all = [...new Set((Array.isArray(named) ? named : [])
+  // ── AND A TOUR IS NOT A FESTIVAL ────────────────────────────────
+  //
+  // This read every listing carrying the name and fused anything within a
+  // fortnight into one run with a start and an end. On a festival that is the
+  // right answer and the reason the function exists: Roskilde's day tickets are
+  // eight listings in one city across eight days, and one run is what they are.
+  //
+  // On a TOUR it invents a festival. "Vanvittig Verdenshistorie" plays Aarhus
+  // on one night and Odense the next week; both listings carry the name, both
+  // are within the window, and the offer this made was "12 Sep – 19 Sep" — a
+  // week-long run that does not exist, written straight into dateStart and
+  // dateEnd by the caller, because the no-date branch is exactly the branch
+  // that has nothing else to check it against.
+  //
+  // The city is the thing that separates them, and it was on every listing all
+  // along. When the entry names a city and any listing agrees with it, only
+  // those listings are this entry's; the rest are other stops. When nothing
+  // agrees, or nothing has a city, every listing stays in — refusing to offer a
+  // date because a venue did not name its town would lose the Kaløvig case this
+  // function was written for.
+  // EXCLUDE THE KNOWN-WRONG, rather than keep only the known-right, and the
+  // difference is a listing whose venue names no city. Danish venues often
+  // don't, and "keep only what matches" would throw those away — losing the
+  // Kaløvig case this function exists for, where not one listing carried a city.
+  // A mismatch is evidence; an absence is not.
+  const wantCity = cityWanted(onFile);
+  const rows = (Array.isArray(named) ? named : []).filter(Boolean);
+  const mine = rows.filter(x => cityRankOf(x?.e, wantCity) !== CITY_DIFFERENT);
+  // And if that empties the list, every listing is in a city this entry is not
+  // in, and we have learned nothing about which are ours. Offering what there is
+  // beats offering nothing: the confidence is already weak, the caller only ever
+  // fills an empty field, and a festival's stated town and its venue's city
+  // genuinely differ (Kaløvig's harbour is in Egå).
+  const use = mine.length ? mine : rows;
+  const all = [...new Set(use
     .map(x => String(x?.e?.localDate || "").slice(0, 10))
     .filter(d => asDay(d) != null))].sort();
   if (!all.length) return null;
@@ -413,14 +463,40 @@ export const matchEvent = (onFile, candidates) => {
       // written from a weak match, and the caller decides whether an offered
       // date is better than an empty field. See datesFromListings for the three
       // things that have to hold before a listing is worth offering.
-      dateOffer: datesFromListings(named, today),
+      dateOffer: datesFromListings(named, today, onFile),
     };
   }
 
+  // ── AND THE CITY, WHICH WAS ON EVERY CANDIDATE ALL ALONG ────────
+  //
+  // Oliver, 31 Aug 2026, on the Aarhus run log: "rule: Ticketmaster has no
+  // confirmed listing for this festival? It most certainly does."
+  //
+  // It does, and the log said so eleven steps earlier: "2 Danish listings".
+  // What it could not do was tell which of them was the AARHUS one, because
+  // this function ranked on name overlap and date gap and nothing else — while
+  // readTicketmasterEvent has been reading `city` and `venue` off every
+  // candidate since it was written.
+  //
+  // That is the wrong axis for the thing this app publishes most. "Vanvittig
+  // Verdenshistorie - Aarhus" is one date of a touring show, the name is
+  // identical in every city it plays, and the date gap between two cities on
+  // one tour is arbitrary: 77 days apart said "probably a different edition",
+  // which was true and useless. The entry names its city in its own title. The
+  // listing carries one. Nothing compared them.
+  //
+  // A CITY MATCH IS A STRONG SIGNAL AND A MISMATCH IS A HARD DEMOTION, but
+  // neither is a veto: a listing with no city on it is not evidence of
+  // anything, and a venue in a suburb may not name the city the entry does. So
+  // a known mismatch sorts last and still gets reported rather than deleted.
+  const wantCity = cityWanted(onFile);
   const dated = named
-    .map(x => ({ ...x, gap: daysApart(onFileDate, x.e.localDate) }))
+    .map(x => ({ ...x, gap: daysApart(onFileDate, x.e.localDate), city: cityRankOf(x.e, wantCity) }))
     .filter(x => x.gap !== null)
-    .sort((a, b) => a.gap - b.gap);
+    // City first, then date. A listing in the right city three weeks out beats
+    // one in the wrong city on the right day, because a tour plays one city
+    // once and the date on file is the thing most likely to be approximate.
+    .sort((a, b) => a.city - b.city || a.gap - b.gap);
 
   if (!dated.length) {
     const best = named.sort((a, b) => b.overlap - a.overlap)[0];
@@ -428,12 +504,51 @@ export const matchEvent = (onFile, candidates) => {
   }
 
   const best = dated[0];
-  if (best.gap <= SAME_EDITION_DAYS) {
-    return { event: best.e, confidence: "strong", why: `Name and date both match: Ticketmaster has it on ${best.e.localDate}, ${best.gap === 0 ? "the same day as" : `${best.gap} ${best.gap === 1 ? "day" : "days"} from`} the date on file.` };
+  // The city agreeing is worth as much as the date agreeing, and on a touring
+  // show it is worth more. Said in the reason, because "name and date match" on
+  // a show that plays twelve cities is not the sentence a reader needs.
+  const cityWord = best.city === CITY_MATCH ? ` in ${best.e.city}` : "";
+  // ── A WRONG CITY IS NOT A STRONG MATCH, WHATEVER THE DATE SAYS ──
+  //
+  // The city rank was added to the SORT and never to this gate, so it changed
+  // which listing was chosen and not what the pipeline was willing to claim
+  // about it. `strong` is not a label: it is what puts `source: "ticketmaster"`
+  // and the listing's own URL onto the row, so a fortnight's coincidence between
+  // two stops of one tour would have published Copenhagen's ticket link on the
+  // Aarhus page and called it confirmed.
+  //
+  // best is dated[0] and the sort puts city first, so reaching here with
+  // CITY_DIFFERENT means EVERY listing is in a city this entry is not in. There
+  // is no reading of that which confirms an edition. It stays reported — the
+  // listing is real and worth a human's eye — but at weak, which is the
+  // confidence that does not write.
+  if (best.gap <= SAME_EDITION_DAYS && best.city === CITY_DIFFERENT) {
+    return {
+      event: best.e, confidence: "weak",
+      why: `Ticketmaster's nearest listing under this name is in ${best.e.city}, not ${onFile?.city || onFile?.town || "this entry's town"}, on ${best.e.localDate} — ${best.gap === 0 ? "the same day as" : `${best.gap} ${best.gap === 1 ? "day" : "days"} from`} the date on file. On a touring show the dates of two cities line up by coincidence, so nothing was written from it. Worth a look by hand.`,
+    };
   }
+  if (best.gap <= SAME_EDITION_DAYS) {
+    return { event: best.e, confidence: "strong", why: `Name and date both match: Ticketmaster has it${cityWord} on ${best.e.localDate}, ${best.gap === 0 ? "the same day as" : `${best.gap} ${best.gap === 1 ? "day" : "days"} from`} the date on file.` };
+  }
+  // A RIGHT-CITY LISTING IS NOT A DIFFERENT EDITION JUST BECAUSE THE DATE MOVED.
+  // A tour plays a given city once, so the city agreeing while the date does
+  // not is far more likely to be a date we have wrong than a second show.
+  if (best.city === CITY_MATCH) {
+    return {
+      event: best.e, confidence: "weak",
+      why: `Ticketmaster has this in ${best.e.city} on ${best.e.localDate}, which is ${best.gap} days from the date on file (${onFileDate}). The city matches, so this is very likely the same show on a date one of the two has wrong rather than a different edition. Worth checking by hand before publishing either date.`,
+    };
+  }
+  // ── AND SAY WHAT IS ACTUALLY TRUE ───────────────────────────────
+  // The old sentence became "Ticketmaster has no confirmed listing for this
+  // festival", which is false whenever this branch runs: there ARE listings,
+  // and they are named right here. Naming them is the difference between a
+  // founder trusting the check and going to look for himself.
+  const others = dated.slice(0, 3).map(x => `${x.e.name}${x.e.city ? ` (${x.e.city})` : ""} on ${x.e.localDate}`).join("; ");
   return {
     event: best.e, confidence: "weak",
-    why: `The nearest Ticketmaster listing with this name is ${best.gap} days from the date on file (${best.e.localDate} against ${onFileDate}), so it is probably a different edition and nothing was written from it.`,
+    why: `Ticketmaster has ${dated.length} listing${dated.length === 1 ? "" : "s"} under this name and none of them is in ${onFile?.city || onFile?.town || "this entry's town"} near ${onFileDate}: ${others}. Nothing was written from ${dated.length === 1 ? "it" : "them"}.`,
   };
 };
 
@@ -498,14 +613,47 @@ export const reconcileTickets = (onFile, match) => {
   }
 
   if (!st.certain && st.status === "off_sale") {
-    // The ambiguous one. It replaces a DEFAULT, never a stated sold_out or free.
-    const replaceable = filed === "on_sale" || filed === "unknown";
-    findings.push({ severity: "low", field: "ticketInfo", detail: st.detail });
+    // ── THE AMBIGUOUS ONE, AND ON_SALE IS NOT A DEFAULT ────────────
+    //
+    // This line read `filed === "on_sale" || filed === "unknown"` under a
+    // comment saying "It replaces a DEFAULT, never a stated sold_out or free" —
+    // and on_sale is not a default. normaliseTicketStatus("") is "unknown";
+    // anything that normalises to on_sale is something a writer actually wrote,
+    // off the operator's own page, saying tickets are being sold.
+    //
+    // So the ambiguous value was overwriting the certain one. offsale means, in
+    // Ticketmaster's own data and this file's own words, "one of three things
+    // and their data does not say which: sold out, sales not open yet, or sales
+    // already closed" — and it is one reseller's allocation, not the event. A
+    // Danish festival that sells through its own site with a small Ticketmaster
+    // allocation reads offsale there and on sale everywhere else.
+    //
+    // The direction matters and this file already chose it, two branches up: "A
+    // wrong sold-out talks a reader out of a trip that would have worked."
+    // Turning "Tickets on sale" into "Not on sale right now" on evidence that
+    // explicitly does not say which of three things it means is that same
+    // mistake wearing a milder badge.
+    //
+    // Only `unknown` is replaced now. A stated on_sale is kept and CONTRADICTED
+    // — raised as a finding a person reads, at the severity of something worth
+    // opening rather than the "low" it used to share with routine notes.
+    const replaceable = filed === "unknown";
+    const contradicts = filed === "on_sale";
+    findings.push(contradicts
+      ? { severity: "medium", field: "ticketInfo", detail: `This entry says tickets are on sale and Ticketmaster's listing reads off sale. ${st.detail} It is also one seller's allocation rather than the event's, so a festival selling through its own site can be both at once. The entry was left as it is — check the operator's own ticket page${ev.url ? ` against ${ev.url}` : ""} and set it by hand if it has genuinely closed.` }
+      : { severity: "low", field: "ticketInfo", detail: st.detail });
     return {
       ...base,
       status: replaceable ? "off_sale" : filed,
       changed: replaceable && filed !== "off_sale",
       verdict: "off-sale",
+      // NOT a new verdict string. Renaming it silently dropped both consumers —
+      // the prompt block below and the decision line in App.jsx, which each
+      // compare against the literal "off-sale" — and the suite caught it. What
+      // happened is the same thing in both cases: Ticketmaster reads off sale.
+      // Whether we WROTE it is already carried by `changed`. The contradiction
+      // is its own field so the prompt can say the harder sentence.
+      contradicts,
       detail: st.detail, findings,
     };
   }
@@ -646,6 +794,10 @@ export const ticketsForPrompt = (reconciled) => {
     parts.push("THIS EVENT IS CANCELLED according to Ticketmaster. Do not write it up as something to attend.");
   } else if (reconciled.verdict === "off-sale") {
     parts.push(`TICKETS ARE NOT ON SALE THROUGH TICKETMASTER RIGHT NOW, AND THAT IS NOT THE SAME AS SOLD OUT. ${statusFromCode("offsale").detail} Write it as "not on sale at the moment, check the official site", never as sold out.`);
+    // The entry states on sale and was NOT overwritten, so the model is holding
+    // two sources that disagree. Told plainly, because the alternative is a
+    // sentence that picks one of them and does not say it picked.
+    if (reconciled.contradicts) parts.push("THIS ENTRY SAYS TICKETS ARE ON SALE AND IT WAS LEFT THAT WAY: one reseller being off sale is not the event being off sale, and a Danish festival selling through its own site is routinely both at once. Do not write that tickets are unavailable. Say where to buy them and let the reader see for themselves.");
   } else if (reconciled.status === "on_sale") {
     parts.push("Tickets are on sale now, which is a fact and may be stated.");
   } else if (reconciled.verdict === "moved") {
