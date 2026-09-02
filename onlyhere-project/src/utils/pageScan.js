@@ -341,14 +341,51 @@ export const pageEra = (text, maxYear) => {
 // nowMs is threaded through because the age gate is six MONTHS as of 12 Aug
 // 2026, and six months cannot be answered by a year. Omitting it falls back to
 // the year comparison rather than failing, so an older caller still works.
-export const scrapeTier = (url, text, nowMs) => {
+// ── AND "OPERATOR" WAS EVERY HOST THAT WAS NOT A KNOWN CALENDAR ─────
+//
+// Fable found this on 31 Aug and I left it for Oliver's decision. He answered
+// on 1 Sep by pasting a run log: "it's not fixed." Step 27 of that log reads
+// "the operator's own page says entry is free", and the page was
+// aarhusfestuge.dk — Aarhus Festuge's programme entry for a paid touring show
+// that plays in it. isOwnSiteFor already refuses that page. Nothing asked it.
+//
+// This line had NO ownership test at all: not a listing host, therefore the
+// operator. So it is a second, wider path to the same "Free entry" that closing
+// the two isOwnSiteFor doors was supposed to stop, and it is the one that was
+// actually firing. Whatever landed here became `scrapedSiteText`, which
+// findTicketPrice labels "the operator's own page states it" and
+// datesConfirmedBy uses to lock a date.
+//
+// ── A THIRD TIER, NOT A STRICTER SECOND ONE ─────────────────────────
+//
+// The obvious fix — anything not owned becomes "listing" — overstates in the
+// other direction: a newspaper review is not a ticket calendar. And demoting to
+// "old" would drop it from the writer entirely, losing real material.
+//
+// So "other" is what a current, readable page that is neither the operator's
+// nor a known calendar actually is. It reaches the writer exactly as before and
+// it may corroborate exactly as a listing does; what it loses is the single
+// thing it was never entitled to, which is being called the official site.
+//
+// ── AND THE SUBJECT IS OPTIONAL, DELIBERATELY ───────────────────────
+//
+// Without one this answers exactly as it did, because a caller that cannot say
+// WHAT the page is supposed to be about cannot be asked whether the page
+// belongs to it. That keeps the age routing — the reason this function exists —
+// testable on its own, and means no caller silently changes behaviour by
+// omission. The one caller that has a subject passes it.
+export const scrapeTier = (url, text, nowMs, subject = null) => {
   const age = factAge(text, nowMs);
   const era = pageEra(text);
   // "old" here means old FOR A PRICE OR A TIMETABLE. The page still reaches the
   // writer; it is demoted to history, which is exactly the split he drew:
   // "History is fine. But NOT logistics and prices."
   if (!age.perishableOk) return { tier: "old", era, age };
-  return { tier: isListingHost(url) ? "listing" : "operator", era, age };
+  if (isListingHost(url)) return { tier: "listing", era, age };
+  const words = Array.isArray(subject?.nameWords) ? subject.nameWords.filter(Boolean) : [];
+  if (!words.length) return { tier: "operator", era, age };
+  const owns = isOwnSiteFor(url, words, { placesWebsite: subject?.placesWebsite || "", type: subject?.type || "", name: subject?.name || "" });
+  return { tier: owns ? "operator" : "other", era, age };
 };
 
 // One line, for the run log and for the founder reading it. Names the domain,
@@ -591,7 +628,7 @@ export const isTourismHost = (url) => {
 // hostOnly drops the path from the haystack. See isOwnSiteFor below for why
 // that distinction had to exist: a path is a headline, and a headline is not a
 // domain.
-export const urlNames = (url, nameWords = [], { hostOnly = false } = {}) => {
+export const urlNames = (url, nameWords = [], { hostOnly = false, wholeOnly = false } = {}) => {
   const words = (Array.isArray(nameWords) ? nameWords : []).map(w => String(w || "").trim()).filter(Boolean);
   if (!words.length) return false;
   let u;
@@ -607,7 +644,15 @@ export const urlNames = (url, nameWords = [], { hostOnly = false } = {}) => {
   // The ordinary case: the name stands as its own words somewhere in the URL.
   // Bounded, so "Ribe" is not named by ribers-gaard.dk and "Vejle" is not named
   // by /vejlebrovej.
-  if (words.some(w => containsName(hay, w))) return true;
+  //
+  // SKIPPED ENTIRELY UNDER wholeOnly, and the first version of that flag did
+  // not skip it — which reopened the krop.aarhus.dk door within minutes of
+  // closing it. This test asks "does ANY word appear", and the whole purpose of
+  // wholeOnly is that no single word may answer: the host label "aarhus" is a
+  // bounded match on the name word "aarhus", so a caller asking the narrow
+  // question got the broad answer. Caught by re-running the probe rather than
+  // by reasoning about it.
+  if (!wholeOnly && words.some(w => containsName(hay, w))) return true;
   // ── AND A DANISH DOMAIN IS A COMPOUND WITH NO GAPS ────────────────
   // marselisborgdyrehave.dk genuinely IS that park's own domain, and no bounded
   // test can see it: a hostname cannot contain a space, so the separators the
@@ -625,6 +670,10 @@ export const urlNames = (url, nameWords = [], { hostOnly = false } = {}) => {
   return hostLabels.some(l => {
     const label = squash(l);
     if (!label) return false;
+    // wholeOnly asks the narrow half of this question: is the label the ENTIRE
+    // name? That is the one form of match safe to accept from a name whose
+    // words include a town, because no single word can satisfy it.
+    if (wholeOnly) return !!whole && label === whole;
     return (whole && label === whole) || words.some(w => label === squash(w));
   });
 };
@@ -661,15 +710,95 @@ const EVENT_SUBJECT_NAMES = ["festival", "event"];
 export const EVENT_SUBJECT_TYPES = new Set(EVENT_SUBJECT_NAMES.filter(t => CONTENT_TYPES.includes(t)));
 export const subjectIsEvent = (t) => EVENT_SUBJECT_TYPES.has(String(t || "").trim());
 
-export const isOwnSiteFor = (url, nameWords = [], { placesWebsite = "", type = "" } = {}) => {
+export const isOwnSiteFor = (url, nameWords = [], { placesWebsite = "", type = "", name = "" } = {}) => {
   const host = hostOf(url);
   if (!host) return false;
   // Google's registered URL is not a guess about which site belongs to this
   // place: it is the URL the owner put on their own listing. It wins outright.
+  //
+  // ── UNLESS THE SUBJECT IS AN EVENT ──────────────────────────────
+  //
+  // Oliver, 1 Sep 2026: "events shouldn't be looking at places API from the
+  // start. Because chances are that the event has changed. The primary source
+  // is the only true source of the area. Places API might even start
+  // contradicting the primary source because Maps have data from older versions
+  // of the event."
+  //
+  // He is right, and this file already agreed with him without acting on it.
+  // App.jsx splits PLACES_THAT_ARE_ONE_BUSINESS from PLACES_THAT_ARE_AN_AREA
+  // and says of the second group, festivals included: "Google has no single
+  // listing for these." Then this line treats whatever Google returns for one
+  // of them as the owner's own statement, outranking every rule below it.
+  //
+  // A Maps pin for a touring show is the VENUE's pin, or last year's edition's.
+  // On his Vanvittig run the lookup came back "Eventyr og Røverhistorier" —
+  // a different thing entirely — and only the name guard at the call site
+  // stopped it. Had it returned Tivoli Friheden's listing instead, the name
+  // guard would have passed it and friheden.dk would have become the touring
+  // show's own site, outranking every door closed this week.
+  //
+  // NOT A BAN, because it is right often enough to keep: Roskilde Festival has
+  // a real Google listing and its registered URL really is roskilde-festival.dk.
+  // What an event's registered URL loses is the BYPASS. It stops skipping the
+  // name test and has to name the thing like any other candidate — which
+  // roskilde-festival.dk does, and which a venue's domain does not.
   const registered = hostOf(placesWebsite);
-  if (registered && (host === registered || host.endsWith(`.${registered}`))) return true;
+  const registeredHere = !!registered && (host === registered || host.endsWith(`.${registered}`));
+  if (registeredHere && !subjectIsEvent(type)) return true;
   if (isTourismHost(url) || isListingHost(url) || isReferenceHost(url)) return false;
+
+  // ── AND IT RUNS BEFORE THE LOOSE NAME GATE, NOT BEHIND IT ───────
+  //
+  // Placed after that gate on the first attempt and it still refused
+  // skanderborgfestival.dk and cphdistortion.dk: `urlNames(url, nameWords)` is
+  // a BOUNDED test, and "skanderborg" inside "skanderborgfestival" has no
+  // boundary after it, so the gate rejected the host before the whole-name test
+  // could see it. A stronger signal cannot sit behind a weaker one that answers
+  // the same question worse.
+  //
+  // The exclusions above still run first: a tourism board or a ticket calendar
+  // whose domain happens to BE the name is still not the operator.
+  // ── AND "THE WHOLE NAME" HAS TO MEAN THE WHOLE NAME ─────────────
+  //
+  // Fable, auditing this on 1 Sep 2026, and it was right about the worst
+  // regression I have shipped this week: roskilde-festival.dk STOPPED being
+  // Roskilde Festival's own site.
+  //
+  // I tested this branch and watched it pass. I tested it with nameWords I
+  // TYPED — ["roskilde", "festival"] — and the pipeline never produces that.
+  // distinctiveWords("Roskilde Festival") strips "festival" as generic and
+  // returns ["roskilde"]; ownershipWords then strips "roskilde" as a town and
+  // returns []. So `whole` was "roskilde", the label is "roskildefestival", and
+  // the festival's own domain matched nothing. Same for Skanderborg Festival,
+  // Tønder Festival, and every name that is a town plus a generic word.
+  //
+  // A probe built from invented inputs is not a probe. It is the same vacuous
+  // pass this file is full of warnings about, and I wrote one into the fix for
+  // the last one.
+  //
+  // The raw NAME is what a domain is built from — roskildefestival.dk exists
+  // because the festival is called Roskilde Festival, generic word and all — so
+  // that is what the gapless comparison reads. The distinctive words are for
+  // deciding whether a word is worth matching; they are the wrong input for
+  // asking whether a host IS the name.
+  const wholeName = String(name || "").trim() || nameWords.join(" ");
+  if (urlNames(url, [wholeName], { hostOnly: true, wholeOnly: true })) return true;
   if (!urlNames(url, nameWords)) return false;
+  // ── AN EVENT'S REGISTERED URL, PAST THE NAME TEST NOT AROUND IT ─
+  //
+  // And it is the OWNERSHIP words, not the full name. Placing it here against
+  // the loose test let krop.aarhus.dk straight back through: the gate above
+  // passes on the host label "aarhus" matching the name word "aarhus", which is
+  // the town-word weakness this file already closed once, met again one branch
+  // along. The registration is not what was wrong there; the name test was.
+  //
+  // What this buys, which is the whole reason to keep the field on an event:
+  // bentertained.dk names nothing in its HOST and names the show in its PATH.
+  // With Google's registration behind it, the promoter's page about this show is
+  // the operator's page. Without it, a path is still just a headline — the
+  // theseasonalevent.com rule, untouched. And the promoter's homepage, carrying
+  // hundreds of other shows, names nothing anywhere and stays out either way.
+  if (registeredHere && urlNames(url, ownershipWords(nameWords))) return true;
   // The host itself names the place: marselisborgdyrehave.dk, ribe-vikingecenter.dk.
   // That is a statement of ownership and settles it.
   //
@@ -700,6 +829,25 @@ export const isOwnSiteFor = (url, nameWords = [], { placesWebsite = "", type = "
   // this asked whether the name CONTAINED a non-town word, which krop.aarhus.dk
   // passed on "vanvittig" while having matched on "aarhus" — the same wrong
   // answer through a longer sentence. The question is which word the HOST said.
+  // ── BUT THE WHOLE NAME, GAPS CLOSED, IS ALWAYS OWNERSHIP ────────
+  //
+  // 1 Sep 2026, found by probing the fix above against real hosts rather than
+  // against the case that prompted it. aarhusfestuge.dk is Aarhus Festuge's own
+  // website, and the town-word rule REFUSED IT: "aarhus" is stripped as a town,
+  // "festuge" is left, and no bounded match finds "festuge" inside the gapless
+  // compound "aarhusfestuge". The entry lost ownership of its own domain.
+  //
+  // Danish names do this constantly — aarhusfestuge, koldingfestival,
+  // odensefilmfestival — and for those the town is not a location suffix, it is
+  // half the name. "Vanvittig Verdenshistorie - Aarhus" and "Aarhus Festuge"
+  // both carry "aarhus" as a name word and only one of them is called that.
+  //
+  // The host itself tells them apart. A label that IS THE WHOLE NAME with the
+  // gaps closed is not a coincidence, whatever words the name is made of;
+  // krop.aarhus.dk's "aarhus" is one word of three and matches nothing whole.
+  // So the full-name equality runs on the REAL name, and only the per-word
+  // matches have to rest on a word that is not a town.
+
   if (urlNames(url, ownershipWords(nameWords), { hostOnly: true })) return true;
   // ── AND A PATH IS A HEADLINE ────────────────────────────────────
   //
@@ -951,9 +1099,22 @@ export const factAge = (text, nowMs) => {
   // make an old page look fresh, and it must not make a fresh one look old —
   // which matters here more than anywhere, because a festival announcing its
   // 2027 dates is the most ordinary page this app reads.
+  // ── AND THE CAP TAKES THE NEWEST YEAR UP TO NOW, NOT NONE ───────
+  //
+  // Fable, 1 Sep 2026, and it is right about a fix of mine that broke the case
+  // its own comment says matters most. The first version read the newest year
+  // on the page and DISCARDED IT ENTIRELY when it was in the future, so a page
+  // reading "Museet åbnede 12. maj 1998. © 2026" was current, and the same page
+  // with "Festival 2027" added became "about 340 months old". Adding next
+  // year's dates — the most ordinary thing a festival page does — aged it by
+  // three decades.
+  //
+  // Discarding was never the intent; ignoring the FUTURE year was. newestYearIn
+  // already takes a ceiling, so asking it for the newest year no later than now
+  // gives exactly that: 2027 stops counting, 2026 still does, and both
+  // directions of the original bug stay closed.
   const nowYear = new Date(now).getUTCFullYear();
-  const seenYear = newestYearIn(text);
-  const newestYear = seenYear !== null && seenYear <= nowYear ? seenYear : null;
+  const newestYear = newestYearIn(text, nowYear);
   const datedYear = newest === null ? null : new Date(newest).getUTCFullYear();
   const dateIsProse = newest !== null && newestYear !== null && newestYear > datedYear;
   if (newest !== null && !dateIsProse) {
@@ -1163,4 +1324,39 @@ export const bannerImagesFromMarkdown = (md, baseUrl = "") => {
   }
   out.sort((a, b) => b.score - a.score);
   return out;
+};
+
+// ── A PAGE WE HAVE ALREADY BOUGHT STRUCTURALLY ──────────────────────
+//
+// Oliver, 1 Sep 2026, weighing whether to search every founder source: "I
+// suppose raising the cap will make it pricier, and probably won't do much
+// change?" He was right, and working out why found something better.
+//
+// The cap that actually binds an event draft is not the four SEARCHES. It is
+// the five PAGES READ. On his Vanvittig run those five were the Festuge event
+// page, the Festuge root, the Bentertained event page, the Bentertained root —
+// and ticketmaster.dk.
+//
+// That fifth slot was spent on a site that refuses readers. Ticketmaster is bot
+// -walled; a hand fetch of that exact URL returns 403. And the pipeline had
+// ALREADY asked Ticketmaster the same question through its own API one step
+// earlier, and got back what a scrape could never have parsed out of the page:
+// five dated appearances with venue, city, on-sale status and price ranges.
+//
+// So the read was paid for twice and answered once. Skipping it is not a
+// saving at the cost of information — the information is strictly better on the
+// API side — it is a fifth of the read budget handed back to a page that might
+// actually answer, on every event draft, plus the scrape it no longer buys.
+//
+// KEPT AS A HOST TEST RATHER THAN A ONE-OFF `if`, because the shape recurs:
+// any source this app has a first-party integration with is a source whose
+// pages are worth less than its API. Today that is Ticketmaster. The guard at
+// the call site is that the API actually ANSWERED — a covered host with no
+// answer is just a host, and skipping it then would lose a real page.
+export const API_COVERED_HOSTS = ["ticketmaster.dk", "ticketmaster.com", "ticketmaster.co.uk"];
+
+export const isApiCoveredHost = (url) => {
+  const host = hostOf(url);
+  if (!host) return false;
+  return API_COVERED_HOSTS.some(h => host === h || host.endsWith(`.${h}`));
 };

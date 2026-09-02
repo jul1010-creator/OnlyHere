@@ -45,7 +45,7 @@ import { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, NUDGE_KEY
 import { sweepAll, sweepRow, deepCheckPlan, checkAge } from "./utils/factSweep";
 import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filterRows, stampLabel, rowStampIsEdit, hasSources, SORTS } from "./utils/manageGroups";
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
-import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured, TICKET_HUNT_PROMPT, ticketHuntUrls } from "./utils/tickets";
+import { matchEvent, reconcileTickets, ticketsForPrompt, appearances, otherDatesHere, alsoPlayingLine, describeAppearances, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured, TICKET_HUNT_PROMPT, ticketHuntUrls } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT, correctionLanded, describeCorrection } from "./utils/factCheckRead";
 import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, launderedAbsence, priceSource, priceMisses, findTicketPrice, ticketPriceOn, pricesAdmission, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit, VENUE_KINDS, UNCONFIRMED_IDENTITY, UNVERIFIED_PROSE } from "./utils/entryAudit";
 import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM, upgradeWorthIt, onFootMinutes } from "./utils/guideEnrichment";
@@ -72,7 +72,7 @@ import { stayDriftNote, LODGING_NOTES_RULE, isLodgingType } from "./utils/venueS
 import { modelProvenanceNote } from "./utils/modelProvenance";
 import { missingSourcesNote } from "./utils/provenance";
 import { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, formatLogs, logChips, storeState } from "./utils/runLog";
-import { domainOf, isListingHost, scrapeTier, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE, MAX_TICKET_PAGES, isOwnSiteFor, urlNames, isKommuneHost } from "./utils/pageScan";
+import { domainOf, isListingHost, scrapeTier, isApiCoveredHost, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE, MAX_TICKET_PAGES, isOwnSiteFor, urlNames, isKommuneHost } from "./utils/pageScan";
 import { weatherSourceFor, weatherBadge, normalsNote, dayWeather, FORECAST, NORMALS } from "./utils/weather";
 import { foodSpots } from "./data/food";
 import { essentials } from "./data/essentials";
@@ -157,7 +157,7 @@ import { partnerDisclosure, linkLabel } from "./utils/affiliates";
 // ── "SOME THINGS ARE ESSENTIALS WHILE OTHERS ARE TIPS" ──────────────
 // Oliver, 30 Aug 2026. See utils/essentialKind.js: the categories were never
 // the problem, two documents sharing one list were.
-import { essentialsOnly, tipsOnly, categoriesPresent, linksOf, isMerged, ESSENTIAL_KINDS, ESSENTIAL_KIND_LABEL, KIND_RULE, cleanKind, kindPatch, hasKindChange, kindStated } from "./utils/essentialKind";
+import { essentialsOnly, tipsOnly, categoriesPresent, linksOf, isMerged, tabForEssential, ESSENTIAL_KINDS, ESSENTIAL_KIND_LABEL, KIND_RULE, cleanKind, kindPatch, hasKindChange, kindStated } from "./utils/essentialKind";
 // ── "ATTRACTIONS ALL SAY FREE" ──────────────────────────────────────
 // Oliver, 27 Aug 2026. Five places in this file published a price claim built
 // out of the CATEGORY NAME: the attractions pool's Studio type is called
@@ -4320,7 +4320,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         // sType, because the kommune branch inside only holds for the PLACES a
         // kommune runs. A touring show in its festival programme is not one, and
         // that is the door the Vanvittig "Free entry" came through.
-        const hostNames = (u) => isOwnSiteFor(u, nameWords, { placesWebsite, type: sType });
+        const hostNames = (u) => isOwnSiteFor(u, nameWords, { placesWebsite, type: sType, name });
         const pageNames = (u) => containsName(urlText[u] || "", name);
         const nameMatched = usable.filter(u => hostNames(u) || pageNames(u));
         // A venue keeps the strict single name-matched site. A town or festival
@@ -4354,10 +4354,49 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         // kultunaut.dk, the homepage of 139,020 unrelated events, and in
         // Oliver's Ribelund run that text went straight into the string the log
         // calls "the official site". Roots for operators, never for listings.
-        const toFetch = [
+        // ── AND A PAGE THE API ALREADY ANSWERS FOR GOES LAST ───────
+        //
+        // See isApiCoveredHost. The cap that actually binds an event draft is
+        // these five READS, not the four searches, and on the Vanvittig run one
+        // of the five went to ticketmaster.dk — a bot-walled page (a hand fetch
+        // of that exact URL returns 403) whose data the Ticketmaster API returns
+        // structured, with more on it than the page could ever have given up.
+        //
+        // ── A RANKING, NOT A BAN, AND THAT IS THE CAREFUL PART ─────
+        //
+        // The first version of this SKIPPED such hosts when the API had
+        // answered, and it was wrong twice over: ticketCandidates is declared
+        // three hundred lines below this one, so it was a ReferenceError in the
+        // middle of the pipeline — the exact TDZ trap the tier comment sixty
+        // lines down already records — and even hoisted it would have read as
+        // empty, because the Ticketmaster call happens AFTER these reads. A
+        // guard on a value that cannot be true yet is dead code that crashes.
+        //
+        // Ordering needs neither. Last in the queue means a covered host is
+        // dropped by the slice whenever five other pages want the room, which is
+        // every draft with a real source list, and is still read when there is
+        // nothing else — which is the right answer for a draft where its page is
+        // genuinely all there is.
+        //
+        // Having the ticket lookup run BEFORE the reads, so its answer can
+        // choose them, is the better architecture and a deliberate change rather
+        // than one to squeeze in here.
+        const byApiLast = (list) => [...list.filter(u => !isApiCoveredHost(u)), ...list.filter(isApiCoveredHost)];
+        const toFetch = byApiLast([
           ...withRoots(picked.filter(u => !isListingHost(u))),
           ...picked.filter(isListingHost),
-        ].slice(0, isPlaceType ? 5 : 3);
+        ]).slice(0, isPlaceType ? 5 : 3);
+        const apiCoveredDropped = picked.filter(isApiCoveredHost).filter(u => !toFetch.includes(u));
+        if (apiCoveredDropped.length) {
+          note("Not read, because an API answers for it", {
+            provider: "ticketmaster",
+            detail: apiCoveredDropped.map(domainOf).join(", "),
+            outcome: "skipped",
+            used: false,
+            got: `${apiCoveredDropped.length} page${apiCoveredDropped.length === 1 ? "" : "s"} left unread so the budget went to sites with no API behind them`,
+            why: "Their pages are bot-walled and their own API answers the same question with more on it — dates, venues, cities, on-sale status and price ranges. Reading the page would have spent one of this draft's source reads to learn less.",
+          });
+        }
         // Sequential, not Promise.all: these hit the app's own scan endpoint and
         // three parallel scrapes of unrelated sites is a good way to get one of
         // them throttled and lose it silently.
@@ -4368,6 +4407,11 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         // a per-page cap alone cannot see the total, and the total is the number
         // that turns up on a bill.
         let postersRead = 0;
+        // Named for the log: pages read and deliberately NOT treated as the
+        // operator's own. Outside the loop, beside the two strings it describes,
+        // because a per-page array would be emptied before anything read it —
+        // which is how this nearly shipped as a variable nothing could see.
+        const notOperator = [];
         for (const url of toFetch) {
           try {
             const scanRes = await studioFetch(`/api/scan-source?${editingId !== null ? "fresh=1&" : ""}url=${encodeURIComponent(url)}`);
@@ -4378,10 +4422,29 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
             // shell both answer HTTP 200. So nothing anywhere recorded WHICH
             // domains cannot be read, and "sites that block AI" had no list
             // behind it. One line per source now, named, on every draft.
+            // ── AND "READ" HAS TO SAY WHAT CAME BACK ─────────────
+            //
+            // Oliver, 1 Sep 2026, on the run where ticketmaster.dk read "ok" and
+            // then answered nothing: the log printed the same word for a page
+            // that handed over its text and a page that handed over a sentence.
+            // Ticketmaster is bot-walled — I hit a 403 on it twice by hand, and
+            // he had to send a screenshot of his own artist page — so "ok" on it
+            // is exactly the case worth being able to see.
+            //
+            // The size is the cheapest possible answer to "was that page any
+            // use", and it costs nothing: the text is already in hand. Every
+            // read page is accounted for after this — too old goes to
+            // staleSkipped, not-the-operator to notOperator, the rest into the
+            // two strings — so between them the log now says what became of it.
             note(`Source ${scanData.blocked ? "blocked" : "read"}: ${domainOf(url)}`, {
               provider: scanData.via || "fetch",
               detail: url.slice(0, 120),
               outcome: scanData.blocked ? "failed" : "ok",
+              got: scanData.blocked
+                ? ""
+                : scanData.text
+                  ? `${scanData.text.length.toLocaleString("en-GB")} characters`
+                  : "nothing readable came back",
               why: scanData.read || "",
               used: !!scanData.text,
             });
@@ -4446,7 +4509,11 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
               // neither. All three still reach the writer as context; only the
               // first two may ever CORROBORATE a price or a date, and only the
               // first is what the log is permitted to call the official site.
-              const { tier, era, age } = scrapeTier(url, scanData.text, Date.now());
+              // The SUBJECT, which this line never had. hostNames just above
+              // asks the same question of the same three values; asking it here
+              // too is what stops a festival programme's page being called the
+              // operator's own. See scrapeTier for the whole story.
+              const { tier, era, age } = scrapeTier(url, scanData.text, Date.now(), { nameWords, placesWebsite, type: sType, name });
               pageTier = tier;
               pagesByUrl[url] = scanData.text;
               const listing = tier === "listing";
@@ -4458,9 +4525,24 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
                 // companion policy and a phone number from a press release
                 // dated 24 August 2022 and stated both to the reader.
                 staleSkipped.push(`${domainOf(url)}${age?.why ? ` (${age.why})` : era.year ? ` (${era.year})` : ""}`);
-              } else if (tier === "listing") {
+              } else if (tier === "listing" || tier === "other") {
+                // ── "OTHER" CORROBORATES, IT JUST DOES NOT SPEAK FOR THEM ──
+                //
+                // A current page that is neither the operator's own nor a known
+                // calendar: a festival programme carrying somebody else's show,
+                // a promoter, a newspaper. It reaches the writer exactly as
+                // before and may corroborate a price exactly as a listing does.
+                // What it loses is being quoted as "the operator's own page",
+                // which is the sentence that published a paid touring show as
+                // Free entry off aarhusfestuge.dk.
+                //
+                // Named in listingDomains either way, because whoSaid reads that
+                // array to say WHICH page answered, and "a ticket shop or
+                // calendar" with no host is the unactionable shape the run log
+                // was rebuilt to stop.
                 listingSiteText += ` ${scanData.text}`;
                 if (!listingDomains.includes(domainOf(url))) listingDomains.push(domainOf(url));
+                if (tier === "other") notOperator.push(domainOf(url));
               } else {
                 // Kept as its own string as well as being appended to context, so
                 // the hours reconciliation below has the site's own words to read
@@ -4743,7 +4825,18 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
             : listingDomains.length
               ? `NO operator page was read. Only a listing on ${listingDomains.join(", ")}, which can price and date this but cannot confirm it`
               : "no operator page and no listing could be read",
-          why: staleSkipped.length ? `held back as too old to price or date anything: ${staleSkipped.join(", ")}` : "",
+          // ── AND THE DEMOTIONS, WHICH ARE THE HALF HE COULD NOT SEE ──
+          //
+          // Oliver, 1 Sep 2026, on a log that said "the operator's own page says
+          // entry is free" about a festival programme carrying somebody else's
+          // paid show: "it's not fixed." The demotion is now real, and a
+          // demotion nobody can see is the same shape as the bug: he would have
+          // had to work out from silence why a page he watched being read is
+          // not answering. So it is named, with the reason.
+          why: [
+            staleSkipped.length ? `held back as too old to price or date anything: ${staleSkipped.join(", ")}` : "",
+            notOperator.length ? `read but NOT treated as this ${TYPE_LABEL[sType] || sType}'s own site, so they can corroborate a price and never state one as the operator's: ${notOperator.join(", ")}` : "",
+          ].filter(Boolean).join(" · "),
           used: !!(scrapedSiteText.trim() || listingSiteText.trim()),
         });
         // ── WHAT LANGUAGE THIS THING RUNS IN ────────────────────────
@@ -4897,6 +4990,34 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
                 ? `${ticketCandidates.length} Danish ${ticketCandidates.length === 1 ? "listing" : "listings"} · match: ${early.confidence} · ${early.why}`
                 : "no Danish listing with this name. Most Danish festivals sell through their own site or Billetto, so this is expected rather than a failure.",
             });
+            // ── AND EVERY DATE IT PLAYS, NOT ONLY THE BEST MATCH ──
+            //
+            // Oliver, 1 Sep 2026: "we need to somehow make it able to
+            // investigate all its dates.. because it doesn't just go on at one
+            // date. It goes on in multiple cities, with multiple dates."
+            //
+            // The step above reports ONE match and hides the rest, which is how
+            // a run naming five real appearances read as "no confirmed
+            // listing". His call was to report every date and pick by hand, so
+            // this is the whole list, marked with which one is this row's.
+            const tour = appearances(ticketCandidates, { name, date: hint?.dates || "", city: draftTown });
+            if (tour.length > 1) {
+              const alsoHere = otherDatesHere(tour, { name, date: hint?.dates || "", city: draftTown });
+              note("Every date it plays", {
+                provider: "ticketmaster",
+                detail: `${tour.length} dated appearances under this name`,
+                outcome: alsoHere.length ? "found" : "ok",
+                used: false,
+                got: describeAppearances(tour),
+                // A tour is not a festival, and the row is one date of it. Said
+                // out loud because the two Aarhus dates eleven weeks apart at
+                // different venues and prices are the thing no single-date row
+                // can hold, and a founder has to see them to choose.
+                why: alsoHere.length
+                  ? `This show plays ${draftTown || "this town"} more than once. This row can only be one of them, so pick the one it is about and consider naming the other in the entry: ${alsoPlayingLine(tour, { name, date: hint?.dates || "", city: draftTown })}`
+                  : "",
+              });
+            }
           }
         } catch (err) {
           note("Ticket status from Ticketmaster", {
@@ -6323,9 +6444,29 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         if (rec.verdict === "no-match" || rec.verdict === "weak-match") {
           // The honest half, and the common one. Without this line a guessed
           // status is indistinguishable from a measured one in the run log.
+          // ── AND THE SENTENCE HAS TO MATCH WHICH VERDICT THIS IS ────
+          //
+          // Oliver, 1 Sep 2026, quoting this exact line back: "it's not fixed..
+          // it didn't check Ticketmaster.dk." It did — the log's own step 23
+          // says "2 Danish listings", and the value beneath this rule named one
+          // of them, in the right city, on 2026-11-21.
+          //
+          // The rule said "Ticketmaster has no confirmed listing for this
+          // festival" anyway, because it was ONE hardcoded string covering both
+          // no-match and weak-match. On a weak match there are listings and the
+          // decision block was printing a flat contradiction of the value
+          // directly above it, so the honest reading of the log was his.
+          //
+          // I fixed this sentence inside matchEvent on 31 August and not here.
+          // Same miss as the price button: the report was corrected and the
+          // second place that says the same thing was not.
+          const noneAtAll = rec.verdict === "no-match";
           decide("ticketStatus", {
-            winner: `the model ("${modelSaid}")`, loser: "nobody, there was nothing to check it against",
-            rule: "Ticketmaster has no confirmed listing for this festival, so the status is WRITTEN, not measured. Most Danish festivals sell through their own site.",
+            winner: `the model ("${modelSaid}")`,
+            loser: noneAtAll ? "nobody, there was nothing to check it against" : "a Ticketmaster listing that could not be confirmed as this edition",
+            rule: noneAtAll
+              ? "Ticketmaster returned nothing under this name, so the status is WRITTEN, not measured. Most Danish festivals sell through their own site."
+              : "Ticketmaster HAS listings under this name and none could be confirmed as this edition, so the status is WRITTEN, not measured. The listing is named below — open it before publishing.",
             value: rec.detail,
           });
         }
@@ -18309,8 +18450,41 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               </div>
             );
 
+            // ── "ASK IF THE BARS TAKE NIGHTPAY" ──────────────────
+            //
+            // Oliver, 1 Sep 2026, on the Nightlife nav. Written ONCE and placed
+            // once, above the level branch, for the reason spotRow states two
+            // screens up: "Two copies of this markup is how the two levels start
+            // disagreeing." A reader drilling town → street keeps the same tip
+            // rather than meeting three versions of it.
+            //
+            // The tab is looked up rather than typed. Nightpay is a Studio row
+            // whose kind is his to set, and he is moving it from Essentials to
+            // Tips — a hardcoded tab would break the moment he does, and break
+            // silently, landing on the right page with the row nowhere on it.
+            // No row, no link: the tip still shows, it just does not offer to
+            // explain itself from a page that cannot.
+            const nightpayTab = tabForEssential(essentials, "nightpay");
+            const nightpayTip = (
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 9, background: `${C.gold}12`, border: `1px solid ${C.gold}33`, borderRadius: 10, padding: "10px 13px", marginBottom: 16 }}>
+                <span style={{ fontSize: 13, lineHeight: 1.5, flexShrink: 0 }}>💡</span>
+                <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6 }}>
+                  <b style={{ color: C.gold }}>Tip:</b> ask if the bars take Nightpay.
+                  {nightpayTab && (
+                    <>
+                      {" "}
+                      <span onClick={() => goTab(nightpayTab)} style={{ color: C.gold, fontWeight: 700, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2 }}>
+                        What that is
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+
             return (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
+              {nightpayTip}
               {!nightlifeTownView ? (
                 // ── LEVEL 1: pick a town ──────────────────────────
                 <>
@@ -18818,9 +18992,29 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <div style={{ marginTop: 34 }}>
                     {parents.map(parent => (
                       <div key={parent || "__unplaced"} style={{ marginBottom: 26 }}>
+                        {/* ── AND THE UNPLACED HEADING IS A READER'S, NOT A FOUNDER'S ──
+                            1 Sep 2026, read off the live site: "MARKED AS AN
+                            AREA, BUT NOT TOLD WHICH PLACE" was the section
+                            header every visitor saw, with Samsø under it. The
+                            sentence is a Studio warning — correct, useful, and
+                            addressed to Oliver — printed for travellers.
+
+                            The section itself STAYS, which is the whole point of
+                            the block: an area with no parent belonged to no
+                            group and was rendered by nothing, reachable only by
+                            typing its name. Hiding it again would undo that.
+
+                            So the reader gets a heading about places and the
+                            founder still gets the warning, gated on being signed
+                            in. Same words, one audience. */}
                         <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 10 }}>
-                          {parent ? `Inside ${parent}` : "Marked as an area, but not told which place"}
+                          {parent ? `Inside ${parent}` : "Elsewhere in Denmark"}
                         </div>
+                        {!parent && studioSession && (
+                          <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.55, marginTop: -4, marginBottom: 10, textTransform: "none", letterSpacing: 0 }}>
+                            ⚠ Only you can see this: {areas.filter(t => !key(t)).length === 1 ? "this entry is" : "these entries are"} marked as an area with no parent set, so nothing says which place {areas.filter(t => !key(t)).length === 1 ? "it belongs" : "they belong"} to. Set it in Studio → Manage → 📍 Kind.
+                          </div>
+                        )}
                         <div className="towns-grid">
                           {areas.filter(t => key(t).toLowerCase() === parent.toLowerCase()).sort(byName).map(town => (
                             <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
@@ -18834,7 +19028,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 {parent && <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(10,15,30,0.8)", color: C.muted, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>◇ In {parent}</div>}
                               </div>
                               <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}><EntryLink type="town" name={town.name}>{town.name}</EntryLink></div>
-                              <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{parent ? `${kindLabel(town)} in ${parent}` : `${kindLabel(town)} · no parent set`}</div>
+                              {/* "no parent set" is Studio's phrase for a missing field and means
+                                  nothing to a traveller. They get the kind alone;
+                                  the gap is named for the owner above. */}
+                              <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{parent ? `${kindLabel(town)} in ${parent}` : kindLabel(town)}</div>
                               <CardChips town={town} />
                     <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
                               <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{(town.desc || "").slice(0, 90)}{(town.desc || "").length > 90 ? "…" : ""}</div>
@@ -20254,14 +20451,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           live control it held, bookableOnly, already has its own pill on the
           Attractions page and is untouched. */}
 
-      <DetailPage paid={hasPaidPlan(userProfile)} item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       {/* onOpenEvent powers the new "What's on in <town>" section: tapping a
           festival closes the town page and opens that event's real entry, so the
           traveler lands on the full page with dates, tickets and directions
           rather than a dead-end list item. */}
-      <DetailPage paid={hasPaidPlan(userProfile)} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage paid={hasPaidPlan(userProfile)} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage paid={hasPaidPlan(userProfile)} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       {/* ── The assistant that follows him (Oliver, 6 Aug: "some sort of
           assistant for the admin /#studio guy? That will always be with me?
           Even when I'm on the blogs")  ────────────────────────────────
@@ -20398,7 +20595,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           onSaved={() => refreshLiveContent()} />;
       })()}
 
-      <DetailPage paid={hasPaidPlan(userProfile)} item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
 
       {/* Per Oliver ("get rid of the popup"): once a guide finishes building, we
           navigate straight to the full-page GuidePage instead of showing a

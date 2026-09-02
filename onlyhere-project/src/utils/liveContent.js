@@ -54,6 +54,7 @@ import { essentials } from "../data/essentials";
 import { craftItemsFallback } from "../data/craft";
 import { stripDashesDeep, isInDenmark } from "./helpers";
 import { placeCoords } from "./guideEnrichment";
+import { cleanReaderProse } from "./researchVoice";
 
 // ── THE REFERENCE FRAME GETS CHECKED BEFORE IT REPLACES ANYTHING ────
 //
@@ -133,7 +134,14 @@ const doLoad = async () => {
       // holds for anything published later, including anything published by a
       // path that forgets. It skips keys beginning with _ by design, so
       // __lat/__lon and the cached durations arrive untouched.
-      const item = stripDashesDeep(row.payload);
+      // ── AND THE PIPELINE'S OWN VOICE, ON THE SAME TERMS ─────────
+      // Hyllested Skovgårde shipped "The claim is not confirmed by the checked
+      // sources." as its description. Same argument as the dashes, one line
+      // above: cleaning on the way IN fixes every row that already says it and
+      // holds for anything published later. See utils/researchVoice.js — the
+      // stored row is untouched and the audit still names it, so it gets
+      // rewritten properly rather than living on a render-time patch.
+      const item = cleanReaderProse(stripDashesDeep(row.payload));
       if (!item || !item.name) return;
       // Second net, deliberately separate from the id guard above: two
       // DIFFERENT rows carrying the same type + name are a genuine duplicate
@@ -267,7 +275,9 @@ export const applyEditedRow = (rowId, type, payload) => {
   // Same clean on the way in as doLoad, for the same reason. An edit is a
   // second door into the arrays and a dash typed by hand in the Studio editor
   // must not walk through it.
-  const item = stripDashesDeep(payload);
+  // The second entry point, and it gets the same clean. One of these two
+  // forgetting is exactly how the dash ban missed published content for a month.
+  const item = cleanReaderProse(stripDashesDeep(payload));
   if (!item || !item.name) return false;
 
   // Booking lives in two places by design (see the note in doLoad), and a

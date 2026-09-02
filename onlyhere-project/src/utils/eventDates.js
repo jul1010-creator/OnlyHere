@@ -764,6 +764,31 @@ export const otherLabelAt = (text, at) => {
   return OTHER_LABEL.test(t.slice(Math.max(0, at - DATE_LABEL_WINDOW), at));
 };
 
+// ── AND THE DATE THAT HAS NO POSITION ───────────────────────────────
+//
+// Fable, 1 Sep 2026, and this is the half of the sale-date rule that never ran.
+// dateRangesInText pushes the single date lastDateInText finds with `at: -1`,
+// deliberately — it answers WHICH date and not WHERE — and every reader above
+// refuses a negative position. So the rule worked on "Billetsalget åbner
+// 04.11.26" and not on "Billetsalget åbner 4. november 2026", which is how a
+// Dane writes it. My fixture used the one format that carries a position: a
+// test written to the code rather than to the requirement.
+//
+// A date with no position cannot be asked what sits beside it, so this asks the
+// TEXT instead: does a sale label stand immediately in front of a date anywhere
+// on the page? Same vocabulary, same adjacency, read forwards rather than back.
+//
+// DELIBERATELY NARROW. It only decides a candidate that has no position of its
+// own, and the day pattern is loose on purpose (a numeral, or a numeral and a
+// month word) because the parser that found the date already agreed there is
+// one — this only has to find the label in front of it.
+const OTHER_LABEL_BEFORE_DATE = new RegExp(
+  OTHER_LABEL.source.replace(/\\W\{0,12\}\$$/, "") + "\\W{0,12}\\d{1,2}\\.?\\s*(?:\\d|[a-zæøå]{3,})",
+  "i",
+);
+
+export const saleLabelledDateIn = (text) => OTHER_LABEL_BEFORE_DATE.test(String(text || ""));
+
 // A page with this many future dates is a calendar, whatever else it is.
 export const CALENDAR_DATES = 2;
 
@@ -803,7 +828,9 @@ export const anchoredEdition = (text, today) => {
   // candidate and the right answer. Removing them afterwards would only have
   // fixed the single-date page and left the two-date page rejecting a date it
   // could read perfectly well.
-  const decoys = future.filter(r => otherLabelAt(t, r.at));
+  // A candidate the parser could not locate is judged on the page instead: see
+  // saleLabelledDateIn. Without this the rule only ever ran on numeric dates.
+  const decoys = future.filter(r => (Number.isFinite(r.at) && r.at >= 0 ? otherLabelAt(t, r.at) : saleLabelledDateIn(t)));
   const own = future.filter(r => !decoys.includes(r));
 
   // Every date on the page belongs to a ticket sale or a deadline. That is not

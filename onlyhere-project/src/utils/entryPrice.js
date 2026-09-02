@@ -252,7 +252,24 @@ export const entryKindLabel = (kind, fallback = "") => ENTRY_KIND_LABEL[String(k
 // A craft workshop is not read here. It has had a real `bookingType` field
 // since it was written, the card already renders it, and a second opinion about
 // the same question is how two answers start disagreeing.
-export const BOOKING_FIELDS = ["ticketsGlance", "bookingNote", "ticketInfo", "price", "priceNote", "desc"];
+// ── AND NOT `desc`, WHICH IS THE FAULT I HAD JUST FIXED FOR PRICES ──
+//
+// Fable, 1 Sep 2026. `desc` was in this list, so the chip was a regex over the
+// entry's free prose and it fired on things that are not the door:
+//
+//   "Free to wander. You can book online for the tower climb."  → Book ahead
+//   "The café is a popular drop-in for cyclists."               → Walk in
+//   "The restaurant next door needs a reservation."             → Book ahead
+//
+// That is exactly A_THING_INSIDE one file along: a tower climb, a café, the
+// restaurant next door. I removed a hardcoded chip and replaced it with a
+// prose-derived one that is wrong in both directions — and bookingProblems then
+// reported those rows as ANSWERED, so they never reached the worklist either.
+//
+// The fields left are the ones where a row states a FACT ABOUT ADMISSION.
+// bookingNote is the field the writer is asked to fill for exactly this, and it
+// is told to leave it empty when the page does not say. Prose stays out.
+export const BOOKING_FIELDS = ["bookingNote", "ticketsGlance", "ticketInfo"];
 
 // Danish first, and both halves anchored on a NOUN or a full phrase rather than
 // a loose verb: "book" alone appears in "book a table at the café", which is

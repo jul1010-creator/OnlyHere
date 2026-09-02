@@ -826,7 +826,30 @@ export const sourcesToSearch = (rows, type, ctx) => {
   // and one scoped to Events and Attractions and Workshops is a general
   // ticketing site. Universal stays last, which is what the 0 is doing here.
   const rank = (s) => (s.types.length === 0 ? Infinity : s.types.length);
-  return out.sort((a, b) => rank(a) - rank(b) || a.domain.localeCompare(b.domain));
+  // ── AND THE TIE-BREAK WAS THE ALPHABET ───────────────────────────
+  //
+  // Oliver, 1 Sep 2026, reading a Vanvittig Verdenshistorie log: "it went to
+  // search every known ticket page, except the one it needed.."
+  //
+  // The four chosen were billet.unitedtickets.dk, billetlugen.dk, billetto.dk
+  // and kultunaut.dk. Every one of them scoped to Events, so every one ranked
+  // identically, and `a.domain.localeCompare(b.domain)` settled it. Denmark's
+  // largest ticket seller lost the last slot to the letter B, on every festival
+  // draft, for as long as those four have existed.
+  //
+  // The comment two screens up already found this fault one level higher —
+  // "ordering universal first means the cap is spent before a type-specific
+  // source is ever reached" — and then handed what was left to the alphabet,
+  // which is the same mistake with a smaller blast radius. A cap has to be
+  // spent on a PRIORITY, and the alphabet is not one; nobody chose it, and
+  // nothing about a domain's first letter predicts whether it will answer.
+  //
+  // His own order is a decision he made. The rows arrive `order=id.asc`, which
+  // is the order he added them, and he can move one by re-adding it. That is
+  // worth having even before there is a drag handle, because the alternative is
+  // an ordering no one can influence at all.
+  const seat = new Map(out.map((s, i) => [s.domain, i]));
+  return out.sort((a, b) => rank(a) - rank(b) || seat.get(a.domain) - seat.get(b.domain));
 };
 
 // ── "IF I PUT IN TICKETMASTER.DK, DOES IT GO THROUGH ALL OF

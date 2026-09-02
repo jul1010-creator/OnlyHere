@@ -39,6 +39,7 @@
 // a renamed row is a finished row.
 
 import { entryPrice, entryBooking } from "./entryPrice";
+import { researchVoiceIn } from "./researchVoice";
 
 // The current heading vocabulary, as produced by shapeForLive in
 // studioContent.js and the paste-ready codegen in App.jsx. The test derives the
@@ -232,6 +233,28 @@ export const bookingProblems = (payload, type) => {
   }];
 };
 
+// ── AND THE ROWS TALKING ABOUT THE RESEARCH ─────────────────────────
+//
+// Found on the live Towns page, 1 Sep 2026: Hyllested Skovgårde's description
+// opens "The claim is not confirmed by the checked sources." liveContent keeps
+// that sentence off the page from now on, and that is a PATCH — the row still
+// says it, every redraft reads it back, and a reader of the Studio would never
+// know. So it is reported here too, named sentence by sentence, because the fix
+// is a rewrite and the render-time clean is only what stops the bleeding.
+//
+// EVERY TYPE. This is not about doors or prices; it is the pipeline's own voice
+// reaching a reader, and any type can do it.
+export const voiceProblems = (payload) => {
+  const found = researchVoiceIn(payload);
+  if (!found.length) return [];
+  return found.slice(0, 3).map(f => ({
+    kind: "research-voice",
+    cost: "one field",
+    says: f.says,
+    detail: `${f.field} contains "${f.says}", which is about the research rather than the place. A reader has no idea what claim is meant or who checked it. It is kept off the page automatically, but the row still says it and every redraft reads it back — rewrite the sentence.`,
+  }));
+};
+
 // The whole picture in one call, so the Studio can say how big the job is
 // instead of him finding these one at a time by browsing his own live site,
 // which is how this one was found.
@@ -242,7 +265,7 @@ export const auditPublished = (rows) => {
   const list = (Array.isArray(rows) ? rows : [])
     .map(r => ({
       id: r?.id, name: r?.payload?.name || "(unnamed)", type: r?.type,
-      problems: [...bodyProblems(r?.payload), ...priceProblems(r?.payload, r?.type), ...bookingProblems(r?.payload, r?.type)],
+      problems: [...bodyProblems(r?.payload), ...priceProblems(r?.payload, r?.type), ...bookingProblems(r?.payload, r?.type), ...voiceProblems(r?.payload)],
     }))
     .filter(r => r.problems.length > 0);
   const has = (k) => list.filter(r => r.problems.some(p => p.kind === k));
@@ -254,6 +277,7 @@ export const auditPublished = (rows) => {
     misleadingFree: has("misleading-free"),
     noPrice: has("no-entry-price"),
     noBooking: has("no-booking-answer"),
+    researchVoice: has("research-voice"),
     total: list.length,
   };
 };
@@ -277,6 +301,9 @@ export const describeAudit = (a) => {
   // "it costs 150" are two different things a reader needs, and a row can have
   // one without the other.
   if (a.noBooking?.length) money.push(`${a.noBooking.length} that never say whether you can walk in or have to book`);
+  // Its own sentence and its own severity of embarrassment: this one is the
+  // pipeline's internal voice reaching a traveller, not a gap in what is known.
+  if (a.researchVoice?.length) money.push(`${a.researchVoice.length} whose own text talks about the research instead of the place (kept off the page, still in the row)`);
   const structural = bits.length
     ? `${bits.length && a.total ? `${a.renameable.length + a.needWriting.length + a.unknown.length} ` : ""}published entries predate the current structure: ${bits.join("; ")}.`
     : "";

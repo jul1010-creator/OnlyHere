@@ -62,7 +62,7 @@
 // as a model guess AND say that it is one, which is the whole difference
 // between this and an integration that silently blanks half the library.
 
-import { fold } from "./danishNames";
+import { fold, samePlaceName, containsName } from "./danishNames";
 import { citationUrls } from "./aiClient";
 
 // ── ONE VOCABULARY, BECAUSE THERE WERE THREE ────────────────────────
@@ -344,11 +344,48 @@ const asDay = (d) => {
 // one — a listing with no city on it is not evidence of a mismatch, and a venue
 // in a suburb may not name the city the entry does.
 export const CITY_MATCH = 0, CITY_UNKNOWN = 1, CITY_DIFFERENT = 2;
-export const cityWanted = (onFile) => fold(String(onFile?.city || onFile?.town || "").trim());
+// ── AND "COPENHAGEN" IS "KØBENHAVN", WHICH fold ALONE CANNOT SEE ────
+//
+// Fable, 1 Sep 2026. fold maps ø to o, so "København" becomes "kobenhavn" and
+// "Copenhagen" stays "copenhagen": neither contains the other, and every
+// Copenhagen event went WEAK against its own Ticketmaster listing. No
+// Copenhell, Distortion or Strøm row could take a measured status or the
+// affiliate ticket URL, and in the no-date branch every København listing
+// counted as known-wrong — which put the invented multi-city "run" straight
+// back, the exact bug the city filter was added to stop.
+//
+// It is an EXONYM, not a spelling: no character mapping reaches it. This repo
+// already solved that — samePlaceName knows the pairs — and I reached for fold
+// because it was the function nearest to hand.
+//
+// ── AND THE TWO-WAY includes WAS THE OTHER HALF ─────────────────────
+// "does either contain the other" is the unbounded-substring trap this codebase
+// names in five separate comments, and it fires here: Ry matched Ryslinge, Als
+// matched Aalsgaarde. containsName is the bounded reader everything else uses,
+// and a venue city like "Aarhus C" or "København V" still matches its town
+// because the suffix is its own word.
+export const cityWanted = (onFile) => String(onFile?.city || onFile?.town || "").trim();
 export const cityRankOf = (e, wantCity) => {
-  const got = fold(String(e?.city || "").trim());
-  if (!wantCity || !got) return CITY_UNKNOWN;
-  return got === wantCity || got.includes(wantCity) || wantCity.includes(got) ? CITY_MATCH : CITY_DIFFERENT;
+  const got = String(e?.city || "").trim();
+  const want = String(wantCity || "").trim();
+  if (!want || !got) return CITY_UNKNOWN;
+  // ── AND THE POSTAL LETTER COMES OFF BEFORE THE COMPARISON ───────
+  //
+  // The two halves have to compose, and on the first attempt they did not:
+  // "København S" is the exonym AND a postal district at once, so
+  // samePlaceName could not see past the " S" and containsName could not see
+  // past the exonym. Copenhell — the case this was fixed for — still failed.
+  //
+  // Ticketmaster writes venue cities as "København S", "København V",
+  // "Aarhus C", "Odense C", "København NV". One or two capitals on the end is a
+  // postal district, never a town, so it is dropped before either test runs.
+  const bare = (v) => String(v).replace(/\s+[A-ZÆØÅ]{1,2}$/, "").trim();
+  const g = bare(got), w = bare(want);
+  if (samePlaceName(g, w)) return CITY_MATCH;
+  // Bounded both ways, for the plain cases the exonym list does not cover.
+  // containsName is what stops Ry matching Ryslinge.
+  if (containsName(g, w) || containsName(w, g)) return CITY_MATCH;
+  return CITY_DIFFERENT;
 };
 
 export const datesFromListings = (named, today = new Date(), onFile = null) => {
@@ -805,4 +842,107 @@ export const ticketsForPrompt = (reconciled) => {
   }
   (reconciled.findings || []).filter(f => f.field === "date").forEach(f => parts.push(`DATE CHECK: ${f.detail}`));
   return parts.join("\n");
+};
+
+// ── "IT DOESN'T JUST GO ON AT ONE DATE" ─────────────────────────────
+//
+// Oliver, 1 Sep 2026, after we both went through the Vanvittig Verdenshistorie
+// draft by hand: "we need to somehow make it able to investigate all its
+// dates.. because it doesn't just go on at one date. It goes on in multiple
+// cities, with multiple dates."
+//
+// That is the root of every fault in that run, and the two nights of fixes
+// above are all symptoms of it. The row is one event. The thing is a tour.
+//
+// THE REAL DATA, from his own Ticketmaster screenshot:
+//
+//   5 Sep 2026   Vejle · Bygningen Vejle          paid
+//   5 Sep 2026   Aarhus · Festugeparken           gratis   ← the row
+//  20 Nov 2026   Slagelse · Slagelse Musikhus     paid
+//  21 Nov 2026   Aarhus C · Hermans               paid
+//  24 Mar 2027   Odense C · Magasinet             paid
+//  27 Mar 2027   København V · Bremen Teater      paid
+//
+// Two appearances on 5 September in different cities, and two in Aarhus eleven
+// weeks apart at different venues and different prices. Every single-date
+// assumption in this pipeline breaks on that, and it broke silently: the 30
+// August code picked Vejle on a zero-day date match and called it CONFIRMED.
+//
+// ── WHAT THIS DOES, AND WHAT IT DELIBERATELY DOES NOT ───────────────
+//
+// It does not restructure the row. Oliver's call, asked directly, was to report
+// every date and let him pick, because one row still meaning one date keeps
+// every date check in the codebase working while the honest picture reaches
+// him. This is the reporting half, and a dates[] on the row can be built on top
+// of it later without any of this being wrong.
+//
+// So: everything found under this name, in date order, with the two facts that
+// tell them apart — which city, and what it costs.
+const sameCity = (a, b) => {
+  const x = fold(String(a || "").trim()), y = fold(String(b || "").trim());
+  if (!x || !y) return false;
+  return x === y || x.includes(y) || y.includes(x);
+};
+
+export const appearances = (candidates, onFile = null) => {
+  const list = (Array.isArray(candidates) ? candidates : []).map(readTicketmasterEvent).filter(Boolean);
+  const named = list.filter(e => !isAncillaryListing(onFile?.name, e.name) && nameOverlap(onFile?.name, e.name) >= MIN_NAME_OVERLAP);
+  const want = cityWanted(onFile);
+  const onFileDate = String(onFile?.date || "").slice(0, 10);
+  return named
+    .filter(e => e.localDate)
+    .map(e => ({
+      date: e.localDate,
+      city: e.city || "",
+      venue: e.venue || "",
+      url: e.url || "",
+      price: priceText(e),
+      status: e.statusCode || "",
+      // Marked rather than filtered, so the list a person reads is the whole
+      // list and the row's own date is findable in it rather than missing.
+      here: cityRankOf(e, want) === CITY_MATCH,
+      isThisRow: !!onFileDate && e.localDate === onFileDate && cityRankOf(e, want) === CITY_MATCH,
+    }))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : String(a.city).localeCompare(String(b.city))));
+};
+
+// ── THE OTHER DATES IN THIS ROW'S OWN CITY ──────────────────────────
+//
+// The ones that make a reader's decision different. A show playing Odense in
+// March is not this entry's business; the same show playing this city again in
+// eleven weeks is, and on the Vanvittig row it is the difference between a
+// free daytime slot somebody missed and a ticketed evening they can still book.
+export const otherDatesHere = (rows, onFile = null) => {
+  const onFileDate = String(onFile?.date || "").slice(0, 10);
+  return (Array.isArray(rows) ? rows : []).filter(r => r.here && r.date !== onFileDate);
+};
+
+// ── "BOTH, SIDE BY SIDE" ────────────────────────────────────────────
+//
+// Oliver's call on what a reader should see when a free programme slot and a
+// paid ticketed date both exist in one city: both. "A reader who missed the
+// free one still gets a way to see the show, and it never reads as one price
+// contradicting itself."
+//
+// Written in code rather than asked of a model, because it is arithmetic over
+// measured listings — a date, a venue, a price — and the one thing this whole
+// pipeline has learned is that a model asked to summarise facts it was handed
+// will smooth two of them into one.
+export const alsoPlayingLine = (rows, onFile = null) => {
+  const others = otherDatesHere(rows, onFile);
+  if (!others.length) return "";
+  const where = onFile?.city || onFile?.town || "the same city";
+  const one = (r) => `${r.date}${r.venue ? ` at ${r.venue}` : ""}${r.price ? `, ${r.price}` : ""}`;
+  return others.length === 1
+    ? `Also playing ${where} on ${one(others[0])}.`
+    : `Also playing ${where} on ${others.map(one).join("; ")}.`;
+};
+
+// One line for the run log, naming every appearance so a founder can see the
+// tour rather than infer it from a match that came back weak.
+export const describeAppearances = (rows) => {
+  if (!Array.isArray(rows) || !rows.length) return "";
+  return rows
+    .map(r => `${r.date} ${r.city || "city not stated"}${r.venue ? ` · ${r.venue}` : ""}${r.price ? ` · ${r.price}` : " · no price on the listing"}${r.isThisRow ? "  ← this row" : r.here ? "  (same city)" : ""}`)
+    .join("\n");
 };

@@ -15,6 +15,7 @@ import { AtAGlanceCard } from "./AtAGlanceCard";
 import { GemlyxFindCard } from "./GemlyxFindCard";
 import { InstagramEmbed } from "./InstagramEmbed";
 import { ReviewsSection } from "./ReviewsSection";
+import { ArticleFeedback } from "./ArticleFeedback";
 import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
 import { bookingUrl, airbnbUrl, STAY_DISCLOSURE, ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote } from "../utils/affiliates";
@@ -138,7 +139,7 @@ const eventsForTown = (townName) => {
 export const detailPoint = (item, kind) =>
   placeCoords(item) || (kind === "town" ? townPointFor(item?.name) : null);
 
-export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false }) => {
+export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false, signedIn = false, onNeedAccount }) => {
   if (!item) return null;
   const color = item.color || C.accent;
   // ── ONE POINT, TWO USES ───────────────────────────────────────────
@@ -950,6 +951,14 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           style={{ display: "block", textAlign: "center", background: color, color: "#fff", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 700, textDecoration: "none" }}>
           ↗ Get Directions
         </a>
+
+        {/* ── REPORTING AND REVIEWING, ABOVE THE PUBLIC COMMENTS ────
+            Oliver, 1 Sep 2026. Deliberately ABOVE ReviewsSection and visually
+            separate from it: that list is travellers talking to each other
+            about the PLACE, and these two are a reader talking to us about the
+            WRITING. Reading them as one thing is how a note meant for Oliver
+            ends up published as somebody's opinion of a bar. */}
+        <ArticleFeedback itemType={kind} itemName={item.name} signedIn={signedIn} onNeedAccount={onNeedAccount} />
 
         <ReviewsSection itemType={kind} itemName={item.name} />
       </div>

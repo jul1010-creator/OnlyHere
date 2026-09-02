@@ -335,6 +335,10 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   const heading = mode === "newpass" ? "Choose a new password"
     : mode === "reset" ? "Reset password"
     : reason === "guide" ? (mode === "up" ? "Keep this guide" : "Sign in to keep it")
+    // A reader who tapped "Review article" is asking to say something, not to
+    // keep something. The heading answers why they are being asked, and the
+    // guide wording would be a non-sequitur here.
+    : reason === "review" ? (mode === "up" ? "Review this article" : "Sign in to review it")
     : mode === "up" ? "Create an account" : "Sign in";
 
   const field = { width: "100%", boxSizing: "border-box", background: C.bg, border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px 13px", fontSize: 14, fontFamily: "'Inter', sans-serif", marginBottom: 9 };
@@ -475,7 +479,9 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         <div style={{ fontSize: 13, color: C.light, lineHeight: 1.62, marginBottom: 14 }}>
           {reason === "guide"
             ? <>The guide itself is free and yours to read right now. An account is what keeps it, on this phone and every other one.</>
-            : <>An account keeps your saved places and guides on every device instead of just this one.</>}
+            : reason === "review"
+              ? <>Reviews of our writing need an account, so we know a real person is behind each one. Reporting something out of date needs nothing at all — that button is right there for everybody.</>
+              : <>An account keeps your saved places and guides on every device instead of just this one.</>}
           {localSaveCount > 0 && (
             <span style={{ color: C.gold }}> The {localSaveCount} {localSaveCount === 1 ? "item" : "items"} already saved on this device will come with you.</span>
           )}

@@ -124,3 +124,25 @@ export const kindPatch = (row, next) => {
 };
 
 export const hasKindChange = (row, next) => Object.keys(kindPatch(row, next)).length > 0;
+
+// ── "ASK IF THE BARS TAKE NIGHTPAY" ─────────────────────────────────
+//
+// Oliver, 1 Sep 2026, asking for a tip at the top of Nightlife. A tip a reader
+// can act on needs somewhere to go: "Nightpay" means nothing to somebody who
+// has just landed, and the row explaining it is already published.
+//
+// WHICH TAB IT IS ON IS NOT KNOWABLE AT WRITE TIME. Nightpay is a Studio row,
+// its kind is his to set, and he is moving it from Essentials to Tips. A
+// hardcoded tab would be wrong the moment he does, and wrong silently — the
+// link would land on the right page with the row nowhere on it.
+//
+// So the tab is read from the row itself, through the same kindOf every other
+// reader uses. Returns "" when nothing matches, and the caller shows the tip
+// without a link rather than sending somebody to a page that cannot answer.
+export const tabForEssential = (rows, name) => {
+  const want = clean(name);
+  if (!want) return "";
+  const hit = (Array.isArray(rows) ? rows : []).find(r => clean(r?.name).includes(want));
+  if (!hit) return "";
+  return kindOf(hit) === "tip" ? "tips" : "essentials";
+};

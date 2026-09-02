@@ -427,6 +427,10 @@ export const haversineKm = (a, b) => {
 // Returns "" rather than a placeholder, and every call site joins on the
 // non-empty parts, so an absent journey costs no dangling separator either.
 export const TRAVEL_ORIGIN = "Copenhagen";
+
+// Every way a stored travelTime spells the origin it was measured from, as a
+// TRAILING clause. Exported so a test can read the same list the render does.
+export const ORIGIN_TAIL = /[\s.,;·]*\bfrom\s+(?:copenhagen|k[oø]benhavn|kbh|cph|copenhagen\s+airport|cph\s+airport)\b[\s.,;·]*$/i;
 const sameName = (a, b) => String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
 
 // A string is treated as a name. An entry is asked about its parent too,
@@ -451,7 +455,29 @@ export const travelLabel = (userCoords, place, fallbackTravelTime) => {
   if (isAtTravelOrigin(place)) return "";
   const t = String(fallbackTravelTime ?? "").trim();
   if (!t) return "";
-  return `${t} from CPH`;
+  // ── AND THE ORIGIN IS NAMED ONCE, BY THIS LINE ONLY ─────────────
+  //
+  // Read off the live Towns page, 1 Sep 2026:
+  //
+  //   Hellerup  18 MINS BY CAR (8.0 KM) FROM COPENHAGEN. FROM CPH
+  //   Køge      43 MINS BY CAR (49.2 KM) FROM COPENHAGEN FROM CPH
+  //   Asaa      4H 51MIN 🚗 FROM CPH
+  //
+  // Two authors writing one sentence. The stored travelTime is a model's, and
+  // it sometimes writes the origin into the value; this line appends its own
+  // regardless. So the card says FROM twice, with a stray full stop between.
+  //
+  // Fixed at RENDER for the reason this function already gives twice above:
+  // "suppressing it at RENDER so all 71 published entries were fixed at once
+  // rather than needing 71 redrafts."
+  //
+  // The tail is stripped rather than the append being skipped, so every card
+  // ends up in ONE shape instead of two — which is the other half of what was
+  // wrong on that page. Anchored at the end, so a value that says "from
+  // Copenhagen it is a long drive" keeps its sentence.
+  const trimmed = t.replace(ORIGIN_TAIL, "").replace(/[\s.,;·]+$/, "").trim();
+  if (!trimmed) return "";
+  return `${trimmed} from CPH`;
 };
 
 // A card subtitle is a list of things that may each be absent. Joining with a

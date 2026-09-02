@@ -52,7 +52,7 @@ writeFileSync(entry, `
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, dateRangesInText, isoDay, anchoredEdition, venueRatherThanEvent, PROGRAMME_DATES, dateMentions, labelledAt, otherLabelAt, CALENDAR_DATES, DATE_LABEL_WINDOW, looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER, OFFICE_CONTEXT_WINDOW, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES, bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK, linksInMarkdown, ticketLinksFromMarkdown, scoreTicketLinks } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
+  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isApiCoveredHost, API_COVERED_HOSTS, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES, bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK, linksInMarkdown, ticketLinksFromMarkdown, scoreTicketLinks } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
   export { DINING_STYLES, DINING_STYLE_LABEL, diningStyleOf, diningStyleLabel, unstyledEntries, styleCoverage, STYLE_COVERAGE_MIN, showStyleFacet, buildFoodFacets, foodCitiesIn, FOOD_SORTS, byFoodPrice } from ${JSON.stringify(join(root, "src/utils/foodStyle.js"))};
@@ -73,7 +73,7 @@ writeFileSync(entry, `
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { tierBadge, TIER_TONE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { withoutNonModes, travelModeKey as travelModeKeyForTest } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
-  export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, stripMarkdown, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { travelLabel, isAtTravelOrigin, ORIGIN_TAIL, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, stripMarkdown, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, HOUR_OF, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -102,6 +102,7 @@ writeFileSync(entry, `
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
   export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, VERIFY_PROMPT, settleVerdict, keepMeasured, isPipelineOwned, MEASURED_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS, feedbackProblem, feedbackRow } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
   export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType, geocodePostcode } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
@@ -111,8 +112,11 @@ writeFileSync(entry, `
   export { directionsEndpoint, collapsedRoute } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { upgradeWorthIt, onFootMinutes, MIN_UPGRADE_SAVING, COLLAPSE_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { essentials } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
-  export { ESSENTIAL_KINDS, ESSENTIAL_KIND_LABEL, KIND_RULE, kindOf, kindStated, cleanKind, kindPatch, hasKindChange, essentialsOnly, tipsOnly, unsortedEssentials, categoriesPresent, linksOf, isMerged } from ${JSON.stringify(join(root, "src/utils/essentialKind.js"))};
-  export { repairBody, headingsOf, bodyProblems, priceProblems, priceWorklist, bookingProblems, bookingWorklist, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
+  export { ESSENTIAL_KINDS, ESSENTIAL_KIND_LABEL, KIND_RULE, kindOf, kindStated, cleanKind, kindPatch, hasKindChange, essentialsOnly, tipsOnly, unsortedEssentials, categoriesPresent, linksOf, isMerged, tabForEssential } from ${JSON.stringify(join(root, "src/utils/essentialKind.js"))};
+  export { saleLabelledDateIn } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
+  export { distinctiveWords as dWords } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
+  export { isResearchVoice, researchVoiceSentences, stripResearchVoice, cleanReaderProse, researchVoiceIn } from ${JSON.stringify(join(root, "src/utils/researchVoice.js"))};
+  export { repairBody, headingsOf, bodyProblems, priceProblems, priceWorklist, bookingProblems, bookingWorklist, voiceProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
   export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, missingRequired, cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS, cleanBornDate, birthYear, BORN_DATE_MIN, BORN_DATE_MAX, REQUIRED_PROFILE, REQUIRED_LABEL, AGE_BANDS, BORN_YEARS, bandForYear, ageFrom, underMinimumAge, MIN_ACCOUNT_AGE, TERMS_VERSION, holdProfile, takeHeldProfile, PENDING_PROFILE_KEY, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
   export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
@@ -146,7 +150,7 @@ writeFileSync(entry, `
   export { isSameSpot, SAME_SPOT_KM, cityFromLocation, stopTown } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { travellerBudget, budgetTierMismatch, dayTripClaim, dayTripHonest, dayTripRadiusKm, withoutDayTripClaim, describeDayTripClaim, DAY_TRIP_FRACTION } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { placedLibrary, nearbyPublished, describeLocation, distanceWords, walkMinutes, nearbyLabel, NEAR_KM, WALK_KMH, SAME_VISIT_KM, SAME_VISIT_LIMIT } from ${JSON.stringify(join(root, "src/utils/nearbyPlaces.js"))};
-  export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP, stampTicketSource, ticketProvenance, isMeasured, TICKET_SOURCES, TICKET_SOURCE_LABEL, isAncillaryListing } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
+  export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, appearances, otherDatesHere, alsoPlayingLine, describeAppearances, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP, stampTicketSource, ticketProvenance, isMeasured, TICKET_SOURCES, TICKET_SOURCE_LABEL, isAncillaryListing } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, readNudge, EMPTY_NUDGE, MIN_SAVES, COOLDOWN_DAYS, MAX_ASKS, NUDGE_KEY, PROFILE_NUDGE_KEY } from ${JSON.stringify(join(root, "src/utils/accountNudge.js"))};
   export { groupRows, groupLabel, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
   export { filterRows, rowMatchesQuery, rowHaystack } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
@@ -4046,6 +4050,49 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const far = null;   // reader not in Denmark, so the CPH fallback is what renders
 
   is("a real journey still reads normally", travelLabel(far, { name: "Asaa" }, "5h 59min 🚂"), "5h 59min 🚂 from CPH");
+
+  // ── AND THE ORIGIN IS NAMED ONCE, NOT TWICE ──────────────────────
+  //
+  // Read off the live Towns page, 1 Sep 2026:
+  //
+  //   Hellerup  18 MINS BY CAR (8.0 KM) FROM COPENHAGEN. FROM CPH
+  //   Køge      43 MINS BY CAR (49.2 KM) FROM COPENHAGEN FROM CPH
+  //
+  // Two authors writing one sentence: the stored travelTime is a model's and
+  // sometimes carries the origin, while travelLabel appends its own regardless.
+  // These are the real values, verbatim.
+  is("a stored value that already names Copenhagen does not get a second FROM",
+     travelLabel(null, { name: "Hellerup" }, "18 mins by car (8.0 km) from Copenhagen."),
+     "18 mins by car (8.0 km) from CPH");
+  is("nor one without the full stop",
+     travelLabel(null, { name: "Køge" }, "43 mins by car (49.2 km) from Copenhagen"),
+     "43 mins by car (49.2 km) from CPH");
+  // ONE SHAPE, which is the other half of what was wrong on that page: three
+  // formats side by side. The tail is stripped and the house suffix re-added
+  // rather than the append being skipped, so every card ends the same way.
+  is("every card ends the same way",
+     ["4h 51min 🚗", "2h 🚆🚌", "4.5h + ferry ⛴", "43 mins by car (49.2 km) from København"]
+       .map(t => travelLabel(null, { name: "X" }, t).endsWith(" from CPH")),
+     [true, true, true, true]);
+  is("and the Danish spelling of the city counts too",
+     travelLabel(null, { name: "X" }, "2h from København"), "2h from CPH");
+  is("as does CPH itself, so it is not doubled either",
+     travelLabel(null, { name: "X" }, "2h 🚂 from CPH"), "2h 🚂 from CPH");
+  // ALL OR NOTHING still holds: a value that is ONLY the origin clause leaves
+  // nothing to say, and a label with no figure in front of it is the bug this
+  // function was written for ("CAPITAL REGION OF DENMARK · FROM CPH").
+  is("a value that is nothing but the origin says nothing at all",
+     travelLabel(null, { name: "X" }, "from Copenhagen"), "");
+  is("and an absent one is still withheld whole", travelLabel(null, { name: "X" }, ""), "");
+  // KNOWN LIMIT, written down rather than discovered later: the pattern is
+  // anchored at the END, so a stored value that OPENS with the origin keeps its
+  // sentence and still gets the suffix. No card on the site is written that way,
+  // and an unanchored strip would cut real prose out of the middle of one.
+  is("an origin in mid-sentence is left alone, deliberately",
+     travelLabel(null, { name: "X" }, "from Copenhagen it is a long drive, about 5h"),
+     "from Copenhagen it is a long drive, about 5h from CPH");
+  ok("the pattern is anchored, which is what makes that limit true",
+     /\$\/i?$/.test(M.ORIGIN_TAIL.source + "/") || M.ORIGIN_TAIL.source.endsWith("$"));
   // THE ONE HE SAW. Copenhagen is CPH, and the figure was a measurement from the
   // CPH origin to whatever coordinate a geocoder picked for the middle of it.
   is("Copenhagen is not thirteen minutes from Copenhagen", travelLabel(far, { name: "Copenhagen" }, "13min 🚂"), "");
@@ -13602,10 +13649,18 @@ rmSync(dir, { recursive: true, force: true });
 
   // Wired: each tier reaches exactly one string, and the old tier reaches none.
   const code = stripNonCode(appS);
-  const staleBranch = (appS.match(/if \(tier === "old"\) \{([\s\S]*?)\} else if \(tier === "listing"\)/) || [])[1] || "";
+  const staleBranch = (appS.match(/if \(tier === "old"\) \{([\s\S]*?)\} else if \(tier === "listing" \|\| tier === "other"\)/) || [])[1] || "";
   ok("the stale branch exists at all", staleBranch.length > 0);
   ok("and it appends to neither corroboration string", !/\+=/.test(staleBranch));
   ok("a listing goes to its own string", /listingSiteText \+= ` \$\{scanData\.text\}`;/.test(appS));
+  // ── AND "OTHER" GOES THERE TOO, NOT TO THE OFFICIAL STRING ───────
+  // A current page that is neither the operator's own nor a known calendar. It
+  // may corroborate; it may never be quoted as the operator. Pinned as a value
+  // below as well, because a regex can say a line is present and never that
+  // another line is absent — the lesson this whole block was rewritten for.
+  is("only one string is written to in the shared branch",
+     ((appS.match(/\} else if \(tier === "listing" \|\| tier === "other"\) \{([\s\S]*?)\} else \{/) || [])[1] || "").match(/\w+SiteText \+=/g) || [],
+     ["listingSiteText +="]);
   ok("and only an operator page reaches the official one",
      /\} else \{[\s\S]{0,300}scrapedSiteText \+= ` \$\{scanData\.text\}`;/.test(appS));
   is("which is written to in exactly one place in the scan loop",
@@ -13689,7 +13744,7 @@ rmSync(dir, { recursive: true, force: true });
      M.EXISTENCE_RULE.includes("was open as of that page's date"));
   ok("the months are one constant, not a number typed twice",
      /Nothing older than \$\{MAX_FACT_AGE_MONTHS\} months may price or time anything/.test(appA));
-  ok("the tier is asked with a clock", /scrapeTier\(url, scanData\.text, Date\.now\(\)\)/.test(appA));
+  ok("the tier is asked with a clock", /scrapeTier\(url, scanData\.text, Date\.now\(\), \{ nameWords, placesWebsite, type: sType, name \}\)/.test(appA));
 }
 
 // ── WEBSITE > ENCYCLOPEDIA > BLOG > OLD BLOG ────────────────────────
@@ -13801,7 +13856,16 @@ rmSync(dir, { recursive: true, force: true });
   // ── AND THE TYPE REACHES IT ────────────────────────────────────
   // A kommune speaks for the places inside it and not for a touring show in its
   // programme. isOwnSiteFor cannot apply that without knowing which it has.
-  ok("and it is told what kind of thing this is", /isOwnSiteFor\(u, nameWords, \{ placesWebsite, type: sType \}\)/.test(codeR));
+  ok("and it is told what kind of thing this is", /isOwnSiteFor\(u, nameWords, \{ placesWebsite, type: sType, name \}\)/.test(codeR));
+  // ── AND THE RAW NAME, WHICH IS NOT THE SAME AS ITS WORDS ─────────
+  //
+  // Fable, 1 Sep 2026, on the worst regression of the week: roskilde-festival.dk
+  // stopped being Roskilde Festival's own site. distinctiveWords strips
+  // "festival" as generic and ownershipWords strips "roskilde" as a town, so the
+  // whole-name comparison had nothing left to compare. A domain is built from
+  // the NAME, generic word and all, so that is what has to reach it.
+  ok("and the name itself, not only the words left after stripping it",
+     /isOwnSiteFor\(u, nameWords, \{[^}]*\bname\b/.test(codeR));
   ok("no hostname-splitting survives in this file's official test",
      !/hostname\.replace\(\/\^www\\\.\/, ""\)\.split\("\."\)\[0\]/.test(codeR));
   ok("so a page that merely mentions it cannot become the operator",
@@ -14739,8 +14803,12 @@ rmSync(dir, { recursive: true, force: true });
   }
   // Every published row is cleaned on the way in, which is what reaches the 55
   // dashes already live without a redraft.
+  // Pinned to the RULE — the payload is cleaned on the way in — rather than to
+  // the exact expression, which changed the day researchVoice wrapped it. What
+  // matters is that stripDashesDeep is what the row goes through, not that it
+  // is the outermost call.
   ok("published payloads are cleaned of dashes as they load",
-     /const item = stripDashesDeep\(row\.payload\);/.test(live));
+     /const item = cleanReaderProse\(stripDashesDeep\(row\.payload\)\);/.test(live));
 
   // ── AND THE ONE SURFACE THAT WAS NOT ─────────────────────────────
   // Found 13 Aug 2026. Every model-to-reader path runs stripDashes except Ask
@@ -24990,10 +25058,23 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // door has to pick, or the sheet reopens on whatever it was last left on.
     is("no entry point opens the sheet without choosing a screen",
        (appD.match(/onSignIn=\{\(\) => setAuthOpen\(true\)\}/g) || []).length, 0);
-    // Five doors: the header Log in, the menu entry, the AskGemlyx panel, the
-    // guide screen, and the account nudge. Every one of them names the screen it
-    // wants before opening.
-    is("all of them set the mode first", (appD.match(/setAuthMode\("in"\); setAuthOpen\(true\);/g) || []).length, 5);
+    // ── PINNED TO THE RULE, NOT TO THE TALLY, 1 SEP 2026 ──────────
+    //
+    // This counted the doors and expected five. Adding a sixth — the "Review
+    // article" gate — broke it while the thing it protects stayed exactly as
+    // true, and a test that fails when the app grows correctly teaches people
+    // to edit the number rather than read the rule.
+    //
+    // The rule is: NOTHING opens this sheet without first choosing a screen,
+    // or it reopens on whatever it was last left on. That is checkable directly
+    // and it survives the seventh door.
+    {
+      const opens = [...stripComments(appD).matchAll(/setAuthOpen\(true\)/g)];
+      ok("there are doors to count in the first place", opens.length >= 5);
+      const blind = opens.filter(m => !/setAuthMode\(\s*"(?:in|up|reset|newpass)"\s*\)[^;]*;\s*$/.test(
+        stripComments(appD).slice(Math.max(0, m.index - 160), m.index)));
+      is("every door names the screen it wants before opening", blind.length, 0);
+    }
   }
   // A 200 with no token is not a sign in. shape() returns null for a body with no
   // access_token and signInWithPassword then writes null to storage, so passing
@@ -38122,10 +38203,50 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("a festival's own domain still outranks everything",
     isOwnSiteFor("https://www.roskilde-festival.dk/", ["roskilde", "festival"], { type: "festival" }));
   ok("and so does Distortion's", isOwnSiteFor("https://www.cphdistortion.dk/", ["cphdistortion", "distortion"], { type: "festival" }));
-  // Google's registered URL is the owner's own statement and outranks all of
-  // this, event or not — that branch runs first and must be untouched.
-  ok("a registered business URL still settles it outright",
-    isOwnSiteFor("https://krop.aarhus.dk/x", WORDS, { type: "festival", placesWebsite: "https://krop.aarhus.dk" }));
+  // ── AND GOOGLE'S REGISTERED URL, WHICH USED TO SKIP ALL OF IT ────
+  //
+  // Oliver, 1 Sep 2026: "events shouldn't be looking at places API from the
+  // start. Because chances are that the event has changed... Maps have data
+  // from older versions of the event."
+  //
+  // Right, and App.jsx already agreed without acting on it: it splits
+  // PLACES_THAT_ARE_ONE_BUSINESS from PLACES_THAT_ARE_AN_AREA and says of the
+  // second, festivals included, "Google has no single listing for these." Then
+  // this branch treated whatever Google returned for one as the owner's own
+  // statement, outranking every rule below it — every door closed this week
+  // included. A Maps pin for a touring show is the VENUE's pin, or last year's.
+  //
+  // THIS ASSERTION USED TO EXPECT TRUE, on the very host that started all this.
+  // The hole was written down as a feature.
+  ok("a Maps pin is no longer a bypass for an event",
+    !isOwnSiteFor("https://krop.aarhus.dk/x", WORDS, { type: "festival", placesWebsite: "https://krop.aarhus.dk" }));
+  ok("nor is the venue's own site, for a show that merely plays there",
+    !isOwnSiteFor("https://friheden.dk/hermans", WORDS, { type: "festival", placesWebsite: "https://friheden.dk" }));
+  // ── NOT A BAN. IT UPGRADES A PAGE, IT NO LONGER BLESSES A DOMAIN ─
+  // An event's registered URL still settles it — once the page NAMES the thing.
+  // So the promoter's page about this show is the operator's, and the promoter's
+  // homepage, which carries hundreds of other shows, is not. That distinction is
+  // the whole value of the field on an event.
+  ok("an event's registered URL that names the event still wins",
+    isOwnSiteFor("https://www.roskilde-festival.dk/", ["roskilde", "festival"],
+      { type: "festival", placesWebsite: "https://www.roskilde-festival.dk" }));
+  ok("the promoter's page about this show counts",
+    isOwnSiteFor("https://bentertained.dk/eventpage/vanvittig-verdenshistorie", WORDS,
+      { type: "festival", placesWebsite: "https://bentertained.dk" }));
+  ok("and the promoter's homepage does not",
+    !isOwnSiteFor("https://bentertained.dk/x", WORDS,
+      { type: "festival", placesWebsite: "https://bentertained.dk" }));
+  // Without the registration a path match is not ownership — the
+  // theseasonalevent.com lesson, unchanged.
+  ok("a path naming the show is still not ownership on its own",
+    !isOwnSiteFor("https://bentertained.dk/eventpage/vanvittig-verdenshistorie", WORDS, { type: "festival" }));
+  // AND A REAL BUSINESS IS UNTOUCHED, which is the case the bypass exists for:
+  // "Chickie's at spisechick.dk", a registered site whose domain does not
+  // contain the name at all.
+  ok("a business's registered URL still settles it outright, name or no name",
+    isOwnSiteFor("https://spisechick.dk/", ["chickies"], { type: "food", placesWebsite: "https://spisechick.dk" }));
+  ok("and without it that same site is nobody's",
+    !isOwnSiteFor("https://spisechick.dk/", ["chickies"], { type: "food" }));
 
   // ── THE WORD TEST, WHICH IS WHERE THE FIRST FIX WENT WRONG ──────
   //
@@ -39914,6 +40035,720 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and the audit counts it separately from the money gaps",
      M.auditPublished(rows).noBooking.length === 1);
   ok("saying so in words", /never say whether you can walk in or have to book/.test(M.describeAudit(M.auditPublished(rows))));
+}
+
+// ── "IT'S NOT FIXED.. IT DIDN'T CHECK TICKETMASTER.DK" ──────────────
+//
+// Oliver, 1 Sep 2026, pasting a Vanvittig Verdenshistorie run log. It HAD
+// checked: step 23 says "2 Danish listings". Three separate faults made the log
+// read as though it had not, and one of them was still publishing "Free entry".
+{
+  const { scrapeTier, isOwnSiteFor, urlNames, sourcesToSearch } = M;
+  const NOW = Date.UTC(2026, 7, 12);
+  const current = "Vanvittig Verdenshistorie. Ons. d. 19. august 2026. Gratis adgang.";
+  const VV = ["vanvittig", "verdenshistorie", "aarhus"];
+  const subj = { nameWords: VV, type: "festival" };
+
+  // ── 1. THE PAGE THAT SAID "THE OPERATOR'S OWN PAGE SAYS FREE" ────
+  //
+  // aarhusfestuge.dk is Aarhus Festuge's programme entry for a PAID TOURING
+  // SHOW that plays in it. scrapeTier had no ownership test at all — not a
+  // listing host, therefore the operator — so its "gratis" was published with
+  // the operator's authority. This is the second, wider door Fable found on 31
+  // August, and the one that was actually firing.
+  const FESTUGE = "https://www.aarhusfestuge.dk/2026/arrangementer/vanvittig-verdenshistorie-kropsidealer";
+  is("a festival programme is not the touring show's own site",
+     scrapeTier(FESTUGE, current, NOW, subj).tier, "other");
+  is("nor is a kommune's programme", scrapeTier("https://krop.aarhus.dk/program-2026/vanvittig", current, NOW, subj).tier, "other");
+  // A THIRD TIER, NOT A STRICTER SECOND ONE: a newspaper is not a ticket
+  // calendar, and "old" would drop it from the writer entirely.
+  is("a known calendar is still a listing, not other",
+     scrapeTier("https://www.kultunaut.dk/perl/arrmore?ArrNr=1", current, NOW, subj).tier, "listing");
+  is("and age still wins over everything",
+     scrapeTier(FESTUGE, "Skrevet 12. marts 2006.", NOW, subj).tier, "old");
+  // THE ONES THAT MUST STILL BE THE OPERATOR.
+  is("a festival's own domain is still the operator",
+     scrapeTier("https://www.roskilde-festival.dk/", current, NOW, { nameWords: ["roskilde", "festival"], type: "festival" }).tier, "operator");
+  // A registered URL still settles the tier — for the page that names the show.
+  // The promoter's bare homepage is not the operator's page for one of the
+  // hundreds of shows on it, and Places is exactly the source Oliver distrusts
+  // on events: "Maps have data from older versions of the event."
+  is("a registered URL makes the page about this show the operator's",
+     scrapeTier("https://bentertained.dk/eventpage/vanvittig-verdenshistorie", current, NOW,
+       { ...subj, placesWebsite: "https://bentertained.dk" }).tier, "operator");
+  is("but not the promoter's homepage",
+     scrapeTier("https://bentertained.dk/x", current, NOW, { ...subj, placesWebsite: "https://bentertained.dk" }).tier, "other");
+  // NO SUBJECT, NO CHANGE. A caller that cannot say what the page is about
+  // cannot be asked whether the page belongs to it, and the age routing this
+  // function exists for stays testable on its own.
+  is("without a subject it answers exactly as before",
+     scrapeTier(FESTUGE, current, NOW).tier, "operator");
+  is("and an empty name list is the same as no subject",
+     scrapeTier(FESTUGE, current, NOW, { nameWords: [] }).tier, "operator");
+
+  // ── 2. THE COMPOUND HOST MY OWN FIX HAD BROKEN ───────────────────
+  //
+  // Found by probing the 31 August town-word rule against real hosts rather
+  // than against the case that prompted it. aarhusfestuge.dk is Aarhus
+  // Festuge's OWN site, and the rule refused it: "aarhus" is stripped as a
+  // town, "festuge" is left, and no bounded test finds "festuge" inside the
+  // gapless compound. The entry lost ownership of its own domain.
+  //
+  // Both names carry "aarhus" and only one of them is called that. The host
+  // tells them apart: a label that is the WHOLE name is not a coincidence.
+  ok("Aarhus Festuge owns aarhusfestuge.dk",
+     isOwnSiteFor("https://www.aarhusfestuge.dk/", ["aarhus", "festuge"], { type: "festival" }));
+  is("and it is the operator for its own draft",
+     scrapeTier("https://www.aarhusfestuge.dk/", current, NOW, { nameWords: ["aarhus", "festuge"], type: "festival" }).tier, "operator");
+  // WITHOUT REOPENING THE DOOR IT CLOSED. One town word out of three names
+  // nothing whole, and the first version of wholeOnly let it through anyway
+  // because the bounded test runs first and answers the broad question.
+  ok("a city domain still does not own a show named after the city",
+     !isOwnSiteFor("https://krop.aarhus.dk/program-2026/vanvittig", VV, { type: "festival" }));
+  ok("nor does the city's own front page",
+     !isOwnSiteFor("https://www.aalborg.dk/", ["aalborg", "karneval"], { type: "festival" }));
+  // The narrow question, asked directly: no single word may answer it.
+  ok("wholeOnly refuses a one-word host match",
+     !urlNames("https://krop.aarhus.dk/x", VV, { hostOnly: true, wholeOnly: true }));
+  ok("and accepts the entire name with the gaps closed",
+     urlNames("https://www.aarhusfestuge.dk/", ["aarhus", "festuge"], { hostOnly: true, wholeOnly: true }));
+
+  // ── 3. THE SENTENCE THAT SAID IT HAD NOT LOOKED ──────────────────
+  //
+  // "Ticketmaster has no confirmed listing for this festival" was ONE hardcoded
+  // rule covering both no-match and weak-match. On a weak match there ARE
+  // listings — the value directly beneath it named one, in the right city — so
+  // the decision block printed a flat contradiction of itself and the honest
+  // reading of the log was his. I fixed this sentence inside matchEvent on 31
+  // August and not here.
+  const appT = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("a weak match no longer claims there was no listing",
+     /Ticketmaster HAS listings under this name and none could be confirmed as this edition/.test(appT));
+  ok("and only a true no-match says nothing was returned",
+     /noneAtAll\s*\?\s*"Ticketmaster returned nothing under this name/.test(appT));
+  ok("which is chosen by the verdict, not written once for both",
+     /const noneAtAll = rec\.verdict === "no-match";/.test(appT));
+  ok("and the loser line stops saying there was nothing to check against",
+     /noneAtAll \? "nobody, there was nothing to check it against" : "a Ticketmaster listing that could not be confirmed/.test(appT));
+
+  // ── 4. THE CAP THAT PICKED FOUR SOURCES BY THE ALPHABET ──────────
+  //
+  // "it went to search every known ticket page, except the one it needed.."
+  // The four chosen were billet.unitedtickets.dk, billetlugen.dk, billetto.dk
+  // and kultunaut.dk — all scoped to Events, so all ranked identically, and
+  // localeCompare settled it. Denmark's largest ticket seller lost the last
+  // slot to the letter B, on every festival draft those four have existed for.
+  const rows = [
+    { id: 1, domain: "billet.unitedtickets.dk", applies_to: "festival" },
+    { id: 2, domain: "billetlugen.dk", applies_to: "festival" },
+    { id: 3, domain: "ticketmaster.dk", applies_to: "festival" },
+    { id: 4, domain: "billetto.dk", applies_to: "festival" },
+    { id: 5, domain: "kultunaut.dk", applies_to: "festival" },
+  ];
+  const picked = sourcesToSearch(rows, "festival", {}).slice(0, M.MAX_DIRECT_SEARCHES).map(s => s.domain);
+  ok("the source he put third is searched third", picked[2] === "ticketmaster.dk");
+  ok("and the alphabet no longer decides", !picked.every((d, i, a) => i === 0 || a[i - 1] <= d));
+  // A MORE SPECIFIC SOURCE STILL WINS, which is the rank this tie-break sits
+  // underneath and must not disturb.
+  const mixed = sourcesToSearch([
+    { id: 1, domain: "visitdenmark.dk", applies_to: "" },
+    { id: 2, domain: "ticketmaster.dk", applies_to: "festival" },
+  ], "festival", {}).map(s => s.domain);
+  is("a source scoped to this type still outranks a universal one added first",
+     mixed, ["ticketmaster.dk", "visitdenmark.dk"]);
+}
+
+// ── "IT DOESN'T JUST GO ON AT ONE DATE" ─────────────────────────────
+//
+// Oliver, 1 Sep 2026, after we went through the Vanvittig Verdenshistorie draft
+// together: "we need to somehow make it able to investigate all its dates..
+// because it doesn't just go on at one date. It goes on in multiple cities,
+// with multiple dates."
+//
+// These are HIS FIVE REAL LISTINGS, off the Ticketmaster artist page he sent.
+// Not a fixture built to make a point — the point was built out of them.
+{
+  const { appearances, otherDatesHere, alsoPlayingLine, describeAppearances, matchEvent } = M;
+  const ev = (city, localDate, venue, min) => ({
+    id: `Z${localDate}${city}`, name: "Vanvittig Verdenshistorie", url: `https://tm.dk/${localDate}`,
+    dates: { status: { code: "onsale" }, start: { localDate } },
+    priceRanges: min ? [{ type: "standard", currency: "DKK", min, max: min }] : undefined,
+    _embedded: { venues: [{ name: venue, city: { name: city } }] },
+  });
+  const TOUR = [
+    ev("Vejle", "2026-09-05", "Bygningen Vejle", 295),
+    ev("Slagelse", "2026-11-20", "Slagelse Musikhus", 295),
+    ev("Aarhus C", "2026-11-21", "Hermans - Tivoli Friheden", 280),
+    ev("Odense C", "2027-03-24", "Magasinet", 295),
+    ev("København V", "2027-03-27", "Bremen Teater", 325),
+  ];
+  const onFile = { name: "Vanvittig Verdenshistorie - Aarhus", city: "Aarhus", date: "2026-09-05" };
+
+  // ── THE ZERO-DAY COINCIDENCE, WHICH IS WHY ANY OF THIS EXISTS ────
+  //
+  // The top line of his screenshot is 5 September in VEJLE — the same day as
+  // the date on this Aarhus row. The 30 August code sorted on the date gap
+  // alone, found a perfect match, and called it strong: Vejle's ticket link and
+  // ticket status would have published on the Aarhus page as confirmed.
+  //
+  // Two independent guards stop it now, and this asserts the outcome rather
+  // than either of them, so a change that removes both still goes red.
+  const m = matchEvent(onFile, TOUR);
+  is("the Aarhus listing is what gets chosen, not the one on the same day", m.event?.city, "Aarhus C");
+  is("and a wrong-city listing is never confirmed", m.confidence, "weak");
+  ok("the reason names the city and the gap", /Aarhus C on 2026-11-21/.test(m.why) && /77 days/.test(m.why));
+
+  // ── THE WHOLE TOUR, NOT THE BEST MATCH ──────────────────────────
+  const tour = appearances(TOUR, onFile);
+  is("every dated appearance is reported", tour.length, 5);
+  is("in date order", tour.map(r => r.date),
+     ["2026-09-05", "2026-11-20", "2026-11-21", "2027-03-24", "2027-03-27"]);
+  // MARKED, NOT FILTERED. The list a person reads is the whole list, and the
+  // row's own city is findable in it rather than missing.
+  is("the ones in this row's city are marked", tour.filter(r => r.here).map(r => r.date), ["2026-11-21"]);
+  is("and Vejle is not one of them, despite the identical date",
+     tour.find(r => r.date === "2026-09-05")?.here, false);
+  ok("each carries what tells them apart — city, venue and price",
+     tour.every(r => r.date && r.city && r.venue) && tour.find(r => r.city === "Aarhus C")?.price === "280 DKK");
+
+  // ── THE ONES THAT CHANGE A READER'S DECISION ────────────────────
+  // A show in Odense in March is not this entry's business. The same show in
+  // this city eleven weeks later is.
+  is("only the other dates in this city count as also-playing",
+     otherDatesHere(tour, onFile).map(r => r.date), ["2026-11-21"]);
+  // "BOTH, SIDE BY SIDE" — Oliver's call, asked directly, on what a reader
+  // should see when a free slot and a ticketed date both exist in one city.
+  const line = alsoPlayingLine(tour, onFile);
+  ok("the reader line names the date, the venue and the price",
+     /2026-11-21/.test(line) && /Hermans/.test(line) && /280 DKK/.test(line));
+  ok("and says which city it is talking about", /Aarhus/.test(line));
+  // NOTHING TO SAY IS SAID AS NOTHING. A one-city show gets no line.
+  is("a show that plays here once says nothing",
+     alsoPlayingLine(appearances([ev("Aarhus C", "2026-11-21", "Hermans", 280)],
+       { name: "Vanvittig Verdenshistorie", city: "Aarhus", date: "2026-11-21" }),
+       { name: "Vanvittig Verdenshistorie", city: "Aarhus", date: "2026-11-21" }), "");
+  // A SHUTTLE BUS IS NOT AN APPEARANCE, and the name filter is the same one
+  // matchEvent uses rather than a second opinion about what counts.
+  is("travel and add-on listings are not dates it plays",
+     appearances([...TOUR, { id: "B", name: "Vanvittig Verdenshistorie - Shuttlebus",
+       dates: { start: { localDate: "2026-11-21" } },
+       _embedded: { venues: [{ name: "Busholdeplads", city: { name: "Aarhus C" } }] } }], onFile).length, 5);
+  // A listing with no date cannot be an appearance: the date is the whole point.
+  is("an undated listing is not reported as a date",
+     appearances([...TOUR, { id: "N", name: "Vanvittig Verdenshistorie", dates: {},
+       _embedded: { venues: [{ name: "TBA", city: { name: "Aarhus C" } }] } }], onFile).length, 5);
+
+  // ── AND IT REACHES THE LOG, WHICH IS THE POINT ──────────────────
+  const said = describeAppearances(tour);
+  ok("the log names all five", TOUR.length === 5 && said.split("\n").length === 5);
+  ok("and marks the same-city one so he can see the pair",
+     /2026-11-21 Aarhus C · Hermans - Tivoli Friheden · 280 DKK {2}\(same city\)/.test(said));
+  const appV = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the run log has a step for it", /note\("Every date it plays"/.test(appV));
+  ok("which is only worth printing when there is more than one",
+     /if \(tour\.length > 1\) \{/.test(appV));
+  // "found" is the outcome this log uses for a gap worth acting on, and a show
+  // playing this town twice is exactly that.
+  ok("and a second date in this town reads as a gap, not a clean pass",
+     /outcome: alsoHere\.length \? "found" : "ok"/.test(appV));
+}
+
+// ── "RAISING THE CAP WILL MAKE IT PRICIER, AND PROBABLY WON'T DO MUCH" ──
+//
+// Oliver, 1 Sep 2026, weighing whether to search every founder source. He was
+// right, and working out why found the cap that actually binds an event draft:
+// not the four SEARCHES, but the five PAGES READ. On the Vanvittig run one of
+// those five went to ticketmaster.dk — bot-walled, 403 to a hand fetch — whose
+// data the Ticketmaster API had already returned with more on it.
+{
+  const { isApiCoveredHost, API_COVERED_HOSTS } = M;
+  ok("Ticketmaster is a host an API already answers for",
+     isApiCoveredHost("https://www.ticketmaster.dk/artist/vanvittig-verdenshistorie-billetter/1260674"));
+  ok("subdomains too, which is where their guides live",
+     isApiCoveredHost("https://guider.ticketmaster.dk/x"));
+  ok("and an ordinary source is not one",
+     !isApiCoveredHost("https://www.aarhusfestuge.dk/") && !isApiCoveredHost("https://billetlugen.dk/x"));
+  // NOT A SUBSTRING TEST. A host that merely contains the name is somebody
+  // else's site, and this app has been bitten by unbounded host matching before.
+  ok("nor is a lookalike host", !isApiCoveredHost("https://ticketmaster.dk.evil.example/x"));
+  ok("every entry is a bare host, so the test above can hold",
+     API_COVERED_HOSTS.every(h => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(h) && !h.includes("/")));
+
+  // ── A RANKING, NOT A BAN ─────────────────────────────────────────
+  //
+  // The first version SKIPPED these hosts when the API had answered. It was
+  // wrong twice: ticketCandidates is declared three hundred lines below the
+  // guard, so it was a ReferenceError in the middle of the pipeline — the same
+  // TDZ trap this file already records once — and even hoisted it would have
+  // read empty, because the Ticketmaster call runs AFTER these reads. Ordering
+  // needs neither, and degrades correctly when there is nothing else to read.
+  const appQ = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("covered hosts are sorted to the back of the read queue",
+     /const byApiLast = \(list\) => \[\.\.\.list\.filter\(u => !isApiCoveredHost\(u\)\), \.\.\.list\.filter\(isApiCoveredHost\)\];/.test(appQ));
+  ok("and the queue is what gets sliced, so the slice is what drops them",
+     /const toFetch = byApiLast\(\[[\s\S]{0,200}\]\)\.slice\(0, isPlaceType \? 5 : 3\);/.test(appQ));
+  // NOT a guard on ticketCandidates, which cannot be true at that point.
+  ok("nothing there reads a value the pipeline has not filled yet",
+     !/apiAnswered = ticketCandidates/.test(appQ));
+  ok("a dropped page is named in the log rather than vanishing",
+     /note\("Not read, because an API answers for it"/.test(appQ));
+
+  // THE ORDERING ITSELF, run rather than read: five real candidates plus
+  // Ticketmaster, and Ticketmaster is the one that loses the slot.
+  const order = (list) => [...list.filter(u => !isApiCoveredHost(u)), ...list.filter(isApiCoveredHost)];
+  const cands = [
+    "https://www.aarhusfestuge.dk/2026/arrangementer/vanvittig",
+    "https://www.ticketmaster.dk/artist/vanvittig-verdenshistorie-billetter/1260674",
+    "https://bentertained.dk/eventpage/vanvittig-verdenshistorie",
+    "https://www.aarhusfestuge.dk/",
+    "https://bentertained.dk/",
+    "https://kultunaut.dk/x",
+  ];
+  const read = order(cands).slice(0, 5);
+  ok("with five other pages wanting the room, the API-covered one is dropped",
+     !read.some(isApiCoveredHost) && read.length === 5);
+  // AND STILL READ WHEN IT IS ALL THERE IS, which is the whole reason this is
+  // an ordering and not a ban.
+  ok("but a draft with nothing else still reads it",
+     order(["https://www.ticketmaster.dk/artist/x"]).slice(0, 5).length === 1);
+
+  // ── AND "READ" NOW SAYS WHAT CAME BACK ───────────────────────────
+  // A page that hands over its text and one that hands over a sentence logged
+  // the same word. The size is the cheapest possible answer to "was that page
+  // any use", and the text is already in hand.
+  ok("the read log reports how much text arrived",
+     /\$\{scanData\.text\.length\.toLocaleString\("en-GB"\)\} characters/.test(appQ));
+  ok("and says so plainly when none did",
+     /"nothing readable came back"/.test(appQ));
+}
+
+// ── "ASK IF THE BARS TAKE NIGHTPAY" ─────────────────────────────────
+//
+// Oliver, 1 Sep 2026, asking for a tip at the top of the Nightlife nav.
+{
+  const { tabForEssential } = M;
+  const appN = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // ── THE TAB IS LOOKED UP, NOT TYPED ──────────────────────────────
+  //
+  // Nightpay is a Studio row whose kind is his to set, and he is moving it from
+  // Essentials to Tips. A hardcoded tab breaks the moment he does, and breaks
+  // SILENTLY: the link lands on the right page with the row nowhere on it.
+  is("a row filed as a tip sends the reader to Tips",
+     tabForEssential([{ name: "Nightpay", kind: "tip" }], "nightpay"), "tips");
+  is("and one still filed as an essential sends them to Essentials",
+     tabForEssential([{ name: "Nightpay", kind: "essential" }], "nightpay"), "essentials");
+  // An unplaced row takes the default, which is where a reader will actually
+  // find it — the same kindOf every other reader uses, not a second opinion.
+  is("an unplaced row follows the default rather than guessing",
+     tabForEssential([{ name: "Nightpay" }], "nightpay"), "essentials");
+  // NO ROW, NO LINK. The tip still shows; it just stops offering to explain
+  // itself from a page that cannot.
+  is("nothing published means no link", tabForEssential([], "nightpay"), "");
+  is("and a row that is not it is not it",
+     tabForEssential([{ name: "Rejsekort", kind: "essential" }], "nightpay"), "");
+  is("matching is case and whitespace insensitive, because a founder types names",
+     tabForEssential([{ name: "  NightPay  ", kind: "tip" }], "nightpay"), "tips");
+  is("an empty name matches nothing rather than the first row",
+     tabForEssential([{ name: "Nightpay", kind: "tip" }], ""), "");
+
+  // ── AND IT IS WRITTEN ONCE, WHICH IS THIS FILE'S OWN RULE ────────
+  // spotRow's comment two screens above it: "Two copies of this markup is how
+  // the two levels start disagreeing about what a bar looks like." The tip sits
+  // above the level branch so a reader drilling town → street keeps one tip.
+  is("the tip is defined exactly once", (appN.match(/const nightpayTip = \(/g) || []).length, 1);
+  is("and placed exactly once", (appN.match(/\{nightpayTip\}/g) || []).length, 1);
+  ok("above the branch, so all three nightlife levels carry it",
+     appN.indexOf("{nightpayTip}") < appN.indexOf("{!nightlifeTownView ? ("));
+  ok("in his words", /<b style=\{\{ color: C\.gold \}\}>Tip:<\/b> ask if the bars take Nightpay\./.test(appN));
+  ok("and the link goes to the tab the row is actually on",
+     /const nightpayTab = tabForEssential\(essentials, "nightpay"\);/.test(appN)
+     && /onClick=\{\(\) => goTab\(nightpayTab\)\}/.test(appN));
+  ok("with no link rendered when nothing is published",
+     /\{nightpayTab && \(/.test(appN));
+}
+
+// ── THE PIPELINE TALKING TO ITSELF IN FRONT OF A TRAVELLER ──────────
+//
+// Read off the live Towns page, 1 Sep 2026. Hyllested Skovgårde's published
+// description, in the slot where the town's pitch goes:
+//
+//   "The claim is not confirmed by the checked sources. It suits someone
+//    already driving through…"
+{
+  const { isResearchVoice, stripResearchVoice, cleanReaderProse, researchVoiceIn, voiceProblems } = M;
+  const REAL = "The claim is not confirmed by the checked sources. It suits someone already driving through Mols Bjerge.";
+
+  is("the verification sentence is cut and the town's own words stay",
+     stripResearchVoice(REAL), "It suits someone already driving through Mols Bjerge.");
+
+  // ── BOTH HALVES REQUIRED, WHICH IS THE WHOLE SAFETY ──────────────
+  //
+  // This DELETES READER CONTENT, so a false positive costs more than a miss. A
+  // verification verb alone is not enough — a place's own history is full of
+  // sentences about what is and is not established. What makes a sentence OURS
+  // is naming the checking as the actor.
+  ok("a research actor with a verify verb is ours",
+     isResearchVoice("The claim is not confirmed by the checked sources.")
+     && isResearchVoice("Our research could not confirm the date."));
+  // Every one of these is real prose off the live site, or the exact shape of
+  // it. Not one may be touched.
+  const KEEP = [
+    "It suits someone already driving through the area.",
+    "Ribe was already a trading settlement by around 705 AD according to tree-ring dating on its oldest timbers.",
+    "Danish kings have been crowned in Viborg since 1027.",
+    "Bybjerg is the largest settlement on Orø, a small island in Isefjord.",
+    "Historians dispute the exact founding date of the church.",
+    "The village has no shop, so bring what you need.",
+    "Nysted received its market-town rights in 1409.",
+    // ── AND THESE ARE THE ONES THE ACTOR GUARD EXISTS FOR ──────────
+    //
+    // Mutation testing: deleting RESEARCH_ACTOR from isResearchVoice killed
+    // nothing, because not one sentence above carries a verification verb. The
+    // guard that stops this deleting reader content was unpinned, and it is the
+    // most important line in the file.
+    //
+    // A Danish town's history prose is full of exactly this shape — what is and
+    // is not established about a founding, a legend, a set of timbers. Every one
+    // of these is about the WORLD. None of them is about our research.
+    "The founding date is not confirmed by written records.",
+    "Tree-ring dating confirmed the timbers were felled around 705 AD.",
+    "The legend has never been verified.",
+    "The castle's original builder could not be established from the parish register.",
+  ];
+  is("no real sentence off the live site is mistaken for ours", KEEP.filter(isResearchVoice), []);
+  is("and none of them is altered", KEEP.map(stripResearchVoice), KEEP);
+  // "The claim" as an opener needs no second half: a sentence describing a
+  // place does not begin that way, and it is how the Hyllested row begins.
+  ok("an opening 'The claim' is ours on its own", isResearchVoice("The claim is disputed."));
+
+  // ── AND IT NEVER EMPTIES A FIELD ────────────────────────────────
+  // A blank description is worse than a bad one — it is indistinguishable from
+  // a broken row. If nothing would remain, the original stands and the audit
+  // is left to report it.
+  const ONLY = "The claim is not confirmed by the checked sources.";
+  is("a field that is nothing but the note keeps it rather than going blank", stripResearchVoice(ONLY), ONLY);
+  is("an empty field is untouched", stripResearchVoice(""), "");
+
+  // ── CLEANED ON THE WAY IN, INCLUDING THE BODY ───────────────────
+  // blogBody is where most of an entry's prose lives and is not in
+  // PROSE_FIELDS, so cleaning only the short fields would leave the same
+  // sentence live one scroll further down.
+  const row = { name: "Hyllested Skovgårde", desc: REAL, blogBody: [{ heading: "Being There", text: REAL }] };
+  const cleaned = cleanReaderProse(row);
+  ok("the description is cleaned", !/The claim/.test(cleaned.desc));
+  ok("and so is the body", !/The claim/.test(cleaned.blogBody[0].text));
+  ok("the body keeps its own shape", cleaned.blogBody[0].heading === "Being There");
+  // A row with nothing wrong is returned AS IT WAS, not rebuilt — a new object
+  // every load is a re-render for every consumer keyed on identity.
+  const clean = { name: "Ribe", desc: "Denmark's oldest town." };
+  ok("a clean row is passed straight through", cleanReaderProse(clean) === clean);
+
+  // ── AND IT IS A PATCH, WHICH IS WHY THE ROW IS STILL REPORTED ────
+  // The stored row still says it, every redraft reads it back, and a reader of
+  // the Studio would never know. The fix is a rewrite.
+  is("the audit names the sentence, not just the row",
+     researchVoiceIn({ desc: REAL })[0].says, "The claim is not confirmed by the checked sources.");
+  is("and says which field it was in", researchVoiceIn({ desc: REAL })[0].field, "desc");
+  ok("it is one field, not a redraft", voiceProblems({ desc: REAL })[0].cost === "one field");
+  ok("and the finding says the row still carries it",
+     /the row still says it and every redraft reads it back/.test(voiceProblems({ desc: REAL })[0].detail));
+  is("a clean row raises nothing", voiceProblems({ desc: "Denmark's oldest town." }), []);
+  // EVERY TYPE. This is not about doors or prices; any type can do it.
+  const rows = [{ id: 1, type: "town", payload: { name: "Hyllested Skovgårde", desc: REAL } }];
+  ok("the audit counts it", M.auditPublished(rows).researchVoice.length === 1);
+  ok("and says so in words", /talks about the research instead of the place/.test(M.describeAudit(M.auditPublished(rows))));
+
+  // WIRED AT BOTH ENTRY POINTS. One of the two forgetting is exactly how the
+  // dash ban missed published content for a month.
+  const live = readFileSync(join(root, "src/utils/liveContent.js"), "utf8");
+  is("both merge points clean the prose",
+     (live.match(/cleanReaderProse\(stripDashesDeep\(/g) || []).length, 2);
+}
+
+// ── A STUDIO WARNING WAS THE HEADING TRAVELLERS READ ────────────────
+//
+// Read off the live Towns page, 1 Sep 2026. The section header, public, with
+// Samsø under it: "MARKED AS AN AREA, BUT NOT TOLD WHICH PLACE", and the card
+// beneath reading "AREA · NO PARENT SET". Both are Studio's words for a missing
+// field, addressed to Oliver, printed for travellers.
+{
+  const appA = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  ok("no traveller is told an entry was not told which place",
+     !/Marked as an area, but not told which place/.test(appA));
+  ok("they get a heading about places instead", /: "Elsewhere in Denmark"/.test(appA));
+  ok("and the card says what kind of thing it is, not which field is empty",
+     !/\$\{kindLabel\(town\)\} · no parent set/.test(appA)
+     && /parent \? `\$\{kindLabel\(town\)\} in \$\{parent\}` : kindLabel\(town\)/.test(appA));
+
+  // ── THE SECTION ITSELF MUST STAY ────────────────────────────────
+  // It exists because an area with no parent belonged to no group and was
+  // rendered by NOTHING — reachable only by typing its name into search. The
+  // fix for a founder-facing heading must not be to hide the entries again.
+  ok("an unplaced area is still rendered", /parent \? `Inside \$\{parent\}` :/.test(appA));
+  ok("and still grouped under its own heading",
+     /parents\.sort\(\(a, b\) => \(a === "" \? 1 : b === "" \? -1 : daCompare\(a, b\)\)\)/.test(appA));
+
+  // ── AND THE WARNING SURVIVES, FOR THE ONE PERSON IT IS FOR ──────
+  // Deleting it would trade a public embarrassment for a silent gap, which is
+  // the trade this codebase keeps refusing.
+  ok("the owner still gets the warning", /Only you can see this:/.test(appA));
+  ok("gated on being signed in", /\{!parent && studioSession && \(/.test(appA));
+  ok("and it names where to fix it", /Studio → Manage → 📍 Kind/.test(appA));
+}
+
+// ── "REPORT OUTDATED INFORMATION" AND "REVIEW ARTICLE" ──────────────
+//
+// Oliver, 1 Sep 2026: "add a button on every blog called 'report outdated
+// information' and a (user-only) 'review article'."
+{
+  const { feedbackProblem, feedbackRow, FEEDBACK_KINDS, MIN_REPORT_CHARS } = M;
+
+  // ── AN EMPTY REPORT IS NOT A REPORT ──────────────────────────────
+  // Suggest a Place already refuses a blank name one screen away rather than
+  // posting an empty row.
+  ok("a blank report is refused, with a reason a person can act on",
+     /Say what is out of date/.test(feedbackProblem("outdated", "   ")));
+  is("and a real one goes", feedbackProblem("outdated", "entry is 120 DKK now, not free"), "");
+  // A REVIEW MAY BE A RATING ALONE. A star with nothing typed is a real answer,
+  // and demanding a sentence is how you get "good" typed to get past the form.
+  is("a review with stars and no words is enough", feedbackProblem("review", "", 4), "");
+  is("and words with no stars are too", feedbackProblem("review", "the walking time is way off", 0), "");
+  ok("but neither is not", /star rating, or say what you think/.test(feedbackProblem("review", "", 0)));
+  is("a kind nobody offers sends nothing", feedbackProblem("nonsense", "words here"), "Nothing to send.");
+  ok("the floor is a few characters, not a paragraph", MIN_REPORT_CHARS > 0 && MIN_REPORT_CHARS <= 10);
+
+  // ── THE URL IS THE HALF THAT MAKES IT ACTIONABLE ─────────────────
+  // entryAudit's own lesson, applied to a reader's words: "a ticket shop states
+  // 280 DKK" is not actionable and "akkc.dk states 280 DKK" is. A report saying
+  // "the price is wrong" with no page attached is the same unusable shape.
+  const row = feedbackRow("outdated", {
+    itemType: "free", itemName: "Kalø Slotsruin", text: "entry is 120 DKK now",
+    url: "https://www.gemlyxtravel.com/#/free/kalo-slotsruin",
+  });
+  is("the entry is named", row.name, "Kalø Slotsruin");
+  is("and filed as its own kind so it is not read as a place suggestion", row.type, "Outdated");
+  ok("the reader's words survive", /entry is 120 DKK now/.test(row.note));
+  ok("with the exact page they were looking at", /gemlyxtravel\.com\/#\/free\/kalo-slotsruin/.test(row.note));
+  ok("and what type of entry it was", /free/.test(row.note));
+  // A review carries its rating in words, because the table has no rating
+  // column and inventing one would mean a migration before the button works.
+  const rev = feedbackRow("review", { itemType: "town", itemName: "Ribe", text: "great", rating: 4 });
+  is("a review is filed as a review", rev.type, "Article review");
+  ok("and its stars are readable", /Rated 4\/5/.test(rev.note));
+  ok("a rating is clamped rather than trusted", /Rated 5\/5/.test(feedbackRow("review", { rating: 99 }).note));
+  ok("and no stars means no rating line", !/Rated/.test(feedbackRow("review", { text: "fine", rating: 0 }).note));
+  // NEVER A ROW WITH NO SUBJECT. gemlyx_suggestions is read by a person.
+  is("an unnamed entry still says so rather than filing blank", feedbackRow("outdated", {}).name, "(unnamed entry)");
+
+  // ── ON EVERY BLOG, THREADED IN ONE EDIT ──────────────────────────
+  //
+  // Five DetailPage call sites. This codebase already has the scar: "Four
+  // lists, one omission, which is not four mistakes. It is one hand-written
+  // list copied four times." So the props go on in a single shared prefix.
+  const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
+  is("every detail page gets the buttons",
+     (appF.match(/<DetailPage paid=\{hasPaidPlan\(userProfile\)\} signedIn=\{!!userSession\} onNeedAccount=/g) || []).length, 5);
+  is("and none is left without them",
+     (appF.match(/<DetailPage /g) || []).length, 5);
+
+  const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("the buttons render on the page", /<ArticleFeedback itemType=\{kind\} itemName=\{item\.name\}/.test(detail));
+  // ── AND THEY ARE NOT THE PUBLIC COMMENT LIST ─────────────────────
+  // ReviewsSection is travellers talking to each other about the PLACE. These
+  // two are a reader talking to us about the WRITING, and reading them as one
+  // thing is how a note meant for Oliver gets published as somebody's opinion
+  // of a bar.
+  ok("kept above and apart from the public comments",
+     detail.indexOf("<ArticleFeedback") < detail.indexOf("<ReviewsSection"));
+  const fbRaw = readFileSync(join(root, "src/components/ArticleFeedback.jsx"), "utf8");
+  // stripComments, because the comment above that fetch EXPLAINS why it is not
+  // gemlyx_reviews and therefore contains the name. A negative assertion read
+  // over comments is answered by the reasoning rather than the code — the same
+  // trap that has caught this suite before, in the other direction.
+  const fb = stripComments(fbRaw);
+  ok("they post to the suggestions table, not the public reviews one",
+     /gemlyx_suggestions/.test(fb) && !/gemlyx_reviews/.test(fb));
+  ok("and the comment still says why, which is where that belongs",
+     /NOT gemlyx_reviews/.test(fbRaw));
+
+  // ── AND IT OPENS ON SIGN IN, NOT CREATE ─────────────────────────
+  //
+  // Caught by an invariant this suite already had: "no unnamed opener sets
+  // Create." My first version used setAuthMode("up"). A button reading "Review
+  // article" does not name signing up, and the rule is that only a button which
+  // NAMES an action opens on it — otherwise a returning reader is dropped on a
+  // create-account form.
+  ok("the review gate opens on Sign in",
+     /setAuthReason\("review"\); setAuthMode\("in"\); setAuthOpen\(true\);/.test(appF));
+
+  // ── A BUTTON THAT DOES NOTHING IS WORSE THAN NO BUTTON ───────────
+  // A signed-out reader is offered the account rather than a dead control, and
+  // the sheet says why THIS person is being asked.
+  ok("review is gated on being signed in", /signedIn \? \(open === "review"/.test(fb));
+  ok("and a signed-out tap opens the account sheet instead", /: onNeedAccount\?\.\(\)/.test(fb));
+  const auth = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
+  ok("which explains itself for this reason", /reason === "review"/.test(auth));
+  ok("and says the report button needs nothing",
+     /Reporting something out of date needs nothing at all/.test(auth));
+  // REPORTING IS FOR EVERYBODY, which is the contrast the whole design rests on.
+  ok("reporting is not gated", !/signedIn \? \(open === "outdated"/.test(fb));
+
+  is("both kinds exist and nothing else does", FEEDBACK_KINDS, ["outdated", "review"]);
+}
+
+// ── WHAT FABLE FOUND IN MY OWN CODE, 1 SEP 2026 ─────────────────────
+//
+// Six defects, four of them severe, all mine, all shipped this week. Every
+// assertion below runs on the inputs THE PIPELINE ACTUALLY PRODUCES, because
+// the worst of them got past me precisely by not doing that.
+{
+  const { isOwnSiteFor, dWords, cityRankOf, cityWanted, CITY_MATCH, CITY_DIFFERENT, CITY_UNKNOWN,
+          matchEvent, factAge, anchoredEdition, bookingChip, isResearchVoice, BOOKING_FIELDS } = M;
+
+  // ── 1. roskilde-festival.dk HAD STOPPED BEING ROSKILDE FESTIVAL'S ─
+  //
+  // The worst thing I have shipped this week, and I "verified" it was safe with
+  // a probe I fed nameWords I TYPED — ["roskilde","festival"]. The pipeline
+  // never produces that: distinctiveWords strips "festival" as generic, leaving
+  // ["roskilde"], and ownershipWords then strips the town, leaving []. So the
+  // festival's own domain matched nothing and the run log would have said no
+  // operator page was read.
+  //
+  // THESE GO THROUGH distinctiveWords, every one of them. A probe built from
+  // invented inputs is not a probe.
+  const owns = (url, name, type = "festival") => isOwnSiteFor(url, dWords(name), { type, name });
+  ok("a festival's own domain is its own site, on the words the pipeline makes",
+     owns("https://www.roskilde-festival.dk/", "Roskilde Festival"));
+  ok("including the gapless compounds", owns("https://www.skanderborgfestival.dk/", "Skanderborg Festival")
+     && owns("https://www.cphdistortion.dk/", "CPH Distortion")
+     && owns("https://www.smukfest.dk/", "Smukfest")
+     && owns("https://www.aarhusfestuge.dk/", "Aarhus Festuge"));
+  // The name is what a domain is built from — generic word and all — so it is
+  // the name that reaches the comparison, not what survives stripping it.
+  ok("stripping really does empty the ownership words, which is why the name is needed",
+     M.ownershipWords(dWords("Roskilde Festival")).length === 0);
+  // AND THE DOORS STAY SHUT. Every one of these is the case the ownership
+  // rules were written for this week.
+  const VV = "Vanvittig Verdenshistorie - Aarhus";
+  ok("a city domain still does not own a show named after the city",
+     !owns("https://krop.aarhus.dk/program-2026/vanvittig", VV)
+     && !owns("https://www.aalborg.dk/", "Aalborg Karneval")
+     && !owns("https://www.aarhusfestuge.dk/2026/arrangementer/vanvittig", VV)
+     && !owns("https://friheden.dk/hermans", VV));
+  ok("and places are untouched",
+     owns("https://www.marselisborgdyrehave.dk/", "Marselisborg Dyrehave", "free")
+     && owns("https://www.ribe-vikingecenter.dk/", "Ribe VikingeCenter", "free")
+     && owns("https://www.aarhus.dk/borger/natur/marselisborg-dyrehave", "Marselisborg Dyrehave", "free"));
+
+  // ── 2. COPENHAGEN IS NOT KØBENHAVN, TO fold ─────────────────────
+  //
+  // fold maps ø to o, so "København" is "kobenhavn" and "Copenhagen" stays
+  // "copenhagen": neither contains the other. Every Copenhagen event went weak
+  // against its own listing — no measured status, no affiliate ticket URL — and
+  // in the no-date branch every København listing counted as known-wrong, which
+  // put the invented multi-city run straight back. An EXONYM, not a spelling:
+  // no character mapping reaches it, and this repo already knew the pairs.
+  const rank = (city, want) => cityRankOf({ city }, cityWanted({ town: want }));
+  is("the exonym is the same city", rank("København", "Copenhagen"), CITY_MATCH);
+  is("even carrying a postal district", rank("København S", "Copenhagen"), CITY_MATCH);
+  is("and the other way round", rank("Copenhagen", "København"), CITY_MATCH);
+  is("a postal district never hides a town", rank("Aarhus C", "Aarhus"), CITY_MATCH);
+  // AND THE UNBOUNDED-SUBSTRING TRAP THIS CODEBASE NAMES FIVE TIMES. The old
+  // test was "does either contain the other", so Ry matched Ryslinge.
+  is("Ryslinge is not Ry", rank("Ryslinge", "Ry"), CITY_DIFFERENT);
+  is("Aalsgaarde is not Als", rank("Aalsgaarde", "Als"), CITY_DIFFERENT);
+  is("Frederiksberg is its own city", rank("Frederiksberg", "Copenhagen"), CITY_DIFFERENT);
+  is("and a listing with no city is still nothing to compare", rank("", "Aarhus"), CITY_UNKNOWN);
+  // END TO END, on the row this cost: Copenhell in Copenhagen, listed in
+  // København S on the same day.
+  const cph = matchEvent({ name: "Copenhell", city: "Copenhagen", date: "2026-06-17" }, [{
+    id: "Z", name: "Copenhell", url: "https://tm.dk/x",
+    dates: { status: { code: "onsale" }, start: { localDate: "2026-06-17" } },
+    _embedded: { venues: [{ name: "Refshaleøen", city: { name: "København S" } }] },
+  }]);
+  is("so a Copenhagen event can be confirmed by its own listing again", cph.confidence, "strong");
+
+  // ── 3. THE SALE-DATE RULE ONLY RAN ON NUMERIC DATES ─────────────
+  //
+  // dateRangesInText pushes the single date lastDateInText finds with at:-1,
+  // deliberately — it answers WHICH and not WHERE — and every label reader
+  // refuses a negative position. My fixture used "04.11.26", the one format
+  // that carries a position: a test written to the code rather than to the
+  // requirement. This is how a Dane actually writes it.
+  const today = new Date(2026, 7, 12);
+  const taken = (t) => !!anchoredEdition(t, today).found;
+  ok("a written-month sale date is refused too",
+     !taken("Smukfest. Billetsalget åbner 4. november 2026.")
+     && !taken("Smukfest. Tickets go on sale 4 November 2026.")
+     && !taken("Smukfest. Salget åbner 4. november 2026 kl. 10.")
+     && !taken("Smukfest. Tilmeldingsfrist 1. december 2026."));
+  ok("and the numeric one still is", !taken("Smukfest. Billetsalget åbner 04.11.26."));
+  // A REAL DATE MUST STILL BE READ, which is what makes this narrow rather than
+  // a ban on pages that mention ticket sales.
+  ok("a festival's own written date is still read",
+     taken("Smukfest er tilbage i bøgeskoven 5. august 2027.")
+     && taken("Festivalen starter 4. august 2027 i bøgeskoven.")
+     && taken("Datoer: 4. august 2027.")
+     && taken("Billetsalg i bøgeskoven 4. august 2027."));
+  ok("the page-level reader is what decides a date with no position",
+     M.saleLabelledDateIn("Billetsalget åbner 4. november 2026.")
+     && !M.saleLabelledDateIn("Billetsalg i bøgeskoven 4. august 2027."));
+
+  // ── 4. THE FUTURE-YEAR CAP AGED FRESH PAGES BY THREE DECADES ────
+  //
+  // My cap DISCARDED the year signal when the newest year was in the future
+  // instead of taking the newest year up to now. So a page reading "Museet
+  // åbnede 12. maj 1998. © 2026" was current, and the same page with "Festival
+  // 2027" added became "about 340 months old" — a festival announcing next
+  // year's dates, which my own comment called the most ordinary page this app
+  // reads.
+  const NOW = Date.UTC(2026, 7, 12);
+  const fresh = (t) => factAge(t, NOW).perishableOk;
+  ok("a current page stays current when it also names a future year",
+     fresh("Museet åbnede 12. maj 1998. © 2026")
+     && fresh("Museet åbnede 12. maj 1998. © 2026 Festival 2027")
+     && fresh("Sidst opdateret 3. marts 2019. Program 2026 er klar. CO2-neutrale i 2030."));
+  // AND THE ORIGINAL BUG STAYS CLOSED: a future goal cannot make an old page
+  // look fresh either.
+  ok("a 2030 goal still cannot rescue a 2006 page",
+     !fresh("Museet blev indviet 12. marts 2006. Vi er klimaneutrale i 2030. Entré 15 kroner.")
+     && !fresh("Museet blev indviet 12. marts 2006. Entré 15 kroner.")
+     && !fresh("Priser gældende 2024. Entré 15 kroner."));
+
+  // ── 5. THE BOOKING CHIP WAS A REGEX OVER FREE PROSE ─────────────
+  //
+  // `desc` was in BOOKING_FIELDS, so the chip fired on things that are not the
+  // door — a tower climb, a café, the restaurant next door. That is
+  // A_THING_INSIDE one file along: I removed a hardcoded chip and replaced it
+  // with a prose-derived one wrong in BOTH directions, and bookingProblems then
+  // reported those rows as answered so they never reached the worklist either.
+  ok("prose no longer decides whether you can walk in",
+     bookingChip({ desc: "Free to wander. You can book online for the tower climb." }) === ""
+     && bookingChip({ desc: "The café is a popular drop-in for cyclists." }) === ""
+     && bookingChip({ desc: "The restaurant next door needs a reservation." }) === ""
+     && bookingChip({ desc: "Guided tours run by appointment; the grounds are open all day." }) === "");
+  ok("and desc is not a field this reads at all", !BOOKING_FIELDS.includes("desc"));
+  ok("while the field the writer fills still answers",
+     bookingChip({ bookingNote: "Timed entry, book ahead" }) === "Book ahead"
+     && bookingChip({ bookingNote: "No booking required" }) === "Walk in, no booking");
+
+  // ── 6. researchVoice WAS DELETING TRUE HISTORY ──────────────────
+  //
+  // "the sources", "the search" and "the research" are ordinary words in the
+  // history of a Danish town. My actor list included phrases a chronicler uses,
+  // so real sentences were being cut off published pages, silently, at render —
+  // and the audit then told Oliver to rewrite them.
+  ok("a town's own history survives",
+     !isResearchVoice("The claim to fame here is the light that drew the Skagen painters.")
+     && !isResearchVoice("Ribe is first mentioned in the sources in 854, and its market rights were confirmed by the king in 1269.")
+     && !isResearchVoice("The sources of the Gudenå river have been confirmed as lying in Tinnet Krat.")
+     && !isResearchVoice("The search for the wreck was abandoned in 1974."));
+  ok("and the pipeline's own voice is still cut",
+     isResearchVoice("The claim is not confirmed by the checked sources.")
+     && isResearchVoice("This claim could not be verified.")
+     && isResearchVoice("Our research could not confirm the date."));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
