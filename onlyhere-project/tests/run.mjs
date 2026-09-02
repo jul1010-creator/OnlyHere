@@ -58,7 +58,7 @@ writeFileSync(entry, `
   export { DINING_STYLES, DINING_STYLE_LABEL, diningStyleOf, diningStyleLabel, unstyledEntries, styleCoverage, STYLE_COVERAGE_MIN, showStyleFacet, buildFoodFacets, foodCitiesIn, FOOD_SORTS, byFoodPrice } from ${JSON.stringify(join(root, "src/utils/foodStyle.js"))};
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery, toggleFacetValue, isOptionOn, selectedValues } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
   export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
-  export { TIERS, TIER_VALUES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
+  export { TIERS, TIER_VALUES, TIER_RULE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { REGION_NAMES, REGION_PART, canonicalRegion, isRegion, regionPart, kommunerIn, kommuneAt, kommuneNameAt, regionAt, regionOf, kommuneOf, sameRegion, regionsPresent, describeRegion, danishAddressIn } from ${JSON.stringify(join(root, "src/utils/regions.js"))};
   export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
   export { TICKET_HUNT_PROMPT, ticketHuntUrls } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
@@ -1551,9 +1551,23 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // most the single type it excludes.
     ok("and it is derived from CONTENT_TYPES rather than typed out", /CONTENT_TYPES/.test(journeyRhs));
     is("naming only the type it leaves out", (journeyRhs.match(/"[^"]*"/g) || []), ['"essential"']);
-    // THREE gates, not two. The third was the journey research search, and this
-    // assertion is what found it: it was written expecting two and went red.
-    is("all three gates read the one list", (appSrc3.match(/PLACE_TYPES_WITH_A_JOURNEY\.includes\(sType\)/g) || []).length, 3);
+    // ── A TRIPWIRE, AND IT HAS NOW FIRED TWICE ──────────────────────
+    //
+    // Written expecting two, and going red is what found the third (the journey
+    // research search). It went red again on 2 Sep 2026 and found the fourth:
+    // the PAGE-READ gate, which had been hand-written as eight literal types
+    // with `nightStreet` missing from it. Fable found the consequence in six of
+    // Oliver's bar-street runs — NOT ONE PAGE WAS READ in any of them, because
+    // the one type they all were is the one type that list left out.
+    //
+    // Four gates now: the journey, the journey research search, the official
+    // -site search, and the page read. Keep it a count: a gate joining this
+    // family is worth a person looking at, and that is what this line is for.
+    is("all four gates read the one list", (appSrc3.match(/PLACE_TYPES_WITH_A_JOURNEY\.includes\(sType\)/g) || []).length, 4);
+    ok("and the page read is one of them, which is the hole it closed",
+       /PLACE_TYPES_WITH_A_JOURNEY\.includes\(sType\) && candidateUrls\.length > 0/.test(appSrc3));
+    ok("with no hand-written copy of that list left beside it",
+       !/\["food", "foodStreet", "night", "booking", "free", "town", "festival", "nightTown"\]/.test(appSrc3));
     ok("and none keeps a hand-written copy of it",
        !/\["town", "festival", "free", "booking"\]\.includes\(sType\)/.test(appSrc3));
     // And the measuring gate needs a destination as well as a type. Without the
@@ -4528,7 +4542,21 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the measured area is stated to the search models",
      /WHERE THIS IS, ALREADY MEASURED: \$\{\[region, kommune/.test(app3));
   ok("and it is named as a measurement rather than a fact to repeat",
-     /treat it as settled and use it to NARROW what you look at/.test(app3));
+     /treat it as settled/.test(app3) && /use it to NARROW what you look at/.test(app3));
+  // ── BUT ONLY WHEN IT WAS MEASURED, 2 SEP 2026 ────────────────────
+  //
+  // Fable, on six bar-street runs: two were pinned to Copenhagen off a postcode
+  // that appeared ONCE in a snippet, and this sentence then told the model and
+  // the fact-checker it had come from a map lookup on the place's own
+  // coordinate. So the checker fought the writer's CORRECT Aarhus description
+  // of Klostergade and the rewrite could not fix what the prompt insisted on.
+  // A guess presented as a measurement is worse than a guess.
+  ok("a location read out of the research says so instead",
+     /read out of an address in the research rather than measured/.test(app3));
+  ok("and invites the model to contradict it rather than forcing a fit",
+     /say so plainly rather than forcing it to fit/.test(app3));
+  ok("the two are chosen by whether it was actually measured",
+     /const measured = typeof where === "object" \? where\?\.measured !== false : true;/.test(app3));
   // The guide pipeline runs for visitors, where no Studio state exists, so the
   // list is loaded app-wide rather than threaded through React state.
   ok("the list is loaded on mount, not only in Studio", /ensureSourcesLoaded\(\)/.test(app3));
@@ -40749,6 +40777,89 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      isResearchVoice("The claim is not confirmed by the checked sources.")
      && isResearchVoice("This claim could not be verified.")
      && isResearchVoice("Our research could not confirm the date."));
+}
+
+// ── "HOW DOES THE AI DETERMINE THE RATING?" ─────────────────────────
+//
+// Oliver, 2 Sep 2026. It did not. The drafting prompts handed the model four
+// labels and a slash, with no criteria at all — while `themes`, the field
+// directly beside it, got a full paragraph of judgement.
+{
+  const { TIER_RULE, TIER_VALUES, TIERS, tierOf, studioPrompts } = M;
+  const town = studioPrompts("Ribe").town;
+  const fest = studioPrompts("Roskilde Festival").festival;
+
+  // ── ONE VOCABULARY, NOT TWO SPELLINGS OF IT ─────────────────────
+  // The two prompts carried the list as separate literals and had already
+  // drifted: "Can't Miss Out" in one, "Can't miss out" in the other.
+  ok("both prompts ask for the shared values",
+     town.includes(TIER_VALUES.join(" / ")) && fest.includes(TIER_VALUES.join(" / ")));
+  ok("and neither keeps its own copy of the list",
+     !/Can't miss out \/ Highly Recommended/.test(town + fest));
+  // Every value the prompt asks for has to pass the gate that reads it back.
+  ok("everything asked for is something tierOf accepts",
+     TIER_VALUES.every(v => !!tierOf({ tier: v })));
+
+  // ── THE SCALE IS DISTANCE, WHICH IS THE DECISION IT INFORMS ─────
+  // A reader does not want to know whether Gemlyx liked a place; they want to
+  // know how far out of their way to go. Written that way the tiers stop being
+  // adjectives and become a question with a checkable answer.
+  ok("the rule reaches both prompts", town.includes(TIER_RULE) && fest.includes(TIER_RULE));
+  ok("every tier has a meaning, not just a name",
+     TIERS.every(t => TIER_RULE.includes(`"${t.value}"`) && TIER_RULE.split(`"${t.value}" — `)[1]?.length > 40));
+  ok("and the meanings are about distance", /worth building a trip around/.test(TIER_RULE)
+     && /hour's detour/.test(TIER_RULE) && /not a reason to travel at all/.test(TIER_RULE));
+
+  // ── THE ANTI-INFLATION HALF, WHICH IS THE ONE THAT BITES ────────
+  // A model judging one place at a time with no view of the others drifts
+  // upward every draft, and a scale where everything is near the top tells a
+  // reader nothing.
+  ok("the shape of the distribution is said out loud", /MOST PLACES ARE NOT AT THE TOP/.test(TIER_RULE));
+  ok("and which way to fall when unsure", /pick the LOWER one/.test(TIER_RULE));
+  ok("with the reason, so it is a judgement and not a quota",
+     /overselling a place costs somebody a day of their trip/.test(TIER_RULE));
+  // A place's own marketing is not evidence about it.
+  ok("self-description is refused as evidence", /that is not evidence/.test(TIER_RULE));
+  // DERIVED FROM TIERS, so a fifth tier cannot exist with no rule and a rule
+  // cannot outlive its tier.
+  const themes = readFileSync(join(root, "src/utils/placeThemes.js"), "utf8");
+  ok("the rule is built from the tier list rather than typed beside it",
+     /\$\{TIERS\.map\(t => `- "\$\{t\.value\}" — \$\{TIER_MEANING\[t\.id\]\}`\)\.join/.test(themes));
+  is("and every tier has a meaning entry",
+     TIERS.filter(t => !new RegExp(`${t.id}:`).test(themes)).map(t => t.id), []);
+}
+
+// ── ONE STRAY POSTCODE IS NOT A LOCATION ────────────────────────────
+//
+// Fable, 2 Sep 2026, on six bar-street runs. Two were pinned to the wrong city:
+// "Overgade & The City Center" is Odense's bar street and "Frederiksgade &
+// Klostergade" is Aarhus's, and both landed in Copenhagen because a Copenhagen
+// postcode appeared ONCE in an unscoped snippet.
+{
+  const { danishAddressIn } = M;
+  const appP = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // danishAddressIn HAS ALWAYS COUNTED THE MENTIONS. It sorts on them and hands
+  // the number back; the caller never read it. The evidence was in the return
+  // value all along.
+  const once = danishAddressIn("Book at City Hotel Apartments, 1203 Copenhagen. Overgade 45, 5000 Odense C. Rabalder, 5000 Odense C.");
+  is("the town mentioned most wins", once.town, "Odense C");
+  ok("and the count travels with it", once.mentions === 2);
+  const stray = danishAddressIn("Hotel booking: 1203 Copenhagen. Overgade 45, 5000 Odense C.");
+  ok("a one-mention town among others is not the only one", stray.only === false);
+  const solo = danishAddressIn("Overgade 45, 5000 Odense C.");
+  ok("but the only town in the research is", solo.only === true && solo.mentions === 1);
+
+  // TWO MENTIONS, OR THE ONLY TOWN. A real address block repeats; a town
+  // appearing once beside others is a passing reference to somewhere else.
+  ok("the caller now reads the count",
+     /const corroborated = !!found && \(found\.mentions > 1 \|\| found\.only\);/.test(appP));
+  ok("and only places the draft when it holds", /if \(found && corroborated\) \{/.test(appP));
+  // REFUSED OUT LOUD. "No region is known" is a state this pipeline handles
+  // honestly; a wrong one reads as a normal draft and is wrong all the way down.
+  ok("a refusal is a step in the log, not a silence",
+     /if \(found && !corroborated\) \{[\s\S]{0,400}note\("Where this place is, second attempt"/.test(appP));
+  ok("marked as a gap rather than a clean pass", /outcome: "found", used: false,[\s\S]{0,300}appears once in the research/.test(appP));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

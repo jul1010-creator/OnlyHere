@@ -336,7 +336,11 @@ export const danishAddressIn = (text) => {
   }
   if (!counts.size) return null;
   const best = [...counts.values()].sort((a, b) => b.n - a.n || a.at - b.at)[0];
-  return { postcode: best.code, town: best.town, mentions: best.n, address: `${best.code} ${best.town}` };
+  // `only` is the other half of the corroboration question and the caller could
+  // not answer it from `mentions` alone: one mention of the ONLY town in the
+  // research is the best evidence there is, while one mention among six is a
+  // passing reference to somewhere else. Both are mentions:1.
+  return { postcode: best.code, town: best.town, mentions: best.n, only: counts.size === 1, address: `${best.code} ${best.town}` };
 };
 
 // One line for a run log or the Studio panel: what we decided and from what.

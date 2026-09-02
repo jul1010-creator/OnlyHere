@@ -146,6 +146,54 @@ export const TIERS = [
 // labels, which is the whole bug above.
 export const TIER_VALUES = TIERS.map(t => t.value);
 
+// ── AND WHAT EACH ONE MEANS, WHICH NOTHING HAD EVER SAID ────────────
+//
+// Oliver, 2 Sep 2026, asking how the AI decides these. It did not decide. The
+// drafting prompts handed the model this and nothing else:
+//
+//   "tier": "Can't Miss Out / Highly Recommended / Worth Considering / Best If
+//            You're Already Nearby"
+//
+// Four labels, no criteria — pick one. Meanwhile `themes`, the field sitting
+// directly beside it, gets a full paragraph of judgement: "almost everywhere in
+// Denmark has a church and a bakery, so history and food only belong here if
+// they are a real reason to go. Pick fewer rather than more." The field that
+// decides whether somebody drives four hours got one line and a slash list.
+//
+// ── THE SCALE IS DISTANCE, BECAUSE THAT IS THE DECISION IT INFORMS ──
+//
+// A reader does not want to know whether Gemlyx liked a place. They want to
+// know how far out of their way it is worth going. Written that way the tiers
+// stop being adjectives and become a question with a checkable answer, and the
+// difference between two of them is a number of minutes rather than a mood.
+//
+// Derived from TIERS rather than typed beside it, so a fifth tier cannot exist
+// with no rule and a rule cannot survive its tier being removed.
+const TIER_MEANING = {
+  must: "worth building a trip around. Somebody with one week in Denmark should reorder their plans to include it. There are only a handful of these in the whole country — if you are picking it for a second place in the same region, it is not this.",
+  high: "worth an hour's detour from a route they were already taking. Not a reason to come to Denmark, and a real reason to change the day.",
+  worth: "worth stopping for if they are passing anyway, or if it matches an interest they already have. The honest middle, and where most good places belong.",
+  nearby: "not a reason to travel at all. Real, and worth an hour once they are in the town for something else.",
+};
+
+// ── AND THE ANTI-INFLATION RULE, WHICH IS THE HALF THAT BITES ───────
+//
+// A scale where everything is near the top is not a scale, it is decoration,
+// and a model asked to judge one place at a time with no reference to the
+// others will drift upward every draft. So the prompt says the shape of the
+// distribution out loud, and says which way to fall when it is unsure —
+// downward, because overselling a place costs a reader a day and underselling
+// it costs them nothing they will ever know about.
+export const TIER_RULE = `HOW TO PICK THE TIER, and this is Gemlyx's own judgement rather than a fact to be researched — it is what the cards, the region picker and the trip planner all rank on.
+
+The scale is DISTANCE, not enthusiasm: how far out of their way should somebody go for this?
+
+${TIERS.map(t => `- "${t.value}" — ${TIER_MEANING[t.id]}`).join("\n")}
+
+MOST PLACES ARE NOT AT THE TOP. A country has a handful of "Can't Miss Out" places, not one per region, and a scale where everything is near the top tells a reader nothing. If two tiers both seem arguable, pick the LOWER one: overselling a place costs somebody a day of their trip, underselling it costs them nothing they will ever find out about.
+
+Judge the place as it actually is, not as its own marketing describes it. A town's website calls it unmissable; that is not evidence. What matters is whether a stranger who went there on your word would feel the journey was repaid.`;
+
 export const tierOf = (entry) => {
   const t = String(entry?.tier ?? "").trim();
   if (!t) return null;

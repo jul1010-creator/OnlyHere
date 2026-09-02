@@ -639,8 +639,16 @@ const researchRules = (type, where) => {
   // something worth it spending words restating in the entry.
   const region = typeof where === "object" ? String(where?.region || "").trim() : "";
   const kommune = typeof where === "object" ? String(where?.kommune || "").trim() : "";
+  // ── AND ONLY SAY "MEASURED" WHEN IT WAS ────────────────────────
+  // Fable, 2 Sep 2026: two bar streets were pinned to Copenhagen off a postcode
+  // read out of a snippet, and this sentence then told the model and the
+  // fact-checker it came from a map lookup on the place's OWN coordinate. So
+  // the checker fought the writer's correct Aarhus description of Klostergade,
+  // and the rewrite could not fix what the prompt insisted on. A guess
+  // presented as a measurement is worse than a guess.
+  const measured = typeof where === "object" ? where?.measured !== false : true;
   const area = region || kommune
-    ? `\n\nWHERE THIS IS, ALREADY MEASURED: ${[region, kommune && `${kommune} Kommune`].filter(Boolean).join(", ")}, in Denmark. That came from a map lookup on this place's own coordinate before this search was written, so treat it as settled and use it to NARROW what you look at. If a page you find is about a place of the same or a similar name somewhere else in Denmark, it is the wrong page and it is not evidence about this one. Do not restate this in your answer; it is here to aim the search.`
+    ? `\n\nWHERE THIS IS, ALREADY MEASURED: ${[region, kommune && `${kommune} Kommune`].filter(Boolean).join(", ")}, in Denmark. ${measured ? "That came from a map lookup on this place's own coordinate before this search was written, so treat it as settled" : "That was read out of an address in the research rather than measured from this place's own coordinate, so it is the best guess available and NOT settled \u2014 if what you find says this place is somewhere else in Denmark, say so plainly rather than forcing it to fit"} and use it to NARROW what you look at. If a page you find is about a place of the same or a similar name somewhere else in Denmark, it is the wrong page and it is not evidence about this one. Do not restate this in your answer; it is here to aim the search.`
     : "";
   return `${RESEARCH_SOURCE_RULES}${both}${area}${sourceRulesBlock(founderSources, type, where)}`;
 };
@@ -3214,7 +3222,39 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       if (!placed) {
         try {
           const found = danishAddressIn(context);
-          if (found) {
+          // ── AND ONE STRAY POSTCODE IS NOT A LOCATION ──────────────
+          //
+          // Fable, 2 Sep 2026, reading six bar-street runs. Two were pinned to
+          // the wrong city: "Overgade & The City Center" is Odense's bar street
+          // and "Frederiksgade & Klostergade" is Aarhus's, and both landed in
+          // Copenhagen because a Copenhagen postcode APPEARED ONCE in an
+          // unscoped snippet — off a hotel page, and in Overgade's case the
+          // same hotel Google Places had been refused for one step earlier.
+          //
+          // Everything downstream trusted it: the founder sources were scoped
+          // to Copenhagen, the journey was measured from Copenhagen, and the
+          // fact-checker fought the writer's correct Aarhus description.
+          //
+          // danishAddressIn HAS ALWAYS RETURNED `mentions`. It counts them,
+          // sorts on them, and hands the number back — and this caller never
+          // read it. The evidence needed to catch this was in the return value
+          // all along, which is this project's signature failure in a new hat.
+          //
+          // TWO MENTIONS, OR THE ONLY TOWN IN THE RESEARCH. A real address
+          // block repeats — the venue line, the contact line, the footer —
+          // while a town appearing once beside others is a passing reference to
+          // somewhere else. Refused OUT LOUD, because "no region is known" is a
+          // state this pipeline already handles honestly and a wrong one is not.
+          const corroborated = !!found && (found.mentions > 1 || found.only);
+          if (found && !corroborated) {
+            note("Where this place is, second attempt", {
+              provider: "fetch", outcome: "found", used: false,
+              detail: "a Danish postal address read out of the research already gathered",
+              got: `"${found.address}" appears once in the research beside other towns, so it was NOT used`,
+              why: "A postcode mentioned once is usually somebody else's address on a page about something else. Taking it scopes every search, the journey and the fact-checker to the wrong city, which reads as a normal draft and is wrong all the way down.",
+            });
+          }
+          if (found && corroborated) {
             // The town first, because a venue geocoded WITH its town is a real
             // coordinate, and the bare postcode is only ever the town centre.
             let coords = await geocodePlace(`${name}, ${found.town}`);
@@ -4280,7 +4320,27 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // why there are still two predicates, and they now live together in
       // utils/sourcePolicy.js where the difference is written down.
       const isPlaceType = ["town", "festival", "nightTown"].includes(sType);
-      if (["food", "foodStreet", "night", "booking", "free", "town", "festival", "nightTown"].includes(sType) && candidateUrls.length > 0) {
+      // ── AND nightStreet WAS THE ONE TYPE LEFT OUT OF THIS LIST ────
+      //
+      // Fable, 2 Sep 2026, auditing six bar-street runs Oliver had just
+      // published: NOT ONE PAGE WAS READ IN ANY OF THEM. This list had food,
+      // foodStreet, night, nightTown, booking, free, town and festival — every
+      // type but nightStreet. So a bar street was written from Tavily snippets
+      // and Perplexity prose alone, and it shows all through those logs: twelve
+      // "Prices against the official site" steps skipped, twelve "what the
+      // pages say a ticket costs" empty, and not one source ever classed
+      // official, because none was ever opened.
+      //
+      // This is the fault this file already has a scar for, three hundred lines
+      // up: "Four lists, one omission, which is not four mistakes. It is one
+      // hand-written list copied four times." That comment introduced the
+      // derived sets — and then this list stayed hand-written.
+      //
+      // PLACE_TYPES_WITH_A_JOURNEY is CONTENT_TYPES minus essential, which is
+      // exactly the rule this line was reaching for: everything that is a place
+      // has pages worth reading, and an essential is not a place. Derived, so a
+      // tenth content type cannot be left out of it in silence.
+      if (PLACE_TYPES_WITH_A_JOURNEY.includes(sType) && candidateUrls.length > 0) {
         // ── ONLY A WORD THAT IDENTIFIES THE PLACE COUNTS ──────────────
         // This was every word of four letters or more, so "Ribelund Festival"
         // matched keramikfestival.dk on the word "festival" and the pipeline
