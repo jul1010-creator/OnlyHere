@@ -469,12 +469,38 @@ export const transitProblems = (prose, { parts, drivingMins } = {}) => {
 // connection could not be confirmed" is a statement about this run and is
 // exactly what the pipeline is supposed to say. "There is no connection" is a
 // statement about Denmark. Only the second is caught.
+// ── AND "there's" IS NOT "there\u2009is" ────────────────────────────────
+//
+// Oliver's Vestergade and Aarhus Riverfront runs, 1 Sep. Both drafts carried a
+// flat absence claim — "there\u2019s no real after-hours scene once the bars shut"
+// — and both passed this gate, which exists for exactly that sentence.
+//
+// Three separate holes, all in the same few characters:
+//
+//   `there\s+(?:is|are|'s)` demanded WHITESPACE before the 's, and nobody
+//   writes "there 's". The apostrophe form has therefore never matched once.
+//   It only accepted a STRAIGHT apostrophe, and a model writing English prose
+//   types the curly one.
+//   `(?:\w+\s+){0,4}` cannot cross a hyphen, so "real after-hours scene"
+//   broke the filler two words short of the noun.
+//
+// And the transport list below had no apostrophe form at all.
+//
+// Written once and read by both lists, because two lists of the same English
+// contraction will drift, and these two already had.
+const THERE_IS_NO = `there(?:\\s+(?:is|are)|\\s*['\u2019]s)\\s+no`;
+// Filler words, hyphens included. "after-hours", "sit-down", "late-night" are
+// single words to a reader and two to \\w+.
+const GAP = (n) => `(?:[\\w-]+\\s+){0,${n}}`;
+// isn't / isn\u2019t / isnt, all three.
+const NOT = `n[o'\u2019]?t`;
+
 const ABSENCE = [
-  /\b(?:has|have|with)\s+no\s+(?:\w+\s+){0,3}(?:train station|railway station|station|stop|bus|buses|public transport|transport|rail)\b/i,
-  /\bthere\s+(?:is|are)\s+no\s+(?:\w+\s+){0,3}(?:train station|railway station|station|stop|bus|buses|public transport|transport|rail)\b/i,
-  /\bno\s+(?:\w+\s+){0,3}(?:train station|railway station|public transport|transport links?|rail link|rail connection|bus route)\b/i,
-  /\b(?:is|are)\s*n[o']?t\s+(?:\w+\s+){0,2}(?:mapped|served|connected|accessible by public transport)\b/i,
-  /\bnot\s+(?:\w+\s+){0,2}(?:reachable|served)\s+by\s+(?:public transport|train|bus)\b/i,
+  /\b(?:has|have|with)\s+no\s+(?:[\w-]+\s+){0,3}(?:train station|railway station|station|stop|bus|buses|public transport|transport|rail)\b/i,
+  new RegExp(`\\b${THERE_IS_NO}\\s+${GAP(3)}(?:train station|railway station|station|stop|bus|buses|public transport|transport|rail)\\b`, "i"),
+  /\bno\s+(?:[\w-]+\s+){0,3}(?:train station|railway station|public transport|transport links?|rail link|rail connection|bus route)\b/i,
+  new RegExp(`\\b(?:is|are)\\s*${NOT}\\s+${GAP(2)}(?:mapped|served|connected|accessible by public transport)\\b`, "i"),
+  /\bnot\s+(?:[\w-]+\s+){0,2}(?:reachable|served)\s+by\s+(?:public transport|train|bus)\b/i,
   /\bonly\s+(?:option|way)\s+is\s+to\s+drive\b/i,
 ];
 // Said about the RESEARCH rather than about the world. These are the sentences
@@ -514,17 +540,28 @@ const HEDGED = /\b(?:could ?n[o']?t be|was ?n[o']?t|were ?n[o']?t|not)\s+(?:\w+\
 // different: the transport version can point at nearestStation and at Google
 // returning no route, and this one has to point at the app's own library.
 const ABSENCE_CULTURE = [
-  /\bthere\s+(?:is|are|'s)\s+no\s+(?:\w+\s+){0,4}(?:festival|festivals|carnival|event|events|market|markets|museum|museums|nightlife|bars?|restaurants?|scene)\b/i,
-  /\b(?:has|have|with)\s+no\s+(?:\w+\s+){0,4}(?:festival|festivals|carnival|event|events|market|markets|museum|museums|nightlife|scene)\b/i,
-  /\bno\s+(?:single\s+)?(?:\w+\s+){0,3}(?:annual|yearly|major|big|real|proper|notable|signature)\s+(?:\w+\s+){0,2}(?:festival|carnival|event|celebration)\b/i,
-  /\bnothing\s+(?:\w+\s+){0,3}(?:on|happening|going on)\s+(?:in|at|during)\b/i,
-  /\b(?:is|are)\s*n[o']?t\s+(?:known|famous|noted)\s+for\b/i,
+  new RegExp(`\\b${THERE_IS_NO}\\s+${GAP(4)}(?:festival|festivals|carnival|event|events|market|markets|museum|museums|nightlife|bars?|restaurants?|scene)\\b`, "i"),
+  /\b(?:has|have|with)\s+no\s+(?:[\w-]+\s+){0,4}(?:festival|festivals|carnival|event|events|market|markets|museum|museums|nightlife|scene)\b/i,
+  /\bno\s+(?:single\s+)?(?:[\w-]+\s+){0,3}(?:annual|yearly|major|big|real|proper|notable|signature)\s+(?:[\w-]+\s+){0,2}(?:festival|carnival|event|celebration)\b/i,
+  /\bnothing\s+(?:[\w-]+\s+){0,3}(?:on|happening|going on)\s+(?:in|at|during)\b/i,
+  new RegExp(`\\b(?:is|are)\\s*${NOT}\\s+(?:known|famous|noted)\\s+for\\b`, "i"),
 ];
+
+// ── AND "no shortage of" IS AN ABUNDANCE ────────────────────────────
+//
+// English builds several idioms out of "no X" that assert the OPPOSITE of an
+// absence. They have always matched these patterns and it never cost anything
+// while the finding only went to the founder's tray. It costs something now:
+// these findings are handed to the correction as contradicted claims, so a
+// false one buys a rewrite of a correct sentence, which is the failure the
+// out-of-scope filter was built to stop on the checker's side.
+const ABUNDANCE = /\bno\s+(?:shortage|lack|end|want)\s+of\b|\bnot\s+short\s+of\b/i;
 
 export const absenceClaims = (prose) => {
   const out = [];
   for (const s of sentences(prose)) {
     if (HEDGED.test(s)) continue;
+    if (ABUNDANCE.test(s)) continue;
     if (ABSENCE.some(re => re.test(s))) {
       out.push(`"${s.trim().slice(0, 120)}" states that something does not exist. Nothing in this run measured an absence and nothing could: an empty nearestStation means the pipeline does not know, and Google returning no itinerary means it could not route this, neither of which is evidence that no station or no service exists. Say it could not be confirmed, or take the sentence out.`);
       continue;

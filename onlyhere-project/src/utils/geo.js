@@ -30,14 +30,68 @@ export const checkNightTransport = async (originLat, originLon, destLat, destLon
 // touched by OpenAI, instead of asking the model to state a lat/lon in its own
 // JSON (which is exactly where coordinate hallucination happens — it "smooths"
 // a real number into something that reads naturally but isn't the real one).
+// ── AND THE ANSWER WAS ACCEPTED BECAUSE AN ARRAY HAD AN ELEMENT ─────
+//
+// Oliver's Meatpacking District run, 1 Sep. Step 1: "55.6747, 12.5744 via
+// Nominatim, on the name". That is Rådhuspladsen, the middle of Copenhagen,
+// 0.4 km from the app's own TRAVEL_ORIGIN. Kødbyen is over a kilometre away in
+// Vesterbro. The nearest arrival point was then found from that point
+// (Rådhuspladsen), the journey was measured to it (0.5 km, "7 mins"), and the
+// writer was handed all of it as verified location data. Three steps later the
+// same pipeline geocoded Google's address for the same subject and landed at
+// Dybbølsbro, which is Kødbyen's real station.
+//
+// The only test on the first answer was `if (coords)`. Fifty lines further down
+// in App.jsx, GOOGLE's answer goes through listingMatchesSubject — the Rungsted
+// / Ringsted fix, written because one letter is a different town. Nominatim's
+// answer went through nothing, and it is the one that runs FIRST and scopes
+// everything after it.
+//
+// ── WHAT THE ANSWER ALREADY CONTAINED, AND THIS FUNCTION THREW AWAY ─
+//
+// A Nominatim hit carries display_name, name, class, type, addresstype and
+// osm_type. This returned two floats. So the log line "via Nominatim, on the
+// name" could not say WHAT Nominatim had found, and no caller could ask.
+//
+// Kept now, and nothing downstream is obliged to read them: every existing
+// caller destructures lat and lon and is unaffected. geocodePostcode two
+// screens below has said the rule since 14 August — "the answer is checked
+// against the question" — and this is that function's other half.
 export const geocodePlace = async (query) => {
   try {
-    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ", Denmark")}&format=json&limit=1&countrycodes=dk`);
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ", Denmark")}&format=json&limit=1&countrycodes=dk&addressdetails=1&namedetails=1`);
     const data = await r.json();
     if (!data?.[0]) return null;
-    return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+    const hit = data[0];
+    const lat = parseFloat(hit.lat), lon = parseFloat(hit.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    return {
+      lat, lon,
+      // What it thinks it found, in its own words, so a caller can refuse it
+      // and a log line can say why.
+      found: String(hit.display_name || hit.name || "").trim(),
+      kind: String(hit.addresstype || hit.type || hit.class || "").trim().toLowerCase(),
+      names: [...new Set([hit.name, ...Object.values(hit.namedetails || {})].map(v => String(v || "").trim()).filter(Boolean))],
+    };
   } catch { return null; }
 };
+
+// ── A TOWN IS NOT AN ANSWER TO "WHERE IS THIS BAR STREET" ───────────
+//
+// Nominatim's own classification of what it matched. When it cannot find the
+// thing asked for it happily returns the settlement the query mentions, which
+// is a correct answer to a question nobody asked and the single wrong
+// coordinate that passes every check this app has: App.jsx already writes that
+// down — "A town centre is zero kilometres from the town it is the centre of."
+//
+// So the class is the check. It costs one field on a response we were already
+// paying for, and it is the only signal that separates "found the place" from
+// "found the city the place is in".
+const SETTLEMENT = new Set([
+  "city", "town", "village", "hamlet", "borough", "suburb", "quarter", "neighbourhood",
+  "municipality", "county", "state", "region", "province", "administrative", "postcode",
+]);
+export const geocodeIsASettlement = (hit) => SETTLEMENT.has(String(hit?.kind || "").trim().toLowerCase());
 
 // ── A POSTCODE IS NOT A SEARCH TERM ─────────────────────────────────
 //

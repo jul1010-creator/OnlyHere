@@ -34,7 +34,7 @@
 // timetable, which is the single error class this project has spent the most
 // time on. The block below says so out loud, every time.
 
-import { samePlaceName, otherNameFor, variantsOf, fold, containsName, distinctiveWords } from "./danishNames";
+import { samePlaceName, otherNameFor, variantsOf, spellingsIn, fold, containsName, distinctiveWords } from "./danishNames";
 import { canonicalRegion, isRegion, regionPart, REGION_NAMES } from "./regions";
 
 const clean = (v) => String(v == null ? "" : v).trim();
@@ -326,10 +326,32 @@ export const sourceIsAboutPlace = (snippet, { name, town, url = "", ownHost = ""
   // was typed and a leading-article variant of it still works.
   const typed = [String(name || ""), ...(Array.isArray(alsoKnownAs) ? alsoKnownAs : [])]
     .map(v => String(v || "").trim()).filter(Boolean);
-  const spellings = [...new Set(typed.flatMap(v => {
+  // ── AND "X (Y)" IS TWO NAMES, NOT ONE LONG ONE ─────────────────
+  //
+  // The Latin Quarter run, 1 Sep: about seventy pages fetched, ONE survived
+  // this filter, and the entry published with a single source under a heading
+  // promising the reader how we know. Nothing was wrong with the pages. The
+  // name was "The Latin Quarter (Latinerkvarteret)" and this list held only
+  // that one contiguous phrase, which no page writes — not the English one,
+  // not the Danish one, not the page that says "The Latin Quarter (Danish:
+  // Latinerkvarteret)".
+  //
+  // A founder typing a parenthetical is writing down the OTHER name for the
+  // place, and that is the spelling the local pages use. See spellingsIn.
+  const halfNames = typed.flatMap(v => spellingsIn(v).slice(1));
+  const spread = (v) => {
     const core = nameCore(v);
     return [...variantsOf(v, { includeSights: true }), ...(core ? [core] : [])];
-  }))];
+  };
+  const spellings = [...new Set([...typed, ...halfNames].flatMap(spread))];
+  // ── BUT A HALF IS WEAKER EVIDENCE THAN THE WHOLE ────────────────
+  //
+  // The reason he wrote both halves is that either alone is ambiguous — that is
+  // what a disambiguator IS. "Latin Quarter" is distinctive enough to skip the
+  // corroboration below on its own, and it is also the name of a famous quarter
+  // of Paris. So a page matched only on a half still has to be corroborated by
+  // the town or by the host, exactly as an ordinary name is.
+  const fromAHalf = new Set(halfNames.flatMap(spread).map(v => fold(v)));
   // WHICH spellings the page used, not merely whether one of them did. The
   // difference decides the next line, and getting it wrong accepted a railway
   // page: "Trainn" is a typo of an ordinary-word venue name and is itself
@@ -341,7 +363,7 @@ export const sourceIsAboutPlace = (snippet, { name, town, url = "", ownHost = ""
   // Distinctive on the spelling the page used. A name that identifies itself
   // needs no second signal; a typo of an ordinary word identifies nothing and
   // never gets to claim it does.
-  if (matched.some(v => nameIsDistinctive(v))) return true;
+  if (matched.some(v => nameIsDistinctive(v) && !fromAHalf.has(fold(v)))) return true;
   // An ordinary name has to be corroborated. The town is the strongest signal
   // and the one always available; the host containing a distinctive word from
   // the name is the second.

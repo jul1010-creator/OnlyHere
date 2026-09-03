@@ -204,6 +204,40 @@ export const numbersTraceable = (value, research) => {
   return { ok: missing.length === 0, missing };
 };
 
+// ── AND "FREE" HAS NO DIGITS, WHICH IS HOW IT GOT PAST ──────────────
+//
+// Four bar-street runs on 1 Sep, four extracted priceNotes, four different
+// phrasings of the same fact: "Free public space", "Free entry", "Free entry",
+// "Free to visit; no admission price applies". Each was logged as "believed the
+// research (extracted), overruled an empty field", under the rule "a value
+// stated on a page beats one composed by a writer, and a value nobody stated
+// stays empty". Nobody checked whether a page stated it. numbersTraceable
+// returns ok for anything with no digits, and that WAS the whole verification.
+//
+// On the Vestergade run it cost more than a wrong field. The writer's own
+// uncertainty said "No specific cover charge or beer price for Vestergade
+// itself was found in the research" — the honest answer — and the extraction
+// deleted it as stale on the strength of this unverified value.
+//
+// ── WHAT CANNOT CHANGE IN TRANSLATION, FOR A FREE CLAIM ─────────────
+//
+// The comment above has the rule: check what survives translation. For a
+// figure that is the digits. For "free" it is the CONCEPT, and the concept has
+// a small bilingual vocabulary that a page charging money does not use.
+//
+// Bare "free" is not enough as the witness: "free cancellation", "free wifi"
+// and "free walking tour" all appear on tourist pages about places that charge
+// at the door. So the witness needs a door word beside it, in either language.
+const FREE_AT_THE_DOOR = /(?:gratis|fri)\s*(?:adgang|entr[ée]|indgang)|free\s+(?:entry|entrance|admission|to\s+(?:enter|visit))|(?:no|ingen)\s+(?:entry|admission|cover|entr[ée])(?:\s*(?:fee|charge|price|betaling))?|no\s+ticket\s+required/i;
+
+export const freeClaimTraceable = (value, research) => {
+  const v = String(value || "");
+  // Only a claim that this place is free to get into. A field saying nothing
+  // about the door is not this rule's business.
+  if (!FREE_AT_THE_DOOR.test(v) && !/^\s*free\b/i.test(v)) return { ok: true };
+  return { ok: FREE_AT_THE_DOOR.test(String(research || "")) };
+};
+
 export const mergeGlance = (draft, values, fields, research = "") => {
   const before = draft || {};
   const out = { ...before };
@@ -243,6 +277,11 @@ export const mergeGlance = (draft, values, fields, research = "") => {
       const trace = numbersTraceable(next, research);
       if (!trace.ok) {
         rejected.push({ field: f, value: next, missing: trace.missing });
+        continue;
+      }
+      // The digit-free half of the same rule. See freeClaimTraceable.
+      if (!freeClaimTraceable(next, research).ok) {
+        rejected.push({ field: f, value: next, missing: ["free"] });
         continue;
       }
     }

@@ -355,6 +355,9 @@ export const readInventedCheck = (text) => {
 // nothing at all. So an anchor counts only if it was in the draft BEFORE the
 // correction: that is what makes it the draft's claim rather than the checker's
 // commentary. Same shape as nameCore's guard, for the same reason.
+const BARE_NUMBER = /^\d+$/;
+const UNIT_AFTER = "(?:dkk|kr|kroner|eur|usd|%|min|mins|minutes|hours?|hrs?|km|m\\b|people|guests|seats|rooms|km/t)";
+
 const FIGURES = /\d{2,}/g;
 const QUOTED = /"([^"]{4,90})"|“([^”]{4,90})”/g;
 
@@ -369,7 +372,48 @@ const anchorsOf = (finding) => {
   return [...out];
 };
 
-const hasAnchor = (text, anchor) => String(text || "").toLowerCase().includes(String(anchor).toLowerCase());
+// ── AND "late" IS INSIDE "chocolate" ────────────────────────────────
+//
+// Two of Oliver's four bar-street runs on 1 Sep ended on the red banner, and
+// both were false. Aarhus Riverfront: `1 still there ... "late"`. Latin Quarter:
+// `1 still there ... "13"`. Neither claim was in the redrafted text.
+//
+// This was an unbounded substring test. "late" is inside later, plate, isolated,
+// translate and chocolate; "13" is inside 1913, 130 kr and 13:00. A bar-street
+// draft that contains none of those does not exist, so for any finding whose
+// only anchor is one short token the answer was decided before the rewrite ran.
+//
+// ── AND THE FILE ALREADY KNEW THE RULE ──────────────────────────────
+//
+// anchorIsUseful admits a bare number only when the FINDING attaches a unit to
+// it: "327 DKK" is a value, "1863" is a date. That is exactly right and it was
+// only half applied — the number was admitted with its unit and then looked for
+// without one. The test that admits an anchor and the test that decides it
+// survived have to be the same test, or the second one is measuring something
+// the first one never claimed.
+//
+// A PHRASE STILL MATCHES AS A SUBSTRING, deliberately. A quoted sentence is a
+// fingerprint and a rewrite that keeps it keeps it whole; bounding it would
+// only break on the trailing punctuation the checker happened to include.
+const isOneToken = (a) => !/\s/.test(String(a || "").trim());
+const escapeRx = (a) => String(a).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export const hasAnchor = (text, anchor, finding = "") => {
+  const hay = String(text || "");
+  const a = String(anchor || "").trim();
+  if (!a) return false;
+  if (!isOneToken(a)) return hay.toLowerCase().includes(a.toLowerCase());
+  // A bare number is only a claim WITH its unit, so it only survives with one.
+  if (BARE_NUMBER.test(a)) {
+    try { return new RegExp(`\\b${escapeRx(a)}\\s*${UNIT_AFTER}`, "i").test(hay); }
+    catch { return false; }
+  }
+  // One word, on its own boundaries. \b is ASCII in JS, so a Danish name like
+  // Kødbyen would get no boundary at the ø; the lookarounds below are the same
+  // rule written in characters that do not stop at 127.
+  try { return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escapeRx(a)}(?:[^\\p{L}\\p{N}]|$)`, "iu").test(hay); }
+  catch { return hay.toLowerCase().includes(a.toLowerCase()); }
+};
 
 // ── A BARE YEAR IS NOT AN ANCHOR ────────────────────────────────────
 //
@@ -419,8 +463,6 @@ const hasAnchor = (text, anchor) => String(text || "").toLowerCase().includes(St
 // exactly as predicted: it "teaches him to stop reading the line", and on
 // 26 August he read it, disbelieved it, and published — which was the right
 // call about this draft and the wrong habit to have taught him.
-const BARE_NUMBER = /^\d+$/;
-const UNIT_AFTER = "(?:dkk|kr|kroner|eur|usd|%|min|mins|minutes|hours?|hrs?|km|m\\b|people|guests|seats|rooms|km/t)";
 
 // ── AND A FIELD NAME IS NOT THE DRAFT'S OWN WORDS ───────────────────
 //
@@ -461,7 +503,19 @@ export const claimLanded = (finding, before, after) => {
     .filter(a => anchorIsUseful(a, finding, before))
     .filter(a => hasAnchor(before, a));
   if (!anchors.length) return { finding, anchors: [], verdict: "uncheckable" };
-  const survived = anchors.filter(a => hasAnchor(after, a));
+  // ── AND THE STRONGEST ANCHOR DECIDES ──────────────────────────
+  //
+  // A quoted SENTENCE is a fingerprint of the claim. A single token is not: it
+  // is one word or one number the claim happened to contain, and an entry is
+  // free to use that word again about something else. So when a finding gives
+  // both — `the draft says "the walk is 13 minutes", which the research does
+  // not state` yields the sentence AND "13" — the sentence is the evidence and
+  // the token is a coincidence waiting to happen. Any surviving anchor used to
+  // count, so a rewrite that deleted the whole sentence still reported the
+  // claim as standing because the row's opening hours said 13.
+  const phrases = anchors.filter(a => !isOneToken(a));
+  const decide = phrases.length ? phrases : anchors;
+  const survived = decide.filter(a => hasAnchor(after, a));
   return { finding, anchors, survived, verdict: survived.length ? "survived" : "gone" };
 };
 

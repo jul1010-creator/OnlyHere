@@ -107,7 +107,7 @@ writeFileSync(entry, `
   export { readableOn, contrastRatio, overlay, parseHex, luminance, READABLE_MIN, MAX_INK_SATURATION, PILL_ALPHA } from ${JSON.stringify(join(root, "src/utils/readableColor.js"))};
   export { journeyOriginFor, showsJourney, journeyOriginForKind, showsJourneyForKind, TYPES_WITH_A_JOURNEY, TYPES_WITHOUT_A_JOURNEY, TYPES_MEASURED_FROM_THE_ORIGIN, TYPES_MEASURED_FROM_THEIR_TOWN, journeyOriginPoint, IS_THE_CENTRE_KM, TRAVEL_ORIGIN } from ${JSON.stringify(join(root, "src/utils/journeyScope.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
-  export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType, geocodePostcode } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
+  export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType, geocodePostcode, geocodeIsASettlement } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
   export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor, resolveLegMode, coordFitsTown, townPointFor, townFallbackFor } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
@@ -117,6 +117,7 @@ writeFileSync(entry, `
   export { essentials } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { ESSENTIAL_KINDS, ESSENTIAL_KIND_LABEL, KIND_RULE, kindOf, kindStated, cleanKind, kindPatch, hasKindChange, essentialsOnly, tipsOnly, unsortedEssentials, categoriesPresent, linksOf, isMerged, tabForEssential } from ${JSON.stringify(join(root, "src/utils/essentialKind.js"))};
   export { saleLabelledDateIn } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
+  export { spellingsIn } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { distinctiveWords as dWords } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { isResearchVoice, researchVoiceSentences, stripResearchVoice, cleanReaderProse, researchVoiceIn } from ${JSON.stringify(join(root, "src/utils/researchVoice.js"))};
   export { repairBody, headingsOf, bodyProblems, priceProblems, priceWorklist, bookingProblems, bookingWorklist, voiceProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
@@ -226,12 +227,12 @@ writeFileSync(entry, `
   export { placeKindOf, kindLabel, KIND_LABEL, isArea, baseTownFor, relationLine, collapseToParent, areasInside, dayTripsFrom, PLACE_KINDS } from ${JSON.stringify(join(root, "src/utils/placeKind.js"))};
   export { SWEEP_INTENT, SWEEP_PROMPT } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
-  export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT, correctionLanded, claimLanded, describeCorrection } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
+  export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT, correctionLanded, claimLanded, describeCorrection, hasAnchor } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { shapeForLive, isPublisherNote, PUBLISHER_NOTE, cleanCredit } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { longestEcho, echoWords, isNameEcho, echoInDraft, describeEcho, ECHO_RUN } from ${JSON.stringify(join(root, "src/utils/echoCheck.js"))};
   export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, describeListingRefusal } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
-  export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
+  export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { keepLanguageOf } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
@@ -4637,8 +4638,19 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("a good address is used even when the name-based geocode found nothing",
      /const exact = await geocodePlace\(hoursData\.address\);[\s\S]{0,1400}\n              if \(exact\) \{/.test(app14));
   ok("and the gate that threw it away is gone", !/if \(exact && frozenGeo\) \{/.test(app14));
-  ok("the frozen facts are built on this path too, since there are none to add to",
-     /if \(!frozenGeo \|\| !frozenFactsText\) frozenFactsText = buildFrozenFacts\(exact, st2, false, draftTown\);/.test(app14));
+  // ── AND THEY ARE REBUILT, NOT MERELY BUILT WHEN MISSING, 3 SEP ──
+  //
+  // This pinned `if (!frozenGeo || !frozenFactsText) frozenFactsText = ...`,
+  // which was right for the case it was written for — a name geocode that found
+  // nothing — and wrong for every other draft. The Latin Quarter run measured
+  // the walk at 13 minutes from the Nominatim point and at 4 from Google's own
+  // address, and the writer was handed the 13, because the earlier one had
+  // succeeded and this guard therefore declined to rebuild. So the rule is not
+  // "built when there are none" but "always built from the better point".
+  ok("the frozen facts are rebuilt from the better coordinate",
+     /frozenFactsText = buildFrozenFacts\(exact, st2, false, draftTown\);/.test(app14));
+  ok("and no longer only when the earlier lookup had failed",
+     !/if \(!frozenGeo \|\| !frozenFactsText\) frozenFactsText =/.test(app14));
   ok("one builder serves both paths", /const buildFrozenFacts = \(coords, st, coordIsTownCentre, draftTown\) => \{/.test(app14));
 }
 
@@ -5649,8 +5661,12 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and before the location lookup that geocodes with it",
      app5.indexOf('let draftTown = "";') < app5.indexOf("let placed = null;")
      && app5.indexOf("let placed = null;") > 0);
+  // The second attempt exists and it carries the town. Pinned on the QUERY
+  // rather than on the assignment: the call gained a settlement check on 3 Sep
+  // and the answer now lands in `hit` before it lands in `coords`, which is a
+  // change to what happens to the answer and not to what was asked.
   ok("and the geocode fallback that reads it is still there",
-     /coords = await geocodePlace\(`\$\{name\}, \$\{draftTown\}`\);/.test(app5));
+     /geocodePlace\(asked\)/.test(app5) && /const asked = `\$\{name\}, \$\{draftTown\}`;/.test(app5));
   ok("and that is what the scoping is given", /town: draftTown,/.test(app5));
   // THE ORDER MATTERS AND SO DOES THE OMISSION. Free research text must never
   // name the town: a realistic Odense snippet says "1 hour 15 from Copenhagen
@@ -6225,7 +6241,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // was given the bare event name, Nominatim indexes places rather than
   // events, and a null result skipped the whole block in silence.
   ok("a second geocode attempt uses the town it already knows",
-     /coords = await geocodePlace\(`\$\{name\}, \$\{draftTown\}`\);/.test(app6));
+     /const asked = `\$\{name\}, \$\{draftTown\}`;[\s\S]{0,120}geocodePlace\(asked\)/.test(app6));
   ok("and the lookup is journalled whether it lands or not",
      /note\("Location lookup"/.test(app6));
   ok("with an empty result saying what it means",
@@ -41197,10 +41213,36 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("no text on that page paints the raw colour any more",
      !/color: color,/.test(dpR));
   const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("and no card in the app does either",
-     !/color: (?:spot|street|event|product|shop|mapCity|craftDetail|selectedProduct|c)\.color/.test(appR));
+  // ── ON A STYLE, WHICH IS WHERE THE PAINTING HAPPENS ───────────
+  // This forbade the raw colour anywhere a `color:` key appeared, which also
+  // caught object literals that merely CARRY a colour to somewhere else — and
+  // three of those were wrongly lifted because of it. The rule is about paint:
+  // a row colour reaching a style's text colour without going through the
+  // floor. A colour being passed along is not paint.
+  ok("and no card in the app paints one as text",
+     !appR.split("\n").some(l => /style=\{\{/.test(l)
+       && /color: (?:spot|street|event|product|shop|mapCity|craftDetail|selectedProduct|item|c)\.color/.test(l)));
   ok("the app reads the same rule rather than a second copy of it",
      /import \{ readableOn \} from ".\/utils\/readableColor"/.test(appR));
+  // ── AND THE LIFT IS APPLIED TO INK, NOT TO A STORED VALUE ───────
+  //
+  // Found by auditing my own change three hours after making it. A blanket
+  // substitution of `color: X.color` also hit three sites where the colour is
+  // ASSIGNED rather than painted: an essentials nav chip whose colour is only
+  // ever a background wash, and two setSelectedProduct calls that store a
+  // colour used downstream as BOTH wash and ink.
+  //
+  // Lifting a stored colour breaks the fill/ink split at a distance: the wash
+  // is then computed from the lightened value, and a later reader of that field
+  // has no way to get the row's real colour back. The rule is that only a
+  // `color:` style property is lifted, and every call site has to be one.
+  // Counting `color: readableOn(` against `readableOn(` does NOT say this: an
+  // object literal writes `color:` too, which is exactly how the three wrong
+  // ones got in. A lift belongs where paint belongs, so every call site has to
+  // be inside a style.
+  is("every lift in the app happens inside a style, where paint happens",
+     appR.split("\n").filter(l => /readableOn\(/.test(l) && !/style=\{\{/.test(l)), []);
+  ok("and there are lifts to check", appR.split("\n").filter(l => /readableOn\(/.test(l)).length >= 5);
 }
 
 // ── "TELL THE AI TO STOP USING THE TERM ACTUALLY SO MUCH" ───────────
@@ -41309,6 +41351,350 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // is not reported, which is the point: the finding now means "a row where the
   // trim could not help", not "a row that says actually".
   is("one surviving use is not a finding", Object.keys(fillerWordCounts("It is actually free.")), []);
+}
+
+// ── THE FOUR NEW BAR-STREET RUNS, 1 SEP ─────────────────────────────
+//
+// Aarhus Riverfront, Latin Quarter, Meatpacking District, Vestergade. Four
+// audits, one per log, each reading the code that produced the line.
+{
+  const { claimLanded, hasAnchor, sourceIsAboutPlace, spellingsIn, freeClaimTraceable,
+          mergeGlance, absenceClaims, rankSources, geocodeIsASettlement } = M;
+
+  // ── 1. "late" IS INSIDE "chocolate" ─────────────────────────────
+  //
+  // Two of the four runs ended on THE CORRECTION DID NOT LAND, and both were
+  // false. The anchors were the bare word "late" and the bare number "13", and
+  // the survival test was an unbounded substring match.
+  {
+    const before = JSON.stringify({ desc: "The bars stay open late on Fridays.", hours: "13:00" });
+    const after = JSON.stringify({ desc: "The bars stay open until the small hours. Try the chocolate.", hours: "13:00" });
+    is("a claim quoting one short word is not kept alive by a longer word",
+       claimLanded(`UNVERIFIED: the draft says bars stay open "late", which the research does not state.`, before, after).verdict,
+       "gone");
+    ok("and the boundary is what does it", !hasAnchor("Try the chocolate later.", "late") && hasAnchor("Open late tonight.", "late"));
+    // \b is ASCII in JS, so the boundary has to be written in characters that
+    // do not stop at 127 or every Danish name loses its anchor.
+    ok("a Danish name still anchors", hasAnchor("The bars of Kødbyen are busy.", "Kødbyen"));
+    ok("and is not matched inside a longer word", !hasAnchor("Kødbyensgade", "Kødbyen"));
+  }
+  {
+    const before = JSON.stringify({ desc: "The station is a 13 minutes walk.", built: "1913" });
+    const gone = JSON.stringify({ desc: "The station is close by.", built: "1913", price: "130 kr" });
+    const kept = JSON.stringify({ desc: "The station is a 13 minutes walk.", built: "1913" });
+    const f = `UNVERIFIED: "the station is a 13 minutes walk" is not stated in the research.`;
+    is("a bare number is not kept alive by a year or a price", claimLanded(f, before, gone).verdict, "gone");
+    is("and a claim that really survived still reads as survived", claimLanded(f, before, kept).verdict, "survived");
+    // The rule the file already had for admitting a number, applied to deciding
+    // whether it survived: admitted with its unit, so looked for with one.
+    ok("a number survives only with the unit that admitted it",
+       hasAnchor("a 13 minutes walk", "13") && !hasAnchor("built in 1913", "13") && !hasAnchor("13:00 opening", "13"));
+  }
+  // AND A PRICE STILL WORKS, which is the case the anchor rule exists for.
+  {
+    const b = JSON.stringify({ price: "Entry is 327 DKK." });
+    is("a price claim that was fixed reads as gone",
+       claimLanded("the research says 250 DKK, not 327 DKK", b, JSON.stringify({ price: "Entry is 250 DKK." })).verdict, "gone");
+    is("and one that was not still reads as survived",
+       claimLanded("the research says 250 DKK, not 327 DKK", b, b).verdict, "survived");
+  }
+  // ── AND THE STRONGEST ANCHOR DECIDES ────────────────────────────
+  // A quoted sentence is a fingerprint; a token the sentence happened to
+  // contain is a coincidence waiting to happen.
+  {
+    // The number has to survive ON ITS OWN TERMS in the after-text — with the
+    // unit that admitted it — or the bounded-number rule alone would decide
+    // this and the phrase rule would be doing nothing.
+    const f = `UNVERIFIED: "the walk from the station takes 13 minutes" is not stated in the research.`;
+    const before = JSON.stringify({ desc: "The walk from the station takes 13 minutes.", boat: "The ferry crossing is 13 minutes." });
+    const after = JSON.stringify({ desc: "The station is nearby.", boat: "The ferry crossing is 13 minutes." });
+    ok("the number really does survive elsewhere in the draft", hasAnchor(after, "13"));
+    is("but the deleted sentence is still gone",
+       claimLanded(f, before, after).verdict, "gone");
+  }
+
+  // ── 2. "X (Y)" IS TWO NAMES ─────────────────────────────────────
+  //
+  // The Latin Quarter run fetched about seventy pages and published with ONE
+  // source, under a heading that promises the reader how we know. The filter
+  // folded the whole typed name into one contiguous phrase no page writes.
+  is("a parenthetical is split into the two spellings it is",
+     spellingsIn("The Latin Quarter (Latinerkvarteret)"),
+     ["The Latin Quarter (Latinerkvarteret)", "The Latin Quarter", "Latinerkvarteret"]);
+  is("a plain name is left as one spelling", spellingsIn("Jomfru Ane Gade"), ["Jomfru Ane Gade"]);
+  // Punctuation is not a disambiguator. A fragment either side of an empty
+  // bracket would match everything.
+  is("an empty bracket is not a second name", spellingsIn("Vestergade ()"), ["Vestergade ()"]);
+  is("and neither is a nested one", spellingsIn("A (B (C))"), ["A (B (C))"]);
+  {
+    const n = "The Latin Quarter (Latinerkvarteret)";
+    ok("the English half now matches an English page about the right town",
+       sourceIsAboutPlace("Explore the Latin Quarter, the oldest part of Aarhus", { name: n, town: "Aarhus" }));
+    ok("and the Danish half matches a Danish one",
+       sourceIsAboutPlace("Latinerkvarteret er et kvarter i det centrale Aarhus", { name: n, town: "Aarhus" }));
+    // ── BUT A HALF IS WEAKER EVIDENCE THAN THE WHOLE ──────────────
+    // He wrote both halves because either alone is ambiguous. "Latin Quarter"
+    // is distinctive enough to skip corroboration on its own merits, and it is
+    // also a famous quarter of Paris.
+    ok("a page about the other Latin Quarter is still refused",
+       !sourceIsAboutPlace("Cafes in the Latin Quarter, Paris, France", { name: n, town: "Aarhus" }));
+    ok("and a page about nothing in particular still is",
+       !sourceIsAboutPlace("A guide to European city breaks", { name: n, town: "Aarhus" }));
+    ok("a name with no parenthetical is unaffected",
+       sourceIsAboutPlace("Jomfru Ane Gade is Aalborg's main strip", { name: "Jomfru Ane Gade", town: "Aalborg" }));
+  }
+
+  // ── 3. A GEOCODER THAT CANNOT FIND THE PLACE ANSWERS WITH THE CITY ──
+  //
+  // "Meatpacking District" came back as a point 0.4 km from the app's own
+  // TRAVEL_ORIGIN — the middle of Copenhagen. The only test on it was that an
+  // array had an element. Google's branch has refused exactly this since the
+  // Rungsted fix; this one runs first and scopes everything after it.
+  ok("a city is a settlement", geocodeIsASettlement({ kind: "city" }) && geocodeIsASettlement({ kind: "municipality" }));
+  ok("and a suburb and a postcode are too", geocodeIsASettlement({ kind: "suburb" }) && geocodeIsASettlement({ kind: "postcode" }));
+  ok("a road is not", !geocodeIsASettlement({ kind: "road" }));
+  ok("nor is an attraction, a building or a nothing",
+     !geocodeIsASettlement({ kind: "attraction" }) && !geocodeIsASettlement({ kind: "building" }) && !geocodeIsASettlement({}));
+
+  // ── 4. "FREE" HAS NO DIGITS, WHICH IS HOW IT GOT PAST ───────────
+  //
+  // Four runs, four extracted priceNotes, four phrasings of one fact, each
+  // logged as "believed the research (extracted)". numbersTraceable returns ok
+  // for anything with no digits, and that WAS the whole verification.
+  ok("a free claim with nothing in the research to back it is refused",
+     !freeClaimTraceable("Free to visit; no admission price applies", "Vestergade is a street in Copenhagen with many bars.").ok);
+  // TRANSLATION IS STILL EXTRACTION. The file's own rule, and the witness is
+  // bilingual so a Danish page still vouches for an English field.
+  ok("a Danish page saying gratis adgang still vouches for it",
+     freeClaimTraceable("Free entry", "Der er gratis adgang til gaden hele året.").ok);
+  ok("and so does fri entré", freeClaimTraceable("Free entry", "Fri entré for alle.").ok);
+  // AND A FREE WORD IS NOT A FREE DOOR. Tourist pages are full of free
+  // cancellation and free wifi about places that charge to get in.
+  ok("free cancellation does not vouch for free entry",
+     !freeClaimTraceable("Free entry", "Free cancellation on all tours. Free wifi in the lobby.").ok);
+  ok("a value that is not about the door is not this rule's business",
+     freeClaimTraceable("Around 60 kr for a beer", "En øl koster omkring 60 kr.").ok);
+  // Wired: the merge refuses it rather than merely knowing.
+  {
+    const merged = mergeGlance({ priceNote: "" }, { priceNote: "Free to visit; no admission price applies" }, ["priceNote"],
+                               "Vestergade is a street in Copenhagen with many bars.");
+    is("the merge leaves the field empty rather than taking it", merged.patched.priceNote, "");
+    ok("and says why", merged.rejected.some(r => r.field === "priceNote" && (r.missing || []).includes("free")));
+    const good = mergeGlance({ priceNote: "" }, { priceNote: "Free entry" }, ["priceNote"], "Der er gratis adgang hele året.");
+    is("a corroborated one is taken", good.patched.priceNote, "Free entry");
+  }
+
+  // ── 5. "there's" IS NOT "there is" ──────────────────────────────
+  //
+  // Two runs shipped a flat absence claim past the gate built for it. Three
+  // holes in a few characters: whitespace demanded before the 's, only the
+  // straight apostrophe accepted, and a filler that cannot cross a hyphen.
+  const flags = (p) => absenceClaims(p).length > 0;
+  ok("a curly apostrophe is an apostrophe", flags("There’s no real after-hours scene once the bars shut."));
+  ok("and a straight one with no space is too", flags("There's no nightlife here after 2am."));
+  ok("the spelled-out form still fires", flags("There is no real scene once the bars shut."));
+  ok("a hyphenated word does not break the filler", flags("There is no real late-night bar scene here."));
+  ok("and the transport list got the same apostrophe", flags("There’s no train station in the village."));
+  ok("as did its isn't", flags("The village isn’t served by public transport."));
+  // A HEDGE IS NOT AN ABSENCE, and this is the half that must not regress: the
+  // gate firing on the sentence the pipeline exists to write would teach it to
+  // write worse in order to pass.
+  ok("a hedge still passes", !flags("No signature annual festival could be confirmed in the research."));
+  ok("and so does an unconfirmed connection", !flags("A rail connection could not be verified."));
+  // AND AN ABUNDANCE IS NOT AN ABSENCE. These findings now buy a rewrite, so a
+  // false one costs a correct sentence.
+  ok("no shortage of is not an absence", !flags("There is no shortage of good bars."));
+  ok("nor is no end of", !flags("There is no end of places to eat."));
+  ok("but a real one still fires", flags("There are no bars on this street."));
+
+  // ── 6. ONE SITE CANNOT BE THE WHOLE HIERARCHY ───────────────────
+  //
+  // Six of eight "HIGHEST AUTHORITY FIRST" slots went to one tour-booking
+  // affiliate, above the tourist board the founder had vouched for, because
+  // every host in that class ties and the tie-break is a year scraped from an
+  // SEO title. __sources has deduped by host since August; this list never did.
+  {
+    const gyg = (n) => Array.from({ length: n }, (_, i) => ({ url: `https://getyourguide.com/${i}`, text: "Aarhus 2026" }));
+    const pool = [...gyg(5), { url: "https://visitaarhus.dk/x", text: "Aarhus havnefront" }, { url: "https://aarhus.dk/y", text: "Aarhus kommune" }];
+    const top = rankSources(pool).slice(0, 4).map(r => r.host);
+    is("every host gets a seat before any host gets a second",
+       new Set(top).size, Math.min(4, new Set(pool.map(p => new URL(p.url).hostname)).size));
+    ok("the strongest source is still first", rankSources(pool)[0].host === "getyourguide.com");
+    is("and nothing is dropped", rankSources(pool).length, pool.length);
+    // THE HIERARCHY ITSELF IS UNTOUCHED. Whether an encyclopedia should outrank
+    // a tourist board on a bar street is Oliver's call, not a round-robin's.
+    is("a reference source still outranks a blog",
+       rankSources([{ url: "https://getyourguide.com/a", text: "2026" }, { url: "https://en.wikipedia.org/wiki/X", text: "" }])[0].host,
+       "en.wikipedia.org");
+  }
+}
+
+// ── AND THE HALF THAT IS ALWAYS THE ONE LEFT OUT: WIRING ────────────
+//
+// Every finding above is a library change. The four run logs mostly show the
+// other failure — a real answer computed and then not connected to anything.
+{
+  const appN = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // ── THE ABSENCE FINDING WAS DISPLAY-ONLY ────────────────────────
+  //
+  // Vestergade: "Stated absences" fired with a precise, correct finding, fired
+  // AGAIN unchanged after the correction, and the run still ended on "4 gone, 0
+  // still there" and read as a pass. The finding went to noteToFounder, which
+  // writes __notes, and readerFields strips every key beginning with _ before
+  // the draft reaches the rewrite. Five hops wired for the external checker,
+  // zero for our own gate.
+  ok("the absence gate's findings are held past their own note",
+     /let absenceFindings = \[\];/.test(appN) && /if \(!again\) absenceFindings = \[\.\.\.ac\];/.test(appN));
+  ok("and joined to the findings the correction actually reads",
+     /absenceFindings\.map\(text => \(\{ label: "CONTRADICTED", text, mine: true \}\)\)/.test(appN));
+  // AFTER the admissible filter, or a rule written for the checker's
+  // out-of-scope findings would drop ours; BEFORE the clean-if-empty line, or a
+  // draft the checker liked would never reach the rewrite.
+  ok("injected after the scope filter and before the clean-if-empty line",
+     appN.indexOf("inventedRead.findings = inventedRead.findings.filter(f => admissible(f));")
+       < appN.indexOf('absenceFindings.map(text => ({ label: "CONTRADICTED"')
+     && appN.indexOf('absenceFindings.map(text => ({ label: "CONTRADICTED"')
+       < appN.indexOf('if (!inventedRead.findings.length && inventedRead.verdict !== "clean")'));
+  ok("and the draft goes to the rewrite even when the checker liked it",
+     /inventedRead\.verdict = "flagged";/.test(appN));
+  // ── BUT NOT OVER THE TOP OF A LOUDER WARNING ───────────────────
+  // On "unreadable" or an error the founder is told nothing was verified at
+  // all. Turning that into a routine correction would replace the warning.
+  ok("except when the check did not answer",
+     /if \(!inventedCheck\.error && inventedRead\.verdict !== "unreadable" && absenceFindings\.length\)/.test(appN));
+  ok("and the log says which findings were ours rather than the checker's",
+     /came from our own stated-absence gate rather than from the checker/.test(appN));
+  // Only the first pass. Feeding the second one back would ask the correction
+  // to fix what the correction just produced.
+  ok("the pass that runs after the rewrite does not feed itself back",
+     /if \(!again\) absenceFindings/.test(appN));
+
+  // ── A FINDING IS NOT "FOUND NOTHING" ────────────────────────────
+  //
+  // runLog added the "found" outcome on 30 Aug for exactly this shape and it
+  // was wired to the ticket-price step and not to these two, so the most
+  // actionable lines in the log printed as "empty · discarded".
+  ok("the absence step reports a finding as a finding",
+     /outcome: ac\.length \? "found" : "ok"/.test(appN));
+  ok("and so does the glance step", /outcome: gp\.length \? "found" : "ok"/.test(appN));
+
+  // ── AND A STEP THAT CAN NEVER SAY ok ────────────────────────────
+  //
+  // modelProvenanceNote was pushed into the glance gate's finding list with a
+  // comment saying "Not a problem report", and it never returns an empty
+  // string, so gp.length was true on every draft ever made and this step's ok
+  // branch has never once been reached. Four spurious counts on every run
+  // header, and a real glance problem printed under a paragraph of boilerplate.
+  ok("the provenance line goes to the tray, not into the findings",
+     /noteToFounder\(modelProvenanceNote\(t\)\);/.test(appN));
+  ok("and is no longer inside the list the gate counts",
+     !/^\s*modelProvenanceNote\(t\),\s*$/m.test(appN));
+
+  // ── A PAID CALL WITH NO LINE IN THE LOG ─────────────────────────
+  // A third Directions request decides whether a ferry is required, hands the
+  // verdict to the writer and to two contradiction gates, and had no note().
+  ok("the ferry probe is journalled", /note\("Is the ferry required or optional"/.test(appN));
+  ok("and a probe that did not answer is not read as optional",
+     /A crossing appeared on the route and the follow-up query did not come back\. That is not evidence the ferry is optional/.test(appN));
+
+  // ── THE FACTS FOLLOW THE COORDINATE ─────────────────────────────
+  //
+  // Latin Quarter: the walk was 13 minutes from the Nominatim point and 4 from
+  // Google's own address, and the writer was handed the 13 — told it was
+  // "verified by a real walking-route query" — because a guard declined to
+  // rebuild whenever the earlier lookup had succeeded, which is most drafts.
+  // Worse, 13 is over SHORT_WALK_MINUTES, so the stale figure suppressed the
+  // "write the walk, do not suggest a bus" clause the true 4 would have earned.
+  ok("the frozen facts are rebuilt whenever a better coordinate arrives",
+     /const movedKm = journeyMeasuredTo[\s\S]{0,200}frozenFactsText = buildFrozenFacts\(exact, st2, false, draftTown\);/.test(appN));
+  // ── AND A JOURNEY TO A PLACE WE NO LONGER THINK THIS IS ─────────
+  // Meatpacking District measured Copenhagen to Rådhuspladsen, 0.5 km, then
+  // moved the place to Kødbyen and kept the figure.
+  ok("the journey remembers which point it was measured to",
+     /journeyMeasuredTo = \{ lat: frozenGeo\.lat, lon: frozenGeo\.lon \};/.test(appN));
+  ok("and is dropped when the coordinate moves out from under it",
+     /if \(Number\.isFinite\(movedKm\) && movedKm >= IS_THE_CENTRE_KM && realTransport\) \{[\s\S]{0,1400}realTransport = null;[\s\S]{0,120}transitParts = null;/.test(appN));
+  ok("with the writer's transport block dropped with it, not left standing",
+     /transitParts = null;[\s\S]{0,160}transportFindings = "";/.test(appN));
+  ok("and the founder told why, rather than the figure just changing",
+     /The journey was measured to a coordinate we replaced/.test(appN));
+
+  // ── NOMINATIM'S ANSWER GETS THE QUESTION GOOGLE'S ALREADY GETS ──
+  //
+  // "Meatpacking District" came back as the middle of Copenhagen and was
+  // accepted on `if (coords)`. Google's branch fifty lines below has refused
+  // exactly this since the Rungsted fix, and it is the one that runs SECOND.
+  ok("a settlement is refused for anything that is not a town",
+     /if \(!hit \|\| !geocodeIsASettlement\(hit\) \|\| sType === "town" \|\| sType === "nightTown"\) return false;/.test(appN));
+  ok("and the refusal is a decision in the log, not a silence",
+     /decide\("whether Nominatim's coordinate is about this place"/.test(appN));
+  ok("both geocode attempts go through it",
+     (appN.match(/settlementRefused\(hit, /g) || []).length === 2);
+  ok("and the log can finally say what the geocoder found",
+     /which found "\$\{String\(hit\.found\)\.slice\(0, 70\)\}"/.test(appN));
+}
+
+// ── THE NAVIGATION SWEEP, 3 SEP ────────────────────────────────────
+//
+// Oliver: "go through the pipeline for other navigations and look into any
+// errors that might be." Three findings survived contact with the code.
+{
+  const appS = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const liveS = readFileSync(join(root, "src/utils/liveContent.js"), "utf8");
+
+  // ── 1. THE SAME HAND-WRITTEN LIST, A FIFTH TIME ─────────────────
+  //
+  // `isPlaceType` read ["town", "festival", "nightTown"] — the identical
+  // literal whose twin three hundred lines up was derived on 17 Aug, with a
+  // comment saying exactly why the two street types belong in it. It decides
+  // how many candidate URLs are read (three or one), the fetch budget (five or
+  // three), and whether the founder is told "THE OPERATOR'S OWN SITE WAS NOT
+  // READ". So a bar street was treated as a single business, took one URL, and
+  // could never trigger the warning that would have said so.
+  ok("the place-type question is derived, not typed again",
+     /const isPlaceType = PLACES_THAT_ARE_AN_AREA\.includes\(sType\);/.test(appS));
+  ok("and no copy of that literal is left in the file",
+     !/\["town", "festival", "nightTown"\]\.includes\(sType\)/.test(appS));
+  // The partition it reads is still a partition of the real type list.
+  ok("an area is every place that is not one business",
+     /const PLACES_THAT_ARE_AN_AREA = PLACE_TYPES_WITH_A_JOURNEY\.filter\(t => !PLACES_THAT_ARE_ONE_BUSINESS\.includes\(t\)\);/.test(appS));
+  {
+    const { CONTENT_TYPES } = M;
+    const oneBusiness = ["free", "booking", "food", "night"];
+    const areas = CONTENT_TYPES.filter(t => t !== "essential" && !oneBusiness.includes(t));
+    // The two the 17 Aug comment named, and the thing this fix is about.
+    ok("a bar street and a food street are areas", areas.includes("nightStreet") && areas.includes("foodStreet"));
+    ok("and a bar is not", !areas.includes("night"));
+  }
+
+  // ── 2. A FAILED FETCH READ AS AN EMPTY LIBRARY ──────────────────
+  //
+  // The only trace of the content library being unreachable was a console.warn.
+  // The app then rendered its hardcoded fallback arrays, so the site looked
+  // whole while missing every published entry, and fourteen empty states across
+  // the app went on saying "nothing published yet" — a claim about the database
+  // the app had no way of standing behind.
+  ok("the loader records why it failed", /loadFailure = String\(err\?\.message \|\| err\)/.test(liveS));
+  ok("and exposes it, so something can tell", /export const liveContentFailure = \(\) => loadFailure;/.test(liveS));
+  // CLEARED ON EVERY ATTEMPT, or a refresh that works leaves a stale warning up.
+  ok("a later attempt clears it", /const doLoad = async \(\) => \{[\s\S]{0,300}loadFailure = null;/.test(liveS));
+  ok("the app asks after the load settles", /setLibraryFailed\(liveContentFailure\(\)\);/.test(appS));
+  // ONE BANNER, AT THE ONE PLACE EVERY TAB PASSES THROUGH. Fourteen edits would
+  // have been fourteen chances to miss one.
+  ok("and one banner covers every tab at once",
+     /const renderTab = \(tab\) => \(\s*<>[\s\S]{0,900}\{libraryFailed && \(/.test(appS));
+  ok("which says the places may be missing rather than absent",
+     /It is not that they are not published/.test(appS));
+
+  // ── 3. DEAD CODE THAT LOOKS LIKE A FEATURE ──────────────────────
+  //
+  // Reported rather than deleted, because deleting a half-built feature at 3am
+  // is not a decision to make for somebody. These are here so the next sweep
+  // does not have to find them again: a ProductCard component that is never
+  // rendered, and the savedProducts filter that only it would have used.
+  ok("the shop's saved-items filter is still unrendered, and known",
+     /const savedProducts = allProducts\.filter/.test(appS));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

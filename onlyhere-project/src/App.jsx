@@ -88,7 +88,7 @@ import {
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
   hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep, storeKindOf } from "./utils/helpers";
-import { checkNightTransport, geocodePlace, findRealNearestStation, geocodePostcode } from "./utils/geo";
+import { checkNightTransport, geocodePlace, geocodeIsASettlement, findRealNearestStation, geocodePostcode } from "./utils/geo";
 import { runOnce } from "./utils/inFlight";
 import { Pill } from "./components/Pill";
 
@@ -123,7 +123,7 @@ import { GuidePage } from "./pages/GuidePage";
 import { askClaude, parseClaudeJSON, askPerplexity, withRetry, askOpenAI, readDatesFromImage, readPosterText, wholeSentences } from "./utils/aiClient";
 import { STUDIO_VOICE, slugify, J, bb, bbBullets, bbData, bulletsBlock, shapeForLive } from "./utils/studioContent";
 import { studioPrompts } from "./utils/studioPrompts";
-import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow } from "./utils/liveContent";
+import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow, liveContentFailure } from "./utils/liveContent";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
 import { journeyParts, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, closedButPlanned, arrivalStop, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
@@ -736,13 +736,25 @@ function GemlyxApp() {
         const fresh = rows.filter(x => !have.has(x.id));
         return fresh.length > 0 ? [...prev, ...fresh] : prev;
       });
-    }).finally(() => { if (!cancelled) bumpLiveContent(v => v + 1); });
+    }).finally(() => {
+      if (cancelled) return;
+      // ── AND WHETHER IT WORKED, WHICH NOTHING USED TO ASK ──────────
+      // A failed fetch left a console.warn and rendered the hardcoded fallback
+      // arrays, so the site looked whole while missing every published entry,
+      // and fourteen empty states across the app went on saying "nothing
+      // published yet" — a sentence about the database the app had no way of
+      // standing behind. See liveContentFailure in utils/liveContent.js.
+      setLibraryFailed(liveContentFailure());
+      bumpLiveContent(v => v + 1);
+    });
     // Studio-published Denmark facts, folded into the same denmarkFacts array
     // the guide loading card already reads. Separate call because it fills a
     // different table and must not be able to delay or break the content load.
     ensureLiveFactsLoaded().catch(() => {});
     return () => { cancelled = true; };
   }, []);
+  // null when the published library loaded, a string saying why when it did not.
+  const [libraryFailed, setLibraryFailed] = useState(null);
   const [active, setActive] = useState("home");
   const [shopTab, setShopTab] = useState("shops");
   const [selectedCity, setSelectedCity] = useState(cities[0]);
@@ -2689,13 +2701,41 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // A published row already holds a reviewed coordinate. Cheapest and best.
       const knownCoord = placeCoords(knownRow || {});
       if (knownCoord) { coords = knownCoord; via = "the coordinate already on the published row"; }
+      // ── AND NOMINATIM'S ANSWER GETS THE SAME QUESTION GOOGLE'S DOES ──
+      //
+      // Meatpacking District, 1 Sep: "55.6747, 12.5744 via Nominatim, on the
+      // name" — the middle of Copenhagen. The geocoder could not find Kødbyen,
+      // so it answered with the city the query mentioned, which is a correct
+      // answer to a different question and the one wrong coordinate that passes
+      // every check this app has ("A town centre is zero kilometres from the
+      // town it is the centre of", publishDraft).
+      //
+      // Google's branch fifty lines below has refused exactly this since the
+      // Rungsted fix. This branch had `if (coords)`. Same failure, same cost —
+      // the arrival point, the journey and the frozen facts all scoped to the
+      // wrong point — and it runs FIRST.
+      //
+      // Refusing is the safe direction and the pipeline is already built for
+      // it: with no coordinate here the next lookup runs, and after that Google
+      // Places, which in that very run answered correctly.
+      const settlementRefused = (hit, asked) => {
+        if (!hit || !geocodeIsASettlement(hit) || sType === "town" || sType === "nightTown") return false;
+        decide("whether Nominatim's coordinate is about this place", {
+          winner: "nothing",
+          loser: `Nominatim's "${String(hit.found || "").slice(0, 70)}" (${hit.kind})`,
+          rule: "A geocoder that cannot find the place answers with the town the query names. That is the centre of a city, not this place, and it is the one wrong coordinate that passes every later check.",
+          value: `${asked} (${sType})`,
+        });
+        return true;
+      };
       if (!coords) {
-        coords = await geocodePlace(name);
-        if (coords) via = "Nominatim, on the name";
+        const hit = await geocodePlace(name);
+        if (hit && !settlementRefused(hit, name)) { coords = hit; via = `Nominatim, on the name${hit.found ? `, which found "${String(hit.found).slice(0, 70)}"` : ""}`; }
       }
       if (!coords && draftTown) {
-        coords = await geocodePlace(`${name}, ${draftTown}`);
-        if (coords) via = `Nominatim, on "${name}, ${draftTown}"`;
+        const asked = `${name}, ${draftTown}`;
+        const hit = await geocodePlace(asked);
+        if (hit && !settlementRefused(hit, asked)) { coords = hit; via = `Nominatim, on "${asked}"${hit.found ? `, which found "${String(hit.found).slice(0, 70)}"` : ""}`; }
       }
       // ── THE CALL THAT EXISTS FOR EVENTS ─────────────────────────
       // Nominatim indexes ADDRESSES. A festival is a business listing, and
@@ -3899,6 +3939,22 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // gateDraft compares the prose against it. See utils/journey.js.
       let transitParts = null;
       let drivingMins = null;
+      // ── AND THE ABSENCE GATE'S FINDINGS, KEPT FOR THE SAME REASON ──
+      //
+      // Vestergade, 1 Sep. "Stated absences" fired with a precise, correct
+      // finding — the research says no price was FOUND and the prose says "no
+      // entry cost", which is a claim about the world rather than about the
+      // search — fired again, unchanged, AFTER the correction, and the run
+      // still ended on "4 gone, 0 still there" and read as a clean pass.
+      //
+      // Because the finding could not reach the rewrite. It went to
+      // noteToFounder, which writes t.__notes, and readerFields strips every
+      // key beginning with _ before the draft is handed to the correction. So
+      // the pipeline's own best gate was display-only: five hops wired for
+      // Perplexity's findings, zero for this one. Held here so it can be given
+      // the same five.
+      let absenceFindings = [];
+      let journeyMeasuredTo = null;
       // ── AND NOT EVERY TYPE IS ASKED THE QUESTION ─────────────────
       //
       // This read PLACE_TYPES_WITH_A_JOURNEY — every content type but essential
@@ -4012,6 +4068,11 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           // Vejle listing got published on an Aarhus row.
           realTransport = { transit, driving, from: journeyFrom.name };   // ferry verdict is attached below, once measured
           transitParts = journeyParts(transitD?.steps, transitD?.durationMinutes);
+          // WHICH POINT THIS ANSWER IS ABOUT. Held because the pipeline is
+          // allowed to change its mind about where the place is, three hundred
+          // lines below, and a duration is only true of the destination it was
+          // measured to. See the address recovery.
+          journeyMeasuredTo = { lat: frozenGeo.lat, lon: frozenGeo.lon };
           drivingMins = Number.isFinite(Number(drivingD?.durationMinutes)) ? Number(drivingD.durationMinutes) : null;
           // ── THE ONLY MEASUREMENT IN THE WHOLE DRAFT ──────────────
           // Every other number about distance or duration in this pipeline is
@@ -4084,6 +4145,34 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
             }
           }
           realTransport.ferry = ferryVerdict;
+          // ── AND A PAID CALL WITH NO LINE IN THE LOG ────────────────
+          //
+          // This branch makes a THIRD Directions request — the same road route
+          // with ferries banned — and decides from it whether a crossing is
+          // required or merely the shortcut Google happened to prefer. That
+          // verdict then goes to the writer and to two contradiction gates.
+          //
+          // It had no note(). A run log headed "29 steps" was missing a
+          // measurement, and the run-log file's own rule is that a step which
+          // was never asked, one that found nothing and one that failed have to
+          // be three different things a reader can tell apart. A silent probe is
+          // all three at once.
+          if (transitD?.hasFerry || drivingD?.hasFerry) {
+            note("Is the ferry required or optional", {
+              provider: "google",
+              detail: "the same road route with ferries banned, against the one Google chose",
+              outcome: ferryVerdict.status === FERRY.NONE ? "empty" : "ok",
+              used: ferryVerdict.status !== FERRY.NONE,
+              got: ferryVerdict.status === FERRY.OPTIONAL
+                ? `optional: a road route exists without it${ferryVerdict.landDurationText ? ` (${ferryVerdict.landDurationText} by car)` : ""}`
+                : ferryVerdict.status === FERRY.REQUIRED
+                  ? "required: banning ferries left no road route at all"
+                  : "the probe did not answer, so neither was established",
+              why: ferryVerdict.status === FERRY.NONE
+                ? "A crossing appeared on the route and the follow-up query did not come back. That is not evidence the ferry is optional, and nothing in the entry may say it is."
+                : "",
+            });
+          }
           const allFerries = [...(transitD?.ferries || []), ...(drivingD?.ferries || [])];
           const seenFerry = new Set();
           const ferryLines = allFerries.filter(f => {
@@ -4292,9 +4381,65 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
                   why: st2?.name ? "" : "This is not evidence that none exists.",
                   used: !!st2?.name,
                 });
-                if (!frozenGeo || !frozenFactsText) frozenFactsText = buildFrozenFacts(exact, st2, false, draftTown);
+                // ── AND THE FACTS HAVE TO FOLLOW THE COORDINATE ────
+                //
+                // This read `if (!frozenGeo || !frozenFactsText)`, so on every
+                // draft where the name-based geocode had ALREADY succeeded —
+                // which is most of them — the block above ran, set both, and
+                // this line then declined to rebuild them from the better point.
+                //
+                // The Latin Quarter run, 1 Sep: step 7 measured the walk from
+                // the Nominatim point at 13 minutes, step 9 measured it from
+                // Google's own address at 4. The writer was handed the 13, told
+                // "it was verified by a real walking-route query" and "the walk
+                // is the connection, and it is measured". Worse, buildFrozenFacts
+                // only adds its "THAT WALK IS N MINUTES, do not suggest a bus"
+                // clause under SHORT_WALK_MINUTES, so the stale 13 suppressed
+                // the very instruction the true 4 would have triggered.
+                //
+                // A measurement the pipeline has superseded is not a fact. The
+                // guard is gone: when this branch finds a better point, every
+                // sentence built from the old one is rebuilt from the new one.
+                const movedKm = journeyMeasuredTo
+                  ? haversineKm(journeyMeasuredTo, { lat: exact.lat, lon: exact.lon })
+                  : null;
+                frozenFactsText = buildFrozenFacts(exact, st2, false, draftTown);
                 frozenGeo = { lat: exact.lat, lon: exact.lon, station: st2?.name || frozenGeo?.station || null, stopKind: st2?.kind || frozenGeo?.stopKind || null, walkMinutes: st2?.walkMinutes ?? frozenGeo?.walkMinutes ?? null, walkText: st2?.walk || frozenGeo?.walkText || "", fromTownCentre: false };
                 ui(setStudioFrozenGeo, frozenGeo);
+                // ── AND A JOURNEY TO A PLACE WE NO LONGER THINK THIS IS ──
+                //
+                // The Meatpacking District run measured Copenhagen to
+                // Rådhuspladsen — 0.5 km, because the name geocode had landed
+                // on the city centre — and then this block moved the place to
+                // Kødbyen and kept the figure. The duration, the leg list, the
+                // named arrival stop and the transport block handed to the
+                // writer were all about the old point, and nothing said so.
+                //
+                // Dropped rather than re-measured: a second Directions call on
+                // every draft to fix a case that is rare is the wrong trade, and
+                // this pipeline's rule for a fact it can no longer stand behind
+                // is to lose it loudly. Under a kilometre the answer survives —
+                // a door-to-door figure from the other side of the country does
+                // not change by walking one block.
+                if (Number.isFinite(movedKm) && movedKm >= IS_THE_CENTRE_KM && realTransport) {
+                  decide("the measured journey", {
+                    winner: "nothing, the journey is dropped",
+                    loser: `the measurement to the earlier coordinate (${realTransport.transit || realTransport.driving || "no route"})`,
+                    rule: "A duration is only true of the point it was measured to. Google's own address moved this place, so the figure is about somewhere else and nothing may present it as this entry's journey.",
+                    value: `${movedKm.toFixed(1)} km apart`,
+                  });
+                  note("The journey was measured to a coordinate we replaced", {
+                    provider: "google", detail: `the point the journey was measured to, against Google's own address for the listing`,
+                    outcome: "found", used: false,
+                    got: `${movedKm.toFixed(1)} km apart, so the measured ${realTransport.transit || realTransport.driving || "route"} is about the earlier point`,
+                    why: "Dropped rather than published. Re-measuring would cost a second Directions call on every draft to fix a rare case; stating a duration to the wrong destination costs a reader their afternoon.",
+                  });
+                  realTransport = null;
+                  transitParts = null;
+                  drivingMins = null;
+                  transportFindings = "";
+                  journeyMeasuredTo = null;
+                }
               }
             } catch { /* the name-based geocode above still stands */ }
           }
@@ -4403,7 +4548,31 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // Gothersgade draft. The two QUESTIONS are genuinely different, which is
       // why there are still two predicates, and they now live together in
       // utils/sourcePolicy.js where the difference is written down.
-      const isPlaceType = ["town", "festival", "nightTown"].includes(sType);
+      // ── AND THIS IS THE SAME LIST AGAIN, THREE HUNDRED LINES ON ───
+      //
+      // The comment at the official-site search says it plainly: "This list read
+      // ["town", "festival", "nightTown"], and by its own reasoning directly
+      // above, the two street types belong in it: a food street and a bar street
+      // are areas, not businesses, so Google has no single registered URL for
+      // them." That one was derived on 17 Aug. THIS one, the identical literal,
+      // was not — which is the scar this file already carries, for the fifth
+      // time: "one hand-written list copied four times."
+      //
+      // What it decides is not small. A street was treated as a VENUE here, so
+      // it took the strict single name-matched URL instead of the best three
+      // (line below), got a fetch budget of three instead of five, and — the
+      // one that matters — was excluded from the "THE OPERATOR'S OWN SITE WAS
+      // NOT READ" warning, because that warning is gated on this same flag. A
+      // street has no operator's site to find, so it never triggered, and the
+      // founder was never told the draft had been written without one.
+      //
+      // Oliver's four bar-street runs on 1 Sep show the shape of it: every
+      // "Prices against the official site" step skipped with "the official
+      // site's text was not available", and no warning anywhere saying so.
+      //
+      // PLACES_THAT_ARE_AN_AREA is the rule this line was reaching for, derived
+      // at the top of the file from CONTENT_TYPES.
+      const isPlaceType = PLACES_THAT_ARE_AN_AREA.includes(sType);
       // ── AND nightStreet WAS THE ONE TYPE LEFT OUT OF THIS LIST ────
       //
       // Fable, 2 Sep 2026, auditing six bar-street runs Oliver had just
@@ -6394,16 +6563,29 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             // somebody not staying there can walk in. Advisory, in the tray the
             // founder already reads. See utils/venueSubject.js.
             ...(stayDriftNote(t, readerText(t)) ? [stayDriftNote(t, readerText(t))] : []),
-            // ── AND WHICH MODEL WROTE WHICH PART ─────────────────────
-            // Not a problem report — a provenance line, in the tray where the
-            // other origins already print. It answers the question Oliver had
-            // to answer by reading the prose and guessing.
-            modelProvenanceNote(t),
           ];
+          // ── AND WHICH MODEL WROTE WHICH PART, WHICH IS NOT A PROBLEM ──
+          //
+          // This was pushed into `gp` beside the problem reports, with its own
+          // comment saying "Not a problem report". modelProvenanceNote never
+          // returns an empty string, so `gp.length` was true on every draft
+          // ever made, and this step's ok branch has never once been reached:
+          // all eight runs on 1 Sep read "empty · discarded" with WHO WROTE
+          // THIS as the finding.
+          //
+          // The cost is not cosmetic. It put two "found nothing" and two
+          // "answered and were discarded" on every run's header, so the counts
+          // a founder skims for real trouble are inflated by four, and a REAL
+          // glance problem would have printed underneath a paragraph of
+          // boilerplate about which model wrote the prose.
+          //
+          // It is still worth having, so it goes to the tray directly rather
+          // than through the gate's finding list.
+          noteToFounder(modelProvenanceNote(t));
           note(`Glance fields${suffix}`, {
             provider: "google",
             detail: "the short fields a reader scans, checked for anything about this run",
-            outcome: gp.length ? "empty" : "ok",
+            outcome: gp.length ? "found" : "ok",
             got: gp.length ? gp.join(" ") : "no glance field reports on the pipeline or credits a source",
             used: !gp.length,
           });
@@ -6452,11 +6634,20 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
                 .filter(r => draftTown && String(r?.town || "").trim().toLowerCase() === String(draftTown).trim().toLowerCase()),
             }),
           ];
+          // FIRST PASS ONLY. The second one runs after the rewrite and its job
+          // is to say whether the fix landed; feeding it back in would ask the
+          // correction to fix what the correction just produced.
+          if (!again) absenceFindings = [...ac];
           note(`Stated absences${suffix}`, {
             provider: "google",
             detail: "any sentence claiming something does not exist, including one the draft's own uncertainties say was merely not found",
-            outcome: ac.length ? "empty" : "ok",
+            // "found", not "empty". runLog added this outcome on 30 Aug for
+            // exactly this shape and it was wired to the ticket-price step and
+            // not to this one, so the most actionable line in the log was
+            // filed under "found nothing" and printed as discarded.
+            outcome: ac.length ? "found" : "ok",
             got: ac.length ? ac.join(" ") : "the draft states no absence it cannot support",
+            why: ac.length ? "This is fed to the correction as a contradicted claim, so the rewrite is asked to fix it and the landing check is asked whether it did." : "",
             used: !ac.length,
           });
           for (const line of ac) {
@@ -6935,6 +7126,28 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // direction. Written as "not clean" on purpose: the flagged branch
         // below is found by its own condition, and a second copy of that
         // string up here would move an assertion's anchor onto this line.
+        // ── OUR OWN GATE'S FINDINGS JOIN THE LIST HERE ──────────────
+        //
+        // After the admissible filter, so a rule written for Perplexity's
+        // out-of-scope findings cannot drop ours, and before the clean-if-empty
+        // line below, so a draft Perplexity liked but our absence gate did not
+        // still goes to the rewrite.
+        //
+        // CONTRADICTED rather than UNVERIFIED, because that is what it is: the
+        // draft's own uncertainties say the fact was not found and its prose
+        // states it as absent, and those two sentences cannot both be true.
+        //
+        // ONLY WHEN THE CHECK ANSWERED. On "unreadable" or an error the founder
+        // gets a much louder warning that nothing was verified at all, and
+        // flipping the verdict to "flagged" would replace that warning with a
+        // routine correction. The line still reaches __notes as it always did.
+        if (!inventedCheck.error && inventedRead.verdict !== "unreadable" && absenceFindings.length) {
+          inventedRead.findings = [
+            ...inventedRead.findings,
+            ...absenceFindings.map(text => ({ label: "CONTRADICTED", text, mine: true })),
+          ];
+          inventedRead.verdict = "flagged";
+        }
         if (!inventedRead.findings.length && inventedRead.verdict !== "clean") inventedRead.verdict = "clean";
         if (outOfScope.length) {
           note("Findings about the writing rather than the facts", {
@@ -6967,7 +7180,13 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         if (!inventedCheck.error && inventedRead.verdict === "flagged") {
           note("Invented-claim check", {
             provider: "perplexity", outcome: "ok", used: true,
-            got: `${inventedRead.findings.length} claim${inventedRead.findings.length === 1 ? "" : "s"} flagged: ${inventedRead.findings.filter(f => f.label === "CONTRADICTED").length} contradicted, ${inventedRead.findings.filter(f => f.label === "UNVERIFIED").length} unverified`,
+            // ── AND WHO FLAGGED THEM, NOW THAT IT IS NOT ALL ONE PROVIDER ──
+            // This line said "N claims flagged" under provider: perplexity, and
+            // since the absence gate's findings join the same list, a count with
+            // no provenance would credit our own gate's work to Perplexity and
+            // hide the fact that the correction is being asked to fix something
+            // no external checker raised.
+            got: `${inventedRead.findings.length} claim${inventedRead.findings.length === 1 ? "" : "s"} flagged: ${inventedRead.findings.filter(f => f.label === "CONTRADICTED").length} contradicted, ${inventedRead.findings.filter(f => f.label === "UNVERIFIED").length} unverified${inventedRead.findings.some(f => f.mine) ? `, of which ${inventedRead.findings.filter(f => f.mine).length} came from our own stated-absence gate rather than from the checker` : ""}`,
             // ── AND SAY IT HERE, WHICH IS THE BRANCH THAT MATTERS ────
             // The clean branch above already reports a truncated check. This one
             // did not, and this is the one that goes on to re-research and
@@ -14152,7 +14371,7 @@ ${languageBlock()}`;
 
   // ── PRODUCT CARD ─────────────────────────────────────────────
   const ProductCard = ({ product }) => (
-    <div onClick={() => setSelectedProduct({ ...product, color: readableOn(product.color, C.surface) || C.accent })}
+    <div onClick={() => setSelectedProduct({ ...product, color: product.color || C.accent })}
       style={{ background: C.surface, borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}`, cursor: "pointer", position: "relative" }}>
       <div style={{ height: 160, background: `${product.color}22`, position: "relative", overflow: "hidden" }}>
         {product.photo ? <img src={product.photo} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", fontSize: 48 }}>{product.emoji}</div>}
@@ -17599,6 +17818,21 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
   const renderTab = (tab) => (
     <>
+          {/* ── "NOTHING PUBLISHED YET" IS A CLAIM ABOUT THE DATABASE ──
+              And when the fetch fails, the app has no right to make it. The
+              hardcoded fallback arrays still render, so the site looks whole
+              while missing every published entry, and fourteen empty states go
+              on saying nothing is there.
+
+              One banner, at the one place every tab passes through, so all
+              fourteen are honest at once rather than fourteen edits — the same
+              argument as suppressing at render so all 71 published entries
+              were fixed without 71 redrafts. See liveContentFailure. */}
+          {libraryFailed && (
+            <div style={{ margin: "10px 16px 0", padding: "10px 14px", borderRadius: 12, background: `${C.gold}14`, border: `1px solid ${C.gold}44`, fontSize: 12, color: C.text, lineHeight: 1.55 }}>
+              <b>We could not load the latest content.</b> What is shown below is what this page already had, so some places may be missing. It is not that they are not published. Reload in a moment and it should come back.
+            </div>
+          )}
           {/* ── HOME LANDING ─────────────────────────────────── */}
           {tab === "home" && (
             <div className={pageAnim} style={{ margin: "-0px -0px" }}>
@@ -19562,7 +19796,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     the Solo Travel chip pointed at prose. */}
                 {[
                   { id: "ess-weather", icon: "🌤", label: "Weather", color: "#1565C0" },
-                  ...cats.map(c => ({ id: c.anchor, icon: c.icon, label: c.cat, color: readableOn(c.color, C.surface) })),
+                  ...cats.map(c => ({ id: c.anchor, icon: c.icon, label: c.cat, color: c.color })),
                   { id: "ess-faq", icon: "❓", label: "FAQ", color: "#455A64" },
                 ].map(s => (
                   <button key={s.id} onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
@@ -19802,7 +20036,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       const dist = userLocation && c ? getDistance(userLocation.lat, userLocation.lng, c[0], c[1]) : null;
                       return (
                         <div key={p.id} onClick={() => setSelectedPin(selectedPin?.id === p.id ? null : p)}
-                          onDoubleClick={() => setSelectedProduct({ ...p, city: mapCity.name, color: readableOn(mapCity.color, C.surface) })}
+                          onDoubleClick={() => setSelectedProduct({ ...p, city: mapCity.name, color: mapCity.color })}
                           style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${C.border}`, cursor: "pointer", background: selectedPin?.id === p.id ? `${mapCity.color}15` : "transparent" }}>
                           <div style={{ width: 40, height: 40, borderRadius: 10, overflow: "hidden", background: `${mapCity.color}22`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
                             {p.photo ? <img src={p.photo} alt={p.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : p.emoji}

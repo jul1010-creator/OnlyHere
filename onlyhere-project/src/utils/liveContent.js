@@ -91,11 +91,16 @@ export const townFrame = (item) => {
 const mergedIds = new Set();      // Supabase row ids already folded in
 const mergedKeys = new Set();     // type + normalised name, second net (see below)
 let loadPromise = null;           // cached so concurrent callers share one fetch
+// Why the last load failed, or null. See the catch at the end of doLoad.
+let loadFailure = null;
 const bookingRowsCache = [];      // "booking" rows have no singleton array of their own
 
 const keyOf = (type, name) => `${type}::${String(name || "").trim().toLowerCase()}`;
 
 const doLoad = async () => {
+  // Cleared on every attempt, so a successful refresh takes the banner down
+  // rather than leaving a stale warning about a fetch that has since worked.
+  loadFailure = null;
   try {
     // ── order=id.desc IS LOAD-BEARING, NOT TIDINESS ─────────────────
     // The dedupe below keeps the FIRST row it meets for a given type + name.
@@ -200,8 +205,32 @@ const doLoad = async () => {
     }
   } catch (err) {
     console.warn("gemlyx_content fetch failed:", err);
+    // ── AND A FAILED FETCH LOOKED EXACTLY LIKE AN EMPTY LIBRARY ────
+    //
+    // Fable found this in the 2 Sep site audit and it is still true: the only
+    // trace of Supabase being unreachable was a console.warn nobody reads. The
+    // app then renders the hardcoded fallback arrays, so the site looks whole
+    // and is quietly missing every published entry — and fourteen different
+    // empty states across the app say "nothing published yet", which is a
+    // sentence about the database that the app has no right to make.
+    //
+    // This is the file's own rule, one level up: the branch above already
+    // refuses to let a published row "be fetched, deduped, marked merged, and
+    // then dropped with no warning", and calls that "this project's signature
+    // bug shape". The whole fetch failing is the same shape at full size.
+    //
+    // Recorded rather than thrown: the fallback arrays are a genuinely useful
+    // degraded state and throwing would take the site down to fix a caption.
+    // What was missing is that anything could TELL. One flag, read once at
+    // render, fixes all fourteen captions at the same time.
+    loadFailure = String(err?.message || err) || "the content library could not be reached";
   }
 };
+
+// null when the library loaded, or was never asked for. A string when the fetch
+// failed, and the string is why. Read at render: a caller must be able to tell
+// "nothing is published" from "we could not find out".
+export const liveContentFailure = () => loadFailure;
 
 // Always safe to call, from anywhere, any number of times, on every mount.
 // The fetch happens at most once per page session; every later caller just

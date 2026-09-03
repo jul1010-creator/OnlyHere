@@ -916,12 +916,63 @@ export const rankSource = (url, text, { officialHosts = [] } = {}) => {
   };
 };
 
-// Highest authority first, and within a class the newest first. Returns the
-// same objects rankSource made, so a caller can print the reason beside the URL.
-export const rankSources = (sources, opts) =>
-  (Array.isArray(sources) ? sources : [])
+// ── AND ONE SITE CANNOT BE THE WHOLE HIERARCHY ──────────────────────
+//
+// Oliver's Aarhus Riverfront run, 1 Sep. The source order handed to the writer,
+// eight lines long, under the heading "HIGHEST AUTHORITY FIRST":
+//
+//   getyourguide.com > getyourguide.com > getyourguide.com > getyourguide.com
+//   > getyourguide.com > nomads-travel-guide.com > tripadvisor.com
+//   > getyourguide.com
+//
+// Six of eight from one tour-booking affiliate, above visitaarhus.dk and
+// aarhus.dk, which the founder had vouched for and which the same run had
+// searched. Not because anything ranked GetYourGuide highly: every one of those
+// hosts is class "blog", so the whole order inside the class fell to the
+// tie-break, which is the newest four-digit year found in the SNIPPET. Its SEO
+// titles carry "2026". A municipality's page carries no year at all.
+//
+// Vestergade's was the same shape from the other end: eight of eight
+// wikipedia/wikidata, for a bar street, and then "0 of 2 pages read mention the
+// subject".
+//
+// ── AND THE FIX IS THE ONE THIS CODEBASE ALREADY MADE ONCE ──────────
+//
+// __sources dedupes by host on its way onto the row, with a `seenHost` set,
+// because eight links to one site is not eight sources. The ranked list is the
+// same list one step earlier and never got the same rule. One list, one
+// omission — the shape regions.js records as this project's signature failure.
+//
+// A round is one entry per host, best first, then the next best from each, and
+// so on. Every source is still returned, in the same order within a host, so a
+// caller that prints all of them loses nothing; what changes is which ones a
+// caller that prints EIGHT ends up showing.
+//
+// DELIBERATELY NOT TOUCHED: that reference outranks tourism for a nightlife
+// street. An encyclopedia has nothing to say about who drinks there on a
+// Tuesday, and sourceFit already tells the founder when the pages read do not
+// mention the subject — but the hierarchy is Oliver's, stated by him, and
+// re-ordering it is his call and not a 2am one.
+export const rankSources = (sources, opts) => {
+  const ranked = (Array.isArray(sources) ? sources : [])
     .map(s => rankSource(s?.url ?? s, s?.text ?? "", opts))
     .sort((a, b) => a.rank - b.rank || (b.year || 0) - (a.year || 0));
+  const byHost = new Map();
+  for (const r of ranked) {
+    const key = r.host || r.url;
+    if (!byHost.has(key)) byHost.set(key, []);
+    byHost.get(key).push(r);
+  }
+  const rounds = [];
+  const queues = [...byHost.values()];
+  // The host order is the order their BEST source came in, so the round-robin
+  // never promotes a weak host above a strong one — it only stops a strong host
+  // from taking every seat before a second opinion gets one.
+  for (let i = 0; queues.some(q => q.length > i); i++) {
+    for (const q of queues) if (q.length > i) rounds.push(q[i]);
+  }
+  return rounds;
+};
 
 // ── WHAT THE WRITER IS TOLD, AND WHY IT IS SHORT ────────────────────
 // A hierarchy is only useful if it settles things. This states the order, names

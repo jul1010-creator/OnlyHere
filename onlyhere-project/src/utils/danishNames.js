@@ -257,6 +257,46 @@ const ALL_INDEX = index([...PLACE_NAMES, ...SIGHT_NAMES]);
 //
 // includeSights is off by default. Matching must not walk the sight table (see
 // above); searching should.
+// ── "The Latin Quarter (Latinerkvarteret)" IS TWO SPELLINGS ─────────
+//
+// Oliver's Latin Quarter run, 1 Sep. The entry published with ONE usable
+// source out of about seventy pages, under a heading that promises the reader
+// how we know. Every one of the others was refused because the source filter
+// folded the whole typed name into the single contiguous phrase
+// "the latin quarter latinerkvarteret" and looked for it. No page on earth
+// writes that. Not the English one, not the Danish one, not the page that
+// helpfully says "The Latin Quarter (Danish: Latinerkvarteret)".
+//
+// A founder typing "X (Y)" is writing down two names for one place — the
+// second is what the local pages call it, which is exactly the spelling the
+// research most needs to match. placeChoice.js already knew: its subjectCore
+// strips the parenthetical and its comment calls it "his own disambiguator".
+// That made two matchers with one rule between them, and only one of them had
+// it. So the split lives here, where every matcher already comes for its
+// spellings.
+//
+// NESTED OR EMPTY PARENTHESES ARE LEFT ALONE: "(" with nothing usable either
+// side is not a disambiguator, it is punctuation, and splitting on it would
+// hand back a fragment that matches everything.
+const PARENTHETICAL = /^([^()]+?)\s*\(([^()]+)\)\s*$/;
+export const spellingsIn = (name) => {
+  const given = String(name ?? "").trim();
+  if (!given) return [];
+  const m = PARENTHETICAL.exec(given);
+  if (!m) return [given];
+  const outside = m[1].trim(), inside = m[2].trim();
+  if (!outside || !inside) return [given];
+  // The typed form first, so a page that really does write it out still matches
+  // on the strongest spelling before either half is tried.
+  return [given, outside, inside];
+};
+
+// DELIBERATELY NOT FOLDED INTO variantsOf. That function is read by matchers
+// and by searches alike, and its own comment already draws one line through the
+// middle of that ("matching must not walk the sight table; searching should").
+// Adding half-names to it would loosen every gate in the app that asks it what
+// a place is called, including ones nobody is looking at tonight. The callers
+// that want the halves ask for them, and pay for them at their own gate.
 export const variantsOf = (name, { includeSights = false } = {}) => {
   const given = String(name ?? "").trim();
   if (!given) return [];
