@@ -420,12 +420,47 @@ export const describeRead = (url, verdict, via) =>
 // blog from 2020; it does not beat the operator's own page. An old official
 // site still owns the history and no longer owns the price, which is what
 // RESEARCH_SOURCE_RULES has always said in prose.
+// ── AND A TOURIST BOARD WAS FILED AS A BLOG ─────────────────────────
+//
+// Two defects, one line apart, both found in Oliver's 1 Sep bar-street runs.
+//
+// FIRST: isTourismHost has existed for weeks and rankSource never called it, so
+// visitdenmark.com, visitaarhus.dk and oplev.esbjerg.dk were class "blog" —
+// level with any travel write-up on the internet. That file's own comment on
+// them says "A tourism board is a good source and is NOT the operator", which
+// is an argument for its own rank, not for the bottom one. It only ever moves a
+// board ABOVE an anonymous write-up: never above the operator, never above a
+// ticket calendar, and by default never above an encyclopedia.
+//
+// SECOND, and this is the one that showed: for a LIVING subject the encyclopedia
+// should not be up there at all. Vestergade's eight "HIGHEST AUTHORITY FIRST"
+// slots were all wikipedia and wikidata, for a bar street, and the very next
+// step said "0 of 2 pages read mention the subject".
+//
+// entryAudit.js already wrote the whole argument down, on 2 Sep, and built
+// LIVING_TYPES for it: "An encyclopedia is a real source about when a street was
+// laid out and where it runs, and no source at all about who drinks there on a
+// Tuesday... SO THE TEST IS BY TYPE. A town's history is what a lexicon is for.
+// A bar street is about this year." That reasoning was wired to a WARNING and
+// never to the ORDERING it is an argument about — the same rule implemented at
+// one door and not its sibling, for the fourth time in this file.
+//
+// So: same list, same reasoning, the other door. For a living type an
+// encyclopedia drops below the boards that write about this year. For a town, a
+// festival, an attraction and an essential nothing moves.
 export const SOURCE_CLASS = {
   official: { rank: 1, label: "the place's own website" },
   listing: { rank: 2, label: "a ticket site or event calendar" },
   reference: { rank: 3, label: "an encyclopedia or history page" },
+  tourism: { rank: 3.5, label: "a tourist board" },
   blog: { rank: 4, label: "a blog or a write-up" },
 };
+
+// What a tourist board and an encyclopedia are worth when the subject is this
+// year rather than the last four hundred. Only these two swap; nothing else in
+// the order moves, so the operator still wins and a ticket calendar still beats
+// both.
+const LIVING_RANK = { reference: 3.6, tourism: 3 };
 
 // Encyclopedias and reference works, which he groups together and which are
 // good for history and bad for a price. Matched on the registrable domain for
@@ -896,22 +931,26 @@ export const isOwnSiteFor = (url, nameWords = [], { placesWebsite = "", type = "
 // officialHosts is what the pipeline has already decided is the operator's own
 // site, rather than a guess made here. Passing none is fine: nothing is ranked
 // official, which is honest rather than optimistic.
-export const rankSource = (url, text, { officialHosts = [] } = {}) => {
+export const rankSource = (url, text, { officialHosts = [], living = false } = {}) => {
   const host = hostOf(url);
   const era = pageEra(text);
   const cls = officialHosts.map(h => String(h).toLowerCase().replace(/^www\./, "")).some(h => h && (host === h || host.endsWith(`.${h}`)))
     ? "official"
     : isListingHost(url) ? "listing"
     : isReferenceHost(url) ? "reference"
+    // Checked AFTER reference, because a board is never an encyclopedia and the
+    // order of these tests is the only thing that says so.
+    : isTourismHost(url) ? "tourism"
     : "blog";
   const base = SOURCE_CLASS[cls];
+  const rank = living && LIVING_RANK[cls] !== undefined ? LIVING_RANK[cls] : base.rank;
   return {
     url, host, cls, year: era.year,
     stale: era.stale,
     // A stale source keeps its class for stable facts and drops below every
     // current source of the same class for anything current. One number, so
     // sorting is a sort and not a special case.
-    rank: base.rank + (era.stale ? 10 : 0),
+    rank: rank + (era.stale ? 10 : 0),
     label: era.stale ? `${base.label}, and it is from ${era.year}` : base.label,
   };
 };
@@ -978,7 +1017,7 @@ export const rankSources = (sources, opts) => {
 // A hierarchy is only useful if it settles things. This states the order, names
 // each source's place in it, and then says the part that removes the noise: a
 // source that loses does not become an uncertainty.
-export const sourceOrderBlock = (ranked) => {
+export const sourceOrderBlock = (ranked, { living = false } = {}) => {
   const list = (Array.isArray(ranked) ? ranked : []).filter(Boolean);
   if (!list.length) return "";
   const lines = list.map((r, i) => `${i + 1}. ${r.host} — ${r.label}${r.year ? ` (${r.year})` : ""}`);
@@ -986,7 +1025,9 @@ export const sourceOrderBlock = (ranked) => {
 ${lines.join("\n")}
 
 WHEN TWO OF THESE DISAGREE, THE HIGHER ONE WINS AND THE LOWER ONE IS NOT MENTIONED. Not in the prose, not in uncertainties, not as "some sources say". A disagreement you can settle by this order is settled, and reporting it anyway hands the reader a decision that was already made for them.
-The order is: the place's own website, then a ticket site or calendar, then an encyclopedia or history page, then a blog. A source from before ${STALE_BEFORE_YEAR} sits below every current source for anything that changes, so an old page may still carry history and may not carry ${perishableSentence()}.
+The order is: ${living
+  ? "the place's own website, then a ticket site or calendar, then a tourist board, then an encyclopedia, then a blog. This subject is about how the place is NOW, so a tourist board writing about this year outranks a lexicon entry: an encyclopedia is a real source for when a street was laid out and no source at all for who drinks on it"
+  : "the place's own website, then a ticket site or calendar, then an encyclopedia or history page, then a tourist board, then a blog"}. A source from before ${STALE_BEFORE_YEAR} sits below every current source for anything that changes, so an old page may still carry history and may not carry ${perishableSentence()}.
 ${EXISTENCE_RULE}
 Only say sources disagree when they are at the SAME level and you cannot separate them by date.
 

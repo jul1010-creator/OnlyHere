@@ -352,3 +352,70 @@ export const applyEditedRow = (rowId, type, payload) => {
   }
   return true;
 };
+
+// ── AND DELETE NEVER GOT THE SAME DOOR ──────────────────────────────
+//
+// Oliver, 3 Sep 2026: "Can you make the /#studio so when I delete an item, it
+// doesn't refresh the entire page? It's annoying.."
+//
+// It is the same complaint he made on 15 August about SAVE — "clicking 'save'
+// just to be put all the way back to the front page is also very annoying" —
+// and the fix for that is the function directly above. Delete was left on
+// `window.location.reload()`, under a comment calling it "the simplest correct
+// way to clear it from every merged array", which was true and is the same
+// thing the edit comment said before applyEditedRow existed.
+//
+// A delete costs more than a save did: it throws away the Studio panel, the
+// open group, the scroll position and the search — and delete is the operation
+// people do several times in a row, so the reload lands once per row.
+//
+// Everything this needs is already here. ARRAY_FOR is the same map, the two
+// multi-home types are the same two, and the registries that outlive a row are
+// the same registries — with one difference that matters more on this path than
+// on the edit path: mergedIds and mergedKeys MUST give the row up. They exist so
+// a refresh cannot re-add what is already in the arrays, and a deleted row that
+// keeps its claim means republishing under that name is silently skipped as a
+// duplicate of something that no longer exists. That is the bug this file calls
+// the signature one: in the database, rendering nowhere. Here it would be worse
+// — not in the database, and unpublishable.
+//
+// RETURNS FALSE RATHER THAN GUESSING, exactly as the edit does, and the caller
+// reloads on false. A type nothing registers, or a row that was skipped as a
+// duplicate, is not in any array to remove, and pretending otherwise leaves the
+// entry on screen with nothing saying the delete half-worked.
+export const removeLiveRow = (rowId, type) => {
+  const id = LIVE_ID_OFFSET + Number(rowId);
+  if (!Number.isFinite(id)) return false;
+  const homes = type === "festival" ? [events, majorEvents]
+    : type === "booking" ? [craftItemsFallback, bookingRowsCache]
+    : ARRAY_FOR[type] ? [ARRAY_FOR[type]] : [];
+  if (!homes.length) return false;
+
+  let name = null;
+  for (const list of homes) {
+    const i = list.findIndex(x => x?.id === id);
+    if (i < 0) continue;
+    if (name === null) name = String(list[i]?.name || "");
+    list.splice(i, 1);
+  }
+  // Not in any array. Say so rather than reporting a removal that did not
+  // happen: the caller's fallback is the full reload, which is today's
+  // behaviour, so the worst case is exactly what it replaces.
+  if (name === null) return false;
+
+  // ── AND THE TWO REGISTRIES ARE KEYED DIFFERENTLY ────────────────
+  // mergedIds holds the RAW Supabase row id (doLoad: `mergedIds.add(row.id)`),
+  // while the arrays hold the OFFSET one. Deleting the offset id here would
+  // silently remove nothing and leave the row's claim standing — the row gone
+  // from the page, still counted as merged, and unpublishable under its own
+  // name afterwards. Written out because the two ids are one line apart in
+  // doLoad and look interchangeable.
+  mergedIds.delete(Number(rowId));
+  if (name) mergedKeys.delete(keyOf(type, name));
+  // A town's coordinate is the reference frame every other entry in that town is
+  // measured against, so it has to go with the row or the map keeps a point for
+  // a place that is no longer published. Same reasoning as the edit path, one
+  // step further: there is no new frame to put back.
+  if (type === "town" && name) delete TOWN_COORDS[name];
+  return true;
+};

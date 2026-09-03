@@ -158,7 +158,7 @@ writeFileSync(entry, `
   export { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, readNudge, EMPTY_NUDGE, MIN_SAVES, COOLDOWN_DAYS, MAX_ASKS, NUDGE_KEY, PROFILE_NUDGE_KEY } from ${JSON.stringify(join(root, "src/utils/accountNudge.js"))};
   export { groupRows, groupLabel, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
   export { filterRows, rowMatchesQuery, rowHaystack } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
-  export { applyEditedRow, LIVE_ID_OFFSET, townFrame } from ${JSON.stringify(join(root, "src/utils/liveContent.js"))};
+  export { applyEditedRow, removeLiveRow, LIVE_ID_OFFSET, townFrame } from ${JSON.stringify(join(root, "src/utils/liveContent.js"))};
   export { freeEntrance } from ${JSON.stringify(join(root, "src/data/freeEntrance.js"))};
   export { towns } from ${JSON.stringify(join(root, "src/data/towns.js"))};
   export { DRAFT_STORE_KEY, STORE_VERSION, DRAFT_TTL_MS, MAX_RESULTS, MAX_QUEUE, MAX_BYTES, STORE_PROBLEMS, packResult, packEditor, packQueueItem, capResults, packStore, isEmptyStore, readStore, storedKeys, FORBIDDEN_KEYS, writeStore, ageWords, restoreNote, problemNote, doneKeysFrom } from ${JSON.stringify(join(root, "src/utils/studioDraftStore.js"))};
@@ -1402,10 +1402,15 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     const ps = readFileSync(join(root, "src/components/ProfileQuestions.jsx"), "utf8");
     ok("no component type is declared in the render body", !/const Group = \(\{/.test(stripNonCode(ps)));
 
-    // A lone gold star on every published event, because shapeForLive's
-    // festival branch has no rating field and React prints undefined as nothing.
+    // ── AND THEN THE STAR WENT ALTOGETHER, 3 SEP ─────────────────
+    // This pinned the GUARD on the star: `{item.rating ? <span ...` rather than
+    // `&&`, because shapeForLive's festival branch has no rating field and React
+    // printed a lone gold star with undefined after it. Correct, and it was
+    // guarding a number that never existed in the first place — the FieldMask
+    // has never asked Places for a rating. The guard's job is now done by the
+    // star not being there, which is the stronger version of the same fix.
     const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
-    ok("the rating is guarded like the other two sites", /\{item\.rating \? <span/.test(dp));
+    ok("no unguarded star can print, because no star prints", !/\{item\.rating/.test(dp));
 
     // A failed reviews read used to render "be the first to share your
     // experience", which is a confident claim about somebody else's data made
@@ -13897,7 +13902,7 @@ rmSync(dir, { recursive: true, force: true });
   const codeR = stripComments(appR);
   ok("the sources are ranked", /const rankedSources = rankSources\(/.test(codeR));
   ok("and the block is built from that ranking rather than left empty",
-     /const orderBlock = sourceOrderBlock\(rankedSources\);/.test(codeR));
+     /const orderBlock = sourceOrderBlock\(rankedSources, \{ living: LIVING_TYPES\.includes\(sType\) \}\);/.test(codeR));
   ok("using the hosts this run judged official rather than a guess",
      /officialHosts: \[\.\.\.officialHosts, \.\.\.\(placesWebsite \? \[domainOf\(placesWebsite\)\] : \[\]\)\]/.test(codeR));
   // ── AND "OFFICIAL" MEANS THE HOST, NOT THE HEADLINE ──────────────
@@ -41519,7 +41524,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const top = rankSources(pool).slice(0, 4).map(r => r.host);
     is("every host gets a seat before any host gets a second",
        new Set(top).size, Math.min(4, new Set(pool.map(p => new URL(p.url).hostname)).size));
-    ok("the strongest source is still first", rankSources(pool)[0].host === "getyourguide.com");
+    // Pinned on the RANK, not on the host. A tourist board stopped being a
+    // "blog" on 3 Sep, so visitaarhus now leads this pool — which is the point
+    // of that change, and naming the winner here would have made the round-robin
+    // assertion fight it.
+    ok("the strongest source is still first",
+       rankSources(pool)[0].rank === Math.min(...rankSources(pool).map(r => r.rank)));
     is("and nothing is dropped", rankSources(pool).length, pool.length);
     // THE HIERARCHY ITSELF IS UNTOUCHED. Whether an encyclopedia should outrank
     // a tourist board on a bar street is Oliver's call, not a round-robin's.
@@ -41687,14 +41697,158 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("which says the places may be missing rather than absent",
      /It is not that they are not published/.test(appS));
 
-  // ── 3. DEAD CODE THAT LOOKS LIKE A FEATURE ──────────────────────
+  // ── 3. TWO SAVE SYSTEMS, ONE OF THEM UNREACHABLE ────────────────
   //
-  // Reported rather than deleted, because deleting a half-built feature at 3am
-  // is not a decision to make for somebody. These are here so the next sweep
-  // does not have to find them again: a ProductCard component that is never
-  // rendered, and the savedProducts filter that only it would have used.
-  ok("the shop's saved-items filter is still unrendered, and known",
-     /const savedProducts = allProducts\.filter/.test(appS));
+  // Oliver: "just finish it." Finishing it meant deleting half of it. The shop
+  // carried its own savedItems/toggleSave/savedProducts and a ProductCard
+  // nothing rendered — a save that lived in plain useState, died on refresh,
+  // never reached the Saved tab, and duplicated savedPlaces/toggleSavePlace,
+  // which persists, syncs to the signed-in user and is what the site's own FAQ
+  // promises. Building the missing card would have shipped a second Saved list
+  // competing with the documented one.
+  ok("the duplicate save system is gone",
+     !/const \[savedItems, setSavedItems\]/.test(appS)
+     && !/const savedProducts = allProducts\.filter/.test(appS)
+     && !/const ProductCard = /.test(appS));
+  ok("and a product saves through the one that persists",
+     /toggleSavePlace\("product", p, mapCity\.name\)/.test(appS)
+     && /toggleSavePlace\("product", selectedProduct, selectedProduct\.city\)/.test(appS));
+  // ── AND A PHONE HAS NO DOUBLE-CLICK ─────────────────────────────
+  // The product sheet — photo, price, description, the "Still here!" check —
+  // could only be opened by onDoubleClick, so on the device most of this site is
+  // read on it was unreachable entirely.
+  ok("the product sheet can be opened by a single tap",
+     /aria-label=\{`Details for \$\{p\.name\}`\}/.test(appS));
+  ok("and the mouse route still works", /onDoubleClick=\{\(\) => setSelectedProduct/.test(appS));
+
+  // ── 4. THE STAR NOTHING MEASURED ────────────────────────────────
+  //
+  // The Places FieldMask has never asked for `rating`, and no data file carries
+  // one. The only source the number ever had was the workshop prompt telling a
+  // model to give "a real rating if found in reviews" out of research holding no
+  // reviews — and it was rendered as a gold star, the strongest confidence
+  // signal on the page, and used as the DEFAULT SORT on the Attractions tab
+  // under the label "★ Recommended".
+  ok("no star is rendered anywhere", !/★ \{/.test(appS)
+     && !/★ \{/.test(readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8")));
+  ok("and nothing asks a model for one",
+     !/"rating": "a real rating/.test(readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8")));
+  ok("the sort that had nothing behind it is gone",
+     !/\{ value: "recommended", label: "★ Recommended" \}/.test(appS)
+     && !/\(b\.rating \|\| 0\) - \(a\.rating \|\| 0\)/.test(appS));
+  ok("and the default is the one the code already argued for",
+     /useState\("az"\)/.test(appS));
+  // The assistant was being handed the invented number too, which is how a
+  // model's guess becomes another model's input.
+  ok("the assistant is not told an invented rating either",
+     !/c\.rating \? ", ★"/.test(appS));
+}
+
+// ── "WHEN I DELETE AN ITEM, IT DOESN'T REFRESH THE ENTIRE PAGE" ─────
+//
+// Oliver, 3 Sep 2026. The same complaint he made about SAVE on 15 August —
+// "clicking 'save' just to be put all the way back to the front page is also
+// very annoying" — which produced applyEditedRow. Delete was left on
+// window.location.reload(), and delete is the worse one to reload on: it is the
+// operation people do several times in a row.
+{
+  const { removeLiveRow, applyEditedRow, LIVE_ID_OFFSET } = M;
+  const appD = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const liveD = readFileSync(join(root, "src/utils/liveContent.js"), "utf8");
+
+  // ── IT REFUSES RATHER THAN GUESSING, LIKE ITS SIBLING ───────────
+  //
+  // A row in no array cannot be removed from one, and reporting a removal that
+  // did not happen leaves the entry on screen with nothing saying so. False is
+  // the honest answer and the caller's fallback is the reload — today's
+  // behaviour, so the worst case is unchanged.
+  is("a type nothing registers cannot be removed in place", removeLiveRow(1, "wormhole"), false);
+  is("and neither can an essential that was never merged", removeLiveRow(999999, "essential"), false);
+  is("nor a row with no usable id", removeLiveRow("nonsense", "town"), false);
+  // The two multi-home types are the same two the edit path knows about, or one
+  // of them silently falls back to a full reload forever.
+  ok("a festival and a workshop are both reachable",
+     /type === "festival" \? \[events, majorEvents\][\s\S]{0,120}type === "booking" \? \[craftItemsFallback, bookingRowsCache\]/.test(
+       liveD.slice(liveD.indexOf("export const removeLiveRow"))));
+
+  // ── AND THE REGISTRIES HAVE TO GIVE THE ROW UP ──────────────────
+  //
+  // mergedIds and mergedKeys exist so a refresh cannot re-add what is already in
+  // the arrays. A deleted row that keeps its claim is worse than the bug this
+  // file calls its signature one: not in the database, still counted as merged,
+  // and unpublishable under its own name afterwards.
+  const removeBody = liveD.slice(liveD.indexOf("export const removeLiveRow"));
+  ok("the id claim is released", /mergedIds\.delete\(/.test(removeBody));
+  ok("and the name claim with it", /mergedKeys\.delete\(keyOf\(type, name\)\)/.test(removeBody));
+  // THE TWO IDS ARE ONE LINE APART IN doLoad AND LOOK INTERCHANGEABLE.
+  // mergedIds holds the RAW Supabase id; the arrays hold the OFFSET one. Getting
+  // this backwards removes nothing from the set and leaves the claim standing,
+  // silently — which is exactly what the first draft of this function did.
+  ok("mergedIds is given the raw row id, not the offset one",
+     /mergedIds\.delete\(Number\(rowId\)\)/.test(removeBody));
+  ok("while the arrays are searched by the offset one",
+     /const id = LIVE_ID_OFFSET \+ Number\(rowId\);/.test(removeBody));
+  ok("and the loader really does store the raw id", /mergedIds\.add\(row\.id\);/.test(liveD));
+  ok("a deleted town gives up its coordinate frame too",
+     /if \(type === "town" && name\) delete TOWN_COORDS\[name\];/.test(removeBody));
+
+  // ── WIRED, WHICH IS THIS CODEBASE'S USUAL FAILURE ───────────────
+  ok("the studio delete asks for the in-place removal first",
+     /const gone = row \? removeLiveRow\(id, row\.type\) : false;/.test(appD));
+  ok("and drops the row from the panel without a reload",
+     /if \(gone\) \{[\s\S]{0,220}setManageItems\(prev => \(prev \|\| \[\]\)\.filter\(r => r\?\.id !== id\)\);/.test(appD));
+  ok("with a re-render so the browse pages lose it too",
+     /if \(gone\) \{[\s\S]{0,320}bumpLiveContent\(v => v \+ 1\);/.test(appD));
+  // THE FALLBACK IS KEPT, and that is the point: this is an improvement on the
+  // reload, not a replacement that can strand a row nothing removed.
+  ok("and the reload is still there for the rows it cannot reach",
+     /\} else \{[\s\S]{0,200}setTimeout\(\(\) => window\.location\.reload\(\), 900\);/.test(appD));
+
+  // ── THE SOURCE HIERARCHY, 3 SEP ─────────────────────────────────
+  //
+  // Two defects one line apart. isTourismHost had existed for weeks and
+  // rankSource never called it, so visitdenmark.com and visitaarhus.dk were
+  // class "blog" — level with any write-up on the internet, under a comment in
+  // the same file calling a tourism board "a good source". And for a LIVING
+  // subject an encyclopedia was above them: Vestergade's eight "HIGHEST
+  // AUTHORITY FIRST" slots were all wikipedia and wikidata, for a bar street,
+  // and the next step said "0 of 2 pages read mention the subject".
+  //
+  // entryAudit wrote the whole argument down on 2 Sep and built LIVING_TYPES
+  // for it — "A town's history is what a lexicon is for. A bar street is about
+  // this year" — and wired it to a WARNING, never to the ordering it is an
+  // argument about. Same list, same reasoning, the other door.
+  {
+    const { rankSources, LIVING_TYPES, CONTENT_TYPES, sourceOrderBlock } = M;
+    const board = "https://www.visitaarhus.dk/x", lexicon = "https://en.wikipedia.org/wiki/X", blog = "https://getyourguide.com/y";
+    const order = (urls, living) => rankSources(urls.map(u => ({ url: u, text: "" })), { living }).map(r => r.cls);
+    is("a tourist board outranks a write-up on any subject",
+       order([blog, board], false), ["tourism", "blog"]);
+    is("and on a living one too", order([blog, board], true), ["tourism", "blog"]);
+    // THE ONLY THING THAT MOVES IS THESE TWO, RELATIVE TO EACH OTHER.
+    is("a town keeps its encyclopedia above the boards",
+       order([board, lexicon], false), ["reference", "tourism"]);
+    is("a bar street puts the boards above the encyclopedia",
+       order([board, lexicon], true), ["tourism", "reference"]);
+    // The operator and the ticket calendar are untouched in both directions.
+    is("the operator still wins either way",
+       [order([lexicon, "https://own.dk/a"], true), order([lexicon, "https://own.dk/a"], false)]
+         .map(o => o[0]),
+       ["reference", "reference"]);
+    ok("and the types it applies to are the list that was built for the argument",
+       LIVING_TYPES.includes("nightStreet") && LIVING_TYPES.includes("food") && !LIVING_TYPES.includes("town"));
+    ok("which is a subset of the real content types",
+       LIVING_TYPES.every(t => CONTENT_TYPES.includes(t)));
+    // ── AND THE WRITER IS TOLD THE ORDER THAT WAS ACTUALLY USED ───
+    // The block states the hierarchy in prose and says "the higher one wins and
+    // the lower one is not mentioned". A sentence describing a different order
+    // from the one above it is worse than no sentence.
+    const ranked = rankSources([{ url: board, text: "" }, { url: lexicon, text: "" }], { living: true });
+    ok("the living block says the board outranks the lexicon",
+       /a tourist board, then an encyclopedia/.test(sourceOrderBlock(ranked, { living: true })));
+    ok("and the ordinary block still says the opposite",
+       /an encyclopedia or history page, then a tourist board/.test(sourceOrderBlock(ranked, { living: false })));
+  }
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

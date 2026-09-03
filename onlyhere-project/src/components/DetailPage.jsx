@@ -322,7 +322,26 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                   item.rating is undefined on EVERY published event and this
                   rendered a lone gold star with nothing after it. React prints
                   undefined as nothing, so there was no error to notice. */}
-              {item.rating ? <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>★ {item.rating}</span> : null}
+              {/* ── AND THE STAR WAS NEVER MEASURED ────────────────────
+                  3 Sep 2026. The Places FieldMask asks for displayName,
+                  formattedAddress, businessStatus, opening hours and websiteUri.
+                  It has never asked for `rating` or `userRatingCount`, and no
+                  hardcoded data file carries one. So the only source this number
+                  ever had was the workshop prompt telling a model to supply "a
+                  real rating if found in reviews" — from research that contains
+                  no reviews.
+
+                  A gold star beside a name is the strongest confidence signal on
+                  the page, and it was the one number on it that nothing checked.
+                  That is the rule the whole pipeline is built on, broken in the
+                  most visible place: "any specific, checkable fact must come
+                  from the search context, never from your own memory."
+
+                  Removed at RENDER, so the rows already carrying one stop
+                  showing it without a redraft, and removed from the prompt so
+                  no new row invents one. If real ratings are wanted later they
+                  come from the FieldMask, and then this can come back with
+                  something behind it. */}
               <span style={{ fontSize: 12, color: C.muted }}>{travelLabel(userCoords, item.town, item.travelTime)}</span>
             </div>
           </div>

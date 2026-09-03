@@ -47,7 +47,7 @@ import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filt
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, appearances, otherDatesHere, alsoPlayingLine, describeAppearances, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured, TICKET_HUNT_PROMPT, ticketHuntUrls } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT, correctionLanded, describeCorrection } from "./utils/factCheckRead";
-import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, launderedAbsence, priceSource, priceMisses, findTicketPrice, ticketPriceOn, pricesAdmission, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit, VENUE_KINDS, UNCONFIRMED_IDENTITY, UNVERIFIED_PROSE } from "./utils/entryAudit";
+import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, launderedAbsence, priceSource, priceMisses, findTicketPrice, ticketPriceOn, pricesAdmission, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit, LIVING_TYPES, VENUE_KINDS, UNCONFIRMED_IDENTITY, UNVERIFIED_PROSE } from "./utils/entryAudit";
 import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM, upgradeWorthIt, onFootMinutes } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems, travellerBudget, budgetTierMismatch } from "./utils/accommodation";
@@ -123,7 +123,7 @@ import { GuidePage } from "./pages/GuidePage";
 import { askClaude, parseClaudeJSON, askPerplexity, withRetry, askOpenAI, readDatesFromImage, readPosterText, wholeSentences } from "./utils/aiClient";
 import { STUDIO_VOICE, slugify, J, bb, bbBullets, bbData, bulletsBlock, shapeForLive } from "./utils/studioContent";
 import { studioPrompts } from "./utils/studioPrompts";
-import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow, liveContentFailure } from "./utils/liveContent";
+import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow, removeLiveRow, liveContentFailure } from "./utils/liveContent";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
 import { journeyParts, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, closedButPlanned, arrivalStop, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
@@ -759,7 +759,6 @@ function GemlyxApp() {
   const [shopTab, setShopTab] = useState("shops");
   const [selectedCity, setSelectedCity] = useState(cities[0]);
   const [category, setCategory] = useState("All");
-  const [savedItems, setSavedItems] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [stillHereMap, setStillHereMap] = useState({});
   const [search, setSearch] = useState("");
@@ -767,7 +766,9 @@ function GemlyxApp() {
   // pill that offers it can never drift apart, which they previously could:
   // the town list was inline inside filteredEvents and nowhere else.
   const NORTH_ZEALAND_TOWNS = ["Gilleleje", "Tisvildeleje", "Hundested", "Frederiksværk", "Liseleje"];
-  const [craftSort, setCraftSort] = useState("recommended"); // "recommended" | "near" | "az"
+  // "az" | "near". "recommended" was the default and sorted by a rating nothing
+  // on this tab has; see the sort itself for the whole story.
+  const [craftSort, setCraftSort] = useState("az");
   // ── ONE OBJECT, NOT FIVE BOOLEANS ─────────────────────────────────
   // The old page kept craftKind, attractionCity, priceFilter, hiddenGemOnly and
   // bookableOnly as five separate pieces of state, which is why "clear all" did
@@ -1994,8 +1995,30 @@ function GemlyxApp() {
         headers: studioAuth(),
       });
       if (res.ok) {
-        setToast("🗑 Deleted — refreshing");
-        setTimeout(() => window.location.reload(), 900); // simplest correct way to clear it from every merged array
+        // ── AND DELETE STOPPED THROWING THE PANEL AWAY ────────────
+        //
+        // Oliver, 3 Sep 2026: "when I delete an item, it doesn't refresh the
+        // entire page? It's annoying.."
+        //
+        // The same complaint he made about SAVE on 15 August, and the same fix:
+        // remove the row from the merged arrays in place. Delete is the worse
+        // one to reload on, because it is the operation people do several times
+        // in a row, so the reload landed once per row and took the open group,
+        // the scroll position and the search with it every time.
+        //
+        // Falls back to the reload when the row was not in any array — a type
+        // nothing registers, or one skipped as a duplicate. That is exactly
+        // today's behaviour, so the worst case is unchanged.
+        const row = (manageItems || []).find(r => r?.id === id);
+        const gone = row ? removeLiveRow(id, row.type) : false;
+        if (gone) {
+          setManageItems(prev => (prev || []).filter(r => r?.id !== id));
+          bumpLiveContent(v => v + 1);
+          showToast("🗑 Deleted", 1800);
+        } else {
+          setToast("🗑 Deleted — refreshing");
+          setTimeout(() => window.location.reload(), 900);
+        }
       } else {
         showToast("❌ Delete failed. Check the delete RLS policy exists", 2500);
         
@@ -5366,9 +5389,15 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // ranks under everything.
       const rankedSources = rankSources(
         [...new Set([...founderUrls, ...candidateUrls])].map(u => ({ url: u, text: urlSaidWhat.get(u) || "" })),
-        { officialHosts: [...officialHosts, ...(placesWebsite ? [domainOf(placesWebsite)] : [])] }
+        // ── AND WHETHER THIS SUBJECT IS ABOUT THIS YEAR ────────────
+        // LIVING_TYPES, the same list entryAudit built for exactly this
+        // argument and then only wired to a warning. A bar street, a bar, a
+        // restaurant, a food street, a nightlife town and a workshop are about
+        // how the place is NOW; a town, a festival, an attraction and an
+        // essential are not, and their encyclopedia keeps its place.
+        { officialHosts: [...officialHosts, ...(placesWebsite ? [domainOf(placesWebsite)] : [])], living: LIVING_TYPES.includes(sType) }
       );
-      const orderBlock = sourceOrderBlock(rankedSources);
+      const orderBlock = sourceOrderBlock(rankedSources, { living: LIVING_TYPES.includes(sType) });
       note("Source order", {
         provider: "tavily",
         detail: "highest authority first, newest first inside a level",
@@ -13685,8 +13714,29 @@ If the conversation only covers a single day or a few stops with no explicit day
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const toggleSave = (id) => setSavedItems(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  const savedProducts = allProducts.filter(p => savedItems.includes(p.id));
+  // ── AND THERE WERE TWO SAVE SYSTEMS, ONE OF THEM UNREACHABLE ─────
+  //
+  // Oliver, 3 Sep 2026, on the dead ProductCard: "I have no idea if it was
+  // finished or not. But just finish it."
+  //
+  // Finishing it turned out to mean deleting half of it. What stood here was a
+  // SECOND save system — `savedItems`, `toggleSave`, `savedProducts` and a
+  // ProductCard nothing rendered — beside the one the app actually ships:
+  // savedPlaces / toggleSavePlace, which persists to localStorage, syncs to the
+  // cloud with the signed-in user, feeds the road-trip planner, and is the one
+  // the site's own FAQ promises ("Tap the ♡ heart on any business. It gets
+  // saved to your Saved tab instantly").
+  //
+  // The shop's copy was plain useState. It did not survive a refresh, it never
+  // reached the Saved tab, and its only card was never rendered — so tapping
+  // its heart would have looked exactly like saving and done nothing lasting.
+  // Building the missing card would have shipped a second Saved list competing
+  // with the documented one, which is the "two lists of the same thing" fault
+  // this codebase has a scar for, wearing a heart icon.
+  //
+  // toggleSavePlace is generic in the kind and the Saved panel renders whatever
+  // is in the list without a kind table, so a product needed no new plumbing at
+  // all: it needed to stop having its own.
 
 
   // ── THE SEARCH BOX NOW SEARCHES GEMLYX ─────────────────────────────
@@ -13801,7 +13851,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const upcomingLocal = events.filter(e => isConfirmedUpcoming(e)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})${eventTicketNote(e)}`).join("; ");
       const upcomingMajor = majorEvents.filter(e => isConfirmedUpcoming(e)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})${eventTicketNote(e)}`).join("; ");
       const upcomingViking = vikingEvents.filter(e => isConfirmedUpcoming(e)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})${eventTicketNote(e)}`).join("; ");
-      const craftList = craftItems.map(c => `${c.name} in ${c.location} (${c.price}${c.rating ? ", ★" + c.rating : ""})`).join("; ");
+      const craftList = craftItems.map(c => `${c.name} in ${c.location} (${c.price})`).join("; ");
       const shuffledTowns = [...towns].sort(() => Math.random() - 0.5);
       const townsList = shuffledTowns.map(t => `${t.name}${t.region ? ` (${t.region})` : ""}${t.highlight ? ` — ${t.highlight}` : ""}`).join("; ");
       const now = new Date();
@@ -14370,28 +14420,6 @@ ${languageBlock()}`;
 
 
   // ── PRODUCT CARD ─────────────────────────────────────────────
-  const ProductCard = ({ product }) => (
-    <div onClick={() => setSelectedProduct({ ...product, color: product.color || C.accent })}
-      style={{ background: C.surface, borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}`, cursor: "pointer", position: "relative" }}>
-      <div style={{ height: 160, background: `${product.color}22`, position: "relative", overflow: "hidden" }}>
-        {product.photo ? <img src={product.photo} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", fontSize: 48 }}>{product.emoji}</div>}
-        <button onClick={e => { e.stopPropagation(); toggleSave(product.id); }}
-          style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: savedItems.includes(product.id) ? C.gold : "#fff", cursor: "pointer" }}>
-          {savedItems.includes(product.id) ? "♥" : "♡"}
-        </button>
-        {product.trending && <div style={{ position: "absolute", top: 8, left: 8, background: C.accent, color: C.onAccent, fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 100 }}>HOT ↗</div>}
-        {product.isNew && <div style={{ position: "absolute", top: product.trending ? 30 : 8, left: 8, background: C.gold, color: C.onGold, fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 100 }}>NEW</div>}
-      </div>
-      <div style={{ padding: "12px 14px" }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 2, fontFamily: "'Fraunces', serif" }}>{product.name}</div>
-        <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>{product.shop}</div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ background: `${product.color}22`, color: readableOn(product.color, C.surface), fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 100 }}>◆ {product.exclusive}</span>
-          <span style={{ fontWeight: 700, fontSize: 15, color: C.gold, fontFamily: "'Fraunces', serif" }}>{product.price}</span>
-        </div>
-      </div>
-    </div>
-  );
 
 
   // ── EVENT CARD ───────────────────────────────────────────────
@@ -14469,7 +14497,6 @@ ${languageBlock()}`;
             {tierOf(event)?.id === "must" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: C.onGold, background: C.gold }}>★ Can't miss out</span>}
             {event.tier === "Highly Recommended" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: "#6ECF97", background: "rgba(110,207,151,0.12)" }}>Highly Recommended</span>}
             {event.tier === "Best If You're Already Nearby" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: "#FFB347", background: "#FFB34722" }}>Best if already nearby</span>}
-            {event.rating && <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>★ {event.rating}</span>}
             <span style={{ fontSize: 11.5, color: C.muted }}>{travelLabel(userCoords, event.town, event.travelTime)}</span>
             {/* ── FOUR HARDCODED COMPARISONS, TWO OF THEM UNREACHABLE ───
                 Was sold_out, selling_fast, available, free. The festival
@@ -18437,10 +18464,23 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               ? byName(a, b)
               : (craftSort === "near" && isInDenmark(userCoords))
               ? (townKmFromUser(a._kind === "craft" ? a.location : a.city) ?? 9999) - (townKmFromUser(b._kind === "craft" ? b.location : b.city) ?? 9999)
-              // Rating descending puts everything UNRATED at the bottom, which is
-              // most of the list, so A to Z above is the honest default for anyone
-              // actually looking for a specific place.
-              : (b.rating || 0) - (a.rating || 0));
+              // ── AND "RECOMMENDED" HAD NOTHING BEHIND IT ──────────────
+              //
+              // This sorted by `rating` descending, and it was the DEFAULT sort
+              // on this tab, labelled "★ Recommended". Nothing on this tab has a
+              // rating: the attraction shape carries none, and the only schema
+              // that ever asked for one was the workshop's, which told a model to
+              // give "a real rating if found in reviews" out of research holding
+              // no reviews. So the star promised a recommendation and delivered
+              // whatever order the array happened to be in, led by whichever
+              // workshops a model had felt generous about.
+              //
+              // A tier would have been the honest signal and this tab has none
+              // either — only towns and festivals carry one. So the option is
+              // gone rather than repaired, and the comment that used to sit here
+              // already said what should replace it: "A to Z is the honest
+              // default for anyone actually looking for a specific place."
+              : byName(a, b));
 
             return (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
@@ -18506,7 +18546,6 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       onChange={next => setAttractionFacets(next)}
                       sort={craftSort}
                       sortOptions={[
-                        { value: "recommended", label: "★ Recommended" },
                         { value: "az", label: "Alphabetical" },
                         { value: "near", label: "📍 Closest" },
                       ]}
@@ -18617,7 +18656,6 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             const label = item._kind === "free" ? priceChip(item) : (item.price || "On request");
                             return label ? <span style={{ fontSize: 11, color: C.gold, fontWeight: 700 }}>{label}</span> : null;
                           })()}
-                          {item.rating && <span style={{ fontSize: 11, color: C.gold, fontWeight: 700 }}>★ {item.rating}</span>}
                           {item._kind === "craft" ? (
                             item.bookingType === "online" ? (
                               <span style={{ fontSize: 9, fontWeight: 700, color: "#4CAF50", background: "#4CAF5018", border: "1px solid #4CAF5044", padding: "2px 8px", borderRadius: 100 }}>⚡ Book online</span>
@@ -20046,9 +20084,37 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{p.shop}</div>
                             {dist && <div style={{ fontSize: 11, color: C.gold, marginTop: 3, fontWeight: 700 }}>● {dist} away</div>}
                           </div>
-                          <div style={{ textAlign: "right" }}>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, fontFamily: "'Fraunces', serif" }}>{p.price}</div>
-                            <span style={{ fontSize: 10, color: C.muted }}>{selectedPin?.id === p.id ? "✓ Selected" : "Tap to locate"}</span>
+                          <div style={{ textAlign: "right", display: "flex", alignItems: "center", gap: 10 }}>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, fontFamily: "'Fraunces', serif" }}>{p.price}</div>
+                              <span style={{ fontSize: 10, color: C.muted }}>{selectedPin?.id === p.id ? "✓ Selected" : "Tap to locate"}</span>
+                            </div>
+                            {/* ── THE HEART THE FAQ ALREADY PROMISES ──────────
+                                "Tap the ♡ heart on any business. It gets saved
+                                to your Saved tab instantly." A product was the
+                                one thing on the site with no heart, and the one
+                                the retired shop system would have saved into a
+                                list that vanished on refresh. This is the same
+                                call every other card makes. */}
+                            <button onClick={(e) => { e.stopPropagation(); toggleSavePlace("product", p, mapCity.name); }}
+                              aria-label={isPlaceSaved("product", p.id) ? `Remove ${p.name} from saved` : `Save ${p.name}`}
+                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 17, lineHeight: 1, padding: 4, color: isPlaceSaved("product", p.id) ? "#E91E63" : C.muted }}>
+                              {isPlaceSaved("product", p.id) ? "♥" : "♡"}
+                            </button>
+                            {/* ── AND A PHONE HAS NO DOUBLE-CLICK ─────────────
+                                The detail sheet below — photo, price, the whole
+                                description, the "Still here!" confirmation —
+                                could only be opened by onDoubleClick, which does
+                                not exist on a touch screen. On the device most
+                                of this site is read on, every one of those
+                                sheets was unreachable. The double-click stays
+                                for anyone on a mouse who has learned it; this is
+                                the way in for everyone else. */}
+                            <button onClick={(e) => { e.stopPropagation(); setSelectedProduct({ ...p, city: mapCity.name, color: mapCity.color }); }}
+                              aria-label={`Details for ${p.name}`}
+                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "4px 2px", color: C.text, fontWeight: 700 }}>
+                              ›
+                            </button>
                           </div>
                         </div>
                       );
@@ -21603,7 +21669,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
           <div style={{ padding: "20px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
             <div style={{ fontSize: 30, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: 6 }}>{craftDetail.name}</div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{dotJoin(craftDetail.location, travelLabel(userCoords, craftDetail.location, craftDetail.travelTime))}{craftDetail.rating && <span> · <span style={{ color: C.gold, fontWeight: 700 }}>★ {craftDetail.rating}</span></span>}</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{dotJoin(craftDetail.location, travelLabel(userCoords, craftDetail.location, craftDetail.travelTime))}</div>
             {craftDetail.popularityTag && (
               <span style={{ display: "inline-block", fontSize: 10, fontWeight: 700, color: craftDetail.popularityTag === "Hidden Gem" ? C.gold : C.muted, background: craftDetail.popularityTag === "Hidden Gem" ? `${C.gold}22` : C.surface, border: `1px solid ${craftDetail.popularityTag === "Hidden Gem" ? C.gold : C.border}`, padding: "4px 11px", borderRadius: 100, marginBottom: 18 }}>
                 {craftDetail.popularityTag === "Hidden Gem" ? "◆ Hidden Gem" : "○ Common Attraction"}
@@ -21842,6 +21908,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   </button>
                 </div>
               </div>
+              {/* The same heart as the row, on the screen somebody is actually
+                  reading when they decide they want it. Both write to the one
+                  saved list, so the Saved tab and the road-trip planner see it. */}
+              <button onClick={() => toggleSavePlace("product", selectedProduct, selectedProduct.city)}
+                style={{ width: "100%", background: isPlaceSaved("product", selectedProduct.id) ? `${C.gold}18` : C.surface, border: `1px solid ${isPlaceSaved("product", selectedProduct.id) ? C.gold : C.border}`, borderRadius: 14, padding: "14px", fontSize: 14, fontWeight: 700, color: isPlaceSaved("product", selectedProduct.id) ? C.gold : C.text, cursor: "pointer", marginBottom: 10 }}>
+                {isPlaceSaved("product", selectedProduct.id) ? "♥ Saved" : "♡ Save this"}
+              </button>
               <button onClick={() => setSelectedProduct(null)}
                 style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px", fontSize: 14, fontWeight: 700, color: C.muted, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                 Close
