@@ -28,6 +28,9 @@
 // reports it, so the row gets properly rewritten rather than quietly patched
 // forever.
 import { PROSE_FIELDS } from "./entryAudit";
+// The budget and the word list live beside fillerWordCounts, which is where
+// the rule was written down in August. A second copy here would drift from it.
+import { trimFillerRuns } from "./helpers";
 
 // ── BOTH HALVES REQUIRED, AND THAT IS THE WHOLE SAFETY ──────────────
 //
@@ -115,7 +118,40 @@ export const cleanReaderProse = (payload) => {
     });
     if (touched) out.blogBody = body;
   }
-  return touched ? out : payload;
+
+  // ── AND THE VERBAL TIC, WHICH IS A PER-ENTRY QUESTION ─────────────
+  //
+  // Oliver, 8 Aug 2026, on "actually": "it's such a nerd word to be using so
+  // much." Oliver, 3 Sep 2026: "tell the AI to stop using the term 'actually'
+  // so much.. fk me.."
+  //
+  // Between those two dates the app gained a counter and a LOW audit finding
+  // and nothing that removed a single one, while STUDIO_VOICE grew a paragraph
+  // explaining precisely why the word is filler. Both halves were advice. This
+  // is the half that acts, and it is the same move as stripResearchVoice above:
+  // done at READ time, so every published row is fixed without a redraft.
+  //
+  // ACROSS THE WHOLE ENTRY, IN READING ORDER, which is why it cannot live in
+  // the per-field loop above. helpers.js already settled the budget — "twice in
+  // one entry is the signal, once can be doing real work" — and a budget spent
+  // field by field would leave one in each of eight fields, which is eight on
+  // the page and is exactly the complaint.
+  const fields = PROSE_FIELDS.filter(k => typeof out[k] === "string" && out[k].trim());
+  const bodyIdx = Array.isArray(out.blogBody)
+    ? out.blogBody.map((b, i) => (b && typeof b === "object" && typeof b.text === "string" ? i : -1)).filter(i => i >= 0)
+    : [];
+  const trimmed = trimFillerRuns([...fields.map(k => out[k]), ...bodyIdx.map(i => out.blogBody[i].text)]);
+  let cut = false;
+  fields.forEach((k, i) => { if (trimmed[i] !== out[k]) { out[k] = trimmed[i]; cut = true; } });
+  if (bodyIdx.length) {
+    const body = [...out.blogBody];
+    bodyIdx.forEach((bi, i) => {
+      const next = trimmed[fields.length + i];
+      if (next !== body[bi].text) { body[bi] = { ...body[bi], text: next }; cut = true; }
+    });
+    if (cut) out.blogBody = body;
+  }
+  return touched || cut ? out : payload;
 };
 
 // What the founder needs: which rows are doing it and what they say, so the row

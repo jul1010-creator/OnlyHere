@@ -103,6 +103,9 @@ writeFileSync(entry, `
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
   export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, VERIFY_PROMPT, settleVerdict, keepMeasured, isPipelineOwned, MEASURED_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS, feedbackProblem, feedbackRow } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
+  export { trimFillerRuns } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { readableOn, contrastRatio, overlay, parseHex, luminance, READABLE_MIN, MAX_INK_SATURATION, PILL_ALPHA } from ${JSON.stringify(join(root, "src/utils/readableColor.js"))};
+  export { journeyOriginFor, showsJourney, journeyOriginForKind, showsJourneyForKind, TYPES_WITH_A_JOURNEY, TYPES_WITHOUT_A_JOURNEY, TYPES_MEASURED_FROM_THE_ORIGIN, TYPES_MEASURED_FROM_THEIR_TOWN, journeyOriginPoint, IS_THE_CENTRE_KM, TRAVEL_ORIGIN } from ${JSON.stringify(join(root, "src/utils/journeyScope.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
   export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType, geocodePostcode } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
@@ -1506,7 +1509,15 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     const appSrc3 = readFileSync(join(root, "src/App.jsx"), "utf8");
     ok("the draft opens a log", /startLog\("Studio draft"/.test(appSrc3));
     ok("and closes it", /endLog\(\);/.test(appSrc3));
-    ok("the one measured journey is recorded", /note\("Measure the journey from Copenhagen"/.test(appSrc3));
+    // ── AND THE HEADING NAMES THE ORIGIN, WHICH IS NOW A VARIABLE ─
+    // This pinned the literal "Measure the journey from Copenhagen", which was
+    // true while Copenhagen was the only origin. Under the 3 Sep rule the
+    // origin differs per type, so the assertion moves to what it always meant:
+    // the one measurement in this pipeline gets a log line, and that line says
+    // WHERE FROM. A heading that stopped naming the origin would be the same
+    // silent-failure shape the log exists to close.
+    ok("the one measured journey is recorded",
+       /note\(`Measure the journey from \$\{journeyFrom\.name\}`/.test(appSrc3));
 
     // ── AND IT RUNS FOR EVERY TYPE THAT HAS A JOURNEY ─────────────
     // Oliver, 13 Aug 2026, holding a Google Maps transit link from København H
@@ -1560,10 +1571,19 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // Oliver's bar-street runs — NOT ONE PAGE WAS READ in any of them, because
     // the one type they all were is the one type that list left out.
     //
-    // Four gates now: the journey, the journey research search, the official
-    // -site search, and the page read. Keep it a count: a gate joining this
-    // family is worth a person looking at, and that is what this line is for.
-    is("all four gates read the one list", (appSrc3.match(/PLACE_TYPES_WITH_A_JOURNEY\.includes\(sType\)/g) || []).length, 4);
+    // ── AND ON 3 SEP THE JOURNEY GATE LEFT THIS FAMILY ─────────────
+    //
+    // Oliver: "I don't think bar streets should have distance from Copenhagen.
+    // Only towns should." He is right, and it means the four gates were never
+    // one question. Which types get their PAGES READ, their sources searched
+    // and their official site hunted really is every place. Which types are
+    // asked how far they are from Copenhagen is not — see utils/journeyScope.js.
+    //
+    // So the constant keeps the three gates that are genuinely the same
+    // question, and the count stays a tripwire for the next one to join.
+    is("the three place-wide gates read the one list", (appSrc3.match(/PLACE_TYPES_WITH_A_JOURNEY\.includes\(sType\)/g) || []).length, 3);
+    ok("and the journey is no longer one of them",
+       !/PLACE_TYPES_WITH_A_JOURNEY\.includes\(sType\) && frozenGeo/.test(appSrc3));
     ok("and the page read is one of them, which is the hole it closed",
        /PLACE_TYPES_WITH_A_JOURNEY\.includes\(sType\) && candidateUrls\.length > 0/.test(appSrc3));
     ok("with no hand-written copy of that list left beside it",
@@ -1576,7 +1596,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // somebody writes frozenGeo?.lat: Google would then be asked to route to
     // "undefined,undefined" and the failure would arrive as a paid empty answer.
     ok("and the journey is only measured when there is a coordinate to measure to",
-       /PLACE_TYPES_WITH_A_JOURNEY\.includes\(sType\) && frozenGeo\b/.test(appSrc3));
+       /showsJourney\(sType\) && frozenGeo\b/.test(appSrc3));
 
     // ── AND THE THREE OTHER LISTS IN THE SAME PIPELINE ────────────
     // Reading every type gate in the draft function to answer his question found
@@ -22614,7 +22634,25 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Anchored on the whole line, not on the tag. `{false && <JourneyCard ... />}`
   // contains the tag and renders nothing, and that mutant survived a version of
   // this assertion that only looked for the element.
-  ok("the detail page renders it", /\n        <JourneyCard item=\{item\} \/>\n/.test(dp));
+  // ── AND IT IS GATED ON THE KIND, 3 SEP 2026 ─────────────────────
+  //
+  // This was anchored on the whole line because `{false && <JourneyCard />}`
+  // contains the tag and renders nothing, and that mutant survived a version
+  // that only looked for the element. The line has legitimately gained a guard
+  // now, so the anchor moves to the guard — and the guard itself is asserted to
+  // be a real question rather than a constant, which is the same protection.
+  ok("the detail page renders it, gated on the kind",
+     /\n        \{showsJourneyForKind\(kind\) && <JourneyCard item=\{item\} kind=\{kind\} \/>\}\n/.test(dp));
+  // ── AND WHAT "VARIES" MEANS CHANGED WITH THE RULE, 3 SEP ────────
+  // This read `showsJourneyForKind("nightlife") === false`, which was the rule
+  // for about an hour. Oliver: "Actually, only make it towns. Nighttown
+  // shouldn't have any. The rest should be calculated from city center." So a
+  // bar street DOES show a journey again — from Aalborg, not from Copenhagen —
+  // and the thing that has to vary is now the ORIGIN, not the card.
+  ok("and that guard actually varies",
+     M.showsJourneyForKind("town") === true && M.showsJourneyForKind("essential") === false);
+  ok("and the origin varies with it",
+     M.journeyOriginForKind("town") === "origin" && M.journeyOriginForKind("nightlife") === "town");
   ok("under the article rather than above it", dp.indexOf("<JourneyCard") > dp.indexOf("{item.blogBody && item.blogBody.length > 0 && ("));
   ok("and before the map, so getting there comes before where it is",
      dp.indexOf("<JourneyCard") < dp.indexOf("<PlaceMiniMap"));
@@ -40860,6 +40898,417 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("a refusal is a step in the log, not a silence",
      /if \(found && !corroborated\) \{[\s\S]{0,400}note\("Where this place is, second attempt"/.test(appP));
   ok("marked as a gap rather than a clean pass", /outcome: "found", used: false,[\s\S]{0,300}appears once in the research/.test(appP));
+}
+
+// ── "ONLY MAKE IT TOWNS. THE REST FROM CITY CENTER" ─────────────────
+//
+// Oliver, 3 Sep 2026, in three messages. First: "I don't think bar streets
+// should have distance from Copenhagen. Only towns should." Then, asked where
+// attractions belong: "depends with attractions. People will be more
+// interested in knowing how far Legoland is from the city center." Then,
+// settling it: "Actually, only make it towns. Nighttown shouldn't have any.
+// The rest should be calculated from city center."
+{
+  const { journeyOriginFor, showsJourney, journeyOriginForKind, showsJourneyForKind,
+          TYPES_WITH_A_JOURNEY, TYPES_WITHOUT_A_JOURNEY,
+          TYPES_MEASURED_FROM_THE_ORIGIN, TYPES_MEASURED_FROM_THEIR_TOWN,
+          journeyOriginPoint, IS_THE_CENTRE_KM, TRAVEL_ORIGIN,
+          CONTENT_TYPES } = M;
+
+  // ── THE THREE BUCKETS, ASSERTED AS SETS ─────────────────────────
+  //
+  // As sets rather than as three sample types, because a sample cannot see the
+  // difference between "only towns" and "towns and whatever else somebody adds
+  // to the same list later". This is the assertion that fails if a second type
+  // is ever quietly measured from Copenhagen.
+  is("only towns are measured from Copenhagen", TYPES_MEASURED_FROM_THE_ORIGIN, ["town"]);
+  is("and exactly two types are refused a journey", TYPES_WITHOUT_A_JOURNEY, ["nightTown", "essential"]);
+  // Derived on both sides. If a content type is added tomorrow it lands here
+  // without anyone editing this line, which is the property being pinned:
+  // "the rest" is a rule, not a list somebody has to remember to extend.
+  is("and the rest are measured from their own town centre",
+     TYPES_MEASURED_FROM_THEIR_TOWN,
+     CONTENT_TYPES.filter(t => t !== "town" && t !== "nightTown" && t !== "essential"));
+
+  // The one that needed asking. A reader planning a day in Billund wants the
+  // drive they are about to make, not the one they already made.
+  is("an attraction is measured from its own town", journeyOriginFor("free"), "town");
+  // The consequence of "actually, ONLY towns", written down because it reverses
+  // his own earlier answer ("Towns, festivals") and is the change most likely to
+  // surprise him: Roskilde Festival is now measured from Roskilde.
+  is("and so is a festival, which changed", journeyOriginFor("festival"), "town");
+  is("a bar street is measured from its own town too", journeyOriginFor("nightStreet"), "town");
+  is("a nightlife town is measured from nowhere", journeyOriginFor("nightTown"), "");
+  ok("an essential still has no journey, as it never did", !showsJourney("essential"));
+
+  // ── AND EVERY TYPE IS PLACED ────────────────────────────────────
+  is("the two halves account for every content type",
+     [...TYPES_WITH_A_JOURNEY, ...TYPES_WITHOUT_A_JOURNEY].sort(), [...CONTENT_TYPES].sort());
+  is("and nothing is in both", TYPES_WITH_A_JOURNEY.filter(t => TYPES_WITHOUT_A_JOURNEY.includes(t)), []);
+  is("the three origin buckets account for every type too",
+     [...TYPES_MEASURED_FROM_THE_ORIGIN, ...TYPES_MEASURED_FROM_THEIR_TOWN, ...TYPES_WITHOUT_A_JOURNEY].sort(),
+     [...CONTENT_TYPES].sort());
+  // A STRING THAT IS NOT A CONTENT TYPE IS NOT A CONTENT TYPE. The fallthrough
+  // is "the rest of the real types", not "anything anyone passes".
+  is("something that is not a content type gets nothing", journeyOriginFor("wormhole"), "");
+  is("and neither does an empty one", journeyOriginFor(""), "");
+
+  // ── THE CARD IS GATED ON THE RENDER VOCABULARY, NOT THE STUDIO ONE ─
+  //
+  // DetailPage is handed `kind` — event, town, nightlife, free, food, craft —
+  // which has never been CONTENT_TYPES. Gating the CARD is what fixes the rows
+  // already published: two of Oliver's bar streets are live right now carrying
+  // a Copenhagen Metro M3 leg, Rådhuspladsen to Gammel Strand, for streets in
+  // Odense and Aarhus. Under this rule those cards render again — but the wrong
+  // stored origin is overwritten on the row, which the next block asserts.
+  is("a town's page is the only one measured from Copenhagen",
+     ["town", "event", "free", "food", "nightlife", "craft"].map(journeyOriginForKind),
+     ["origin", "town", "town", "town", "town", "town"]);
+  // An unknown kind gets silence rather than a guess — the same direction as
+  // every other absence in this app.
+  is("a kind nobody placed shows nothing", showsJourneyForKind("something-new"), false);
+  is("and so does an empty one", showsJourneyForKind(""), false);
+  // nightTown never reaches DetailPage (placeUrl.js: "nightTown and essential
+  // are absent on purpose: neither opens as a page in the app"), so the render
+  // side has no entry for it and must not invent one.
+  is("a nightlife town has no page and so no card", showsJourneyForKind("nightTown"), false);
+
+  // ── THE MEASUREMENT IS GATED TOO, SO THE CALL IS NOT BOUGHT ─────
+  // Rendering nothing while still paying Google for it is half a fix.
+  const appJ = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("a type with no journey is never measured", /if \(showsJourney\(sType\) && frozenGeo\)/.test(appJ));
+  ok("and the three place-wide gates keep the wider list",
+     (appJ.match(/PLACE_TYPES_WITH_A_JOURNEY\.includes\(sType\)/g) || []).length === 3);
+
+  // ── AND THE ORIGIN IS RESOLVED, NOT ASSUMED ─────────────────────
+  //
+  // The half that is easy to leave out. Gating WHICH types are measured while
+  // still sending Copenhagen as the origin would move the bug rather than fix
+  // it: every bar street would keep its Rådhuspladsen leg and merely stop being
+  // called a town's journey.
+  //
+  // THIS WAS A REGEX OVER A COMMENT AND A MUTANT WALKED THROUGH IT. Adding one
+  // line to the else branch — `journeyFrom = { point: TRAVEL_ORIGIN_POINT, name:
+  // "Copenhagen" }`, which IS the bug — passed all 11,965 assertions, because
+  // the comment they were anchored on was still sitting above it. So the
+  // decision was pulled out of App.jsx into a function, and these call it.
+  const asBarStreet = (opts) => journeyOriginPoint("nightStreet", opts);
+  const AALBORG = { lat: 57.0488, lon: 9.9217 };
+
+  is("a town is measured from Copenhagen, by coordinate",
+     journeyOriginPoint("town"), { point: "55.6761,12.5683", name: "Copenhagen" });
+  is("and that point is the one the app has always used",
+     `${TRAVEL_ORIGIN.lat},${TRAVEL_ORIGIN.lon}`, "55.6761,12.5683");
+  is("a bar street is measured from its own town centre",
+     asBarStreet({ townName: "Aalborg", townCentre: AALBORG, destination: { lat: 57.0180, lon: 9.9800 } }),
+     { point: "57.0488,9.9217", name: "Aalborg" });
+  // THE REFUSAL IS THE POINT, AND IT IS NULL, NOT COPENHAGEN.
+  is("a town centre that could not be resolved measures nothing",
+     asBarStreet({ townName: "Fjerritslev", townCentre: null, destination: AALBORG }), null);
+  is("and an entry naming no town measures nothing either",
+     asBarStreet({ townName: "", townCentre: AALBORG, destination: { lat: 57.0180, lon: 9.9800 } }), null);
+  is("a centre with a broken coordinate is a refusal, not a point",
+     asBarStreet({ townName: "Aalborg", townCentre: { lat: NaN, lon: 9.9 }, destination: AALBORG }), null);
+  // The place IS the centre. Jomfru Ane Gade is 400m from the middle of
+  // Aalborg, and "3min from Aalborg, door to door" is a sentence about nothing.
+  is("a place that IS the town centre has no journey to state",
+     asBarStreet({ townName: "Aalborg", townCentre: AALBORG, destination: { lat: 57.0480, lon: 9.9250 } }), null);
+  ok("and the line it is refused at is a real distance, not zero", IS_THE_CENTRE_KM > 0);
+  is("a type refused a journey is refused an origin too",
+     journeyOriginPoint("nightTown", { townName: "Aalborg", townCentre: AALBORG, destination: { lat: 57.018, lon: 9.98 } }), null);
+  is("and so is something that is not a content type",
+     journeyOriginPoint("wormhole", { townName: "Aalborg", townCentre: AALBORG, destination: { lat: 57.018, lon: 9.98 } }), null);
+
+  // Wired, which is this codebase's usual failure.
+  ok("the app asks that function rather than deciding for itself",
+     /journeyFrom = journeyOriginPoint\(sType, \{ townName, townCentre: centre, destination: destPoint \}\)/.test(appJ));
+  ok("and takes the Copenhagen case from it too",
+     /journeyFrom = journeyOriginPoint\(sType\);/.test(appJ));
+  ok("with no second copy of the rule left beside it",
+     !/journeyFrom = \{ point:/.test(appJ));
+  ok("and everything else resolves its own town centre",
+     /townPointFor\(townName\)[\s\S]{0,400}await geocodePlace\(townName\)/.test(appJ));
+  ok("nothing is measured without a resolved origin", /if \(journeyFrom\) \{\n\s*try \{/.test(appJ));
+  ok("and the query is sent to the resolved point, not to a constant",
+     /origin=\$\{originPoint\}/.test(appJ) && !/origin=\$\{CPH\}/.test(appJ));
+
+  // ── THE STORED ORIGIN IS THE MEASURED ONE ───────────────────────
+  //
+  // journeyReach prints this word to a reader — "3h 35min from Copenhagen, door
+  // to door" — so a wrong one is not a provenance detail, it is a false
+  // sentence on the page. It was the literal string "Copenhagen" on every row.
+  ok("the row records where it was actually measured from",
+     /from: realTransport\?\.from \|\| journeyFrom\?\.name \|\| "Copenhagen",/.test(appJ));
+  ok("and the measurement carries it to the four consumers that print it",
+     /realTransport = \{ transit, driving, from: journeyFrom\.name \};/.test(appJ));
+  ok("so no consumer says Copenhagen when it measured somewhere else",
+     !/detail: "Directions, transit, from Copenhagen"/.test(appJ)
+     && !/detail: "Directions, driving mode, from Copenhagen"/.test(appJ)
+     && !/found one from Copenhagen \(\$\{realTransport\.transit\}\)/.test(appJ));
+  // The research search asked "from Copenhagen" for every type, which returns
+  // the intercity route to the city rather than the bus that serves the street.
+  ok("and the transport search asks the question the type actually has",
+     /const fromCph = journeyOriginFor\(sType\) === "origin";/.test(appJ));
+
+  // ── journeyReach PRINTS WHATEVER IS STORED ──────────────────────
+  // No render change was needed for any of this, and that is worth pinning:
+  // the card already read the stored origin, so the fix is entirely upstream.
+  is("the card names the origin the row carries",
+     M.journeyReach({ total: 41, from: "Aalborg" }), "41min from Aalborg, door to door");
+  is("and falls back to Copenhagen only for a row that never stored one",
+     M.journeyReach({ total: 215 }), "3h 35min from Copenhagen, door to door");
+}
+
+// ── "THE PINK/PURPLE WRITING IS SO UNCOMFORTABLE FOR THE EYES" ──────
+//
+// Oliver, 3 Sep 2026, on the crowd line of the Jomfru Ane Gade entry: "it's
+// fine to have a different color.. but find a better."
+{
+  const { readableOn, contrastRatio, overlay, parseHex, READABLE_MIN, MAX_INK_SATURATION, PILL_ALPHA } = M;
+  const DARK = "#0F1628";     // C.surface, dark theme
+  const PAPER = "#FFFDF7";    // C.surface, light theme
+  // What is actually behind the text: the row's colour at 9.4% over the card,
+  // which is what `background: ${color}18` paints. Measuring against the bare
+  // surface would be scoring the ink against something that is not there.
+  const groundFor = (c, bg) => overlay(c, bg, PILL_ALPHA);
+  const reads = (c, bg) => contrastRatio(readableOn(c, bg), groundFor(c, bg));
+
+  // ── THE TWO COLOURS THAT PROMPTED IT, MEASURED ──────────────────
+  //
+  // The pink is the one he saw. The brown is the one that matters more: it is
+  // studioContent.js's DEFAULT for every nightlife row, so it is on most of
+  // them, and it was the worst in the set.
+  ok("the magenta on his screen failed the line", contrastRatio("#C2185B", groundFor("#C2185B", DARK)) < READABLE_MIN);
+  ok("and the DEFAULT nightlife brown was far worse", contrastRatio("#5D4037", groundFor("#5D4037", DARK)) < 2);
+  ok("both read after the lift", reads("#C2185B", DARK) >= READABLE_MIN && reads("#5D4037", DARK) >= READABLE_MIN);
+
+  // ── "IT'S FINE TO HAVE A DIFFERENT COLOR" ───────────────────────
+  // A colour that already reads is not touched. This is the half that keeps
+  // the app's identity: the fix is a floor, not a repaint.
+  is("a colour that already clears the line is returned untouched", readableOn("#D9A441", DARK), "#D9A441");
+  ok("and the palette's own gold is one of them", contrastRatio("#D9A441", groundFor("#D9A441", DARK)) >= READABLE_MIN);
+  // AND THE HUE SURVIVES. A pink entry stays pink; it does not become grey or
+  // become the house accent, which is what "find a better" would not have meant.
+  {
+    const lifted = parseHex(readableOn("#C2185B", DARK));
+    ok("a lifted pink is still pink", lifted.r > lifted.b && lifted.b > lifted.g);
+    const purple = parseHex(readableOn("#6A1B9A", DARK));
+    ok("and a lifted purple is still purple", purple.b > purple.r && purple.r > purple.g);
+  }
+
+  // ── THE DIRECTION IS DERIVED FROM THE GROUND, NOT ASSUMED ───────
+  //
+  // The classic way this ships half done: lighten unconditionally, because the
+  // author was looking at the dark theme. The light theme then gets pale text
+  // on paper and nobody notices until somebody switches.
+  {
+    const lum = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    // A dark brown fails on the dark card and passes on paper; a pale sand does
+    // the reverse. One colour cannot show both directions, which is the whole
+    // point — the direction is a property of the GROUND.
+    ok("a dark ground lifts a colour too dark to read on it",
+       lum(parseHex(readableOn("#5D4037", DARK))) > lum(parseHex("#5D4037")));
+    ok("and paper darkens one too pale to read on paper",
+       lum(parseHex(readableOn("#F5D76E", PAPER))) < lum(parseHex("#F5D76E")));
+    ok("each is legible against its own ground",
+       reads("#5D4037", DARK) >= READABLE_MIN && reads("#F5D76E", PAPER) >= READABLE_MIN);
+    // AND NEITHER IS TOUCHED WHERE IT ALREADY WORKED, which is what makes this
+    // a floor rather than a repaint.
+    is("the brown is left alone on paper", readableOn("#5D4037", PAPER), "#5D4037");
+    is("and the sand is left alone on the dark card", readableOn("#F5D76E", DARK), "#F5D76E");
+
+    // ── AND THE FALLBACK MUST NOT BE DOING THE WORK ───────────────
+    //
+    // A mutant that stepped lightness UP regardless of the ground survived
+    // every assertion above, because a pale colour driven up past white falls
+    // out of the loop into the plain-text fallback — which on paper is BLACK,
+    // and black is darker, and legible, and passed both tests. The search was
+    // broken and the safety net hid it.
+    //
+    // The hue is what tells them apart: black has none. Measured across the
+    // whole cube, the fallback is reached only for pure black and pure white
+    // themselves, so a hue arriving there is a search that failed.
+    {
+      const sand = parseHex(readableOn("#F5D76E", PAPER));
+      ok("a darkened sand is still a sand, not black", sand.r > sand.b && sand.g > sand.b && sand.r > 40);
+      let fellBack = 0;
+      for (let r = 0; r < 256; r += 51) for (let g = 0; g < 256; g += 51) for (let b = 0; b < 256; b += 51) {
+        const hex = "#" + [r, g, b].map(n => n.toString(16).padStart(2, "0")).join("");
+        if (Math.max(r, g, b) === Math.min(r, g, b)) continue;   // greys have no hue to keep
+        for (const bg of [DARK, PAPER]) {
+          const out = readableOn(hex, bg).toUpperCase();
+          if (out === "#FFFFFF" || out === "#000000") fellBack++;
+        }
+      }
+      ok(`no colour with a hue falls through to plain text (${fellBack} did)`, fellBack === 0);
+    }
+  }
+
+  // ── AND THE OTHER HALF OF "UNCOMFORTABLE" ───────────────────────
+  // Contrast is not the whole complaint: a fully saturated magenta at 11px bold
+  // shimmers even at a passing ratio. Capped on the colours being moved anyway.
+  {
+    const satOf = (hex) => {
+      const c = parseHex(hex);
+      const max = Math.max(c.r, c.g, c.b) / 255, min = Math.min(c.r, c.g, c.b) / 255;
+      const l = (max + min) / 2;
+      return l === 0 || l === 1 ? 0 : (max - min) / (l > 0.5 ? 2 - max - min : max + min);
+    };
+    ok("the hot pink was over the ceiling to begin with", satOf("#E91E63") > MAX_INK_SATURATION);
+    // Rounded to 8 bits on the way out, so this is "at the ceiling" to within
+    // one channel step, not "exactly at it".
+    ok("and the lifted one is brought down to it", satOf(readableOn("#E91E63", DARK)) <= MAX_INK_SATURATION + 0.01);
+    ok("which is a real reduction, not a rounding artefact",
+       satOf(readableOn("#E91E63", DARK)) < satOf("#E91E63") - 0.05);
+  }
+
+  // ── WHAT IT REFUSES TO DO ───────────────────────────────────────
+  // A designer's literal it cannot parse is handed back, not replaced by black.
+  is("something that is not a hex is returned as it came", readableOn("rgb(1,2,3)", DARK), "rgb(1,2,3)");
+  is("and so is an empty one", readableOn("", DARK), "");
+  is("a colour measured against a ground it cannot parse is untouched", readableOn("#C2185B", "nonsense"), "#C2185B");
+  is("three-digit hex is a hex", parseHex("#f0a").r, 255);
+
+  // ── EVERY COLOUR A MODEL CAN PICK CLEARS THE LINE ───────────────
+  //
+  // The property, not a sample. `color` is unconstrained model output — it is
+  // whatever hex the drafting model liked — so the assertion that matters is
+  // that there is no hex it can produce which this leaves unreadable.
+  {
+    let worst = 99, worstAt = "";
+    for (let r = 0; r < 256; r += 51) for (let g = 0; g < 256; g += 51) for (let b = 0; b < 256; b += 51) {
+      const hex = "#" + [r, g, b].map(n => n.toString(16).padStart(2, "0")).join("");
+      for (const bg of [DARK, PAPER]) {
+        const got = contrastRatio(readableOn(hex, bg), groundFor(hex, bg));
+        if (got < worst) { worst = got; worstAt = `${hex} on ${bg}`; }
+      }
+    }
+    ok(`no hex a model can pick stays unreadable (worst was ${worst.toFixed(2)} at ${worstAt})`, worst >= READABLE_MIN - 0.001);
+  }
+
+  // ── WIRED, WHICH IS THIS CODEBASE'S USUAL FAILURE ───────────────
+  const dpR = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("the detail page derives an ink from the row's colour", /const ink = readableOn\(color, C\.surface\);/.test(dpR));
+  // AND THE FILL KEEPS THE RAW COLOUR. Lifting the badge too would put white
+  // text on a pale pink, which is the same bug pointing the other way.
+  ok("the solid badge still uses the row's own colour, with white on it",
+     /background: color, color: "#fff"/.test(dpR));
+  ok("and the wash behind the ink does too", /color: ink, background: `\$\{color\}18`/.test(dpR));
+  ok("no text on that page paints the raw colour any more",
+     !/color: color,/.test(dpR));
+  const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("and no card in the app does either",
+     !/color: (?:spot|street|event|product|shop|mapCity|craftDetail|selectedProduct|c)\.color/.test(appR));
+  ok("the app reads the same rule rather than a second copy of it",
+     /import \{ readableOn \} from ".\/utils\/readableColor"/.test(appR));
+}
+
+// ── "TELL THE AI TO STOP USING THE TERM ACTUALLY SO MUCH" ───────────
+//
+// Oliver, 3 Sep 2026. And Oliver, 8 Aug 2026, about the same word: "it's such
+// a nerd word to be using so much."
+//
+// Between those two dates the app gained fillerWordCounts, a LOW audit finding
+// nobody has to act on, and a paragraph in STUDIO_VOICE explaining exactly why
+// the word is filler. All advice, no removal. Twenty-six days later it was
+// still shipping, which is the evidence that a prompt rule was not enough.
+{
+  const { trimFillerRuns, fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, cleanReaderProse } = M;
+
+  ok("the word he named is on the list", FILLER_WORDS.includes("actually"));
+  // The budget is the one already agreed in August, not a new one.
+  is("and the budget is the one already written down", FILLER_REPEAT, 2);
+
+  // ── THE FIRST ONE STAYS ─────────────────────────────────────────
+  // "It is only a real word when it corrects an expectation the reader already
+  // has." An entrance that looks closed but is round the back is the case the
+  // word exists for, and deleting every one would be its own kind of wrong.
+  {
+    const out = trimFillerRuns([
+      "The door looks shut. The entrance is actually round the back.",
+      "It is actually free for under-18s, and the tower is actually worth the climb.",
+    ]);
+    is("the first use survives", out[0], "The door looks shut. The entrance is actually round the back.");
+    is("and every later one is cut, with the grammar closed up",
+       out[1], "It is free for under-18s, and the tower is worth the climb.");
+    // ── AND "THE FIRST" MEANS THE EARLIEST, WITHIN A FIELD TOO ────
+    // A mutant that removed the FIRST match rather than the last survived every
+    // assertion above, because no fixture had two uses in ONE string with the
+    // budget to keep one. It deleted the occurrence it had just decided to
+    // keep, and the count came out the same, so nothing noticed.
+    is("with two in one field, the earlier one is the one kept",
+       trimFillerRuns(["It is actually free, and it is actually worth it."])[0],
+       "It is actually free, and it is worth it.");
+  }
+
+  // ── ACROSS THE ENTRY, NOT WITHIN A FIELD ────────────────────────
+  //
+  // The failure this is written against: a budget spent per field leaves one in
+  // each of eight fields, which is eight on the page, which is the complaint.
+  {
+    const eight = Array.from({ length: 8 }, () => "It is actually worth it.");
+    const out = trimFillerRuns(eight);
+    const total = out.join(" ").match(/\bactually\b/gi) || [];
+    is("eight fields saying it once each leaves one on the page", total.length, 1);
+    is("and the one kept is the first", out[0], "It is actually worth it.");
+  }
+
+  // ── THE GRAMMAR HAS TO SURVIVE THE CUT ──────────────────────────
+  // Removing a word leaves the punctuation and the capital around it. Every one
+  // of these came back wrong at least once while this was being written.
+  is("a leading Actually with a comma takes the comma with it",
+     trimFillerRuns(["keep one actually", "Actually, go early."])[1], "Go early.");
+  is("a leading Actually with no comma still leaves a capital",
+     trimFillerRuns(["keep one actually", "Actually the best bakery in town."])[1], "The best bakery in town.");
+  is("a mid-sentence one leaves a single space",
+     trimFillerRuns(["keep one actually", "What actually matters is the timetable."])[1],
+     "What matters is the timetable.");
+  is("and one at the end leaves no trailing space",
+     trimFillerRuns(["keep one actually", "The queue is the point, actually"])[1], "The queue is the point,");
+  // Each word has its own budget: spending "actually" must not spend "truly".
+  {
+    const out = trimFillerRuns(["It is actually good.", "It is truly good.", "It is truly fine. It is actually fine."]);
+    is("each filler word keeps its own budget", out[1], "It is truly good.");
+    is("and the second of each is what goes", out[2], "It is fine. It is fine.");
+  }
+  // Non-strings pass through untouched, because a payload holds numbers and
+  // nulls beside its prose.
+  is("anything that is not prose is passed through", trimFillerRuns([null, 42, ""]), [null, 42, ""]);
+  is("and text with nothing to cut is returned as it came",
+     trimFillerRuns(["Nothing to trim here."]), ["Nothing to trim here."]);
+
+  // ── AND IT RUNS AT READ TIME, SO PUBLISHED ROWS ARE FIXED ───────
+  //
+  // Same argument as stripDashesDeep and stripResearchVoice: "suppressing it at
+  // RENDER so all 71 published entries were fixed at once rather than needing
+  // 71 redrafts." A row already in Supabase is not going to be redrafted.
+  {
+    const row = {
+      desc: "The street is actually quiet before eight.",
+      gemlyxFind: "It is actually worth arriving early.",
+      blogBody: [{ type: "paragraph", text: "The bars are actually cheap on a Tuesday." }],
+      __lat: 57.05,
+    };
+    const cleaned = cleanReaderProse(row);
+    is("the first use is left alone", cleaned.desc, "The street is actually quiet before eight.");
+    is("the second field loses it", cleaned.gemlyxFind, "It is worth arriving early.");
+    is("and so does the body, which is where most of the prose lives",
+       cleaned.blogBody[0].text, "The bars are cheap on a Tuesday.");
+    is("machinery keys are not prose and are not touched", cleaned.__lat, 57.05);
+    ok("and the original row is not mutated", row.gemlyxFind === "It is actually worth arriving early.");
+  }
+  // A row with nothing to cut comes back as the SAME OBJECT, which is what the
+  // callers' identity checks rely on to avoid re-rendering everything.
+  {
+    const clean = { desc: "Nothing to cut here at all." };
+    ok("a row with nothing to cut is returned unchanged, by identity", cleanReaderProse(clean) === clean);
+  }
+
+  // ── AND THE COUNTER STILL COUNTS WHAT IS LEFT ───────────────────
+  // The audit is not replaced by this. One survivor is under the threshold and
+  // is not reported, which is the point: the finding now means "a row where the
+  // trim could not help", not "a row that says actually".
+  is("one surviving use is not a finding", Object.keys(fillerWordCounts("It is actually free.")), []);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

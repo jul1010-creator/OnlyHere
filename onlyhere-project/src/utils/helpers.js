@@ -582,6 +582,93 @@ export const fillerWordCounts = (text, words = FILLER_WORDS) => {
   return out;
 };
 
+// ── AND COUNTING IT WAS NOT THE SAME AS STOPPING IT ─────────────────
+//
+// Oliver, 8 Aug 2026, on "actually": "it's such a nerd word to be using so
+// much." Oliver, 3 Sep 2026: "tell the AI to stop using the term 'actually' so
+// much.. fk me.."
+//
+// Twenty-six days apart, about the same word. fillerWordCounts was written for
+// the first complaint and it does exactly what its name says: it COUNTS. The
+// only consumer files a LOW audit finding, which nobody has to act on, and
+// nothing anywhere removes a single one. So the word kept shipping.
+//
+// ── AND THE PROMPTS WERE TEACHING IT ────────────────────────────────
+//
+// The other half, found by counting: App.jsx says "actually" about a hundred
+// times inside PROMPT text — "what actually matters", "what to actually do
+// there", "why locals actually go there". A model writes in the register of its
+// instructions. It was being asked for the word on every draft and then flagged
+// for using it.
+//
+// ── SO IT IS TRIMMED ON THE WAY IN ──────────────────────────────────
+//
+// The same move as stripDashesDeep and stripResearchVoice: fix it at read time
+// and every published row is fixed at once, rather than 71 redrafts. And the
+// rule is the one already agreed here, not a new one — FILLER_REPEAT says twice
+// is the signal and once can be doing real work, so THE FIRST ONE STAYS. An
+// entrance that looks closed but is round the back is exactly what the word is
+// for; the eighth one on the same page is a tic.
+//
+// PER ENTRY, NOT PER FIELD. A budget spent field by field would leave one in
+// each of eight fields, which is eight on the page and is the complaint.
+
+// Removing a word leaves the punctuation around it. "Actually, the entrance is
+// round the back" must not become ", the entrance..." and "what actually
+// matters" must not become "what  matters".
+// Removes the LAST occurrence, not the first. The budget keeps the EARLIEST
+// uses, because those are the ones a reader meets before the repetition
+// registers, and a version of this that removed the first one deleted the
+// occurrence it had just decided to keep.
+const dropLast = (text, word) => {
+  const re = new RegExp(`\\b${word}\\b`, "gi");
+  let m = null, last = null;
+  while ((m = re.exec(text)) !== null) last = m;
+  if (!last) return text;
+  const before = text.slice(0, last.index);
+  const after = text.slice(last.index + last[0].length);
+  // "Actually, X" and ", actually," lose their comma with the word; anywhere
+  // else the two sides are simply rejoined with one space.
+  const cut = `${before}${/^\s*,/.test(after) && /(^|[.!?]\s*)$/.test(before) ? after.replace(/^\s*,\s*/, "") : after}`;
+  const tidy = cut
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/([,;:])\s*([,.;:])/g, "$2")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/^\s*[,;:]\s*/, "")
+    // TRIMMED BEFORE THE CAPITAL GOES BACK, not after. With the leading space
+    // still there the ^ anchor below matched the SPACE rather than the first
+    // letter, and "Actually the best bakery in town" came back lowercase.
+    .trim();
+  // The word may have BEEN the capital at the start of a sentence, so whatever
+  // now follows a full stop has to take it back.
+  return tidy.replace(/(^|[.!?]\s+)([a-z])/g, (_, lead, ch) => lead + ch.toUpperCase());
+};
+
+// Keeps `keep` of each word across the whole run of strings and removes the
+// rest. Returns the strings in the same order, so a caller can put them back
+// where they came from.
+export const trimFillerRuns = (texts, { words = FILLER_WORDS, keep = FILLER_REPEAT - 1 } = {}) => {
+  const budget = new Map(words.map(w => [w, keep]));
+  return texts.map((t) => {
+    if (typeof t !== "string" || !t.trim()) return t;
+    let out = t;
+    for (const w of words) {
+      const n = (out.match(new RegExp(`\\b${w}\\b`, "gi")) || []).length;
+      if (!n) continue;
+      // How many this string is allowed to keep, and what the run has left
+      // afterwards. min(), because a string with one use cannot bank the rest.
+      const keepHere = Math.min(budget.get(w) ?? 0, n);
+      budget.set(w, (budget.get(w) ?? 0) - keepHere);
+      for (let i = n; i > keepHere; i--) {
+        const next = dropLast(out, w);
+        if (next === out) break;   // nothing changed; do not spin
+        out = next;
+      }
+    }
+    return out;
+  });
+};
+
 export const scanForAITells = (text, extraPhrases = []) => {
   if (!text) return [];
   const found = [];

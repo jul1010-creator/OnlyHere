@@ -1,0 +1,44 @@
+{
+  "name": "Frederiksgade & Klostergade",
+  "town": "Aarhus",
+  "location": "Frederiksgade & Klostergade, City Centre, Aarhus",
+  "emoji": "🍻",
+  "category": "Bar street",
+  "crowd": "Early evening it's Aarhus locals grabbing a first beer in one of the small pubs along Frederiksgade after work. Later in the week the mix skews younger, and on Friday andSaturday nights at least one well-known door on the street starts checking ID and holding a minimum age of 21 after 11pm, a sign the late crowd gets rowdier than the calm sit-down feel a few hours earlier.",
+  "desc": "Frederiksgade runs from Immervad down to Frederiks Allé, right off the Strøget shopping street, and it's lined with small pubs packed side by side rather than built around one big venue. Klostergade sits nearby, stretching between Grønnegade and Studsgade, and works as a second short leg of the same kind of bar-hopping rather than a straight continuation of Frederiksgade. Together they're one of the areas locals point you toward when you ask where Aarhus drinks at night, not the flashy club end of town but the pub-crawl end.",
+  "whoFor": "This suits you if you'd rather sit in a small, packed pub with a beer than queue for a nightclub with a DJ booth. It's a poor match if you're chasing big dance floors or late electronic sets, that's not what this stretch is built for. Good for a slow crawl between three or four bars in one evening rather than parking yourself in one place all night.",
+  "bestNights": "Thursday through Saturday is when this earns a visit. Sunday through Wednesday the same pubs can feel close to empty, since the later hours and stricter door checks only show up toward the weekend.",
+  "walkIt": "Start at the Immervad end of Frederiksgade, right where it meets Strøget, and walk down toward Frederiks Allé, letting the pubs pull you in rather than picking one in advance. Klostergade isn't a straight continuation of that walk, so treat it as a separate short leg between Grønnegade and Studsgade once you've worked through Frederiksgade. Nothing changes dramatically block to block, it stays small pub after small pub rather than opening into a bigger club stretch at either end.",
+  "priceNote": "",
+  "realityCheck": "This is not a club strip and it will disappoint you if that's what you came for, there's no big dance floor or headline DJ waiting at the end of it. What it is, is a solid stretch of small pubs that locals use, and the 21-plus door check that shows up on at least one venue Friday and Saturday after 11pm tells you the later hours pull in a rowdier crowd than the after-work feel earlier on. By closing time on a weekend the street empties fast rather than winding down slowly, since these are pubs with a hard last call, not clubs that bleed people out over an hour.",
+  "thingsToKnow": [
+    "At least one well-known bar on Frederiksgade enforces a minimum age of 21 after 11pm on Fridays and Saturdays, so younger travellers can get turned away late.",
+    "Frederiksgade sits right off the Strøget shopping street, so it's an easy stop tacked onto an evening already spent in the city centre.",
+    "Outside Thursday to Saturday the same pubs can feel half-empty, so don't plan a special trip here on a random Tuesday."
+  ],
+  "gemlyxFind": "Walk Frederiksgade early, before the after-work crowd thickens, since these are small, cosy pubs with limited seating rather than big rooms, and grabbing a seat before 9pm on a Friday saves you standing for the rest of the night.",
+  "mapHint": "Frederiksgade, 8000 Aarhus, Denmark",
+  "color": "#8B3A3A",
+  "uncertainties": [
+    "No cover charge or beer price for the street itself was found in research, so priceNote is left empty.",
+    "The exact walking distance or direct connection between Klostergade and Frederiksgade is not confirmed, so they are treated here as two separate legs rather than one continuous strip.",
+    "Hours and age-restriction detail come from a single listed venue at Frederiksgade 25 in a 2025 guide, and may not apply to every bar on the street."
+  ],
+  "__sources": [
+    "https://www.visitdenmark.fr/danemark/planifiez-votre-voyage/frederiksgade-precinct-gdk765268",
+    "https://www.novacircle.com/en-GB/spots/europe/denmark/capital-region/kbenhavn-municipality/kbenhavn-k/frederiks-church-285690/about",
+    "https://en.wikipedia.org/wiki/Klostergade",
+    "https://www.visitcopenhagen.com/copenhagen/planning/the-marble-church-gdk414142",
+    "https://da.wikipedia.org/wiki/Klostergade",
+    "https://www.getyourguide.com/",
+    "https://www.visitdenmark.com/denmark/plan-your-trip/soren-kierkegaard-statue-by-the-marble-church-gdk410586",
+    "https://aarhusinside.dk/en/street-art-i-midtbyen/"
+  ],
+  "__notes": [
+    "NOTHING WE READ IS ABOUT THE SUBJECT. 8 pages were read and not one mentions any of: natteliv barer nightlife bars. 2 of the 8 hosts are encyclopedias, which is why the list reads as thorough research: a lexicon is a real source about when a street was laid out and no source at all about who drinks there on a Tuesday. The geography in this draft may be perfectly right while everything about the crowd, the hours and the money has nothing behind it. Search the subject rather than the name before this goes out.",
+    "No run of 8 words or more in this draft appears in any source we read. Nothing here is lifted.",
+    "WHO WROTE THIS: every word of it is Claude's, working from research notes OpenAI organised.",
+    "THE CORRECTION DID NOT LAND. 1 flagged claim is still in the draft after the rewrite, on the draft's own words: \"Klostergade sits nearby, stretching betw\". The rewrite was asked to remove or replace it and did not, so the draft below still carries a claim the checker contradicted. Fix by hand or redraft, and do not read the banner above as a pass.",
+    "JOURNEY REMOVED BY HAND, 3 Sep 2026. The measured journey on this row was Copenhagen Metro M3 Rådhuspladsen to Kongens Nytorv, 8 minutes — measured to a coordinate in Copenhagen, because a Copenhagen postcode appeared once in the research and was taken as this place's location. This street is in Aarhus. The words on this row are correct; only the measurement was not. It is removed rather than replaced, because a journey is a Google measurement and one typed by hand would be the same mistake with better manners. mapHint is correct, so a re-measure has what it needs."
+  ]
+}

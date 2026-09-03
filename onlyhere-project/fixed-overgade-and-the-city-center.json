@@ -1,0 +1,35 @@
+{
+  "name": "Overgade & The City Center",
+  "town": "Odense",
+  "location": "Overgade, City Centre, Odense",
+  "emoji": "🍺",
+  "category": "Bar street",
+  "crowd": "A mix of locals out for a normal weeknight, students showing up for Sir Club's quiz or bingo nights, and a slightly dressier group heading for Butchers if they want to dance. During the day the same pavement belongs to shoppers and museum visitors, since Overgade doubles as a pedestrian shopping street running past the City Museum and close to H.C. Andersen's House. It isn't built as a tourist strip, so don't expect a heavily international crowd late at night. This reads as Odense out for a drink rather than a destination party mile.",
+  "desc": "Overgade runs through Odense's old merchant quarter, past some of the city's oldest surviving houses and on toward the cobblestoned Nedergade, where the buildings tilt and lean and the street narrows right down. By day it reads as a history lesson: courtyards, half-timbered fronts, the City Museum sitting at Overgade 48. After dark the same buildings hold a scattered mix of bars and one proper nightclub, folded in among shopfronts rather than lined up shoulder to shoulder like a purpose-built nightlife strip. It does double duty, and neither version pretends to be the other.",
+  "whoFor": "This suits someone who wants a calmer pub crawl with some real history underfoot, not someone chasing a wall-to-wall club strip. Sir Club near the station end, with its selection of over 85 beers plus a weekly quiz and bingo night, pulls in a local, mixed-age crowd rather than a stag-party one. If you're picturing something on the scale of a big-city party mile, skip it. This is smaller and more spread out than that.",
+  "bestNights": "The street doesn't have one loud, well-documented peak night. It runs more on the rhythm of its individual bars than as a single strip. What is confirmed is that Sir Club runs a quiz every Monday from 20:00 and bingo every Wednesday from 20:00, both fixed draws that give the street a real pulse on nights it might otherwise sit quiet. Weekends are the safer bet if you just want bars open and some noise in the air, but treat that as the normal Danish city-centre pattern rather than a fact confirmed street by street.",
+  "walkIt": "Start near the railway station end, where Sir Club anchors things, and head into the older stretch from there. The buildings get lower and older as you go. Nedergade's cobblestones and colourful fronts take over from the more modern shopfronts near thestation, and you end up near Overgade 3 and the City Museum, right by the pedestrian mall section, so you finish among the oldest houses rather than starting there.",
+  "priceNote": "Free entry",
+  "realityCheck": "This isn't a dedicated party strip. It's a historic shopping and museum quarter that happens to have bars folded into it, and if you come expecting something on the scale of a big nightlife mile you'll find it thin and spread out instead. The bars here suit a quieter night out, a few beers, a quiz, maybe one stop at Butchers for a dance, and the research gives no clear picture of a big closing-time scene, so don't count on one.",
+  "thingsToKnow": [
+    "Parking on Overgade 31 is free but capped at 45 minutes, useless for a full night out.",
+    "Odense's city centre has over 4000 parking spaces total, with live availability shown on OdenseRundt.dk.",
+    "The street itself is public and free at all hours, it's the individual bars that set their own opening times and any cover charges."
+  ],
+  "gemlyxFind": "Sir Club, right at the station end, runs a proper quiz every Monday and bingo every Wednesday from 20:00, both nights when the rest of Overgade is quiet. That's the local move here rather than just turning up on a Friday.",
+  "mapHint": "Overgade, 5000 Odense, Denmark",
+  "color": "#8B5A2B",
+  "uncertainties": [
+    "The research doesn't specify which of Overgade 45 or 47 houses No Stress Bar versus Rabalder Bar.",
+    "No cover charge or beer price figures were found for bars along this specific street.",
+    "Which nights the street overall is busiest or dead, beyond Sir Club's confirmed Monday quiz and Wednesday bingo, is not confirmed in the research.",
+    "Closing-time atmosphere and how the crowd changes late at night along the street were not documented in the sources available."
+  ],
+  "__sources": [],
+  "__notes": [
+    "NOTHING IS SOURCED. __sources is empty, so every sentence in this draft rests on a page nobody kept. Either the place is genuinely unwritten about, in which case say less, or the source filter refused pages that were about it, which is a bug and not a gap.",
+    "No run of 8 words or more in this draft appears in any source we read. Nothing here is lifted.",
+    "WHO WROTE THIS: the prose is Claude's. One value was read out of the research by OpenAI rather than written — priceNote — and OpenAI also chose which facts survived into the notes Claude wrote from, which is the stage that decides what an entry ends up being about.",
+    "JOURNEY REMOVED BY HAND, 3 Sep 2026. The measured journey on this row was Copenhagen Metro M3 Rådhuspladsen to Gammel Strand, 5 minutes — measured to a coordinate in Copenhagen, because a Copenhagen postcode appeared once in the research and was taken as this place's location. This street is in Odense. The words on this row are correct; only the measurement was not. It is removed rather than replaced, because a journey is a Google measurement and one typed by hand would be the same mistake with better manners. mapHint is correct, so a re-measure has what it needs."
+  ]
+}

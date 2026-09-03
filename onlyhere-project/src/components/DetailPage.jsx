@@ -24,6 +24,8 @@ import { offerView, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "..
 import { saveLabel, saveHint, planFromSavedLabel } from "../utils/savedTrip";
 import { HowWeKnow } from "./HowWeKnow";
 import { JourneyCard } from "./JourneyCard";
+import { showsJourneyForKind } from "../utils/journeyScope";
+import { readableOn } from "../utils/readableColor";
 import { events, majorEvents, vikingEvents } from "../data/events";
 import { freeEntrance } from "../data/freeEntrance";
 import { foodSpots } from "../data/food";
@@ -142,6 +144,25 @@ export const detailPoint = (item, kind) =>
 export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false, signedIn = false, onNeedAccount }) => {
   if (!item) return null;
   const color = item.color || C.accent;
+  // ── AND THE SAME COLOUR CANNOT BE BOTH FILL AND INK ─────────────
+  //
+  // Oliver, 3 Sep 2026: "the pink/purple writing is so uncomfortable for the
+  // eyes.. it's fine to have a different color.. but find a better."
+  //
+  // `color` is a hex the DRAFTING MODEL chose, and this page uses it two ways:
+  // as a solid badge behind white text, and as 10-11px bold text on the card.
+  // Those want opposite things. A deep magenta is a good badge and an unreadable
+  // ink — Jomfru Ane Gade's measured 2.94:1 against its own pill, and the
+  // DEFAULT nightlife brown (#5D4037, which most rows carry) measured 1.86:1.
+  //
+  // So the fill keeps the row's colour and the text takes a version of the same
+  // hue lifted to 4.5:1, which is the line theme.js already measures its own
+  // colours against. A colour that already clears it comes back untouched.
+  //
+  // Computed here in the render and never hoisted: C is mutated by applyTheme,
+  // so a module-level constant would be measured against whichever theme
+  // happened to load first and would be silently wrong in the other two.
+  const ink = readableOn(color, C.surface);
   // ── ONE POINT, TWO USES ───────────────────────────────────────────
   // The pin and the dots come from the same resolution, so the map cannot show a
   // pin with no neighbours because the two halves disagreed about where it is.
@@ -199,7 +220,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           back to that lookup when it is absent, which is every older entry. */}
       <PhotoCredit photo={item.photo} credit={item.__photoCredit} style={{ padding: "6px 20px 0", maxWidth: 620, margin: "0 auto" }} />
       <div style={{ padding: "14px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: color, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: ink, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>
           {kind === "event" ? `${item.town}` : kind === "nightlife" ? item.location : kind === "free" ? item.city : kind === "food" ? item.location : item.region}
         </div>
         <div style={{ fontSize: 30, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: 8 }}>{item.name}</div>
@@ -242,7 +263,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
         {kind === "nightlife" && (item.crowd || true) && (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 18 }}>
             {item.crowd && (
-              <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: color, background: `${color}18`, padding: "5px 12px", borderRadius: 100 }}>
+              <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: ink, background: `${color}18`, padding: "5px 12px", borderRadius: 100 }}>
                 👥 {item.crowd}
               </span>
             )}
@@ -255,7 +276,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
         {kind === "free" && <AttractionBadge item={item} C={C} />}
         {kind === "food" && (
           <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: color, background: `${color}18`, padding: "5px 12px", borderRadius: 100 }}>{item.category}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: ink, background: `${color}18`, padding: "5px 12px", borderRadius: 100 }}>{item.category}</span>
             <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, background: `${C.gold}18`, padding: "5px 12px", borderRadius: 100 }}>{item.price}</span>
           </div>
         )}
@@ -274,7 +295,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                 ? { icon: "📍", label: "Best If Already Nearby", color: C.muted, bg: `${C.border}44` }
                 : { icon: "👍", label: item.tier, color: "#4CAF50", bg: "#4CAF5022" }; // unrecognized value — show it verbatim rather than silently hiding it
               return (
-                <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 100, marginRight: 8, display: "inline-block", marginBottom: 8, color: tierStyle.color, background: tierStyle.bg }}>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 100, marginRight: 8, display: "inline-block", marginBottom: 8, color: readableOn(tierStyle.color, C.surface), background: tierStyle.bg }}>
                   {tierStyle.icon} {tierStyle.label}
                 </span>
               );
@@ -757,7 +778,19 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             the claims came from, how to reach it, then where it sits. It renders
             nothing at all on an entry with no measured journey or no date on
             one, which today is every row published before 13 August. */}
-        <JourneyCard item={item} />
+        {/* ── AND ONLY WHERE THE JOURNEY ANSWERS A QUESTION ──────────
+            Oliver, 3 Sep 2026: "I don't think bar streets should have distance
+            from Copenhagen. Only towns should." He is right — nobody travels
+            from Copenhagen to Jomfru Ane Gade, they are already in Aalborg —
+            and two of his bar streets had shipped with a Copenhagen Metro leg
+            on them for streets in Odense and Aarhus.
+
+            GATED HERE AS WELL AS AT THE MEASUREMENT, because the wrong journeys
+            are already in Supabase. This file has settled that argument twice:
+            "suppressing it at RENDER so all 71 published entries were fixed at
+            once rather than needing 71 redrafts." journeyScope has the whole
+            rule, including why an attraction is measured from its own town. */}
+        {showsJourneyForKind(kind) && <JourneyCard item={item} kind={kind} />}
 
         {/* Where this actually is, and what else is around it. Renders only
             when the entry carries real coordinates; TOWN_COORDS is the fallback

@@ -129,6 +129,8 @@ import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liv
 import { journeyParts, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, closedButPlanned, arrivalStop, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
 import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS } from "./utils/correction";
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance, staleUncertainties, describeStale } from "./utils/glanceExtract";
+import { showsJourney, journeyOriginFor, journeyOriginPoint, IS_THE_CENTRE_KM } from "./utils/journeyScope";
+import { readableOn } from "./utils/readableColor";
 import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive, isNeverOwnSite, isNeverASource } from "./utils/sourcePolicy";
 import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn, danishAddressIn } from "./utils/regions";
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
@@ -3098,7 +3100,18 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // that never ran this search.
       if (PLACE_TYPES_WITH_A_JOURNEY.includes(sType)) {
         try {
-          const tq = `how to get to ${name} Denmark from Copenhagen by public transport train bus ferry which line rejseplanen`;
+          // ── AND IT ASKED THE WRONG QUESTION FOR MOST TYPES ────
+          // "from Copenhagen" was welded into this query for every place,
+          // which is the same mistake the measurement was making one screen
+          // down: a search for how to reach a bar street from the other end of
+          // the country returns the intercity route to the city, not the bus
+          // that serves the street. The origin clause is only asked for the
+          // types actually measured from Copenhagen; everything else asks
+          // which services serve the place, which is what the answer is for.
+          const fromCph = journeyOriginFor(sType) === "origin";
+          const tq = fromCph
+            ? `how to get to ${name} Denmark from Copenhagen by public transport train bus ferry which line rejseplanen`
+            : `how to get to ${name}${draftTown ? ` ${draftTown}` : ""} Denmark by public transport which bus train line stop rejseplanen`;
           const tRes = await fetch(`/api/search?q=${encodeURIComponent(tq)}`);
           const tData = await tRes.json();
           if (tRes.ok && !tData.error) {
@@ -3886,11 +3899,77 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // gateDraft compares the prose against it. See utils/journey.js.
       let transitParts = null;
       let drivingMins = null;
-      // ── AND THE SAME LIST HERE, WHICH IS THE FIX ─────────────────
-      // This was its own four-entry list. See PLACE_TYPES_WITH_A_JOURNEY.
-      if (PLACE_TYPES_WITH_A_JOURNEY.includes(sType) && frozenGeo) {
+      // ── AND NOT EVERY TYPE IS ASKED THE QUESTION ─────────────────
+      //
+      // This read PLACE_TYPES_WITH_A_JOURNEY — every content type but essential
+      // — so a bar street was measured from Copenhagen and shipped with the
+      // answer on it. Oliver, 3 Sep 2026: "Only towns should."
+      //
+      // showsJourney is the narrower question and the one this line meant to
+      // ask. PLACE_TYPES_WITH_A_JOURNEY keeps its three OTHER gates: which
+      // types get their pages read, their sources searched, their official site
+      // hunted. Those really are every place. Only the journey is not.
+      // ── AND WHERE THE JOURNEY IS MEASURED FROM ────────────────────
+      //
+      // Oliver, 3 Sep 2026: "Actually, only make it towns. Nighttown shouldn't
+      // have any. The rest should be calculated from city center."
+      //
+      // journeyScope holds the split. This resolves the POINT it names, and it
+      // runs BEFORE the gate rather than inside it, because "no town centre
+      // could be found" is a reason not to measure at all. The alternative is
+      // the exact bug being fixed: falling back to Copenhagen is how a Metro
+      // leg from Rådhuspladsen ended up on a bar street in Aalborg.
+      // The rule and its threshold live in journeyScope.js, where they can be
+      // called with a bar street and no town centre. This block does the two
+      // async lookups the decision needs and then asks it; it does not decide.
+      let journeyFrom = null;
+      if (showsJourney(sType) && frozenGeo) {
+        const townName = String(draftTown || "").trim();
+        if (journeyOriginFor(sType) === "origin") {
+          journeyFrom = journeyOriginPoint(sType);
+        } else {
+          // TOWN_COORDS first: a dozen towns, hand-checked, free. Nominatim
+          // second, because most Danish towns are not in that dozen and a
+          // geocode of a bare town name is the one query it is genuinely good
+          // at. No Places call — a town centre is an address, not a listing.
+          let centre = townName ? townPointFor(townName) : null;
+          let centreVia = centre ? "the town coordinates already on file" : "";
+          if (!centre && townName) {
+            try {
+              const geocodedCentre = await geocodePlace(townName);
+              if (geocodedCentre) { centre = geocodedCentre; centreVia = `Nominatim, on "${townName}"`; }
+            } catch { /* recorded as "nothing found" by the note below */ }
+          }
+          const destPoint = { lat: frozenGeo.lat, lon: frozenGeo.lon };
+          journeyFrom = journeyOriginPoint(sType, { townName, townCentre: centre, destination: destPoint });
+          const km = centre ? haversineKm({ lat: centre.lat, lon: centre.lon }, destPoint) : null;
+          if (journeyFrom) {
+            note("Where the journey is measured from", {
+              provider: "fetch", detail: `the centre of ${townName}, via ${centreVia}`,
+              outcome: "ok", used: true,
+              got: `${centre.lat.toFixed(4)}, ${centre.lon.toFixed(4)}${Number.isFinite(km) ? `, ${km.toFixed(1)} km from this place` : ""}`,
+              why: "Only towns are measured from Copenhagen. Everything else is measured from the middle of the town it is in, because that is the trip the reader is about to make.",
+            });
+          } else if (centre) {
+            note("Where the journey is measured from", {
+              provider: "fetch", detail: `the centre of ${townName}, against this entry's own coordinate`,
+              outcome: "empty", used: false,
+              got: `${Number.isFinite(km) ? `${km.toFixed(2)} km apart` : "no distance could be measured"}, under the ${IS_THE_CENTRE_KM} km line`,
+              why: "This place is the town centre, so there is no journey from the town centre to it. Nothing is measured and no travel figure is claimed.",
+            });
+          } else {
+            note("Where the journey is measured from", {
+              provider: "fetch", detail: "TOWN_COORDS, then Nominatim, on the town name",
+              outcome: "empty", used: false,
+              got: townName ? `no centre could be resolved for "${townName}"` : "this entry names no town",
+              why: "Without a town centre there is no honest origin. Falling back to Copenhagen is the bug this replaced, so the journey is not measured at all rather than measured from the wrong end of the country.",
+            });
+          }
+        }
+      }
+      if (journeyFrom) {
         try {
-          const CPH = "55.6761,12.5683";
+          const originPoint = journeyFrom.point;
           const dest = `${frozenGeo.lat},${frozenGeo.lon}`;
           // A TRANSIT QUERY WITH NO departure_time MEANS "IF YOU LEFT RIGHT NOW",
           // and that is a bug I shipped in PASS 44 and made worse in PASS 45 by
@@ -3916,7 +3995,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           // road", REQUEST_DENIED means "learned nothing", and collapsing both
           // to null would turn a broken API key into a claim about geography.
           const askRaw = async (mode, extra = "") => {
-            const r = await fetch(`/api/directions?origin=${CPH}&destination=${dest}&mode=${mode}${departureParam(mode)}${extra}`);
+            const r = await fetch(`/api/directions?origin=${originPoint}&destination=${dest}&mode=${mode}${departureParam(mode)}${extra}`);
             return r.json();
           };
           const ask = async (mode) => {
@@ -3926,7 +4005,12 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           const [transitD, drivingD] = await Promise.all([ask("transit"), ask("driving")]);
           const fmt = (d) => (d ? `${d.durationText} (${d.distanceText})` : null);
           const transit = fmt(transitD), driving = fmt(drivingD);
-          realTransport = { transit, driving };   // ferry verdict is attached below, once measured
+          // `from` travels with the figures because four consumers six hundred
+          // lines down print the origin in their own strings, and every one of
+          // them said "Copenhagen" whatever had actually been measured. A
+          // measurement that does not carry what it measured from is how a
+          // Vejle listing got published on an Aarhus row.
+          realTransport = { transit, driving, from: journeyFrom.name };   // ferry verdict is attached below, once measured
           transitParts = journeyParts(transitD?.steps, transitD?.durationMinutes);
           drivingMins = Number.isFinite(Number(drivingD?.durationMinutes)) ? Number(drivingD.durationMinutes) : null;
           // ── THE ONLY MEASUREMENT IN THE WHOLE DRAFT ──────────────
@@ -3936,8 +4020,8 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           // recorded as "found nothing" rather than as a failure, because
           // Google having no transit feed for a route is not the same as there
           // being no public transport. See the note at the travelTime override.
-          note("Measure the journey from Copenhagen", {
-            provider: "google", detail: "Directions, transit and driving, from Copenhagen to the frozen coordinate",
+          note(`Measure the journey from ${journeyFrom.name}`, {
+            provider: "google", detail: `Directions, transit and driving, from ${journeyFrom.name} to the frozen coordinate`,
             outcome: transit || driving ? "ok" : "empty",
             why: transit || driving ? "" : "Google returned no route by either mode",
             got: `transit: ${transit || "no route returned"} | driving: ${driving || "no route returned"}`,
@@ -4014,10 +4098,10 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
             const ferryText = ferryFindings(ferryVerdict, ferryLines);
             transportFindings = (ferryText ? `${ferryText}\n` : "")
               + (ferryLines.length > 0 && ferryVerdict.status !== FERRY.OPTIONAL
-              ? `Those port names and that operator come from the routing API itself, not from research: use them exactly. Do NOT name a different crossing to the same island. If a traveler could start from a different part of the country and use a different route, say so, but this is the confirmed one from Copenhagen.\n`
+              ? `Those port names and that operator come from the routing API itself, not from research: use them exactly. Do NOT name a different crossing to the same island. If a traveler could start from a different part of the country and use a different route, say so, but this is the confirmed one from ${journeyFrom.name}.\n`
               : "")
               + (namedLegs.length > 0 ? `REAL CONNECTING SERVICES on that public transport route, also from the API: ${namedLegs.join("; ")}.\n` : "")
-              + `REAL TRANSPORT CHECK from Copenhagen (a live Google Directions query, not a search result and not a guess; the public transport figure is for a normal weekday mid-morning departure, which is the journey a traveler would actually make, not a late-night or weekend timetable): `
+              + `REAL TRANSPORT CHECK from ${journeyFrom.name} (a live Google Directions query, not a search result and not a guess; the public transport figure is for a normal weekday mid-morning departure, which is the journey a traveler would actually make, not a late-night or weekend timetable): `
               + (transit ? `BY PUBLIC TRANSPORT: ${transit}.\n${journeyBlock(transitParts)}\n` : `BY PUBLIC TRANSPORT: the routing query returned no itinerary. This means UNCONFIRMED, NOT "no route exists" — rural Danish bus links and island ferry operators are not always in the transit feed, and this is ESPECIALLY common for islands, where a real, frequent, well-used ferry simply is not indexed. Do NOT write that public transport is unavailable or that driving is the only option; say the connection could not be confirmed and point at rejseplanen.dk and the ferry operator, IN THE REALITY CHECK PARAGRAPH AND NOWHERE ELSE. NEVER put that advice in a short At a Glance field, and NEVER IN gemlyxFind: that field is the one curated find in the entry and an errand is not a find. A Ribelund draft put "the useful move is to check Rejseplanen the same week for the real bus connection from Ribe Station" there, for a station eight minutes' walk away. Before you write anything about looking up a bus, check whether a nearest arrival point is named above: if one is, and it is walkable, the answer is the walk, not a journey planner. The nearestStation field takes a real station, stop or terminal NAME and nothing else: no sentence, no semicolon, no "likely", no "check rejseplanen", no explanation. If no real stop can be named, nearestStation must be an EMPTY STRING. An empty field reads as "we do not know"; a field containing advice reads as a station called "check rejseplanen.dk", which is what actually shipped. If a ferry is named anywhere above, that crossing is real and carries foot passengers unless the operator says otherwise. `)
               + (driving ? `BY CAR: ${driving}. ` : "")
               + `Use these real figures for travelTime and for anything you say about getting there, in preference to any duration from a search snippet. If a ferry is involved, these already include it. NEVER state that no public transport route exists on the strength of this block alone.`;
@@ -5608,7 +5692,11 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         t.__journey = {
           ...transitParts,
           drivingMins,
-          from: "Copenhagen",
+          // Was the literal "Copenhagen" on every row, including the bar
+          // streets that were never measured from there. journeyReach prints
+          // this word to the reader, so a wrong one is not a provenance
+          // detail — it is a false sentence on the page.
+          from: realTransport?.from || journeyFrom?.name || "Copenhagen",
           // ── AND THIS STAMPED THE UTC DAY, NOT TODAY ──────────
           // `new Date().toISOString().slice(0, 10)` is the day it is in
           // Greenwich, which is not the day it is here. In Denmark every stamp
@@ -6658,7 +6746,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             // just not a decision, because nothing was decided.
             if (modelSaid === t.travelTime) {
               note("travelTime matched the measurement", {
-                provider: "google", detail: "Directions, transit, from Copenhagen",
+                provider: "google", detail: `Directions, transit, from ${realTransport.from || "Copenhagen"}`,
                 outcome: "ok", used: true,
                 got: `the written ${t.travelTime} is what Google measured, so nothing was overruled`,
               });
@@ -6715,7 +6803,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             });
           }
           note("travelTime measured by road", {
-            provider: "google", detail: "Directions, driving mode, from Copenhagen",
+            provider: "google", detail: `Directions, driving mode, from ${realTransport.from || "Copenhagen"}`,
             outcome: "ok", used: true,
             got: `${t.travelTime}${modelSaid ? `, replacing the model's "${modelSaid}"` : ""}`,
             why: "no transit itinerary came back for this route. That is not evidence that no public transport exists, and nothing in the entry may say it is.",
@@ -6745,7 +6833,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         const NO_TRANSPORT = /no (?:confirmed |direct |reliable |real |proper |obvious )*(?:public transport|public transit|train[- ]and[- ]bus|bus[- ]and[- ]train|train and bus)[^.]{0,60}?(?:route|itinerary|connection|link)|(?:public transport|public transit)[^.]{0,40}?(?:does not exist|isn't available|is not available|unavailable)|driving is (?:genuinely |really )?the only/i;
         if (realTransport.transit && NO_TRANSPORT.test(JSON.stringify(t))) {
           t.uncertainties = [
-            `PIPELINE CONTRADICTION, FIX BEFORE PUBLISHING: this draft says there is no public transport route, but a live Directions query found one from Copenhagen (${realTransport.transit}). Rewrite the getting-there text and any Things to Know bullet repeating the claim.`,
+            `PIPELINE CONTRADICTION, FIX BEFORE PUBLISHING: this draft says there is no public transport route, but a live Directions query found one from ${realTransport.from || "Copenhagen"} (${realTransport.transit}). Rewrite the getting-there text and any Things to Know bullet repeating the claim.`,
             ...(t.uncertainties || []),
           ];
         }
@@ -14064,7 +14152,7 @@ ${languageBlock()}`;
 
   // ── PRODUCT CARD ─────────────────────────────────────────────
   const ProductCard = ({ product }) => (
-    <div onClick={() => setSelectedProduct({ ...product, color: product.color || C.accent })}
+    <div onClick={() => setSelectedProduct({ ...product, color: readableOn(product.color, C.surface) || C.accent })}
       style={{ background: C.surface, borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}`, cursor: "pointer", position: "relative" }}>
       <div style={{ height: 160, background: `${product.color}22`, position: "relative", overflow: "hidden" }}>
         {product.photo ? <img src={product.photo} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", fontSize: 48 }}>{product.emoji}</div>}
@@ -14079,7 +14167,7 @@ ${languageBlock()}`;
         <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 2, fontFamily: "'Fraunces', serif" }}>{product.name}</div>
         <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>{product.shop}</div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ background: `${product.color}22`, color: product.color, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 100 }}>◆ {product.exclusive}</span>
+          <span style={{ background: `${product.color}22`, color: readableOn(product.color, C.surface), fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 100 }}>◆ {product.exclusive}</span>
           <span style={{ fontWeight: 700, fontSize: 15, color: C.gold, fontFamily: "'Fraunces', serif" }}>{product.price}</span>
         </div>
       </div>
@@ -14131,7 +14219,7 @@ ${languageBlock()}`;
         <div style={{ padding: "14px 16px 15px" }}>
           <div style={{ display: "flex", gap: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: event.color, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 5 }}>{event.type} · {event.town}</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: readableOn(event.color, C.surface), letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 5 }}>{event.type} · {event.town}</div>
               <div style={{ fontSize: 20, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15, marginBottom: 4 }}>{event.name}</div>
               <div style={{ fontSize: 12, color: C.gold, fontWeight: 600 }}>{getEventDate(event.date, event.dateEnd)}</div>
             </div>
@@ -18223,7 +18311,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           )}
                         </div>
                         <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>{shop.location}</div>
-                        <div style={{ fontSize: 11, color: shop.color, fontWeight: 700, marginBottom: 8 }}>{shop.tag}</div>
+                        <div style={{ fontSize: 11, color: readableOn(shop.color, C.surface), fontWeight: 700, marginBottom: 8 }}>{shop.tag}</div>
                         <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{shop.desc}</div>
                         <div style={{ fontSize: 12, color: C.text, background: C.bg, borderRadius: 10, padding: "8px 12px", marginBottom: 10, lineHeight: 1.5 }}>
                           💡 {shop.highlight}
@@ -18495,7 +18583,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-                  <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: spot.color, background: `${spot.color}18`, padding: "5px 12px", borderRadius: 100 }}>
+                  <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: readableOn(spot.color, C.surface), background: `${spot.color}18`, padding: "5px 12px", borderRadius: 100 }}>
                     👥 {spot.crowd}
                   </span>
                   {/* Who is in there, and how dressed up they are. Nothing at
@@ -18655,7 +18743,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         </div>
                         <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7, marginBottom: 12 }}>{street.desc}</div>
                         {street.crowd && (
-                          <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: street.color || C.gold, background: `${street.color || C.gold}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 12 }}>
+                          <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: readableOn(street.color || C.gold, C.surface), background: `${street.color || C.gold}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 12 }}>
                             👥 {street.crowd}
                           </div>
                         )}
@@ -19215,12 +19303,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           style={{ background: C.surface, borderRadius: 16, padding: "14px", border: `1px solid ${C.border}`, cursor: "pointer" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                             <span style={{ fontSize: 20 }}>{spot.emoji}</span>
-                            <span style={{ fontSize: 10, fontWeight: 700, color: spot.color, background: `${spot.color}22`, padding: "3px 8px", borderRadius: 100 }}>{spot.type}</span>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: readableOn(spot.color, C.surface), background: `${spot.color}22`, padding: "3px 8px", borderRadius: 100 }}>{spot.type}</span>
                           </div>
                           <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 3 }}>{spot.name}</div>
                           <div style={{ fontSize: 10, color: C.muted, marginBottom: 8 }}>{dotJoin(spot.region, spot.travelTime)}</div>
                           {spot.vibe && (
-                            <div style={{ fontSize: 10, fontWeight: 700, color: spot.color, marginBottom: 8 }}>{spot.vibe}</div>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: readableOn(spot.color, C.surface), marginBottom: 8 }}>{spot.vibe}</div>
                           )}
                           <div style={{ fontSize: 12, color: C.light, lineHeight: 1.55 }}>{spot.desc}</div>
                           <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginTop: 10, textDecoration: "underline", textUnderlineOffset: "3px" }}>Get Directions →</div>
@@ -19474,7 +19562,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     the Solo Travel chip pointed at prose. */}
                 {[
                   { id: "ess-weather", icon: "🌤", label: "Weather", color: "#1565C0" },
-                  ...cats.map(c => ({ id: c.anchor, icon: c.icon, label: c.cat, color: c.color })),
+                  ...cats.map(c => ({ id: c.anchor, icon: c.icon, label: c.cat, color: readableOn(c.color, C.surface) })),
                   { id: "ess-faq", icon: "❓", label: "FAQ", color: "#455A64" },
                 ].map(s => (
                   <button key={s.id} onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
@@ -19714,7 +19802,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       const dist = userLocation && c ? getDistance(userLocation.lat, userLocation.lng, c[0], c[1]) : null;
                       return (
                         <div key={p.id} onClick={() => setSelectedPin(selectedPin?.id === p.id ? null : p)}
-                          onDoubleClick={() => setSelectedProduct({ ...p, city: mapCity.name, color: mapCity.color })}
+                          onDoubleClick={() => setSelectedProduct({ ...p, city: mapCity.name, color: readableOn(mapCity.color, C.surface) })}
                           style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${C.border}`, cursor: "pointer", background: selectedPin?.id === p.id ? `${mapCity.color}15` : "transparent" }}>
                           <div style={{ width: 40, height: 40, borderRadius: 10, overflow: "hidden", background: `${mapCity.color}22`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
                             {p.photo ? <img src={p.photo} alt={p.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : p.emoji}
@@ -21365,7 +21453,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <div style={{ background: `${craftDetail.color}18`, border: `1px solid ${craftDetail.color}`, borderRadius: 14, padding: "16px", marginBottom: 20 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
                   <span style={{ fontSize: 14 }}>★</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: craftDetail.color, letterSpacing: 1, textTransform: "uppercase" }}>Recommended Package</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: readableOn(craftDetail.color, C.surface), letterSpacing: 1, textTransform: "uppercase" }}>Recommended Package</span>
                 </div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 6 }}>{craftDetail.recommendedPackage.name}</div>
                 <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6 }}>{craftDetail.recommendedPackage.reason}</div>
@@ -21498,7 +21586,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 24, fontWeight: 700, color: C.text, marginBottom: 4 }}>{selectedProduct.name}</div>
               <div style={{ fontSize: 12, color: C.muted, marginBottom: 12, textTransform: "uppercase" }}>{selectedProduct.shop}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-                <span style={{ background: `${selectedProduct.color}22`, color: selectedProduct.color, fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 100 }}>◆ {selectedProduct.exclusive}</span>
+                <span style={{ background: `${selectedProduct.color}22`, color: readableOn(selectedProduct.color, C.surface), fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 100 }}>◆ {selectedProduct.exclusive}</span>
                 {selectedProduct.trending && <span style={{ fontSize: 11, fontWeight: 700, color: C.gold }}>↗ TRENDING</span>}
                 {selectedProduct.locationType === "popup" && <span style={{ fontSize: 11, fontWeight: 700, color: "#FF9966", background: "#FF996622", padding: "4px 10px", borderRadius: 100 }}>⚠ Pop-up</span>}
                 {selectedProduct.locationType === "seasonal" && <span style={{ fontSize: 11, fontWeight: 700, color: "#FFB347", background: "#FFB34722", padding: "4px 10px", borderRadius: 100 }}>◷ Seasonal</span>}
