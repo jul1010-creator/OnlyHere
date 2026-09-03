@@ -124,6 +124,7 @@ import { askClaude, parseClaudeJSON, askPerplexity, withRetry, askOpenAI, readDa
 import { STUDIO_VOICE, slugify, J, bb, bbBullets, bbData, bulletsBlock, shapeForLive } from "./utils/studioContent";
 import { studioPrompts } from "./utils/studioPrompts";
 import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow, removeLiveRow, liveContentFailure } from "./utils/liveContent";
+import { isRecording, startRecording, stopRecording, record, recordedEvents, recordingText, recordingFileName, safeUrl } from "./utils/studioRecorder";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
 import { journeyParts, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, closedButPlanned, arrivalStop, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
@@ -1449,6 +1450,103 @@ function GemlyxApp() {
   const [manageItems, setManageItems] = useState(null);
   const [manageLoading, setManageLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  // ── THE RECORDER, WHICH HAS TO BE ON BEFORE THE PAGE IT WATCHES ──
+  //
+  // Seeded from localStorage rather than false, because the whole reason this
+  // exists is a bug whose symptom is a page reload: if the flag lived in React
+  // state the recorder would switch itself off at exactly the moment worth
+  // recording, and the file would end one line before the answer.
+  const [recording, setRecording] = useState(() => isRecording());
+  const [recordedCount, setRecordedCount] = useState(() => recordedEvents().length);
+  useEffect(() => {
+    if (!recording) return undefined;
+    const tick = () => setRecordedCount(recordedEvents().length);
+
+    // WHAT WAS CLICKED, not what was typed. The label is the button's own text,
+    // which is what he would call it when telling me what he pressed, and it is
+    // read from the nearest button or [data-rec] ancestor so a click on the
+    // emoji inside a button still names the button. No input is ever read: a
+    // value is the one thing on this screen that could be a password.
+    const onClick = (e) => {
+      const el = e.target?.closest?.("[data-rec], button, a, [role=button]") || e.target;
+      const tag = String(el?.tagName || "").toLowerCase();
+      const label = String(el?.getAttribute?.("data-rec") || el?.getAttribute?.("aria-label") || el?.textContent || "")
+        .replace(/\s+/g, " ").trim().slice(0, 80);
+      record("click", label || `(unlabelled ${tag})`, { tag, disabled: !!el?.disabled });
+      tick();
+    };
+    document.addEventListener("click", onClick, true);
+
+    // ── AND WHAT THE PAGE ASKED THE SERVER ────────────────────────
+    // Method, address, status, duration. Never a header — that is where the
+    // Supabase key travels — and never a body, in either direction. What makes
+    // this worth having is the pairing: "DELETE returned 200" followed by "the
+    // page is unloading" is the whole delete bug in two lines.
+    const realFetch = window.fetch;
+    const patched = async (...args) => {
+      const started = Date.now();
+      const url = safeUrl(typeof args[0] === "string" ? args[0] : args[0]?.url || "");
+      const method = String(args[1]?.method || args[0]?.method || "GET").toUpperCase();
+      try {
+        const res = await realFetch(...args);
+        record("fetch", `${method} ${url}`, { status: res?.status ?? 0, ok: !!res?.ok, ms: Date.now() - started });
+        tick();
+        return res;
+      } catch (err) {
+        record("fetch", `${method} ${url}`, { failed: true, why: String(err?.message || err).slice(0, 160), ms: Date.now() - started });
+        tick();
+        throw err;
+      }
+    };
+    window.fetch = patched;
+
+    const onError = (e) => { record("error", String(e?.message || e?.reason?.message || e?.reason || "an error reached the window").slice(0, 200)); tick(); };
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onError);
+    // The line that answers "did it reload". Written on the way out, so it is
+    // the last thing in the file before the recording picks up on the new page.
+    const onUnload = () => record("page", "the page is unloading — a reload or a navigation");
+    window.addEventListener("beforeunload", onUnload);
+    record("page", "recording is live on this page", { url: safeUrl(window.location.href) });
+    tick();
+
+    return () => {
+      document.removeEventListener("click", onClick, true);
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onError);
+      window.removeEventListener("beforeunload", onUnload);
+      // Only if nothing else has patched it since. Restoring blindly would
+      // clobber a later wrapper and take its behaviour with it.
+      if (window.fetch === patched) window.fetch = realFetch;
+    };
+  }, [recording]);
+
+  const toggleRecording = () => {
+    if (recording) {
+      const events = stopRecording();
+      setRecording(false);
+      setRecordedCount(events.length);
+      showToast(`⏹ Stopped — ${events.length} event${events.length === 1 ? "" : "s"} recorded`, 2600);
+    } else {
+      startRecording();
+      setRecording(true);
+      setRecordedCount(1);
+      showToast("⏺ Recording — do the thing that goes wrong, then press stop", 3200);
+    }
+  };
+
+  const downloadRecording = () => {
+    const text = recordingText();
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = recordingFileName();
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+
   const [editingId, setEditingId] = useState(null); // id of the row being edited, or null for a fresh draft
   const loadManageItems = async () => {
     if (!studioSession) return;
@@ -1986,7 +2084,15 @@ function GemlyxApp() {
     } catch (e) { setMediaError(String(e?.message || e)); }
     setMediaBusy(false);
   };
-  const deleteContentItem = async (id) => {
+  // ── AND THE TYPE COMES FROM THE CALLER, NOT A SECOND LOOKUP ──────
+  //
+  // The first version of this took only the id and then searched manageItems
+  // for the row it needed the type from. The button already HAS that row — it
+  // renders row.type two lines above — so the lookup was a second chance to
+  // fail at something already known, and when it failed the fallback was a full
+  // page reload that looks exactly like the bug being fixed. A fallback that
+  // hides a failure, in the fix for a fallback that hides a failure.
+  const deleteContentItem = async (id, type) => {
     if (!studioSession || !window.confirm("Delete this from Gemlyx? This can't be undone.")) return;
     setDeletingId(id);
     try {
@@ -2009,15 +2115,28 @@ function GemlyxApp() {
         // Falls back to the reload when the row was not in any array — a type
         // nothing registers, or one skipped as a duplicate. That is exactly
         // today's behaviour, so the worst case is unchanged.
-        const row = (manageItems || []).find(r => r?.id === id);
-        const gone = row ? removeLiveRow(id, row.type) : false;
+        const rowType = type || (manageItems || []).find(r => r?.id === id)?.type || "";
+        // ── THE BREADCRUMB THIS WHOLE FEATURE EXISTS FOR ──────────
+        // A click log can say the Delete button was pressed and the page
+        // reloaded. Only the handler can say WHICH branch it took, and that is
+        // the difference between "it still refreshes" and an answer.
+        record("delete", "the row was deleted on the server", { id, typeFromButton: type || "", typeUsed: rowType, hadManageItems: (manageItems || []).length });
+        const gone = rowType ? removeLiveRow(id, rowType) : false;
+        record("delete", gone ? "removed from the merged arrays in place, no reload" : "NOT in the merged arrays — falling back to a full reload", { gone, type: rowType });
         if (gone) {
           setManageItems(prev => (prev || []).filter(r => r?.id !== id));
           bumpLiveContent(v => v + 1);
           showToast("🗑 Deleted", 1800);
         } else {
-          setToast("🗑 Deleted — refreshing");
-          setTimeout(() => window.location.reload(), 900);
+          // ── AND THE FALLBACK SAYS WHICH ONE IT WAS ────────────────
+          // "It still refreshes" is not a bug report anybody can act on, and it
+          // was the only thing this branch could produce. The two reasons a row
+          // cannot be removed in place are different problems with different
+          // fixes, so the toast names the one that happened.
+          setToast(rowType
+            ? `🗑 Deleted — refreshing (a published ${rowType} row was not in the merged list)`
+            : "🗑 Deleted — refreshing (no type on the row)");
+          setTimeout(() => window.location.reload(), 1400);
         }
       } else {
         showToast("❌ Delete failed. Check the delete RLS policy exists", 2500);
@@ -15095,6 +15214,23 @@ ${languageBlock()}`;
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8 }}>
                       <div style={{ fontSize: 10.5, color: C.muted }}>Logged in as {studioSession.email}</div>
                       <div style={{ display: "flex", gap: 6 }}>
+                        {/* ── THE RECORDER ────────────────────────────────
+                            Oliver, 3 Sep: "you can make a studio button, that
+                            records everything I do... so you can see a file
+                            about how it worked." Sits first in this row because
+                            it is the button you press BEFORE the thing you were
+                            about to do. */}
+                        <button onClick={toggleRecording} data-rec="Record"
+                          title={recording ? "Stop recording and keep the file" : "Record what happens next, so a bug report can carry the evidence"}
+                          style={{ background: recording ? "#E5393522" : "none", border: `1px solid ${recording ? "#E53935" : C.border}`, color: recording ? "#FF8A80" : C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                          {recording ? `⏹ Stop (${recordedCount})` : "⏺ Record"}
+                        </button>
+                        {!recording && recordedCount > 0 && (
+                          <button onClick={downloadRecording} data-rec="Download recording"
+                            style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                            ⬇ Recording ({recordedCount})
+                          </button>
+                        )}
                         <button onClick={() => setRedraftOpen(v => !v)}
                           style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                           {redraftOpen ? "Hide" : "🔄 Needs Redraft"}
@@ -15701,7 +15837,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                       📝 Blog text
                                     </button>
                                   )}
-                                  <button onClick={() => deleteContentItem(row.id)} disabled={deletingId === row.id}
+                                  <button onClick={() => deleteContentItem(row.id, row.type)} disabled={deletingId === row.id}
                                     style={{ background: "none", border: "1px solid #E23B4E66", color: "#E57373", borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
                                     {deletingId === row.id ? "…" : "🗑 Delete"}
                                   </button>

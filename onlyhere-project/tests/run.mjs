@@ -158,6 +158,7 @@ writeFileSync(entry, `
   export { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, readNudge, EMPTY_NUDGE, MIN_SAVES, COOLDOWN_DAYS, MAX_ASKS, NUDGE_KEY, PROFILE_NUDGE_KEY } from ${JSON.stringify(join(root, "src/utils/accountNudge.js"))};
   export { groupRows, groupLabel, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
   export { filterRows, rowMatchesQuery, rowHaystack } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
+  export { isRecording, startRecording, stopRecording, record, recordedEvents, recordingText, recordingFileName, clearRecording, safeUrl, safeDetail, REDACTED, MAX_EVENTS, DROP_MARKER } from ${JSON.stringify(join(root, "src/utils/studioRecorder.js"))};
   export { applyEditedRow, removeLiveRow, LIVE_ID_OFFSET, townFrame } from ${JSON.stringify(join(root, "src/utils/liveContent.js"))};
   export { freeEntrance } from ${JSON.stringify(join(root, "src/data/freeEntrance.js"))};
   export { towns } from ${JSON.stringify(join(root, "src/data/towns.js"))};
@@ -41794,7 +41795,19 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // ── WIRED, WHICH IS THIS CODEBASE'S USUAL FAILURE ───────────────
   ok("the studio delete asks for the in-place removal first",
-     /const gone = row \? removeLiveRow\(id, row\.type\) : false;/.test(appD));
+     /const gone = rowType \? removeLiveRow\(id, rowType\) : false;/.test(appD));
+  // ── AND THE TYPE COMES FROM THE CALLER ──────────────────────────
+  // The first version searched manageItems for a row the button already had in
+  // hand — a second chance to fail at something already known, whose failure
+  // mode is the full page reload this is meant to remove.
+  ok("the button hands over the type it is already rendering",
+     /deleteContentItem\(row\.id, row\.type\)/.test(appD));
+  ok("and the handler takes it", /const deleteContentItem = async \(id, type\) => \{/.test(appD));
+  // ── AND THE FALLBACK SAYS WHICH BRANCH RAN ──────────────────────
+  // "It still refreshes" is not a report anybody can act on, and it was the
+  // only thing this branch could produce.
+  ok("a fallback reload names its reason",
+     /was not in the merged list/.test(appD) && /no type on the row/.test(appD));
   ok("and drops the row from the panel without a reload",
      /if \(gone\) \{[\s\S]{0,220}setManageItems\(prev => \(prev \|\| \[\]\)\.filter\(r => r\?\.id !== id\)\);/.test(appD));
   ok("with a re-render so the browse pages lose it too",
@@ -41849,6 +41862,127 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("and the ordinary block still says the opposite",
        /an encyclopedia or history page, then a tourist board/.test(sourceOrderBlock(ranked, { living: false })));
   }
+}
+
+// ── "A FILE ABOUT HOW IT WORKED" ────────────────────────────────────
+//
+// Oliver, 3 Sep 2026, after "it still refreshes the page" cost me a wrong fix:
+// "you can make a studio button, that records everything I do."
+{
+  const { isRecording, startRecording, stopRecording, record, recordedEvents, recordingText,
+          recordingFileName, clearRecording, safeUrl, safeDetail, REDACTED, MAX_EVENTS, DROP_MARKER } = M;
+
+  // The module talks to localStorage, which does not exist in node. A Map
+  // standing in for it is the whole harness: everything else is real code.
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: k => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: k => store.delete(k),
+  };
+  clearRecording();
+
+  // ── A BREADCRUMB COSTS NOTHING WHEN NOTHING IS RECORDING ────────
+  // Which is what lets record() sit permanently inside a handler.
+  is("nothing is recording by default", isRecording(), false);
+  is("and a breadcrumb before start is dropped", record("delete", "something"), false);
+  is("so no file is produced from it", recordedEvents().length, 0);
+
+  startRecording();
+  ok("recording is on", isRecording());
+  // THE FIRST LINE IS ITS OWN. A recorder whose start is not in the file leaves
+  // the reader guessing where the session began.
+  is("and the start is in the file", recordedEvents()[0].kind, "recorder");
+
+  record("click", "🗑 Delete", { rowId: 412, type: "nightStreet" });
+  record("fetch", "DELETE gemlyx_content", { status: 200, ok: true, ms: 143 });
+  record("delete", "NOT in the merged arrays — falling back to a full reload", { gone: false, type: "nightStreet" });
+  const events = stopRecording();
+  is("recording stops", isRecording(), false);
+  ok("and the stop is in the file too", events[events.length - 1].what === "recording stopped");
+
+  // ── THE FILE A PERSON READS ─────────────────────────────────────
+  const text = recordingText(events);
+  ok("the file carries the click", /🗑 Delete/.test(text));
+  ok("and the request beside it", /DELETE gemlyx_content/.test(text) && /status=200/.test(text));
+  ok("and the branch the handler took, which is the whole point",
+     /falling back to a full reload/.test(text) && /gone=false/.test(text));
+  ok("times are relative, because the question is what happened next", /^\s*0\.00s/m.test(text));
+  ok("and it says what it deliberately does not record",
+     /No header values, request bodies or typed values are recorded/.test(text));
+  ok("an empty recording says so rather than producing a blank file",
+     recordingText([]) === "Nothing was recorded.");
+  ok("the file name is stable and sortable",
+     /^gemlyx-studio-recording-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.txt$/.test(recordingFileName(new Date("2026-09-03T18:20:00Z"))));
+
+  // ── AND IT MUST NEVER RECORD A SECRET ───────────────────────────
+  //
+  // This runs inside the founder tool, which holds a Supabase key and a login
+  // form, and the entire point of the file is that it gets SENT to somebody.
+  // These are the feature working, not defensive style.
+  is("a credential in a query string is replaced, not trimmed",
+     safeUrl("https://x.supabase.co/rest/v1/gemlyx_content?id=eq.412&apikey=SECRET123"),
+     `x.supabase.co/rest/v1/gemlyx_content?id=eq.412&apikey=${REDACTED}`);
+  ok("the useful parameter survives", /id=eq\.412/.test(safeUrl("https://x.co/a?id=eq.412&token=abc")));
+  ok("and the marker is readable rather than percent-encoded",
+     !/%5B/i.test(safeUrl("https://x.co/a?apikey=abc")));
+  // Matched on the NAME, because a key is just a long string and so is a
+  // description. Wide on purpose: a false positive costs one redacted line.
+  {
+    const d = safeDetail({ password: "hunter2", authToken: "x", sessionId: "y", rowId: 5, note: "fine" });
+    is("every credential-shaped field is replaced",
+       [d.password, d.authToken, d.sessionId], [REDACTED, REDACTED, REDACTED]);
+    is("and the ordinary ones are kept", [d.rowId, d.note], [5, "fine"]);
+  }
+  // A NESTED OBJECT IS WHERE A PAYLOAD HIDES. Reported as present rather than
+  // serialised, so the file says something was there and does not carry it.
+  {
+    const d = safeDetail({ payload: { apikey: "leak" }, rows: [1, 2] });
+    ok("an object is named, not serialised", d.payload === "[object, not recorded]" && !/leak/.test(JSON.stringify(d)));
+    ok("and so is an array", d.rows === "[array, not recorded]");
+  }
+  ok("an unparseable address is refused rather than passed through",
+     safeUrl("not a url at all #token=abc").startsWith("[") || !/token=abc/.test(safeUrl("not a url at all #token=abc")));
+
+  // ── A LIMIT HIT IS A LIMIT REPORTED ─────────────────────────────
+  // Six times over in this codebase. The oldest events go, because the question
+  // is always "what did I just do", and the file says how many were lost rather
+  // than quietly starting in the middle.
+  clearRecording();
+  startRecording();
+  for (let i = 0; i < MAX_EVENTS + 25; i++) record("click", `event ${i}`);
+  const full = recordedEvents();
+  ok("the recorder stays inside its cap", full.length <= MAX_EVENTS);
+  is("and says so in the file itself", full[0].kind, DROP_MARKER);
+  ok("with a count of what it lost", (full[0].detail?.events || 0) > 0);
+  ok("the newest events are the ones kept, because the question is what just happened",
+     full.some(e => e.what === `event ${MAX_EVENTS + 24}`) && !full.some(e => e.what === "event 0"));
+  ok("and the count is arithmetic that adds up",
+     full[0].detail.events + (full.length - 1) === MAX_EVENTS + 25 + 1);
+  clearRecording();
+  delete globalThis.localStorage;
+
+  // ── WIRED, WHICH IS THIS CODEBASE'S USUAL FAILURE ───────────────
+  const appRec = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // SEEDED FROM STORAGE, NOT FALSE. The bug this exists for is a page reload:
+  // React state would switch the recorder off at the exact moment worth
+  // recording, and the file would end one line before the answer.
+  ok("the flag survives a reload",
+     /const \[recording, setRecording\] = useState\(\(\) => isRecording\(\)\);/.test(appRec));
+  ok("and a reload is itself an event, so the file shows it happened",
+     /the page is unloading — a reload or a navigation/.test(appRec));
+  ok("clicks are captured by their label, never an input's value",
+     /record\("click", label \|\| `\(unlabelled \$\{tag\}\)`/.test(appRec)
+     && !/e\.target\.value/.test(appRec.slice(appRec.indexOf("const onClick = (e) =>"), appRec.indexOf("document.addEventListener(\"click\""))));
+  ok("requests are captured without headers or bodies",
+     /record\("fetch", `\$\{method\} \$\{url\}`, \{ status: res\?\.status \?\? 0, ok: !!res\?\.ok, ms: Date\.now\(\) - started \}\)/.test(appRec));
+  ok("and the patch is only undone if nothing else took it",
+     /if \(window\.fetch === patched\) window\.fetch = realFetch;/.test(appRec));
+  ok("the button is in the studio", /\{recording \? `⏹ Stop \(\$\{recordedCount\}\)` : "⏺ Record"\}/.test(appRec));
+  ok("and the file can be taken away", /a\.download = recordingFileName\(\);/.test(appRec));
+  // THE BREADCRUMB THE WHOLE FEATURE EXISTS FOR.
+  ok("the delete handler says which branch it took",
+     /record\("delete", gone \? "removed from the merged arrays in place, no reload" : "NOT in the merged arrays/.test(appRec));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
