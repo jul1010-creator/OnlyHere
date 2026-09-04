@@ -379,17 +379,46 @@ export const applyEditedRow = (rowId, type, payload) => {
 // the signature one: in the database, rendering nowhere. Here it would be worse
 // — not in the database, and unpublishable.
 //
-// RETURNS FALSE RATHER THAN GUESSING, exactly as the edit does, and the caller
-// reloads on false. A type nothing registers, or a row that was skipped as a
-// duplicate, is not in any array to remove, and pretending otherwise leaves the
-// entry on screen with nothing saying the delete half-worked.
+// ── AND "NOT IN THE ARRAYS" IS NOT A FAILURE ────────────────────────
+//
+// The first version returned a boolean and the caller reloaded on false. A
+// recording Oliver made on 3 Sep is what corrected that, and it took one line
+// to do it:
+//
+//   19.27s  delete  the row was deleted on the server  id=80 typeUsed="town"
+//   19.27s  delete  NOT in the merged arrays — falling back to a full reload
+//
+// The type was right and the removal still found nothing, because doLoad
+// fetches `published=eq.true` and the Manage panel lists EVERY row. Billund row
+// 80 had never been merged, so it was on no page, in no array, and visible to
+// no visitor — and deleting it reloaded the whole app to reflect a change that
+// altered nothing on screen. The one case where a reload is most obviously
+// pointless was the one case that always reloaded.
+//
+// So the answer is three-valued, because there are three situations and the old
+// boolean could only see two:
+//
+//   "removed"      it was in the arrays and it is out. Re-render.
+//   "not-live"     the type is registered and the row was not in it: unpublished,
+//                  or it lost a duplicate-name race at load. Nothing renders it,
+//                  so there is nothing to update and nothing to reload.
+//   "unknown-type" nothing registers this type at all. We cannot reason about
+//                  where it went, so the caller reloads — the only honest reload
+//                  left, and the one the old code did for all three.
+export const REMOVED = "removed";
+export const NOT_LIVE = "not-live";
+export const UNKNOWN_TYPE = "unknown-type";
+
 export const removeLiveRow = (rowId, type) => {
   const id = LIVE_ID_OFFSET + Number(rowId);
-  if (!Number.isFinite(id)) return false;
+  // No usable id, so it is certainly in no array — which is "not live", not a
+  // reason to reload. Left as `false` when the verdicts went in, which would
+  // have sent exactly this case back to the full reload it just escaped.
+  if (!Number.isFinite(id)) return NOT_LIVE;
   const homes = type === "festival" ? [events, majorEvents]
     : type === "booking" ? [craftItemsFallback, bookingRowsCache]
     : ARRAY_FOR[type] ? [ARRAY_FOR[type]] : [];
-  if (!homes.length) return false;
+  if (!homes.length) return UNKNOWN_TYPE;
 
   let name = null;
   for (const list of homes) {
@@ -398,10 +427,11 @@ export const removeLiveRow = (rowId, type) => {
     if (name === null) name = String(list[i]?.name || "");
     list.splice(i, 1);
   }
-  // Not in any array. Say so rather than reporting a removal that did not
-  // happen: the caller's fallback is the full reload, which is today's
-  // behaviour, so the worst case is exactly what it replaces.
-  if (name === null) return false;
+  // Never merged. It was on no page and in no array, so there is nothing to
+  // take out and nothing to redraw — and no claim to release either, because
+  // both paths that skip a row (unpublished, or a duplicate name) return before
+  // mergedIds and mergedKeys are written.
+  if (name === null) return NOT_LIVE;
 
   // ── AND THE TWO REGISTRIES ARE KEYED DIFFERENTLY ────────────────
   // mergedIds holds the RAW Supabase row id (doLoad: `mergedIds.add(row.id)`),
@@ -417,5 +447,5 @@ export const removeLiveRow = (rowId, type) => {
   // a place that is no longer published. Same reasoning as the edit path, one
   // step further: there is no new frame to put back.
   if (type === "town" && name) delete TOWN_COORDS[name];
-  return true;
+  return REMOVED;
 };

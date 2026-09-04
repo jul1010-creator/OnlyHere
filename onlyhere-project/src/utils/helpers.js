@@ -5,6 +5,9 @@ import { dayStart, dayWithin } from "./calendarDay";
 // The six-language month vocabulary, so a numbered-list marker and a European
 // date can be told apart. See utils/travellerWords.js.
 import { MONTH_PATTERN } from "./travellerWords";
+// distinctiveWords only, and danishNames imports nothing at all, so this adds
+// no cycle. See hostMatchesName for what it is guarding.
+import { fold, GENERIC_PLACE_WORDS } from "./danishNames";
 
 // ── ONE ANSWER TO "IS THIS LEG A BOAT" ───────────────────────────────
 // Audited 10 Aug 2026: this question was being asked in SEVEN places in FIVE
@@ -1117,13 +1120,60 @@ export const hostMatchesName = (url, name) => {
   try { host = new URL(url).hostname.toLowerCase(); } catch { return false; }
   host = host.replace(/^www\./, "");
   const bare = host.replace(/\.(dk|com|net|org|eu|info|travel)$/i, "").replace(/[^a-z0-9]/g, "");
-  const n = String(name || "").toLowerCase()
+  const flat = (v) => String(v || "").toLowerCase()
     .replace(/æ/g, "ae").replace(/ø/g, "oe").replace(/å/g, "aa")
     .replace(/[^a-z0-9]/g, "");
+  const n = flat(name);
   if (!bare || !n) return false;
   if (bare === n) return true;
+  // The name is inside the domain. Safe in this direction: a domain long enough
+  // to contain the whole name is that place's domain.
   if (n.length >= 6 && bare.includes(n)) return true;
-  if (bare.length >= 6 && n.includes(bare)) return true;
+  // ── AND THE DIRECTION THAT MADE A STRANGER THE OPERATOR ─────────
+  //
+  // The domain is inside the NAME, which is how "Gasoline Grill Landgreven"
+  // matches gasolinegrill.dk and is the reason this direction exists. It is
+  // also how street-food.dk became the official website of "Copenhagen Street
+  // Food": flattened, the name contains "streetfood", the domain is six
+  // characters or more, and the test passed. An unrelated site then filled the
+  // website field, and the official site is the strongest source this pipeline
+  // has, so its prices and hours would have been read as this market's own.
+  //
+  // A domain only speaks for a place when what it matched is that place's own
+  // NAME rather than a run of ordinary words that any place of the same kind
+  // would share. So the matched run has to survive distinctiveWords: "street
+  // food" and "bar" and "museum" do not, "gasolinegrill" and "jomfruanegade"
+  // do. Checked on the DOMAIN rather than the name, because the domain is the
+  // part claiming to be the identity.
+  if (bare.length >= 6 && n.includes(bare)) {
+    // Which of the NAME's own distinctive words the domain actually covers.
+    // Asked this way round rather than "is the domain distinctive" so it does
+    // not depend on the exact run-together compound happening to be listed:
+    // Copenhagen Street Food's only distinctive word is "copenhagen", and
+    // "streetfood" does not contain it, so the domain covers none of what makes
+    // this place this place. Gasoline Grill Landgreven's distinctive words
+    // include "gasoline", which gasolinegrill does contain.
+    // ── TWO NORMALISATIONS, AND THEY DISAGREE ABOUT Ø ─────────────
+    //
+    // The first draft of this read `distinctiveWords(name).map(flat)`, and it
+    // was wrong in a way the existing assertions could not see because none of
+    // them had a Danish letter in the name. distinctiveWords returns FOLDED
+    // words, where fold() maps ø to "o"; this function has always flattened ø
+    // to "oe", because that is what a .dk domain spells. So "Møgeltønder
+    // Marked" gave the word "mogeltonder" to test against the domain
+    // "moegeltoender", which contains no such string, and a real operator's own
+    // site would have been refused.
+    //
+    // So the split into words and the drop of ordinary ones happen in FOLD
+    // space, where GENERIC_PLACE_WORDS lives, and the words are then flattened
+    // into the same space as the domain before they are compared.
+    const own = String(name || "").split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+      .filter(w => { const f = fold(w); return f.length >= 4 && !GENERIC_PLACE_WORDS.has(f); })
+      .map(flat).filter(Boolean);
+    // A name made entirely of ordinary words has nothing to corroborate with,
+    // and guessing in that case is what this whole guard is about.
+    return own.some(w => bare.includes(w));
+  }
   return false;
 };
 

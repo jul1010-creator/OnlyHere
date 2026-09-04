@@ -44,7 +44,31 @@
 
 const clean = (v) => String(v == null ? "" : v).trim();
 
-export const BODY_FIELDS = ["characterAndFit", "whatToDo", "gettingThereReality", "vibeLocation", "howItsMade", "realityCheck", "desc"];
+// ── AND IT HAS TO BE ALL OF THE BODY ────────────────────────────────
+//
+// This is what the restatement check reads: a bullet that repeats a sentence
+// the reader has already been given is padding, and the check exists because a
+// Billund draft told the reader the same thing twice.
+//
+// It listed seven fields and missed eight. The four types that carry
+// "Things to Know" bullets ALONGSIDE their prose, which is the whole set of
+// types the check is for, were the four it could not see: free, night,
+// nightTown and booking write Being There / Who It's For / After Dark and none
+// of those was here. Measured on 4 Sep: a free draft whose three bullets are
+// verbatim copies of its own `special` and `whoFor` paragraphs scored zero
+// restatements, while the identical bullets over a town's field names scored
+// 100% and were flagged twice.
+//
+// The suite now derives the real set by calling shapeForLive for every content
+// type and reading which fields land in a paragraph, and fails by name when
+// this list is short of it.
+export const BODY_FIELDS = [
+  "characterAndFit", "whatToDo", "gettingThereReality", "vibeLocation",
+  "howItsMade", "realityCheck", "desc",
+  "special", "whoFor", "whoItsFor", "atmosphere",
+  "beforeDark", "afterDark", "bestTime", "whenEnter",
+  "bestNights", "walkIt", "howTo",
+];
 
 export const sentencesOf = (text) =>
   clean(text).split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);

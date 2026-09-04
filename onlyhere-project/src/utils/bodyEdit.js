@@ -34,7 +34,7 @@
 
 import { stripDashesDeep, scanForAITells, fillerWordCounts } from "./helpers";
 import { bodyProblems } from "./publishedRepair";
-import { pricesIn } from "./entryAudit";
+import { pricesIn, blockText, withBlockText } from "./entryAudit";
 
 // The three a person may rewrite. Deliberately NOT image, video or instagram: a
 // caption is a credit and a src is a file that has to exist, and neither is
@@ -48,23 +48,18 @@ export const EDITABLE_TYPES = ["paragraph", "heading", "bullets"];
 export const typeOf = (b) => (b && b.type ? b.type : "paragraph");
 export const isEditable = (b) => EDITABLE_TYPES.includes(typeOf(b));
 
-// Bullets hold an array, everything else holds a string. One reader and one
-// writer, so no call site has to know which it is holding.
-export const blockText = (b) => {
-  if (!b) return "";
-  if (typeOf(b) === "bullets") return (Array.isArray(b.items) ? b.items : []).join("\n");
-  return String(b.text ?? "");
-};
-
-export const withBlockText = (b, text) => {
-  const t = String(text ?? "");
-  if (typeOf(b) === "bullets") {
-    // Blank lines are dropped, because an empty bullet renders as a dot with
-    // nothing beside it and bodyProblems already counts that as a fault.
-    return { ...b, items: t.split("\n").map(s => s.trim()).filter(Boolean) };
-  }
-  return { ...b, text: t };
-};
+// ── ONE READER AND ONE WRITER, AND THIS WAS THE SECOND PAIR ─────────
+//
+// The comment that stood here said "one reader and one writer, so no call site
+// has to know which it is holding", and it was true of this file and false of
+// the app: entryAudit had a flattener for the same shape and researchVoice
+// invented a third. This one read `b.text`, which shapeForLive has never
+// written, so on every real published row the editor showed an empty box and a
+// save added a phantom `text` field beside the `content` the page renders.
+//
+// Re-exported rather than re-implemented, so the sentence above is finally true.
+// See entryAudit.blockText for what the payload actually looks like.
+export { blockText, withBlockText } from "./entryAudit";
 
 // Every block, with its index and whether a person may edit it. The
 // uneditable ones are RETURNED rather than filtered out, so the panel can show
@@ -115,7 +110,7 @@ export const changedIndexes = (before, after) => {
 // research pages, because by definition those are gone: the entry was published
 // and nothing was re-fetched. That limit is stated rather than hidden, and it
 // is the reason for the price warning below.
-export const bodyEditProblems = (payload, nextBody) => {
+export const bodyEditProblems = (payload, nextBody, type) => {
   const out = [];
   const next = { ...(payload || {}), blogBody: nextBody };
   const before = editableBlocks(payload?.blogBody);
@@ -128,7 +123,7 @@ export const bodyEditProblems = (payload, nextBody) => {
     out.push({ severity: "critical", detail: `The body went from ${before.length} blocks to ${after.length}. This editor is not allowed to add or remove blocks, so something is wrong and the save should not go through.` });
   }
   try {
-    (bodyProblems(next) || []).forEach(p => out.push({ severity: "high", detail: p.detail }));
+    (bodyProblems(next, type) || []).forEach(p => out.push({ severity: "high", detail: p.detail }));
   } catch { /* a malformed body must not stop a person saving a typo fix */ }
 
   const changed = after.filter((x, i) => before[i] && x.text !== before[i].text);

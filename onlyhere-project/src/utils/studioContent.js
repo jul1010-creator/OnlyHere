@@ -26,6 +26,31 @@ export const bbBullets = (heading, raw) => {
   if (items.length === 0) return "";
   return `      { type: "heading", content: ${J(heading)} },\n      { type: "bullets", items: ${JSON.stringify(items)} },`;
 };
+// ── THE HEADING OVER `howItsMade` IS NOT ONE QUESTION ───────────────
+//
+// A restaurant's second paragraph is how the food is made: "the sourdough
+// starter is 40 years old, loaves are hand-shaped, baked in a wood-fired oven".
+// "How It's Made" is exactly right over that.
+//
+// A food street's second paragraph is a different question, and the prompt says
+// so in the strongest terms it uses anywhere — studioPrompts.js, the foodStreet
+// branch: "what kinds of vendors/cuisines are actually there, how the space is
+// organized, what a visitor actually does", and then, as its own sentence,
+// "NEVER DESCRIBE IT AS IF IT WERE ONE RESTAURANT'S KITCHEN."
+//
+// The prompt bans the framing and the heading above the paragraph asserted it.
+// Reffen's own draft reads "Stalls run the full range, Danish smorrebrod next
+// to Vietnamese banh mi", under a heading promising to explain how it is made,
+// which is a heading about a kitchen that does not exist. The writer obeyed;
+// the page overruled it.
+//
+// ONE FUNCTION, TWO CALLERS, because there are exactly two generators and this
+// codebase's oldest scar is a hand-written list copied between them: "Four
+// lists, one omission, which is not four mistakes. It is one hand-written list
+// copied four times." shapeForLive is the publish path and App.jsx's codegen is
+// the paste path, and a reader cannot tell which one made the row they are on.
+export const madeHeading = (type) => type === "foodStreet" ? "What's There" : "How It's Made";
+
 export const bbData = (pairs) => pairs.filter(([, body]) => body).flatMap(([h, body]) => [{ type: "heading", content: h }, { type: "paragraph", content: body }]);
 // ── A PHOTO CREDIT, IN THE FOUR FIELDS EVERY READER EXPECTS ─────────
 // The same four saveMediaCredit writes and PhotoCredit renders, so a credit
@@ -142,7 +167,7 @@ const shapeForLiveFields = (type, t) => {
     ] };
   if (type === "food" || type === "foodStreet") return { name: t.name, isFoodStreet: type === "foodStreet", emoji: t.emoji || (type === "foodStreet" ? "🍜" : "🍽"), category: t.category || (type === "foodStreet" ? "Food market" : ""), location: t.location || "", price: t.price || PRICE_UNKNOWN, photo: `/food/${slugify(t.name)}.jpg`, desc: t.vibeLocation, mapHint: t.mapHint || "", color: t.color || "#D9A441", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
-      ...bbData([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]]),
+      ...bbData([[madeHeading(type), t.howItsMade], ["The Reality Check", t.realityCheck]]),
     ] };
   // ── venueStyle SHIPS, OR THE FIELD IS A PROMPT THAT GOES NOWHERE ──
   // 27 Aug 2026. This shape is the publish gate: a field the draft schema asks

@@ -54,6 +54,9 @@ export const CURRENT_HEADINGS = [
   // nights are worth it and which way to walk, and neither is a question you
   // would ask about a single bar, so they are headings of their own.
   "Best Nights", "Walking It",
+  // Food streets, 3 Sep 2026. A market is not a kitchen and its second
+  // paragraph never was about one. See madeHeading in studioContent.js.
+  "What's There",
 ];
 
 // A town's first heading carries the town's name, so it can never be a fixed
@@ -85,6 +88,24 @@ export const LEGACY_HEADINGS = {
   "Good to Know": "Things to Know",
 };
 
+// ── AND A RENAME THAT IS ONLY WRONG FOR ONE TYPE ────────────────────
+//
+// "How It's Made" is a CURRENT heading. It is the right heading over a
+// restaurant's second paragraph and it is the wrong one over a food street's,
+// which is why it cannot go in LEGACY_HEADINGS: that map is unconditional and
+// would rename every restaurant in the database along with the markets.
+//
+// So the rename is scoped to the type of the row it is applied to. This is the
+// only kind of rename that needs the row's type, and it is kept a separate map
+// rather than a flag on the other one so that "nothing is both current and
+// legacy" stays a true and checkable statement about LEGACY_HEADINGS.
+//
+// A row whose type is unknown is left alone. Guessing the type from the body
+// would be inventing the thing the rename depends on.
+export const TYPE_HEADINGS = {
+  foodStreet: { "How It's Made": "What's There" },
+};
+
 const isHeading = (b) => b && b.type === "heading" && typeof b.content === "string";
 const clean = (s) => String(s || "").trim();
 
@@ -95,12 +116,13 @@ export const headingsOf = (blogBody) =>
 // body returns the same blocks and reports no changes, which is what lets the
 // Studio offer it on every row without a person having to know which rows need
 // it.
-export const repairBody = (blogBody) => {
+export const repairBody = (blogBody, type) => {
   if (!Array.isArray(blogBody)) return { body: blogBody, renamed: [], changed: false };
+  const forType = TYPE_HEADINGS[String(type || "").trim()] || {};
   const renamed = [];
   const body = blogBody.map(b => {
     if (!isHeading(b)) return b;
-    const to = LEGACY_HEADINGS[clean(b.content)];
+    const to = forType[clean(b.content)] || LEGACY_HEADINGS[clean(b.content)];
     if (!to || to === clean(b.content)) return b;
     renamed.push({ from: clean(b.content), to });
     return { ...b, content: to };
@@ -112,18 +134,23 @@ export const repairBody = (blogBody) => {
 // Reported separately from the rename, and deliberately not merged into one
 // "needs attention" flag, because the two cost wildly different amounts to put
 // right and he is the one paying.
-export const bodyProblems = (payload) => {
+// The type is optional and every caller that has it should pass it: without it
+// a food street carrying "How It's Made" reads as a clean row, because that
+// heading IS current for the type sitting next to it in the same table.
+export const bodyProblems = (payload, type) => {
   const heads = headingsOf(payload?.blogBody);
   const problems = [];
   if (!heads.length) return problems;
 
-  const legacy = heads.filter(h => LEGACY_HEADINGS[h]);
+  const forType = TYPE_HEADINGS[String(type || "").trim()] || {};
+  const renameTo = (h) => forType[h] || LEGACY_HEADINGS[h];
+  const legacy = heads.filter(h => renameTo(h));
   if (legacy.length) {
     problems.push({
       kind: "legacy-heading",
       cost: "free",
       headings: [...new Set(legacy)],
-      detail: `Renames to ${[...new Set(legacy.map(h => LEGACY_HEADINGS[h]))].join(" and ")}. No model call, no redraft.`,
+      detail: `Renames to ${[...new Set(legacy.map(renameTo))].join(" and ")}. No model call, no redraft.`,
     });
   }
 
@@ -265,7 +292,7 @@ export const auditPublished = (rows) => {
   const list = (Array.isArray(rows) ? rows : [])
     .map(r => ({
       id: r?.id, name: r?.payload?.name || "(unnamed)", type: r?.type,
-      problems: [...bodyProblems(r?.payload), ...priceProblems(r?.payload, r?.type), ...bookingProblems(r?.payload, r?.type), ...voiceProblems(r?.payload)],
+      problems: [...bodyProblems(r?.payload, r?.type), ...priceProblems(r?.payload, r?.type), ...bookingProblems(r?.payload, r?.type), ...voiceProblems(r?.payload)],
     }))
     .filter(r => r.problems.length > 0);
   const has = (k) => list.filter(r => r.problems.some(p => p.kind === k));

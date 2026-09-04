@@ -412,3 +412,191 @@ export const readOutOfScope = (body) => {
   }
   return found;
 };
+
+// ── AND AN ASSERTION CAN PASS WITHOUT TESTING ANYTHING ──────────────
+//
+// 3 Sep 2026. Three assertions in run.mjs read
+//
+//   is("...", transitProblems(prose, parts, null), [])
+//
+// and passed for a month. transitProblems is `(prose, { parts, drivingMins })`,
+// so a positional second argument makes the destructure yield undefined, the
+// function returns [] on its first line, and the empty answer the assertion
+// wanted arrives for a reason that has nothing to do with the rule. I wrote all
+// three, watched them go green, and only found out because a MUTANT survived.
+//
+// That is the worst failure a suite can have. A missing assertion is a known
+// gap; a vacuous one is a gap that reads as coverage, and this project makes
+// decisions on the strength of 12,000 of them.
+//
+// ── WHY ARITY IS THE CHECK ──────────────────────────────────────────
+//
+// The general question — "does this assertion actually exercise the rule" — is
+// mutation testing, and it costs a full suite run per line. This is the cheap
+// specific case, and it is the one that bit: an options object is invisible at
+// the call site, so passing past it looks exactly like passing into it. Every
+// such call gives MORE arguments than the function declares, and that is
+// countable from the source in a second.
+//
+// STRINGS AND REGEXES MUST BE BLANKED OR THIS IS USELESS, for the same reason
+// the TDZ scanner above says so: run.mjs is mostly assertions ABOUT source
+// text, so it is full of lines like `indexOf("const tp = transitProblems(")`.
+// A first version flagged eleven calls and every one of them was a function
+// name inside a string. stripNonCode already answers this exactly, and a tenth
+// hand-rolled string walker in this repo would be the fault it exists to catch.
+
+// Every parameter list is read by brace matching rather than by regex, because
+// `(start, end, today = new Date())` closes a naive [^)]* at the wrong paren —
+// which silently gave isCurrentlyLive a two-parameter signature and produced
+// nine false hits on the first run.
+const paramsAt = (src, openParen) => {
+  let depth = 0;
+  for (let i = openParen; i < src.length; i++) {
+    const ch = src[i];
+    if (ch === "(" || ch === "[" || ch === "{") depth += 1;
+    else if (ch === ")" || ch === "]" || ch === "}") {
+      depth -= 1;
+      if (depth === 0) return { inner: src.slice(openParen + 1, i), end: i };
+    }
+  }
+  return null;
+};
+
+const topLevelSplit = (s) => {
+  const parts = [];
+  let depth = 0, cur = "";
+  for (const ch of s) {
+    if (ch === "(" || ch === "[" || ch === "{") depth += 1;
+    else if (ch === ")" || ch === "]" || ch === "}") depth -= 1;
+    if (ch === "," && depth === 0) { parts.push(cur); cur = ""; }
+    else cur += ch;
+  }
+  if (cur.trim()) parts.push(cur);
+  return parts;
+};
+
+// name -> how many parameters it declares, for every `export const f = (...) =>`
+// in the given source. A rest parameter means "any number" and is reported as
+// Infinity, because a call cannot pass too many arguments to one.
+export const exportedArity = (stripped) => {
+  const out = new Map();
+  const re = /export const ([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?\(/g;
+  let m;
+  while ((m = re.exec(stripped))) {
+    const got = paramsAt(stripped, m.index + m[0].length - 1);
+    if (!got) continue;
+    if (!/^\s*=>/.test(stripped.slice(got.end + 1))) continue;   // not an arrow function
+    const params = topLevelSplit(got.inner);
+    out.set(m.group ? m.group(1) : m[1], params.some(p => p.trim().startsWith("...")) ? Infinity : params.length);
+  }
+  return out;
+};
+
+// How many arguments a call passes, counted on stripped code so a comma inside
+// a string or a nested call cannot be miscounted. A trailing comma is not an
+// argument: `f(a, b,)` passes two, and reading it as three was the only "hit"
+// left after the strings were blanked.
+export const argCountAt = (stripped, openParen) => {
+  let depth = 0, commas = 0, sawSomething = false, lastReal = "";
+  for (let i = openParen; i < stripped.length; i++) {
+    const ch = stripped[i];
+    if (ch === "(" || ch === "[" || ch === "{") depth += 1;
+    else if (ch === ")" || ch === "]" || ch === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        if (!sawSomething) return 0;
+        return lastReal === "," ? commas : commas + 1;
+      }
+    } else if (depth === 1 && ch === ",") commas += 1;
+    if (depth >= 1 && !/\s/.test(ch) && ch !== "(") { sawSomething = true; lastReal = ch; }
+  }
+  return null;
+};
+
+// Calls in `testSrc` that hand more arguments than the function declares. The
+// extra one is silently dropped by JavaScript, so nothing fails and nothing
+// says so — which is exactly how three assertions came to test nothing.
+export const overArgumentedCalls = (testSrc, arity) => {
+  const stripped = stripNonCode(testSrc);
+  const out = [];
+  const re = /(?<![\w$.])([A-Za-z_$][\w$]*)\s*\(/g;
+  let m;
+  while ((m = re.exec(stripped))) {
+    const want = arity.get(m[1]);
+    if (want === undefined || want === Infinity) continue;
+    const got = argCountAt(stripped, m.index + m[0].length - 1);
+    if (got === null || got <= want) continue;
+    out.push({ name: m[1], given: got, declares: want, line: stripped.slice(0, m.index).split("\n").length });
+  }
+  return out;
+};
+
+// ── THE HELPER THAT WAS WRITTEN, TESTED, AND NEVER CALLED ───────────
+//
+// This codebase's signature failure, and it has been found NINE times by hand:
+// isAlreadyCovered, resolveLegMode's second copy, the heading list, evidence.js,
+// ticketQueries. Every one of them was correct, unit-tested and green, and none
+// of them ran. "A passing unit test proved only that the function worked, never
+// that it ran."
+//
+// Found by hand means found late, and only where somebody happened to look. So
+// the question is asked of the whole tree instead, once, on every run.
+//
+// WHAT COUNTS AS UNWIRED, and each exclusion is here because including it made
+// the answer noise rather than a finding:
+//
+//   - FUNCTIONS ONLY. A threshold like WIND_GALE is exported so the suite can
+//     assert the number without a second copy of it, and that is a good reason
+//     to export something nothing else imports. Counting those gave 607 rows,
+//     which is a list nobody reads.
+//   - USED IN ITS OWN MODULE IS USED. A helper called by two other functions in
+//     the same file is wired; its export is for the suite. The definition
+//     itself is one occurrence, so the bar inside its own file is two.
+//   - api/ IS PART OF THE APP. Three linkPreview functions are called only from
+//     the serverless handlers, and reading src/ alone reported them as dead.
+//
+// Returns "path:name" strings, sorted, so the caller can compare against a
+// named list rather than a count. A count tells you something changed. A name
+// tells you what, and which side of the change it was on.
+export const uncalledExports = (bodies) => {
+  // ── `[^)]*` CLOSES AT THE WRONG PAREN ───────────────────────────
+  // `(start, end, today = new Date())` ends at the paren after `Date`, not at
+  // the one that closes the parameter list, so the `=>` never lines up and the
+  // export is invisible. That hid FORTY of the app's exported arrows, including
+  // isCurrentlyLive and getEventDate. exportedArity in this same file was bitten
+  // by the identical thing and solved it with paramsAt; this was written the
+  // same day and did not reuse it. It does now.
+  const fnExports = (src) => {
+    const names = new Set();
+    for (const m of src.matchAll(/^export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/gm)) names.add(m[1]);
+    // Arrow with a single unparenthesised parameter: `export const f = x => x`.
+    for (const m of src.matchAll(/^export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?[A-Za-z_$][\w$]*\s*=>/gm)) names.add(m[1]);
+    // Arrow with a parameter list, matched by brace depth rather than by regex.
+    const re = /^export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(/gm;
+    let m;
+    while ((m = re.exec(src))) {
+      const open = src.indexOf("(", m.index + m[0].length - 1);
+      const params = paramsAt(src, open);
+      if (params && /^\s*=>/.test(src.slice(params.end + 1))) names.add(m[1]);
+    }
+    return names;
+  };
+  // ── AND A NAME IN A COMMENT IS NOT A CALL ───────────────────────
+  // This file's own sibling scanner states the rule: "STRINGS AND REGEXES MUST
+  // BE BLANKED OR THIS IS USELESS." A helper mentioned once in another file's
+  // comment counted as wired, which is precisely how a dead export hides.
+  const code = new Map([...bodies].map(([f, src]) => [f, stripNonCode(src)]));
+  const hits = (file, name) => ((code.get(file) || "").match(new RegExp(`\\b${name}\\b`, "g")) || []).length;
+  const out = [];
+  for (const [file, src] of bodies) {
+    for (const name of fnExports(src)) {
+      if (hits(file, name) > 1) continue;
+      let used = false;
+      for (const other of bodies.keys()) {
+        if (other !== file && hits(other, name) > 0) { used = true; break; }
+      }
+      if (!used) out.push(`${file}:${name}`);
+    }
+  }
+  return out.sort();
+};

@@ -121,9 +121,10 @@ import { StoreBadge } from "./components/StoreBadge";
 import { DateTimePicker } from "./components/DateTimePicker";
 import { GuidePage } from "./pages/GuidePage";
 import { askClaude, parseClaudeJSON, askPerplexity, withRetry, askOpenAI, readDatesFromImage, readPosterText, wholeSentences } from "./utils/aiClient";
-import { STUDIO_VOICE, slugify, J, bb, bbBullets, bbData, bulletsBlock, shapeForLive } from "./utils/studioContent";
+import { STUDIO_VOICE, slugify, J, bb, bbBullets, bbData, bulletsBlock, shapeForLive, madeHeading } from "./utils/studioContent";
+import BlogBody from "./components/BlogBody";
 import { studioPrompts } from "./utils/studioPrompts";
-import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow, removeLiveRow, liveContentFailure } from "./utils/liveContent";
+import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow, removeLiveRow, REMOVED, UNKNOWN_TYPE, liveContentFailure } from "./utils/liveContent";
 import { isRecording, startRecording, stopRecording, record, recordedEvents, recordingText, recordingFileName, safeUrl } from "./utils/studioRecorder";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
@@ -141,7 +142,7 @@ import { readBrief, briefBlock, nextAsks, buildBlockedNote } from "./utils/tripB
 import { readExclusions, withoutExcluded, excludedNote } from "./utils/exclusions";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
-import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch } from "./utils/ticketLink";
+import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries } from "./utils/ticketLink";
 import { placesNamedIn } from "./utils/chatPlaces";
 import { railPlaces, railCss, RAIL_CLASS, INLINE_CARDS_CLASS } from "./utils/chatRail";
 import { briefProgress, progressLine, briefPercent, percentLine } from "./utils/briefPanel";
@@ -175,7 +176,7 @@ import { venueStyleOf, showVenueStyleFacet, stylesPresent, VENUE_STYLE_LABEL } f
 import { VenueStyleChip } from "./components/VenueStyleChip";
 import { dayKey, dayStart, dayPlus } from "./utils/calendarDay";
 import { arrivalPoint } from "./utils/arrival";
-import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeForTown, barsOnStreet, townOfLocation } from "./utils/nightlife";
+import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, nightlifeForTown, barsOnStreet, townOfLocation } from "./utils/nightlife";
 import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
 import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
 import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
@@ -364,6 +365,28 @@ const PLACE_TYPES_WITH_A_JOURNEY = CONTENT_TYPES.filter(t => t !== "essential");
 // asserted against CONTENT_TYPES so a new type has to be classified.
 const PLACES_THAT_ARE_ONE_BUSINESS = ["free", "booking", "food", "night"];
 
+// ── WHICH TYPES CHARGE AT A DOOR ────────────────────────────────────
+// A festival, an attraction and a workshop have one gate and one admission
+// price. A restaurant, a food street, a bar, a bar street, a town and a
+// nightlife town do not: their prices are per dish, per pint, per venue, and
+// the cheapest figure on a page is a beer rather than a fare. Every check that
+// reasons about "the ticket price" belongs to this list and nothing else.
+const TYPES_WITH_A_DOOR = ["festival", "free", "booking"];
+
+// ── AND WHICH TYPE IS A STREET AND NOTHING ELSE ─────────────────────
+// A bar street is definitionally not a business: the prompt for it opens "This
+// is a whole street or strip known for its bars and clubs, not a single venue".
+// So its Google listing has to BE the street, and a listing whose name is the
+// street plus a word is a shop on it. See streetListingMatches in placeChoice.js.
+//
+// foodStreet is NOT on this list and that is the whole reason the list exists
+// rather than a check for the word "Street". Half of them are streets and half
+// are markets with their own front door, their own listing and their own hours:
+// Reffen is a real business called "Reffen - Copenhagen Street Food", and the
+// strict rule would refuse its own listing. A wrong refusal there costs real
+// opening hours, so that type keeps the ordinary containment test.
+const NAME_IS_A_STREET = ["nightStreet"];
+
 // Everything else with an address: a town, an event, a street, a nightlife town.
 // Google has no single listing for these, so a dedicated official-site search is
 // the best tool available, and that search is where they were being skipped.
@@ -447,12 +470,19 @@ A listing there is evidence that something is sold. It is not evidence that it i
 // ── A DURATION IS ONLY TRUE AGAINST A STATED MEASURE ───────────────
 // The same rule as the ranking one, and it had no equivalent for journeys until
 // a draft said "Direct trains run from København H to Odense in about 1h50min"
-// off the back of a door-to-door measurement of about that length, while the
+// off the back of a whole-journey measurement of about that length, while the
 // train itself is about 1h22. See utils/journey.js for the full anatomy.
+//
+// ── AND THE PHRASE FOR IT CHANGED, 3 SEP ────────────────────────────
+// "Door to door" was the label everywhere, and it was overclaiming: the walk at
+// each end is measured from a geocoded centroid, so nobody's door is in it. The
+// card and this rule both say "centre to centre" now, which is what was
+// measured, and they have to keep saying the same thing — a writer taught one
+// phrase while the card prints another is how a caption and its number drift.
 const MEASURED_JOURNEY_RULES = `HOW TO WRITE THE MEASURED JOURNEY, and this is as strict as the ranking rule for the same reason: a duration is only true against a stated measure, and one number cannot answer two questions.
 
 The figures above are named. Use each one only for the thing it names.
-NEVER attach the door-to-door figure to a vehicle. "Direct trains run to Odense in about 1h50" is FALSE when 1h50 is the door-to-door time and the train is 1h22, even though 1h50 is a real measured number. If you name a train, a bus or a ferry, use the ON BOARD figure, or the operator's own published time. If you want to use the door-to-door figure, say it door to door: "about 1h50 from central Copenhagen once you count the walk at both ends".
+NEVER attach the centre-to-centre figure to a vehicle. "Direct trains run to Odense in about 1h50" is FALSE when 1h50 is the centre-to-centre time and the train is 1h22, even though 1h50 is a real measured number. If you name a train, a bus or a ferry, use the ON BOARD figure, or the operator's own published time. If you want to use the door-to-door figure, say it door to door: "about 1h50 from central Copenhagen once you count the walk at both ends".
 THE OPERATOR'S TIMETABLE OUTRANKS ALL OF THIS for how long a named service takes. DSB publishes its own running times, and so does every ferry company. The measurement is the honest travel figure; the timetable is the authority on the vehicle.
 
 THE WALKING FIGURE IS NOT A FACT ABOUT GEOGRAPHY. It is measured from a coordinate a geocoder chose for the middle of the destination, which for anywhere bigger than a village is an arbitrary point. NEVER write that a station is a certain number of minutes from the town centre on the strength of it, and never write that it is "just outside" or "a short walk from" the centre either. In most Danish towns the station IS in the centre, and Odense Banegård Center in particular sits at the northern edge of the pedestrian streets: you are in the centre the moment you walk out of it. If you have nothing sourced to say about where a station sits, say nothing about it.
@@ -777,10 +807,10 @@ function GemlyxApp() {
   // One object means the chips, the counts and the clear are all derivable.
   const [attractionFacets, setAttractionFacets] = useState({});
   const [attractionQuery, setAttractionQuery] = useState("");
-  // "🍬 Handmade" used to be a pill in the CITY row, which is why the panel
-  // changed shape when you tapped it: it is not a city and not a filter, it
-  // swaps the page for a different view entirely. It gets to say so now.
-  const [attractionView, setAttractionView] = useState("all");
+  // A Handmade control used to live here, first inside the city row and then
+  // beside it. Both placements were wrong for the same reason and neither was
+  // the real one: it was a control for a feature that does not exist. See the
+  // note where it was removed, 3 Sep.
   const [eventSort, setEventSort] = useState("soonest");     // "soonest" | "az"
   // FOOD had no location filter at all, which on a national guide means the only
   // way to find somewhere to eat in the town you are actually standing in was to
@@ -1230,7 +1260,7 @@ function GemlyxApp() {
       // coordinate or a __checked stamp written by a background job while this
       // was open survives the save.
       const nextBody = applyBodyEdits(live.blogBody, bodyDraft);
-      const problems = bodyEditProblems(live, nextBody);
+      const problems = bodyEditProblems(live, nextBody, row.type);
       const merged = stampEdit({ ...live, blogBody: nextBody }, {
         by: studioSession?.email || "",
         blocks: changedIndexes(live.blogBody, nextBody),
@@ -1563,7 +1593,7 @@ function GemlyxApp() {
       // checks only, deliberately: the paid sweep has not run at load time and
       // seeding from a sweep that does not exist would open nothing.
       setOpenGroups(initiallyOpen(groupRows(list, (r) => [
-        ...bodyProblems(r.payload),
+        ...bodyProblems(r.payload, r.type),
         ...coordProblems(r.payload, r.type),
       ])));
     } catch { setManageItems([]); }
@@ -1804,7 +1834,7 @@ function GemlyxApp() {
   const repairRowHeadings = async (row) => {
     setRepairBusy(row.id); setRepairNote(null);
     try {
-      const { body, renamed, changed } = repairBody(row.payload?.blogBody);
+      const { body, renamed, changed } = repairBody(row.payload?.blogBody, row.type);
       if (!changed) {
         const other = otherwiseWrong(row);
         setRepairNote(`${row.payload?.name || "That entry"} already uses the current headings.${other || " Nothing else on it needs changing either."}`);
@@ -2119,24 +2149,28 @@ function GemlyxApp() {
         // ── THE BREADCRUMB THIS WHOLE FEATURE EXISTS FOR ──────────
         // A click log can say the Delete button was pressed and the page
         // reloaded. Only the handler can say WHICH branch it took, and that is
-        // the difference between "it still refreshes" and an answer.
+        // what turned "it still refreshes" into an answer, in one line, on the
+        // first recording he made.
         record("delete", "the row was deleted on the server", { id, typeFromButton: type || "", typeUsed: rowType, hadManageItems: (manageItems || []).length });
-        const gone = rowType ? removeLiveRow(id, rowType) : false;
-        record("delete", gone ? "removed from the merged arrays in place, no reload" : "NOT in the merged arrays — falling back to a full reload", { gone, type: rowType });
-        if (gone) {
-          setManageItems(prev => (prev || []).filter(r => r?.id !== id));
-          bumpLiveContent(v => v + 1);
-          showToast("🗑 Deleted", 1800);
-        } else {
-          // ── AND THE FALLBACK SAYS WHICH ONE IT WAS ────────────────
-          // "It still refreshes" is not a bug report anybody can act on, and it
-          // was the only thing this branch could produce. The two reasons a row
-          // cannot be removed in place are different problems with different
-          // fixes, so the toast names the one that happened.
-          setToast(rowType
-            ? `🗑 Deleted — refreshing (a published ${rowType} row was not in the merged list)`
-            : "🗑 Deleted — refreshing (no type on the row)");
+        const verdict = rowType ? removeLiveRow(id, rowType) : UNKNOWN_TYPE;
+        record("delete", `removeLiveRow said ${verdict}`, { verdict, type: rowType });
+        // ── AND ONLY AN UNRECOGNISED TYPE STILL RELOADS ───────────
+        //
+        // The recording: `id=80 typeUsed="town"` then `NOT in the merged arrays`.
+        // The type was right and the row still was not there, because doLoad
+        // fetches published=eq.true and the Manage panel lists EVERY row. Billund
+        // row 80 was on no page, in no array and visible to no visitor — and
+        // deleting it reloaded the whole app to reflect a change that altered
+        // nothing on screen. The case where a reload is most obviously pointless
+        // was the one case that always reloaded.
+        if (verdict === UNKNOWN_TYPE) {
+          setToast(`🗑 Deleted — refreshing (nothing in the app registers the type "${rowType || "?"}")`);
           setTimeout(() => window.location.reload(), 1400);
+        } else {
+          setManageItems(prev => (prev || []).filter(r => r?.id !== id));
+          // Only a row that really came out of an array changes what renders.
+          if (verdict === REMOVED) bumpLiveContent(v => v + 1);
+          showToast(verdict === REMOVED ? "🗑 Deleted" : "🗑 Deleted (it was not published, so nothing on the site changes)", 2400);
         }
       } else {
         showToast("❌ Delete failed. Check the delete RLS policy exists", 2500);
@@ -2927,7 +2961,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
           // sources out. A missing region costs a weaker search. A wrong one
           // costs a whole draft about the wrong town, silently.
           const placesOk = pr.ok && !pd.error && Number.isFinite(pd.lat) && Number.isFinite(pd.lon);
-          const placesAbout = placesOk && listingMatchesSubject(name, draftTown, pd.name || pd.address);
+          const placesAbout = placesOk && listingMatchesSubject(name, draftTown, pd.name || pd.address, { theNameIsAStreet: NAME_IS_A_STREET.includes(sType) });
           if (placesOk && !placesAbout) {
             decide("whether Google's coordinate is about this place", {
               winner: "nothing",
@@ -3016,10 +3050,30 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // specifically. A genuinely malformed-but-successful response (the API
       // answered, but the query-list JSON didn't parse) is NOT treated as a hard
       // failure here — only an actual API error is.
+      // ── A STREET NAME IS NOT A PLACE ──────────────────────────
+      //
+      // There is a Vestergade in Aarhus, in Odense, in Copenhagen and in a
+      // dozen towns besides, and a Nørregade in most of the same ones. For
+      // every other type the name is close enough to an identity that a search
+      // engine lands on the right thing; for a street it is a word that means
+      // "the west street" and nothing more.
+      //
+      // Three of the four baseline nightStreet queries carried neither the town
+      // NOR the word Denmark: "Vestergade best night to go busy quiet which
+      // end" is a search about no particular street on earth, and whatever came
+      // back was fed to the writer as research about this one.
+      //
+      // So the SUBJECT of every query for these types is the street plus its
+      // town. Not appended per query, which is four places to forget it, but
+      // substituted once for the name everything below is templated on.
+      const NAME_IS_NOT_A_PLACE = ["nightStreet", "foodStreet"];
+      const subject = NAME_IS_NOT_A_PLACE.includes(sType) && draftTown
+        ? `${name} ${draftTown}`
+        : name;
       let plannedQueries = [];
       const planResult = await withRetry(
         () => askOpenAI(
-          `Planning research for a Danish travel guide entry: "${name}" (type: ${sType}). List 2-3 SPECIFIC search queries that would find the most important facts for THIS particular place — not generic categories, actual search strings a researcher would type. Include at least one query aimed at finding a genuine downside or limitation, not just highlights. Respond with ONLY a JSON array of strings, nothing else.`,
+          `Planning research for a Danish travel guide entry: "${subject}"${subject !== name ? ` (the street "${name}" in ${draftTown} — a street name alone is ambiguous in Denmark, so every query you write must keep the town in it)` : ""} (type: ${sType}). List 2-3 SPECIFIC search queries that would find the most important facts for THIS particular place — not generic categories, actual search strings a researcher would type. Include at least one query aimed at finding a genuine downside or limitation, not just highlights. Respond with ONLY a JSON array of strings, nothing else.`,
           // BUG FIX: 300 was almost certainly the actual cause of the "Empty
           // response from OpenAI" errors on town/event drafts and Discover runs —
           // gpt-5.6-sol is a reasoning model, and 300 tokens is tight enough that
@@ -3044,12 +3098,12 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         festival: { queries: [`${name} festival Denmark 2026 dates tickets prices lineup official website`, `${name} festival Denmark atmosphere who goes accommodation nearest station`, `${name} reddit r/Denmark experience worth it crowds queue`, `${name} quora google reviews honest opinion worth it`] },
         free: { queries: [`${name} free entry what makes it special history opening hours`, `${name} Denmark visitor tips things to know best time to visit`, `${name} Denmark getting there how to reach`, `${name} reddit r/Denmark hidden gem overrated worth it`, `${name} quora google reviews honest opinion overrated`] },
         food: { queries: [`${name} Denmark what to order menu prices history`, `${name} Denmark best time to visit busy hours local tips address`, `${name} reddit r/Denmark r/food worth it locals think`, `${name} quora google reviews honest opinion`] },
-        foodStreet: { queries: [`${name} Denmark food street market vendors stalls what's there`, `${name} Denmark food market opening hours best time to visit how to get there`, `${name} reddit r/Denmark r/food worth it locals think`, `${name} quora google reviews honest opinion`] },
+        foodStreet: { queries: [`${subject} Denmark food street market vendors stalls what's there`, `${subject} Denmark food market opening hours best time to visit how to get there`, `${subject} reddit r/Denmark r/food worth it locals think`, `${subject} Denmark quora google reviews honest opinion`] },
         night: { queries: [`${name} Denmark bar club atmosphere crowd prices reviews`, `${name} Denmark opening hours when busy entry local tips address`, `${name} reddit r/Denmark vibe crowd locals tourists`, `${name} quora google reviews honest opinion`] },
         // A STREET'S QUESTIONS ARE NOT A BAR'S. Which nights it is alive,
         // what a night along it costs, and what it is like when it empties out,
         // which is the half most pages leave out.
-        nightStreet: { queries: [`${name} Denmark bar street bars clubs guide`, `${name} best night to go busy quiet which end`, `${name} reddit honest opinion tourist trap or worth it`, `${name} nightlife safety closing time reputation`] },
+        nightStreet: { queries: [`${subject} Denmark bar street bars clubs guide`, `${subject} Denmark best night to go busy quiet which end`, `${subject} Denmark reddit honest opinion tourist trap or worth it`, `${subject} Denmark nightlife safety closing time reputation`] },
         nightTown: { queries: [`${name} Denmark nightlife scene bars clubs overview`, `${name} nightlife student population crowd reddit r/Denmark`, `${name} nightlife when does it get busy best areas`, `${name} nightlife quora google reviews honest opinion`] },
         essential: { queries: [`${name} Denmark 2026 how it works price official`, `${name} Danmark priser regler gældende 2026 turist`, `${name} Denmark discontinued replaced changed 2026 what to use instead`, `${name} Denmark reddit r/Denmark tourist visitor does it work without CPR`] },
         booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`, `${name} reddit r/Denmark experience worth the money`, `${name} quora google reviews honest opinion`] },
@@ -3779,7 +3833,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         // Other content types still get the general fact-check version until this
         // approach is validated on these two.
         const precheckPrompt = ((sType === "food" || sType === "foodStreet")
-          ? `Using real, current web search, find accurate facts about "${name}" in Denmark, and organize them into exactly three labeled groups — do not write prose, just sort real facts you find into these buckets:
+          ? `Using real, current web search, find accurate facts about "${subject}" in Denmark, and organize them into exactly three labeled groups — do not write prose, just sort real facts you find into these buckets:
 VIBE/LOCATION FACTS: its exact address or a real nearby landmark, why locals actually go there.
 FOOD MECHANICS FACTS: ${sType === "foodStreet" ? "what vendors/stalls are actually there, the range of cuisines/dishes on offer, how it's organized (indoor hall, outdoor stalls, etc.)" : "how the food is actually made — cooking method (stone-baked, flame-grilled, slow-cooked, hand-rolled), specific real dishes people order"}.
 REALITY CHECK FACTS: real current prices, typical wait times, seating situation, anything else logistically true.
@@ -3793,7 +3847,29 @@ IDENTITY CHECK, IMPORTANT: a town's real signature event has been mistaken for a
 If you can't find something for a bucket, leave it out rather than guessing. Short facts only, no essay, no flowing sentences — ChatGPT handles the actual writing.`
           : sType === "festival"
           ? `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay. IDENTITY CHECK, IMPORTANT: this exact event has been confused with a different, similarly-named or co-occurring event before (a small event mistaken for a much bigger one sharing part of its name or season) — actively check whether "${name}" might be getting confused with a different real event in your search results. If there's genuine risk of that, start your entire response with a single line: "IDENTITY WARNING: [explain exactly what might be getting mixed up, e.g. a different, larger festival with a similar name in the same town]" — then continue with the facts as normal. If you're confident there's no confusion, don't include that line at all.`
-          : `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay.`) + `\n${researchRules(sType, researchWhere())}`;
+          // ── A BAR STREET WAS BEING ASKED FOR ITS LINEUP ──────────
+          //
+          // Everything that was not a town, a restaurant or a festival fell
+          // through to the festival question: "find the accurate dates, prices,
+          // and any specific named venues/stages". A bar street has no dates
+          // and no stages. Asked for them anyway, a search model does not
+          // answer "there are none" — it finds the nearest thing that fits the
+          // shape of the question, which is how a music venue three streets
+          // away becomes this street's main stage.
+          //
+          // The street types also get the TOWN in the question, for the reason
+          // at NAME_IS_NOT_A_PLACE above: there is a Vestergade in a dozen
+          // Danish towns and "Vestergade in Denmark" names none of them.
+          : sType === "nightStreet"
+          ? `Using real, current web search, find accurate current facts about the bar street "${subject}" in Denmark, and sort them into exactly three labeled groups — do not write prose, just real facts:
+WHO IT'S FOR FACTS: who actually drinks there (students, stag parties, locals, tourists), the real named bars and clubs ON this street, how many venues it genuinely has, what a beer costs.
+BEST NIGHTS FACTS: which nights of the week are actually busy and which are dead, when it fills up and when it empties, seasonal differences, closing times.
+WALKING IT FACTS: how long the street is, which end is which and how they differ, where it starts and finishes, what is at each end, real safety or reputation issues people report.
+This is a STREET, not a venue and not an event: it has no opening hours of its own, no tickets, no lineup and no stages. If you find yourself reporting a date or a stage, you are describing something else. If you can't find something for a bucket, leave it out rather than guessing.
+IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is a Vestergade, a Nørregade and an Algade in many of them. Everything you report must be about this street in ${draftTown || "the town named above"}. If your results are actually about a street of the same name in a different town, or you cannot tell which town a result means, start your entire response with a single line: "IDENTITY WARNING: [what is uncertain]" — then continue with whatever you can confirm.`
+          : sType === "nightTown"
+          ? `Using real, current web search, find accurate current facts about the nightlife of "${name}" in Denmark. Short facts only, no essay: where people actually go out (real named streets, quarters and venues), who the crowd genuinely is and why (student population, garrison, tourism), which nights are busy, roughly what a night out costs, and any real logistical downside (last transport, distances between areas, closing times). This is a TOWN, not a venue: it has no opening hours, no tickets and no lineup. If you can't find something, leave it out rather than guessing.`
+          : `Using real, current web search, find accurate, current, checkable facts about "${subject}" in Denmark. Short facts only, no essay: exactly where it is, what it costs to get in or take part and what that price covers, when it is open or when it is busy, how a visitor gets there, and any real logistical downside. If it is a dated event, give the dates; if it is not, do not invent a season for it. If you can't find something, leave it out rather than guessing.`) + `\n${researchRules(sType, researchWhere())}`;
         setStudioStage({ label: "Fact-checking the research (Perplexity)", percent: 50 });
         const preCheck = await withRetry(
           () => askPerplexity(precheckPrompt),
@@ -4456,7 +4532,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           // verified hours. And the types most likely to be refused here, the
           // areas and the events, are exactly the ones that now get the dedicated
           // official-site search above, so the two cover each other.
-          if (!listingMatchesSubject(name, draftTown, hoursData.name)) {
+          if (!listingMatchesSubject(name, draftTown, hoursData.name, { theNameIsAStreet: NAME_IS_A_STREET.includes(sType) })) {
             note("Opening hours and address", {
               provider: "google", detail: "Places Text Search for the business listing",
               outcome: "empty", used: false,
@@ -5165,7 +5241,10 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           // {kind:"free"} for a page that says free entry with no fare on it, so
           // `priced` is truthy and no hunt runs. The call is spent only where a
           // door has a price nobody has found yet.
-          const HUNTS_FOR_A_PRICE = ["festival", "free"];
+          // Named once and read twice: the hunt below and the check that reads
+          // its answer, thirteen hundred lines down, were two hand-written
+          // lists of the same idea and only one of them existed.
+          const HUNTS_FOR_A_PRICE = TYPES_WITH_A_DOOR.filter(t => t !== "booking");
           const needHunt = HUNTS_FOR_A_PRICE.includes(sType) && !pricesAdmission(priced);
           if (needHunt) {
             try {
@@ -5777,7 +5856,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         code = `// This reads as a ${isMajor ? "MAJOR, well-known" : "LOCAL/smaller-scale"} festival — targeting the ${targetName} array. If that feels wrong, move the block below to the other array yourself.\n// 1) Ctrl+F for \`const ${targetName} = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, tier: ${J(t.tier)}, nearestStation: ${J(t.nearestStation)}, ticketInfo: ${J(t.ticketInfo)}, camping: ${J(t.camping)}, accommodationTip: ${J(t.accommodationTip)}, travelTime: ${J(t.travelTime)}, ticketStatus: ${J(t.ticketStatus)}, town: ${J(t.town)}, type: ${J(t.type || "Festival")}, emoji: ${J(t.emoji || "🎪")}, date: ${J(t.dateStart)}, dateEnd: ${J(t.dateEnd)}, photo: "/events/${slug}.jpg", desc: ${J(t.desc)}, mapHint: ${J(t.mapHint)}, website: ${J(t.website)}, verified: ${J(stamp)}, color: ${J(t.color || "#8E24AA")}, tags: ${JSON.stringify(Array.isArray(t.tags) ? t.tags.slice(0, 3) : [])}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Atmosphere", t.atmosphere], ["Who It's For", t.whoItsFor], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/events/${slug}.jpg\n// 3) VERIFY dates, station, town/region and ticket info before committing. Empty date fields mean the research couldn't confirm them.`;
       } else if (sType === "free") {
         const nextId = Math.max(0, ...freeEntrance.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag)}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")}, ticketsGlance: ${J(t.ticketsGlance)}, extraCosts: ${J(t.extraCosts)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY the website URL and that entry is genuinely free before committing.`;
+        code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag)}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")}, ticketsGlance: ${J(t.ticketsGlance)}, extraCosts: ${J(t.extraCosts)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, bookingNote: ${J(t.bookingNote)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY the website URL and that entry is genuinely free before committing.`;
       } else if (sType === "booking") {
         const nextId = Math.max(0, ...craftItems.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const craftItemsFallback = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, what: ${JSON.stringify(Array.isArray(t.what) ? t.what : [t.what].filter(Boolean))}, rating: ${t.rating ? Number(t.rating).toFixed(1) : "null"}, location: ${J(t.location)}, price: ${J(t.price)}, priceNote: ${J(t.priceNote)}, travelTime: ${J(t.travelTime)}, bookingType: ${J(t.bookingType || "contact")}, popularityTag: ${J(t.popularityTag || "")}, transportWarning: ${t.transportWarning ? "true" : "false"}, emoji: ${J(t.emoji || "🔨")}, photo: "/craft/${slug}.jpg", color: ${J(t.color || "#8E6B1F")}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  desc: ${J(t.desc)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/craft/${slug}.jpg (or remove the photo field)\n// 3) rating is left null unless the research found a real one — leave it as null rather than inventing a number.\n// 4) VERIFY price, booking method, and that it still operates before committing.`;
@@ -5796,14 +5875,14 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // live site's Food page filters restaurants vs. food streets by isFoodStreet on
         // one shared list, not a separate array — see the "Food Streets" tab on /food.
         const nextId = Math.max(0, ...foodSpots.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isFoodStreet: true, emoji: ${J(t.emoji || "🍜")}, category: ${J(t.category || "Food market")}, location: ${J(t.location)}, price: ${J(t.price)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.\n// 4) This is a Food Street/market — isFoodStreet: true is what puts it in the "Food Streets" tab on the live Food page instead of "Restaurants".`;
+        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isFoodStreet: true, emoji: ${J(t.emoji || "🍜")}, category: ${J(t.category || "Food market")}, location: ${J(t.location)}, price: ${J(t.price)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([[madeHeading("foodStreet"), t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.\n// 4) This is a Food Street/market — isFoodStreet: true is what puts it in the "Food Streets" tab on the live Food page instead of "Restaurants".`;
       } else if (sType === "essential") {
         const nextId = Math.max(0, ...essentials.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`export const essentials = [\` in src/data/essentials.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, category: ${J(t.category || "Transport")}, kind: ${J(cleanKind(t.kind) || "essential")}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, howTo: ${J(t.howTo)}, price: ${J(t.price)}, link: ${t.link ? J(t.link) : "null"}${t.linkAndroid ? `, linkAndroid: ${J(t.linkAndroid)}` : ""}, tip: ${J(t.tip)}${t.visitorNote ? `, visitorNote: ${J(t.visitorNote)}` : ""}, verified: ${J(stamp)} },\n\n// 2) VERIFY the price and that the system still works this way before committing. This is the type that goes stale fastest.`;
+        code = `// 1) Ctrl+F for \`export const essentials = [\` in src/data/essentials.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, category: ${J(t.category || "Transport")}, kind: ${J(cleanKind(t.kind))}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, howTo: ${J(t.howTo)}, price: ${J(t.price)}, link: ${t.link ? J(t.link) : "null"}${t.linkAndroid ? `, linkAndroid: ${J(t.linkAndroid)}` : ""}, tip: ${J(t.tip)}${t.visitorNote ? `, visitorNote: ${J(t.visitorNote)}` : ""}, verified: ${J(stamp)} },\n\n// 2) VERIFY the price and that the system still works this way before committing. This is the type that goes stale fastest.`;
       } else {
         const nextId = Math.max(0, ...nightlifeSpots.map(x => x.id)) + 1;
         const isClub = !!t.isClub;
-        code = `// 1) Ctrl+F for \`const nightlifeSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, crowd: ${J(t.crowd)}, emoji: ${J(t.emoji || "🍺")}, category: ${J(t.category)}, priceNote: ${J(t.priceNote)}, location: ${J(t.location)}, isClub: ${isClub ? "true" : "false"}, desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb(isClub ? [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["When Do People Enter", t.whenEnter], ["The Reality Check", t.realityCheck]] : [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["Before Dark", t.beforeDark], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY address, crowd and that it still exists before committing.`;
+        code = `// 1) Ctrl+F for \`const nightlifeSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, crowd: ${J(t.crowd)}, emoji: ${J(t.emoji || "🍺")}, category: ${J(t.category)}, venueStyle: ${J(t.venueStyle)}, priceNote: ${J(t.priceNote)}, location: ${J(t.location)}, isClub: ${isClub ? "true" : "false"}, desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb(isClub ? [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["When Do People Enter", t.whenEnter], ["The Reality Check", t.realityCheck]] : [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["Before Dark", t.beforeDark], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY address, crowd and that it still exists before committing.`;
       }
       ui(setStudioResult, code);
       ui(setScanHint, null);
@@ -5975,9 +6054,24 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           // The spelling Google resolved, when it differs from the typed one. A
           // typo in the Studio box used to empty the whole source list.
           alsoKnownAs: placesName && placesName !== name ? [placesName] : [],
-          town: (t && (t.town || t.city)) || townOfLocation(t && t.location) || studioTown || "",
+          // ── AND THE LAST FALLBACK IS NOT A TOWN ─────────────────
+          // `studioTown` is the NAME box, not a town: App.jsx reads it as
+          // `name` at the top of this pipeline. Handing it to the town slot
+          // means a street whose draft has no town yet is corroborated against
+          // its own name, so any page naming the street vouches for it, which
+          // is the acceptance theNameIsAStreet was added to stop. It was
+          // harmless before that flag existed, because a distinctive name
+          // returned true one line earlier and never reached the town test.
+          //
+          // draftTown, which is a real town resolved by the pipeline, or
+          // nothing. Nothing is the honest answer and the safe direction: it
+          // costs a source, where the wrong answer costs the whole draft.
+          town: (t && (t.town || t.city)) || townOfLocation(t && t.location) || draftTown || "",
           url: u,
           ownHost: placesWebsite || (t && t.website) || "",
+          // A street name repeats across Danish towns, so a page saying it is
+          // not yet a page about THIS one. See NAME_IS_A_STREET.
+          theNameIsAStreet: NAME_IS_A_STREET.includes(sType),
         });
       };
       // ── HOURS: KEPT, DATED, NEVER RENDERED ────────────────────────
@@ -6346,8 +6440,27 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           siteText: scrapedSiteText, listingText: listingSiteText,
           siteHosts: [...new Set(officialHosts)], listingHosts: [...new Set(listingDomains)],
         };
-        const misses = priceMisses(readerText(t), priceOpts);
-        const wanted = findTicketPrice(priceOpts);
+        // ── AND A FOOD HALL HAS NO DOOR ─────────────────────────
+        //
+        // Found by Fable, 3 Sep 2026, probing a Reffen-shaped page: site text
+        // "Retter fra 65 kr til 125 kr. Fri entré til området. Øl 55 kr.", a
+        // correct draft saying "65-125 DKK per dish" and "entry is free", and
+        // this gate filed a HIGH founder finding — on `ticketInfo`, a field the
+        // food types do not have — saying "reffen.dk states 55 DKK and this
+        // draft states 65 to 125 DKK. The operator's own page outranks
+        // everything else." The 55 is a BEER.
+        //
+        // ticketPriceOn takes the lowest figure that gets you through a gate,
+        // which is exactly right for a festival and meaningless for a place
+        // whose whole price story is a per-dish range. Applied to every type,
+        // it turns a correct draft into a correction request.
+        //
+        // HUNTS_FOR_A_PRICE, thirteen hundred lines up, already draws this
+        // line for the price HUNT: festival, free, booking — the types with a
+        // door. The check that reads the answer never got the same list.
+        const hasADoor = TYPES_WITH_A_DOOR.includes(sType);
+        const misses = hasADoor ? priceMisses(readerText(t), priceOpts) : [];
+        const wanted = hasADoor ? findTicketPrice(priceOpts) : null;
         // ── "empty · discarded" OVER A PRICE WE FOUND ───────────
         //
         // Oliver, 30 Aug 2026, reading this exact line on the Aarhus draft:
@@ -6406,7 +6519,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           // have to reach into sourcePolicy. See priceSource for the Bybjerg
           // citation this fixes.
           const src = priceSource(readerText(t), pagesByUrl, rankedSources.map(r => r.host), {
-            isAbout: (pageText, url) => sourceIsAboutPlace(pageText, { name: t?.name, town: t?.town || t?.city || t?.location, url }),
+            isAbout: (pageText, url) => sourceIsAboutPlace(pageText, { name: t?.name, town: t?.town || t?.city || t?.location, url, theNameIsAStreet: NAME_IS_A_STREET.includes(sType) }),
           });
           if (src && src.offSubject) {
             note("Where the price came from", {
@@ -6528,6 +6641,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
               outcome: "empty",
               got: describeTicketSearch(candidates, { name, town: draftTown }),
               used: false,
+              why: "Every step above vets pages this run happened to read. Asking the agents directly is a separate step, after this one — see the agent search.",
             });
           }
         }
@@ -6851,6 +6965,61 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // record of two sources disagreeing and something picking, and running
         // the same comparison twice does not make it two decisions.
         const dc = gateDraft("first");
+
+        // ── AND NOBODY HAD EVER ASKED THE AGENT ──────────────────────
+        //
+        // Oliver, 3 Sep 2026: "The last part of the pipeline should be quickly
+        // finding out if the attraction exists on our affiliate or something."
+        //
+        // His Tivoli run ended on "No ticket page found for Tivoli on Tiqets or
+        // Ticketmaster", which reads like a search and was not one. Every ticket
+        // step above VETS PAGES THIS RUN HAPPENED TO READ — pickTicketUrl over
+        // pagesByUrl, the operator's own "Køb billetter" links, the Ticketmaster
+        // API match. Tivoli was never going to turn up that way, and Tivoli is
+        // on Tiqets.
+        //
+        // ticketQueries has been in utils/ticketLink.js since 15 August, written
+        // and tested and called from nowhere. Ninth helper in this codebase
+        // found in that state, and this time the missing caller IS the feature.
+        //
+        // OUTSIDE gateDraft ON PURPOSE. gateDraft is synchronous and runs twice,
+        // and a search belongs in neither of those: once, here, after the pages
+        // in hand have had their turn, and only when they came up empty — so a
+        // draft that already has a link pays nothing, and the second gate pass
+        // reports whatever this found.
+        if (!String(t.ticketUrl || "").trim()) {
+          let searched = 0;
+          for (const q of ticketQueries(name, draftTown)) {
+            if (String(t.ticketUrl || "").trim()) break;
+            searched += 1;
+            try {
+              const aRes = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+              const aData = await aRes.json();
+              if (!aRes.ok || aData.error) continue;
+              const results = (aData.results || []).map(r => ({ url: r.url, snippet: `${r.title || ""} ${r.snippet || r.content || ""}` }));
+              // pickTicketUrl, never the first result. It refuses a front page,
+              // a search page and a category listing, and it refuses a product
+              // page that is not about this place — which matters more here than
+              // anywhere else in this pipeline, because a wrong ticket link is
+              // not a weak fact, it is a reader who paid for something else.
+              const found = pickTicketUrl(results, { name, town: draftTown });
+              note(`Ask ${domainOf(q.includes("tiqets") ? "https://tiqets.com" : "https://ticketmaster.dk")} directly`, {
+                provider: "tavily",
+                detail: q.slice(0, 110),
+                outcome: found ? "ok" : "empty",
+                used: !!found,
+                got: found
+                  ? `${found.slice(0, 120)} — bookable, and vetted as being about this place`
+                  : `${results.length} result${results.length === 1 ? "" : "s"}, none both bookable and about this place`,
+                why: found ? "" : "Not evidence that it is unsellable there. It means this search found no page that is both a product page and this place.",
+              });
+              if (found) t.ticketUrl = found;
+            } catch { /* one query failing is not a reason to lose the draft */ }
+          }
+          if (searched && !String(t.ticketUrl || "").trim()) {
+            noteToFounder(`No ticket link: the pages this run read had none, and asking Tiqets and Ticketmaster directly found none either. Plenty of Danish places sell only through their own site, and no ticket link is the right answer for those.`);
+          }
+        }
         if (dc?.confirmed) {
           decide("dates", {
             winner: "the festival's own site", loser: "",
@@ -9359,7 +9528,16 @@ ${researchRules("festival", ev)}`
   const [manualPricePolishing, setManualPricePolishing] = useState(null); // which field is mid-polish
   // Which field in this content type's schema is the "price we might not have found"
   // one — matches what the schema/render code above actually asks for per type.
-  const PRICE_FIELD_BY_TYPE = { town: "typicalCosts", free: "extraCosts", food: "price", foodStreet: "price", festival: "ticketInfo", booking: "price" };
+  // ── AND THE THREE TYPES THAT COULD NOT BE ANSWERED ──────────────
+  // night gained `priceNote` because Oliver asked "Where are the prices?" of a
+  // concert-hall draft, and this map was not touched, so the "COULDN'T FIND A
+  // REAL PRICE, KNOW IT? FILL IT IN" panel that exists for exactly that case
+  // never appeared for a bar, a bar street or an essential. The founder had to
+  // hand-edit the raw JSON instead, which is the thing the panel replaced.
+  //
+  // nightTown is absent on purpose and stays absent: its schema has no price
+  // field, so there is nothing for the panel to write into.
+  const PRICE_FIELD_BY_TYPE = { town: "typicalCosts", free: "extraCosts", food: "price", foodStreet: "price", festival: "ticketInfo", booking: "price", night: "priceNote", nightStreet: "priceNote", essential: "price" };
   const saveManualPriceField = (fieldName, rawValue) => {
     const value = rawValue.trim();
     if (!value) return;
@@ -11464,14 +11642,23 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   // (a real free-entrance spot, restaurant, nightlife venue, town, or event)
   // open that actual page — so "Amalienborg" in a plan links to Gemlyx's own
   // Amalienborg entry, not just static plan text.
+  // One list, for the reason written at the copy of this in GuidePage.jsx: a
+  // kind added to a pool and not added here is a card with a pointer cursor and
+  // a click that does nothing. A bar street opens as a nightlife page, which is
+  // what the URL route already does with it.
+  const STOP_OPENS_AS = {
+    free: setFreeDetail,
+    food: setFoodDetail,
+    nightlife: setNightlifeDetail,
+    nightlifeStreet: setNightlifeDetail,
+    town: setTownDetail,
+    event: setEventDetail,
+    craft: setCraftDetail,
+  };
+  const canOpenStop = (real) => !!real && !!STOP_OPENS_AS[real._src];
   const openStopDetail = (real) => {
-    if (!real) return;
-    if (real._src === "free") setFreeDetail(real);
-    else if (real._src === "food") setFoodDetail(real);
-    else if (real._src === "nightlife") setNightlifeDetail(real);
-    else if (real._src === "town") setTownDetail(real);
-    else if (real._src === "event") setEventDetail(real);
-    else if (real._src === "craft") setCraftDetail(real);
+    if (!canOpenStop(real)) return;
+    STOP_OPENS_AS[real._src](real);
   };
 
   // overrideConvoText lets a caller (the Studio "Random guide" test button below)
@@ -15599,7 +15786,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           </div>
                           {(() => {
                             const problemsFor = (r) => [
-                              ...bodyProblems(r.payload),
+                              ...bodyProblems(r.payload, r.type),
                               ...coordProblems(r.payload, r.type),
                               ...(sweep?.rows || []).filter(x => x.id === r.id).flatMap(x => x.findings),
                             ];
@@ -15740,7 +15927,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   {/* Says which problem this row has, in the
                                       row, because a count at the top does not
                                       tell him which page to open. */}
-                                  {bodyProblems(row.payload).map((p, i) => (
+                                  {bodyProblems(row.payload, row.type).map((p, i) => (
                                     <div key={i} style={{ fontSize: 10, color: p.kind === "legacy-heading" ? "#FFB347" : "#E57373", lineHeight: 1.5 }}>
                                       {p.kind === "legacy-heading" ? `old headings: ${p.headings.join(", ")}`
                                         : p.kind === "no-reality-check" ? "no Reality Check"
@@ -15770,7 +15957,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   {/* Only offered where it would do something,
                                       and labelled with the fact that matters
                                       most to him: it is free. */}
-                                  {repairBody(row.payload?.blogBody).changed && (
+                                  {repairBody(row.payload?.blogBody, row.type).changed && (
                                     <button onClick={() => repairRowHeadings(row)} disabled={repairBusy === row.id}
                                       style={{ background: "#FFB34722", border: "1px solid #FFB34766", color: "#FFB347", borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
                                       {repairBusy === row.id ? "…" : "🏷 Fix headings (free)"}
@@ -15857,7 +16044,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 // Recomputed as he types rather than only on
                                 // save, because a warning that arrives after
                                 // the decision is a report rather than a check.
-                                const warn = changed.length ? bodyEditProblems(row.payload || {}, next) : [];
+                                const warn = changed.length ? bodyEditProblems(row.payload || {}, next, row.type) : [];
                                 const rank = { critical: "#FF6B6B", high: "#FFB347", medium: "#FFB347", low: C.muted };
                                 return (
                                   <div style={{ marginTop: 10, padding: 12, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12 }}>
@@ -16372,7 +16559,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     </div>
                     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                       <input value={studioTown} onChange={e => setStudioTown(e.target.value)} onKeyDown={e => e.key === "Enter" && generateArea()}
-                        placeholder={{ town: "Town name, e.g. Ringkøbing", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", foodStreet: "Market/street name + city, e.g. Reffen Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade", nightStreet: "Street name + city, e.g. Gothersgade Copenhagen", nightTown: "Town name, e.g. Aarhus", essential: "What a visitor has to sort out, e.g. Rejsebillet app or Tax-free shopping" }[studioType] || "Name"}
+                        placeholder={{ town: "Town name, e.g. Ringkøbing", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", foodStreet: "Market or street name + city, e.g. Reffen Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade", nightStreet: "Street name + city, e.g. Gothersgade Copenhagen", nightTown: "Town name, e.g. Aarhus", essential: "What a visitor has to sort out, e.g. Rejsebillet app or Tax-free shopping" }[studioType] || "Name"}
                         style={{ flex: 1, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
                       <button onClick={() => generateArea()} disabled={studioLoading}
                         style={{ background: C.gold, border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 12, fontWeight: 700, color: C.onGold, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
@@ -18638,13 +18825,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <input value={attractionQuery} onChange={e => setAttractionQuery(e.target.value)}
                     placeholder="Search attractions"
                     style={{ flex: "1 1 200px", minWidth: 0, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "11px 16px", fontSize: 14, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
-                  {/* Not a city. Its own control, so the panel stops changing
-                      shape when you tap it. */}
-                  <Pill label="🍬 Handmade" active={attractionView === "handmade"} color="#E91E63"
-                    onClick={() => setAttractionView(v => v === "handmade" ? "all" : "handmade")} />
                 </div>
 
-                {attractionView !== "handmade" && (
                   <div style={{ marginTop: 10 }}>
                     {/* ── ONE FILTER, THE SAME ONE EVENTS USES ─────────────
                         Oliver, 19 Aug 2026: "Fix filters on the blogs please...
@@ -18695,46 +18877,27 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       <div style={{ fontSize: 11, color: C.muted, marginTop: -6, marginBottom: 12 }}>Works once you are in Denmark with location on. Showing recommended order for now.</div>
                     )}
                   </div>
-                )}
               </div>
 
-              {attractionView === "handmade" ? (
-                <>
-                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Watch it made, buy it warm. No ticket, no booking, just walk in.</div>
-                  {/* Supabase-only content (Aug 5): handmade craft shops have no Studio
-                      type/table yet, so this list is empty until one exists. */}
-                  {handmadeCraftShops.length === 0 && (
-                    <div style={{ background: C.surface, borderRadius: 16, padding: "18px", border: `1px solid ${C.border}`, fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
-                      Nothing published here yet.
-                    </div>
-                  )}
-                  {handmadeCraftShops.map(shop => (
-                    <div key={shop.id} style={{ background: C.surface, borderRadius: 16, padding: "16px", marginBottom: 12, border: `1px solid ${shop.color}33`, position: "relative" }}>
-                      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: shop.color, borderRadius: "16px 0 0 16px" }} />
-                      <div style={{ paddingLeft: 8 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                          <span style={{ fontSize: 20 }}>{shop.emoji}</span>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{shop.name}</div>
-                          {shop.yearRound && (
-                            <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "3px 8px", borderRadius: 100, flexShrink: 0 }}>◆ Open year-round</span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>{shop.location}</div>
-                        <div style={{ fontSize: 11, color: readableOn(shop.color, C.surface), fontWeight: 700, marginBottom: 8 }}>{shop.tag}</div>
-                        <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{shop.desc}</div>
-                        <div style={{ fontSize: 12, color: C.text, background: C.bg, borderRadius: 10, padding: "8px 12px", marginBottom: 10, lineHeight: 1.5 }}>
-                          💡 {shop.highlight}
-                        </div>
-                        <div style={{ fontSize: 11, color: C.gold, fontWeight: 600, marginBottom: 10 }}>{shop.price}</div>
-                        <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(shop.mapHint)}`} target="_blank" rel="noreferrer"
-                          style={{ display: "block", background: shop.color, color: "#fff", borderRadius: 10, padding: "9px", fontSize: 12, fontWeight: 700, textDecoration: "none", textAlign: "center" }}>
-                          ↗ Get Directions
-                        </a>
-                      </div>
-                    </div>
-                  ))}
-                </>
-              ) : filtered.length === 0 ? (
+              {/* ── THE HANDMADE PILL HAD NOTHING BEHIND IT ─────────────
+                  Oliver, 3 Sep 2026: "The 'hand-made' filter is so random. Why
+                  is it not just in the 'type'?"
+
+                  Because there was nothing to put in Type. handmadeCraftShops is
+                  `export const handmadeCraftShops = []` in data/craft.js, and
+                  nothing populates it: liveContent registers town, festival,
+                  free, food, foodStreet, night, nightStreet, nightTown, booking
+                  and essential, and no branch for this. So the pill has never
+                  shown a single row and could not, and clicking it replaced the
+                  whole Attractions grid with "Nothing published here yet."
+
+                  Not a filter in the wrong place — a control for a feature that
+                  does not exist, sitting beside the real ones. Removed rather
+                  than moved. If handmade shops become a real Studio type they
+                  arrive with a schema and a liveContent branch like every other
+                  type, and at that point they belong in Type exactly as he
+                  says, with no separate pill at all. */}
+              {filtered.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "48px 20px", color: C.muted, background: C.surface, borderRadius: 16, border: `1px dashed ${C.border}` }}>
                   <div style={{ fontSize: 26, marginBottom: 8 }}>🔍</div>
                   <div style={{ fontSize: 14, color: C.light, fontWeight: 600, marginBottom: 4 }}>Nothing matches those filters</div>
@@ -18967,7 +19130,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             // København and Copenhagen are one town rather than two rows.
             const spotsFor = (t) => spotsForTown(townGroups, t);
             const townContentFor = (t) => townPageFor(nightlifeTowns, t);
-            const townList = nightlifeTownList(nightlifeSpots, nightlifeTowns).sort(daCompare);
+            const townList = nightlifeTownList(nightlifeSpots, nightlifeTowns, nightlifeStreets).sort(daCompare);
             // ── AND THE STREETS BETWEEN THEM ──────────────────────
             // Oliver, 15 Aug 2026, on Gothersgade and Jomfru Ane Gade: "it's
             // technically in Copenhagen.. but it's a bar street with bars."
@@ -19084,7 +19247,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 real, publishable state. "0 spots" reads like a
                                 broken row; saying what IS there does not. */}
                             {spots.length === 0
-                              ? "Scene guide, no venues published yet"
+                              ? nightlifeSummaryFor(t, { townPages: nightlifeTowns, streets: nightlifeStreets })
                               : `${spots.length} spot${spots.length !== 1 ? "s" : ""}${localCount > 0 && internationalCount > 0 ? ` · ${localCount} local, ${internationalCount} international` : ""}`}
                           </div>
                         </div>
@@ -19119,6 +19282,19 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               ◆ <b>Gemlyx Find:</b> {townContent.gemlyxFind}
                             </div>
                           )}
+                          {/* ── AND THE 230-330 WORDS NOBODY SAW ────────
+                              The nightTown prompt asks for Who It's For, After
+                              Dark, The Reality Check and three What to Be Aware
+                              Of bullets. shapeForLive stored every one of them
+                              and this page drew the photo, the name, the
+                              description and the Gemlyx Find, so about four
+                              fifths of what was researched, drafted,
+                              fact-checked and published for the type reached
+                              nobody. The suite's own "the publish path carries
+                              a verdict for every type" passed the whole time,
+                              because the verdict was in a body nothing showed. */}
+                          <BlogBody blocks={townContent.blogBody} C={C} name={townContent.name}
+                            InstagramEmbed={InstagramEmbed} style={{ marginTop: 16 }} />
                         </div>
                       );
                     }
@@ -19956,7 +20132,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     <div style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", marginBottom: 3 }}>The 3 mistakes to avoid</div>
                     <div style={{ fontSize: 11, color: C.text, lineHeight: 1.5 }}>{item.howTo}</div>
                   </div>
-                  <div style={{ fontSize: 11, color: C.muted, fontStyle: "italic" }}>💡 {item.tip}</div>
+                  {/* Guarded: a draft with no tip published a card showing a
+                      lightbulb with nothing after it. */}
+                  {item.tip && <div style={{ fontSize: 11, color: C.muted, fontStyle: "italic" }}>💡 {item.tip}</div>}
                 </div>
               ))}
 
@@ -20014,7 +20192,24 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, marginBottom: 3 }}>How to get it</div>
                         <div style={{ fontSize: 11, color: C.text, lineHeight: 1.5 }}>{item.howTo}</div>
                       </div>
-                      <div style={{ fontSize: 11, color: C.muted, fontStyle: "italic", marginBottom: (item.link || isMerged(item)) ? 8 : 0 }}>💡 {item.tip}</div>
+                      {/* ── THE SENTENCE THAT WAS THE WHOLE POINT ──────────
+                          studioContent.js on visitorNote: "for this type it is
+                          often the whole point: a system that needs a Danish CPR
+                          number is the wrong answer for a visitor, and that
+                          sentence is worth more than the rest of the entry."
+                          The prompt marks it REQUIRED when a system is
+                          resident-gated, shapeForLive stores it, and no card
+                          rendered it. A visitor read a friendly how-to for a
+                          service they cannot use.
+                          Drawn as a warning rather than a note, because that is
+                          what it is. */}
+                      {item.visitorNote && (
+                        <div style={{ background: "#FFB34714", border: "1px solid #FFB34755", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 3 }}>If you are visiting</div>
+                          <div style={{ fontSize: 11, color: C.text, lineHeight: 1.5 }}>{item.visitorNote}</div>
+                        </div>
+                      )}
+                      {item.tip && <div style={{ fontSize: 11, color: C.muted, fontStyle: "italic", marginBottom: (item.link || isMerged(item)) ? 8 : 0 }}>💡 {item.tip}</div>}
                       {/* ── A MERGED CARD DRAWS ITS OPERATORS ──────────────
                           Oliver: "Kombardo Expressen and Flixbus could
                           technically be in same 'apartment'." They are, and so
@@ -21788,8 +21983,21 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
       {craftDetail && (
         <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 290, overflowY: "auto" }}>
           {/* Hero */}
-          <div style={{ height: 200, background: `${craftDetail.color}22`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-            <span style={{ fontSize: 72 }}>{craftDetail.emoji}</span>
+          {/* ── THE PHOTO THIS PAGE THREW AWAY ────────────────────────
+              A photo uploaded through the Studio is carried to Supabase by
+              shapeForLive, shows on the Attractions grid card, and was then
+              replaced by a 72px emoji on the workshop's own page: the only img
+              in this whole view was the one inside the body. The machinery that
+              carries it exists specifically because photos were being eaten.
+              The emoji stays as the fallback, which is what it was always for. */}
+          <div style={{ height: 200, background: `${craftDetail.color}22`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
+            {craftDetail.photo ? (
+              <img src={craftDetail.photo} alt={craftDetail.name}
+                onError={e => { e.target.style.display = "none"; }}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              <span style={{ fontSize: 72 }}>{craftDetail.emoji}</span>
+            )}
             <button onClick={closeEntry}
               style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", left: 14, background: "rgba(10,15,30,0.7)", border: "none", color: "#fff", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
               ‹ Back
@@ -21828,34 +22036,16 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
             <div style={{ fontSize: 14, color: C.light, lineHeight: 1.75, marginBottom: 22 }}>{craftDetail.desc}</div>
 
-            {craftDetail.blogBody && craftDetail.blogBody.length > 0 && (
-              <div style={{ marginBottom: 24 }}>
-                {craftDetail.blogBody.map((block, i) => (
-                  block.type === "bullets" ? (
-                    <ul key={i} style={{ margin: "0 0 16px", paddingLeft: 20, color: C.light, fontSize: 14, lineHeight: 1.75 }}>
-                      {block.items.map((it, j) => <li key={j} style={{ marginBottom: 4 }}>{it}</li>)}
-                    </ul>
-                  ) : block.type === "instagram" ? (
-                    <InstagramEmbed key={i} url={block.url} />
-                  ) : block.type === "video" ? (
-                    <div key={i} style={{ marginBottom: 16 }}>
-                      <video src={block.src} controls playsInline preload="metadata" style={{ width: "100%", borderRadius: 14, display: "block", background: "#000" }} />
-                      {block.caption && <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>{block.caption}</div>}
-                    </div>
-                  ) : block.type === "image" ? (
-                    <div key={i} style={{ marginBottom: 16 }}>
-                      <img src={block.src} alt={craftDetail.name} onError={e => { e.target.style.display = "none"; }}
-                        style={{ width: "100%", borderRadius: 14, display: "block" }} />
-                      {block.caption && <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>{block.caption}</div>}
-                    </div>
-                  ) : block.type === "heading" ? (
-                    <div key={i} style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 20, marginBottom: 10 }}>{block.content}</div>
-                  ) : (
-                    <div key={i} style={{ fontSize: 14, color: C.light, lineHeight: 1.8, marginBottom: 14 }}>{block.content}</div>
-                  )
-                ))}
-              </div>
-            )}
+            {/* ── AND ITS CREDIT, WHICH IS NOT COSMETIC ───────────────
+                studioContent.js on a missing credit: "a licence breach and not
+                a cosmetic gap". A CC BY photo published on a workshop carried
+                its credit in the database and printed without attribution,
+                because PhotoCredit was used on DetailPage and nowhere else. */}
+            <PhotoCredit photo={craftDetail.photo} credit={craftDetail.__photoCredit} style={{ marginBottom: 14 }} />
+
+            {/* One renderer, shared with the nightlife town page. See
+                src/components/BlogBody.jsx for why this stopped being inline. */}
+            <BlogBody blocks={craftDetail.blogBody} C={C} name={craftDetail.name} InstagramEmbed={InstagramEmbed} />
 
             {craftDetail.bestTime && (
               <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", marginBottom: 22 }}>
@@ -21874,7 +22064,19 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <span style={{ fontSize: 14 }}>🚲</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color: "#FFB347", letterSpacing: 1, textTransform: "uppercase" }}>No car or bike? Read this</span>
                 </div>
-                <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>{craftDetail.transportWarning}</div>
+                {/* ── A BOOLEAN IS NOT A SENTENCE ──────────────────
+                    The prompt asks for `true only if it's genuinely hard to
+                    reach without a car`, shapeForLive stores `!!t.transportWarning`,
+                    and this printed the value. React renders nothing for `true`,
+                    so every hard-to-reach workshop showed an amber box headed
+                    "NO CAR OR BIKE? READ THIS" with nothing under it. The
+                    sentence a reader needs is in nearestStation and travelTime,
+                    which are the fields that actually hold one. */}
+                <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>
+                  {craftDetail.nearestStation
+                    ? `Nearest public transport: ${craftDetail.nearestStation}.${craftDetail.travelTime ? ` ${craftDetail.travelTime} from Copenhagen.` : ""}`
+                    : "This one is genuinely awkward to reach without your own transport. Check the route before you commit to the day."}
+                </div>
               </div>
             )}
 

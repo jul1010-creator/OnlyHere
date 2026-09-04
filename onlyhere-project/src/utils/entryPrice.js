@@ -169,7 +169,27 @@ export const entryPrice = (row) => {
 // The chip. "Free" only when the row says so, the row's own short words when it
 // charges and they are short enough to be a chip, and "" when it has not said —
 // which renders as no chip at all rather than as a guess.
-export const CHIP_MAX = 24;
+// ── AND 24 SENT REAL PRICES TO THE FALLBACK ─────────────────────────
+//
+// Oliver's rule, 3 Sep: "Just include the at a glance price or write paid. One
+// of the two." Which means the cap decides how often a reader gets the real
+// thing, and 24 was throwing away lines that fit on the card perfectly well:
+//
+//   "Free for kids, 9 kr adults"        26
+//   "Day ticket 419 DKK, under 3 free"  32
+//
+// Both are the operator's own words, both answer "how much and for whom", and
+// both were being replaced by "Paid" for the sake of two to eight characters.
+// The chip sits on its own line at card width, so 40 is what actually fits
+// rather than what was guessed. Fårup's 78-character line still does not, and
+// still falls back — which is the point: the cap is now the real limit, so
+// "Paid" means "genuinely too long to show" instead of "slightly over".
+export const CHIP_MAX = 40;
+
+// Not "Paid entry" or "Costs money": the shortest true thing, sitting where a
+// "Free" chip sits on the row above it, so the two read as the same question
+// answered two ways.
+export const PAID_LABEL = "Paid";
 export const priceChip = (row) => {
   const { free, says } = entryPrice(row);
   if (free === true) return "Free";
@@ -179,16 +199,29 @@ export const priceChip = (row) => {
   // does fit, so that is what goes in.
   if (free === false) {
     if (says.length <= CHIP_MAX) return says;
-    // ── AND A RANGE IS SHOWN FROM ITS BOTTOM, NOT ITS TOP ────────
-    // Faarup Sommerland's own line is "1-day ticket 229 to 399 DKK". Only the
-    // 399 carries the currency, so reading the first complete amount picks the
-    // most expensive end of a range and prints it as the price. entryAudit
-    // settled this question already, for the same reason: "what a reader plans
-    // around is the cheapest way through the gate."
-    const r = RANGE.exec(says);
-    if (r) return `from ${r[1]} ${r[2]}`.replace(/\s+/g, " ").trim();
-    const m = AMOUNT.exec(says);
-    return m ? m[0].replace(/^[^\d]+/, "").trim() : "";
+    // ── AND A SUMMARY THAT DROPS THE QUALIFIER IS NOT A PRICE ────
+    //
+    // Oliver, 3 Sep 2026, on the Fårup Sommerland card: "writing 'from 229 kr'
+    // lacks information.. from 229 kr? What do I get at 229 kr? And for who?
+    // Just include the at a glance price or write paid. One of the two."
+    //
+    // The row's own line is "1-day ticket 229 to 399 DKK per person aged 3 to
+    // 64; children aged 0 to 2 free". What stood here squeezed that into "from
+    // 229 DKK", which drops the ticket, the ages, and the fact that it can be
+    // 399 — and adds a "from" the source never said, implying a floor with no
+    // stated basis. It is the ranking rule in a chip: a figure is only true
+    // against the thing it measures, and this one was measuring nothing a
+    // reader could name.
+    //
+    // The branch under it was worse. AMOUNT plucked the FIRST complete amount
+    // out of a sentence and printed it bare, so "Guided tour 150 DKK, entry 80
+    // DKK" became "150 DKK" — the wrong number, with no qualifier at all, and
+    // no range for a reader to be suspicious of.
+    //
+    // Neither is fixable inside 24 characters, so the chip stops trying. It
+    // says the honest thing it has room for, and the full line is already on
+    // the page one tap away, in At a Glance, in the operator's own words.
+    return PAID_LABEL;
   }
   return "";
 };

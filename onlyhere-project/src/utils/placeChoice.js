@@ -193,12 +193,71 @@ export const subjectCore = (typed, town = "") => {
   return core && core !== raw && nameIsDistinctive(core) ? core : raw;
 };
 
+// ── A STREET IS NOT A BUSINESS, AND EVERY BUSINESS ON IT IS ─────────
+//
+// sameSubject accepts a candidate that is the typed name plus more of its own
+// name, because that is what a person typing into a box produces: "Heidi's"
+// really is "Heidi's Bier Bar Aalborg". For a street the containment runs the
+// other way and is always wrong. Vestergade Apotek, Vestergade Tandklinik and
+// Vestergade Pizza all contain Vestergade, all sit on it, and none of them IS
+// it, so the first one Google ranks was accepted as the street's own listing
+// and its website, its opening hours and its business status went into the
+// draft. A pharmacy that closed becomes CLOSED_PERMANENTLY on a bar street.
+//
+// describeListingRefusal below has said so in words since it was written: "This
+// is what a search for a street or a square usually returns, whichever business
+// on it Google ranks first." The sentence was right and nothing acted on it.
+//
+// So for a street the listing has to BE the street: the same words, once the
+// town, the house number and the postcode are taken off. Nothing added.
+// ── AND THE WORD AT THE END OF EVERY DANISH ADDRESS ─────────────────
+// The first draft of this stripped the town, the house number and the postcode
+// and stopped there, so "Gothersgade, Copenhagen, Denmark" reduced to
+// "gothersgade denmark" and did not equal "gothersgade". Google's own formatted
+// address always ends in the country, and this app's mapHint convention is
+// literally "Street name, postcode City, Denmark", so the ONE shape most likely
+// to arrive was the one shape that failed. The street's own listing was then
+// refused, which is the outcome the refusal message promises for a WRONG
+// listing, applied to the right one.
+//
+// The town alone is not enough either: the town is only known once something
+// has resolved it, and the case this runs in is often the case where nothing
+// has. So the country comes off by name, in both languages, always.
+const COUNTRY_WORDS = new Set(["denmark", "danmark"]);
+const streetKey = (value, town) => {
+  const kill = new Set();
+  variantsOf(town).forEach(v => fold(clean(v)).split(/[^\p{L}\p{N}]+/u).filter(Boolean).forEach(w => kill.add(w)));
+  return fold(clean(value))
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+    // House numbers, postcodes, and the single letters Danish addresses use for
+    // a city district ("København K") or a stairway ("15 B").
+    .filter(w => !/^\d/.test(w) && w.length > 1)
+    .filter(w => !COUNTRY_WORDS.has(w))
+    .filter(w => !kill.has(w))
+    .join(" ");
+};
+
+// Exported so the caller can say which case it is in, and so the suite can ask
+// the question directly rather than through the wrapper.
+export const streetListingMatches = (typed, town, listing) => {
+  const a = streetKey(typed, town), b = streetKey(listing, town);
+  return !!a && !!b && a === b;
+};
+
 // Is Google's listing about the thing being drafted. Both directions, because
 // either side can be the fuller name: he types "Heidi's" and the listing is
 // "Heidi's Bier Bar", or he types "Rundetaarn Copenhagen" and it is "Rundetårn".
-export const listingMatchesSubject = (typed, town, listing) => {
+//
+// `theNameIsAStreet` is an OPTION rather than a fourth positional argument. A
+// boolean in fourth place next to three strings is the shape of the bug this
+// repository has already paid for twice: transitProblems was called
+// positionally where it wanted an options object, and three assertions passed
+// vacuously because of it.
+export const listingMatchesSubject = (typed, town, listing, { theNameIsAStreet = false } = {}) => {
   const got = clean(listing);
   if (!got || !clean(typed)) return false;
+  if (theNameIsAStreet) return streetListingMatches(typed, town, got);
   if (sameSubject(typed, got)) return true;
   const core = subjectCore(typed, town);
   return core !== clean(typed) && sameSubject(core, got);

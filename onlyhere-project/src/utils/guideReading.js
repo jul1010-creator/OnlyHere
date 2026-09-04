@@ -92,7 +92,7 @@ export const STOP_KINDS = [
 // What a published entry's own category is worth saying, when the name itself
 // gives nothing away. Deliberately concrete words: "Attraction" tells a visitor
 // nothing they did not already assume.
-const BY_SOURCE = { town: "Town", free: "Free to enter", food: "Restaurant", nightlife: "Bar", event: "Event", craft: "Workshop" };
+const BY_SOURCE = { town: "Town", free: "Free to enter", food: "Restaurant", nightlife: "Bar", nightlifeStreet: "Bar street", event: "Event", craft: "Workshop" };
 
 export const stopKind = (name, real) => {
   for (const [token, label] of STOP_KINDS) {

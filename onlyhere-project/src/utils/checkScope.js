@@ -79,6 +79,31 @@ export const CHARACTERISATION_FIELDS = [
   // Bullets that characterise rather than state. thingsToKnow is asked to
   // include "at least one real downside", which is a judgement by definition.
   "thingsToKnow", "tags",
+  // ── AND A TOWN'S ENTIRE BODY, WHICH WAS ON NEITHER LIST ─────────
+  //
+  // 4 Sep 2026. characterAndFit, whatToDo and gettingThereReality appeared in
+  // no list, so checkModeOf returned the `report` default for all three, and
+  // town was the only one of the ten types whose whole body was checked that
+  // way. Under report mode an UNVERIFIED finding is admissible and the
+  // auto-corrector is told, in capitals, "IN PROSE ... unverified means NOBODY
+  // WROTE THIS ANYWHERE. DELETE THE SENTENCE."
+  //
+  // characterAndFit is defined as "say honestly who this town actually suits
+  // and who it doesn't". A judgement is not written down on any page by
+  // construction, so every sentence of it is unverified, and it is also the
+  // card-preview text. This is the deletion bug this file was written to stop,
+  // still live on the one type Oliver has said is genuinely good.
+  //
+  // gettingThereReality is the town's Reality Check, in the prompt's own
+  // capitals, and `realityCheck` has been on this list since it existed. The
+  // two fields differ only in the type that carries them.
+  //
+  // whatToDo is the arguable one and it lands here for the same reason: it is
+  // prose a reader reads, so CONTRADICTED still fires on a page that disagrees,
+  // and silence stops being grounds for deleting a sentence. The comment above
+  // says report is "the safe direction" for an unclassified field. That is true
+  // of a value and it is exactly backwards for a paragraph.
+  "characterAndFit", "whatToDo", "gettingThereReality",
 ];
 
 export const REPORT_FIELDS = [

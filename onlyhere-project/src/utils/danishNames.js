@@ -177,6 +177,24 @@ export const GENERIC_PLACE_WORDS = new Set([
   "forsamlingshus", "festsal", "kulturhus", "medborgerhus", "events", "event",
   "koncert", "concert", "tour", "tours", "billetter", "billet", "tickets",
   "visit", "oplev", "guide", "travel", "rejse", "denmark", "danmark",
+  // ── THE TWO NEWEST TYPES ARE NAMED AFTER WHAT THEY ARE ──────────
+  // Bar streets and food streets shipped in August and this set was written
+  // before either existed, so the words that make those names ordinary were
+  // missing and every one of them counted as distinctive.
+  //
+  // The cost, found 3 Sep: "Copenhagen Street Food" shares the words "street"
+  // and "food" with street-food.dk, so an unrelated site was accepted as that
+  // entry's OWN OPERATOR, which is the strongest source class this pipeline
+  // has. Its prices and its opening hours would have gone in as the operator's.
+  //
+  // Compound Danish street names are unaffected and that is the point:
+  // "vestergade" is one ten-letter word, not "vester" plus "gade", so a street
+  // still has its own distinctive name. What comes off is the word "gade"
+  // standing alone, as in "Jomfru Ane Gade", where it says no more about which
+  // street this is than "museum" says about which museum.
+  "gade", "gaden", "gagade", "strade", "stradet", "alle", "boulevard",
+  "street", "streets", "streetfood", "food", "foods", "mad", "madmarked",
+  "hall", "halls", "haller", "hallerne",
 ]);
 
 // Fold first, so Ærø and Aero are the same word here as everywhere else in this

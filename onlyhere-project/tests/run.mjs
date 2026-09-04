@@ -25,7 +25,7 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { stripNonCode, stripComments, functionBody, useBeforeDeclare, namedFunctions, hookDepsBeforeDeclaration, readOutOfScope } from "./tdz.mjs";
+import { stripNonCode, stripComments, functionBody, useBeforeDeclare, namedFunctions, hookDepsBeforeDeclaration, readOutOfScope, exportedArity, overArgumentedCalls, uncalledExports } from "./tdz.mjs";
 
 let passed = 0, failed = 0;
 const fails = [];
@@ -47,7 +47,7 @@ writeFileSync(entry, `
   export { legSteps, journeyFromStored, worthShowingLegs, journeyParts, journeyBlock, vehicleWord, arrivalStop, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn, closedButPlanned, storedJourney, journeyReach, journeyChanges, journeyBreakdown, journeyDriving, journeyStamp, journeyAgencies, JOURNEY_SOURCE } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS, foundAt, matchVariantsOf, GENERIC_ALIASES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
-  export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, streetForSpot, barsOnStreet, nightlifeForTown } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
+  export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, townOfStreet, streetForSpot, barsOnStreet, nightlifeForTown } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
@@ -88,7 +88,7 @@ writeFileSync(entry, `
   export { whoWrote, modelProvenanceNote, DRAFT_STAGES, readerFacingStages, WRITER, EXTRACTOR, MEASURED } from ${JSON.stringify(join(root, "src/utils/modelProvenance.js"))};
   export { venueStyleOf, venueStyleLabel, VENUE_STYLES, VENUE_STYLE_LABEL, unstyledVenues, venueStyleCoverage, stylesPresent, showVenueStyleFacet, buildNightlifeStyleFacet, VENUE_STYLE_COVERAGE_MIN } from ${JSON.stringify(join(root, "src/utils/venueStyle.js"))};
   export { looksLikeLodging, stayDrift, stayDriftNote, publicAccessAnswered, STAY_TERMS, LODGING_RULE, LODGING_NOTES_RULE, LODGING_WORDS, isLodgingType, LODGING_TYPES } from ${JSON.stringify(join(root, "src/utils/venueSubject.js"))};
-  export { entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, SAYS_FREE, AMOUNT, isUnqualifiedFree, entryBooking, bookingChip, BOOKING_FIELDS, NEEDS_BOOKING, WALK_IN } from ${JSON.stringify(join(root, "src/utils/entryPrice.js"))};
+  export { entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, PAID_LABEL, SAYS_FREE, AMOUNT, isUnqualifiedFree, entryBooking, bookingChip, BOOKING_FIELDS, NEEDS_BOOKING, WALK_IN } from ${JSON.stringify(join(root, "src/utils/entryPrice.js"))};
   export { literalRenderings, literalNote, looksLikeAName, FALSE_FRIENDS, FALSE_FRIEND_RULE, NAME_RULE } from ${JSON.stringify(join(root, "src/utils/literalDanish.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
@@ -101,7 +101,7 @@ writeFileSync(entry, `
   export { PAID_PLANS_LIVE } from ${JSON.stringify(join(root, "src/config.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
-  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, VERIFY_PROMPT, settleVerdict, keepMeasured, isPipelineOwned, MEASURED_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, keepMeasured, isPipelineOwned, MEASURED_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS, feedbackProblem, feedbackRow } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { trimFillerRuns } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { readableOn, contrastRatio, overlay, parseHex, luminance, READABLE_MIN, MAX_INK_SATURATION, PILL_ALPHA } from ${JSON.stringify(join(root, "src/utils/readableColor.js"))};
@@ -120,7 +120,7 @@ writeFileSync(entry, `
   export { spellingsIn } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { distinctiveWords as dWords } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { isResearchVoice, researchVoiceSentences, stripResearchVoice, cleanReaderProse, researchVoiceIn } from ${JSON.stringify(join(root, "src/utils/researchVoice.js"))};
-  export { repairBody, headingsOf, bodyProblems, priceProblems, priceWorklist, bookingProblems, bookingWorklist, voiceProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
+  export { repairBody, headingsOf, bodyProblems, priceProblems, priceWorklist, bookingProblems, bookingWorklist, voiceProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, TYPE_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
   export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, missingRequired, cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS, cleanBornDate, birthYear, BORN_DATE_MIN, BORN_DATE_MAX, REQUIRED_PROFILE, REQUIRED_LABEL, AGE_BANDS, BORN_YEARS, bandForYear, ageFrom, underMinimumAge, MIN_ACCOUNT_AGE, TERMS_VERSION, holdProfile, takeHeldProfile, PENDING_PROFILE_KEY, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
   export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
@@ -159,7 +159,7 @@ writeFileSync(entry, `
   export { groupRows, groupLabel, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
   export { filterRows, rowMatchesQuery, rowHaystack } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
   export { isRecording, startRecording, stopRecording, record, recordedEvents, recordingText, recordingFileName, clearRecording, safeUrl, safeDetail, REDACTED, MAX_EVENTS, DROP_MARKER } from ${JSON.stringify(join(root, "src/utils/studioRecorder.js"))};
-  export { applyEditedRow, removeLiveRow, LIVE_ID_OFFSET, townFrame } from ${JSON.stringify(join(root, "src/utils/liveContent.js"))};
+  export { applyEditedRow, removeLiveRow, REMOVED, NOT_LIVE, UNKNOWN_TYPE, LIVE_ID_OFFSET, townFrame } from ${JSON.stringify(join(root, "src/utils/liveContent.js"))};
   export { freeEntrance } from ${JSON.stringify(join(root, "src/data/freeEntrance.js"))};
   export { towns } from ${JSON.stringify(join(root, "src/data/towns.js"))};
   export { DRAFT_STORE_KEY, STORE_VERSION, DRAFT_TTL_MS, MAX_RESULTS, MAX_QUEUE, MAX_BYTES, STORE_PROBLEMS, packResult, packEditor, packQueueItem, capResults, packStore, isEmptyStore, readStore, storedKeys, FORBIDDEN_KEYS, writeStore, ageWords, restoreNote, problemNote, doneKeysFrom } from ${JSON.stringify(join(root, "src/utils/studioDraftStore.js"))};
@@ -171,6 +171,7 @@ writeFileSync(entry, `
   export { claimConflicts, implausibleWalks, checkable, durationsIn, distancesIn, TOLERANCE, MIN_GAP_MINUTES } from ${JSON.stringify(join(root, "src/utils/claimCheck.js"))};
   export { placeSlug, townPath, findBySlug, slugCollisions, sitemapXml, COUNTRY, ENTRY_KINDS, segForType, kindForSeg, typesForSeg, entryUrlPath, parseEntryUrl, isEntryUrl } from ${JSON.stringify(join(root, "src/utils/placeUrl.js"))};
   export { towns as TOWNS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/towns.js"))};
+  export { nightlifeStreets as STREETS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/nightlifeStreets.js"))};
   export { PRICES, startRun, endRun, recordModelCall, recordRequestCall, summarise, averageFor, describe, describeAverage, recentRuns, currentRun, __reset } from ${JSON.stringify(join(root, "src/utils/apiCost.js"))};
   export { swipeAxis, dragOffset, swipeCommits, swipeTarget, SLOP_PX, AXIS_BIAS, COMMIT_FRACTION, FLICK_SPEED, EDGE_DRAG } from ${JSON.stringify(join(root, "src/utils/swipe.js"))};
   export { verdictInProse, keepProse } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
@@ -185,7 +186,7 @@ writeFileSync(entry, `
   export { buildPreviewReport, rowReport, passOf, reportFilename, REPORT_KIND } from ${JSON.stringify(join(root, "src/utils/previewReport.js"))};
   export { OBSERVED_MIN, learnedIsEmpty, seenFromTrip, observeTrip, settledObservations, observedForPrompt } from ${JSON.stringify(join(root, "src/utils/profileLearning.js"))};
   export { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, COVERAGE_UNANSWERED, COVERAGE_UNCOUNTED } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
-  export { stayRangeIn, stayRangeInBody, stayGlanceDays, stayContradiction, restatesBody, restatementFindings, meaningfulWords, RESTATEMENT } from ${JSON.stringify(join(root, "src/utils/draftShape.js"))};
+  export { stayRangeIn, stayRangeInBody, stayGlanceDays, stayContradiction, restatesBody, restatementFindings, BODY_FIELDS, meaningfulWords, RESTATEMENT } from ${JSON.stringify(join(root, "src/utils/draftShape.js"))};
   export { searchTypeFor } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
   export { ENTRY_POINTS, arrivalPoint as arrivalPointRaw, destinationPoint, destinationsNamed, tripAnchor } from ${JSON.stringify(join(root, "src/utils/arrival.js"))};
   export { tripAnchorFor, eventReachBand, eventPoint, placePoint, tripPoints, CONSIDER_CAP } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
@@ -229,18 +230,18 @@ writeFileSync(entry, `
   export { SWEEP_INTENT, SWEEP_PROMPT } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT, correctionLanded, claimLanded, describeCorrection, hasAnchor } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
-  export { shapeForLive, isPublisherNote, PUBLISHER_NOTE, cleanCredit } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
+  export { shapeForLive, madeHeading, isPublisherNote, PUBLISHER_NOTE, cleanCredit } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { longestEcho, echoWords, isNameEcho, echoInDraft, describeEcho, ECHO_RUN } from ${JSON.stringify(join(root, "src/utils/echoCheck.js"))};
-  export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, describeListingRefusal } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
+  export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
-  export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
+  export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, saysFreeOnly, statesAnAmount, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { keepLanguageOf } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { datesFromListings, cityRankOf, cityWanted, CITY_MATCH, CITY_UNKNOWN, CITY_DIFFERENT } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, PRICE_NOT_PUBLISHED, PRICE_UNKNOWN } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { sourceFit, describeSourceFit, LIVING_TYPES } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
-  export { costContradictions, bareOccurrence, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, priceMisses, pricesAdmission, NOT_ADMISSION, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { costContradictions, bareOccurrence, questionWordsFor, questionWords, EVERYDAY_WORDS, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, priceMisses, pricesAdmission, NOT_ADMISSION, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 // ── ESBUILD THROUGH ITS NODE API, NOT ITS BINARY ────────────────────
 // This spawned node_modules/.bin/esbuild, located with existsSync. That works
@@ -659,6 +660,53 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("a different place does not match", !M.hostMatchesName("https://visitaarhus.dk", "Aarhus Festuge"));
   ok("a short name cannot match by substring", !M.hostMatchesName("https://denmarkholidays.com", "Ry"));
   ok("nonsense input is not a match", !M.hostMatchesName("not a url", "Aarhus Festuge"));
+
+  // ── AND THE DOMAIN THAT IS A CATEGORY, NOT A NAME ─────────────────
+  //
+  // "Copenhagen Street Food" flattens to copenhagenstreetfood, which contains
+  // "streetfood", so street-food.dk passed the domain-inside-the-name test and
+  // became that market's OFFICIAL WEBSITE. The official site is the strongest
+  // source this pipeline has: an unrelated aggregator's prices and hours would
+  // have been read as the market's own.
+  //
+  // The rule is not "block this domain". It is that a domain speaks for a place
+  // only when it covers what makes that place THAT place, and "street food" is
+  // what every street food market in the country is called.
+  ok("a stranger's category domain is not the operator",
+    !M.hostMatchesName("https://street-food.dk", "Copenhagen Street Food"));
+  ok("nor with a www on it",
+    !M.hostMatchesName("https://www.street-food.dk/vendors", "Copenhagen Street Food"));
+  is("and it never fills the website field either",
+    M.officialSiteFromCandidates(["https://street-food.dk"], "Copenhagen Street Food"), null);
+  // THE OTHER DIRECTION, which is what makes this a rule and not a wall. This
+  // is the case the name-contains-domain test was written for and it still has
+  // to work: a branch name is the business name plus a place.
+  ok("a branch still matches its business's own domain",
+    M.hostMatchesName("https://gasolinegrill.dk", "Gasoline Grill Landgreven"));
+  ok("and a market with a real name keeps its own domain",
+    M.hostMatchesName("https://torvehallernekbh.dk", "Torvehallerne"));
+  ok("a bar street's own domain still matches",
+    M.hostMatchesName("https://jomfruanegade.dk", "Jomfru Ane Gade"));
+  // A name with nothing distinctive in it cannot corroborate anything, and
+  // guessing there is exactly what this guard exists to stop.
+  ok("a name made only of ordinary words claims no domain",
+    !M.hostMatchesName("https://streetfood.dk", "Street Food Market"));
+  // ── AND THE DANISH LETTER THAT BROKE THE FIRST DRAFT OF IT ───────
+  //
+  // The guard above compares words from the name against the domain, and the
+  // two sides normalise ø differently: fold() gives "o", a .dk domain spells
+  // "oe". The first version took the words from distinctiveWords, which folds,
+  // so "Møgeltønder Marked" produced "mogeltonder" to look for inside
+  // "moegeltoender" and the operator's own site was refused. Every existing
+  // assertion here passed, because not one of them had a Danish letter in a
+  // name long enough to reach this branch.
+  ok("a Danish-lettered name still matches its own domain",
+    M.hostMatchesName("https://moegeltoender.dk", "Møgeltønder Marked"));
+  ok("and with æ", M.hostMatchesName("https://naestved.dk", "Næstved Museum"));
+  ok("and with å", M.hostMatchesName("https://aarhusfestuge.dk", "Århus Festuge"));
+  // Still refused where it should be, so the fix is not just a wider door.
+  ok("a generic Danish word still claims nothing",
+    !M.hostMatchesName("https://marked.dk", "Møgeltønder Marked"));
 
   // Aggregators and ticket sellers are never the official site, however well
   // the domain reads. This is the case that would quietly publish a reseller.
@@ -1680,7 +1728,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // subject, and what is taken from it is the strongest material in the
     // pipeline. For a street that is whichever business Google ranks first.
     ok("a listing is checked against the subject before anything is taken from it",
-       /if \(!listingMatchesSubject\(name, draftTown, hoursData\.name\)\) \{/.test(appSrc3));
+       /if \(!listingMatchesSubject\(name, draftTown, hoursData\.name, \{ theNameIsAStreet: NAME_IS_A_STREET\.includes\(sType\) \}\)\) \{/.test(appSrc3));
     ok("and the refusal says which listing it was, not just that there was none",
        /why: describeListingRefusal\(name, draftTown, hoursData\.name\)/.test(appSrc3));
     // Anchored on the CALL rather than on the string: `if (false) decide(...)`
@@ -2508,12 +2556,122 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // through the button carried the old headings and no verdict, and every
   // assertion below passed the entire time.
   const shape = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
-  const headingsIn = (src, fn) =>
-    [...src.matchAll(new RegExp(`${fn}\\(\\s*(?:isClub \\? )?\\[\\[([\\s\\S]{0,400}?)\\]\\]`, "g"))]
+  // ── A HEADING THAT IS NOT A LITERAL IS STILL A HEADING ────────────
+  // `madeHeading("foodStreet")` is a call, and this scan reads string literals,
+  // so without this line it would have quietly harvested "foodStreet" as a
+  // section heading and never seen the real one. Resolved through the actual
+  // exported function rather than a second copy of its answer.
+  const resolveCalls = (src) => src.replace(/madeHeading\(\s*"([^"]+)"\s*\)/g, (_m, t) => JSON.stringify(M.madeHeading(t)));
+  const headingsIn = (raw, fn) => {
+    const src = resolveCalls(raw);
+    return [...src.matchAll(new RegExp(`${fn}\\(\\s*(?:isClub \\? )?\\[\\[([\\s\\S]{0,400}?)\\]\\]`, "g"))]
       .map(m => [...m[1].matchAll(/"([^"]+)"|`([^`]+)`/g)].map(h => h[1] || h[2]));
+  };
   const codegenSets = headingsIn(app, "bb");
   const publishSets = headingsIn(shape, "bbData");
   const headingSets = [...codegenSets, ...publishSets];
+  // ── AND THE TWO GENERATORS ARE COMPARED, TYPE BY TYPE ─────────────
+  //
+  // The comment above says both lists get read. Reading both is not the same as
+  // checking they AGREE, and the difference is a whole class of bug: on 3 Sep a
+  // mutant that put "How It's Made" back on the food-street PASTE branch, while
+  // the publish branch said "What's There", passed all 12,277 assertions. Both
+  // lists were read. Neither was read against the other.
+  //
+  // So each codegen branch is matched to the type it is written for and its
+  // headings are compared with what shapeForLive really returns for that type.
+  // A reader cannot tell whether the row they are on was published by the
+  // button or pasted from the box, so the two must not be able to differ.
+  {
+    const { headingsOf, shapeForLive } = M;
+    // The same all-answering draft the publish-path block uses, so no branch is
+    // skipped for a field this test forgot to name.
+    const ARR = { themes: ["coast"], tags: ["music"], what: ["throwing"], thingsToKnow: ["a", "b", "c"], uncertainties: [], __sources: [] };
+    const anyDraft = (over = {}) => new Proxy({}, { get(_t, k) {
+      if (typeof k === "symbol") return undefined;
+      if (k in over) return over[k];
+      if (k in ARR) return ARR[k];
+      return `x-${String(k)}`;
+    }, has() { return true; } });
+    // `sType === "festival"` appears seven times in App.jsx and only one of them
+    // is the codegen. The region is bounded by the line that starts it, so a
+    // prompt or a date check elsewhere cannot be mistaken for a paste branch.
+    const all = resolveCalls(app);
+    const from = all.indexOf('let code = "";');
+    ok("the paste-ready codegen block was located", from > 0);
+    const src = all.slice(from, all.indexOf("setPasteCode", from) > from ? all.indexOf("setPasteCode", from) : from + 30000);
+    // Each branch runs from its own `sType === "x"` test to the next one.
+    const marks = [...src.matchAll(/sType === "([a-zA-Z]+)"\)\s*\{/g)];
+    // The LAST named branch ends where the unnamed one begins, not at the end of
+    // the region: without this the essentials branch swallowed the bar branch
+    // below it and appeared to write a body it does not write.
+    const nightAt = src.indexOf("const nightlifeSpots = [");
+    ok("the unnamed bar branch was located", nightAt > 0);
+    const branchOf = (i) => src.slice(marks[i].index, i + 1 < marks.length ? marks[i + 1].index : nightAt);
+    const codegenTypes = marks.map(m => m[1]);
+    ok("the codegen branches were found", codegenTypes.length >= 8);
+    is("and each type appears exactly once", codegenTypes.length, new Set(codegenTypes).size);
+    // Every `[[...]]` in a paste branch is a list of heading/body pairs, and
+    // taking them all is what reads BOTH sides of the bar branch's isClub
+    // ternary. Anchoring on `bb(` read only the first and lost After Dark.
+    const headsInBranch = (txt) => [...new Set([
+      ...[...txt.matchAll(/\[\[([\s\S]{0,600}?)\]\]/g)]
+        .flatMap(m => [...m[1].matchAll(/"([^"]+)"|`([^`]+)`/g)].map(h => h[1] || h[2])),
+      ...[...txt.matchAll(/bbBullets\(\s*"([^"]+)"/g)].map(m => m[1]),
+    ])];
+    // A town's heading carries the town's name in both generators, spelled two
+    // different ways (a template hole here, a real name there). Both collapse
+    // to one token so the comparison is about the SET, not the interpolation.
+    const norm = (hs) => [...new Set(hs.map(h => /\$\{|^What to Do in /.test(h) ? "<the town's own heading>" : h))].sort();
+    // A club and a bar are one type with two bodies, so the publish side is
+    // asked for both and the codegen's ternary is compared against the union.
+    const publishHeads = (type) => norm([...new Set([
+      ...headingsOf(shapeForLive(type, anyDraft({ name: "Probe Place", isClub: true }))?.blogBody),
+      ...headingsOf(shapeForLive(type, anyDraft({ name: "Probe Place", isClub: false }))?.blogBody),
+    ])]);
+    // essential is the one type whose paste branch writes no blogBody at all:
+    // essentials render from howTo/tip fields, not from a body. Named here so
+    // the exclusion is a stated fact rather than a silent gap in the loop.
+    const noBody = codegenTypes.filter(t => !/blogBody: \[/.test(branchOf(codegenTypes.indexOf(t))));
+    is("only the essentials paste without a body", noBody, ["essential"]);
+    codegenTypes.forEach((type, i) => {
+      if (type === "essential") return;
+      is(`the paste path and the publish path write the same sections for a ${type}`,
+         norm(headsInBranch(branchOf(i))), publishHeads(type));
+    });
+    // The night branch is the final else and carries no sType test, so the loop
+    // above never reaches it. Compared explicitly rather than left out.
+    const nightBranch = src.slice(src.indexOf("const nightlifeSpots = ["));
+    is("and for a bar, which is the branch with no name on it",
+       norm(headsInBranch(nightBranch)), publishHeads("night"));
+  }
+  // ── AND THE FIELDS, NOT ONLY THE HEADINGS ─────────────────────────
+  //
+  // The comparison above is about SECTIONS. The paste path can also drop a flat
+  // field the publish path keeps, and it had dropped two: `bookingNote` off a
+  // free attraction, which entryPrice reads for the walk-in/book-ahead chip,
+  // and `venueStyle` off a bar, which studioContent carries with a comment
+  // explaining that a field the shape does not name "spends prompt for nothing".
+  //
+  // A general field-by-field parity check is the right shape for this and is
+  // NOT what is written here: extracting an object literal out of a template
+  // string is fiddly enough that a scanner I cannot properly falsify would be
+  // worse than none. These are the two real gaps, named. The general check is
+  // still owed.
+  {
+    const freeBranch = app.slice(app.indexOf('sType === "free"'), app.indexOf('sType === "booking"'));
+    ok("a pasted attraction carries whether you can walk in",
+       /bookingNote: \$\{J\(t\.bookingNote\)\}/.test(freeBranch));
+    const nightBranch = app.slice(app.indexOf("const nightlifeSpots = ["));
+    ok("and a pasted bar carries its venue style",
+       /venueStyle: \$\{J\(t\.venueStyle\)\}/.test(nightBranch));
+    // The publish path leaves an unstated kind empty on purpose; the paste path
+    // filled one in, so the one still-hardcoded array got a judgement invented
+    // by a logical or. Same class as the ticketStatus and popularityTag
+    // defaults studioContent.js removed for exactly this reason.
+    ok("and a pasted essential is not given a kind nobody chose",
+       !/cleanKind\(t\.kind\) \|\| "essential"/.test(app));
+  }
   ok("every published type still builds a page", codegenSets.length >= 7);
   ok("and the publish path declares its headings too", publishSets.length >= 7);
   // The publish path is the one that reaches a reader, so it is checked by name
@@ -5322,6 +5480,28 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("and a town with both is listed once", M.nightlifeTownList(bars, pages).sort(), ["Aarhus", "Copenhagen"]);
   is("nothing published is genuinely nothing", M.nightlifeTownList([], []), []);
 
+  // ── AND THE TOWN WHOSE ONLY NIGHTLIFE IS A STREET ─────────────────
+  // Same bug as the scene guide above, one content type later. Aalborg's night
+  // out IS Jomfru Ane Gade: publish the street, publish no individual bar, and
+  // before this the town had no row on the Nightlife page at all.
+  const streets = [{ id: 1, name: "Jomfru Ane Gade", town: "Aalborg", isStreet: true }];
+  is("a town with only a bar street reaches the page",
+     M.nightlifeTownList([], [], streets), ["Aalborg"]);
+  is("and is listed once when it has bars too",
+     M.nightlifeTownList([{ id: 9, location: "Jomfru Ane Gade 15, Aalborg", type: "Local" }], [], streets), ["Aalborg"]);
+  is("a street published before the town field existed still lands",
+     M.nightlifeTownList([], [], [{ id: 2, name: "Gothersgade", location: "Gothersgade, Copenhagen" }]), ["Copenhagen"]);
+  is("the two spellings of the capital are still one row with a street",
+     M.nightlifeTownList([], [{ name: "Copenhagen" }], [{ id: 3, name: "Gothersgade", town: "København" }]), ["Copenhagen"]);
+  is("a street with no town anywhere adds no row",
+     M.nightlifeTownList([], [], [{ id: 4, name: "Nowhere Gade" }]), []);
+  // The town page and the town list must resolve a street's town the same way,
+  // or a town appears on the list and its street is missing from the page.
+  is("the list and the page agree on which town a street is in",
+     M.townOfStreet(streets[0]), "Aalborg");
+  ok("and the page really finds the street for that town",
+     M.nightlifeForTown("Aalborg", [], streets).streets.length === 1);
+
   // ONE TOWN, NOT TWO. He types Copenhagen in Studio; a venue's location may
   // carry the Danish spelling, and two rows for one city is its own bug.
   is("the two spellings of the capital are one row",
@@ -5347,13 +5527,56 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("and a town with no guide has none", M.townPageFor(pages, "Aarhus"), undefined);
 
   const app6 = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the tab builds its list from both kinds of entry", /nightlifeTownList\(nightlifeSpots, nightlifeTowns\)/.test(app6));
+  ok("the tab builds its list from all three kinds of entry", /nightlifeTownList\(nightlifeSpots, nightlifeTowns, nightlifeStreets\)/.test(app6));
+  // The two functions in nightlife.js that take spots, pages/streets and cities
+  // must take them in the same order, or a caller passing the city list where
+  // the street list goes is a silent no-op with no error anywhere.
+  {
+    const nl = readFileSync(join(root, "src/utils/nightlife.js"), "utf8");
+    ok("streets sit in the same position in both functions",
+       /nightlifeTownList = \(spots, townPages, streets = \[\], cities/.test(nl)
+       && /nightlifeForTown = \(town, spots, streets, cities/.test(nl));
+  }
   ok("and never indexes the group map raw again", !/townGroups\[nightlifeTownView\]/.test(app6));
   // The empty state named only spots, which reads as "nothing is published" to
   // somebody who has just published a town.
   ok("the empty state no longer says only spots", !/No nightlife spots published yet\. They appear here/.test(app6));
   ok("it names towns and venues both", /Towns and venues both appear as soon as they go live/.test(app6));
-  ok("a town with a guide and no bars says what IS there", /Scene guide, no venues published yet/.test(app6));
+  // ── AND IT SAYS WHAT IS REALLY THERE, NOT WHAT USED TO BE ────────
+  // This used to be a regex over the literal sentence in App.jsx. The sentence
+  // stayed true only while a venue and a scene guide were the two ways onto the
+  // list; bar streets became a third on 3 Sep and the row went on promising a
+  // guide that does not exist. A source-text regex could not notice, so the
+  // rule is asked of the function instead.
+  ok("the row asks the shared summary rather than hardcoding a sentence",
+     /nightlifeSummaryFor\(t, \{ townPages: nightlifeTowns, streets: nightlifeStreets \}\)/.test(app6));
+  {
+    const guideOnly = [{ name: "Aalborg", desc: "Scene guide" }];
+    const streetOnly = [{ id: 1, name: "Jomfru Ane Gade", town: "Aalborg" }];
+    is("a town with a guide and no bars says what IS there",
+       M.nightlifeSummaryFor("Aalborg", { townPages: guideOnly }),
+       "Scene guide, no venues published yet");
+    // THE ROW THIS SESSION CREATED. Before the street types it could not exist;
+    // after them it claimed a guide it did not have.
+    is("a town with only a bar street names the street",
+       M.nightlifeSummaryFor("Aalborg", { streets: streetOnly }),
+       "Jomfru Ane Gade, no venues published yet");
+    is("and never claims a scene guide it does not have",
+       /Scene guide/.test(M.nightlifeSummaryFor("Aalborg", { streets: streetOnly })), false);
+    is("with both, it says both",
+       M.nightlifeSummaryFor("Aalborg", { townPages: guideOnly, streets: streetOnly }),
+       "Scene guide · Jomfru Ane Gade, no venues published yet");
+    is("several streets are counted rather than listed",
+       M.nightlifeSummaryFor("Aalborg", { streets: [...streetOnly, { id: 2, name: "Vesterbro", town: "Aalborg" }] }),
+       "2 bar streets, no venues published yet");
+    // A street in another town is not this town's.
+    is("a street elsewhere is not counted",
+       M.nightlifeSummaryFor("Aalborg", { streets: [{ id: 3, name: "Gothersgade", town: "Copenhagen" }] }),
+       "Nothing published here yet");
+    is("and the two spellings of the capital are one town here too",
+       M.nightlifeSummaryFor("Copenhagen", { streets: [{ id: 4, name: "Gothersgade", town: "København" }] }),
+       "Gothersgade, no venues published yet");
+  }
 }
 
 // ── "IT'S SUCH A NERD WORD TO BE USING SO MUCH" ───────────────────
@@ -8283,6 +8506,71 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   missing("type label map", JSON.stringify(Object.keys(M.TYPE_LABEL)), t => `"${t}"`);
   missing("draft prompt table", JSON.stringify(Object.keys(prompts)), t => `"${t}"`);
 
+  // ── AND EVERY PROMPT SHOWS THE MODEL WHAT GOOD LOOKS LIKE ─────────
+  //
+  // Nine of the ten drafting prompts carry a SHAPE-ONLY EXAMPLE: a filled-in
+  // entry that fixes the level of specificity, the sentence rhythm and the JSON
+  // shape in one. nightStreet, the newest type, carried none, so a bar street
+  // was drafted from rules alone while every other type also got shown.
+  //
+  // Checked against the prompt table rather than a list of types, so the next
+  // type added is held to the same standard on the day it is added.
+  {
+    const missingExample = TYPES.filter(t => !/SHAPE-ONLY EXAMPLE/.test(String(prompts[t] || "")));
+    is("every drafting prompt carries a shape example", missingExample, []);
+    // An example is only worth having if it is a real filled-in entry, not the
+    // words "shape-only example" above the schema it was meant to illustrate.
+    const thin = TYPES.filter(t => {
+      const after = String(prompts[t] || "").split("SHAPE-ONLY EXAMPLE")[1] || "";
+      const json = after.slice(0, after.indexOf("\n") < 0 ? after.length : after.indexOf("\n"));
+      return (json.match(/"/g) || []).length < 12;
+    });
+    is("and each example is a filled-in entry rather than a label", thin, []);
+    // The example must not be mistakable for research. Every one of them is
+    // labelled, and the newest type says so in the strongest terms because its
+    // example names a real street somebody will eventually draft.
+    // ── AND THE EXAMPLE MUST NOT BREAK THE RULE IT ILLUSTRATES ────
+    //
+    // STUDIO_VOICE bans the em dash in its strongest terms: "one of the single
+    // most recognizable AI-writing tells", "full stop, no exceptions". The
+    // suite enforced that on STUDIO_VOICE and never read the ten per-type
+    // prompts, and five of their SHAPE-ONLY EXAMPLES modelled one anyway,
+    // inside the JSON the model is shown as its rhythm reference: "There's
+    // nowhere to sit — this is a grab-and-go stop."
+    //
+    // The model copies it, stripDashes turns it mechanically into the comma
+    // splice "There's nowhere to sit, this is a grab-and-go stop", and the row
+    // then scores a HIGH-severity voice finding in the published sweep. The
+    // prompt taught the fault that the sweep reports.
+    //
+    // Asked of the EXAMPLE JSON only, not of the instruction prose around it:
+    // the instructions legitimately quote the character in order to ban it, and
+    // an assertion that cannot tell those apart is one somebody weakens later.
+    {
+      const exampleJson = TYPES.map(t => {
+        const after = String(prompts[t] || "").split("SHAPE-ONLY EXAMPLE")[1] || "";
+        const at = after.indexOf("): {");
+        return [t, at < 0 ? "" : after.slice(at + 2).split("\n")[0]];
+      });
+      is("every shape example was located", exampleJson.filter(([, j]) => !j).map(([t]) => t), []);
+      is("and not one of them models the dash its own prompt bans",
+         exampleJson.filter(([, j]) => /\u2014|--/.test(j)).map(([t]) => t), []);
+      // The ban itself has to still be in the voice rules, or the assertion
+      // above is checking examples against a rule that no longer exists.
+      ok("and the rule they are being held to is still stated",
+         /NEVER USE THE EM DASH/.test(M.STUDIO_VOICE));
+    }
+    ok("the bar street example says plainly not to reuse its facts",
+       /If the street you are drafting IS this one, take nothing from here and write only from the research/.test(String(prompts.nightStreet)));
+    // ── AND THE TYPE WHOSE NAME IS NOT AN IDENTITY ──────────────────
+    // Streets repeat across Danish towns, and the prompt is the last place that
+    // can stop two of them being blended into one entry.
+    ok("the bar street prompt states the identity rule",
+       /there is a Vestergade, a N\u00f8rregade, an Algade and a Havnegade in town after town/.test(String(prompts.nightStreet)));
+    ok("and says what to do when the town cannot be told",
+       /say so in uncertainties and leave the field empty rather than blending two streets into one entry/.test(String(prompts.nightStreet)));
+  }
+
   // THE PUBLISH SHAPE, exercised rather than read. shapeForLive is the only
   // insert path into the database and has silently eaten a feature twice.
   const unshaped = TYPES.filter(t => !M.shapeForLive(t, { name: "X", desc: "d", vibeLocation: "v", characterAndFit: "c", howTo: "h" }));
@@ -8291,10 +8579,149 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   missing("live content merge chain", region(live, "rows.forEach(row =>", "if (dupeNames.length", "merge chain"), t => `row.type === "${t}"`);
   missing("Studio type picker", region(app, '{[["town", "🏘 Town"]', "].map(([k, label]) =>", "type picker"), t => `["${t}", "`);
   missing("research query table", region(app, "const cfg = {", "}[sType];", "research query table"), t => `${t}: { queries:`);
+
+  // ── AND EVERY QUERY HAS TO SAY WHERE IN THE WORLD IT MEANS ────────
+  //
+  // Three of the four nightStreet queries said neither the town nor the
+  // country: "Vestergade best night to go busy quiet which end" is a search
+  // about no particular street on earth, and there is a Vestergade in Aarhus,
+  // Odense, Copenhagen and a dozen towns besides. Whatever it returned was fed
+  // to the writer as research about THIS street.
+  //
+  // The rule is not "the strings should mention Denmark", which would be an
+  // assertion about text. It is that a query has to be answerable about one
+  // place: either the name it is templated on is the identity (a town, a
+  // festival, a named venue), or the name is a word like "west street" and the
+  // query has to carry the town too.
+  {
+    const table = region(app, "const cfg = {", "}[sType];", "research query table");
+    const perType = Object.fromEntries([...table.matchAll(/^\s*(\w+): \{ queries: \[([\s\S]*?)\] \},$/gm)]
+      .map(m => [m[1], [...m[2].matchAll(/`([^`]*)`/g)].map(q => q[1])]));
+    is("every type's queries were read", TYPES.filter(t => !(perType[t]?.length >= 3)), []);
+    // A street's name is a common noun. Both street types must template on the
+    // subject, which carries the town, not on the bare name.
+    ["nightStreet", "foodStreet"].forEach(t => {
+      is(`every ${t} query is about a street in a named town`,
+         perType[t].filter(q => !q.includes("${subject}")), []);
+      is(`and every ${t} query says which country`,
+         perType[t].filter(q => !/Denmark|Danmark/.test(q)), []);
+    });
+    // And the subject is only substituted where the name genuinely is not an
+    // identity: appending a town to "Ribe" would search for "Ribe Ribe".
+    const others = TYPES.filter(t => !["nightStreet", "foodStreet"].includes(t));
+    is("no other type has its name replaced",
+       others.filter(t => (perType[t] || []).some(q => q.includes("${subject}"))), []);
+    ok("and the subject is the street plus its town",
+       /const subject = NAME_IS_NOT_A_PLACE\.includes\(sType\) && draftTown\s*\?\s*`\$\{name\} \$\{draftTown\}`\s*:\s*name;/.test(app));
+    // The planner writes queries too, and it was told the bare name.
+    ok("the query planner is told the town as well",
+       /Planning research for a Danish travel guide entry: "\$\{subject\}"/.test(app));
+    ok("and told plainly why, so it keeps the town in what it writes",
+       /a street name alone is ambiguous in Denmark, so every query you write must keep the town in it/.test(app));
+  }
+
+  // ── AND THE PRE-CHECK ASKS EACH TYPE ITS OWN QUESTION ─────────────
+  //
+  // Everything that was not a town, a restaurant or a festival fell through to
+  // the festival question: "find the accurate dates, prices, and any specific
+  // named venues/stages". A bar street has neither dates nor stages, and a
+  // search model asked for them does not answer "there are none" — it returns
+  // the nearest thing shaped like the question.
+  {
+    const pre = region(app, "const precheckPrompt = ((sType", "setStudioStage({ label: \"Fact-checking", "perplexity pre-check");
+    ok("the pre-check block was located", pre.length > 500);
+    // The lineup question must not be reachable by anything that is not an
+    // event. Counted over CODE only: the comment explaining why this rule
+    // exists quotes the sentence it bans, and counting the explanation as a
+    // violation is the kind of assertion that gets weakened to get green.
+    const stages = [...stripComments(pre).matchAll(/named venues\/stages/g)].length;
+    is("only one branch asks for dates and stages, and it is the festival", stages, 1);
+    ok("and the branch that asks it is guarded on the festival type",
+       /sType === "festival"\s*\?\s*`Using real, current web search, find the accurate dates, prices \(in local currency\), and any specific named venues\/stages/.test(pre));
+    // The fallthrough is what everything else lands on, and it must not invent
+    // a season for a place that has none.
+    ok("the fallthrough asks for facts, not for a lineup",
+       /find accurate, current, checkable facts about "\$\{subject\}" in Denmark/.test(pre));
+    ok("and says plainly not to invent a season",
+       /if it is not, do not invent a season for it/.test(pre));
+    // A street gets its own question, in its own town.
+    ok("a bar street is asked about its bars, its nights and its two ends",
+       /sType === "nightStreet"/.test(pre) && /WHO IT'S FOR FACTS/.test(pre) && /BEST NIGHTS FACTS/.test(pre) && /WALKING IT FACTS/.test(pre));
+    ok("and is told it is a street, not a venue or an event",
+       /This is a STREET, not a venue and not an event: it has no opening hours of its own, no tickets, no lineup and no stages/.test(pre));
+    ok("and which town it has to be about",
+       /Everything you report must be about this street in \$\{draftTown \|\| "the town named above"\}/.test(pre));
+    // Both street types are asked about the street IN ITS TOWN, not the bare
+    // name, which is the same identity rule as the queries above.
+    ["\\$\\{subject\\}"].forEach(() => {});
+    is("neither street type is pre-checked on a bare name",
+       [...pre.matchAll(/find accurate facts about "\$\{(\w+)\}" in Denmark, and organize/g)].map(m => m[1]).filter(v => v !== "subject"), []);
+    // A nightlife town is not a venue either.
+    ok("a nightlife town is asked about its scene, not its opening hours",
+       /sType === "nightTown"/.test(pre) && /This is a TOWN, not a venue: it has no opening hours, no tickets and no lineup/.test(pre));
+  }
   // Both halves of discovery. The label is what the model is told to find, the
   // pool is what results are deduplicated against. A type in one and not the
   // other either offers candidates it already has, or none at all.
   missing("discover label map", region(app, "const DISCOVER_TYPE_LABEL = {", "};", "discover label map"), t => `${t}:`);
+  // ── AND NO TWO TYPES HUNT FOR THE SAME THING ──────────────────────
+  // nightStreet and nightTown carried byte-identical keyword bags, so
+  // discovering bar streets searched for nightlife towns, got towns back, and
+  // discarded every one of them as already published. A type whose search is a
+  // copy of another type's search cannot discover anything it exists for.
+  {
+    const words = M.DISCOVER_WORDS;
+    is("every type has its own discovery keywords", TYPES.filter(t => !words[t]), []);
+    const dupes = TYPES.filter(t => TYPES.some(o => o !== t && words[o] === words[t]));
+    is("and no two types search for the same words", dupes, []);
+    // The street's words have to be about a street, or renaming them changed
+    // nothing but the bytes.
+    ok("a bar street's search says street", /gade|street|strip/.test(words.nightStreet));
+    ok("and a nightlife town's still says town", /town/.test(words.nightTown));
+  }
+
+  // ── AND THE SAME TWO FAULTS IN THE OTHER WORD TABLE ───────────────
+  // QUERY_WORDS is not what discovery searches for, it is what sourceFit uses
+  // to decide whether the pages read answer this type's questions at all. It
+  // had the identical nightStreet/nightTown duplication, and the town line
+  // carried "what to see", so "what" and "see" vouched for every page on the
+  // internet and the check could not fire for the type with the most pages.
+  {
+    const q = M.QUERY_WORDS;
+    is("every type has question words", TYPES.filter(t => !q[t]), []);
+    is("and no two types ask the same question",
+       TYPES.filter(t => TYPES.some(o => o !== t && q[o] === q[t])), []);
+    // ── AND NOT ASKED OF THE FILTERED LIST ────────────────────────
+    // The first version of this block asked questionWordsFor(t) whether it
+    // contained any of ten words, every one of which is in FILLER_WORDS. The
+    // filter removes them by definition, so the assertion restated the filter
+    // and could not fail for any vocabulary at all. It is asked of the RAW
+    // vocabulary below instead, where it bites.
+    // Every type must still have something to look for, or the check silently
+    // becomes unanswerable rather than strict.
+    is("every type still has real words to look for",
+       TYPES.filter(t => M.questionWordsFor(t).length < 3), []);
+    // ── AND BOTH HALVES OF THE FIX, SEPARATELY ────────────────────
+    // The vocabulary and the filter each hid the other: with the vocabulary
+    // cleaned, deleting the filter changed nothing, and with the filter in
+    // place, putting "what to see" back changed nothing. Two survivors. So the
+    // vocabulary is checked raw, and the filter is called with real input.
+    // Derived from FILLER_WORDS itself rather than a hand-written copy of ten
+    // of them, so adding a word to the filter forbids it in every vocabulary in
+    // the same edit. A hand-written copy is what let "bars closing time which
+    // night" ship: "time", "which" and "night" were not on the copy.
+    const rawLeaks = TYPES.flatMap(t => String(q[t] || "").split(/\s+/).map(w => w.toLowerCase())
+      .filter(w => M.EVERYDAY_WORDS.has(w))
+      .map(w => `${t}: ${w}`));
+    is("no type's vocabulary contains an everyday word in the first place", rawLeaks, []);
+    ok("and the filter is a real list, not an empty one", M.EVERYDAY_WORDS.size >= 20);
+    is("and the filter drops one when it does appear",
+       M.questionWords("praktisk what to see opening hours"), ["praktisk", "opening", "hours"]);
+    is("it keeps the real question words either way",
+       M.questionWords("billetter datoer program"), ["billetter", "datoer", "program"]);
+    is("and folds Danish letters, so åbningstider matches a folded page",
+       M.questionWords("åbningstider"), ["aabningstider"]);
+  }
   missing("discover source pools", region(app, "const discoverSourceArrays = () => ({", "});", "discover pools"), t => `${t}:`);
 
   // AND THE ONE THAT CANNOT BE A LIST CHECK. The paste-ready codegen ends in a
@@ -9051,6 +9478,66 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // here rather than a raw compare.
     ok("across the place's real name variants",
       sourceIsAboutPlace("En guide til København og omegn.", { name: "Copenhagen" }));
+
+    // ── AND THE NAME THAT IS DISTINCTIVE AND IDENTIFIES NOTHING ────
+    //
+    // "Vestergade" is one compound word, so the distinctive-name shortcut above
+    // fires and no town is ever checked. There is a Vestergade in Aarhus, in
+    // Odense, in Middelfart and in a dozen towns besides, so a page about any
+    // of them was accepted as a source about this one.
+    const aarhusPage = "Vestergade runs west from the cathedral and fills up on Fridays.";
+    ok("a street name alone still looks distinctive, which is the trap",
+      M.nameIsDistinctive("Vestergade"));
+    ok("so without the street flag the page is accepted",
+      sourceIsAboutPlace(aarhusPage, { name: "Vestergade", town: "Aarhus" }));
+    ok("and with it, a page that never says the town is refused",
+      !sourceIsAboutPlace(aarhusPage, { name: "Vestergade", town: "Aarhus", theNameIsAStreet: true }));
+    // THE OTHER DIRECTION. Corroboration is a real route through, not a wall:
+    // a page that names the town passes, exactly as an ordinary name does.
+    ok("a page that names the town is a source",
+      sourceIsAboutPlace("Vestergade i Aarhus er byens travleste udelivsgade.",
+        { name: "Vestergade", town: "Aarhus", theNameIsAStreet: true }));
+    ok("in either spelling of the town",
+      sourceIsAboutPlace("Gothersgade i København er fuld af barer.",
+        { name: "Gothersgade", town: "Copenhagen", theNameIsAStreet: true }));
+    // And the host route through, which is the second corroboration the file
+    // already allows for an ordinary name.
+    // The page has to NAME the street for the host route to be reached at all:
+    // corroboration is a second signal on top of a match, never a replacement
+    // for one. This fixture says the street and not the town.
+    ok("or a host carrying a distinctive word from the street's name",
+      sourceIsAboutPlace("Jomfru Ane Gade har over tyve barer på én gade.",
+        { name: "Jomfru Ane Gade", town: "Aalborg", url: "https://jomfruanegade.dk/barer", theNameIsAStreet: true }));
+    ok("and a page that never names the street is not rescued by the host",
+      !sourceIsAboutPlace("Alt om gaden og dens barer.",
+        { name: "Jomfru Ane Gade", town: "Aalborg", url: "https://jomfruanegade.dk/barer", theNameIsAStreet: true }));
+    // The operator's own site is still the operator's own site.
+    ok("and the street's own site is never refused",
+      sourceIsAboutPlace("Velkommen.", { name: "Vestergade", town: "Aarhus", url: "https://vestergade.dk", ownHost: "vestergade.dk", theNameIsAStreet: true }));
+    // A page about the same street in a DIFFERENT town is the case this exists
+    // for, and it has to be refused even though it names a town.
+    ok("and a page about the same street in another town is refused",
+      !sourceIsAboutPlace("Vestergade i Odense ligger tæt på banegården.",
+        { name: "Vestergade", town: "Aarhus", theNameIsAStreet: true }));
+
+    // ── AND THE WORDS THAT MADE A STRANGER THE OPERATOR ────────────
+    //
+    // "Copenhagen Street Food" shared "street" and "food" with street-food.dk,
+    // so an unrelated site was accepted as that entry's OWN OPERATOR, which is
+    // the strongest source class this pipeline has.
+    is("street and food are ordinary words in a place name",
+      M.distinctiveWords("Copenhagen Street Food").filter(w => ["street", "food"].includes(w)), []);
+    // NOT asserted through sourceIsAboutPlace: a first draft of this block did,
+    // and the assertion passed because the fixture page never named the place
+    // at all, so the generic-words change was never what refused it. The place
+    // that decision is really made is hostMatchesName, and it is asserted
+    // there. What belongs here is the word list itself.
+    // The compound Danish name is untouched, which is what keeps this a fix
+    // rather than a wall: vestergade is one word, not vester plus gade.
+    ok("a compound street name is still its own word",
+      M.distinctiveWords("Vestergade").includes("vestergade"));
+    ok("while the bare word gade says nothing",
+      !M.distinctiveWords("Jomfru Ane Gade").includes("gade"));
   }
 
   // ── A VENUE CALLED "TRAIN" POISONS ITS OWN RESEARCH ─────────────
@@ -9367,6 +9854,70 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("a specific stop finds its own entry", hit("Ribe VikingeCenter"), "Ribe VikingeCenter");
   is("and so does the cliff", hit("Møns Klint"), "Møns Klint");
   is("a stop with trailing context still resolves", hit("Ribe VikingeCenter, Ribe"), "Ribe VikingeCenter");
+  // ── AND THE TYPE THAT WAS NOT IN THE POOL AT ALL ─────────────────
+  //
+  // The guide's plan gate asks isPublished(name), which is this function. Bar
+  // streets shipped 15 Aug and this pool was not widened, so a street live on
+  // the site read as unpublished to the one check that decides whether a guide
+  // may name a stop. Gemlyx would refuse to put Jomfru Ane Gade in an Aalborg
+  // night out on the grounds that there is no entry for it, with the entry
+  // sitting right there.
+  M.STREETS_FOR_TEST.push({ id: 9101, name: "Jomfru Ane Gade", isStreet: true, town: "Aalborg", __lat: 57.048, __lon: 9.918 });
+  is("a published bar street is found", hit("Jomfru Ane Gade"), "Jomfru Ane Gade");
+  ok("which is what the guide's publish gate asks", !!lookupRealPlace("Jomfru Ane Gade"));
+  // Optional-chained on purpose: when the pool loses streets again this has to
+  // fail by name, not crash the run before the rest of the suite has spoken.
+  is("and it carries its own kind, not a bar's",
+     lookupRealPlace("Jomfru Ane Gade")?._src ?? null, "nightlifeStreet");
+  // The label comes from the NAME first where the name says what it is, which
+  // is why a street called something-gade reads as a street with no row at all.
+  is("a name that says gade is labelled a street on its own",
+     M.stopKind("Jomfru Ane Gade", lookupRealPlace("Jomfru Ane Gade")), "Street");
+  // And the row's own kind is what answers when the name does not say. Strøget
+  // is the case: a bar and a street named like this were both labelled "Bar"
+  // before, because nightlifeStreet had no entry in the source map.
+  M.STREETS_FOR_TEST.push({ id: 9102, name: "Strøget Testby", isStreet: true, town: "Testby", __lat: 55.6, __lon: 12.5 });
+  is("and a street whose name does not say so is labelled from its own entry",
+     M.stopKind("Strøget Testby", lookupRealPlace("Strøget Testby")) ?? null, "Bar street");
+  is("not as a bar, which is what it read as before",
+     M.stopKind("Strøget Testby", { _src: "nightlife" }), "Bar");
+  // Its coordinate comes with it, which is the other half of what the pool is
+  // for: a stop with no coordinate is not judged on distance at all.
+  ok("and its coordinate comes with it", !!placeCoords(lookupRealPlace("Jomfru Ane Gade")));
+  // The street must not swallow the town it is in, or the reverse.
+  is("the town it sits in is still the town", hit("Aalborg"), null);
+
+  // ── AND A STOP IS CLICKABLE ONLY IF SOMETHING OPENS IT ────────────
+  //
+  // Adding streets to the pool above made them "real" stops, and the guide's
+  // clickable filter read `_src !== "craft"` — a list of what cannot be opened,
+  // written as its opposite and kept in a second place. A bar street passed it,
+  // rendered with a pointer cursor and a Read more, and the dispatcher had no
+  // branch for it, so the click did nothing. The comment above that filter
+  // promised exactly this could not happen.
+  //
+  // Pinned on both copies of the dispatcher, because there are two.
+  {
+    const guide = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+    const appD = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    for (const [where, src] of [["the guide page", guide], ["the app", appD]]) {
+      ok(`${where} decides clickability from the dispatcher, not a second list`,
+         /const canOpenStop = \(real\) => !!real && !!STOP_OPENS_AS\[real\._src\];/.test(src));
+      ok(`${where} no longer keeps an opposite list of what it cannot open`,
+         !/_src !== "craft"/.test(src));
+      ok(`${where} opens a bar street`, /nightlifeStreet: setNightlifeDetail,/.test(src));
+      // The dispatcher must not be able to fall off the end silently again.
+      ok(`${where} refuses anything with no setter`,
+         /if \(!canOpenStop\(real\)\) return;/.test(src));
+    }
+    // The kind lookupRealPlace really produces has to be one the guide opens,
+    // which is the assertion that ties the two files together.
+    const kinds = [...guide.matchAll(/^\s{4}(\w+): set\w+Detail,$/gm)].map(m => m[1]);
+    ok("the guide's openable kinds were read", kinds.length >= 5);
+    ok("and the kind a published bar street carries is one of them",
+       kinds.includes(lookupRealPlace("Jomfru Ane Gade")?._src));
+  }
+
   // Widening: the stop is broader than the entry and there is no exact row.
   // Allowed, ranked last, and shortest wins so it reaches for the least.
   freeEntrance.push({ id: 9006, name: "Kronborg Slot", __lat: 56.039, __lon: 12.622 });
@@ -9778,7 +10329,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 // THREE. src/data/studioTypes.js was a whole second copy of the prompt table,
 // imported by nothing, still carrying the old headings. Deleted.
 {
-  const { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } = M;
+  const { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING, shapeForLive } = M;
 
   // ── HIS ACTUAL PAGE ───────────────────────────────────────────────
   const oldRow = { type: "free", payload: { name: "Københavns Museum", blogBody: [
@@ -9841,6 +10392,57 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const odd = bodyProblems({ blogBody: [{ type: "heading", content: "What Makes It Unmissable" }, { type: "heading", content: "The Reality Check" }] });
   is("an unrecognised heading is surfaced", odd.filter(p => p.kind === "unknown-heading").length, 1);
 
+  // ── A RENAME THAT IS ONLY WRONG FOR ONE TYPE ──────────────────────
+  //
+  // Every rename above is unconditional, and this one cannot be: "How It's
+  // Made" is the RIGHT heading over a restaurant and the wrong one over a food
+  // street, and both live in the same table. So it is scoped by type, and the
+  // three cases that matter are the row it fixes, the row it must not touch,
+  // and the row whose type nobody told us.
+  const streetBody = [
+    { type: "heading", content: "How It's Made" },
+    { type: "paragraph", content: "Stalls run the full range, Danish smorrebrod next to Vietnamese banh mi." },
+    { type: "heading", content: "The Reality Check" },
+    { type: "paragraph", content: "Weekend evenings get crowded and you will hunt for a seat." },
+  ];
+  is("a food street's kitchen heading is renamed",
+     headingsOf(repairBody(streetBody, "foodStreet").body)[0], "What's There");
+  is("a restaurant with the same heading is left exactly alone",
+     headingsOf(repairBody(streetBody, "food").body)[0], "How It's Made");
+  ok("and a restaurant reports no change at all", !repairBody(streetBody, "food").changed);
+  // Guessing the type from the prose would be inventing the thing the rename
+  // depends on, so an untyped call does nothing rather than something.
+  ok("a row whose type nobody stated is not guessed at", !repairBody(streetBody).changed);
+  is("the rename says which heading moved where",
+     repairBody(streetBody, "foodStreet").renamed, [{ from: "How It's Made", to: "What's There" }]);
+  // Idempotent, like every other rename here: the repair button is offered on
+  // every row and must be safe to press twice.
+  ok("and running it again changes nothing",
+     !repairBody(repairBody(streetBody, "foodStreet").body, "foodStreet").changed);
+
+  // The audit has to see it too, or the button is never offered on the row.
+  ok("a food street with the wrong heading is reported as free to fix",
+     bodyProblems({ blogBody: streetBody }, "foodStreet").some(p => p.kind === "legacy-heading" && p.cost === "free"));
+  is("and the same body on a restaurant reports nothing",
+     bodyProblems({ blogBody: streetBody }, "food"), []);
+  // THE FAILURE THIS PARAMETER EXISTS TO STOP. Without the type the heading is
+  // current, so the row reads as clean and the repair button never appears.
+  is("a caller that forgets the type sees a clean row, which is why every caller passes it",
+     bodyProblems({ blogBody: streetBody }), []);
+  ok("the audit routes it to the renameable pile",
+     auditPublished([{ id: 9, type: "foodStreet", payload: { name: "Reffen", blogBody: streetBody } }])
+       .renameable.some(r => r.name === "Reffen"));
+  is("and leaves an identical restaurant out of every pile",
+     auditPublished([{ id: 10, type: "food", payload: { name: "Silo Bakery", blogBody: streetBody } }]).total, 0);
+  // The scoped map must not quietly become a second copy of the unconditional
+  // one, and its targets must be headings a generator really writes.
+  is("every type-scoped rename lands on a current heading",
+     Object.values(M.TYPE_HEADINGS).flatMap(m => Object.values(m)).filter(h => !CURRENT_HEADINGS.includes(h)), []);
+  is("and none of them duplicates an unconditional rename",
+     Object.values(M.TYPE_HEADINGS).flatMap(m => Object.keys(m)).filter(h => LEGACY_HEADINGS[h]), []);
+  is("a type-scoped rename is only ever declared for a real content type",
+     Object.keys(M.TYPE_HEADINGS).filter(t => !M.CONTENT_TYPES.includes(t)), []);
+
   // ── HOW BIG IS THE JOB ────────────────────────────────────────────
   const audit = auditPublished([oldRow, { id: 2, payload: { name: "Ribe", blogBody: [
     { type: "heading", content: "What to Do in Ribe" }, { type: "heading", content: "The Reality Check" }] } }]);
@@ -9855,20 +10457,52 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // exact shape of thing that drifts: resolveLegMode, lookupRealPlace and the
   // heading arrays themselves have each been duplicated and gone out of sync.
   // So it is not trusted, it is checked against what shapeForLive really emits.
-  const shapeSrc = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
-  // BOTH generators in this file, not just one. This scan read bbData() only,
-  // and shapeForLive's TOWN branch writes its bullet heading with a SECOND
-  // helper, bulletsBlock(). So "Good to Know" shipped on every town published
-  // through the button while this test stayed green and publishedRepair.js
-  // claimed, in a comment, that the list "cannot quietly fall behind the
-  // generator". It could, and it had. That claim is only true once every
-  // heading-emitting call in the file is read.
-  const emitted = [...new Set([
-    ...[...shapeSrc.matchAll(/bbData\(\s*(?:isClub \? )?\[\[([\s\S]{0,400}?)\]\]/g)]
-      .flatMap(m => [...m[1].matchAll(/"([^"]+)"|`([^`]+)`/g)].map(h => h[1] || h[2])),
-    ...[...shapeSrc.matchAll(/bulletsBlock\(\s*"([^"]+)"/g)].map(m => m[1]),
-  ])];
+  // ── AND THE GENERATOR IS CALLED, NOT READ ─────────────────────────
+  //
+  // This scan was a regex over studioContent.js, and it had already been
+  // widened once because it read bbData() and missed bulletsBlock(). It was
+  // still the same kind of thing: "a probe built from invented inputs is not a
+  // probe", one level up, because a regex over source is a probe built from an
+  // invented idea of what the source looks like.
+  //
+  // It broke the moment a heading stopped being a literal. `madeHeading(type)`
+  // is one function with two answers, and the scan would have read NEITHER of
+  // them out of that call and gone quietly green with a smaller list. So the
+  // generator is CALLED, once per content type, and the headings are read off
+  // the blogBody it really returns. A heading computed, interpolated or moved
+  // to another helper is still counted, because the only thing being read now
+  // is the output.
+  //
+  // The draft is a Proxy answering every field with a non-empty string, so no
+  // branch is skipped for a field this test forgot to name. The few fields the
+  // shaper needs as arrays are given as arrays.
+  const ARRAY_FIELDS = { themes: ["coast"], tags: ["music"], what: ["throwing"], thingsToKnow: ["Bring cash", "No seating", "Closed Mondays"], uncertainties: [], __sources: [] };
+  const anyDraft = (over = {}) => new Proxy({}, {
+    get(_t, k) {
+      if (typeof k === "symbol") return undefined;
+      if (k in over) return over[k];
+      if (k in ARRAY_FIELDS) return ARRAY_FIELDS[k];
+      return `x-${String(k)}`;
+    },
+    has() { return true; },
+  });
+  const emittedFor = (t) => headingsOf(shapeForLive(t, anyDraft({ name: "Probe Place" }))?.blogBody);
+  const perType = M.CONTENT_TYPES.map(t => [t, emittedFor(t)]);
+  const emitted = [...new Set(perType.flatMap(([, hs]) => hs))];
+  // Every content type must produce a body. A branch returning null here is a
+  // type nobody can publish, which is a bigger bug than a heading name.
+  is("every content type shapes a body with headings",
+     perType.filter(([, hs]) => !hs.length).map(([t]) => t), []);
   ok("both heading helpers in the publish path were read", emitted.length >= 10);
+  // The scan this replaced could not have made this assertion at all: it read
+  // strings, not the type that emitted them.
+  const headsOf = (t) => (perType.find(([k]) => k === t) || [, []])[1];
+  ok("a restaurant's second heading is still about the kitchen",
+     headsOf("food").includes("How It's Made"));
+  is("and a food street's is not, because the prompt bans that framing",
+     headsOf("foodStreet").filter(h => /how it's made/i.test(h)), []);
+  ok("a food street says what is there instead",
+     headsOf("foodStreet").includes("What's There"));
   const uncovered = emitted.filter(h => !CURRENT_HEADINGS.includes(h) && !DYNAMIC_HEADING.test(h));
   is("every heading the publish path writes is a heading the repair knows", uncovered, []);
   // And the reverse would be just as bad: a rename target nothing emits means
@@ -9933,9 +10567,43 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the Studio can run it on a row", /const repairRowHeadings = async \(row\) => \{/.test(stripNonCode(appSrc)));
   ok("and it writes the repaired body back", /patchContentPayload\(row, \{ \.\.\.\(row\.payload \|\| \{\}\), blogBody: body \}\)/.test(stripNonCode(appSrc)));
   ok("the Manage panel counts the stale rows", /const a = auditPublished\(manageItems\);/.test(appSrc));
-  ok("and names the problem on each row", /\{bodyProblems\(row\.payload\)\.map\(\(p, i\) =>/.test(appSrc));
+  // WITH THE ROW'S TYPE, which is not decoration: "How It's Made" is a current
+  // heading for a restaurant and a wrong one for a food street, so a caller
+  // that drops the type reports a broken row as clean. Every bodyProblems call
+  // in the app is checked, not just this one, because the under-reporting is
+  // silent wherever it happens.
+  ok("and names the problem on each row", /\{bodyProblems\(row\.payload, row\.type\)\.map\(\(p, i\) =>/.test(appSrc));
+  // EVERY caller, in every file, not just this one. factSweep.js and the audit
+  // inside publishedRepair.js both call it too, and a caller that drops the
+  // type reports a broken food street as a clean row from wherever it stands.
+  // A mutant that removed the type from factSweep.js alone survived the
+  // App.jsx-only version of this scan.
+  {
+    const CALLERS = ["src/App.jsx", "src/utils/factSweep.js", "src/utils/bodyEdit.js", "src/utils/publishedRepair.js"];
+    const bare = CALLERS.flatMap(f => {
+      const txt = readFileSync(join(root, f), "utf8");
+      return [...txt.matchAll(/bodyProblems\(([^)]*)\)/g)].map(m => m[1])
+        .filter(a => a.trim() && !/,/.test(a))
+        .map(a => `${f}: bodyProblems(${a})`);
+    });
+    is("nowhere in the app is a body checked without saying what type it is", bare, []);
+    // And the list of callers is not hand-maintained: anything else that calls
+    // it has to be added here, or this says so.
+    const files = [];
+    const walk = (d) => readdirSync(d, { withFileTypes: true }).forEach(e => {
+      const full = join(d, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (/\.(js|jsx)$/.test(e.name)) files.push(full);
+    });
+    walk(join(root, "src"));
+    const callsIt = files.filter(f => /bodyProblems\(/.test(readFileSync(f, "utf8")))
+      .map(f => f.slice(join(root, "").length).replace(/\\/g, "/"));
+    is("and every file that calls it is on that list", callsIt.filter(f => !CALLERS.includes(f)), []);
+  }
   // The button appears only where it would do something.
-  ok("the button is offered only on a row it can fix", /\{repairBody\(row\.payload\?\.blogBody\)\.changed && \(/.test(appSrc));
+  ok("the button is offered only on a row it can fix", /\{repairBody\(row\.payload\?\.blogBody, row\.type\)\.changed && \(/.test(appSrc));
+  is("and no caller repairs a body without saying what type it is",
+     [...appSrc.matchAll(/repairBody\(([^)]*)\)/g)].map(m => m[1]).filter(a => !/,/.test(a)), []);
   ok("and it says the repair is free", /Fix headings \(free\)/.test(appSrc));
   // The one sentence that must survive: renaming is not finishing.
   ok("a renamed row still admits it has no verdict", /still has no Reality Check, which a rename cannot write/.test(appSrc));
@@ -15519,14 +16187,22 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // the reader text, inside the same gate as the trace, over both the
   // operator's pages and the listings — was untouched.
   ok("the finder runs inside the same gate as the trace",
-     /const misses = priceMisses\(readerText\(t\), priceOpts\);/.test(appT));
+     /const misses = hasADoor \? priceMisses\(readerText\(t\), priceOpts\) : \[\];/.test(appT));
+  // ── AND ONLY FOR A TYPE WITH A DOOR, 3 SEP ──────────────────────
+  // Probed on a Reffen-shaped page: "Retter fra 65 kr til 125 kr. Fri entré.
+  // Øl 55 kr." against a correct draft, and this gate filed a HIGH finding on
+  // ticketInfo — a field food types do not have — calling a 55 kr BEER the
+  // admission the draft had got wrong. The lowest-figure-through-the-gate rule
+  // is right for a festival and meaningless for a place priced per dish.
+  ok("and only for the types that charge at one",
+     /const hasADoor = TYPES_WITH_A_DOOR\.includes\(sType\);/.test(appT));
   ok("over the operator's pages and the listings alike",
      /siteText: scrapedSiteText, listingText: listingSiteText/.test(appT));
   // Inside gateDraft, so it runs AGAIN after the auto-correction. Fifth standing
   // rule: checking a draft does not check what replaced it.
   ok("and therefore again after the correction",
-     appT.indexOf("const misses = priceMisses(") > appT.indexOf("const gateDraft = (pass) => {")
-     && appT.indexOf("const misses = priceMisses(") < appT.indexOf("// ── AND THE JOURNEY, AGAINST THE ONE THING THAT MEASURED IT ──"));
+     appT.indexOf("const misses = hasADoor ?") > appT.indexOf("const gateDraft = (pass) => {")
+     && appT.indexOf("const misses = hasADoor ?") < appT.indexOf("// ── AND THE JOURNEY, AGAINST THE ONE THING THAT MEASURED IT ──"));
   ok("the run log says what the pages said a ticket costs",
      /note\(`What the pages say a ticket costs\$\{suffix\}`, \{/.test(appT));
   ok("and calls a silent page a real answer rather than a failure",
@@ -15808,7 +16484,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
           bodyEditProblems, stampEdit, bodyConflict, isEditable, blockText, MAX_EDIT_LOG } = M;
   const body = [
     { type: "heading", text: "Being There" },
-    { type: "paragraph", text: "A quiet harbour town." },
+    { type: "paragraph", content: "A quiet harbour town." },
     { text: "An old block with no type at all." },
     { type: "image", src: "/photos/x.jpg", caption: "The harbour" },
     { type: "bullets", items: ["One", "Two"] },
@@ -15831,7 +16507,15 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // the reality-check requirement and the image layout stay as the pipeline
   // left them and bodyProblems cannot start firing because of a hand edit.
   const edited = applyBodyEdits(body, { 1: "A quiet harbour town on the fjord." });
-  is("the edit lands", (edited[1] || {}).text, "A quiet harbour town on the fjord.");
+  // ── AND THE KEY IS THE ONE THE APP WRITES, 3 SEP ────────────────
+  // This read `.text` on a fixture keyed `text`, and both were invented: a real
+  // published block is `{ type: "paragraph", content: "..." }`. So the editor
+  // read an empty string out of every real paragraph, a save added a phantom
+  // `text` field beside the `content` the page renders, and 12,232 assertions
+  // agreed it worked. Asserted through blockText now, which is the one reader.
+  is("the edit lands", blockText(edited[1]), "A quiet harbour town on the fjord.");
+  is("and it lands in the key the page renders", (edited[1] || {}).content, "A quiet harbour town on the fjord.");
+  ok("with no phantom second field beside it", !("text" in (edited[1] || {})));
   is("and the block count is untouched", edited.length, body.length);
   is("an edit aimed at an image is ignored", applyBodyEdits(body, { 3: "hack" })[3], body[3]);
   is("and one aimed at a block that is not there", applyBodyEdits(body, { 99: "x" }).length, 5);
@@ -15840,7 +16524,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // because a person typing a sentence reaches for an em dash without thinking.
   // Same stripper the content loader runs, so the two cannot disagree.
   is("a dash typed by a person is stripped on the way in",
-     applyBodyEdits(body, { 1: "Quiet — and small." })[1].text, "Quiet, and small.");
+     blockText(applyBodyEdits(body, { 1: "Quiet — and small." })[1]), "Quiet, and small.");
   is("an empty bullet is dropped rather than rendered as a dot with nothing beside it",
      applyBodyEdits(body, { 4: "One\n\nThree" })[4].items, ["One", "Three"]);
   ok("bodyChanged sees a real edit", bodyChanged(body, edited));
@@ -15862,14 +16546,14 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // A price the entry already carried is not re-flagged: the person moved a
   // sentence, they did not make a claim.
   is("a price already in the entry is not flagged again",
-     bodyEditProblems({ name: "X", blogBody: [{ type: "paragraph", text: "Costs 250 kr." }] },
-       [{ type: "paragraph", text: "It costs 250 kr. to get in." }]).filter(p => p.detail.includes("adds a price")).length, 0);
+     bodyEditProblems({ name: "X", blogBody: [{ type: "paragraph", content: "Costs 250 kr." }] },
+       [{ type: "paragraph", content: "It costs 250 kr. to get in." }]).filter(p => p.detail.includes("adds a price")).length, 0);
   // Voice rules run on the TYPED text only. Over the whole entry they would
   // report faults the person did not introduce and cannot be expected to fix,
   // which is how a warning panel becomes something everybody dismisses.
   ok("the voice scan reads only what was typed",
-     bodyEditProblems({ name: "X", blogBody: [{ type: "paragraph", text: "nestled in the heart of it all" }] },
-       [{ type: "paragraph", text: "nestled in the heart of it all" }]).length === 0);
+     bodyEditProblems({ name: "X", blogBody: [{ type: "paragraph", content: "nestled in the heart of it all" }] },
+       [{ type: "paragraph", content: "nestled in the heart of it all" }]).length === 0);
 
   // ── WHO CHANGED WHAT ─────────────────────────────────────────────
   const stamped = stampEdit(pay, { by: "helper@x.dk", blocks: [1], problems: probs, at: "2026-08-13T20:00:00.000Z" });
@@ -21660,7 +22344,19 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("so a bar street is unsourced", fit.subjectUnsourced, true);
   const fitSaid = describeSourceFit(fit, { type: "nightStreet" });
   ok("the note says so plainly", /^NOTHING WE READ IS ABOUT THE SUBJECT/.test(fitSaid));
-  ok("names the words it looked for", /natteliv/.test(fitSaid) && /barer/.test(fitSaid));
+  // Derived from the vocabulary rather than pinned to two of its words, so
+  // rewording the vocabulary cannot leave this assertion checking for words the
+  // check no longer looks for.
+  is("names every word it looked for, and only those",
+     M.questionWordsFor("nightStreet").filter(w => !fitSaid.includes(w)), []);
+  ok("and the words it names are the words it matched on",
+     M.questionWordsFor("nightStreet").length > 0);
+  // The note must not name a word the matcher drops: that is the one message
+  // whose whole job is to say what was looked for. Asked against the filter
+  // itself, so it cannot become a restatement of the filter's own definition
+  // the way its first version did.
+  is("the note never names a word the matcher would have dropped",
+     M.questionWordsFor("town").filter(w => M.EVERYDAY_WORDS.has(w)), []);
   ok("counts the encyclopedias", /3 of the 5 hosts are encyclopedias/.test(fitSaid));
   // AND IT SEPARATES THE HALVES, which is the thing two other models did not.
   ok("and says the geography may be right", /geography in this draft may be perfectly right/.test(fitSaid));
@@ -22459,9 +23155,65 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // This is the rule the whole of journey.js exists for: 1h50 is true door to
   // door and false for the train, and a sentence that does not say which cannot
   // be checked and reads as wrong to anyone who has taken the train.
-  is("the headline says door to door", journeyReach(J), "3h 11min from Copenhagen, door to door");
+  // ── AND IT WAS NEVER A DOOR, 3 SEP ──────────────────────────────
+  // The QUALIFIER is the point and it stays: this file exists because a total
+  // got attached to a train. The WORD was wrong — journey.js's own header says
+  // the walk at each end is measured from "a geocoded CENTROID, an arbitrary
+  // point somebody's geocoder picked" — so the phrase invented to stop a figure
+  // overclaiming was itself overclaiming.
+  is("the headline names the measure", journeyReach(J), "3h 11min from Copenhagen, centre to centre");
+  // ── AND THE GATE HAS TO KNOW THE LABEL THE CARD PRINTS ──────────
+  //
+  // transitProblems flags a total attached to a vehicle, and it stands down
+  // when the sentence LABELS the figure instead. That list of labels was the
+  // old wording only, so the phrase the card and the writer's own rule now use
+  // would have been read as an unlabelled total and a correct sentence flagged.
+  // Found by mutation: removing it from the list broke nothing.
+  {
+    // transitProblems takes an OPTIONS OBJECT. Passing parts positionally makes
+    // it return [] on its first line, so every assertion written that way passes
+    // whatever the code does. Three of mine did, for about ten minutes.
+    const parts = { total: 110, onBoard: 82, onFoot: 21, waiting: 7, legs: [] };
+    const flagged = (prose) => M.transitProblems(prose, { parts });
+    // ── THE LABEL ONLY DECIDES WHEN A VEHICLE IS IN THE SENTENCE ──
+    // `ride = RIDE_WORDS.test(s) && !DOOR_WORDS.test(s)`, so a sentence with no
+    // vehicle in it is accepted whatever the label says, and a fixture without
+    // one cannot tell whether the label is in the list. Two of mine could not,
+    // and a mutant that removed the card's own wording from that list survived
+    // both of them.
+    is("a labelled total is accepted even beside the vehicle that runs it",
+       flagged("Trains run twice an hour and the whole journey is 1h50min centre to centre."), []);
+    // The old wording keeps working: rows already published were written under it.
+    is("and the phrase it replaced is still recognised",
+       flagged("Trains run twice an hour and the whole journey is 1h50min door to door."), []);
+    ok("while the same sentence without a label is caught",
+       flagged("Trains run twice an hour and the whole journey is 1h50min.").length === 1);
+
+    // ── AND THE GATE COULD NOT MATCH ITS OWN FOUNDING SENTENCE ────
+    //
+    // The bug this whole rule exists for is quoted in journey.js's header:
+    // "Direct TRAINS run from København H to Odense in about 1h50min", against
+    // a train that takes 1h22. RIDE_WORDS was `\btrain\b`, which does not match
+    // "trains" — nor `bus` "buses", nor `ferry` "ferries", nor `tram` "trams".
+    // The Danish inflections were all covered (tog/toget/togene, bus/bussen/
+    // busser, færge/færgen) and the English plural was not, in the language the
+    // entries are written in. So the sentence that made the rule walked past it.
+    ok("the founding sentence is finally caught",
+       flagged("Direct trains run from Kobenhavn H to Odense in about 1h50min.").some(p => /time on board/i.test(p)));
+    ok("and so is the plural of every other vehicle",
+       flagged("Buses from Copenhagen take 1h50min.").length === 1
+       && flagged("Ferries from Copenhagen take 1h50min.").length === 1);
+    ok("while the singular still works, which is what it could always do",
+       flagged("A direct train from Copenhagen takes 1h50min.").some(p => /time on board/i.test(p)));
+    // A RIDE THAT REALLY IS THE RIDE IS NOT A CONFLATION. The rule only fires
+    // when the figure quoted is the whole journey rather than the time aboard.
+    is("a real on-board figure is left alone", flagged("The train takes 1h 22min."), []);
+    // railway stays out: STOP_WORDS owns it, and a station five minutes away is
+    // a walk, not a ride.
+    is("and a station is not a vehicle", flagged("The railway station is 1h50min from here."), []);
+  }
   ok("and it never says train", !/train/i.test(journeyReach(J)));
-  is("where it came from defaults to Copenhagen rather than nowhere", journeyReach({ ...J, from: "" }), "3h 11min from Copenhagen, door to door");
+  is("where it came from defaults to Copenhagen rather than nowhere", journeyReach({ ...J, from: "" }), "3h 11min from Copenhagen, centre to centre");
   is("a journey with no total says nothing", journeyReach({ ...J, total: null }), "");
   is("and nothing says nothing", journeyReach(null), "");
 
@@ -22834,7 +23586,27 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // structurally indistinguishable, as are a restaurant and a food street.
     const keyFor = (type) => report.types.find(t => t.type === type)?.skeleton?.largest?.key;
     is("an attraction and a workshop are the same page", keyFor("free"), keyFor("booking"));
-    is("a restaurant and a food street too", keyFor("food"), keyFor("foodStreet"));
+    // ── AND ONE OF THE TWO PAIRS HAS BEEN SPLIT ─────────────────────
+    //
+    // 3 Sep 2026. This line used to read `is("a restaurant and a food street
+    // too", keyFor("food"), keyFor("foodStreet"))` and it was true. It is
+    // rewritten here rather than deleted, per the note at the top of this
+    // block: the record moves when the thing it records moves.
+    //
+    // What changed is not a new section. It is the NAME of the second one. A
+    // restaurant's second paragraph is how the food is made; a food street's is
+    // which vendors are there, and the foodStreet prompt bans the kitchen
+    // framing in its own sentence while the page asserted it in the heading.
+    // The two pages are still the same length and still carry no Who It's For,
+    // which is the part of this record that has not been fixed.
+    ok("a restaurant and a food street are no longer the same page",
+       keyFor("food") !== keyFor("foodStreet"));
+    is("and the restaurant keeps the kitchen heading",
+       keyFor("food"), "How It's Made > The Reality Check");
+    is("while the food street names the stalls",
+       keyFor("foodStreet"), "What's There > The Reality Check");
+    is("the two pages are still the same shape underneath, which is the part still unfixed",
+       keyFor("food").split(" > ").length, keyFor("foodStreet").split(" > ").length);
     // The one that reads worst out loud.
     is("and this is the sequence every attraction on the site carries",
        keyFor("free"), "Being There > Who It's For > The Reality Check > Things to Know");
@@ -23405,7 +24177,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // address, the verified opening hours and a coordinate from it. For a venue that
   // is right. For a STREET, Google returns whichever business on it ranks first,
   // and foodStreet has been in that gate for weeks.
-  const { subjectCore, listingMatchesSubject, describeListingRefusal } = M;
+  const { subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal } = M;
 
   // The listing that IS the place, in both directions of fullness.
   ok("a listing with more of its own name is the same place",
@@ -23441,6 +24213,73 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // A listing with no name cannot be checked, so it cannot be used.
   ok("a nameless listing is refused", !listingMatchesSubject("Reffen", "Copenhagen", ""));
   ok("and so is a listing for nothing typed", !listingMatchesSubject("", "", "Anything"));
+
+  // ── AND THE ONE THE CONTAINMENT RULE COULD NOT SEE ────────────────
+  //
+  // "Bar Ane" is refused above because it shares no words with the street. The
+  // case that got through is the opposite: a business NAMED AFTER the street it
+  // sits on, which is most of them. Vestergade Apotek contains Vestergade in
+  // order and in whole words, so sameSubject said yes and the pharmacy's
+  // website, opening hours and business status went into a bar street's draft.
+  const street = { theNameIsAStreet: true };
+  ok("a shop named after the street is not the street",
+     !listingMatchesSubject("Vestergade", "Aarhus", "Vestergade Apotek", street));
+  ok("nor a clinic on it", !listingMatchesSubject("Vestergade", "Aarhus", "Vestergade Tandklinik", street));
+  ok("nor a bar named after it",
+     !listingMatchesSubject("Jomfru Ane Gade", "Aalborg", "Jomfru Ane Gade 5 Bar", street));
+  // THE OTHER DIRECTION, which is what makes it a rule and not a filter: the
+  // street's own listing still passes, in the spellings Google really returns.
+  ok("the street's own listing passes",
+     listingMatchesSubject("Vestergade", "Aarhus", "Vestergade", street));
+  ok("with its town appended",
+     listingMatchesSubject("Vestergade", "Aarhus", "Vestergade, Aarhus", street));
+  ok("with a postcode and a district letter",
+     listingMatchesSubject("Gothersgade", "København", "Gothersgade, 1123 København K", street));
+  // ── AND THE SHAPE GOOGLE ACTUALLY RETURNS ────────────────────────
+  // The first draft of streetKey stripped the town, the house number and the
+  // postcode and stopped there, so the country survived and "Gothersgade,
+  // Copenhagen, Denmark" reduced to "gothersgade denmark". That is Google's own
+  // formatted-address shape and this app's own mapHint convention, so the one
+  // form most likely to arrive was the one form that failed.
+  ok("a full formatted address still matches",
+     listingMatchesSubject("Gothersgade", "Copenhagen", "Gothersgade, Copenhagen, Denmark", street));
+  ok("in Danish too",
+     listingMatchesSubject("Gothersgade", "København", "Gothersgade, 1123 København K, Danmark", street));
+  ok("and a mapHint-shaped one",
+     listingMatchesSubject("Jomfru Ane Gade", "Aalborg", "Jomfru Ane Gade, 9000 Aalborg, Denmark", street));
+  // THE TOWN MAY NOT BE KNOWN YET, which is the case this runs in most often:
+  // nothing has resolved a town, so nothing can be stripped by name.
+  ok("a listing carrying its own town matches even when we do not know the town",
+     listingMatchesSubject("Gothersgade", "", "Gothersgade, Denmark", street));
+  // And the country coming off must not make two streets equal.
+  ok("two different streets are still two",
+     !listingMatchesSubject("Gothersgade", "", "Nørregade, Denmark", street));
+  ok("and typed with its town, as the Studio placeholder asks",
+     listingMatchesSubject("Jomfru Ane Gade Aalborg", "Aalborg", "Jomfru Ane Gade", street));
+  ok("a multi-word street still matches itself",
+     listingMatchesSubject("Jomfru Ane Gade", "Aalborg", "Jomfru Ane Gade", street));
+  // A house number is an address on the street, not a different street.
+  ok("a house number does not make it a different street",
+     listingMatchesSubject("Vestergade", "Aarhus", "Vestergade 15, Aarhus", street));
+  // And a genuinely different street is still refused.
+  ok("a different street is refused",
+     !listingMatchesSubject("Vestergade", "Aarhus", "Nørregade", street));
+  ok("the empty cases hold under the street rule too",
+     !listingMatchesSubject("Vestergade", "Aarhus", "", street) && !listingMatchesSubject("", "Aarhus", "Vestergade", street));
+  // THE FLAG HAS TO CHANGE THE ANSWER, or it is decoration. Same inputs, and
+  // the ordinary rule is the one that accepts the pharmacy.
+  ok("and without the flag the old rule still accepts it, which is the bug",
+     listingMatchesSubject("Vestergade", "Aarhus", "Vestergade Apotek"));
+  // foodStreet deliberately does NOT get this rule: half of them are markets
+  // with their own listing, and refusing Reffen's own hours costs real facts.
+  ok("a market with its own name keeps its listing under the ordinary rule",
+     listingMatchesSubject("Reffen", "Copenhagen", "Reffen - Copenhagen Street Food"));
+  ok("which the street rule would have refused",
+     !streetListingMatches("Reffen", "Copenhagen", "Reffen - Copenhagen Street Food"));
+  {
+    const app7 = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("so only the bar street is held to it", /const NAME_IS_A_STREET = \["nightStreet"\];/.test(app7));
+  }
 
   // ── THE CORE, AND WHERE IT REFUSES TO STRIP ──────────────────────
   is("the town comes off what he typed", subjectCore("Rundetaarn Copenhagen", "Copenhagen"), "Rundetaarn");
@@ -37949,7 +38788,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // This is the leak placeUrl.js already named for URLs in August: "a person
 // looking for Koldinghus is not looking for a free." A type name is a bucket.
 {
-  const { entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, isUnqualifiedFree } = M;
+  const { entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, PAID_LABEL, isUnqualifiedFree } = M;
 
   // ── THREE ANSWERS, AND THE THIRD IS THE ONE THAT WAS MISSING ────
   //
@@ -38023,17 +38862,46 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // first, and this is the row that says so.
   is("a one-digit fare still beats the word free",
     entryPrice({ ticketsGlance: "Free for kids, 9 kr adults" }).free, false);
-  is("and the chip shows that fare rather than the word",
-    priceChip({ ticketsGlance: "Free for kids, 9 kr adults" }), "9 kr");
-  // ── A RANGE IS SHOWN FROM ITS BOTTOM, NOT ITS TOP ───────────────
-  // Faarup Sommerland's own live line. Only the 399 carries the currency, so
-  // reading the first complete amount prints the most expensive end of a range
-  // as the price. entryAudit settled this already: "what a reader plans around
-  // is the cheapest way through the gate."
-  is("a priced range shows the end a reader plans around",
-    priceChip({ ticketsGlance: "1-day ticket 229 to 399 DKK per person aged 3 to 64" }), "from 229 DKK");
-  ok("and never the expensive end alone",
-    !/^399/.test(priceChip({ ticketsGlance: "1-day ticket 229 to 399 DKK per person aged 3 to 64" })));
+  // ── AND THE CHIP SHOWS THE ROW'S OWN SENTENCE, 3 SEP ────────────
+  // This expected "9 kr" — the fare plucked out and shown bare. Under Oliver's
+  // rule the chip either shows what the row says or says "Paid", and this row's
+  // own words fit, so they are what goes in. The rule underneath is unchanged
+  // and is what the next line asserts: it must never read as free.
+  is("and the chip shows the row's own words when they fit",
+    priceChip({ ticketsGlance: "Free for kids, 9 kr adults" }), "Free for kids, 9 kr adults");
+  ok("and never as an unqualified free claim",
+    !isUnqualifiedFree(priceChip({ ticketsGlance: "Free for kids, 9 kr adults" })));
+
+  // ── AND A SUMMARY THAT DROPS THE QUALIFIER IS NOT A PRICE ───────
+  //
+  // These used to assert "from 229 DKK" for Fårup Sommerland, and the rule they
+  // pinned — show the cheap end of a range, never the expensive one — was right
+  // about which number to pick and wrong that a number should be picked at all.
+  //
+  // Oliver, 3 Sep 2026: "from 229 kr? What do I get at 229 kr? And for who?
+  // Just include the at a glance price or write paid. One of the two."
+  //
+  // The row's own line is "1-day ticket 229 to 399 DKK per person aged 3 to 64;
+  // children aged 0 to 2 free". "from 229 DKK" drops the ticket, the ages and
+  // the top of the range, and adds a "from" nobody wrote. It is the ranking
+  // rule in a chip: a figure is only true against the thing it measures.
+  is("a price too long for a chip is not squeezed into a number",
+     priceChip({ ticketsGlance: "1-day ticket 229 to 399 DKK per person aged 3 to 64; children aged 0 to 2 free" }),
+     PAID_LABEL);
+  ok("and no invented floor is printed anywhere",
+     !/from/i.test(priceChip({ ticketsGlance: "1-day ticket 229 to 399 DKK per person aged 3 to 64; children aged 0 to 2 free" })));
+  // THE WORSE BRANCH, WHICH NOBODY HAD NOTICED: the fallback plucked the FIRST
+  // complete amount out of a sentence and printed it bare, so this row's chip
+  // said "150 DKK" when entry is 80.
+  is("and a number is never plucked out of a sentence",
+     priceChip({ ticketsGlance: "Guided tour 150 DKK, entry 80 DKK, under 12 free with an adult" }),
+     PAID_LABEL);
+  // A PRICE THAT FITS IS STILL SHOWN, which is what keeps this honest rather
+  // than merely safe: the chip says the real thing whenever the real thing fits.
+  is("a short figure is shown as it was written", priceChip({ ticketsGlance: "120 DKK" }), "120 DKK");
+  is("and so is a short range, both ends", priceChip({ ticketsGlance: "80 to 120 DKK" }), "80 to 120 DKK");
+  is("free is still free", priceChip({ ticketsGlance: "Free entry" }), "Free");
+  is("and a row that says nothing still says nothing", priceChip({ desc: "A ruined castle." }), "");
 
   // ── AND A NUMBER THAT IS NOT MONEY IS NOT A PRICE ───────────────
   // Reading a bare number as money is how a free museum starts charging, so
@@ -38086,7 +38954,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("a long price is not silently dropped", priceChip(long).length > 0);
     ok("and what is shown is the row's own figure", /419/.test(priceChip(long)));
     ok("and it fits", priceChip(long).length <= CHIP_MAX);
-    ok("and it never says the opposite of what the row says", !/free/i.test(priceChip(long)));
+    // ── WHAT "THE OPPOSITE" MEANS FOR A VERBATIM CHIP ────────────
+    // This banned the word "free" outright, which was right while the chip was
+    // a figure this file composed: a composed chip containing "free" could only
+    // have come from somewhere it did not belong. The chip is now the row's own
+    // sentence, and "Day ticket 419 DKK, under 3 free" saying "free" is the row
+    // saying it. The rule that actually matters is that it must not read AS
+    // free, which is the question isUnqualifiedFree exists to answer.
+    ok("and it never reads as a free place", !isUnqualifiedFree(priceChip(long)));
+    ok("while the fare is still the first thing in it", /^Day ticket 419 DKK/.test(priceChip(long)));
   }
 
   // ── THE CATEGORY GETS ITS PUBLIC WORD BACK ──────────────────────
@@ -38684,7 +39560,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the refusal message still promises no coordinate",
       /no address, no hours, no coordinate/.test(readFileSync(join(root, "src/utils/placeChoice.js"), "utf8")));
     ok("and the coordinate now asks the same question the listing does",
-      /listingMatchesSubject\(name, draftTown, pd\.name \|\| pd\.address\)/.test(app));
+      /listingMatchesSubject\(name, draftTown, pd\.name \|\| pd\.address, \{ theNameIsAStreet: NAME_IS_A_STREET\.includes\(sType\) \}\)/.test(app));
+    // ── AND BOTH ASK IT THE SAME WAY ──────────────────────────────
+    // The bug this block records is one call site asking and the other not.
+    // The repeat of that bug is one call site asking the STREET question and
+    // the other asking the ordinary one, on the same draft, so a street is
+    // refused a coordinate and handed a pharmacy's opening hours.
+    is("every listing check in the app says whether the name is a street",
+       [...app.matchAll(/listingMatchesSubject\(([^;]*?)\);/g)].map(m => m[1])
+         .filter(a => !/theNameIsAStreet: NAME_IS_A_STREET\.includes\(sType\)/.test(a)), []);
     // A coordinate is only taken when it passed. Number.isFinite alone is what
     // let Ringsted through.
     ok("nothing is taken from a refused lookup", /if \(placesAbout\) \{/.test(app));
@@ -38767,8 +39651,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // to festivals. Attractions never got it.
   {
     const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    // Derived from TYPES_WITH_A_DOOR now: the hunt and the check that reads its
+    // answer were two hand-written lists of one idea, and only one existed.
     ok("the price hunt is no longer festivals only",
-      /HUNTS_FOR_A_PRICE = \["festival", "free"\]/.test(app));
+      /HUNTS_FOR_A_PRICE = TYPES_WITH_A_DOOR\.filter/.test(app));
+    ok("and the door list is the one both of them read",
+      /const TYPES_WITH_A_DOOR = \["festival", "free", "booking"\];/.test(app));
+    ok("a town, a street and a bar are not on it",
+      !/TYPES_WITH_A_DOOR = \[[^\]]*(?:"town"|"nightStreet"|"foodStreet"|"night"|"food")/.test(app));
     ok("and still only runs when nothing read so far prices it",
       /needHunt = HUNTS_FOR_A_PRICE\.includes\(sType\) && !pricesAdmission\(priced\)/.test(app));
     // COSTS NOTHING ON A GENUINELY FREE ATTRACTION: ticketPriceOn returns
@@ -39858,6 +40748,139 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 //
 // Anchored on the count, not on the position of a string: any ok/is call after
 // the print is the bug, wherever it is written.
+
+// ── WHERE THE PROSE IS, ASKED OF THE GENERATOR ──────────────────────
+//
+// Three hand-written lists answered "which fields hold writing": entryAudit's
+// PROSE_FIELDS, correction's PROSE_FIELDS, and correction's EDITABLE_FIELDS.
+// Bar streets shipped `bestNights` and `walkIt` on 15 Aug and none of the three
+// was updated, so for three weeks the audit could not scan two of a bar
+// street's four sections, an edit could not be aimed at them, and a confirmed
+// correction could not reach them.
+//
+// None of that was catchable by reading the lists, because a list is only wrong
+// against something. So it is asked of shapeForLive, which is the only insert
+// path into the database: every content type is shaped from a draft whose every
+// field answers with its own name, and whatever comes back inside a paragraph
+// block IS prose, by construction, whoever added the type.
+{
+  const { shapeForLive, CONTENT_TYPES, AUDIT_PROSE_FIELDS, PROSE_LISTS, EDITABLE_FIELDS } = M;
+  const ARR = { themes: ["coast"], tags: ["music"], what: ["throwing"], thingsToKnow: ["a", "b", "c"], uncertainties: [], __sources: [] };
+  const mk = (over = {}) => new Proxy({}, { get(_t, k) {
+    if (typeof k === "symbol") return undefined;
+    if (k in over) return over[k];
+    if (k in ARR) return ARR[k];
+    return `\u00ab${String(k)}\u00bb`;
+  }, has() { return true; } });
+  const found = new Map();
+  CONTENT_TYPES.forEach(type => [true, false].forEach(isClub => {
+    const body = shapeForLive(type, mk({ name: "Probe Place", isClub }))?.blogBody || [];
+    body.forEach((b, i) => {
+      if (b?.type !== "paragraph" || typeof b.content !== "string") return;
+      const m = b.content.match(/^\u00ab(.+)\u00bb$/);
+      if (!m) return;
+      if (!found.has(m[1])) found.set(m[1], new Set());
+      found.get(m[1]).add(`${type} / ${body[i - 1]?.content || "?"}`);
+    });
+  }));
+  const fields = [...found.keys()].sort();
+  ok("the shaper was really exercised", fields.length >= 14);
+  // Named, so a failure below says which type introduced the field.
+  const whereIs = (f) => [...(found.get(f) || [])].join(", ");
+
+  // 1. THE AUDIT. A field missing here is prose nothing scans for AI tells,
+  // filler runs, price leaks or self-contradiction.
+  const unaudited = fields.filter(f => !AUDIT_PROSE_FIELDS.includes(f) && !PROSE_LISTS.includes(f));
+  is("every paragraph the shaper writes is prose the audit knows about",
+     unaudited.map(f => `${f} (${whereIs(f)})`), []);
+
+  // 2. THE EDITOR. A field missing here cannot be named in an instruction: it
+  // resolves, fails the gate, and the edit silently lands somewhere else.
+  // howTo is the one deliberate absence and it is asserted as deliberate rather
+  // than tolerated, so removing the reason does not quietly pass.
+  const BY_DESIGN = ["howTo"];
+  const unnameable = fields.filter(f => !EDITABLE_FIELDS.has(f) && !BY_DESIGN.includes(f));
+  is("every paragraph the shaper writes can be named in an edit",
+     unnameable.map(f => `${f} (${whereIs(f)})`), []);
+  is("and the only field kept out of an edit on purpose is still out",
+     BY_DESIGN.filter(f => EDITABLE_FIELDS.has(f)), []);
+  ok("which is only defensible because the fallthrough still reaches it",
+     BY_DESIGN.every(f => M.CORRECTION_PROSE_FIELDS.includes(f)));
+
+  // 3b. THE RESTATEMENT CHECK. A bullet that repeats a sentence the reader has
+  // already been given is padding, and the check can only see the fields on
+  // BODY_FIELDS. It listed seven and missed eight, and the eight it missed were
+  // exactly the prose of the four types that carry bullets alongside it, which
+  // is the whole set of types the check exists for.
+  const unread = fields.filter(f => !M.BODY_FIELDS.includes(f));
+  is("the restatement check can see every paragraph in the body",
+     unread.map(f => `${f} (${whereIs(f)})`), []);
+
+  // 4. THE CHECK MODE. Every one of these is a paragraph a reader reads, and
+  // an unclassified field falls through to `report`, where an UNVERIFIED
+  // finding is admissible and the auto-corrector is instructed to DELETE THE
+  // SENTENCE. A judgement is unverifiable by construction, so report mode on a
+  // paragraph deletes the writing.
+  //
+  // The rule asserted is not "every paragraph is characterisation" — howItsMade
+  // and howTo are deliberately report fields, because a cooking method and a
+  // set of steps are checkable. It is that every paragraph is CLASSIFIED, by
+  // name, on one list or the other. A town's whole body was on neither for
+  // three weeks and nothing could say so.
+  {
+    const CLASSIFIED = new Set([...M.CHARACTERISATION_FIELDS, ...M.REPORT_FIELDS]);
+    const unclassified = fields.filter(f => !CLASSIFIED.has(f));
+    is("every paragraph field is classified as report or characterisation",
+       unclassified.map(f => `${f} (${whereIs(f)})`), []);
+    // And the three that were not are on the safe side of it now.
+    ["characterAndFit", "whatToDo", "gettingThereReality"].forEach(f => {
+      is(`a town's ${f} is a judgement, not a report`, M.checkModeOf(f), "characterisation");
+    });
+    // The two deliberate report paragraphs stay report, or this became a blanket
+    // exemption rather than a classification.
+    is("a cooking method is still checked as a report", M.checkModeOf("howItsMade"), "report");
+    is("and so are a system's steps", M.checkModeOf("howTo"), "report");
+  }
+
+  // 3. THE CORRECTION FALLTHROUGH. A confirmed claim that names no field may
+  // rewrite prose and never a glance value, so the prose it may rewrite has to
+  // be all of it.
+  const unreachable = fields.filter(f => !M.CORRECTION_PROSE_FIELDS.includes(f));
+  is("and a confirmed correction can reach every one of them",
+     unreachable.map(f => `${f} (${whereIs(f)})`), []);
+
+  // ── AND THE PROSE THAT NEVER REACHES A BODY ───────────────────────
+  //
+  // The derivation above reads paragraphs out of blogBody, so by construction
+  // it can only find fields that go into one. Three reader-facing sentences do
+  // not: an essentials card's `tip`, a bar card's `crowd`, and the
+  // `visitorNote` the essential prompt marks REQUIRED when a system is
+  // resident-gated. Nothing was ever going to point at them, so they are named
+  // here, with what renders each one, and held to the same rule.
+  const CARD_PROSE = [
+    ["tip", "the italic line on an essentials card"],
+    ["crowd", "the line under a bar's name"],
+    ["visitorNote", "the sentence a resident-gated system needs"],
+  ];
+  CARD_PROSE.forEach(([f, what]) => {
+    ok(`${f}, ${what}, is scanned as prose`, AUDIT_PROSE_FIELDS.includes(f));
+    ok(`and ${f} can be named in an edit`, EDITABLE_FIELDS.has(f));
+  });
+
+  // ── AND THE TWO LISTS ARE ONE LIST ────────────────────────────────
+  // They were separate copies of the same answer and each fell behind on its
+  // own. The narrative half is now shared; only the structural keys differ.
+  is("the correction list is the audit list plus its structural keys",
+     M.CORRECTION_PROSE_FIELDS.filter(f => !AUDIT_PROSE_FIELDS.includes(f)),
+     ["blogBody", "intro", "body"]);
+  is("and it drops none of them",
+     AUDIT_PROSE_FIELDS.filter(f => !M.CORRECTION_PROSE_FIELDS.includes(f)), []);
+  // A glance value in either list is the failure both comments warn about.
+  const GLANCE = ["price", "nearestStation", "travelTime", "ticketsGlance", "extraCosts", "recommendedStayGlance", "bestTimeGlance", "accommodationGlance", "typicalCosts", "mapHint", "website", "tier", "name"];
+  is("no glance field became editable prose",
+     GLANCE.filter(g => AUDIT_PROSE_FIELDS.includes(g) || M.CORRECTION_PROSE_FIELDS.includes(g) || EDITABLE_FIELDS.has(g)), []);
+}
+
 {
   const self = readFileSync(fileURLToPath(import.meta.url), "utf8");
   // stripCOMMENTS, not stripNonCode. The scoreboard's own text lives inside a
@@ -41076,9 +42099,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // No render change was needed for any of this, and that is worth pinning:
   // the card already read the stored origin, so the fix is entirely upstream.
   is("the card names the origin the row carries",
-     M.journeyReach({ total: 41, from: "Aalborg" }), "41min from Aalborg, door to door");
+     M.journeyReach({ total: 41, from: "Aalborg" }), "41min from Aalborg, centre to centre");
   is("and falls back to Copenhagen only for a row that never stored one",
-     M.journeyReach({ total: 215 }), "3h 35min from Copenhagen, door to door");
+     M.journeyReach({ total: 215 }), "3h 35min from Copenhagen, centre to centre");
 }
 
 // ── "THE PINK/PURPLE WRITING IS SO UNCOMFORTABLE FOR THE EYES" ──────
@@ -41334,14 +42357,20 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const row = {
       desc: "The street is actually quiet before eight.",
       gemlyxFind: "It is actually worth arriving early.",
-      blogBody: [{ type: "paragraph", text: "The bars are actually cheap on a Tuesday." }],
+      blogBody: [{ type: "paragraph", content: "The bars are actually cheap on a Tuesday." }],
       __lat: 57.05,
     };
     const cleaned = cleanReaderProse(row);
     is("the first use is left alone", cleaned.desc, "The street is actually quiet before eight.");
     is("the second field loses it", cleaned.gemlyxFind, "It is worth arriving early.");
+    // ── AND THIS ONE WAS MINE, IN BOTH HALVES, 3 SEP ──────────────
+    // The fixture was keyed `text` and the assertion read `.text`, so a trim
+    // that never touched a real blogBody passed against a payload that does not
+    // exist — under a comment of mine saying blogBody is "where most of the
+    // prose lives". It is, and it was the half not being cleaned.
     is("and so does the body, which is where most of the prose lives",
-       cleaned.blogBody[0].text, "The bars are cheap on a Tuesday.");
+       cleaned.blogBody[0].content, "The bars are cheap on a Tuesday.");
+    ok("and the block keeps its own shape", !("text" in cleaned.blogBody[0]));
     is("machinery keys are not prose and are not touched", cleaned.__lat, 57.05);
     ok("and the original row is not mutated", row.gemlyxFind === "It is actually worth arriving early.");
   }
@@ -41763,9 +42792,24 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // did not happen leaves the entry on screen with nothing saying so. False is
   // the honest answer and the caller's fallback is the reload — today's
   // behaviour, so the worst case is unchanged.
-  is("a type nothing registers cannot be removed in place", removeLiveRow(1, "wormhole"), false);
-  is("and neither can an essential that was never merged", removeLiveRow(999999, "essential"), false);
-  is("nor a row with no usable id", removeLiveRow("nonsense", "town"), false);
+  // ── AND "NOT IN THE ARRAYS" IS NOT A FAILURE, 3 SEP ─────────────
+  //
+  // These asserted a boolean, and the boolean was the bug. Oliver's first
+  // recording: `id=80 typeUsed="town"` then `NOT in the merged arrays`. The type
+  // was right and the row still was not there, because doLoad fetches
+  // published=eq.true while the Manage panel lists EVERY row. That row was on no
+  // page and in no array, and deleting it reloaded the whole app to reflect a
+  // change nothing on screen could show. Three situations, and a boolean could
+  // only see two.
+  is("an unrecognised type is the one case nobody can reason about",
+     removeLiveRow(1, "wormhole"), M.UNKNOWN_TYPE);
+  is("a row that was never merged is simply not live",
+     removeLiveRow(999999, "essential"), M.NOT_LIVE);
+  is("and a row with no usable id is not live either",
+     removeLiveRow("nonsense", "town"), M.NOT_LIVE);
+  // The three verdicts are distinct, or the caller cannot branch on them.
+  is("the three verdicts are three things",
+     new Set([M.REMOVED, M.NOT_LIVE, M.UNKNOWN_TYPE]).size, 3);
   // The two multi-home types are the same two the edit path knows about, or one
   // of them silently falls back to a full reload forever.
   ok("a festival and a workshop are both reachable",
@@ -41795,7 +42839,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // ── WIRED, WHICH IS THIS CODEBASE'S USUAL FAILURE ───────────────
   ok("the studio delete asks for the in-place removal first",
-     /const gone = rowType \? removeLiveRow\(id, rowType\) : false;/.test(appD));
+     /const verdict = rowType \? removeLiveRow\(id, rowType\) : UNKNOWN_TYPE;/.test(appD));
   // ── AND THE TYPE COMES FROM THE CALLER ──────────────────────────
   // The first version searched manageItems for a row the button already had in
   // hand — a second chance to fail at something already known, whose failure
@@ -41806,16 +42850,19 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── AND THE FALLBACK SAYS WHICH BRANCH RAN ──────────────────────
   // "It still refreshes" is not a report anybody can act on, and it was the
   // only thing this branch could produce.
-  ok("a fallback reload names its reason",
-     /was not in the merged list/.test(appD) && /no type on the row/.test(appD));
-  ok("and drops the row from the panel without a reload",
-     /if \(gone\) \{[\s\S]{0,220}setManageItems\(prev => \(prev \|\| \[\]\)\.filter\(r => r\?\.id !== id\)\);/.test(appD));
-  ok("with a re-render so the browse pages lose it too",
-     /if \(gone\) \{[\s\S]{0,320}bumpLiveContent\(v => v \+ 1\);/.test(appD));
-  // THE FALLBACK IS KEPT, and that is the point: this is an improvement on the
-  // reload, not a replacement that can strand a row nothing removed.
-  ok("and the reload is still there for the rows it cannot reach",
-     /\} else \{[\s\S]{0,200}setTimeout\(\(\) => window\.location\.reload\(\), 900\);/.test(appD));
+  // ── AND ONLY ONE OF THE THREE STILL RELOADS ─────────────────────
+  ok("an unrecognised type is the only reload left",
+     /if \(verdict === UNKNOWN_TYPE\) \{[\s\S]{0,260}window\.location\.reload\(\)/.test(appD));
+  ok("and it says so rather than just refreshing",
+     /nothing in the app registers the type/.test(appD));
+  ok("a row that was never published does not reload anything",
+     /it was not published, so nothing on the site changes/.test(appD));
+  // A re-render is only earned by a row that really left an array. Bumping for
+  // one that was never in one would redraw the whole app for nothing.
+  ok("and only a real removal redraws the browse pages",
+     /if \(verdict === REMOVED\) bumpLiveContent\(v => v \+ 1\);/.test(appD));
+  ok("and the row leaves the panel either way",
+     /\} else \{[\s\S]{0,200}setManageItems\(prev => \(prev \|\| \[\]\)\.filter\(r => r\?\.id !== id\)\);/.test(appD));
 
   // ── THE SOURCE HIERARCHY, 3 SEP ─────────────────────────────────
   //
@@ -41982,7 +43029,536 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and the file can be taken away", /a\.download = recordingFileName\(\);/.test(appRec));
   // THE BREADCRUMB THE WHOLE FEATURE EXISTS FOR.
   ok("the delete handler says which branch it took",
-     /record\("delete", gone \? "removed from the merged arrays in place, no reload" : "NOT in the merged arrays/.test(appRec));
+     /record\("delete", `removeLiveRow said \$\{verdict\}`, \{ verdict, type: rowType \}\);/.test(appRec));
+}
+
+// ── "THE HAND-MADE FILTER IS SO RANDOM" ─────────────────────────────
+//
+// Oliver, 3 Sep 2026: "Why is it not just in the 'type'?" Because there was
+// nothing to put in Type. handmadeCraftShops is an empty array literal in
+// data/craft.js and nothing populates it: liveContent registers ten types and
+// none of them is this. So the pill had never shown a row, could not, and
+// clicking it replaced the whole Attractions grid with "Nothing published here
+// yet." A control for a feature that does not exist, beside the real ones.
+{
+  const appH = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const craftH = readFileSync(join(root, "src/data/craft.js"), "utf8");
+  const liveH = readFileSync(join(root, "src/utils/liveContent.js"), "utf8");
+
+  ok("the source really is empty", /export const handmadeCraftShops = \[\];/.test(craftH));
+  ok("and nothing in the loader fills it", !/handmadeCraftShops/.test(liveH));
+  ok("the pill is gone", !/🍬 Handmade/.test(appH));
+  ok("and so is the view it switched to", !/attractionView/.test(appH));
+  // THE FILTERS IT USED TO HIDE ARE STILL THERE. Removing a wrapper is where a
+  // whole control row goes missing without anybody noticing.
+  ok("the Type facet survived the removal", /\{ key: "type", label: "Type", primary: true, multi: true,/.test(appH));
+  ok("with its real options", /\{ value: "free", label: "Attractions" \}/.test(appH) && /\{ value: "craft", label: "🎟 Bookable" \}/.test(appH));
+  // If handmade shops ever become a real Studio type they arrive with a schema
+  // and a loader branch like every other type, and then they belong in Type
+  // exactly as he said — with no separate pill at all.
+  ok("and the reason is written down where the pill was",
+     (appH.match(/a control for a feature that does not exist/gi) || []).length >= 1);
+}
+
+// ── THE TIVOLI RUN, 3 SEP ───────────────────────────────────────────
+{
+  const { ticketPriceOn, mergeGlance, saysFreeOnly, statesAnAmount } = M;
+  const appT = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const tickT = readFileSync(join(root, "src/utils/ticketLink.js"), "utf8");
+
+  // ── 1. ZERO IS NOT WHAT GENERAL ADMISSION COSTS ─────────────────
+  //
+  // The same agent page was read twice and answered "435 DKK" and then "0 DKK",
+  // and the 0 was kept. It became the pipeline's own figure and contradicted the
+  // draft's correct 150-275: "billetlugen.dk states 0 DKK and this draft states
+  // 150 to 275 DKK", and the rewrite was then asked to remove the real price.
+  {
+    // A zero the CONCESSION rule already catches proves nothing about this fix —
+    // it never reaches the new line. The zero that matters is the one with no
+    // concession word anywhere near it: an agent's "from 0 kr" filter, a gift
+    // card, a sold-out tier. That is what billetlugen answered with.
+    const agent = "Billetter til Tivoli. Entrebillet 0 kr. Entrebillet 275 kr.";
+    is("a bare zero is not the admission price", ticketPriceOn(agent).lo, 275);
+    ok("and the page is still read as priced", ticketPriceOn(agent).free === false);
+    is("in English too", ticketPriceOn("Tickets from 0 DKK. Entry ticket 275 DKK.").lo, 275);
+    // The concession rule still does its own job, one step earlier.
+    is("a named child rate is still a concession, not the fare",
+       ticketPriceOn("Billetter til Tivoli. Voksen 150 kr. Barn 0-3 ar 0 kr. Entrebillet 275 kr.").lo, 150);
+    // A page where EVERY open figure is zero is a different claim and is left to
+    // the branches that say so in words.
+    ok("a page that really prices nothing is not forced to a fare",
+       ticketPriceOn("Billetter: entre 0 kr for alle.").lo === 0);
+    is("and an ordinary page is untouched", ticketPriceOn("Billetter koster 180 kr for voksne.").lo, 180);
+  }
+
+  // ── 2. AN EXTRACTION MUST NOT DELETE A STATED AMOUNT ────────────
+  //
+  //   ticketsGlance: believed the research (extracted), overruled the writer
+  //   ("Food Hall free — Gardens admission 150-275 DKK")
+  //   value: Free entry from the street
+  //
+  // Both are true and they are about different doors. The writer's carried BOTH,
+  // so Tivoli's Tickets line lost the price of getting into Tivoli.
+  ok("a value naming a price states an amount", statesAnAmount("Food Hall free — Gardens admission 150-275 DKK"));
+  ok("and one that only says free does not", saysFreeOnly("Free entry from the street"));
+  // THE ONE THAT CARRIES BOTH IS NOT A FREE-ONLY CLAIM, which is the whole
+  // distinction: it says free and still has the price in it.
+  ok("a value carrying both is not free-only", !saysFreeOnly("Food Hall free — Gardens admission 150-275 DKK"));
+  {
+    const research = "Tivoli Food Hall has free entry from the street. Gardens admission from 150 DKK.";
+    const m = mergeGlance({ ticketsGlance: "Food Hall free — Gardens admission 150-275 DKK" },
+                          { ticketsGlance: "Free entry from the street" }, ["ticketsGlance"], research);
+    is("the price survives the extraction", m.patched.ticketsGlance, "Food Hall free — Gardens admission 150-275 DKK");
+    ok("and the refusal says what it kept", m.rejected.some(r => r.field === "ticketsGlance" && r.keptAmount));
+    // ── AND THE DIRECTION IS NOT SYMMETRIC ────────────────────────
+    // Being wrongly told a paid place is free costs a reader at the gate. Being
+    // wrongly told a free place charges costs them a pleasant surprise.
+    const back = mergeGlance({ ticketsGlance: "Free entry" }, { ticketsGlance: "Adults 120 DKK" }, ["ticketsGlance"], "Adults 120 DKK");
+    is("an amount replacing a free claim is still allowed", back.patched.ticketsGlance, "Adults 120 DKK");
+    const fresh = mergeGlance({ ticketsGlance: "" }, { ticketsGlance: "Free entry" }, ["ticketsGlance"], "Der er gratis adgang.");
+    is("and a free claim over an empty field still lands", fresh.patched.ticketsGlance, "Free entry");
+  }
+
+  // ── 3. NOBODY HAD EVER ASKED THE AGENT ──────────────────────────
+  //
+  // Oliver: "The last part of the pipeline should be quickly finding out if the
+  // attraction exists on our affiliate." The run ended on "No ticket page found
+  // for Tivoli on Tiqets or Ticketmaster", which reads like a search and was
+  // not one: every ticket step vets pages the run happened to READ. ticketQueries
+  // had been written and tested since 15 August and called from nowhere.
+  ok("the agent search is wired at last", /for \(const q of ticketQueries\(name, draftTown\)\)/.test(appT));
+  ok("and it runs outside the gate, which is synchronous and runs twice",
+     appT.indexOf('const dc = gateDraft("first");') < appT.indexOf("for (const q of ticketQueries("));
+  // ONLY WHEN THE PAGES IN HAND CAME UP EMPTY, which is what makes the cost
+  // defensible: a draft that already has a link pays nothing.
+  ok("it only runs when nothing else found a link",
+     /if \(!String\(t\.ticketUrl \|\| ""\)\.trim\(\)\) \{\s*\n\s*let searched = 0;/.test(appT));
+  ok("and stops at the first query that answers", /if \(String\(t\.ticketUrl \|\| ""\)\.trim\(\)\) break;/.test(appT));
+  // NEVER THE FIRST RESULT. A wrong ticket link is not a weak fact, it is a
+  // reader who paid for something else.
+  ok("the result is vetted, not taken", /const found = pickTicketUrl\(results, \{ name, town: draftTown \}\);/.test(appT));
+  ok("and an empty answer is not read as unsellable",
+     /It means this search found no page that is both a product page and this place/.test(appT));
+  ok("the queries ask each agent separately", /site:tiqets\.com/.test(tickT) && /site:ticketmaster\.dk/.test(tickT));
+}
+
+// ── AN ASSERTION THAT PASSES WITHOUT TESTING ANYTHING ───────────────
+//
+// 3 Sep 2026. Three assertions in this file read
+//
+//   is("...", transitProblems(prose, parts, null), [])
+//
+// and passed for a month. transitProblems is `(prose, { parts, drivingMins })`,
+// so a positional second argument leaves the destructure undefined, the function
+// returns [] on its first line, and the empty answer the assertion wanted
+// arrives for a reason with nothing to do with the rule. I wrote all three,
+// watched them go green, and found out only because a MUTANT survived.
+//
+// A missing assertion is a known gap. A VACUOUS one is a gap that reads as
+// coverage, and this project makes decisions on the strength of twelve thousand
+// of them — including, that night, "the gate is working" about a gate that could
+// not match its own founding sentence.
+//
+// The general question is mutation testing and costs a suite run per line. This
+// is the cheap specific case and it is the one that bit: an options object is
+// invisible at the call site, so passing PAST it looks exactly like passing INTO
+// it, and every such call hands over more arguments than the function declares.
+// JavaScript drops the extra one without a word. See tests/tdz.mjs.
+{
+  const arity = new Map();
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!/\.(js|jsx)$/.test(entry.name)) continue;
+      for (const [name, n] of exportedArity(stripNonCode(readFileSync(full, "utf8")))) arity.set(name, n);
+    }
+  };
+  walk(join(root, "src"));
+  ok("the scanner found the app's real signatures", arity.size > 500);
+  // A defaulted parameter containing a call — `(start, end, today = new Date())`
+  // — closes a naive [^)]* at the wrong paren. The first version of this read
+  // that as two parameters and reported nine calls as faults.
+  is("a default value with a call in it does not truncate the signature", arity.get("isCurrentlyLive"), 3);
+  is("and an options object counts as one parameter", arity.get("transitProblems"), 2);
+
+  const own = readFileSync(fileURLToPath(import.meta.url), "utf8");
+  const over = overArgumentedCalls(own, arity);
+  is("no assertion in this file passes an argument the function will drop",
+     over.map(o => `run.mjs:${o.line} ${o.name}(${o.given} given, ${o.declares} declared)`), []);
+
+  // ── AND THE SCANNER ITSELF HAS TO BE ABLE TO FAIL ───────────────
+  //
+  // Every one of these was a false positive on a real run before it was fixed,
+  // and a scanner that reports nothing because it can see nothing is the same
+  // shape as the bug it hunts.
+  ok("it catches the call that started this",
+     overArgumentedCalls('is("x", transitProblems(prose, parts, null), []);', arity).length === 1);
+  is("and passes the corrected one",
+     overArgumentedCalls('is("x", transitProblems(prose, { parts }), []);', arity), []);
+  // run.mjs is mostly assertions ABOUT source text, so it is full of function
+  // names inside string literals. Blanking them is what took the first run from
+  // eleven "faults" to zero.
+  is("a name inside a string is not a call",
+     overArgumentedCalls('ok("x", src.indexOf("const tp = transitProblems(a, b, c)") > 0);', arity), []);
+
+// ── AND FOUR THINGS A READER WAS NEVER SHOWN AT ALL ─────────────────
+//
+// The other half of the same audit. Each of these is prose or a picture the
+// pipeline researched, drafted, fact-checked, paid for and published, and that
+// no renderer drew. They are the most expensive kind of bug in this project
+// because everything upstream reports success.
+{
+  const appV = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // 1. A NIGHTLIFE TOWN'S WHOLE BODY. The prompt asks for 230-330 words across
+  // Who It's For, After Dark, The Reality Check and three bullets. The page
+  // drew photo, name, desc and Gemlyx Find and stopped.
+  ok("a nightlife town draws the body it publishes",
+     /<BlogBody blocks=\{townContent\.blogBody\}/.test(appV));
+
+  // 2. AN ESSENTIAL'S VISITOR NOTE. studioContent calls it "often the whole
+  // point: a system that needs a Danish CPR number is the wrong answer for a
+  // visitor". A visitor read a friendly how-to for a service they cannot use.
+  ok("an essentials card draws its visitor note", /\{item\.visitorNote && \(/.test(appV));
+  ok("and labels it for the reader it is for", /If you are visiting/.test(appV));
+
+  // 3. A WORKSHOP'S PHOTO. Carried to Supabase, shown on the grid card,
+  // replaced by an emoji on the workshop's own page.
+  ok("a workshop draws its own photo", /\{craftDetail\.photo \? \(/.test(appV));
+  ok("with the emoji kept as the fallback it always was",
+     /<span style=\{\{ fontSize: 72 \}\}>\{craftDetail\.emoji\}<\/span>/.test(appV));
+
+  // 4. AND ITS CREDIT, which studioContent.js calls "a licence breach and not
+  // a cosmetic gap".
+  ok("and the credit under it",
+     /<PhotoCredit photo=\{craftDetail\.photo\} credit=\{craftDetail\.__photoCredit\}/.test(appV));
+
+  // ── AND ONE RENDERER, NOT THREE ─────────────────────────────────
+  // The nightlife town page needed a body renderer and there were already two:
+  // DetailPage's and a copy inlined in the workshop page. A third would have
+  // been the fourth instance of this codebase's oldest habit.
+  ok("the shared renderer exists", existsSync(join(root, "src/components/BlogBody.jsx")));
+  is("and App.jsx no longer keeps its own copy",
+     (stripNonCode(appV).match(/block\.type === "bullets" \?/g) || []).length, 0);
+  is("both of its pages use the shared one",
+     (appV.match(/<BlogBody blocks=/g) || []).length, 2);
+}
+
+// ── THREE THINGS A READER WAS SHOWN THAT WERE NOT SENTENCES ─────────
+//
+// Found in the draft-quality audit of 4 Sep 2026, all three on types nobody had
+// looked at since the fields were added.
+{
+  const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // 1. A BOOLEAN PRINTED AS PROSE. The prompt asks for `true only if it's
+  // genuinely hard to reach without a car`, shapeForLive stores `!!value`, and
+  // the workshop page printed the value. React renders nothing for `true`, so
+  // the amber box headed "NO CAR OR BIKE? READ THIS" had nothing under it.
+  ok("the transport warning no longer prints its own flag",
+     !/\{craftDetail\.transportWarning\}/.test(stripNonCode(appR)));
+  ok("and says something a reader can act on",
+     /Nearest public transport: \$\{craftDetail\.nearestStation\}/.test(appR));
+  ok("with an honest fallback when there is no station on file",
+     /genuinely awkward to reach without your own transport/.test(appR));
+  // The flag still decides WHETHER the box appears, which is what it is for.
+  ok("the flag still gates the box", /craftDetail\.transportWarning && \(/.test(appR));
+
+  // 2. A BARE LIGHTBULB. `💡 {item.tip}` with no guard, on a field
+  // shapeForLive stores as "" when the draft omits it.
+  // Counted as a RATIO, not as an absence. The first version of this asserted
+  // that `>💡 {item.tip}` appears zero times, which is false in the fixed code
+  // too: the guard is a prefix, so the substring survives it. It passed only
+  // because the code was broken and would have gone green on either.
+  {
+    const renders = (appR.match(/>💡 \{item\.tip\}/g) || []).length;
+    const guarded = (appR.match(/\{item\.tip && <div[^>]*>💡 \{item\.tip\}/g) || []).length;
+    ok("the tip is rendered somewhere", renders >= 2);
+    is("and every render of it is guarded, so no card shows a bare lightbulb",
+       renders - guarded, 0);
+  }
+
+  // 3. THE PRICE PANEL THAT COULD NOT BE OPENED. night gained priceNote
+  // because Oliver asked "Where are the prices?", and this map was not touched.
+  {
+    const from = appR.indexOf("const PRICE_FIELD_BY_TYPE = {");
+    ok("the price field map was located", from > 0);
+    const map = appR.slice(from, appR.indexOf("};", from));
+    ["night", "nightStreet", "essential"].forEach(t =>
+      ok(`a ${t} can be given a price by hand`, new RegExp(`${t}: "`).test(map)));
+    // nightTown is absent on purpose: its schema has no price field, so there
+    // is nothing for the panel to write into. Asserted so the absence is a
+    // decision rather than the next gap.
+    ok("and a nightlife town is still left out, because it has no price field",
+       !/nightTown: "/.test(map));
+  }
+}
+
+// ── THE HELPER THAT WAS WRITTEN, TESTED AND NEVER CALLED ────────────
+//
+// Nine of these have been found by hand: isAlreadyCovered, a second
+// resolveLegMode, the heading list, evidence.js, ticketQueries. Every one was
+// correct, unit-tested and green, and none of them ran. Found by hand means
+// found late, and only where somebody happened to look.
+//
+// So the tree is asked once, on every run, and the answer is compared with a
+// NAMED LIST rather than a count. Both directions fail:
+//
+//   A NEW NAME means a function was just written and wired to nothing, or a
+//   call site was deleted and the helper left behind. That is the bug.
+//
+//   A MISSING NAME means one of these finally got wired, or was deleted. Also
+//   a failure, and deliberately so: the list only ever shrinks, and taking a
+//   name off it is the moment somebody has to look at what changed.
+//
+// This list is not a to-do list and not an accusation. Some of these are real
+// features waiting on a call site (placeChoice's whole "which one did you
+// mean" chooser is five of them), some are diagnostics kept for the suite, and
+// some are genuinely dead. What the list buys is that the next one cannot join
+// them quietly.
+{
+  const bodies = new Map();
+  const gather = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) { gather(full); continue; }
+      if (!/\.(js|jsx)$/.test(entry.name)) continue;
+      bodies.set(full.slice(root.length).replace(/\\/g, "/"), readFileSync(full, "utf8"));
+    }
+  };
+  gather(join(root, "src"));
+  if (existsSync(join(root, "api"))) gather(join(root, "api"));
+  ok("the whole tree was read", bodies.size > 100);
+
+  // api/ is part of the app. Three linkPreview functions are called only from
+  // the serverless handlers, and reading src/ alone reported them as dead.
+  ok("and the serverless handlers with it", [...bodies.keys()].some(k => k.startsWith("api/")));
+
+  const KNOWN_UNWIRED = [
+    "src/utils/accommodation.js:stayTextForReader",
+    "src/utils/affiliates.js:affiliateActive",
+    "src/utils/affiliates.js:carRentalActive",
+    "src/utils/affiliates.js:isAffiliateHref",
+    "src/utils/affiliates.js:ticketmasterActive",
+    "src/utils/affiliates.js:tiqetsActive",
+    "src/utils/aiClient.js:geocodeOne",
+    "src/utils/apiCost.js:__reset",
+    "src/utils/apiCost.js:currentRun",
+    "src/utils/arrival.js:tripAnchor",
+    "src/utils/briefPanel.js:briefPanel",
+    "src/utils/chatThread.js:threadIsSound",
+    "src/utils/constraintCheck.js:constraintNote",
+    "src/utils/constraintCheck.js:repairWorked",
+    "src/utils/constraintCheck.js:violationsOfKind",
+    "src/utils/costLedger.js:linkGaps",
+    "src/utils/entryAudit.js:describeNameFit",
+    "src/utils/entryAudit.js:nameFit",
+    "src/utils/entryPrice.js:bookingChip",
+    "src/utils/essentialKind.js:unsortedEssentials",
+    "src/utils/eventDates.js:eventLocation",
+    "src/utils/eventDates.js:staleEvents",
+    "src/utils/eventTypes.js:untypedEvents",
+    "src/utils/evidence.js:evidenceCounts",
+    "src/utils/evidence.js:evidenceNote",
+    "src/utils/evidence.js:weakestClaim",
+    "src/utils/factRotation.js:identityOrder",
+    "src/utils/factSweep.js:stampCheck",
+    "src/utils/foodStyle.js:diningStyleLabel",
+    "src/utils/geo.js:nearestStationName",
+    "src/utils/helpers.js:parsePrice",
+    "src/utils/helpers.js:priceBandLabel",
+    "src/utils/helpers.js:seasonRank",
+    "src/utils/interestFit.js:THEMES_WITHOUT_WORDS",
+    "src/utils/linkPreview.js:articleHtml",
+    "src/utils/linkPreview.js:guideIdFromPath",
+    "src/utils/linkPreview.js:injectArticle",
+    "src/utils/linkPreview.js:injectMeta",
+    "src/utils/linkPreview.js:isCrawler",
+    "src/utils/linkPreview.js:structuredData",
+    "src/utils/mapTiles.js:__resetRefusedStyles",
+    "src/utils/mapTiles.js:styleRefused",
+    "src/utils/modelProvenance.js:readerFacingStages",
+    "src/utils/nearbyPlaces.js:nearbyLabel",
+    "src/utils/openingHours.js:shutOnVisit",
+    "src/utils/operators.js:isLongLeg",
+    "src/utils/pageScan.js:describeRead",
+    "src/utils/placeChoice.js:applyChoice",
+    "src/utils/placeChoice.js:choiceNote",
+    "src/utils/placeChoice.js:describeChoosing",
+    "src/utils/placeChoice.js:needsChoosing",
+    "src/utils/placeKind.js:baseTownFor",
+    "src/utils/placeKind.js:collapseToParent",
+    "src/utils/placeKind.js:dayTripsFrom",
+    "src/utils/placeUrl.js:sitemapXml",
+    "src/utils/placeUrl.js:slugCollisions",
+    "src/utils/placeUrl.js:typesForSeg",
+    "src/utils/provenance.js:isCheckerVoice",
+    "src/utils/publishedRepair.js:bookingWorklist",
+    "src/utils/publishedRepair.js:priceWorklist",
+    "src/utils/redraftImpact.js:redraftBrief",
+    "src/utils/redraftImpact.js:redraftRisks",
+    "src/utils/redraftImpact.js:townDependents",
+    "src/utils/regions.js:kommuneOf",
+    "src/utils/regions.js:regionsPresent",
+    "src/utils/regions.js:sameRegion",
+    "src/utils/runLog.js:currentLog",
+    "src/utils/sameness.js:describeSameness",
+    "src/utils/sameness.js:samenessReport",
+    "src/utils/savedTrip.js:savedLine",
+    "src/utils/studioDraftStore.js:storedKeys",
+    "src/utils/studioRecorder.js:clearRecording",
+    "src/utils/travellerWords.js:edged",
+    "src/utils/tripBrief.js:briefMovedOn",
+    "src/utils/venueStyle.js:buildNightlifeStyleFacet",
+    "src/utils/venueStyle.js:venueStyleLabel",
+  ];
+  const found = uncalledExports(bodies);
+  const appeared = found.filter(x => !KNOWN_UNWIRED.includes(x));
+  is("no exported function was written and wired to nothing", appeared, []);
+  const wiredUp = KNOWN_UNWIRED.filter(x => !found.includes(x));
+  is("and every name on the list is still unwired, so the list only shrinks", wiredUp, []);
+
+  // ── AND THE SCANNER ITSELF HAS TO BE ABLE TO FAIL ───────────────
+  // A scanner that reports nothing because it can see nothing is the same
+  // shape as the bug it hunts. Each of these was a real false positive or a
+  // real miss on a run before it was fixed.
+  const probe = (files) => uncalledExports(new Map(Object.entries(files)));
+  is("it finds a function nothing calls",
+     probe({ "a.js": "export const orphan = (x) => x + 1;", "b.js": "const y = 1;" }),
+     ["a.js:orphan"]);
+  is("a function called from another file is wired",
+     probe({ "a.js": "export const used = (x) => x;", "b.js": "import { used } from './a'; used(1);" }), []);
+  // `helper` is called by `run` in the same file, so it is wired. `run` itself
+  // is called by nothing and IS reported, which is right: the fixture's first
+  // draft expected an empty list and was simply wrong about its own contents.
+  is("a function used inside its own module is wired",
+     probe({ "a.js": "export const helper = (x) => x;\nexport const run = () => helper(1);", "b.js": "import { run } from './a'; run();" }), []);
+  // CONSTANTS ARE NOT FUNCTIONS. A threshold exported so the suite can assert
+  // the number without a second copy of it is a good reason to export
+  // something nothing imports. Counting those gave 607 rows.
+  is("an exported constant is not reported", probe({ "a.js": "export const WIND_GALE = 17;" }), []);
+  is("nor an exported array", probe({ "a.js": "export const TYPES = [\"a\", \"b\"];" }), []);
+  // Both function forms, or half of them are invisible.
+  is("a function declaration counts too",
+     probe({ "a.js": "export function orphan(x) { return x; }" }), ["a.js:orphan"]);
+  is("and a no-argument arrow", probe({ "a.js": "export const orphan = () => 1;" }), ["a.js:orphan"]);
+  is("and a single-argument arrow with no parens", probe({ "a.js": "export const orphan = x => x;" }), ["a.js:orphan"]);
+  is("and an async one", probe({ "a.js": "export const orphan = async (x) => x;" }), ["a.js:orphan"]);
+  // ── AND THE FOUR BLIND SPOTS THE FIRST VERSION HAD ──────────────
+  //
+  // Found by review the same day it was written. Each one made the scanner
+  // report LESS than the truth, which is the failure mode a tripwire cannot
+  // afford: a list presented as exhaustive that quietly is not.
+  //
+  // 1. `\([^)]*\)` closes at the first `)`, so any default value containing a
+  //    call hid the export. Forty of the app's exported arrows were invisible,
+  //    including isCurrentlyLive and getEventDate. exportedArity in the same
+  //    file had already been bitten by this and solved it with paramsAt.
+  is("a default value with a call in it does not hide the export",
+     probe({ "a.js": "export const orphan = (x, today = new Date()) => x;" }), ["a.js:orphan"]);
+  is("nor does a destructured parameter with a default",
+     probe({ "a.js": "export const orphan = ({ a = f() } = {}) => a;" }), ["a.js:orphan"]);
+  // 2. A name in a COMMENT counted as a call, so a dead export could be kept
+  //    alive by the sentence explaining that it is dead.
+  is("a name in another file's comment is not a call",
+     probe({ "a.js": "export const orphan = (x) => x;", "b.js": "// see orphan for why" }), ["a.js:orphan"]);
+  is("nor a name in a string",
+     probe({ "a.js": "export const orphan = (x) => x;", "b.js": "const s = \"orphan\";" }), ["a.js:orphan"]);
+  // 3. The same blindness inside the export's own file, where the threshold is
+  //    two rather than one.
+  is("nor a second mention of itself in its own comment",
+     probe({ "a.js": "// orphan is kept for the suite\nexport const orphan = (x) => x;" }), ["a.js:orphan"]);
+  // And it must still see a real call through all of that.
+  is("a real call still counts",
+     probe({ "a.js": "export const used = (x) => x;", "b.js": "// used is called below\nused(1);" }), []);
+}
+
+
+  is("nor is one inside a regex",
+     overArgumentedCalls('ok("x", /transitProblems\\(a, b, c\\)/.test(src));', arity), []);
+  // A trailing comma is not an argument, and reading it as one was the only hit
+  // left standing after the strings were blanked.
+  is("and a trailing comma is not an argument",
+     overArgumentedCalls("const m = mergeGlance(a, b, c, d,);", arity), []);
+  // A rest parameter takes anything, so it can never be over-argumented.
+  is("a rest parameter is never a fault", overArgumentedCalls("dotJoin(a, b, c, d, e);", arity), []);
+}
+
+// ── THREE READERS OF ONE SHAPE, TWO OF THEM WRONG ───────────────────
+//
+// Found by Fable, 3 Sep 2026, auditing the bar-street drafting path.
+//
+// A published blogBody block is `{ type: "paragraph", content: "..." }` — that
+// is what shapeForLive writes and what DetailPage renders, and entryAudit
+// records a real payload Oliver pasted off the live site saying so. Two other
+// readers of that shape read `b.text`, a key nothing has ever written:
+//
+//   researchVoice.js  the strip that removes checker voice and repeated filler
+//                     from the long-form half of an entry. It walked every
+//                     block and changed none, and its audit reported zero rows,
+//                     under a comment of mine saying blogBody is where most of
+//                     the prose lives.
+//   bodyEdit.js       the Studio's "📝 Blog text" panel. Worse: it showed an
+//                     EMPTY box for every real heading and paragraph, and a save
+//                     wrote a phantom `text` field beside the `content` the page
+//                     renders — so the edit vanished and the row grew a field.
+//                     Bullets worked, which is how one block type in three
+//                     working hid the other two.
+//
+// entryAudit already carries this lesson, in its own words, about its own
+// flattener: "a flattener written from an ASSUMED shape is a guess, and the
+// first real payload is the only thing that can settle it." It was then made
+// twice more. There is one pair now and every caller reads it.
+{
+  const { blockText, withBlockText, cleanReaderProse, researchVoiceIn, editableBlocks, applyBodyEdits } = M;
+  const real = { type: "paragraph", content: "Aalborg Zoo sits west of the centre." };
+
+  is("the shape the app actually writes is read", blockText(real), "Aalborg Zoo sits west of the centre.");
+  is("and a write lands in the same key", withBlockText(real, "New.").content, "New.");
+  ok("with no second field beside it", !("text" in withBlockText(real, "New.")));
+  // A row written before any format change still has to work, and must not gain
+  // a `content` field it never had.
+  is("an older block keeps its own key", withBlockText({ type: "paragraph", text: "Old." }, "New.").text, "New.");
+  ok("and gains nothing", !("content" in withBlockText({ type: "paragraph", text: "Old." }, "New.")));
+  // Bullets were the half bodyEdit got right, and the half entryAudit's version
+  // did not have. The one pair has to keep it.
+  is("bullets still read as lines", blockText({ type: "bullets", items: ["One", "Two"] }), "One\nTwo");
+  is("and write back as items", withBlockText({ type: "bullets", items: [] }, "One\nTwo").items, ["One", "Two"]);
+  is("an empty line is not a bullet", withBlockText({ type: "bullets", items: [] }, "One\n\nTwo").items, ["One", "Two"]);
+  // A block with no text yet gets the canonical key, not the legacy one.
+  is("a fresh block is written in the key the page renders", withBlockText({ type: "paragraph" }, "New.").content, "New.");
+
+  // ── AND EVERY CALLER READS THE ONE PAIR ─────────────────────────
+  const rv = readFileSync(join(root, "src/utils/researchVoice.js"), "utf8");
+  const be = readFileSync(join(root, "src/utils/bodyEdit.js"), "utf8");
+  // Asserted on CODE, not on the file: the comment recording the fix names the
+  // key it replaced, and a check that cannot tell a fix from the thing it fixed
+  // is the fault stripComments exists for.
+  ok("the voice cleaner stopped inventing a third",
+     !/b\.text/.test(stripComments(rv)) && /blockText/.test(rv));
+  ok("and the body editor re-exports rather than re-implements",
+     /export \{ blockText, withBlockText \} from ".\/entryAudit";/.test(be)
+     && !/String\(b\.text \?\? ""\)/.test(be));
+
+  // ── WHAT EACH OF THEM DOES NOW, ON A REAL ROW ───────────────────
+  {
+    const row = { desc: "A street.", blogBody: [
+      { type: "paragraph", content: "The claim is not confirmed by the checked sources. It is actually busy." },
+      { type: "paragraph", content: "It is actually cheap before nine." },
+    ] };
+    const c = cleanReaderProse(row);
+    ok("checker voice is finally stripped from the body",
+       !/checked sources/i.test(c.blogBody[0].content));
+    is("the filler trim reaches the body too", c.blogBody[1].content, "It is cheap before nine.");
+    is("and the audit can see the row at all", researchVoiceIn(row).length, 1);
+  }
+  {
+    const body = [{ type: "heading", content: "What to Do" }, { type: "paragraph", content: "A paragraph." }];
+    is("the editor shows the real text rather than an empty box",
+       editableBlocks(body).map(b => b.text), ["What to Do", "A paragraph."]);
+    is("and a save reaches the page", applyBodyEdits(body, { 1: "Rewritten." })[1].content, "Rewritten.");
+  }
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

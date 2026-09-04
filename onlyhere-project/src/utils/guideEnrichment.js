@@ -19,6 +19,7 @@ import { events, majorEvents, vikingEvents } from "../data/events";
 import { towns, TOWN_COORDS } from "../data/towns";
 import { freeEntrance } from "../data/freeEntrance";
 import { nightlifeSpots } from "../data/nightlife";
+import { nightlifeStreets } from "../data/nightlifeStreets";
 import { foodSpots } from "../data/food";
 import { detectLegMode, haversineKm, isFerryText } from "./helpers";
 import { containsName, variantsOf, distinctiveWords } from "./danishNames";
@@ -119,6 +120,17 @@ export const lookupRealPlace = (name) => {
     ...craftItemsFallback.map(p => ({ ...p, _src: "craft" })),
     ...foodSpots.map(p => ({ ...p, _src: "food" })),
     ...nightlifeSpots.map(p => ({ ...p, _src: "nightlife" })),
+    // ── A BAR STREET IS PUBLISHED AND WAS NOT IN HERE ─────────────
+    // The guide's plan gate asks `isPublished(name)`, which is this function,
+    // and this list was written before bar streets existed. So a street live on
+    // the site since 15 Aug read as unpublished to the one check that decides
+    // whether a guide may name a stop: Gemlyx would not put Jomfru Ane Gade in
+    // an Aalborg night out, on the grounds that it does not have an entry for
+    // it, while the entry sat there.
+    //
+    // Its own _src, not "nightlife". A street is not a bar, stopKind labels it
+    // separately, and the click routing in App.jsx opens the two differently.
+    ...nightlifeStreets.map(p => ({ ...p, _src: "nightlifeStreet" })),
     ...[...events, ...majorEvents, ...vikingEvents].map(p => ({ ...p, _src: "event" })),
     ...towns.map(p => ({ ...p, _src: "town" })),
   ].filter(p => p?.name);

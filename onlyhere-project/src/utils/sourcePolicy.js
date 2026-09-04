@@ -316,7 +316,21 @@ export const nameCore = (name) => {
 // `alsoKnownAs` is for exactly that: other spellings something upstream RESOLVED,
 // not spellings guessed here. Passing Google's own answer is no more trusting
 // than the app already is, since it takes the coordinate from the same lookup.
-export const sourceIsAboutPlace = (snippet, { name, town, url = "", ownHost = "", alsoKnownAs = [] } = {}) => {
+// ── AND A DISTINCTIVE STREET NAME IDENTIFIES NO STREET ──────────────
+//
+// The rule below lets a distinctive name skip corroboration, on the grounds
+// that a name which identifies itself needs no second signal. A Danish street
+// name breaks that grounding without looking like it does. "Vestergade" is one
+// compound word, so nameIsDistinctive says yes, and there is a Vestergade in
+// Aarhus, Odense, Middelfart and a dozen towns besides. A page about any of
+// them was accepted as a source about this one, with no town check at all.
+//
+// `theNameIsAStreet` forces the corroboration step instead of skipping it. The
+// page has to say the town, or the host has to carry a distinctive word from the
+// name, which is exactly what the file already demands of an ordinary name and
+// of a half of a two-part one: "a page matched only on a half still has to be
+// corroborated by the town or by the host".
+export const sourceIsAboutPlace = (snippet, { name, town, url = "", ownHost = "", alsoKnownAs = [], theNameIsAStreet = false } = {}) => {
   const said = String(snippet || "");
   if (!said.trim()) return false;             // never saw the page, so it is not a source
   const host = normaliseDomain(url);
@@ -363,7 +377,7 @@ export const sourceIsAboutPlace = (snippet, { name, town, url = "", ownHost = ""
   // Distinctive on the spelling the page used. A name that identifies itself
   // needs no second signal; a typo of an ordinary word identifies nothing and
   // never gets to claim it does.
-  if (matched.some(v => nameIsDistinctive(v) && !fromAHalf.has(fold(v)))) return true;
+  if (!theNameIsAStreet && matched.some(v => nameIsDistinctive(v) && !fromAHalf.has(fold(v)))) return true;
   // An ordinary name has to be corroborated. The town is the strongest signal
   // and the one always available; the host containing a distinctive word from
   // the name is the second.
@@ -701,14 +715,31 @@ export const QUERY_WORDS = {
   // Danish first, because the authority on a Danish ticket system is a Danish
   // page. "gældende" and "priser" are what a rules or price page calls itself.
   essential: "priser regler gældende 2026 turist besøgende practical information visitors price rules",
-  town: "praktisk information seværdigheder åbningstider what to see opening hours",
+  // ── EVERY WORD HERE HAS TO BE A QUESTION, NOT A CONNECTIVE ──────
+  // sourceFit asks "does anything we read answer the questions this type is
+  // about" by looking for these words in the page text. This line used to end
+  // "what to see opening hours", and "what" and "see" appear on essentially
+  // every page on the internet, so any page at all counted as on-subject and
+  // the check could never fire for a town. See stopwords in sourceFit.
+  town: "praktisk information seværdigheder åbningstider attraktioner opening hours attractions",
   festival: "billetter datoer program tickets dates programme",
   free: "åbningstider gratis adgang opening hours free entry",
   food: "menukort priser åbningstider menu prices opening hours",
   foodStreet: "boder madmarked åbningstider stalls market opening hours",
   night: "åbningstider entré opening hours entry",
-  nightStreet: "natteliv barer nightlife bars",
-  nightTown: "natteliv barer nightlife bars",
+  // A street's questions are which nights, which end, and closing time. A
+  // town's are which areas and which crowd. These two lines were identical, so
+  // a page answering neither counted as answering both.
+  // Every word here has to be a word a page about a BAR STREET would use and a
+  // page about something else would not. The first version of this line ended
+  // "bars closing time which night", and "time", "which" and "night" are
+  // ordinary English that appears on any page at all, so one encyclopedia
+  // snippet about when the street was laid out counted as answering the
+  // question and subjectUnsourced could never fire. That is the exact leak the
+  // town line had, reintroduced the same day it was fixed. "udeligger" was not
+  // a Danish word either.
+  nightStreet: "barer natteliv lukketid udeliv bargade nightlife bars closing",
+  nightTown: "natteliv bydele studerende nightlife areas crowd scene",
   booking: "værksted booking priser workshop booking prices",
 };
 
@@ -1036,7 +1067,11 @@ export const DISCOVER_WORDS = {
   food: "restauranter spisesteder anbefalinger restaurants where to eat",
   foodStreet: "madmarked street food boder market halls",
   night: "natteliv barer klubber nightlife bars",
-  nightStreet: "natteliv udeliv nightlife towns",
+  // ── A STREET AND A TOWN WERE LOOKING FOR THE SAME THING ─────────
+  // These two lines were identical, so discovery for BAR STREETS searched for
+  // nightlife TOWNS and came back with towns, which the pool then discarded as
+  // already published. The type could not discover anything it was for.
+  nightStreet: "bargade barer i samme gade udeliv gågade med barer bar street nightlife strip",
   nightTown: "natteliv udeliv nightlife towns",
   booking: "værksteder kurser oplevelser workshops courses experiences",
   essential: "praktisk information turist gældende priser practical visitor information",

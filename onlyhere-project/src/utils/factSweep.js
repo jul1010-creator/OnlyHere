@@ -68,7 +68,7 @@ export const sweepRow = (row) => {
       findings.push({ severity: c.severity, field: "coordinates", detail: c.detail, from: "coordinates" }));
   } catch { /* same */ }
   try {
-    bodyProblems(row?.payload).forEach(b =>
+    bodyProblems(row?.payload, row?.type).forEach(b =>
       findings.push({ severity: b.kind === "legacy-heading" ? "low" : "medium", field: "structure", detail: b.detail, from: "structure" }));
   } catch { /* same */ }
   findings.sort((a, b) => rank(a.severity) - rank(b.severity));

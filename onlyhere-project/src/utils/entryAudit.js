@@ -1070,6 +1070,28 @@ export const ticketPriceOn = (text) => {
     // cheapest way through the gate. The full set travels alongside either way.
     const open = found.filter(p => !p.concession && !p.inside);
     if (open.length) {
+      // ── AND ZERO IS NOT WHAT GENERAL ADMISSION COSTS ────────────
+      //
+      // Oliver's Tivoli run, 3 Sep 2026. The same ticket agent was read twice
+      // and answered "435 DKK" and then "0 DKK", and the 0 was kept. It then
+      // became the pipeline's own figure and contradicted the draft's correct
+      // 150-275: "billetlugen.dk states 0 DKK and this draft states 150 to 275
+      // DKK", and the rewrite was asked to remove the real price.
+      //
+      // A ticket page that lists a 0 among paid tiers is pricing somebody's
+      // free entry — under-3s, members, a carer — which is a concession by
+      // definition, whatever words happen to sit near it. Taking it as the
+      // lowest open price is the IDA-members bug the line below was written
+      // against, one step further: not the cheapest rate a stranger can buy,
+      // but a rate nobody buys at all.
+      //
+      // Only when EVERY open figure is zero does the page mean the door is
+      // free, and that is left to the branches below, which say so in words.
+      const payable = open.filter(p => Number(p.lo) > 0);
+      if (payable.length) {
+        const lo = payable.reduce((a, b) => (b.lo < a.lo ? b : a));
+        return { kind: "price", lo: lo.lo, hi: lo.hi, currency: lo.currency, when: lo.when || "", all: found, free: false };
+      }
       const lo = open.reduce((a, b) => (b.lo < a.lo ? b : a));
       return { kind: "price", lo: lo.lo, hi: lo.hi, currency: lo.currency, when: lo.when || "", all: found, free: false };
     }
@@ -1479,6 +1501,45 @@ export const LIVING_TYPES = ["night", "nightStreet", "nightTown", "food", "foodS
 // is fed. WITHOUT IT THERE IS NO FINDING: not knowing what the pages said is not
 // evidence they said nothing, and calling a draft unsourced on the strength of a
 // missing map is the overreach this file has spent the day removing.
+// Words that are in nobody's question. Deliberately small and deliberately not
+// a general stopword list: the point is to stop a connective vouching for a
+// page, not to second-guess a real question word in either language.
+// NOT called FILLER_WORDS. helpers.js already exports a set by that name and it
+// is a different question: that one is the AI-writing tells a draft must not
+// USE ("actually", "really", "quite"), this one is the everyday words that
+// cannot vouch for a page. Two same-named exports over one namespace is the
+// collision this repository has already written about once, in the note above
+// PROSE_FIELDS, and the bundler caught this one on its first run.
+export const EVERYDAY_WORDS = new Set([
+  "what", "see", "the", "and", "for", "with", "from", "how", "who", "why",
+  "hvad", "der", "som", "med", "til", "har", "kan", "ved", "den", "det",
+  // Added after a vocabulary written the same day as this filter ended "bars
+  // closing time which night". These are not connectives in the grammatical
+  // sense; they are ordinary words that appear on any page at all, which is the
+  // only property that matters here. A question word has to be a word a page
+  // about THIS kind of thing would use and a page about something else would
+  // not, and "time" and "night" and "day" fail that on every page ever written.
+  "time", "which", "night", "day", "days", "week", "year", "place", "one",
+  "tid", "dag", "dage", "uge", "sted",
+]);
+
+// The words this check really looks for, exported so the note that explains a
+// failure names the same list the failure was decided on. They were two
+// separate readings of QUERY_WORDS and the note printed words the matcher had
+// already dropped, which is a small lie in the one message whose whole job is
+// to say what was looked for.
+// Split out from the type lookup so the filter can be probed with real inputs
+// rather than only through whatever the vocabulary happens to say today. Both
+// halves defended each other and neither could be tested alone: with a clean
+// vocabulary, deleting the filter changed nothing, and with the filter in place,
+// putting "what to see" back changed nothing either. Two mutants survived
+// because each fix was hidden behind the other.
+export const questionWords = (raw) => [...new Set(
+  String(raw || "").split(/\s+/).map(fold)
+    .filter(w => w.length >= 3 && !EVERYDAY_WORDS.has(w))
+)];
+export const questionWordsFor = (type) => questionWords(QUERY_WORDS[String(type)]);
+
 export const sourceFit = (urls, { type = "", saidByUrl = null } = {}) => {
   const list = (Array.isArray(urls) ? urls : []).map(u => String(u || "")).filter(Boolean);
   const hostOf = (u) => { try { return new URL(u).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; } };
@@ -1490,7 +1551,14 @@ export const sourceFit = (urls, { type = "", saidByUrl = null } = {}) => {
     (saidByUrl && typeof saidByUrl.get === "function" ? saidByUrl.get(u) : saidByUrl?.[u]) ?? ""
   );
   const heard = list.filter(u => said(u).trim());
-  const words = [...new Set(String(QUERY_WORDS[String(type)] || "").split(/\s+/).map(fold).filter(w => w.length >= 3))];
+  // ── A CONNECTIVE CANNOT VOUCH FOR A PAGE ────────────────────────
+  // The vocabulary is the type's question words, and the town line used to
+  // carry "what to see", so "what" and "see" were in it. Both appear on
+  // essentially every page written in English, so every page read counted as
+  // on-subject and subjectUnsourced could not fire for the type with the most
+  // pages. Filtered here as well as fixed there, because the vocabulary is
+  // edited by hand and this is the check that depends on it.
+  const words = questionWordsFor(type);
   const spaced = (v) => ` ${fold(v).replace(/[^a-z0-9]+/g, " ").trim()} `;
   const onSubject = heard.filter(u => {
     const hay = spaced(said(u));
@@ -1587,7 +1655,7 @@ export const describeNameFit = (fit) => {
 export const describeSourceFit = (fit, { type = "" } = {}) => {
   const f = fit || {};
   if (!f.subjectUnsourced) return "";
-  const looked = String(QUERY_WORDS[String(type)] || "").trim();
+  const looked = questionWordsFor(type).join(" ");
   const refNote = f.reference > 0
     ? ` ${f.reference} of the ${f.total} hosts are encyclopedias, which is why the list reads as thorough research: a lexicon is a real source about when a street was laid out and no source at all about who drinks there on a Tuesday.`
     : "";
@@ -1922,13 +1990,35 @@ const straightenQuotes = (s) => String(s || "").replace(/[\u201C\u201D\u201E\u20
 // flattened below rather than added here: norm() of an object is
 // "[object Object]", which would have looked like coverage and been none.
 //
-// ── AND THIS IS THE SECOND PROSE_FIELDS IN THE REPOSITORY ───────────
-// correction.js exports one too, same name, different contents: four fields
-// overlap and fifteen do not. They are not the same question, one being "where
-// is the prose" and the other "what may a claim that resolved to nothing
-// touch", and neither file imports the other today. Two same-named exports over
-// one namespace is a collision waiting for its first wrong import.
-export const PROSE_FIELDS = ["atmosphere", "whoItsFor", "realityCheck", "desc", "special", "whoFor", "afterDark", "beforeDark", "bestTime", "howItsMade", "vibeLocation", "characterAndFit", "whatToDo", "gettingThereReality", "highlight", "gemlyxFind"];
+// ── AND THIS WAS THE SECOND PROSE_FIELDS IN THE REPOSITORY ──────────
+// correction.js exported one too, same name, different contents: four fields
+// overlapped and fifteen did not. The note here used to end "a collision
+// waiting for its first wrong import", and the collision arrived from the other
+// direction, which is the one this file did not watch: not a wrong import, but
+// BOTH LISTS FALLING BEHIND THE SAME NEW TYPE, separately.
+//
+// Bar streets shipped 15 Aug with `bestNights` and `walkIt`, and food streets
+// and essentials have `howTo`, and `whenEnter` is a club's own paragraph. Four
+// fields, invisible to this audit and to the editor, in two hand-written lists
+// that had to be updated twice and were updated neither time. That is the scar
+// this codebase names against itself in regions.js: "Four lists, one omission,
+// which is not four mistakes. It is one hand-written list copied four times."
+//
+// So there is now one list, here, and correction.js imports it. It is still
+// hand-written, because a module-level call into studioContent would be a cycle
+// (studioContent imports PRICE_UNKNOWN from this file). It is no longer
+// UNCHECKED: the suite calls shapeForLive for every content type, reads which
+// fields really land in a paragraph, and fails by name when this list is short.
+export const PROSE_FIELDS = ["atmosphere", "whoItsFor", "realityCheck", "desc", "special", "whoFor", "afterDark", "beforeDark", "bestTime", "bestNights", "walkIt", "whenEnter", "howTo", "howItsMade", "vibeLocation", "characterAndFit", "whatToDo", "gettingThereReality", "highlight", "gemlyxFind",
+  // ── AND THE PROSE THAT IS NOT IN A BODY ──────────────────────────
+  // The derivation the suite runs reads paragraphs out of blogBody, so it can
+  // only find fields that go into one. These three are reader-facing prose on
+  // a CARD and reach no body at all, so nothing was ever going to point at
+  // them: `tip` is the one italic line an essentials card prints, `crowd` is
+  // the sentence under a bar's name, and `visitorNote` is the sentence the
+  // essential prompt marks REQUIRED when a system is resident-gated. None was
+  // scanned for banned words, em dashes, filler runs or a generic sentence.
+  "tip", "crowd", "visitorNote"];
 
 // Reader-facing prose that is not a plain string. Flattened rather than listed
 // above, because the shape is the reason it was missed.
@@ -1959,6 +2049,68 @@ export const PROSE_LISTS = ["blogBody", "thingsToKnow"];
 // Both shapes are accepted, because rows written before and after any format
 // change both have to work, and an image or instagram block correctly yields
 // nothing rather than "undefined".
+// ── AND THE SHAPE IS NAMED ONCE, 3 SEP 2026 ─────────────────────────
+//
+// The comment above records this mistake being made and fixed here. It was then
+// made again, in researchVoice.js, which walks blogBody to STRIP research voice
+// and repeated filler out of it and read `b.text` — a key shapeForLive has never
+// written. So the strip that says in its own comment "blogBody is the long-form
+// half of an entry, and cleaning only the short fields would leave the same
+// sentence live one scroll further down" cleaned only the short fields, and its
+// audit reported nothing on every row. Fable found it; the fixture I wrote for
+// it was keyed `text`, so my assertion passed against a payload that does not
+// exist. A probe built from invented inputs is not a probe.
+//
+// Reading is not enough for that caller: it has to put the text BACK. So the
+// shape is a pair — the key, and a setter — and both live here, beside the
+// flattener, because a fourth reader of this shape is how this happens a third
+// time.
+// ── AND THE BODY EDITOR HAD IT WRONG TOO, WHICH IS WORSE ────────────
+//
+// bodyEdit.js carried its own pair — `String(b.text ?? "")` — and that pair is
+// what the Studio's "📝 Blog text" panel reads and writes. Probed against the
+// real payload quoted above:
+//
+//   the heading and the paragraph both show as EMPTY in the editor
+//   saving an edit writes {type, content: <the old text>, text: <the new one>}
+//
+// So a founder editing a published paragraph sees a blank box, types into it,
+// saves, and the page keeps rendering `content` — the edit is gone and the row
+// has quietly grown a phantom field. Bullets worked, because they live in
+// `items`, which is why one block type in three working hid the other two.
+//
+// THREE COPIES OF ONE SHAPE, one of them right. This pair is now the only one:
+// bodyEdit and researchVoice both read it, and it keeps bodyEdit's bullets
+// handling, which was the half its version got right.
+//
+// `content` is written first for a block that has no text yet, because that is
+// what shapeForLive produces and DetailPage renders; an older row keyed `text`
+// is written back into `text` rather than gaining a second field.
+export const BLOCK_TEXT_KEYS = ["content", "text", "paragraph"];
+const isBullets = (b) => !!b && typeof b === "object" && (b.type === "bullets" || Array.isArray(b.items));
+
+export const blockText = (block) => {
+  if (typeof block === "string") return block;
+  if (!block || typeof block !== "object") return "";
+  // Bullets hold an array; joined so one reader serves every block type.
+  if (isBullets(block)) return (Array.isArray(block.items) ? block.items : []).map(x => String(x ?? "")).join("\n");
+  for (const k of BLOCK_TEXT_KEYS) if (typeof block[k] === "string" && block[k]) return block[k];
+  return "";
+};
+
+export const withBlockText = (block, next) => {
+  if (typeof block === "string") return String(next ?? "");
+  if (!block || typeof block !== "object") return block;
+  const t = String(next ?? "");
+  if (isBullets(block)) {
+    // Blank lines dropped: an empty bullet renders as a dot with nothing beside
+    // it, and bodyProblems already counts that as a fault.
+    return { ...block, items: t.split("\n").map(x => x.trim()).filter(Boolean) };
+  }
+  for (const k of BLOCK_TEXT_KEYS) if (typeof block[k] === "string" && block[k]) return { ...block, [k]: t };
+  return { ...block, content: t };
+};
+
 const listProse = (payload) => PROSE_LISTS.flatMap(k => {
   const v = payload?.[k];
   if (!Array.isArray(v)) return [];

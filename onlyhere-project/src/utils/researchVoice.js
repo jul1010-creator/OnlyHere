@@ -27,7 +27,7 @@
 // so exactly the same place. The stored row is untouched and the audit still
 // reports it, so the row gets properly rewritten rather than quietly patched
 // forever.
-import { PROSE_FIELDS } from "./entryAudit";
+import { PROSE_FIELDS, blockText, withBlockText } from "./entryAudit";
 // The budget and the word list live beside fillerWordCounts, which is where
 // the rule was written down in August. A second copy here would drift from it.
 import { trimFillerRuns } from "./helpers";
@@ -110,11 +110,16 @@ export const cleanReaderProse = (payload) => {
   // sentence live one scroll further down.
   if (Array.isArray(out.blogBody)) {
     const body = out.blogBody.map(b => {
-      if (!b || typeof b !== "object" || typeof b.text !== "string") return b;
-      const next = stripResearchVoice(b.text);
-      if (next === b.text) return b;
+      // blockText, not b.text. shapeForLive writes { type, content } and
+      // DetailPage renders block.content; `text` is a key nothing has ever
+      // written, so this walked every block and changed none. See
+      // entryAudit.blockText for the whole story, which is its second telling.
+      const was = blockText(b);
+      if (!was) return b;
+      const next = stripResearchVoice(was);
+      if (next === was) return b;
       touched = true;
-      return { ...b, text: next };
+      return withBlockText(b, next);
     });
     if (touched) out.blogBody = body;
   }
@@ -138,16 +143,16 @@ export const cleanReaderProse = (payload) => {
   // the page and is exactly the complaint.
   const fields = PROSE_FIELDS.filter(k => typeof out[k] === "string" && out[k].trim());
   const bodyIdx = Array.isArray(out.blogBody)
-    ? out.blogBody.map((b, i) => (b && typeof b === "object" && typeof b.text === "string" ? i : -1)).filter(i => i >= 0)
+    ? out.blogBody.map((b, i) => (blockText(b) ? i : -1)).filter(i => i >= 0)
     : [];
-  const trimmed = trimFillerRuns([...fields.map(k => out[k]), ...bodyIdx.map(i => out.blogBody[i].text)]);
+  const trimmed = trimFillerRuns([...fields.map(k => out[k]), ...bodyIdx.map(i => blockText(out.blogBody[i]))]);
   let cut = false;
   fields.forEach((k, i) => { if (trimmed[i] !== out[k]) { out[k] = trimmed[i]; cut = true; } });
   if (bodyIdx.length) {
     const body = [...out.blogBody];
     bodyIdx.forEach((bi, i) => {
       const next = trimmed[fields.length + i];
-      if (next !== body[bi].text) { body[bi] = { ...body[bi], text: next }; cut = true; }
+      if (next !== blockText(body[bi])) { body[bi] = withBlockText(body[bi], next); cut = true; }
     });
     if (cut) out.blogBody = body;
   }
@@ -162,7 +167,7 @@ export const researchVoiceIn = (payload) => {
     researchVoiceSentences(payload?.[key]).forEach(s => found.push({ field: key, says: s }));
   }
   (Array.isArray(payload?.blogBody) ? payload.blogBody : []).forEach(b => {
-    researchVoiceSentences(b?.text).forEach(s => found.push({ field: b?.heading || "blogBody", says: s }));
+    researchVoiceSentences(blockText(b)).forEach(s => found.push({ field: b?.heading || "blogBody", says: s }));
   });
   return found;
 };

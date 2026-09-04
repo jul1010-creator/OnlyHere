@@ -86,7 +86,21 @@ export const resolveField = (entry, hint) => {
 // never names those precisely. A claim that resolves to nothing is allowed to
 // touch the prose fields only, never a glance field, because a glance field
 // holding a guessed value is the failure mode this project keeps hitting.
-export const PROSE_FIELDS = ["atmosphere", "whoItsFor", "realityCheck", "gemlyxFind", "desc", "blogBody", "intro", "body"];
+//
+// ── AND IT IS NO LONGER A SECOND HAND-WRITTEN COPY ──────────────────
+// This named eight fields while entryAudit.js named sixteen, and the two lists
+// answered the same question for the same entries. A bar street's whole body is
+// whoFor, bestNights and walkIt, and NONE of the three was here, so a confirmed
+// correction to something said in "Walking It" could rewrite the description
+// and the reality check and never the sentence that was wrong.
+//
+// The narrative fields now come from entryAudit's list, which is the one the
+// suite checks against what shapeForLive really writes. The three added here
+// are the STRUCTURAL keys that are not narrative fields at all: blogBody is the
+// published body, and intro/body are the older shapes some rows still carry.
+// They are listed here because they belong to this question and not to that one.
+import { PROSE_FIELDS as NARRATIVE_FIELDS } from "./entryAudit";
+export const PROSE_FIELDS = [...NARRATIVE_FIELDS, "blogBody", "intro", "body"];
 
 // A claim reaches the patch step under one of two verdicts. "confirmed" means a
 // primary source backed it. "asserted" means nothing settled it either way and
@@ -939,11 +953,34 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
 // An edit is for PROSE. Anything a resolver comes back with that is not a
 // writing field is treated as if it resolved to nothing, which falls through to
 // the prose fields the entry actually has.
+//
+// ── AND A BAR STREET'S BODY WAS NOT ON IT ───────────────────────────
+// bestNights and walkIt shipped with the street types on 15 Aug and this set
+// was not touched, so two of a bar street's four sections could not be named in
+// an edit. "tighten Walking It" resolved to walkIt, failed this gate, and fell
+// through to whatever other prose the entry had, which meant the instruction
+// silently rewrote a different paragraph than the one he pointed at.
+//
+// howTo IS DELIBERATELY ABSENT and that is not the same omission. It is real
+// prose, an essential's whole "How It Works" section, and it is reachable
+// through the fallthrough because PROSE_FIELDS above now carries it. It is kept
+// out of THIS set because this set is what an instruction may name, and
+// resolveField strips spaces before matching: "make the how to shorter" would
+// resolve to howTo. That is the exact hazard the note at the top of this block
+// is about, and the honest answer is that "how to" is too common an English
+// fragment to be a field name a person can point at.
 export const EDITABLE_FIELDS = new Set([
   "desc", "intro", "body",
   "special", "whoFor", "whoItsFor", "whoItsForText", "realityCheck",
   "atmosphere", "whatToDo", "gettingThereReality", "characterAndFit",
   "howItsMade", "vibeLocation", "afterDark", "beforeDark", "bestTime",
+  "bestNights", "walkIt",
+  // Reader-facing prose on a card rather than in a body: an essentials tip, a
+  // bar's crowd line, and the visitor note the essential prompt marks REQUIRED
+  // when a system is resident-gated. All three could be read and none could be
+  // named in an edit, so "tighten the tip" resolved to `tip`, failed this gate
+  // and silently rewrote some other paragraph.
+  "tip", "crowd", "visitorNote",
   "whenEnter", "highlight", "gemlyxFind", "thingsToKnow", "accommodationTip",
 ]);
 

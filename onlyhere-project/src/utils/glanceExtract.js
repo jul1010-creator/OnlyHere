@@ -230,6 +230,13 @@ export const numbersTraceable = (value, research) => {
 // at the door. So the witness needs a door word beside it, in either language.
 const FREE_AT_THE_DOOR = /(?:gratis|fri)\s*(?:adgang|entr[ée]|indgang)|free\s+(?:entry|entrance|admission|to\s+(?:enter|visit))|(?:no|ingen)\s+(?:entry|admission|cover|entr[ée])(?:\s*(?:fee|charge|price|betaling))?|no\s+ticket\s+required/i;
 
+// A figure with a currency on it, which is the thing that must not vanish.
+const AN_AMOUNT = /\d[\d.,]*\s*(?:dkk|kr\.?|kroner|€|eur|usd|\$)|(?:dkk|kroner|€|eur|usd|\$)\s*\d/i;
+export const statesAnAmount = (v) => AN_AMOUNT.test(String(v || ""));
+// Says the door is free AND names no amount at all. "Food Hall free — Gardens
+// admission 150-275 DKK" says free and is not this: it still carries the price.
+export const saysFreeOnly = (v) => FREE_AT_THE_DOOR.test(String(v || "")) && !statesAnAmount(v);
+
 export const freeClaimTraceable = (value, research) => {
   const v = String(value || "");
   // Only a claim that this place is free to get into. A field saying nothing
@@ -284,6 +291,35 @@ export const mergeGlance = (draft, values, fields, research = "") => {
         rejected.push({ field: f, value: next, missing: ["free"] });
         continue;
       }
+    }
+    // ── AND AN EXTRACTION MUST NOT DELETE A STATED AMOUNT ──────────
+    //
+    // Oliver's Tivoli run, 3 Sep 2026, from the decisions list:
+    //
+    //   ticketsGlance: believed the research (extracted), overruled the writer
+    //   ("Food Hall free — Gardens admission 150-275 DKK")
+    //   value: Free entry from the street
+    //
+    // Both sentences are true and they are about different doors. The writer's
+    // carried BOTH — the free part and the admission — and the extraction
+    // carried one, so the row's Tickets line for Tivoli lost the price of
+    // getting into Tivoli. The rule quoted beside it, "a value stated on a page
+    // beats one composed by a writer", is right about a figure and wrong here:
+    // the writer's value was not composed, it was more complete.
+    //
+    // ── AND THE DIRECTION IS NOT SYMMETRIC ────────────────────────
+    //
+    // This refuses only one swap: a free claim replacing a stated amount. The
+    // reverse is left alone. Being wrongly told a paid place is free costs a
+    // reader at the gate, in a queue, with a family; being wrongly told a free
+    // place charges costs them a pleasant surprise. This codebase already
+    // treats free claims as the ones needing corroboration, and a competing
+    // amount somebody wrote from the same research is corroboration against.
+    if (research && saysFreeOnly(next) && statesAnAmount(prev)) {
+      rejected.push({ field: f, value: next, keptAmount: prev });
+      continue;
+    }
+    {
     }
     out[f] = next;
     changed.push({ field: f, was: prev, now: next });

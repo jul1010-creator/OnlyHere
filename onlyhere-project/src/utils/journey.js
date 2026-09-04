@@ -292,8 +292,29 @@ export const journeyDurations = (text) => {
 // sentence actually says "the train". A gate that silently stops checking half
 // the prose in a Danish travel product is the fold() bug in api/commons-photo.js
 // wearing a timetable. Found by writing the Danish test, not by reading it.
-const RIDE_WORDS = /\b(train|rail|lyntog|intercity|bus(?:sen|ser)?|coach|ferry|metro(?:en)?|tram|tog(?:et|ene)?|f[æa]?erge[nr]?|færge[nr]?|faerge[nr]?)\b/i;
-const DOOR_WORDS = /\b(door to door|door-to-door|all in|in total|altogether|including the walk)\b/i;
+// ── AND IT COULD NOT MATCH ITS OWN FOUNDING SENTENCE ────────────────
+//
+// Found by mutation, 3 Sep 2026, while pinning something else. The bug this
+// entire gate was written for is, in the header of this file:
+//
+//   "Direct TRAINS run from København H to Odense in about 1h50min"
+//
+// and `\btrain\b` does not match "trains". Nor does `bus` match "buses", `ferry`
+// match "ferries", or `tram` match "trams". Somebody covered the DANISH
+// inflections carefully — tog/toget/togene, bus/bussen/busser, færge/færgen —
+// and left the English plural out, in the language the entries are written in.
+//
+// So the sentence that made this rule exist walks past it, and every draft that
+// says "trains", "buses" or "ferries" — which is how English prose talks about
+// a service rather than a single vehicle — has never been checked at all.
+//
+// railway is deliberately still absent: STOP_WORDS owns it, and "the railway
+// station is five minutes away" is a walk, not a ride.
+const RIDE_WORDS = /\b(trains?|rails?|lyntog|intercity|bus(?:es|ses|sen|ser)?|coach(?:es)?|ferr(?:y|ies)|metros?|metroen|trams?|tog(?:et|ene)?|f[æa]?erge[nr]?|færge[nr]?|faerge[nr]?)\b/i;
+// The old spelling stays: 71 published rows carry prose written under it, and a
+// gate that stops recognising the label it taught the writer to use would start
+// reporting correct sentences as unlabelled totals.
+const DOOR_WORDS = /\b(door to door|door-to-door|centre to centre|center to center|all in|in total|altogether|including the walk)\b/i;
 const DIRECT_WORDS = /\b(direct|non-?stop|straight through|without (?:a |any )?chang(?:e|es|ing)|no chang(?:e|es))\b/i;
 const CHANGE_COUNT = /\b(?:(one|two|three|four|\d{1,2}))\s+chang(?:e|es)\b/i;
 const WORD_NUM = { one: 1, two: 2, three: 3, four: 4 };
@@ -1011,7 +1032,28 @@ export const journeyReach = (parts) => {
   const total = Number(parts.total);
   if (!Number.isFinite(total) || total <= 0) return "";
   const from = String(parts.from || "").trim() || "Copenhagen";
-  return `${hm(total)} from ${from}, door to door`;
+  // ── AND IT WAS NEVER A DOOR ─────────────────────────────────────
+  //
+  // Oliver, 3 Sep 2026: "Gemini keeps pointing out door-to-door."
+  //
+  // The QUALIFIER is load-bearing and stays. This file exists because a draft
+  // wrote "Direct trains run from København H to Odense in about 1h50min" when
+  // the Lyntog is 1h22: the 1h50 was the whole trip, and a total attached to a
+  // vehicle is false. Saying which measure the figure is is the same rule the
+  // house already applies to superlatives.
+  //
+  // The WORD was wrong, and this file says so thirty lines from here: "the walk
+  // at the ends is measured from a geocoded CENTROID, which for a city of any
+  // size is an arbitrary point somebody's geocoder picked." Nobody's door is in
+  // it. So the phrase invented to stop a figure overclaiming was overclaiming —
+  // precision it does not have, in a product whose own voice rule asks whether
+  // a sixteen-year-old would understand every word.
+  //
+  // "Centre to centre" is what was actually measured, is plainer English, and
+  // keeps the job the old phrase did: it is visibly not a train time. It is on
+  // DOOR_WORDS as well, so the gate that tells a labelled total from an
+  // unlabelled one still recognises the sentence.
+  return `${hm(total)} from ${from}, centre to centre`;
 };
 
 // ── NAMED ONLY WHEN EVERY CHANGE HAS A NAME ─────────────────────────

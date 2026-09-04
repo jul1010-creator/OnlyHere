@@ -284,13 +284,34 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   // page reuses), out of scope for this pass. lookupRealPlace's caller below
   // filters craft matches out of "clickable" for the same reason, so a craft
   // stop's card never shows a pointer cursor for a click that would do nothing.
+  // ── WHAT THIS DISPATCHER CAN OPEN, IN ONE PLACE ─────────────────
+  //
+  // The filter below used to read `_src !== "craft"`, which is a list of what
+  // this cannot open written as its opposite, kept in a second place, and it
+  // went wrong the first time a new _src appeared: bar streets were added to
+  // lookupRealPlace's pools on 3 Sep 2026 with _src "nightlifeStreet", passed
+  // `!== "craft"`, and rendered as cards with a pointer cursor and a Read more
+  // that did nothing. Exactly the dead click the comment above promised could
+  // not happen.
+  //
+  // So the two are one list now. A stop is clickable if and only if there is a
+  // setter here for it, and adding a kind to the pools without adding it here
+  // makes the card quietly non-clickable rather than falsely clickable.
+  //
+  // A bar street opens as a nightlife page: the same DetailPage the URL route
+  // already opens it with (App.jsx merges streets into the nightlife pool).
+  const STOP_OPENS_AS = {
+    free: setFreeDetail,
+    food: setFoodDetail,
+    nightlife: setNightlifeDetail,
+    nightlifeStreet: setNightlifeDetail,
+    town: setTownDetail,
+    event: setEventDetail,
+  };
+  const canOpenStop = (real) => !!real && !!STOP_OPENS_AS[real._src];
   const openStopDetail = (real) => {
-    if (!real) return;
-    if (real._src === "free") setFreeDetail(real);
-    else if (real._src === "food") setFoodDetail(real);
-    else if (real._src === "nightlife") setNightlifeDetail(real);
-    else if (real._src === "town") setTownDetail(real);
-    else if (real._src === "event") setEventDetail(real);
+    if (!canOpenStop(real)) return;
+    STOP_OPENS_AS[real._src](real);
   };
   const [liveInfo, setLiveInfo] = useState({});
   const [liveInfoLoading, setLiveInfoLoading] = useState(null);
@@ -1691,7 +1712,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                   than as four equal things in a queue. */}
               {(day.stops || []).map((stop, stopIdx) => {
                 const matched = lookupRealPlace(stop.name);
-                const real = matched && matched._src !== "craft" ? matched : null;
+                const real = canOpenStop(matched) ? matched : null;
                 const nextStop = day.stops[stopIdx + 1];
                 const noteKey = `${dayIdx}-${stopIdx}`;
                 const noteOpen = !!openNotes[noteKey];
