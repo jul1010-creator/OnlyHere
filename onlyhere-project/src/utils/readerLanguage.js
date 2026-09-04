@@ -34,6 +34,8 @@
 // Chinese", which is what a model needs, and it ships in every browser this app
 // supports. The small table is the fallback for an environment without it and
 // for the handful of tags where the display name is worse than the plain one.
+import { storedUiLanguage } from "./uiLanguage";
+
 const FALLBACK = {
   de: "German", nl: "Dutch", sv: "Swedish", no: "Norwegian", nb: "Norwegian",
   da: "Danish", fr: "French", es: "Spanish", it: "Italian", pl: "Polish",
@@ -86,8 +88,24 @@ export const languageName = (tag) => {
 // added to every prompt telling it to answer in English, because that is a
 // token cost and an instruction that can only ever be obeyed or misread.
 export const readerLanguage = (nav) => {
+  // ── AND A LANGUAGE THEY PICKED OUTRANKS THE ONE THEIR PHONE GUESSED ─
+  //
+  // 4 Sep 2026, with the flag picker. Every production caller of this function
+  // and of languageBlock passes NOTHING and lets it read navigator, so without
+  // this line somebody who presses the Danish flag gets a Danish interface
+  // wrapped around an English guide. Oliver on exactly that shape, 26 Aug:
+  // the MIXED case is worse than either language alone.
+  //
+  // Only when no `nav` is handed in. A caller that passes one is asking about
+  // THAT device (aiDisclosureFor does, and so does every assertion in the suite
+  // that hands over a fake navigator), and those answers are unchanged.
+  //
+  // A stored "en" is a CHOICE and falls through to the early return below,
+  // which is the correct answer: null means change nothing, and somebody who
+  // picked English on a Danish phone has asked for exactly that.
+  const picked = nav ? "" : storedUiLanguage();
   const source = nav || (typeof navigator !== "undefined" ? navigator : null);
-  const tag = String(source?.language || "").trim();
+  const tag = picked || String(source?.language || "").trim();
   if (!tag) return null;
   if (tag.split("-")[0].toLowerCase() === "en") return null;
   const name = languageName(tag);

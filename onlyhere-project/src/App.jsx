@@ -143,6 +143,8 @@ import { readExclusions, withoutExcluded, excludedNote } from "./utils/exclusion
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
 import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries } from "./utils/ticketLink";
+import { currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLanguage";
+import { LanguagePicker } from "./components/LanguagePicker";
 import { placesNamedIn } from "./utils/chatPlaces";
 import { railPlaces, railCss, RAIL_CLASS, INLINE_CARDS_CLASS } from "./utils/chatRail";
 import { briefProgress, progressLine, briefPercent, percentLine } from "./utils/briefPanel";
@@ -13126,6 +13128,25 @@ If the conversation only covers a single day or a few stops with no explicit day
   // Redesign pass: the intake form was one long wall of fields. Dates + starting
   // point stay visible; everything else lives behind this "fine-tune" toggle.
   const [intakeMoreOpen, setIntakeMoreOpen] = useState(false);
+
+  // ── THE INTERFACE LANGUAGE ────────────────────────────────────────
+  //
+  // Read once from the stored choice, falling back to the browser tag only when
+  // nothing is stored. See resolveUiLanguage: a choice always wins, including a
+  // choice of English, because otherwise a Danish phone silently undoes it on
+  // the next load.
+  //
+  // documentElement.lang is set alongside, so the PAGE declares what it is in.
+  // A screen reader picks its voice from that attribute and Google reads it for
+  // hreflang, and both were saying English on every page whatever was rendered.
+  const [uiLang, setUiLang] = useState(currentUiLanguage);
+  const changeUiLanguage = (code) => {
+    setStoredUiLanguage(code);
+    setUiLang(code);
+  };
+  useEffect(() => {
+    try { document.documentElement.lang = uiLang; } catch { /* no document, nothing to declare */ }
+  }, [uiLang]);
   // ── HOW CLOSE GEMLYX IS TO BEING ABLE TO BUILD ──────────────────────
   //
   // Oliver, 26 Aug 2026, with a red line drawn under the chat composer: "I want
@@ -13873,16 +13894,25 @@ If the conversation only covers a single day or a few stops with no explicit day
   // Single source of truth for nav labels — same order as TAB_ORDER, so swipe and nav can never drift apart again.
   // Redesign pass: emoji removed from nav — `ico` names map to the drawn icon
   // set in components/Icon.jsx, rendered next to the plain-text label.
+  // ── THE PAGES, NAMED IN THE READER'S LANGUAGE ─────────────────────
+  //
+  // One array, three render sites (the top bar, the burger, and the strip that
+  // titles the current page), which is why the label goes through uiT here
+  // rather than at each of them. The id never moves: it is the routing key and
+  // the tab order, and translating it would have made goTab language-dependent.
+  //
+  // "✦ Gemlyx Detour" comes back untranslated from the catalogue on purpose.
+  // A product name is a proper noun and readerLanguage.js has the rule.
   const NAV_ITEMS = [
-    { id: "home", label: "Explore", ico: "compass" },
-    { id: "essentials", label: "Essentials", ico: "map" },
-    { id: "tips", label: "Tips", ico: "bulb" },
-    { id: "attractions", label: "Attractions", ico: "ticket" },
-    { id: "events", label: "Events", ico: "calendar" },
-    { id: "food", label: "Food", ico: "utensils" },
-    { id: "nightlife", label: "Nightlife", ico: "beer" },
-    { id: "visits", label: "Towns", ico: "town" },
-    { id: "ai", label: "✦ Gemlyx Detour", ico: null },
+    { id: "home", label: uiT("nav.home", uiLang), ico: "compass" },
+    { id: "essentials", label: uiT("nav.essentials", uiLang), ico: "map" },
+    { id: "tips", label: uiT("nav.tips", uiLang), ico: "bulb" },
+    { id: "attractions", label: uiT("nav.attractions", uiLang), ico: "ticket" },
+    { id: "events", label: uiT("nav.events", uiLang), ico: "calendar" },
+    { id: "food", label: uiT("nav.food", uiLang), ico: "utensils" },
+    { id: "nightlife", label: uiT("nav.nightlife", uiLang), ico: "beer" },
+    { id: "visits", label: uiT("nav.visits", uiLang), ico: "town" },
+    { id: "ai", label: uiT("nav.ai", uiLang), ico: null },
   ];
   const [slideDir, setSlideDir] = useState(null);
   const pageAnim = "";
@@ -18291,12 +18321,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <div style={{ padding: "4px 16px 8px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
                 <div style={{ display: "flex", gap: 8, overflowX: "auto", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch", paddingBottom: 4 }}>
                   {[
-                    { id: "all", label: "Everything", ico: "compass" },
-                    { id: "town", label: "Towns", ico: "town" },
-                    { id: "free", label: "Attractions", ico: "ticket" },
-                    { id: "food", label: "Food", ico: "utensils" },
-                    { id: "nightlife", label: "Nightlife", ico: "beer" },
-                    { id: "craft", label: "Workshops", ico: null, glyph: "🔨" },
+                    { id: "all", label: uiT("filter.all", uiLang), ico: "compass" },
+                    { id: "town", label: uiT("nav.visits", uiLang), ico: "town" },
+                    { id: "free", label: uiT("nav.attractions", uiLang), ico: "ticket" },
+                    { id: "food", label: uiT("nav.food", uiLang), ico: "utensils" },
+                    { id: "nightlife", label: uiT("nav.nightlife", uiLang), ico: "beer" },
+                    { id: "craft", label: uiT("filter.craft", uiLang), ico: null, glyph: "🔨" },
                   ].map(c => {
                     const on = pickCategory === c.id;
                     return (
@@ -21029,7 +21059,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               nothing to a screen reader, and this is the one control on the
               header that every other site has trained people to press. His
               father is the accessibility test for this product. */}
-          <button onClick={backToFrontPage} aria-label="Back to the front page"
+          <button onClick={backToFrontPage} aria-label={uiT("header.back", uiLang)}
             style={{ display: "flex", alignItems: "center", background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0 }}>
             <GemlyxLogo size={22} color={C.text} />
           </button>
@@ -21057,14 +21087,19 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             ))}
           </nav>
 
-          {/* Right: small persistent search pill (always visible, not a toggle) + menu */}
+          {/* Right: the language flags, then the small persistent search pill
+              (always visible, not a toggle), then the menu. Oliver asked for the
+              flags "in the right corner"; they go at the HEAD of this cluster so
+              the burger keeps the corner it has always occupied and nothing a
+              returning visitor reaches for moves. */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            <LanguagePicker lang={uiLang} onChange={changeUiLanguage} C={C} />
             <div style={{ position: "relative" }}>
               <svg className="gemlyx-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64708C" strokeWidth="2.5" strokeLinecap="round"
                 style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
                 <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.2" y2="16.2" />
               </svg>
-              <input className="gemlyx-search-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search"
+              <input className="gemlyx-search-input" value={search} onChange={e => setSearch(e.target.value)} placeholder={uiT("header.search", uiLang)}
                 style={{ width: 104, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "8px 12px 8px 29px", fontSize: 12.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", transition: "width 0.18s ease" }}
                 onFocus={e => { if (window.innerWidth < 900) e.target.style.width = "170px"; }}
                 onBlur={e => { if (window.innerWidth < 900) e.target.style.width = "104px"; }} />

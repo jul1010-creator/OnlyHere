@@ -103,6 +103,7 @@ writeFileSync(entry, `
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
   export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, keepMeasured, isPipelineOwned, MEASURED_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS, feedbackProblem, feedbackRow } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
+  export { previewReportRow, travellerTurns, PREVIEW_SAID_CAP, PREVIEW_SCREEN_CAP } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { trimFillerRuns } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { readableOn, contrastRatio, overlay, parseHex, luminance, READABLE_MIN, MAX_INK_SATURATION, PILL_ALPHA } from ${JSON.stringify(join(root, "src/utils/readableColor.js"))};
   export { journeyOriginFor, showsJourney, journeyOriginForKind, showsJourneyForKind, TYPES_WITH_A_JOURNEY, TYPES_WITHOUT_A_JOURNEY, TYPES_MEASURED_FROM_THE_ORIGIN, TYPES_MEASURED_FROM_THEIR_TOWN, journeyOriginPoint, IS_THE_CENTRE_KM, TRAVEL_ORIGIN } from ${JSON.stringify(join(root, "src/utils/journeyScope.js"))};
@@ -238,6 +239,7 @@ writeFileSync(entry, `
   export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { keepLanguageOf } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
+  export { UI_LANGUAGES, UI_CODES, UI_STRINGS, UI_KEYS, UI_LANGUAGE_KEY, DEFAULT_UI_LANGUAGE, t, resolveUiLanguage, isUiLanguage, uiLanguageMeta, storedUiLanguage, setStoredUiLanguage, currentUiLanguage } from ${JSON.stringify(join(root, "src/utils/uiLanguage.js"))};
   export { datesFromListings, cityRankOf, cityWanted, CITY_MATCH, CITY_UNKNOWN, CITY_DIFFERENT } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, PRICE_NOT_PUBLISHED, PRICE_UNKNOWN } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { sourceFit, describeSourceFit, LIVING_TYPES } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -12753,7 +12755,14 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   }
   // A div is not reachable by keyboard and announces nothing. This is the one
   // control every other site has trained people to press.
-  ok("the logo is a button", /aria-label="Back to the front page"/.test(app));
+  // ── AND THE LABEL MOVED INTO THE CATALOGUE, 4 SEP ─────────────
+  // This matched the English literal, which now lives in uiLanguage.js so a
+  // Danish reader gets a Danish label on the one control the whole header hangs
+  // off. The RULE is unchanged and is the reason the assertion exists: it has to
+  // be a <button> carrying an accessible name. So it asks for the element and
+  // for a bound aria-label, and the catalogue block below asserts the label
+  // itself exists in all three languages.
+  ok("the logo is a button", /<button onClick=\{backToFrontPage\} aria-label=\{uiT\("header\.back", uiLang\)\}/.test(app));
   ok("and no longer a bare div", !/<div onClick=\{\(\) => goTab\("home"\)\} style=\{\{ cursor: "pointer"/.test(code));
 }
 
@@ -39410,7 +39419,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── THE WIRING ──────────────────────────────────────────────────
   {
     const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
-    ok("Tips is in the nav", /\{ id: "tips", label: "Tips", ico: "bulb" \}/.test(app));
+    // The label is uiT("nav.tips") since 4 Sep and the English word is in
+    // uiLanguage.js. The id and the icon are what this line is really about:
+    // the id is the routing key and the swipe order below reads it, so it is
+    // the half that must never move. The word itself is asserted, in all three
+    // languages, in the catalogue block.
+    ok("Tips is in the nav", /\{ id: "tips", label: uiT\("nav\.tips", uiLang\), ico: "bulb" \}/.test(app));
     ok("and in the swipe order, next to Essentials",
       /"home", "essentials", "tips", "attractions"/.test(app));
     // ONE RENDER, TWO TABS. Copying the block is how the two start disagreeing
@@ -41685,7 +41699,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // Oliver, 1 Sep 2026: "add a button on every blog called 'report outdated
 // information' and a (user-only) 'review article'."
 {
-  const { feedbackProblem, feedbackRow, FEEDBACK_KINDS, MIN_REPORT_CHARS } = M;
+  const { feedbackProblem, feedbackRow, FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS } = M;
 
   // ── AN EMPTY REPORT IS NOT A REPORT ──────────────────────────────
   // Suggest a Place already refuses a blank name one screen away rather than
@@ -41777,7 +41791,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // REPORTING IS FOR EVERYBODY, which is the contrast the whole design rests on.
   ok("reporting is not gated", !/signedIn \? \(open === "outdated"/.test(fb));
 
-  is("both kinds exist and nothing else does", FEEDBACK_KINDS, ["outdated", "review"]);
+  // ── AND A THIRD JOINED THEM, 4 SEP 2026 ────────────────────────
+  // "pick" is the preview report. The RULE this line protects is unchanged and
+  // is why it stays a closed list rather than becoming a length check: a kind
+  // with no entry in FEEDBACK_TYPE posts a row typed "Outdated" whatever it
+  // really was, and the inbox stops meaning anything.
+  is("the kinds are exactly these three", FEEDBACK_KINDS, ["outdated", "review", "pick"]);
+  ok("and every one of them is labelled", FEEDBACK_KINDS.every(k => FEEDBACK_TYPE[k]));
+  // The two reader-facing ones are the only two the article panel offers. The
+  // third lives on the preview and is asserted where it is built.
+  ok("the article panel still offers the original two only",
+     /open === "outdated"/.test(fb) && /open === "review"/.test(fb) && !/open === "pick"/.test(fb));
 }
 
 // ── WHAT FABLE FOUND IN MY OWN CODE, 1 SEP 2026 ─────────────────────
@@ -43629,6 +43653,233 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is("the editor shows the real text rather than an empty box",
        editableBlocks(body).map(b => b.text), ["What to Do", "A paragraph."]);
     is("and a save reaches the page", applyBodyEdits(body, { 1: "Rewritten." })[1].content, "Rewritten.");
+  }
+}
+
+
+// ── THE INTERFACE LANGUAGE, 4 SEP 2026 ──────────────────────────────
+//
+// Oliver: "I've had alot of complaints because people say they want a Danish
+// version as well" and "put flags in the right corner as 'languages'".
+//
+// ENGLISH_STRINGS_24AUG.md wrote the assertion before the feature: "A count is
+// not a rule. The assertion worth writing is structural: every key the
+// catalogue declares has a string in every declared language, and no render
+// site on the guide surface holds a bare English literal in a rendered slot."
+// Both, below, and both mutation tested.
+{
+  const { UI_LANGUAGES, UI_CODES, UI_STRINGS, UI_KEYS, UI_LANGUAGE_KEY, DEFAULT_UI_LANGUAGE,
+          t, resolveUiLanguage, isUiLanguage, uiLanguageMeta, storedUiLanguage,
+          setStoredUiLanguage, readerLanguage } = M;
+
+  // ── THE STRUCTURAL ONE ────────────────────────────────────────────
+  // Not "there are 14 keys". A count passes while the German column is empty.
+  const missing = [];
+  for (const key of UI_KEYS) for (const { code } of UI_LANGUAGES) {
+    const v = UI_STRINGS[key][code];
+    if (typeof v !== "string" || !v.trim()) missing.push(`${key}.${code}`);
+  }
+  is("every catalogue key has a string in every declared language", missing.join(", "), "");
+  ok("...and there is something to check", UI_KEYS.length > 10 && UI_LANGUAGES.length === 3);
+  is("English is the source language and is first", UI_LANGUAGES[0].code, "en");
+  is("the three are English, Danish and German", UI_CODES.join(","), "en,da,de");
+  ok("every language carries a flag and its own name for itself",
+     UI_LANGUAGES.every(l => l.flag && l.name) && uiLanguageMeta("da").name === "Dansk");
+
+  // ── AND THE COLUMNS ARE NOT COPIES OF EACH OTHER ──────────────────
+  // The failure this catches is the one that looks like success: a translation
+  // pass that adds the keys and pastes English into all three. Every nav label
+  // must differ between English and Danish, EXCEPT the product name, which is
+  // asserted to be identical for the opposite reason.
+  //
+  // A COGNATE IS NOT AN UNTRANSLATED STRING, and the first draft of this
+  // assertion called one: Danish for tips is "Tips". Failing on it would have
+  // meant either a wrong word in the product or a test nobody could keep green,
+  // which is the "correcting something that was already true" shape. So the
+  // exemptions are declared, per language, with the word that earns each one.
+  const SAME_AS_ENGLISH = { "nav.tips": ["da"] };
+  const sameOk = (key, code) => (SAME_AS_ENGLISH[key] || []).includes(code);
+  const navKeys = UI_KEYS.filter(k => k.startsWith("nav.") && k !== "nav.ai");
+  const untranslated = navKeys.filter(k => UI_STRINGS[k].da === UI_STRINGS[k].en && !sameOk(k, "da"));
+  is("no nav label is still English in the Danish column", untranslated.join(", "), "");
+  const untranslatedDe = navKeys.filter(k => UI_STRINGS[k].de === UI_STRINGS[k].en && !sameOk(k, "de"));
+  is("nor in the German column", untranslatedDe.join(", "), "");
+  // And the exemption is not a hole: the word it names must still be the word
+  // in the catalogue, so deleting the Danish column does not quietly pass here.
+  is("the one exempt cognate is the word it says it is", UI_STRINGS["nav.tips"].da, "Tips");
+  is("and German does translate it", UI_STRINGS["nav.tips"].de, "Tipps");
+  // A product name is a proper noun. readerLanguage.js has the rule for
+  // Nørreport and it is the same rule: a word somebody matches against a screen
+  // does not get translated.
+  ok("but the product name is the same in all three",
+     UI_STRINGS["nav.ai"].en === UI_STRINGS["nav.ai"].da && UI_STRINGS["nav.ai"].da === UI_STRINGS["nav.ai"].de);
+  ok("and it still says Gemlyx Detour", /Gemlyx Detour/.test(UI_STRINGS["nav.ai"].en));
+
+  // ── READING ONE ───────────────────────────────────────────────────
+  is("a Danish reader gets the Danish word", t("nav.food", "da"), "Mad");
+  is("a German reader gets the German word", t("nav.food", "de"), "Essen");
+  is("and English is the default", t("nav.food"), "Food");
+  is("an unknown language falls back to English rather than breaking", t("nav.food", "fr"), "Food");
+  // The failure mode every hand-rolled t() ships with.
+  is("an unknown key renders nothing, never the key name", t("nav.notAThing", "da"), "");
+  ok("and the key name is not what came back", t("nav.notAThing", "da") !== "nav.notAThing");
+
+  // ── CHOOSING ONE ──────────────────────────────────────────────────
+  // His brief: a selector that remembers the choice and never switches on IP.
+  is("a stored choice wins over the browser", resolveUiLanguage("de", "da-DK"), "de");
+  // The one that matters most: English is a CHOICE, not an absence. Reading it
+  // as "nothing stored" is how a Danish phone silently undoes the picker on the
+  // next load, which is the whole thing a language picker exists to stop.
+  is("and a stored English wins too, because picking English is picking", resolveUiLanguage("en", "da-DK"), "en");
+  is("the browser tag is used only when nothing is stored", resolveUiLanguage(null, "da-DK"), "da");
+  is("region is dropped, so an Austrian gets German", resolveUiLanguage(null, "de-AT"), "de");
+  is("a language we do not carry falls back to English", resolveUiLanguage(null, "fr-FR"), "en");
+  is("and so does nonsense", resolveUiLanguage("klingon", ""), "en");
+  ok("isUiLanguage refuses one we do not carry", isUiLanguage("da") && !isUiLanguage("fr"));
+
+  // ── STORAGE, WHICH IS ALLOWED TO BE ABSENT ────────────────────────
+  // Private mode THROWS on access rather than returning null, and an interface
+  // that will not render because storage is off is a worse bug than one that
+  // forgets a preference.
+  {
+    const prior = globalThis.localStorage;
+    try {
+      const store = {};
+      globalThis.localStorage = { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; }, removeItem: k => { delete store[k]; } };
+      is("nothing is stored to begin with", storedUiLanguage(), null);
+      ok("a real language is stored", setStoredUiLanguage("da") === true);
+      is("and read back", storedUiLanguage(), "da");
+      ok("a language we do not carry is refused rather than stored", setStoredUiLanguage("fr") === false);
+      is("so the stored one is untouched", storedUiLanguage(), "da");
+      is("under the namespaced key", store[UI_LANGUAGE_KEY], "da");
+
+      // ── AND THE GUIDE FOLLOWS THE FLAG ──────────────────────────
+      // Oliver, 26 Aug: the MIXED case is worse than either language alone.
+      // Every production caller of readerLanguage passes nothing, so this is
+      // what stops a Danish interface wrapping an English guide.
+      is("a picked language reaches the guide builder", readerLanguage()?.tag, "da");
+      setStoredUiLanguage("en");
+      is("and picking English means change nothing, which is null", readerLanguage(), null);
+      // A caller that hands over a device is asking about THAT device.
+      // aiDisclosureFor does, and so does every assertion above this one.
+      setStoredUiLanguage("da");
+      is("but an explicit navigator still wins, so nothing above this changed",
+         readerLanguage({ language: "de-DE" })?.tag, "de-DE");
+    } finally {
+      if (prior === undefined) delete globalThis.localStorage; else globalThis.localStorage = prior;
+    }
+  }
+  ok("and a missing localStorage is survivable rather than fatal", storedUiLanguage() === null);
+
+  // ── NO BARE ENGLISH LEFT IN THE SLOTS THAT WERE CONVERTED ─────────
+  // The second half of the doc's rule. Source-scanning, so it is written the
+  // way this repo has learned to write these: the literal must be GONE and the
+  // bound expression must be PRESENT, because asserting only the absence passes
+  // when somebody deletes the control.
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the search box is labelled from the catalogue", /placeholder=\{uiT\("header\.search", uiLang\)\}/.test(app));
+    ok("and no longer carries the English literal", !/placeholder="Search"/.test(app));
+    ok("every nav label comes from the catalogue",
+       /label: uiT\("nav\.home", uiLang\)/.test(app) && /label: uiT\("nav\.visits", uiLang\)/.test(app));
+    ok("and none of them is a bare English literal", !/\{ id: "(home|essentials|tips|attractions|events|food|nightlife|visits)", label: "/.test(app));
+    // The front-page category filter is the second render site holding these
+    // words, and it was found by this assertion rather than by reading.
+    ok("the category filter reads the catalogue too", /\{ id: "all", label: uiT\("filter\.all", uiLang\)/.test(app));
+    ok("and holds no bare label either", !/\{ id: "(all|town|free|craft)", label: "/.test(app));
+    // Every nav id must have a key, so adding a tenth page without translating
+    // it fails here rather than rendering an empty label at a traveller.
+    // ── SLICED TO THE ARRAY, NOT RUN OVER THE FILE ───────────────
+    // The first draft matched the whole of App.jsx and failed on the category
+    // filter, where `{ id: "town" }` deliberately reads nav.visits: two render
+    // sites, one word, which is the point of the catalogue. The id-equals-key
+    // rule is about NAV_ITEMS alone, so the slice is NAV_ITEMS alone. Same
+    // lesson as the assertion that anchored on a class name and swallowed a
+    // stylesheet: anchor on the thing, not on something near it.
+    const navStart = app.indexOf("const NAV_ITEMS = [");
+    ok("the NAV_ITEMS array is findable at all", navStart > 0);
+    const navSlice = app.slice(navStart, app.indexOf("];", navStart));
+    const navIds = [...navSlice.matchAll(/\{ id: "([a-z]+)", label: uiT\("nav\.([a-z]+)"/g)];
+    is("every page in the nav is translated", navIds.length, 9);
+    ok("every nav entry names a key that exists", navIds.every(m => UI_KEYS.includes(`nav.${m[2]}`)));
+    ok("and inside NAV_ITEMS the id and the key agree", navIds.every(m => m[1] === m[2]));
+    // Across the whole file, every uiT key that is referenced has to exist.
+    // This is the one that catches a tenth page added without a translation.
+    const usedKeys = [...app.matchAll(/uiT\("([a-z]+\.[a-zA-Z]+)"/g)].map(m => m[1]);
+    ok("and there are plenty of them", usedKeys.length >= 15);
+    is("every key the app asks for is in the catalogue",
+       [...new Set(usedKeys)].filter(k => !UI_KEYS.includes(k)).join(", "), "");
+    ok("the picker is mounted in the header", /<LanguagePicker lang=\{uiLang\} onChange=\{changeUiLanguage\} C=\{C\} \/>/.test(app));
+    ok("the choice is persisted rather than held in memory", /setStoredUiLanguage\(code\)/.test(app));
+    ok("and the page declares what language it is in", /document\.documentElement\.lang = uiLang/.test(app));
+  }
+}
+
+
+// ── REPORTING A WRONG PICK, 4 SEP 2026 ──────────────────────────────
+//
+// Oliver, on a preview built after he had told the chat he was travelling with
+// seven kids: "yet it puts me on a bar/club for 21+ .. Make a studio report
+// button on the preview."
+{
+  const { FEEDBACK_KINDS, FEEDBACK_TYPE, feedbackProblem, previewReportRow,
+          travellerTurns, PREVIEW_SAID_CAP } = M;
+
+  ok("pick is a feedback kind", FEEDBACK_KINDS.includes("pick"));
+  is("and it is labelled for the inbox he already reads", FEEDBACK_TYPE.pick, "Wrong pick");
+  // The other two kinds are untouched, which is the point of extending this
+  // file rather than writing a second one.
+  ok("the existing kinds survive", FEEDBACK_KINDS.includes("outdated") && FEEDBACK_KINDS.includes("review"));
+
+  // An empty report is not a report, same rule the other kinds already keep.
+  ok("a blank pick report is refused", !!feedbackProblem("pick", ""));
+  ok("and a real one is not", !feedbackProblem("pick", "Heidi's Bier Bar is 21+ and we have seven kids"));
+  // A rating does NOT rescue a pick report the way it rescues a review: there
+  // is no star on this control and a pick report with no words says nothing.
+  ok("a star does not stand in for words here", !!feedbackProblem("pick", "", 5));
+
+  // ── THE BRIEF TRAVELS WITH IT ─────────────────────────────────────
+  // The whole value of the report. "Heidi's Bier Bar is wrong" is not
+  // actionable; "and the traveller had said seven kids" is the bug report.
+  const msgs = [
+    { role: "assistant", text: "Where are you going?" },
+    { role: "user", text: "Skagen and Aalborg, travelling with 7 kids" },
+    { role: "user", text: "", isError: true },
+    { role: "user", text: "A week in September" },
+  ];
+  const said = travellerTurns(msgs);
+  ok("the traveller's own words are carried", /7 kids/.test(said) && /A week in September/.test(said));
+  ok("the assistant's are not, so a bad pick cannot justify itself", !/Where are you going/.test(said));
+  ok("and an errored turn is not a turn", said.split("\n").length === 2);
+  is("a missing conversation is empty rather than a crash", travellerTurns(null), "");
+
+  const row = previewReportRow({ text: "21+ bar with kids", said, onScreen: "NIGHTLIFE\nHeidi's Bier Bar Aalborg", url: "https://gemlyxtravel.com/#studio" });
+  is("it posts under the name he will scan for", row.name, "Preview picks");
+  is("with the right type", row.type, "Wrong pick");
+  ok("the note carries what he typed", /21\+ bar with kids/.test(row.note));
+  ok("and what the traveller said", /7 kids/.test(row.note));
+  ok("and what the screen was showing", /Heidi's Bier Bar Aalborg/.test(row.note));
+  ok("and the page it happened on", /gemlyxtravel\.com/.test(row.note));
+  // Same three-key shape the other kinds post, so it lands in gemlyx_suggestions
+  // with no migration. A second table for a third kind of the same thing is how
+  // two lists start disagreeing.
+  is("and nothing else, because the table has three columns", Object.keys(row).sort().join(","), "name,note,type");
+
+  // A conversation can run to thousands of characters and the row is not a log.
+  const huge = previewReportRow({ text: "x".repeat(10), said: "y".repeat(5000) });
+  ok("a long conversation is capped rather than posted whole", huge.note.length < PREVIEW_SAID_CAP + 600);
+
+  // ── THE CONTROL IS ON THE PREVIEW AND SENDS THE PAIR ──────────────
+  {
+    const pv = stripComments(readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8"));
+    ok("the report control is mounted on the preview", /<StudioPickReport aiMessages=\{aiMessages\} C=\{C\} \/>/.test(pv));
+    ok("it builds its row from the shared helper", /previewReportRow\(\{/.test(pv));
+    ok("and sends the conversation with it", /said: travellerTurns\(aiMessages\)/.test(pv));
+    // The screen is read rather than rebuilt, so the report describes what he
+    // was looking at rather than what a second derivation thinks was there.
+    ok("the screen tags itself so it can be read back", /data-preview-screen/.test(pv));
+    ok("and the report reads it", /querySelector\("\[data-preview-screen\]"\)/.test(pv));
+    ok("posting to the table that already exists", /gemlyx_suggestions/.test(pv));
   }
 }
 

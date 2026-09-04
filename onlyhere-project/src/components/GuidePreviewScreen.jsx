@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { previewReportRow, travellerTurns, feedbackProblem } from "../utils/articleFeedback";
+import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 import { C } from "../utils/theme";
 import { testTravelerLine, getEventDate } from "../utils/helpers";
 import { matchedPlaces, previewPools, mentionsPlace, wantedCategories, groupKeyOf, parentTownOf, tripAnchorFor, eventReachBand, tripPoints } from "../utils/previewMatch";
@@ -127,6 +129,92 @@ const askSeed = (cat) => ASK_SEED[cat?.src] || `What ${String(cat?.label || "").
 // of them without one category silently crowding another out of the shared
 // slice(0, 8) this used to have.
 const MAX_PER_SECTION = 6;
+
+// ── THE REPORT CONTROL ──────────────────────────────────────────────
+//
+// Posts the same { name, type, note } shape to the same gemlyx_suggestions
+// table the article feedback already uses, so there is no migration and no
+// second inbox. previewReportRow is what builds it, and it is in
+// utils/articleFeedback.js rather than here for the reason that file gives
+// about its own rules: a component needs a browser, a fetch and a key, and
+// cannot be asked anything by a test.
+const StudioPickReport = ({ aiMessages, C }) => {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [status, setStatus] = useState(null);
+  const [problem, setProblem] = useState("");
+
+  const send = async () => {
+    if (status === "sending") return;
+    const why = feedbackProblem("pick", text);
+    if (why) { setProblem(why); return; }
+    setProblem("");
+    setStatus("sending");
+    try {
+      // What the screen is showing, read off the rendered DOM rather than
+      // rebuilt from the props: the report has to describe what he was LOOKING
+      // AT, and a second derivation of the same list is a second thing that can
+      // be wrong in a different way from the first.
+      // Read off the SCREEN rather than rebuilt from the props. The report has
+      // to describe what he was looking at, and a second derivation of the same
+      // list is a second thing that can be wrong, in a different way from the
+      // first, which is the failure this whole report exists to catch.
+      const onScreen = (() => {
+        try { return document.querySelector("[data-preview-screen]")?.innerText || ""; }
+        catch { return ""; }
+      })();
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_suggestions`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify(previewReportRow({
+          text,
+          said: travellerTurns(aiMessages),
+          onScreen,
+          url: typeof window !== "undefined" ? window.location.href : "",
+        })),
+      });
+      setStatus(res.ok ? "sent" : "error");
+      if (res.ok) setText("");
+    } catch { setStatus("error"); }
+  };
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)}
+        style={{ display: "block", margin: "10px auto 0", background: "none", border: "none", color: C.muted, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", textDecoration: "underline", textUnderlineOffset: 3 }}>
+        ⚑ Report these picks
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 10, padding: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12 }}>
+      <textarea value={text} onChange={e => { setText(e.target.value); setProblem(""); }}
+        placeholder="What is wrong with these picks?"
+        rows={3}
+        style={{ width: "100%", boxSizing: "border-box", background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "9px 11px", fontSize: 12.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", resize: "vertical" }} />
+      {/* The brief and the screen travel with it and he does not have to retype
+          either, so this line is a statement about what is being sent rather
+          than an instruction. */}
+      <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6 }}>
+        The conversation and what this screen is showing are sent with it.
+      </div>
+      {problem && <div style={{ fontSize: 11.5, color: C.gold, marginTop: 6 }}>{problem}</div>}
+      {status === "sent" && <div style={{ fontSize: 11.5, color: C.gold, marginTop: 6 }}>Sent. It is in Studio suggestions.</div>}
+      {status === "error" && <div style={{ fontSize: 11.5, color: C.gold, marginTop: 6 }}>That did not send. Try again in a moment.</div>}
+      <div style={{ display: "flex", gap: 8, marginTop: 9 }}>
+        <button onClick={send} disabled={status === "sending"}
+          style={{ background: `${C.gold}18`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: status === "sending" ? "wait" : "pointer", fontFamily: "'Inter', sans-serif" }}>
+          {status === "sending" ? "Sending" : "Send report"}
+        </button>
+        <button onClick={() => { setOpen(false); setStatus(null); setProblem(""); }}
+          style={{ background: "none", border: "none", color: C.muted, fontSize: 12, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export const GuidePreviewScreen = ({
   previewWhy,
@@ -445,7 +533,7 @@ export const GuidePreviewScreen = ({
     setGuideModal(null);
   };
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.92)", overflowY: "auto", padding: "60px 16px 40px" }} onClick={closePreview}>
+    <div data-preview-screen style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.92)", overflowY: "auto", padding: "60px 16px 40px" }} onClick={closePreview}>
       <button onClick={e => { e.stopPropagation(); closePreview(); }} aria-label="Close"
         style={{ position: "fixed", top: 20, right: 20, background: "rgba(255,255,255,0.06)", border: "none", color: C.light, width: 40, height: 40, borderRadius: "50%", fontSize: 16, cursor: "pointer", zIndex: 951 }}>✕</button>
       <div style={{ maxWidth: 560, margin: "0 auto" }} onClick={e => e.stopPropagation()}>
@@ -914,6 +1002,20 @@ export const GuidePreviewScreen = ({
               written dash in a component, which is why the suite now does. */}
           Looks good, continue →
         </button>
+        {/* ── REPORT THE PICKS, 4 SEP 2026 ────────────────────────────
+            Oliver, on a preview built after he had said he was travelling with
+            seven kids: "yet it puts me on a bar/club for 21+ .. Make a studio
+            report button on the preview. So you can start fixing that."
+
+            ONE CONTROL FOR THE SCREEN rather than one per card, because the
+            defect he described is the SET given the brief. A per-card flag on
+            Heidi's Bier Bar would have lost the other half of the report, which
+            is that the brief said seven kids and nothing on this screen knew it.
+
+            Under the continue button and quiet: this is a founder tool sitting
+            on a traveller's screen, so it must not compete with the decision
+            the screen exists to ask for. */}
+        <StudioPickReport aiMessages={aiMessages} C={C} />
       </div>
       {/* ── ASK GEMLYX, WITHOUT LEAVING THE DECISION ──────────────────
           Oliver, 15 Aug 2026: "So if they want to add that on, then make
