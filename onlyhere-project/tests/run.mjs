@@ -88,7 +88,7 @@ writeFileSync(entry, `
   export { whoWrote, modelProvenanceNote, DRAFT_STAGES, readerFacingStages, WRITER, EXTRACTOR, MEASURED } from ${JSON.stringify(join(root, "src/utils/modelProvenance.js"))};
   export { venueStyleOf, venueStyleLabel, VENUE_STYLES, VENUE_STYLE_LABEL, unstyledVenues, venueStyleCoverage, stylesPresent, showVenueStyleFacet, buildNightlifeStyleFacet, VENUE_STYLE_COVERAGE_MIN } from ${JSON.stringify(join(root, "src/utils/venueStyle.js"))};
   export { looksLikeLodging, stayDrift, stayDriftNote, publicAccessAnswered, STAY_TERMS, LODGING_RULE, LODGING_NOTES_RULE, LODGING_WORDS, isLodgingType, LODGING_TYPES } from ${JSON.stringify(join(root, "src/utils/venueSubject.js"))};
-  export { entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, PAID_LABEL, SAYS_FREE, AMOUNT, isUnqualifiedFree, entryBooking, bookingChip, BOOKING_FIELDS, NEEDS_BOOKING, WALK_IN } from ${JSON.stringify(join(root, "src/utils/entryPrice.js"))};
+  export { entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, PAID_LABEL, SAYS_FREE, AMOUNT, isUnqualifiedFree, CONCESSION_SCOPE, entryBooking, bookingChip, BOOKING_FIELDS, NEEDS_BOOKING, WALK_IN } from ${JSON.stringify(join(root, "src/utils/entryPrice.js"))};
   export { literalRenderings, literalNote, looksLikeAName, FALSE_FRIENDS, FALSE_FRIEND_RULE, NAME_RULE } from ${JSON.stringify(join(root, "src/utils/literalDanish.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
@@ -38788,7 +38788,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // This is the leak placeUrl.js already named for URLs in August: "a person
 // looking for Koldinghus is not looking for a free." A type name is a bucket.
 {
-  const { entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, PAID_LABEL, isUnqualifiedFree } = M;
+  const { entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, PAID_LABEL, isUnqualifiedFree, CONCESSION_SCOPE, AMOUNT } = M;
 
   // ── THREE ANSWERS, AND THE THIRD IS THE ONE THAT WAS MISSING ────
   //
@@ -38837,6 +38837,56 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     entryPrice({ ticketsGlance: "Free (garden only, palace interiors cost extra)" }).free, null);
   is("and a bare figure beside the word free is not one either",
     entryPrice({ ticketsGlance: "Adults 120, children free" }).free, null);
+  // ── AND WHICH OF THOSE FOUR MEANS SOMEBODY PAYS, 4 SEP 2026 ─────
+  //
+  // Oliver, off the live Legoland page: "because of the at a glance, the
+  // Legoland doesn't get a 'paid'." Every rule above was right and the card was
+  // still blank, because `null` was being read by the chip as "say nothing"
+  // when the row had in fact said something: it priced a concession, and a
+  // place that prices under-twos free has a gate you pay at.
+  //
+  // The four lines split in two and only one half implies a gate. Legoland and
+  // AROS scope their free claim to a PERSON, so most people pay. Trelleborg and
+  // Christiansborg scope theirs to a PART, and a visitor really can walk the
+  // ramparts or the garden all day for nothing. Calling those Paid would be the
+  // same overreach pointing the other way, so both halves are asserted here:
+  // the fix is only correct if it leaves the second half alone.
+  ok("Legoland's under-2 line means somebody pays",
+    entryPrice({ ticketsGlance: "Children under 2: free entry" }).impliesPaid);
+  ok("and so does AROS being free for under-18s",
+    entryPrice({ ticketsGlance: "Free entry for everyone under 18" }).impliesPaid);
+  ok("but free ramparts do not, because the ramparts really are free",
+    !entryPrice({ ticketsGlance: "Free entry year-round to the fortress ramparts" }).impliesPaid);
+  ok("nor does a free palace garden with the interiors priced separately",
+    !entryPrice({ ticketsGlance: "Free (garden only, palace interiors cost extra)" }).impliesPaid);
+  ok("nor does a free claim scoped to a DAY rather than a person",
+    !entryPrice({ ticketsGlance: "Free entry on Wednesdays" }).impliesPaid);
+  // The chips those four produce, which is the half Oliver can see.
+  is("so Legoland's card says Paid", priceChip({ ticketsGlance: "Children under 2: free entry" }), PAID_LABEL);
+  is("and AROS's card says Paid", priceChip({ ticketsGlance: "Free entry for everyone under 18" }), PAID_LABEL);
+  is("and the fortress still says nothing", priceChip({ ticketsGlance: "Free entry year-round to the fortress ramparts" }), "");
+  is("and so does the palace garden", priceChip({ ticketsGlance: "Free (garden only, palace interiors cost extra)" }), "");
+  // ── AND THE REPAIR QUEUE STILL SEES THE ROW ─────────────────────
+  //
+  // The reason impliesPaid is a second field rather than a fourth value of
+  // `free`: publishedRepair's priceProblems is gated on `free !== null` and
+  // flags this exact line as "misleading-free". Folding the answer into `free`
+  // would have fixed the chip and silently emptied the repair queue of the one
+  // row shape it was written for. So `free` is asserted to be UNCHANGED here,
+  // and the priceProblems block further down asserts the finding survives.
+  is("and `free` is untouched, because the row still has not said what entry costs",
+    entryPrice({ ticketsGlance: "Children under 2: free entry" }).free, null);
+  // A person, named or aged, and nothing else. Probed directly so the two
+  // halves of the pattern cannot rot into each other.
+  ok("a named class of person is a concession scope", CONCESSION_SCOPE.test("pensionister"));
+  ok("in Danish too, which is where the research comes from", CONCESSION_SCOPE.test("Gratis for børn under 12"));
+  ok("an age with no noun is one as well", CONCESSION_SCOPE.test("everyone under 18"));
+  ok("and a wing of a building is not", !CONCESSION_SCOPE.test("the fortress ramparts"));
+  ok("and neither is a weekday", !CONCESSION_SCOPE.test("on Wednesdays"));
+  // The bare-figure rule the assertion above used to carry on its own. "120"
+  // with no currency is still not money, and that has to stay true independently
+  // of what the concession scope decides about the same line.
+  ok("a bare figure is still not an amount", !AMOUNT.test("Adults 120, children free"));
   // AND IT STILL SAYS YES TO THE ONES THAT ARE, or the rule is just a mute
   // button. All four of these are live values too.
   for (const yes of ["Free entry", "Free entry all year round", "Gratis adgang", "Fri entré", "Free, donations welcome"])
@@ -39075,8 +39125,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // person skimming the list reads the word free and moves on. Legoland's line
   // is real: legoland.dk states "Børn under 2 år får gratis entré" on the same
   // page as the 349 DKK fare.
+  // ── AND IT IS ASKED WHETHER THERE IS A FINDING AT ALL, 4 SEP ────
+  // Found by mutation while adding impliesPaid: a candidate fix that folded the
+  // concession answer into `free` emptied this list, and the [0] below threw a
+  // TypeError that took the whole run down instead of failing by name. A gate
+  // that crashes when it regresses tells you less than one that reports, and
+  // this file has written that lesson down twice already for truncation.
+  ok("a qualified free claim is still flagged for repair at all",
+    priceProblems(row("Legoland", "Children under 2: free entry").payload, "free").length > 0);
   is("a qualified free claim is the misleading kind",
-    priceProblems(row("Legoland", "Children under 2: free entry").payload, "free")[0].kind, "misleading-free");
+    priceProblems(row("Legoland", "Children under 2: free entry").payload, "free")[0]?.kind, "misleading-free");
   is("and an empty ticket line is the silent kind",
     priceProblems(row("Somewhere", "").payload, "free")[0].kind, "no-entry-price");
   is("a row that names a fare is not a problem at all",
@@ -39087,10 +39145,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("a restaurant is not swept", priceProblems({ name: "Alma", ticketsGlance: "" }, "food").length, 0);
   is("nor a festival, whose price lives in its own fields", priceProblems({ name: "Roskilde" }, "festival").length, 0);
   // The cost is the point of the whole file: this is a field, not a redraft.
+  // `.every` on an empty array is vacuously true, so the length is asserted
+  // alongside it. Same mutation that found the [0] above: with no findings this
+  // read as a pass. See the note there.
   ok("every price finding says it is one field",
-    priceProblems(row("Legoland", "Children under 2: free entry").payload, "free").every(p => p.cost === "one field"));
+    priceProblems(row("Legoland", "Children under 2: free entry").payload, "free").length > 0
+    && priceProblems(row("Legoland", "Children under 2: free entry").payload, "free").every(p => p.cost === "one field"));
   ok("and quotes what the row says, so it can be acted on",
-    /Children under 2/.test(priceProblems(row("Legoland", "Children under 2: free entry").payload, "free")[0].detail));
+    /Children under 2/.test(priceProblems(row("Legoland", "Children under 2: free entry").payload, "free")[0]?.detail || ""));
 
   // ── THE WORKLIST, OFF THE REAL LIVE TICKET LINES ────────────────
   //
@@ -41069,7 +41131,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // The free half, restated here because his question pairs them and a reader
   // of this block should see both answers together.
   is("free for children is not a free attraction", entryPrice({ price: "Free for children under 18" }).free, null);
-  is("and the card says nothing rather than guessing", priceChip({ price: "Free for children under 18" }), "");
+  // ── AND SAYING NOTHING WAS ONLY HALF AN ANSWER, 4 SEP ──────────
+  // This expected "". Oliver, off the live Legoland page: "because of the at a
+  // glance, the Legoland doesn't get a 'paid'." Its card sat silent between two
+  // genuinely free places both chipped Free, which reads as one more thing we
+  // could not be bothered to fill in. `free` is still null, because null is the
+  // honest answer to what the ROW SAYS and priceProblems is gated on it. The
+  // chip reads impliesPaid instead: a line that prices a concession has told us
+  // somebody pays.
+  is("and the card says Paid, because a concession is evidence of a gate",
+    priceChip({ price: "Free for children under 18" }), "Paid");
   is("while a plain free door still says Free", priceChip({ price: "Free entry" }), "Free");
 
   // ── THE BOOKING HALF: THREE ANSWERS, AND SILENCE IS ONE ──────────

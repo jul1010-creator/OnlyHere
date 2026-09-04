@@ -130,6 +130,57 @@ export const isUnqualifiedFree = (text) => {
   return residue === "";
 };
 
+// ── AND WHO THE QUALIFIER IS ABOUT, WHICH IS A SECOND QUESTION ──────
+//
+// Oliver, 4 Sep 2026, off the live Legoland page: "because of the at a glance,
+// the Legoland doesn't get a 'paid'."
+//
+// Its ticket line is "Children under 2: free entry", which every rule above
+// handles correctly and which still left the card SILENT: AMOUNT finds no
+// figure, isUnqualifiedFree refuses it, the answer is `null`, and priceChip
+// renders null as no chip at all. A 419-krone theme park sat on the grid saying
+// nothing, between two genuinely free places both saying Free.
+//
+// `null` is the right answer to what this row SAYS and it is not the whole of
+// what this row TELLS US. A page that prices under-twos free has a gate you pay
+// at. The concession is the evidence, not the absence of it, and that is the
+// same direction as the amount rule at the top: a fact about who pays less is a
+// fact that somebody pays.
+//
+// ── BUT ONLY WHEN THE QUALIFIER IS A PERSON ─────────────────────────
+//
+// The four live lines listed at isUnqualifiedFree split cleanly in two, and
+// only one half implies a gate:
+//
+//   Legoland       "Children under 2: free entry"                     WHO
+//   AROS           "Free entry for everyone under 18"                 WHO
+//   Trelleborg     "Free entry year-round to the fortress ramparts"   WHICH PART
+//   Christiansborg "Free (garden only, palace interiors cost extra)"  WHICH PART
+//
+// The first two say most people pay. The last two say there is a way in that
+// costs nothing, and a visitor walks the ramparts or the garden all day without
+// a ticket. Calling those Paid is the same overreach pointing the other way, so
+// the SCOPE decides and nothing else does. A free claim scoped to WHEN or to
+// WHICH PART keeps answering "we have not been told".
+//
+// Two ways a page writes the same class of person, and both are needed: it
+// names it ("children", "studerende", "pensionist") or it gives the age instead
+// ("everyone under 18"), which is how the same fact is written when the noun
+// would be redundant. AROS uses only the second.
+//
+// DELIBERATELY NOT SHARED WITH entryAudit.js's CONCESSION, which looks like the
+// same list and answers a different question: that one reads a SCRAPED PAGE
+// where an age sits in a sentence beside a figure, so it never needed the age
+// half, and adding it there would change what counts as a concession on a page.
+// Two lists, each with the comment saying why, rather than one quietly serving
+// two questions.
+export const CONCESSION_SCOPE = new RegExp([
+  "medlem(?:mer|skab)?|foreningsmedlem|studerende|student|elev|pensionist|senior|efterl[øo]n",
+  "b[øo]rn|barn|child|children|kid|ungdom|unge|youth",
+  "handicap|ledsager|gruppe|grupper|group|klub|rabat|discount",
+  "under\\s*\\d+|over\\s*\\d+|\\d+\\s*(?:[åa]r|years?)\\b|aged?\\s*\\d+",
+].join("|"), "i");
+
 const textOf = (row, fields) => fields.map(f => String(row?.[f] ?? "").trim()).filter(Boolean).join(" · ");
 
 // ── THE ANSWER ──────────────────────────────────────────────────────
@@ -143,7 +194,22 @@ export const entryPrice = (row) => {
   const extra = textOf(row, EXTRA_FIELDS);
   // AN AMOUNT ON AN ENTRY FIELD SETTLES IT. Checked before the word, so a
   // partly-free place reports the part that costs money.
-  if (AMOUNT.test(entry)) return { free: false, says: entry };
+  // ── impliesPaid IS A SECOND FIELD AND NOT A FOURTH VALUE OF free ──
+  //
+  // Because `free` already has a consumer that reads null as WORK TO DO:
+  // publishedRepair's priceProblems is gated on `free !== null` and flags
+  // exactly Legoland's line as "misleading-free ... about who gets in free
+  // rather than what entry costs". Folding this into `free` as a fourth answer
+  // would have fixed the chip and silently emptied the repair queue of the one
+  // row shape it was written for, which is the audit's own version of the leak
+  // this file exists to stop.
+  //
+  // So: `free` keeps answering WHAT THE ROW SAYS, unchanged and with the same
+  // three values. `impliesPaid` answers the separate question of whether the
+  // row's words mean somebody pays, and only priceChip reads it. A row that
+  // names an amount implies it trivially; a row scoped to a person implies it
+  // by the concession; everything else does not imply it at all.
+  if (AMOUNT.test(entry)) return { free: false, says: entry, impliesPaid: true };
   // ── AND THE FREE CLAIM HAS TO BE ABOUT THE DOOR ─────────────────
   //
   // "Children under 2: free entry" is Legoland's own ticket line. See
@@ -155,15 +221,15 @@ export const entryPrice = (row) => {
   // tours genuinely are free. That is the trade, taken deliberately and in the
   // safe direction: a reader told nothing goes and looks, and a reader told
   // FREE turns up with no money.
-  if (isUnqualifiedFree(entry)) return { free: true, says: entry };
+  if (isUnqualifiedFree(entry)) return { free: true, says: entry, impliesPaid: false };
   // It says free, and the rest of the sentence says who or what it is free FOR.
   // Not a free attraction, and not a price we can print either.
-  if (SAYS_FREE.test(entry)) return { free: null, says: entry };
+  if (SAYS_FREE.test(entry)) return { free: null, says: entry, impliesPaid: CONCESSION_SCOPE.test(entry) };
   // A row that says nothing about entry but prices an ADD-ON has still not told
   // us what the door costs. "Audio guide 40 DKK" is not an entry fee and is not
   // a claim that entry is free either.
-  if (extra) return { free: null, says: entry || "" };
-  return { free: null, says: "" };
+  if (extra) return { free: null, says: entry || "", impliesPaid: false };
+  return { free: null, says: "", impliesPaid: false };
 };
 
 // The chip. "Free" only when the row says so, the row's own short words when it
@@ -191,7 +257,7 @@ export const CHIP_MAX = 40;
 // answered two ways.
 export const PAID_LABEL = "Paid";
 export const priceChip = (row) => {
-  const { free, says } = entryPrice(row);
+  const { free, says, impliesPaid } = entryPrice(row);
   if (free === true) return "Free";
   // ── TOO LONG FOR A CHIP IS NOT THE SAME AS NOTHING TO SAY ──────
   // "Day ticket 419 DKK, under 3 free" does not fit in a chip, and dropping it
@@ -223,6 +289,14 @@ export const priceChip = (row) => {
     // the page one tap away, in At a Glance, in the operator's own words.
     return PAID_LABEL;
   }
+  // ── AND A CONCESSION SAYS PAID WITHOUT NAMING A FIGURE ───────
+  // The row told us somebody pays and never told us how much, so this is the
+  // one branch where PAID_LABEL is the WHOLE answer rather than a fallback
+  // from a line too long to print. `says` is deliberately not shown: it fits
+  // inside CHIP_MAX and it would sit in the slot where "Free" sits one row
+  // up, answering "who gets in free" to a reader asking "how much". The
+  // operator's own line is already on the page, in At a Glance, one tap away.
+  if (free === null && impliesPaid) return PAID_LABEL;
   return "";
 };
 
