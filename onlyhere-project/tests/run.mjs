@@ -46258,8 +46258,23 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 
     // ── THE SECTION HE ASKED FOR ──────────────────────────────────
     ok("the Events page has the section", /No confirmed date yet/.test(appW));
-    ok("scoped to the tab, like the grid above it",
-       /\(eventTab === "local"\) === \(e\.__scale !== "Major"\)/.test(appW));
+    // ── AND IT IS NOT SCOPED TO THE TAB ───────────────────────────
+    //
+    // It was, and Oliver published Riverboat Jazz Festival and reported it
+    // "published nowhere". The row was perfect. It was __scale "Major", so the
+    // section drew it on the Major tab while he was looking at Local.
+    //
+    // "The thing is, customers should see what events exist in Denmark." Local
+    // and Major is a useful split for browsing what is ON, because the reader
+    // is choosing between things they can attend. It is the wrong split for
+    // "we know about this and cannot date it", where the reader is only finding
+    // out the thing exists, and scoping it lets an entry hide on a tab nobody
+    // opened.
+    ok("the whole waiting list shows on both tabs",
+       /const waiting = waitingOrder\(undatedEvents\);/.test(appW));
+    ok("and nothing filters it by scale",
+       !/undatedEvents\.filter\(e => \(eventTab/.test(appW));
+    ok("which the section says out loud", /Everything we know about is here, whichever tab you are on/.test(appW));
 
     // ── AND IT HAS AN ADDRESS ─────────────────────────────────────
     // A published page with no URL is the "in the database, rendering nowhere"

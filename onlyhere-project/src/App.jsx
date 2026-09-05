@@ -20103,20 +20103,32 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   every month filter would empty it, and a section that vanishes
                   under a filter is a section nobody knows exists.
 
-                  Scoped to the tab, because the rows carry __scale exactly as
-                  the events arrays do, and a Roskilde-sized festival under the
-                  Local tab would be the same category error the tabs exist to
-                  prevent. */}
+                  NOT SCOPED TO THE TAB, and it was until Oliver published
+                  Riverboat Jazz Festival and reported it "published nowhere".
+                  It was published perfectly: the row was correct, and it was
+                  __scale "Major", so it drew on the Major tab while he was
+                  looking at Local.
+
+                  "The thing is, customers should see what events exist in
+                  Denmark." That is the whole argument and it beats mine. Local
+                  and Major is a useful split for BROWSING what is on, because
+                  the reader is choosing between things they can attend. It is
+                  the wrong split for "we know about this and cannot date it",
+                  where the reader is not choosing anything, they are finding
+                  out the thing exists. Scoping it there means an entry can hide
+                  on a tab nobody opened, which is exactly what happened.
+
+                  So the whole waiting list shows under both tabs. There will
+                  only ever be a handful, and the more there are the more it
+                  matters that they are in one place. */}
               {(() => {
-                const waiting = waitingOrder(
-                  undatedEvents.filter(e => (eventTab === "local") === (e.__scale !== "Major")),
-                );
+                const waiting = waitingOrder(undatedEvents);
                 if (!waiting.length) return null;
                 return (
                   <div style={{ marginTop: 30, borderTop: `1px solid ${C.border}`, paddingTop: 20 }}>
                     <div style={{ fontSize: 20, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 6 }}>No confirmed date yet</div>
                     <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7, maxWidth: 560, marginBottom: 14 }}>
-                      {waiting.length === 1 ? "One event we" : `${waiting.length} events we`} have researched and cannot date, because the organiser has not announced the next edition. {waiting.length === 1 ? "It is" : "They are"} kept out of the list above on purpose, and checked again every time we sweep for dates.
+                      {waiting.length === 1 ? "One event we" : `${waiting.length} events we`} have researched and cannot date, because the organiser has not announced the next edition. {waiting.length === 1 ? "It is" : "They are"} kept out of the list above on purpose, and checked again every time we sweep for dates. Everything we know about is here, whichever tab you are on.
                     </div>
                     <div className="cards-grid">
                       {waiting.map(e => <WaitingCard key={e.id} event={e} />)}
