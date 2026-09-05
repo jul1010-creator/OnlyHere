@@ -22,13 +22,53 @@ import { creditIsRequired } from "../utils/imageCredits";
 // api/commons-photo, and it is the only one available: showing it would be a
 // licence breach on the page whose terms clause 10.5 says the photographs
 // belong to their photographers.
-// ── THE BADGE IS COPY, SO IT FOLLOWS THE CONVERSATION ───────────────
-// A Danish reader being shown a Danish town under a Danish sentence should not
-// be told "CHECKED". Two languages here rather than six, for the reason
-// readerLanguage.js gives about its own Danish block: a word nobody in this
-// project can read is a word nobody can correct.
-const CHECKED = { da: "TJEKKET", de: "GEPRÜFT", nl: "GECHECKT", sv: "KOLLAD", no: "SJEKKET" };
-const checkedLabel = (lang) => CHECKED[String(lang?.tag || "").split("-")[0].toLowerCase()] || "CHECKED";
+// ── "'CHECKED', WHAT DOES THAT MEAN?" ───────────────────────────────
+//
+// Oliver, 5 Sep 2026, looking at his own chat. It is a fair question and the
+// badge could not answer it. Checked by whom, against what, and why is it on a
+// photograph — it reads as a trust mark of the kind every site has and nobody
+// believes.
+//
+// What it actually meant is much more specific and much more interesting: a
+// picture appears ONLY when Gemlyx holds its own written page for the place, and
+// tapping it opens that page. That is the rule chatPlaces.js enforces and the
+// reason the silence matters as much as the photograph. So the badge says that
+// instead, in words, and the line under the name says what tapping does.
+//
+// Two languages here rather than six, for the reason readerLanguage.js gives
+// about its own Danish block: a word nobody in this project can read is a word
+// nobody can correct.
+const OURS = { da: "VORES SIDE", de: "UNSERE SEITE", nl: "ONZE PAGINA", sv: "VÅR SIDA", no: "VÅR SIDE" };
+const OPEN_IT = {
+  da: "Tryk for at læse den", de: "Tippen zum Lesen",
+  nl: "Tik om te lezen", sv: "Tryck för att läsa", no: "Trykk for å lese",
+};
+const langKey = (lang) => String(lang?.tag || "").split("-")[0].toLowerCase();
+const oursLabel = (lang) => OURS[langKey(lang)] || "OUR PAGE";
+const openLabel = (lang) => OPEN_IT[langKey(lang)] || "Tap to read it";
+
+// ── AND IT ARRIVES THE WAY A PICTURE ARRIVES ────────────────────────
+//
+// Oliver, same message: "make it a small picture into the chat. Imagine you're
+// talking to me and you want to show me a picture."
+//
+// That is a precise brief and the old layout was the opposite of it. A row of
+// 124-pixel cards scrolling sideways under the reply is a carousel, and nobody
+// sends a carousel to a friend. A shared picture is one image, roughly the width
+// of the message it came with, sitting under the sentence with the same corner
+// cut off — and it lands a beat AFTER the words, because that is the order it
+// happens in when a person does it.
+//
+// The stagger is what makes two pictures read as two things being shown rather
+// than as a gallery loading.
+const PHOTO_CSS = `
+@keyframes gx-shared-photo{
+  from{opacity:0;transform:translateY(8px) scale(.97)}
+  to{opacity:1;transform:none}
+}
+.gx-shared-photo{animation:gx-shared-photo .34s cubic-bezier(.2,.7,.3,1) both}
+@media (prefers-reduced-motion: reduce){.gx-shared-photo{animation:none}}
+`;
 
 const creditLine = (credit) => {
   const who = String(credit?.photographer || "").trim();
@@ -59,8 +99,11 @@ export const showablePhoto = (place) => {
 // width. A second component would be a second place for the licence credit rule
 // to be got wrong, and that rule is the one with a legal edge on it.
 //
-// "rail" is also the layout with room, so the name is allowed to wrap onto two
-// lines there instead of being cut with an ellipsis. Sideways, it cannot be.
+// Both layouts now have room for a name to wrap. "row" used to be a sideways
+// strip of 124-pixel cards where it could not, and the ellipsis went with the
+// strip when the row became a shared picture on 5 Sep. The names are kept
+// because they are what the two call sites pass and what the CSS in chatRail.js
+// switches between; "row" means "under the reply" and "rail" means "beside it".
 export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "row", className = "" }) => {
   const rail = layout === "rail";
   const rows = (Array.isArray(places) ? places : [])
@@ -69,31 +112,43 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
   if (!rows.length) return null;
 
   return (
+    <>
+    <style>{PHOTO_CSS}</style>
     <div
       className={className || undefined}
       style={rail ? {
         display: "flex", flexDirection: "column", gap: 10, width: "100%",
       } : {
-        display: "flex", gap: 8, marginTop: 8, marginLeft: 6,
-        overflowX: "auto", paddingBottom: 2, maxWidth: "100%",
-        scrollbarWidth: "none",
+        // ── SHOWN, NOT SHELVED ──────────────────────────────────────
+        // A column under the reply, left-aligned with it, one picture per row.
+        // The old version was a sideways-scrolling strip of 124px cards, which
+        // is a carousel; nobody sends a carousel to a friend.
+        display: "flex", flexDirection: "column", gap: 6,
+        marginTop: 6, marginLeft: 6, maxWidth: "min(82%, 240px)",
       }}
     >
-      {rows.map(({ place, shot }) => (
+      {rows.map(({ place, shot }, idx) => (
         <div
           key={`${place._src || "row"}-${place.name}`}
           onClick={() => onOpen && onOpen(place)}
+          // Staggered, so two pictures read as two things being shown one after
+          // the other rather than as a gallery finishing its load.
+          className={rail ? undefined : "gx-shared-photo"}
           style={rail ? {
             width: "100%", background: C.surface,
             border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden",
             cursor: onOpen ? "pointer" : "default",
           } : {
-            flex: "0 0 auto", width: 124, background: C.surface,
-            border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden",
+            width: "100%", background: C.surface,
+            border: `1px solid ${C.border}`,
+            // The same corner the assistant's own bubble has, so the picture
+            // reads as coming from the same speaker rather than from the page.
+            borderRadius: "14px 14px 14px 4px", overflow: "hidden",
             cursor: onOpen ? "pointer" : "default",
+            animationDelay: `${idx * 90}ms`,
           }}
         >
-          <div style={{ position: "relative", height: rail ? 88 : 78, background: `${C.gold}18` }}>
+          <div style={{ position: "relative", height: rail ? 88 : 132, background: `${C.gold}18` }}>
             <img
               src={shot.photo}
               alt={place.name}
@@ -107,12 +162,17 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
               position: "absolute", inset: 0, display: "flex", alignItems: "center",
               justifyContent: "center", fontSize: 26, zIndex: -1,
             }}>{place.emoji || "📍"}</div>
-            {/* The mark that says this one is ours and was checked. */}
+            {/* ── WHAT THE MARK ACTUALLY MEANS ────────────────────────
+                It used to say "CHECKED", which Oliver asked about directly on
+                5 Sep and which could not answer him: checked by whom, against
+                what. What it means is that Gemlyx has its own written page for
+                this place — that is the whole rule for whether a picture appears
+                at all — so that is what it says. */}
             <div style={{
               position: "absolute", top: 6, left: 6, fontSize: 9, fontWeight: 700,
               letterSpacing: ".08em", color: C.onGold || "#20160A", background: C.gold,
               borderRadius: 100, padding: "2px 6px",
-            }}>✦ {checkedLabel(lang)}</div>
+            }}>✦ {oursLabel(lang)}</div>
           </div>
           <div style={{ padding: "7px 9px 8px" }}>
             <EntryLink
@@ -127,10 +187,18 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
                 // through it is a name nobody can match against a road sign.
                 wordBreak: "break-word",
               } : {
-                fontSize: 11.5, fontWeight: 700, color: C.text, lineHeight: 1.3,
-                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                fontSize: 12.5, fontWeight: 700, color: C.text, lineHeight: 1.3,
+                // Wraps here too now. The old strip could not afford two lines at
+                // 124px wide; a shared picture can.
+                wordBreak: "break-word",
               }}>{place.name}</div>
             </EntryLink>
+            {/* Says what tapping does, which is the other half of the answer to
+                "what does that mean?". A picture that opens something has to say
+                so, or it is a picture. */}
+            <div style={{ fontSize: 9.5, color: C.muted, marginTop: 2, fontWeight: 600 }}>
+              {openLabel(lang)}
+            </div>
             {creditLine(shot.credit) && (
               // WRAPS, never truncates. An ellipsis through "CC BY-SA 3.0"
               // leaves an attribution that names the photographer and not the
@@ -145,5 +213,6 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
         </div>
       ))}
     </div>
+    </>
   );
 };

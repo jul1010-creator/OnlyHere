@@ -87,7 +87,7 @@ import {
   getEnclosingJSONStringBounds, nextWeekdayTimestamp,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
-  hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep, storeKindOf } from "./utils/helpers";
+  hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep, storeKindOf, trimFillerAgainst } from "./utils/helpers";
 import { checkNightTransport, geocodePlace, geocodeIsASettlement, findRealNearestStation, geocodePostcode } from "./utils/geo";
 import { runOnce } from "./utils/inFlight";
 import { Pill } from "./components/Pill";
@@ -139,12 +139,18 @@ import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords
 import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoice";
 import { cityFromLocation } from "./utils/guideEnrichment";
 import { readBrief, briefBlock, nextAsks, buildBlockedNote } from "./utils/tripBrief";
+import { askedBeforeTurns, lastAskedOnScreen } from "./utils/directAnswer";
+import { briefConflicts } from "./utils/briefConflicts";
+import { townClashes, clashNote } from "./utils/chatGeography";
 import { readExclusions, withoutExcluded, excludedNote } from "./utils/exclusions";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
 import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries } from "./utils/ticketLink";
 import { currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLanguage";
 import { LanguageChoice } from "./components/LanguagePicker";
+import { WeatherBell } from "./components/WeatherBell";
+import { NavStrip } from "./components/NavStrip";
+import { alertKey, describeWeatherChange, unseenAlerts, seenAlerts, markAlertSeen } from "./utils/weatherAlerts";
 import { placesNamedIn } from "./utils/chatPlaces";
 import { railPlaces, railCss, RAIL_CLASS, INLINE_CARDS_CLASS } from "./utils/chatRail";
 import { briefProgress, progressLine, briefPercent, percentLine } from "./utils/briefPanel";
@@ -13123,6 +13129,7 @@ If the conversation only covers a single day or a few stops with no explicit day
   // tripBrief.js told it to ask, so a question asked and not answered stops
   // blocking instead of being asked forever. See sendAI, "THE BRIEF, COMPUTED".
   const [briefAsked, setBriefAsked] = useState([]);
+  const [briefSettled, setBriefSettled] = useState([]);
   // ── READINESS LATCHES, BECAUSE A TRIP DOES NOT GET SHORTER ─────────
   //
   // Oliver, 23 Aug 2026, with six photographs of a Danish conversation that
@@ -13144,7 +13151,12 @@ If the conversation only covers a single day or a few stops with no explicit day
   // Oliver, 26 Aug 2026. The brief is read once per turn inside sendAI and was
   // thrown away the moment the prompt was built, so nothing on the screen could
   // say how far along the conversation was. Kept here so the render can.
-  const [liveBrief, setLiveBrief] = useState(null);
+  // ── WRITTEN AND NEVER READ, SO IT IS GONE, 5 SEP 2026 ────────────
+  // liveBrief had one reader, the progress bar above the chat input, and that
+  // bar now reads liveIntakeBrief with the one below it. Keeping the state and
+  // the setState that feeds it would leave a value computed on every reply for
+  // nobody, which is the same shape as the seventy-six unwired helpers in
+  // tests/run.mjs one level down.
   // ── AND "NOT YET" HAS TO MEAN NOT YET ─────────────────────────────
   // Holds the brief's signature at the moment they declined. The card stays down
   // until the brief actually MOVES — a date, a place, a constraint — rather than
@@ -13210,9 +13222,14 @@ If the conversation only covers a single day or a few stops with no explicit day
   const todayKey = new Date().toDateString();
   const liveIntakeBrief = useMemo(() => {
     const turns = (aiMessages || []).slice(1).filter(m => m.role === "user" && !m.isError).map(m => m.text || "");
+    // What each of those turns was answering. Same slice, so the two arrays line
+    // up index for index; askedBeforeTurns skips error bubbles for the same
+    // reason this filter does.
+    const answering = askedBeforeTurns((aiMessages || []).slice(1));
     return readBrief({
       travellerText: turns.join("\n"),
       travellerTurns: turns,
+      answering,
       today: new Date(todayKey),
       asked: briefAsked,
       intake: {
@@ -13892,12 +13909,32 @@ If the conversation only covers a single day or a few stops with no explicit day
             // Only worth surfacing if the RISK LEVEL actually changed (none→high etc) —
             // small temperature wobbles aren't worth interrupting someone for.
             if (newRisk !== day.weather.risk && (newRisk === "high" || day.weather.risk === "high")) {
-              alerts.push({ id: `${guide.id}-${idx}`, guideTitle: guide.title, dayLabel: `Day ${idx + 1}`, oldRisk: day.weather.risk, newRisk, icon: weatherIcon(slot.condition) });
+              // The key carries the NEW risk, so dismissing "day 3 turned to
+              // rain" does not also silence "day 3 turned back to dry" later.
+              // See alertKey. The sentence is built here, from the slot, while
+              // the slot is still in hand: the old card threw the temperature,
+              // the millimetres and the wind away to write "clearer than
+              // before".
+              const dayLabel = `Day ${idx + 1}`;
+              alerts.push({
+                id: alertKey(guide.id, idx, newRisk),
+                guideTitle: guide.title,
+                dayLabel,
+                oldRisk: day.weather.risk,
+                newRisk,
+                icon: weatherIcon(slot.condition),
+                line: describeWeatherChange({ dayLabel, oldRisk: day.weather.risk, newRisk, slot }),
+              });
             }
           } catch { /* skip this day, not worth failing the whole check over one bad fetch */ }
         }
       }
-      if (alerts.length > 0) setWeatherAlerts(alerts.slice(0, 3)); // don't flood the corner with a wall of toasts
+      // ── DISMISSED IS DISMISSED ──────────────────────────────
+      // This effect refetches the forecast on every mount, so without the seen
+      // list the identical notice was rebuilt and shown again every time. He
+      // was not dismissing it, he was hiding it until the next render.
+      const fresh = unseenAlerts(alerts, seenAlerts());
+      if (fresh.length > 0) setWeatherAlerts(fresh.slice(0, 3)); // still capped: three is a glance, ten is a wall
     };
     if (savedGuides.length > 0) checkSavedGuidesWeather();
   }, []);
@@ -14266,6 +14303,10 @@ If the conversation only covers a single day or a few stops with no explicit day
         // Both shapes. The join is what most readers want; the turns are what a
         // relative date has to be judged against, one answer at a time.
         travellerTurns,
+        // And what each of them was answering. The message being sent is not in
+        // aiMessages yet, so its own entry is appended here: it answers whatever
+        // the last reply on screen asked for.
+        answering: [...askedBeforeTurns(aiMessages), lastAskedOnScreen(aiMessages)],
         today: now,
         asked: briefAsked,
         intake: {
@@ -14279,8 +14320,26 @@ If the conversation only covers a single day or a few stops with no explicit day
           budgetText: intakeBudgetText,
         },
       });
-      setLiveBrief(brief);
-      const askedThisTurn = nextAsks(brief).map(s => s.key);
+
+      // ── AND TWO FACTS THAT DO NOT FIT ARE A QUESTION TOO ─────────
+      //
+      // Oliver, 5 Sep 2026: "if I tell the AI that I got kids with me, and I
+      // also tell it I wanna go drinking, then the AI gotta solve it somehow."
+      // Asked what solving it looks like: "Try to get a better understanding of
+      // what the customer is looking for, in such scenarios."
+      //
+      // Raised once and then recorded, exactly like a slot: a question that keeps
+      // coming back is worse than one that was never asked. See
+      // utils/briefConflicts.js.
+      const conflicts = briefConflicts(brief, briefSettled);
+      // ── AND A CONFLICT TURN ASKS NOTHING ELSE ─────────────────────
+      //
+      // briefBlock suppresses the STILL MISSING list when a conflict fires, so
+      // nothing was asked for this turn and nothing may be recorded as asked. The
+      // first version recorded it anyway: the slot went to `declined` — asked and
+      // refused — without the traveller ever seeing the question. Empty here and
+      // empty there, from the same condition, so the two cannot drift.
+      const askedThisTurn = conflicts.length ? [] : nextAsks(brief).map(s => s.key);
       // ── SOMETHING TO GIVE BEFORE IT ASKS ──────────────────────────
       //
       // Oliver, 21 Aug 2026, on the first three turns of his own conversation:
@@ -14388,7 +14447,7 @@ ${heldBlock}
 ── THE TRIP BRIEF, AS MEASURED RATHER THAN AS YOU FEEL IT ──
 This block is computed from what the traveller has actually typed and from the form they filled in. It is not your impression of the conversation and it overrides your impression of the conversation. Never say you have everything you need unless this block says so, and never say a traveller has already told you something that is not listed as known here.
 
-${briefBlock(brief)}
+${briefBlock(brief, conflicts)}
 
 IF A TURN OF YOURS IS MISSING FROM THIS CONVERSATION, IT NEVER REACHED THEM. A reply of yours that failed to send is removed from the history you see, so you may find two of their messages in a row with nothing of yours between them. That gap is a reply of yours that they never saw. Do not guess what they meant by a short follow-up like "what?" or "huh?" in that position, do not explain their own message back to them, and never treat the exchange as settled because of it. Answer their last real message again, plainly.
 
@@ -14429,6 +14488,17 @@ ${languageBlock()}`;
           .filter(m => !!m.content),
         { role: "user", content: msg },
       ];
+
+      // ── AND THE FILLER BUDGET IS SPENT ACROSS THE THREAD ─────────
+      //
+      // Oliver, 5 Sep 2026: "Is it really impossible to get the AI to stop
+      // saying 'actually' so much?"
+      //
+      // The budget is per CONVERSATION, so what has already been said is what
+      // decides whether this reply may keep one. Error bubbles are excluded for
+      // the same reason baseMessages excludes them: Gemlyx never said those, so
+      // they cannot spend its budget. See trimFillerAgainst in utils/helpers.js.
+      const priorReplies = aiMessages.filter(m => m.role === "assistant" && !m.isError).map(m => m.text);
 
       // BUG FIX: this was capped at max_tokens: 900, which directly contradicts the
       // system prompt's own "BE GENUINELY HELPFUL, NOT JUST BRIEF" instruction (real
@@ -14569,7 +14639,23 @@ ${languageBlock()}`;
       let holdPartial = true;
       const handleDelta = (fullText) => {
         if (!fullText) return;
-        const shown = holdPartial ? fullText.slice(0, completeUpTo(fullText)) : fullText;
+        // ── TRIMMED BEFORE IT IS SHOWN, NOT AFTER ─────────────────
+        //
+        // The filler trim used to run only on the finished reply, and the
+        // streaming bubble is written from the raw text. So the reader watched
+        // "actually" type itself out and then vanish when the reply landed, with
+        // the sentence reflowing around the hole. A word disappearing out of a
+        // sentence you are reading is worse than the word.
+        //
+        // Trimming the partial is safe because the budget is spent LEFT TO
+        // RIGHT: whichever occurrence is kept in a prefix stays kept as the
+        // prefix grows, and every later one is dropped, so the partial and the
+        // finished reply never disagree.
+        //
+        // It also means the stored thread is clean, and the stored thread is
+        // what goes back to the model as its own prior turns. The register was
+        // teaching itself.
+        const shown = trimFillerAgainst(priorReplies, holdPartial ? fullText.slice(0, completeUpTo(fullText)) : fullText);
         if (!shown) return;
         if (msgId === null) {
           msgId = `ai-${Math.random().toString(36).slice(2)}`;
@@ -14656,7 +14742,16 @@ ${languageBlock()}`;
 
       let turn = await runTurn(baseMessages);
       let data = turn.data;
-      let replyText = data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
+      // ── AND THE FILLER COMES OFF ON THE WAY OUT ──────────────────
+      //
+      // The same move the dashes got: every path from a model to a reader runs
+      // stripDashes, because asking a model not to use a character never worked
+      // and removing it always does. Published rows have had trimFillerRuns at
+      // read time since August; this chat, which is most of what anybody reads,
+      // had nothing. The budget is the thread rather than the reply, so a
+      // corrective "actually" survives once and the tic does not. See
+      // trimFillerAgainst in utils/helpers.js.
+      let replyText = trimFillerAgainst(priorReplies, data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim());
 
       // ── A REPLY WITH TEXT IN IT CAN STILL BE CUT OFF ──────────────
       //
@@ -14673,6 +14768,32 @@ ${languageBlock()}`;
       // aiClient.js does not reach it: two implementations of one call, and only
       // one of them was ever taught to read the flag. That is why this was live
       // while the other path retried.
+      // ── AND A PLACE IN THE WRONG CITY IS CORRECTED, IN CODE ──────
+      //
+      // Oliver, 5 Sep 2026: "It put nightlife to Kødbyen". What Gemlyx told him
+      // was that Mesteren & Lærlingen, "down in Kødbyen", was in AARHUS, an hour
+      // and a half from Billund. Kødbyen is the old meatpacking yards behind
+      // Vesterbro in COPENHAGEN, which is two and three quarter hours from
+      // Billund. The right bar, the wrong city, and then the wrong city's drive
+      // time quoted as if it had been measured.
+      //
+      // The published pipeline has coordinate checks and town scoping and a
+      // draft saying this would not survive any of them. THIS CHAT HAS NONE OF
+      // THEM: it calls /api/anthropic itself and nothing between the model and
+      // the traveller reads a word of it for facts.
+      //
+      // Appended by code rather than sent back to the model, for the same reason
+      // the withheld ready-marker note is: the model has just demonstrated it
+      // believes the wrong thing, so asking it to check itself is asking the
+      // same belief for a second opinion. See utils/chatGeography.js.
+      if (replyText) {
+        const note = clashNote(townClashes(replyText), readerLang?.tag?.slice(0, 2) === "da" ? "da" : "en");
+        if (note) {
+          console.warn("Gemlyx chat: a district was named with the wrong town.", note);
+          replyText = `${replyText}\n\n${note}`;
+        }
+      }
+
       if (replyText && data?.stop_reason === "max_tokens") {
         console.warn("Gemlyx chat: reply was cut off at max_tokens.", { chars: replyText.length });
         replyText = wholeSentences(replyText);
@@ -14696,7 +14817,7 @@ ${languageBlock()}`;
           // rather than transient.
           const retry = await runTurn(baseMessages);
           const retryData = retry.data;
-          replyText = retryData.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
+          replyText = trimFillerAgainst(priorReplies, retryData.content?.filter(b => b.type === "text").map(b => b.text).join("").trim());
           if (!replyText) {
             console.warn("Gemlyx chat: retry also empty, giving up.", { retryData, stop_reason: retryData?.stop_reason, error: retryData?.error });
             clearStreamedBubble();
@@ -14760,12 +14881,29 @@ ${languageBlock()}`;
       if (replyText && askedThisTurn.length) {
         setBriefAsked(prev => [...new Set([...prev, ...askedThisTurn])]);
       }
+      // Same rule, same reason: a conflict put to the traveller once is not put
+      // to them again, whatever they answered.
+      if (replyText && conflicts.length) {
+        setBriefSettled(prev => [...new Set([...prev, ...conflicts.map(c => c.key)])]);
+      }
 
       if (replyText) {
+        // ── AND THE REPLY REMEMBERS WHAT IT ASKED FOR ──────────────
+        //
+        // `asked` is stamped on the message that did the asking, so the next
+        // traveller turn can be read as an answer TO IT. A bare "7" is a day
+        // count or a headcount depending only on the question before it, and
+        // this is where that question is written down. See
+        // utils/directAnswer.js and the `answering` argument to readBrief.
+        //
+        // On the message rather than in a separate state, because it has to
+        // survive the thread being saved and restored: the alignment is between
+        // a question and the turn after it, and a parallel array that outlives
+        // the messages it points at is an off-by-one waiting to happen.
         if (msgId !== null) {
-          setAiMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: replyText, streaming: false } : m));
+          setAiMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: replyText, streaming: false, asked: askedThisTurn } : m));
         } else {
-          setAiMessages(prev => [...prev, { role: "assistant", text: replyText }]);
+          setAiMessages(prev => [...prev, { role: "assistant", text: replyText, asked: askedThisTurn }]);
         }
       } else {
         // ── AND "SOMETHING BROKE" IS NOT ALWAYS THE TRUTH ─────────
@@ -15246,19 +15384,43 @@ ${languageBlock()}`;
 
                     Nothing is shown before they have said anything: "0 of 7" on
                     an empty box is a form with a scoreboard on it. */}
-                {liveBrief && briefProgress(liveBrief).done > 0 && (
+                {/* ── TWO BARS, ONE BRIEF, 5 SEP 2026 ──────────────────
+                    Oliver, with a screenshot of this screen: "one says 'ready to
+                    build' while the other says 3/7."
+
+                    Both were true of what they were reading, and that was the
+                    fault. This one read `liveBrief`, which is set inside sendAI
+                    and so knows only what was TYPED IN THE CHAT. The bar below
+                    the input reads liveIntakeBrief, which readBrief builds from
+                    the chat AND the form. His brief had origin, days, dates,
+                    interests and transport all filled from the form, so one bar
+                    counted five things the other could not see.
+
+                    The declaration of liveIntakeBrief already states the rule
+                    this broke: "the same function App.jsx uses to decide whether
+                    the build button appears decides what this bar says, so the
+                    bar and the button cannot disagree about what is known." True
+                    of that bar and the button, and there were three of them.
+
+                    One reader now, so the two bars cannot disagree. And the
+                    "nothing before they have said anything" guard stays as
+                    `done > 0`, which is the same rule the other bar keeps: a
+                    scoreboard over an empty box is a form with a scoreboard on
+                    it, and a bar reading zero over three filled boxes is worse
+                    than none. */}
+                {liveIntakeBrief && briefProgress(liveIntakeBrief).done > 0 && (
                   <div style={{
                     display: "flex", alignItems: "center", gap: 8, marginBottom: 10,
                     fontSize: 11, fontWeight: 600,
-                    color: briefProgress(liveBrief).ready ? C.gold : C.muted,
+                    color: briefProgress(liveIntakeBrief).ready ? C.gold : C.muted,
                   }}>
                     <div style={{ flex: "0 0 66px", height: 4, borderRadius: 100, background: C.border, overflow: "hidden" }}>
                       <div style={{
-                        width: `${Math.round((briefProgress(liveBrief).done / briefProgress(liveBrief).total) * 100)}%`,
+                        width: `${Math.round((briefProgress(liveIntakeBrief).done / briefProgress(liveIntakeBrief).total) * 100)}%`,
                         height: "100%", background: C.gold, borderRadius: 100,
                       }} />
                     </div>
-                    <span>{progressLine(briefProgress(liveBrief))}</span>
+                    <span>{progressLine(briefProgress(liveIntakeBrief))}</span>
                   </div>
                 )}
 
@@ -15421,7 +15583,15 @@ ${languageBlock()}`;
                     {chatResetAsk ? (
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span style={{ fontSize: 12, color: C.light }}>{uiT("chat.resetConfirm", uiLang)}</span>
-                        <button onClick={() => { setAiMessages(clearThread()); setChatResetAsk(false); }}
+                        {/* ── AND THE BRIEF IS RESET TOO ──────────────────────────
+                            A new conversation with the old `asked` list is not a
+                            new conversation: every slot is still marked as having
+                            been asked, so a brief with nothing in it reports every
+                            slot as DECLINED and goes ready on the first message.
+                            The reset button shipped clearing only the messages,
+                            which is the same "asked, so stop asking" hole the
+                            5 Sep work exists to close. */}
+                        <button onClick={() => { setAiMessages(clearThread()); setBriefAsked([]); setBriefSettled([]); setEverReadyToBuild(false); setChatResetAsk(false); }}
                           style={{ background: `${C.gold}18`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                           {uiT("chat.resetYes", uiLang)}
                         </button>
@@ -15570,6 +15740,7 @@ ${languageBlock()}`;
                           at,
                           messages: aiMessages,
                           asked: briefAsked,
+                          settled: briefSettled,
                           buildStarted: !!guideModal,
                           intake: {
                             arrival: intakeArrival,
@@ -20704,45 +20875,31 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
            on a desktop the seven pages have moved into the bar and it keeps what
            has no place there, which is the theme picker, the account, the FAQ,
            the photo credits and support. That is where a website puts them too. */
-        /* ── AND THE BAR OVERFLOWED THE MOMENT IT WAS TRANSLATED ────
-           Oliver, 5 Sep 2026, on the German header: the language control was
-           drawn ON TOP of the Gemlyx Detour button, and "Entdecken" was drawn on
-           top of the GEMLYX logo at the other end.
+        /* ── AND THE WIDTH STOPPED BEING A NUMBER, 5 SEP 2026 ──────
+           This nav has been given a width twice and both times the number was
+           wrong for a language. 1180 was measured for English and hid the Danish
+           and German navs the day the site was translated; 1240/1300/1400 hid
+           them harder and cost Oliver his page links.
 
-           Not the picker's fault. This rule had "flex: 1; min-width: 0" and NO
-           overflow rule, and every button inside it is "white-space: nowrap".
-           So the flex box shrank exactly as told and its contents did not, and
-           spilled out of both ends over whatever was next to them. Invisible for
-           as long as the eight labels were English, because English is the
-           shortest of the three: measured across the eight, Danish is about
-           fifty pixels wider and German about a hundred and forty.
+           A strip that SCROLLS needs no number. It fits at every width by
+           definition, so the per-language queries are gone and with them the
+           whole class of bug where translating the site quietly removed its own
+           navigation. See components/NavStrip.jsx.
 
-           TWO FIXES, because they answer different questions.
-
-           "overflow: hidden" is the guarantee. Whatever a future language does,
-           whatever a future page is called, this bar can no longer draw itself
-           over its neighbours. It clips instead, which is wrong-looking rather
-           than broken-looking, and it needs no number to be right.
-
-           The per-language widths are so it never has to. "document.
-           documentElement.lang" is set from the picker, so the breakpoint can
-           ask what language is being rendered and collapse into the burger at
-           the width where that language actually stops fitting. The :not() pair
-           is the fallback: anything that is not Danish or German, INCLUDING a
-           missing lang attribute before the effect has run, uses the English
-           width rather than losing its nav. */
-        .gx-topnav { display: none; align-items: center; gap: 2px; margin: 0 14px; flex: 1; min-width: 0; overflow: hidden; justify-content: center; }
-        @media (min-width: 1180px) {
-          html:not([lang="da"]):not([lang="de"]) .gx-topnav { display: flex; }
-          html:not([lang="da"]):not([lang="de"]) .gx-nav-in-menu { display: none !important; }
-        }
-        @media (min-width: 1230px) {
-          html[lang="da"] .gx-topnav { display: flex; }
-          html[lang="da"] .gx-nav-in-menu { display: none !important; }
-        }
-        @media (min-width: 1280px) {
-          html[lang="de"] .gx-topnav { display: flex; }
-          html[lang="de"] .gx-nav-in-menu { display: none !important; }
+           ONE breakpoint survives and it answers a different question: is this a
+           screen that should carry a top nav at all, or does the burger hold it.
+           That is about the shape of the device, not about how long a word is in
+           German, so one number is the right number for it. */
+        .gx-topnav { display: none; align-items: center; margin: 0 10px; min-width: 0; }
+        /* The strip scrolls and says so with a fading edge rather than a
+           scrollbar, which at this size is thicker than the text it sits under. */
+        .gx-navstrip { scrollbar-width: none; -ms-overflow-style: none; }
+        .gx-navstrip::-webkit-scrollbar { display: none; }
+        .gx-topnav-ai { display: none; }
+        @media (min-width: 1024px) {
+          .gx-topnav { display: flex; }
+          .gx-topnav-ai { display: inline-flex; }
+          .gx-nav-in-menu { display: none !important; }
         }
         .products-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         @media (min-width: 600px) { .products-grid { grid-template-columns: 1fr 1fr 1fr; } }
@@ -21209,25 +21366,36 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           {/* The pages, along the top, on anything wide enough to hold them.
               Hidden by .gx-topnav below 1080px, where the menu button carries
               them instead. */}
-          <nav className="gx-topnav">
-            {NAV_ITEMS.map(item => item.id === "ai" ? (
-              <button key={item.id} onClick={() => goTab("ai")}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#fff", border: "none", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginLeft: 8, whiteSpace: "nowrap", boxShadow: `0 2px 10px ${C.gold}33` }}>
-                {item.label}
-              </button>
-            ) : (
+          {/* ── THE PAGES SCROLL, THE DETOUR BUTTON DOES NOT ──────
+              Oliver, 5 Sep 2026: "Gemlyx Detour should ALWAYS be visible as a
+              whole. However, the rest of the header panel can have <-rd word
+              word wo->".
+
+              It used to be the ninth entry in NAV_ITEMS, so it sat INSIDE the
+              row that clips and was the last thing in it, which made it the
+              first casualty: his screenshot reads "✦ Gemlyx Det". Rendering it
+              outside the strip is what makes always-visible true by
+              construction rather than by guessing a breakpoint. */}
+          <NavStrip C={C}>
+            {NAV_ITEMS.filter(item => item.id !== "ai").map(item => (
               /* The page you are on is marked with a rule under it rather than a
                  filled pill: a pill in the header reads as a button you have not
                  pressed yet, which is the opposite of what it means. Kept at a
                  constant 2px, transparent when inactive, so nothing shifts by a
                  pixel as you move between pages. */
               <button key={item.id} onClick={() => goTab(item.id)}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", borderBottom: `2px solid ${active === item.id ? C.gold : "transparent"}`, color: active === item.id ? C.text : C.light, padding: "8px 10px 6px", fontSize: 13, fontWeight: active === item.id ? 700 : 500, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", borderBottom: `2px solid ${active === item.id ? C.gold : "transparent"}`, color: active === item.id ? C.text : C.light, padding: "8px 10px 6px", fontSize: 13, fontWeight: active === item.id ? 700 : 500, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
                 {item.ico && <Ico name={item.ico} size={14} color={active === item.id ? C.gold : C.muted} />}
                 {item.label}
               </button>
             ))}
-          </nav>
+          </NavStrip>
+          {/* Outside the strip and flexShrink: 0, so nothing can take a pixel
+              off it however long the eight labels beside it get. */}
+          <button className="gx-topnav-ai" onClick={() => goTab("ai")}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#fff", border: "none", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginLeft: 8, marginRight: 4, whiteSpace: "nowrap", flexShrink: 0, boxShadow: `0 2px 10px ${C.gold}33` }}>
+            {NAV_ITEMS.find(item => item.id === "ai")?.label}
+          </button>
 
           {/* Right: the small persistent search pill (always visible, not a
               toggle) + menu. The language flags were here for a day and cost the
@@ -22447,26 +22615,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         </div>
       )}
 
-      {/* Weather-change notices for saved guides — purely in-app, top-right corner,
-          only while this tab is actually open, same spirit as a social app's "new
-          activity" pop-in rather than a real push notification */}
-      {weatherAlerts.length > 0 && (
-        <div style={{ position: "fixed", top: 16, right: 16, zIndex: 600, display: "flex", flexDirection: "column", gap: 8, maxWidth: 300 }}>
-          {weatherAlerts.map(a => (
-            <div key={a.id} style={{ background: C.surface, border: `1px solid ${a.newRisk === "high" ? "#FFB347" : C.border}`, borderRadius: 12, padding: "12px 14px", boxShadow: "0 6px 24px rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-start", gap: 10 }}>
-              <span style={{ fontSize: 20, flexShrink: 0 }}>{a.icon}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 2 }}>Weather update — {a.guideTitle}</div>
-                <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.5 }}>
-                  {a.dayLabel} now looks {a.newRisk === "high" ? "like rain/snow — worth planning around" : "clearer than before"}.
-                </div>
-              </div>
-              <button onClick={() => setWeatherAlerts(prev => prev.filter(x => x.id !== a.id))}
-                style={{ background: "none", border: "none", color: C.muted, fontSize: 14, cursor: "pointer", padding: 0, flexShrink: 0 }}>✕</button>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Weather-change notices for saved guides. A BELL rather than a card
+          over the page: this is about a day that has not happened yet, on a
+          trip that is not today, so it is worth counting and not worth
+          interrupting for. Oliver, 5 Sep: "Let it be a notification like this."
+          Dismissing writes the key to storage, so it closes for good rather
+          than until the next mount. */}
+      <WeatherBell
+        alerts={weatherAlerts}
+        C={C}
+        onDismiss={(id) => { markAlertSeen(id); setWeatherAlerts(prev => prev.filter(x => x.id !== id)); }}
+      />
     </div>
   );
 }

@@ -45,6 +45,8 @@
 // diagnose a conversation without them — so that part IS included, and the file is
 // local, produced by a button he presses, going nowhere he does not send it.
 import { readBrief, nextAsks, BRIEF_SLOTS } from "./tripBrief";
+import { askedBeforeTurns } from "./directAnswer";
+import { briefConflicts, conflictLabel, conflictSlots } from "./briefConflicts";
 import { isReadyToBuild } from "./helpers";
 import { travelModeKey } from "./routeOrder";
 import { travellerBudget } from "./accommodation";
@@ -91,7 +93,16 @@ export const briefTimeline = (messages, { intake = {}, asked = [], today = new D
     if (m?.role === "assistant") return;
     said.push(String(m?.text ?? ""));
     const askedByNow = list.slice(0, i).some(x => x?.role === "assistant") ? asked : [];
-    const brief = readBrief({ travellerText: said.join("\n"), intake, asked: askedByNow, today });
+    // ── AND READ THE WAY THE APP READS IT ───────────────────────────
+    // This passed neither the turns nor what each of them was answering, so
+    // every row of the timeline reproduced the OLD reading. On Oliver's own
+    // export that made the summary and the timeline contradict each other: the
+    // brief said nothing was declined and the last row of the timeline said four
+    // slots were. A timeline is the thing somebody debugs from.
+    const brief = readBrief({
+      travellerText: said.join("\n"), travellerTurns: said,
+      answering: askedBeforeTurns(list.slice(0, i)), intake, asked: askedByNow, today,
+    });
     out.push({
       afterTurn: i,
       known: Object.fromEntries(Object.entries(brief.known).map(([k, v]) => [k, v?.value ?? true])),
@@ -128,10 +139,17 @@ export const readyClaimsWhileIncomplete = (messages, { intake = {}, asked = [], 
   const list = Array.isArray(messages) ? messages : [];
   const said = [];
   let bad = 0;
-  list.forEach(m => {
+  list.forEach((m, i) => {
     if (m?.role !== "assistant") { said.push(String(m?.text ?? "")); return; }
     if (!isReadyToBuild(m?.text)) return;
-    const brief = readBrief({ travellerText: said.join("\n"), intake, asked, today });
+    // Read the way the app read it AT THIS TURN: the turns so far, and what each
+    // of them was answering. Passing neither meant every claim was judged
+    // against the old reading of the conversation rather than the one the
+    // traveller was actually looking at.
+    const brief = readBrief({
+      travellerText: said.join("\n"), travellerTurns: said,
+      answering: askedBeforeTurns(list.slice(0, i)), intake, asked, today,
+    });
     if (!brief.ready) bad += 1;
   });
   return bad;
@@ -145,10 +163,32 @@ export const buildChatReport = ({
   today = new Date(),
   buildStarted = false,
   guideId = null,
+  // Conflicts already put to the traveller. Without it every conflict the
+  // conversation resolved is reported as still open, which is the opposite of
+  // what the field is called.
+  settled = [],
 } = {}) => {
   const list = Array.isArray(messages) ? messages : [];
-  const travellerText = list.filter(m => m?.role === "user").map(m => String(m?.text ?? "")).join("\n");
-  const brief = readBrief({ travellerText, intake, asked, today });
+  const travellerTurns = list.filter(m => m?.role === "user").map(m => String(m?.text ?? ""));
+  const travellerText = travellerTurns.join("\n");
+  // ── READ THE WAY THE APP READS IT ─────────────────────────────────
+  //
+  // This call used to pass neither the turns nor what each of them was
+  // answering, so the report reproduced the OLD reading of the conversation and
+  // not the app's. That is how Oliver's export came to say "declined" for four
+  // slots he had answered out loud: the report was not describing the bug, it
+  // was reproducing it and calling it the state of the brief.
+  //
+  // A report that reads differently from the screen is worse than no report,
+  // because it is the thing somebody debugs from.
+  const answering = askedBeforeTurns(list);
+  const brief = readBrief({ travellerText, travellerTurns, answering, intake, asked, today });
+  const clashes = briefConflicts(brief, settled).map(c => ({
+    key: c.key,
+    label: conflictLabel(c.key),
+    slots: conflictSlots(c.key),
+    question: c.question,
+  }));
   const errors = list.filter(m => m?.isError).length;
   const assistantTurns = list.filter(m => m?.role === "assistant");
   return {
@@ -175,6 +215,11 @@ export const buildChatReport = ({
       briefReady: brief.ready,
       stillMissing: brief.missing,
       askedAndUnanswered: brief.declined || [],
+      // Two facts that are both true and do not fit. Named in the summary
+      // because a guide built through one of these is the guide somebody files a
+      // report about, and "nightlife with children" is the first line of the
+      // explanation. See utils/briefConflicts.js.
+      unresolvedConflicts: clashes.map(c => c.label),
       buildStarted: !!buildStarted,
       guideId: guideId || null,
     },
@@ -193,6 +238,7 @@ export const buildChatReport = ({
       vague: brief.vague,
       ready: brief.ready,
       wouldAskNext: nextAsks(brief).map(s => ({ key: s.key, ask: s.ask })),
+      conflicts: clashes,
     },
     // Read the same way the preview reads it, so a report and a screen cannot
     // disagree about what mode or budget the trip was planned on.

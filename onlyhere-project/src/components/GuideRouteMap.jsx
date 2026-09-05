@@ -3,6 +3,7 @@ import L from "leaflet";
 import { addTileLayer } from "../utils/mapTiles";
 import { C } from "../utils/theme";
 import { departureParam } from "../utils/helpers";
+import { clusterPins, clusterBounds, clusterLabel, clusterHint } from "../utils/mapStops";
 
 // ── REAL ROUTE GEOMETRY ────────────────────────────────────────────
 // Oliver, 5 Aug 2026: "It shouldn't be difficult to make a route…", with
@@ -66,6 +67,17 @@ const MAP_CSS = `
 .gemlyx-near-label::before{display:none}
 `;
 
+// Whether zooming in further could ever pull these apart: is there room left on
+// the zoom scale, and is the box big enough for that room to matter. Both, so a
+// pair at the same coordinate is caught wherever the reader happens to be.
+const separable = (points, map) => {
+  const box = clusterBounds(points);
+  if (!box) return false;
+  const room = (map.getMaxZoom?.() ?? 19) - map.getZoom();
+  const span = Math.max(Math.abs(box[1][0] - box[0][0]) * 111, Math.abs(box[1][1] - box[0][1]) * 62);
+  return room >= 1 && span > 0.03;   // 30 metres, roughly a pin's width on the ground
+};
+
 export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, selectedName = "" }) => {
   const holderRef = useRef(null);
   const mapRef = useRef(null);
@@ -73,6 +85,19 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
   const didFitRef = useRef(false);
   // The secondary layer of our own nearby places, redrawn on every zoom and pan.
   const nearLayerRef = useRef(null);
+  // ── THE STOP PINS, WHICH NOW DEPEND ON THE ZOOM ─────────────────────
+  //
+  // Oliver, 5 Sep 2026: "If something is on top of oneanother, then when you
+  // click it, you should zoom down towards them all."
+  //
+  // Which pins overlap is a question about the SCREEN, so it has a different
+  // answer at every zoom level and the layer has to be redrawn when the zoom
+  // changes. It used to be drawn once, inside the fit, which is why a starburst
+  // of stacked pins at Tønder stayed a starburst however far in you went.
+  const pinLayerRef = useRef(null);
+  // Where the map was before it flew down to a pin, so closing the card can put
+  // it back. "And when you click out of it, you zoom out again."
+  const beforeFlyRef = useRef(null);
   // The pending invalidateSize frame, so unmount can cancel it. See the note at
   // the requestAnimationFrame call below.
   const rafRef = useRef(null);
@@ -174,62 +199,136 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
     // shows the ORDER of the day rather than just where things are, and the
     // first and last stop are visually distinct because "where I start" and
     // "where I end up" are the two a traveler actually looks for.
-    points.forEach((p, i) => {
-      const isFirst = i === 0, isLast = i === points.length - 1;
-      const size = isFirst || isLast ? 26 : 22;
-      const bg = isFirst ? "#4CAF50" : isLast ? C.accent : C.gold;
-      // ── AN APPROXIMATE PIN LOOKS APPROXIMATE ────────────────────
-      // A stop that could not be geocoded is plotted at the middle of its
-      // town. Drawn identically to a real one, that pin is the map asserting
-      // something nobody checked, in the place a reader trusts most. A dashed
-      // ring and a hollow centre say "near here" at a glance, without needing
-      // the note under the map to have been read. See tripPoints in
-      // pages/GuidePage.jsx for where the flag comes from.
-      const approx = !!p.approx;
-      const icon = L.divIcon({
-        className: "gemlyx-stop-pin",
-        html: `<div style="width:${size}px;height:${size}px;border-radius:50%;`
-            + `background:${approx ? "rgba(10,15,30,.72)" : bg};color:${approx ? bg : "#0A0F1E"};`
-            + `font:700 ${isFirst || isLast ? 12 : 11}px 'Inter',sans-serif;display:flex;align-items:center;justify-content:center;`
-            + `border:2px ${approx ? "dashed" : "solid"} ${approx ? bg : "#0A0F1E"};box-shadow:0 2px 6px rgba(0,0,0,.55);">${i + 1}</div>`,
-        iconSize: [size, size],
-        iconAnchor: [size / 2, size / 2],
+    //
+    // ── AND THEY ARE REDRAWN WHENEVER THE ZOOM CHANGES ───────────
+    //
+    // Oliver, 5 Sep 2026: "If something is on top of oneanother, then when you
+    // click it, you should zoom down towards them all."
+    //
+    // Whether two pins overlap is a fact about the SCREEN, so it has a different
+    // answer at every zoom and the layer cannot be drawn once. His own screenshot
+    // has a starburst at Tønder where two stops sit a few hundred metres apart at
+    // national zoom: Leaflet draws the second on top of the first, a click can
+    // only ever reach one of them, and nothing says the other is there.
+    //
+    // See utils/mapStops.js for the arithmetic, which is in screen pixels rather
+    // than in kilometres because that is the actual question.
+    const drawPins = () => {
+      pinLayerRef.current?.remove();
+      const layer = L.layerGroup().addTo(map);
+      pinLayerRef.current = layer;
+      clusterPins(points, map.getZoom()).forEach((cl) => {
+        const first = cl.indexes[0];
+        const p = cl.points[0];
+        // ── A CLUSTER IS NOT A STOP AND IS NOT LABELLED AS ONE ────
+        // It answers "why is there one dot where the list says three", and
+        // opening it is the only thing it does. Numbering it would be a lie
+        // about which stop a reader is looking at.
+        if (cl.points.length > 1) {
+          const n = cl.points.length;
+          const cluster = L.marker([p.lat, p.lon], {
+            riseOnHover: true,
+            icon: L.divIcon({
+              className: "gemlyx-stop-cluster",
+              // The hint is the title attribute rather than a second tooltip: the
+              // label says WHAT it is in two words and the hint says what
+              // clicking does, and a map with two tooltips on one pin is a map
+              // with a tooltip covering the next pin.
+              html: `<div title="${clusterHint(n)}" style="width:30px;height:30px;border-radius:50%;background:${C.surface};color:${C.gold};`
+                  + `font:800 12px 'Inter',sans-serif;display:flex;align-items:center;justify-content:center;`
+                  + `border:2px solid ${C.gold};box-shadow:0 0 0 4px rgba(212,175,55,.18),0 2px 8px rgba(0,0,0,.6)">${n}</div>`,
+              iconSize: [30, 30],
+              iconAnchor: [15, 15],
+            }),
+          }).bindTooltip(clusterLabel(n), { direction: "top", offset: [0, -17], className: "gemlyx-map-label" }).addTo(layer);
+          cluster.on("click", () => {
+            // Down to the box that holds them, not to a zoom number: two stops
+            // 200 m apart and two 2 km apart need different answers and only the
+            // bounds know which this is. maxZoom so a pair in one building does
+            // not end up on a blank tile.
+            const box = clusterBounds(cl.points);
+            beforeFlyRef.current = beforeFlyRef.current || { center: map.getCenter(), zoom: map.getZoom() };
+            // ── AND SOME CLUSTERS CANNOT BE SEPARATED AT ALL ────────
+            //
+            // Two stops at the SAME coordinate — a base returned to later in the
+            // day, or two stops that both fell back to the middle of their town
+            // — are one dot at every zoom there is. Flying to a zero-area box
+            // lands at the tile layer's maximum, the cluster is redrawn
+            // identically, and the pin is simply dead: no card, no way through,
+            // and the caption under the map promising it separates them is a
+            // lie. Opening the first one is worth more than a flight to nowhere.
+            if (!box || !separable(cl.points, map)) {
+              cluster.openTooltip();
+              if (onSelect) onSelect(cl.points[0]);
+              return;
+            }
+            map.flyToBounds(box, { padding: [70, 70], maxZoom: 17, duration: 0.8 });
+          });
+          return;
+        }
+        const i = first;
+        const isFirst = i === 0, isLast = i === points.length - 1;
+        const size = isFirst || isLast ? 26 : 22;
+        const bg = isFirst ? "#4CAF50" : isLast ? C.accent : C.gold;
+        // ── AN APPROXIMATE PIN LOOKS APPROXIMATE ────────────────────
+        // A stop that could not be geocoded is plotted at the middle of its
+        // town. Drawn identically to a real one, that pin is the map asserting
+        // something nobody checked, in the place a reader trusts most. A dashed
+        // ring and a hollow centre say "near here" at a glance, without needing
+        // the note under the map to have been read. See tripPoints in
+        // pages/GuidePage.jsx for where the flag comes from.
+        const approx = !!p.approx;
+        const icon = L.divIcon({
+          className: "gemlyx-stop-pin",
+          html: `<div style="width:${size}px;height:${size}px;border-radius:50%;`
+              + `background:${approx ? "rgba(10,15,30,.72)" : bg};color:${approx ? bg : "#0A0F1E"};`
+              + `font:700 ${isFirst || isLast ? 12 : 11}px 'Inter',sans-serif;display:flex;align-items:center;justify-content:center;`
+              + `border:2px ${approx ? "dashed" : "solid"} ${approx ? bg : "#0A0F1E"};box-shadow:0 2px 6px rgba(0,0,0,.55);">${i + 1}</div>`,
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2],
+        });
+        // ── LABELS GO QUIET ON A LONG ROUTE ──────────────────────
+        // Oliver, 7 Aug 2026, asking for one map across the whole trip instead
+        // of one per day. Permanent tooltips were fine for a three stop day and
+        // are unreadable at fourteen: the labels collide, overlap the line, and
+        // hide the country the map exists to show. Above the threshold the
+        // numbers carry the order (they match the stop list below) and a name
+        // appears on hover or tap.
+        const marker = L.marker([p.lat, p.lon], { icon, riseOnHover: true })
+          .bindTooltip(p.name, {
+            permanent: points.length <= LABEL_LIMIT,
+            direction: "top",
+            offset: [0, -(size / 2 + 2)],
+            className: "gemlyx-map-label",
+          })
+          .addTo(layer);
+        // ── CLICK A PIN AND FLY DOWN TO IT ──────────────────────
+        // Oliver, 17 Aug 2026: "Can you make a design that when you click on one of
+        // them, you instantly fly down to the area? And then it pops up in the right
+        // corner where you read shortly about its location."
+        //
+        // The whole-trip map is the right default and it is unreadable up close:
+        // Copenhagen to Billund in a 320 px box puts nine stops inside one pin's
+        // worth of screen, which is why he could only read four numbers. Flying to a
+        // single pin is the way out of that without giving up the overview, and 15
+        // is the zoom where street names and the neighbours appear.
+        //
+        // flyTo, not setView: the animation is what tells a reader the map moved
+        // rather than reloaded, and it is the difference between an overview and a
+        // close-up feeling like one map or two.
+        marker.on("click", () => {
+          marker.openTooltip();
+          // Remembered before the first flight and not overwritten by the second,
+          // so closing the card returns to the whole route rather than to
+          // wherever the last hop happened to leave it.
+          beforeFlyRef.current = beforeFlyRef.current || { center: map.getCenter(), zoom: map.getZoom() };
+          map.flyTo([p.lat, p.lon], 15, { duration: 0.85 });
+          if (onSelect) onSelect(p);
+        });
       });
-      // ── LABELS GO QUIET ON A LONG ROUTE ──────────────────────
-      // Oliver, 7 Aug 2026, asking for one map across the whole trip instead
-      // of one per day. Permanent tooltips were fine for a three stop day and
-      // are unreadable at fourteen: the labels collide, overlap the line, and
-      // hide the country the map exists to show. Above the threshold the
-      // numbers carry the order (they match the stop list below) and a name
-      // appears on hover or tap.
-      const marker = L.marker([p.lat, p.lon], { icon, riseOnHover: true })
-        .bindTooltip(p.name, {
-          permanent: points.length <= LABEL_LIMIT,
-          direction: "top",
-          offset: [0, -(size / 2 + 2)],
-          className: "gemlyx-map-label",
-        })
-        .addTo(group);
-      // ── CLICK A PIN AND FLY DOWN TO IT ──────────────────────
-      // Oliver, 17 Aug 2026: "Can you make a design that when you click on one of
-      // them, you instantly fly down to the area? And then it pops up in the right
-      // corner where you read shortly about its location."
-      //
-      // The whole-trip map is the right default and it is unreadable up close:
-      // Copenhagen to Billund in a 320 px box puts nine stops inside one pin's
-      // worth of screen, which is why he could only read four numbers. Flying to a
-      // single pin is the way out of that without giving up the overview, and 15
-      // is the zoom where street names and the neighbours appear.
-      //
-      // flyTo, not setView: the animation is what tells a reader the map moved
-      // rather than reloaded, and it is the difference between an overview and a
-      // close-up feeling like one map or two.
-      marker.on("click", () => {
-        marker.openTooltip();
-        map.flyTo([p.lat, p.lon], 15, { duration: 0.85 });
-        if (onSelect) onSelect(p);
-      });
-    });
+    };
+    drawPins();
+    map.on("zoomend", drawPins);
     // ── AND OUR OWN PLACES, ONCE YOU ARE CLOSE ENOUGH TO CARE ────
     // Oliver: "Also make the map look a little more realistic. Having some of our
     // written tourism attractions written down. It's close to King's Garden. So
@@ -345,12 +444,41 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
     }
     return () => {
       map.off("zoomend moveend", drawNearby);
+      map.off("zoomend", drawPins);
       nearLayerRef.current?.remove();
       nearLayerRef.current = null;
+      pinLayerRef.current?.remove();
+      pinLayerRef.current = null;
+      // A new route is a new overview, so the view saved from the old one is not
+      // somewhere to go back to.
+      beforeFlyRef.current = null;
       group.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(points), JSON.stringify(legs), geometry, JSON.stringify(nearby)]);
+
+  // ── AND CLICKING OUT ZOOMS BACK OUT ─────────────────────────────────
+  //
+  // Oliver, 5 Sep 2026: "And when you click out of it, you zoom out again."
+  //
+  // Closing the card used to close a card. The map stayed at zoom 15 over
+  // whichever pin had been opened, so a reader who wanted the route back had to
+  // find the minus button and guess how far. The view is captured on the way
+  // down and restored on the way out, which is what makes the two feel like one
+  // map rather than a page that navigated.
+  //
+  // Driven by the SELECTION rather than by the close button, so dismissing the
+  // card any other way — a second click, an escape, the parent clearing it —
+  // comes back the same way. The card is the parent's state; the flight is not
+  // something the parent should have to remember to undo.
+  useEffect(() => {
+    if (selectedName) return;
+    const map = mapRef.current;
+    const back = beforeFlyRef.current;
+    if (!map || !back) return;
+    beforeFlyRef.current = null;
+    map.flyTo(back.center, back.zoom, { duration: 0.8, easeLinearity: 0.25 });
+  }, [selectedName]);
   useEffect(() => () => {
     if (rafRef.current != null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
     if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }

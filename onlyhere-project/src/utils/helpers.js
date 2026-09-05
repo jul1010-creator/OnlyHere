@@ -671,6 +671,46 @@ export const trimFillerRuns = (texts, { words = FILLER_WORDS, keep = FILLER_REPE
     return out;
   });
 };
+// ── AND THE CONVERSATION IS AN ENTRY TOO ────────────────────────────
+//
+// Oliver, 5 Sep 2026: "Is it really impossible to get the AI to stop saying
+// 'actually' so much?" Fourth time he has asked across a month, and the first
+// three were all prompt instructions, which is the same evidence the dashes
+// produced: asking a model not to say a word never worked, removing it always
+// does.
+//
+// The chat had no filler rule of any kind. trimFillerRuns runs at READ time
+// over published rows, so a draft he rarely opens got trimmed and a chat reply,
+// which is most of what anybody reads, was looked at by nothing at all.
+//
+// ── THE BUDGET IS THE ONE ALREADY WRITTEN DOWN ──────────────────────
+//
+// The first version of this removed EVERY occurrence from every reply, and it
+// contradicted this file two hundred lines up. Worth saying why that was wrong
+// rather than quietly changing it, because in chat the deleted case is the one
+// that matters MOST:
+//
+//   Traveller:            "I'll do Louisiana on the Monday."
+//   Gemlyx, all removed:  "It's closed on Mondays."
+//   Gemlyx, budget kept:  "Actually, it's closed on Mondays."
+//
+// The word is doing its whole job there. It marks the sentence as a correction
+// of something the traveller just said, and without it the reply reads as if he
+// had not spoken. Published prose has no interlocutor to correct, so removal is
+// SAFER there than here, not less safe.
+//
+// So the rule does not change and the WINDOW does. "PER ENTRY, NOT PER FIELD"
+// said a page is what a reader meets at once; a conversation is the same thing
+// spread over time, so the run is the whole thread rather than the one reply. A
+// budget spent per reply is one "actually" per bubble, which IS the complaint.
+//
+// Already-trimmed prior turns are what spend the budget, so no separate tally
+// has to be kept anywhere: the thread carries its own count in its own text.
+export const trimFillerAgainst = (priorTexts, text, opts = {}) => {
+  const run = trimFillerRuns([...(Array.isArray(priorTexts) ? priorTexts : []), text], opts);
+  return run[run.length - 1];
+};
+
 
 export const scanForAITells = (text, extraPhrases = []) => {
   if (!text) return [];

@@ -48,6 +48,7 @@ import { arrivalDateIn, departureDateIn, dayCountIn, monthOnlyIn, latestRelative
 import { PARTY_BARE, PARTY_POSSESSIVE, PARTY_POSSESSIVES, PARTY_COUNT, TRAVEL_VERBS, FROM_WORDS, TRANSPORT_PREPS, VEHICLE_WORDS, TRANSPORT_VERBS, PUBLIC_TRANSPORT, alt, LETTER } from "./travellerWords";
 import { dayStart } from "./calendarDay";
 import { travelModeKey, withoutNonModes } from "./routeOrder";
+import { directAnswers } from "./directAnswer";
 
 const clean = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
 const has = (v) => !!clean(v);
@@ -125,6 +126,18 @@ export const BLOCKING_SLOTS = BRIEF_SLOTS.filter(s => s.tier === "blocking").map
 // the queue (see nextAsks), so it is raised once everything else is settled
 // rather than becoming a door the traveller cannot get past.
 export const HARD_SLOTS = BRIEF_SLOTS.filter(s => s.hard).map(s => s.key);
+
+// ── THE VALUE THAT MEANS "SOMETHING WAS SAID" AND NOTHING ELSE ──────
+//
+// Three readers produce it when they can tell that a subject came up and cannot
+// tell what was said about it. It is an acknowledgement, not a fact, and nothing
+// downstream can plan from it — which is why a direct answer is allowed to
+// replace it and is allowed to replace nothing else.
+//
+// briefPanel.js holds the same string as ACKNOWLEDGED and reads it for the same
+// reason. It is spelled once here rather than three times, so the two files can
+// be checked against each other instead of hoping.
+export const ACKNOWLEDGED_VALUE = "said in the conversation";
 
 // ── READERS, ONE PER SLOT ───────────────────────────────────────────
 // Each returns a value or null. Every one of them is a fact about what was
@@ -240,7 +253,7 @@ const ORIGIN_RE = new RegExp([
 ].join("|"), "i");
 const readOrigin = (text, intakeStartPoint) => {
   if (has(intakeStartPoint)) return { value: clean(intakeStartPoint), source: "intake" };
-  return ORIGIN_RE.test(String(text || "")) ? { value: "said in the conversation", source: "said" } : null;
+  return ORIGIN_RE.test(String(text || "")) ? { value: ACKNOWLEDGED_VALUE, source: "said" } : null;
 };
 
 // Who is coming. A count, a family word, or the intake field. "2 kids and my
@@ -274,7 +287,7 @@ const PARTY_RE = new RegExp(
 const readParty = (text, intakeTravelers, familyMode) => {
   if (has(intakeTravelers)) return { value: clean(intakeTravelers), source: "intake" };
   if (familyMode) return { value: "family", source: "intake" };
-  return PARTY_RE.test(String(text || "")) ? { value: "said in the conversation", source: "said" } : null;
+  return PARTY_RE.test(String(text || "")) ? { value: ACKNOWLEDGED_VALUE, source: "said" } : null;
 };
 
 // ── THE ONE THAT WAS NEVER ASKED AT ALL ─────────────────────────────
@@ -359,10 +372,54 @@ const INTEREST_WORDS = [
   "relax", "quiet", "photography", "music", "festival", "hygge", "spa",
   "hidden gem", "off the beaten", "local spot", "surf", "wildlife", "birdwatch",
 ];
+// ── AND A THEME THEY DO NOT WANT IS NOT A THEME ─────────────────────
+//
+// Found 5 Sep 2026 by an adversarial review. "I don't want to do museums or
+// castles, none of that" filled this blocking slot with `museum, castle`, and
+// "definitely not nature, we hate hiking" filled it with `nature, hiking`. The
+// brief block then prints them under "Never ask about any of these again", so the
+// trip is built around the two things the traveller opened by refusing.
+//
+// readTransport has had this guard since 18 August — withoutNonModes, because "we
+// have no car" says they are NOT driving. Interests never got one, and it is the
+// same class of error with a worse outcome: a wrong mode makes the days too long,
+// a wrong theme makes the whole guide about the wrong thing.
+//
+// THE SCOPE ENDS AT A CONTRAST WORD, not only at a full stop. "not nature, but
+// food and history" is one sentence holding a refusal and an answer, and a
+// scrubber that ran to the end of it would throw away the half that was the
+// answer.
+const NOT_WANTED = new RegExp(
+  "\\b(?:no|not|don'?t|doesn'?t|won'?t|can'?t|never|hate|hates|hating|avoid|skip|forget|rather not|not into|no interest in|ikke|hader|nicht|kein(?:e|en)?|hasse|geen|haat)\\b" +
+  // ── AND IT STOPS AT A COMMA ─────────────────────────────────────
+  // Found 5 Sep by an adversarial review. Running to the full stop swallowed the
+  // answer in "No problem, we love food and history" and "Skip Copenhagen, we
+  // want nature and food" — a blocking slot sent to `declined` on a plain
+  // answer, which is the same failure this whole night is about. A refusal is a
+  // clause, and a clause ends at a comma.
+  "(?:(?!\\b(?:but|though|however|instead|rather|men|dog|aber|sondern|maar)\\b)[^.,;:!?]){0,48}",
+  "gi");
+// ── AND SOME REFUSALS COME AFTER THE THING ──────────────────────────
+// "christmas markets bore us", "museums are not for me", "hiking, hated it".
+// The forward scrub cannot see these: the theme is said first and the verdict
+// second. Same window, same punctuation stops, running the other way.
+const REFUSED_AFTER = new RegExp(
+  // No word appears in both lists. A word in both would be matched by whichever
+  // scrub ran first and would take the wrong half of the sentence with it: "we
+  // hate hiking" is a forward refusal and "hiking, hated it" is a backward one,
+  // and one pattern cannot be both.
+  "(?:(?![.,;:!?])[^.,;:!?]){0,48}\\b(?:bores?|bored|boring|isn'?t for (?:me|us)|are not for (?:me|us)|not for (?:me|us)|no thanks|keder|langweilig)\\b",
+  "gi");
+// Backward first: a post-position verdict names the theme in front of it, and a
+// forward scrub reaching that verdict would delete the verdict and leave the
+// theme standing.
+export const withoutRefused = (text) =>
+  String(text || "").replace(REFUSED_AFTER, " ").replace(NOT_WANTED, " ");
+
 const readInterests = (text, intakeInterest) => {
   const ticked = (Array.isArray(intakeInterest) ? intakeInterest : []).map(clean).filter(Boolean);
   if (ticked.length) return { value: ticked.join(", "), source: "intake" };
-  const s = String(text || "").toLowerCase();
+  const s = withoutRefused(String(text || "").toLowerCase());
   // ── AND A PREFIX IS NOT A WORD ─────────────────────────────────────
   // Found 18 Aug 2026 by an adversarial review. This anchored the START of a word
   // and not the end, so "We are coming from Spain" filled the blocking interests
@@ -453,7 +510,7 @@ const readTransport = (text, intakeTransport) => {
 const BUDGET_RE = /\b(?:budget|cheap|tight|afford|splash|plenty of money|money is no|expensive|luxur|\d+\s*(?:dkk|kr|kroner|eur|usd|£|\$))\b/i;
 const readBudget = (text, intakeBudgetText) => {
   if (has(intakeBudgetText)) return { value: clean(intakeBudgetText), source: "intake" };
-  return BUDGET_RE.test(String(text || "")) ? { value: "said in the conversation", source: "said" } : null;
+  return BUDGET_RE.test(String(text || "")) ? { value: ACKNOWLEDGED_VALUE, source: "said" } : null;
 };
 
 // ── THE WHOLE BRIEF, IN ONE OBJECT ──────────────────────────────────
@@ -476,7 +533,7 @@ const readBudget = (text, intakeBudgetText) => {
 // responsibility to ASK." Asked and unanswered is a third state. It does not
 // block, it is never asked twice, and it is reported to the writer as an
 // assumption rather than a fact, which is the honest way to carry a gap.
-export const readBrief = ({ travellerText = "", travellerTurns = null, intake = {}, today = new Date(), asked = [] } = {}) => {
+export const readBrief = ({ travellerText = "", travellerTurns = null, intake = {}, today = new Date(), asked = [], answering = null } = {}) => {
   const t = String(travellerText || "");
   // Turns, not the join, for anything that has to know whether ONE turn was an
   // answer. Falls back to splitting the join so every existing caller and every
@@ -493,6 +550,41 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   set("transport", readTransport(t, intake.transport));
   set("stay", readStay(t, intake.stayBooked));
   set("budget", readBudget(t, intake.budgetText));
+
+  // ── AND THEN WHAT THEY SAID WHEN THEY WERE ASKED ──────────────────
+  //
+  // Oliver, 5 Sep 2026. He answered four questions in a row with the answer and
+  // nothing else — "Billund", "7", "bikes and cars", "The lodge billund we got"
+  // — and all four were recorded as REFUSALS, which is the state that stops the
+  // gate asking and lets `ready` go true on an empty brief.
+  //
+  // The readers above are not wrong. Every one of them is built to find a fact
+  // inside a SENTENCE and has to be, or "is the train to Odense expensive?"
+  // fills the origin slot. A person answering a direct question does not write a
+  // sentence, and the information that makes "Billund" an origin is not in
+  // "Billund" — it is in the question before it. See utils/directAnswer.js.
+  //
+  // ── IT FILLS A HOLE. IT DOES NOT OVERRULE A FACT ──────────────────
+  //
+  // The first version let a direct answer beat a sentence match, and an
+  // adversarial review found what that costs. "We cancelled the lodge, nothing
+  // booked now" was read correctly by readStay and then overwritten with the
+  // BOOKED read of the turn before it. "Actually we've got 10 days now" lost to
+  // an earlier "7". A correction is the one thing the traveller most needs to
+  // land, and the override was quietly eating them.
+  //
+  // So the rule is narrow and says exactly what it does: a direct answer fills a
+  // slot the sentence readers left EMPTY, and it replaces the acknowledgement
+  // placeholder, which carries no information at all — "said in the
+  // conversation" is not a fact anything downstream can use, which is the whole
+  // reason eight children reached the guide builder as a sentence about a
+  // conversation. It never replaces a real value, from the form or from a
+  // sentence.
+  const direct = directAnswers(turns, answering);
+  for (const [key, res] of Object.entries(direct)) {
+    const held = known[key];
+    if (!held || held.value === ACKNOWLEDGED_VALUE) known[key] = res;
+  }
 
   const wasAsked = new Set((Array.isArray(asked) ? asked : []).map(clean).filter(Boolean));
   const unfilled = BRIEF_SLOTS.filter(s => s.tier === "blocking" && !known[s.key]).map(s => s.key);
@@ -597,7 +689,11 @@ export const buildBlockedNote = (brief, lang = null) => {
 // It states what is already known, so nothing is asked twice, which is the other
 // half of his complaint: it asked about budget in two separate turns and asked
 // "mix of both?" after being told.
-export const briefBlock = (brief) => {
+// `conflicts` are two facts that are both true and do not fit — eight children
+// and a night out. They arrive as data rather than being computed here, so this
+// file does not have to import the checks that read it back. See
+// utils/briefConflicts.js.
+export const briefBlock = (brief, conflicts = []) => {
   if (!brief) return "";
   const lines = [];
   const knownKeys = BRIEF_SLOTS.filter(s => brief.known[s.key]);
@@ -628,9 +724,34 @@ export const briefBlock = (brief) => {
     hardOpen.forEach(s => lines.push(`  ${s.label}: ${s.ask}`));
     lines.push("They changed the subject rather than refusing, so this is not a decline. Answer whatever they did ask, then come back to it once, plainly.");
   }
-  const asks = nextAsks(brief);
+  // ── AND A CONFLICT IS RAISED EVEN WHEN NOTHING IS MISSING ─────────
+  //
+  // Above the "you have everything you need" line, because that sentence is
+  // exactly what silenced this in Oliver's transcript: the brief was full, the
+  // model was told not to ask another question, and it quietly decided a night
+  // out for a man travelling alone with eight children.
+  const clash = (Array.isArray(conflicts) ? conflicts : []).filter(c => c?.question);
+  if (clash.length) {
+    lines.push("TWO THINGS THEY HAVE SAID DO NOT FIT TOGETHER. Raise this before you plan around either of them, in your own words, as one question. Do not decide it for them and do not build until they answer:");
+    clash.forEach(c => lines.push(`  ${c.question}`));
+  }
+  // ── AND A CONFLICT IS THE ONLY QUESTION THIS TURN ─────────────────
+  //
+  // Found 5 Sep by an adversarial review. When a conflict fired AND a slot was
+  // missing, the block printed the conflict and then "STILL MISSING. Ask for
+  // THIS ONE and nothing else in this reply" — two instructions, each saying to
+  // ask a different thing and nothing else. A model obeying the second one never
+  // raises the conflict, and App.jsx records it as put to them anyway, so it is
+  // silenced for the rest of the conversation.
+  //
+  // The conflict wins, because it is about facts already given and the missing
+  // slot will still be missing next turn. nextAsks is not consulted at all in
+  // that case, which is the same thing App.jsx does with askedThisTurn.
+  const asks = clash.length ? [] : nextAsks(brief);
   if (!asks.length) {
-    lines.push("YOU HAVE EVERYTHING YOU NEED. Do not ask another question. Say in one short line what you are about to plan, and offer to build it.");
+    lines.push(clash.length
+      ? "ASK THE QUESTION ABOVE AND NOTHING ELSE IN THIS REPLY, then wait for their answer. Whatever else is missing can wait a turn."
+      : "YOU HAVE EVERYTHING YOU NEED. Do not ask another question. Say in one short line what you are about to plan, and offer to build it.");
     return lines.join("\n");
   }
   lines.push(asks.length === 1

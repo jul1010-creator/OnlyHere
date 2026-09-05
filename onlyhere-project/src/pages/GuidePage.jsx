@@ -10,6 +10,7 @@ import { GuideRouteMap } from "../components/GuideRouteMap";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
 import { previewPools } from "../utils/previewMatch";
 import { placedLibrary, nearbyPublished, describeLocation } from "../utils/nearbyPlaces";
+import { stopCard } from "../utils/mapStops";
 import { towns } from "../data/towns";
 import { freeEntrance } from "../data/freeEntrance";
 import { foodSpots } from "../data/food";
@@ -696,6 +697,14 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
       town,
       lat: c.lat,
       lon: c.lon,
+      // ── AND WHAT THE GUIDE ALREADY SAID ABOUT IT ────────────────
+      // Oliver, 5 Sep 2026: "explain what this is with a short 50 words
+      // resume", and asked where the words should come from, he picked the
+      // guide's own line over a fresh summary. It was already on the page under
+      // the stop card and was not on the map, so the map's own panel could only
+      // say what was NEAR the place and never what it was. See
+      // utils/mapStops.js.
+      note: st.note || "",
     };
   });
   // ── A STOP WITH NO COORDINATES IS DROPPED, SILENTLY ────────────
@@ -1067,14 +1076,26 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                       style={{ background: "transparent", border: 0, color: C.muted, fontSize: 15, lineHeight: 1, cursor: "pointer", padding: 2 }}
                     >×</button>
                   </div>
+                  {/* ── WHAT IT IS, THEN WHERE IT IS ──────────────────
+                      This read only the second half, so the card on a map of his
+                      own trip said "Nothing else in our own guides is within a
+                      1200 m walk of Day 2 · LEGO House yet." — a true sentence
+                      about the neighbours of a place it never described.
+                      stopCard puts the guide's own words first and the distances
+                      after, which is the order a reader who has just flown down
+                      to a pin actually wants them in. */}
                   <div style={{ fontSize: 11, color: C.light, lineHeight: 1.55, marginTop: 5 }}>
-                    {describeLocation(mapPin, nearbyPublished(mapPin, mapLibrary, { exclude: mapPin.name }), { town: mapPin.town })}
+                    {/* stopName, not name: the pin's `name` is "Day 2 · LEGO House" and the
+                        published rows are called "LEGO House", so the exclusion never
+                        matched and only the 20 m floor stopped the card listing the stop
+                        as its own nearest neighbour. */}
+                    {stopCard(mapPin, describeLocation(mapPin, nearbyPublished(mapPin, mapLibrary, { exclude: mapPin.stopName || mapPin.name }), { town: mapPin.town }))}
                   </div>
                 </div>
               )}
             </div>
             <div style={{ fontSize: 11, color: C.muted, marginTop: 7 }}>
-              The whole route, numbered in order. Tap a pin to fly down to it, and zoom in to see what else of ours is nearby.
+              The whole route, numbered in order. Tap a pin to fly down to it and read what it is; a pin with a number in a ring is several stops on top of each other, and opening it separates them. Close the card to come back out.
             </div>
             {/* Said out loud rather than left as a shorter map. A stop with no
                 coordinate used to vanish from here with nothing to show it

@@ -104,7 +104,13 @@ writeFileSync(entry, `
   export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, keepMeasured, isPipelineOwned, MEASURED_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS, feedbackProblem, feedbackRow } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { previewReportRow, travellerTurns, PREVIEW_SAID_CAP, PREVIEW_SCREEN_CAP } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
-  export { trimFillerRuns } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { trimFillerRuns, trimFillerAgainst } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { withoutRefused } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
+  export { briefConflicts, conflictLabel, conflictSlots, CONFLICTS } from ${JSON.stringify(join(root, "src/utils/briefConflicts.js"))};
+  export { clusterPins, clusterBounds, pixelAt, stopBlurb, stopCard, clusterLabel, clusterHint, OVERLAP_PX, BLURB_WORDS } from ${JSON.stringify(join(root, "src/utils/mapStops.js"))};
+  export { DISTRICTS, CLASH_TOWNS, CLASH_WINDOW, districtsIn, townClashes, clashNote, townKey } from ${JSON.stringify(join(root, "src/utils/chatGeography.js"))};
+  export { briefBlock as briefBlockC } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
+  export { withoutCorrectionLead, directAnswers, askedBeforeTurns, lastAskedOnScreen, isRefusal, looksLikePlaceAnswer, daysAnswer, transportAnswer, stayAnswer, partyAnswer, partyLine, widestMode, isKnownPlace } from ${JSON.stringify(join(root, "src/utils/directAnswer.js"))};
   export { readableOn, contrastRatio, overlay, parseHex, luminance, READABLE_MIN, MAX_INK_SATURATION, PILL_ALPHA } from ${JSON.stringify(join(root, "src/utils/readableColor.js"))};
   export { journeyOriginFor, showsJourney, journeyOriginForKind, showsJourneyForKind, TYPES_WITH_A_JOURNEY, TYPES_WITHOUT_A_JOURNEY, TYPES_MEASURED_FROM_THE_ORIGIN, TYPES_MEASURED_FROM_THEIR_TOWN, journeyOriginPoint, IS_THE_CENTRE_KM, TRAVEL_ORIGIN } from ${JSON.stringify(join(root, "src/utils/journeyScope.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
@@ -241,6 +247,7 @@ writeFileSync(entry, `
   export { keepLanguageOf } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { describeGuide, guideLanguageMix, guideProseOf } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { usableRuns } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
+  export { alertKey, describeWeatherChange, unseenAlerts, usableSeen, seenAlerts, markAlertSeen, alertCountLine, SEEN_KEY, MAX_SEEN } from ${JSON.stringify(join(root, "src/utils/weatherAlerts.js"))};
   export { preferenceRowState, PREF_NO_ACCOUNT, PREF_NO_INTERESTS, PREF_READY } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { savableThread, restorableThread, saveThread, loadThread, clearThread, CHAT_KEY, MAX_SAVED_MESSAGES } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { UI_LANGUAGES, UI_CODES, UI_STRINGS, UI_KEYS, UI_LANGUAGE_KEY, DEFAULT_UI_LANGUAGE, t, resolveUiLanguage, isUiLanguage, uiLanguageMeta, storedUiLanguage, setStoredUiLanguage, currentUiLanguage } from ${JSON.stringify(join(root, "src/utils/uiLanguage.js"))};
@@ -25281,9 +25288,25 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       ok("and it wraps rather than truncating",
          !/ellipsis/.test(el) && /wordBreak: "break-word"/.test(el));
     }
+    // ── "'CHECKED', WHAT DOES THAT MEAN?" ─────────────────────────
+    //
+    // Oliver, 5 Sep 2026, looking at his own chat. The badge said CHECKED and
+    // could not answer him: checked by whom, against what, and why is it on a
+    // photograph. What it meant is far more specific — a picture appears ONLY
+    // when Gemlyx holds its own written page for the place — so that is what it
+    // says now, and the line under the name says what tapping does.
+    ok("the badge says what it means rather than asserting a check",
+       /da: "VORES SIDE"/.test(cards) && /\|\| "OUR PAGE"/.test(cards));
+    // Comments stripped: the paragraph explaining this change quotes the word it
+    // removed, and a source scan that could not tell those apart would forbid
+    // the codebase from saying why it changed.
+    ok("and the old unexplained word is gone from the code",
+       !/"CHECKED"|TJEKKET/.test(stripComments(cards)));
     // The badge is copy a person reads, so it follows the conversation.
-    ok("the checked badge has a Danish form", /da: "TJEKKET"/.test(cards));
-    ok("and falls back to English", /\|\| "CHECKED"/.test(cards));
+    ok("it still follows the language the conversation is in",
+       /de: "UNSERE SEITE"/.test(cards) && /sv: "VÅR SIDA"/.test(cards));
+    ok("and so does the line saying what tapping does",
+       /da: "Tryk for at læse den"/.test(cards) && /\|\| "Tap to read it"/.test(cards));
   }
 
   // ── AND IT IS ACTUALLY WIRED, UNDER ASSISTANT MESSAGES ONLY ─────
@@ -26311,34 +26334,45 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // anything had been built: "On phone it should still be a hamburger though."
 {
   const appN = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("there is a nav bar in the header", /<nav className="gx-topnav">/.test(appN));
+  // The <nav> moved into NavStrip when the pages became a scrolling strip, so
+  // this asks the component for it. The rule is the same: there is a real
+  // landmark element, not a row of divs a screen reader walks straight past.
+  ok("there is a nav bar in the header", /<NavStrip C=\{C\}>/.test(appN));
+  {
+    const strip = readFileSync(join(root, "src/components/NavStrip.jsx"), "utf8");
+    ok("and the strip owns the nav landmark", /className="gx-topnav"/.test(strip));
+    // Held, not clicked: "just when holding your mouse over the arrow it
+    // strifes". The click is kept as the fallback for touch and keyboard.
+    ok("hovering an arrow scrolls it", /onMouseEnter=\{\(\) => strafe\(/.test(strip));
+    ok("and letting go stops it", /onMouseLeave=\{stop\}/.test(strip));
+    // An interval that outlives the component scrolls an element that is gone.
+    ok("the scroll is cleaned up on unmount", /useEffect\(\(\) => stop, \[stop\]\)/.test(strip));
+    // The arrow only appears on a side that has somewhere to go.
+    ok("an arrow only shows where there is more", /\{edges\.left && arrow\("left"\)\}/.test(strip));
+  }
   // ONE array, rendered twice. The note on TAB_ORDER says the nav and the swipe
   // order must never drift apart again, and two hand-written lists is exactly
   // how they drifted the first time.
-  is("both the bar and the menu render the same list", (appN.match(/NAV_ITEMS\.map\(/g) || []).length, 2);
+  // ── ONE ARRAY, STILL TWO RENDERS, 5 SEP 2026 ────────────────────
+  // The bar now renders NAV_ITEMS.filter(...).map, because Gemlyx Detour was
+  // pulled out of the scrolling strip so it can never be clipped. So the count
+  // of the literal ".map(" dropped to one while the RULE this line protects,
+  // that the bar and the menu come from ONE array and cannot drift apart, is
+  // unchanged. Asked as that rule instead of as a number.
+  is("the menu renders the list", (appN.match(/NAV_ITEMS\.map\(/g) || []).length, 1);
+  is("and the bar renders the same list minus the Detour button",
+     (appN.match(/NAV_ITEMS\.filter\(item => item\.id !== "ai"\)\.map\(/g) || []).length, 1);
+  ok("which is still the only source of the pages", !/const NAV_ITEMS_2|const TOP_NAV_ITEMS/.test(appN));
   ok("the bar is hidden until there is room for it", /\.gx-topnav \{ display: none;/.test(appN));
-  // Measured in a browser, not estimated: the bar's content is about 750px and
-  // with the logo, the search field and the menu beside it the row only stops
-  // overflowing at about 1160.
-  //
-  // ── AND THE MEASUREMENT IS PER LANGUAGE NOW, 5 SEP 2026 ─────────
-  // One number was right for as long as there was one set of labels. Across the
-  // eight, Danish is about fifty pixels wider than English and German about a
-  // hundred and forty, and 1180 was where ENGLISH stopped overflowing. The
-  // language picker added its own width to the row on top of that, so English
-  // moved to 1240 and the other two got their own.
-  //
-  // The rule this line has always protected is unchanged: the bar is not shown
-  // at a width where it does not fit. What changed is that "fits" now depends on
-  // what the labels say, which is why documentElement.lang is set.
-  ok("and shown only where it fits, which was measured",
-     /@media \(min-width: 1180px\) \{\s*html:not\(\[lang="da"\]\):not\(\[lang="de"\]\) \.gx-topnav \{ display: flex;/.test(appN));
-  ok("with a wider one for Danish", /@media \(min-width: 1230px\) \{\s*html\[lang="da"\] \.gx-topnav \{ display: flex;/.test(appN));
-  ok("and the widest for German", /@media \(min-width: 1280px\) \{\s*html\[lang="de"\] \.gx-topnav \{ display: flex;/.test(appN));
-  // A language nobody has declared yet, and the moment before the effect sets
-  // the attribute at all, must still get a nav rather than losing one.
-  ok("and an unknown language falls back to the English width rather than to nothing",
-     /html:not\(\[lang="da"\]\):not\(\[lang="de"\]\)/.test(appN));
+  // ── AND THE MEASUREMENT RETIRED, 5 SEP 2026 ─────────────────────
+  // 1180 was measured in a browser and it was measured for ENGLISH. The day the
+  // site was translated it hid the Danish and German navs, and raising it per
+  // language hid them harder. The strip scrolls now, so the only question left
+  // is whether the screen carries a top nav at all.
+  ok("and shown only where a top nav belongs at all",
+     /@media \(min-width: 1024px\) \{\s*\.gx-topnav \{ display: flex; \}/.test(appN));
+  ok("with no width per language any more",
+     !/html\[lang="da"\] \.gx-topnav/.test(appN) && !/html\[lang="de"\] \.gx-topnav/.test(appN));
   // The hamburger stays at every width: on a phone it is the navigation, and on
   // a desktop it keeps the theme picker, the account, the FAQ, the photo credits
   // and support, which have no place in a page bar.
@@ -26753,7 +26787,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      /const travellerTurns = \[\.\.\.aiMessages\.filter\(m => m\.role === "user"\)\.map\(m => m\.text \|\| ""\), msg\];/.test(app));
   ok("and the message being sent is included",
      /travellerText: travellerTurns\.join\("\\n"\)/.test(app));
-  ok("the block reaches the prompt", /\$\{briefBlock\(brief\)\}/.test(app));
+  // `briefBlock(brief` rather than the whole call: it gained a second argument
+  // on 5 Sep (the conflicts) and an assertion that breaks when something is
+  // added BESIDE the thing it guards teaches the next person to edit the
+  // assertion, which is how a guard stops guarding.
+  ok("the block reaches the prompt", /\$\{briefBlock\(brief[,)]/.test(app));
   ok("and it is told the block outranks its impression",
      /it overrides your impression of the conversation/.test(app));
   ok("the form's answers are passed in too", /startPoint: intakeStartPoint,/.test(app));
@@ -26776,8 +26814,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      !/content: m\.text \}\)\)\s*,?\s*\n\s*\{ role: "user", content: msg \}/.test(app));
 
   // ── AND ASKING IS RECORDED, NOT PARSED ──────────────────────────
+  // Still nextAsks and still never parsed back out of the reply. It gained one
+  // condition on 5 Sep: a turn that raises a CONFLICT asks nothing else, because
+  // briefBlock suppresses the missing-slot list on exactly that condition, and
+  // recording a slot as asked when the question was never put is how a slot
+  // becomes "asked and refused" without anybody being asked.
   ok("what was asked is taken from what it was told to ask",
-     /const askedThisTurn = nextAsks\(brief\)\.map\(s => s\.key\);/.test(app));
+     /const askedThisTurn = conflicts\.length \? \[\] : nextAsks\(brief\)\.map\(s => s\.key\);/.test(app));
+  ok("and nothing is recorded on a turn that asks about a conflict instead",
+     /const asks = clash\.length \? \[\] : nextAsks\(brief\);/.test(readFileSync(join(root, "src/utils/tripBrief.js"), "utf8")));
   ok("and remembered across turns", /setBriefAsked\(prev => \[\.\.\.new Set\(\[\.\.\.prev, \.\.\.askedThisTurn\]\)\]\)/.test(app));
   ok("only when a reply actually arrived", /if \(replyText && askedThisTurn\.length\)/.test(app));
   // Two at a time, so the "two more things" that were three cannot recur.
@@ -27003,8 +27048,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("clicking a pin flies to it", /map\.flyTo\(\[p\.lat, p\.lon\], 15, \{ duration: 0\.85 \}\);/.test(grm));
   ok("and tells the page which pin it was", /if \(onSelect\) onSelect\(p\);/.test(grm));
   ok("the card renders in the corner of the map", /position: "absolute", top: 10, right: 10/.test(gp2));
+  // The exclusion reads `stopName` since 5 Sep: the pin's `name` is "Day 2 · LEGO
+  // House" and the published rows are called "LEGO House", so it never matched
+  // and only the 20 m floor kept the card from listing the stop as its own
+  // nearest neighbour.
   ok("and its sentence is computed, not written by a model",
-     /describeLocation\(mapPin, nearbyPublished\(mapPin, mapLibrary, \{ exclude: mapPin\.name \}\), \{ town: mapPin\.town \}\)/.test(gp2));
+     /describeLocation\(mapPin, nearbyPublished\(mapPin, mapLibrary, \{ exclude: mapPin\.stopName \|\| mapPin\.name \}\), \{ town: mapPin\.town \}\)/.test(gp2));
   ok("the card can be closed", /aria-label="Close this pin"/.test(gp2));
   ok("our own places are passed to the map", /nearby=\{mapLibrary\}/.test(gp2));
   ok("and drawn only once somebody has zoomed in", /if \(z < 13 \|\| !Array\.isArray\(nearby\) \|\| !nearby\.length\) return;/.test(grm));
@@ -27016,9 +27065,20 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   const drawRegion = grm.slice(grm.indexOf("const drawNearby = () => {"), grm.indexOf("drawNearby();"));
   ok("the draw region was found", drawRegion.length > 200);
   ok("the old layer is cleared before each redraw", /nearLayerRef\.current\?\.remove\(\);/.test(drawRegion));
-  ok("and again on teardown",
-     /map\.off\("zoomend moveend", drawNearby\);\s*\n\s*nearLayerRef\.current\?\.remove\(\);/.test(grm));
-  ok("and the zoom listener with it", /map\.off\("zoomend moveend", drawNearby\);/.test(grm));
+  // ── AND AGAIN ON TEARDOWN, ASSERTED BY REGION ───────────────────
+  // This used to pin the two lines as ADJACENT, which broke the day a second
+  // listener was unregistered between them (the stop pins, 5 Sep). Adjacency was
+  // never the rule; being inside the teardown was. The region runs from the
+  // effect's return to the end of it.
+  const teardown = grm.slice(grm.indexOf('return () => {\n      map.off("zoomend moveend", drawNearby);'));
+  const teardownBlock = teardown.slice(0, teardown.indexOf("};") + 2);
+  ok("the teardown region was found", teardownBlock.length > 80 && teardownBlock.length < 1200);
+  ok("and again on teardown", /nearLayerRef\.current\?\.remove\(\);/.test(teardownBlock));
+  ok("and the zoom listener with it", /map\.off\("zoomend moveend", drawNearby\);/.test(teardownBlock));
+  // The stop pins are a layer too, redrawn on every zoom, and leaking one of
+  // those leaks a set of numbered markers over the next route.
+  ok("the pin layer goes with it", /pinLayerRef\.current\?\.remove\(\);/.test(teardownBlock));
+  ok("and its listener", /map\.off\("zoomend", drawPins\);/.test(teardownBlock));
 
   // ── AND THE CSS THAT WAS ONLY IN THE OTHER ROUTE ────────────────
   // .gemlyx-map-label was defined only in App.jsx's inline style, so opening a
@@ -32668,7 +32728,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // preamble written before the model decided to call web_search, left on screen
   // while the search ran. The code already deleted that bubble afterwards, which
   // is the wrong end of the problem.
-  ok("the stream holds back an unfinished sentence", /const shown = holdPartial \? fullText\.slice\(0, completeUpTo\(fullText\)\) : fullText;/.test(app));
+  // Pinned to the hold-back itself rather than to the whole line: the filler
+  // trim now wraps this expression (5 Sep), and an assertion that breaks when
+  // something is composed AROUND the rule it guards teaches the next person to
+  // edit the assertion, which is how a guard stops guarding.
+  ok("the stream holds back an unfinished sentence", /holdPartial \? fullText\.slice\(0, completeUpTo\(fullText\)\) : fullText/.test(app));
   ok("and flushes when a stream really has ended", /if \(!toolUseBlock\) \{ flush\(out\); return \{ data: out, exhausted: false \}; \}/.test(app));
   ok("including when the search rounds run out", /flush\(out\);\s*\n\s*return \{ data: out, exhausted:/.test(app));
 
@@ -38645,10 +38709,24 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   //
   // briefPanel.js sat in this repository with zero callers for three days, which
   // is this project's signature bug: finished, correct code that nothing calls.
-  ok("the brief is kept for the render rather than thrown away", /setLiveBrief\(brief\)/.test(appP));
-  ok("and the chat panel draws it", /progressLine\(briefProgress\(liveBrief\)\)/.test(appP));
+  // ── AND BOTH BARS READ ONE BRIEF, 5 SEP 2026 ────────────────────
+  // Oliver: "one says 'ready to build' while the other says 3/7." Both were
+  // true of what they were reading. This bar read liveBrief, which is set
+  // inside sendAI and knows only the CHAT; the bar under the input reads
+  // liveIntakeBrief, which readBrief builds from the chat and the form. His
+  // brief had five slots filled from the form that liveBrief could not see.
+  //
+  // The rule was already written at liveIntakeBrief's declaration: "the bar and
+  // the button cannot disagree about what is known." It held for that bar and
+  // the button, and there were three of them.
+  ok("the chat panel draws the count", /progressLine\(briefProgress\(liveIntakeBrief\)\)/.test(appP));
+  ok("from the brief that reads the form as well as the chat",
+     !/briefProgress\(liveBrief\)/.test(appP));
+  // Write-only state is the same shape as an unwired helper, one level down.
+  ok("and the chat-only brief is gone rather than left computing for nobody",
+     !/setLiveBrief\(brief\)/.test(appP) && !/const \[liveBrief,/.test(appP));
   // "0 of 7" over an empty box is a form with a scoreboard on it.
-  ok("nothing is shown before they have said anything", /liveBrief && briefProgress\(liveBrief\)\.done > 0/.test(appP));
+  ok("nothing is shown before they have said anything", /liveIntakeBrief && briefProgress\(liveIntakeBrief\)\.done > 0/.test(appP));
   is("and the panel hands the count out with the sentence", typeof M.briefPanel(read("")).progress, "object");
 }
 
@@ -41088,7 +41166,39 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const railed = await rsr("src/components/ChatPlaceCards.jsx", "ChatPlaceCards", { places: [place], C, layout: "rail" });
     const rowed = await rsr("src/components/ChatPlaceCards.jsx", "ChatPlaceCards", { places: [place], C, layout: "row" });
     ok("the rail does not truncate a long name", !/text-overflow:ellipsis/.test(railed.html.replace(/\s/g, "")));
-    ok("and the row still does, because it cannot wrap sideways", /text-overflow:ellipsis/.test(rowed.html.replace(/\s/g, "")));
+    // ── AND NEITHER DOES THE ROW ANY MORE ─────────────────────────
+    //
+    // It used to, and it had to: the row was a sideways-scrolling strip of
+    // 124-pixel cards with no width to wrap into. Oliver, 5 Sep 2026: "make it a
+    // small picture into the chat. Imagine you're talking to me and you want to
+    // show me a picture." A shared picture is one image the width of the message
+    // it came with, stacked under the reply, and that layout has the room the
+    // strip did not. The truncation went with the strip.
+    ok("and neither does the row, now that it is a picture rather than a strip",
+       !/text-overflow:ellipsis/.test(rowed.html.replace(/\s/g, "")));
+    ok("which is only true because it stopped scrolling sideways",
+       !/overflow-x:auto/.test(rowed.html.replace(/\s/g, "")));
+    // ── A PICTURE SOMEBODY SENT YOU ─────────────────────────────────
+    // One image the width of the message, stacked under the reply, with the same
+    // corner cut off as the assistant's own bubble so it reads as coming from
+    // the same speaker rather than from the page.
+    {
+      const flat = rowed.html.replace(/\s/g, "");
+      ok("the picture is a column rather than a strip", /flex-direction:column/.test(flat));
+      ok("and it carries the assistant bubble's own corner", /border-radius:14px14px14px4px/.test(flat));
+      ok("and it says what tapping it does", /Taptoreadit/.test(flat));
+      ok("and the mark says whose page it is", /OURPAGE/.test(flat));
+      // Arrives a beat after the words, the way a person sends a picture after
+      // saying something, and staggered so two read as two.
+      ok("it animates in", /gx-shared-photo/.test(flat));
+      const two = await rsr("src/components/ChatPlaceCards.jsx", "ChatPlaceCards",
+        { places: [place, { ...place, name: "Hammershus", _src: "towns" }], C, layout: "row" });
+      ok("and a second one lands after the first", /animation-delay:90ms/.test(two.html.replace(/\s/g, "")));
+      // Motion is not everybody's friend, and a photograph that flies in is the
+      // kind that matters.
+      ok("unless the reader has asked for less motion",
+         /prefers-reduced-motion/.test(readFileSync(join(root, "src/components/ChatPlaceCards.jsx"), "utf8")));
+    }
   }
   // A place with no usable photo produces no card in either layout, so the rail
   // cannot become an empty grey column.
@@ -42418,7 +42528,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // the word is filler. All advice, no removal. Twenty-six days later it was
 // still shipping, which is the evidence that a prompt rule was not enough.
 {
-  const { trimFillerRuns, fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, cleanReaderProse } = M;
+  const { trimFillerRuns, trimFillerAgainst, fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, cleanReaderProse } = M;
 
   ok("the word he named is on the list", FILLER_WORDS.includes("actually"));
   // The budget is the one already agreed in August, not a new one.
@@ -42520,6 +42630,132 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // is not reported, which is the point: the finding now means "a row where the
   // trim could not help", not "a row that says actually".
   is("one surviving use is not a finding", Object.keys(fillerWordCounts("It is actually free.")), []);
+
+  // ── AND THE CHAT NEVER GOT THE RULE AT ALL, 5 SEP ───────────────
+  //
+  // Oliver, 5 Sep 2026: "Is it really impossible to get the AI to stop saying
+  // 'actually' so much?" Fourth ask in a month. The first three were prompt
+  // instructions and all three failed, which is the same evidence the dashes
+  // produced before they were removed in code instead.
+  //
+  // Everything above this runs at READ time over PUBLISHED ROWS. The chat had
+  // no filler rule of any kind, and the chat is most of what anybody reads: the
+  // half that was being trimmed is the half he rarely opens.
+  //
+  // ── THE WINDOW IS THE THREAD, WHICH IS THE WHOLE FIX ────────────
+  //
+  // "PER ENTRY, NOT PER FIELD" is the rule twenty lines up, and its reason was
+  // that a budget spent per field leaves one in each of eight fields, which is
+  // eight on the page. A budget spent PER REPLY leaves one in every bubble,
+  // which is the identical bug in a conversation, and it is exactly what he was
+  // looking at.
+  {
+    // A fresh thread keeps one, and what it keeps is the case the word is for.
+    // In chat that case is stronger than in prose, because there is somebody to
+    // correct: without it this reply reads as if the traveller had not spoken.
+    is("the first use in a conversation survives",
+       trimFillerAgainst([], "It's actually closed on Mondays."),
+       "It's actually closed on Mondays.");
+
+    // ── HIS OWN TWO BUBBLES ───────────────────────────────────────
+    // Both off the screenshots he sent, from one thread. Under a per-reply
+    // budget both survive, because each bubble says it once. That is the state
+    // he was complaining about, so it is the state asserted against.
+    const spent = ["Denmark's a great call for autumn, actually, the coast towns get really quiet"];
+    is("and the next bubble in the same thread loses it",
+       trimFillerAgainst(spent, "Bikes and cars works well down there, actually."),
+       "Bikes and cars works well down there.");
+    is("a comma PAIR collapses to one comma rather than to none",
+       trimFillerAgainst(spent, "Denmark's a great call for autumn, actually, the coast towns get really quiet"),
+       "Denmark's a great call for autumn, the coast towns get really quiet");
+    is("a sentence-initial one hands the capital on",
+       trimFillerAgainst(spent, "Actually, the coast towns get quiet."), "The coast towns get quiet.");
+    is("and a mid-clause one leaves one space",
+       trimFillerAgainst(spent, "What actually matters is the timetable."), "What matters is the timetable.");
+
+    // Two in one reply on a fresh thread is the within-string case, and the
+    // EARLIEST is the one kept: a reader meets it before the repetition
+    // registers.
+    is("two in one reply keeps the earlier one",
+       trimFillerAgainst([], "It is actually free, and it is actually worth it."),
+       "It is actually free, and it is worth it.");
+
+    // ── EACH WORD CARRIES ITS OWN BUDGET ACROSS THE THREAD ────────
+    // A mutant that spent one budget for all four words passed everything above
+    // this, because every fixture used "actually" alone.
+    is("spending actually earlier does not spend truly",
+       trimFillerAgainst(["It is actually free."], "It is truly good, and it is actually good."),
+       "It is truly good, and it is good.");
+
+    // ── AND THE PARTIAL A READER WATCHES TYPE ITSELF OUT ──────────
+    //
+    // The trim runs on the streaming bubble as well, so it runs on PREFIXES of
+    // the reply. That is only safe if the budget is spent left to right: a word
+    // kept in a prefix has to still be there when the prefix grows, or the
+    // reader watches a word vanish out of a sentence they are reading, which is
+    // worse than the word.
+    {
+      const full = "It's actually closed on Mondays. It is actually free on the first Sunday.";
+      const seen = [];
+      for (let i = 1; i <= full.length; i++) seen.push(trimFillerAgainst([], full.slice(0, i)));
+      const kept = seen.filter(t => /\bactually\b/.test(t)).length;
+      ok("once it appears in the stream it never disappears again",
+         seen.slice(seen.findIndex(t => /\bactually\b/.test(t))).every(t => /\bactually\b/.test(t)));
+      ok("and there was a prefix carrying it to check", kept > 0);
+      is("the finished reply still has exactly the one",
+         (trimFillerAgainst([], full).match(/\bactually\b/gi) || []).length, 1);
+    }
+
+    // The shapes a live thread actually hands it: a reply that is not a string
+    // because the model returned no text block, and a prior list holding the
+    // nulls and empties aiMessages can carry.
+    is("a non-string reply passes straight through", trimFillerAgainst([], 42), 42);
+    is("a missing prior list is an empty one", trimFillerAgainst(undefined, "It is actually free."), "It is actually free.");
+    is("and non-prose in the thread spends nothing",
+       trimFillerAgainst([null, 42, ""], "It is actually free."), "It is actually free.");
+    is("a reply with nothing to cut comes back as it came",
+       trimFillerAgainst(["It is actually free."], "Nothing to trim here."), "Nothing to trim here.");
+  }
+
+  // ── AND IT IS WIRED, ON EVERY PATH OUT OF THAT CHAT ─────────────
+  {
+    // Comments stripped, because the absence check below is about code and the
+    // paragraphs explaining this fix name the function it replaced. A
+    // source-scanning assertion satisfied by its own explanation is the oldest
+    // way to get a green tick for nothing in this repo.
+    const bare = (t) => t.replace(/\/\*[\s\S]*?\*\//g, "").split("\n").map(l => l.replace(/(^|[^:"'`\\])\/\/.*$/, "$1")).join("\n");
+    const chat = bare(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    const helpersR = bare(readFileSync(join(root, "src/utils/helpers.js"), "utf8"));
+    // Three call sites: the streamed bubble, the finished reply, and the retry
+    // after an empty one. The retry needs its own because it parses the
+    // response by hand a second time, which is the same shape of hole the
+    // max_tokens fix fell into here: two implementations of one call, and only
+    // one of them ever taught the new rule.
+    is("every chat path out of the model runs the trim",
+       (chat.match(/trimFillerAgainst\(priorReplies,/g) || []).length, 3);
+    // ── THE STREAMED ONE IS NOT OPTIONAL ──────────────────────────
+    // Trimming only the finished reply meant the word typed itself out and then
+    // vanished when the reply landed, with the sentence reflowing round the
+    // hole. The stream is where a reader meets the text.
+    ok("including the bubble that streams, so nothing vanishes as it is read",
+       /const shown = trimFillerAgainst\(priorReplies, holdPartial \?/.test(chat));
+    // ── AND AN ERROR BUBBLE CANNOT SPEND THE BUDGET ───────────────
+    // Same filter baseMessages uses, for the same reason: Gemlyx never said
+    // those words, so they are not its prior turns and they cannot make the
+    // next real reply lose a word it was entitled to keep.
+    ok("the budget is spent by what Gemlyx said, not by what failed to send",
+       /const priorReplies = aiMessages\.filter\(m => m\.role === "assistant" && !m\.isError\)\.map\(m => m\.text\);/.test(chat));
+    // ── AND THE VERSION THAT REMOVED EVERY ONE IS GONE ────────────
+    //
+    // It existed for a day. It contradicted FILLER_REPEAT, which has said since
+    // August that once can be doing real work, and in a conversation the use it
+    // deleted is the one that matters most. Asserted by absence so it cannot
+    // come back beside the rule it disagrees with.
+    is("and the one that removed every occurrence is not in the app any more",
+       (chat.match(/\bstripFiller\b/g) || []).length, 0);
+    is("nor in helpers, where the rule it contradicted lives",
+       (helpersR.match(/\bstripFiller\b/g) || []).length, 0);
+  }
 }
 
 // ── THE FOUR NEW BAR-STREET RUNS, 1 SEP ─────────────────────────────
@@ -43541,7 +43777,6 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     "src/utils/savedTrip.js:savedLine",
     "src/utils/studioDraftStore.js:storedKeys",
     "src/utils/studioRecorder.js:clearRecording",
-    "src/utils/travellerWords.js:edged",
     "src/utils/tripBrief.js:briefMovedOn",
     "src/utils/venueStyle.js:buildNightlifeStyleFacet",
     "src/utils/venueStyle.js:venueStyleLabel",
@@ -43884,16 +44119,43 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     }
     ok("the choice is persisted rather than held in memory", /setStoredUiLanguage\(code\)/.test(app));
     ok("and the page declares what language it is in", /document\.documentElement\.lang = uiLang/.test(app));
-    // ── THE BAR THAT OVERFLOWED, 5 SEP ──────────────────────────
-    // German drew the picker on top of the Gemlyx Detour button and "Entdecken"
-    // on top of the logo. The nav had `flex: 1; min-width: 0` and no overflow
-    // rule, so it shrank and its nowrap contents did not.
-    ok("the nav clips rather than drawing over its neighbours", /\.gx-topnav \{[^}]*overflow: hidden/.test(app));
-    // And it collapses into the burger at the width each language needs, which
-    // is what documentElement.lang is for.
-    ok("English keeps the narrowest breakpoint", /min-width: 1180px[^@]*html:not\(\[lang="da"\]\):not\(\[lang="de"\]\) \.gx-topnav/.test(app));
-    ok("Danish needs more room", /min-width: 1230px[^@]*html\[lang="da"\] \.gx-topnav/.test(app));
-    ok("and German needs the most", /min-width: 1280px[^@]*html\[lang="de"\] \.gx-topnav/.test(app));
+    // ── AND THE WIDTH STOPPED BEING A NUMBER, 5 SEP ─────────────
+    // The nav was given a width twice and both numbers were wrong for a
+    // language: 1180 was measured for English and hid the Danish and German
+    // navs, 1240/1300/1400 hid them harder. A strip that scrolls fits at every
+    // width, so the per-language queries are gone and so is the class of bug
+    // where translating the site removed its own navigation.
+    ok("the nav no longer has a width per language",
+       !/html\[lang="da"\] \.gx-topnav/.test(app) && !/html\[lang="de"\] \.gx-topnav/.test(app));
+    ok("and it scrolls rather than clipping", /\.gx-navstrip::-webkit-scrollbar \{ display: none/.test(app));
+    // The one breakpoint that survives answers a different question: is this a
+    // screen that carries a top nav at all, or does the burger hold it.
+    ok("one breakpoint decides whether there is a top nav at all",
+       /@media \(min-width: 1024px\) \{\s*\.gx-topnav \{ display: flex; \}/.test(app));
+    // ── AND GEMLYX DETOUR IS OUT OF THE STRIP ───────────────────
+    // Oliver: "Gemlyx Detour should ALWAYS be visible as a whole." It was the
+    // ninth entry in NAV_ITEMS, so it sat inside the row that clips and was the
+    // last thing in it, which made it the first casualty.
+    ok("the pages are in a strip", /<NavStrip C=\{C\}>/.test(app));
+    // By POSITION rather than by an adjacency regex: stripComments leaves the
+    // removed JSX comment behind as something, and what matters is only that the
+    // button is outside the strip, which is what these two indices say.
+    {
+      const close = app.indexOf("</NavStrip>");
+      const ai = app.indexOf('className="gx-topnav-ai"');
+      ok("the strip closes before the Detour button starts", close > 0 && ai > close);
+      ok("and the button is not inside the strip",
+         app.slice(app.indexOf("<NavStrip"), close).indexOf('className="gx-topnav-ai"') === -1);
+    }
+    ok("the strip carries the eight pages and not the ninth",
+       /NAV_ITEMS\.filter\(item => item\.id !== "ai"\)\.map/.test(app));
+    // Sliced rather than matched with [^>]*: the onClick contains an arrow
+    // function, so the first ">" in that attribute list is inside "=>".
+    {
+      const aiAt = app.indexOf('className="gx-topnav-ai"');
+      ok("the Detour button is findable", aiAt > 0);
+      ok("and nothing can shrink it", /flexShrink: 0/.test(app.slice(aiAt, aiAt + 700)));
+    }
   }
 }
 
@@ -44302,7 +44564,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // to be in front of it.
     const resetAt = appR.indexOf("setAiMessages(clearThread())");
     ok("the reset control is findable", resetAt > 0);
-    const resetBlock = appR.slice(Math.max(0, resetAt - 900), resetAt);
+    // stripComments BLANKS rather than deletes, so the window is a distance in
+    // the original source and a paragraph of explanation above the control eats
+    // it. Widened once, on 5 Sep, when the reset learned to clear the brief too;
+    // the guard is 300 characters away and the slack is for the comment.
+    const resetBlock = appR.slice(Math.max(0, resetAt - 1800), resetAt);
     // Only when there is something to clear: over a bare greeting it is a
     // button that does nothing.
     ok("and only shows once there is a conversation", /aiMessages\.length > 1 && \(/.test(resetBlock));
@@ -44329,6 +44595,936 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the confirmation says what was kept rather than naming a table",
      /Saved with the conversation and the screen/.test(pv));
   ok("and no longer only names a destination", !/>Sent\. It is in Studio suggestions\.</.test(pv));
+}
+
+
+// ── THE WEATHER NOTICE THAT WOULD NOT GO AWAY, 5 SEP 2026 ───────────
+//
+// Oliver, with a screenshot of his own front page: "this tip in the right
+// corner keeps popping up. And 'clearer than before'.. be more specific. And
+// Let it be a notification like this."
+{
+  const { alertKey, describeWeatherChange, unseenAlerts, usableSeen, alertCountLine, SEEN_KEY, MAX_SEEN } = M;
+
+  // ── THE KEY, WHICH IS WHY IT CAME BACK ────────────────────────────
+  is("a notice is identified by guide, day and the new risk", alertKey("g1", 2, "high"), "g1-2-high");
+  // The risk is IN the key on purpose: dismissing "day 3 turned to rain" must
+  // not also silence "day 3 turned back to dry" three days later. That is a
+  // different fact about the same day and it is the one worth having.
+  ok("the same day turning back is a different notice", alertKey("g1", 2, "high") !== alertKey("g1", 2, "none"));
+  ok("and two guides never collide", alertKey("g1", 2, "high") !== alertKey("g2", 2, "high"));
+
+  // ── AND DISMISSED STAYS DISMISSED ─────────────────────────────────
+  const alerts = [{ id: "g1-0-high" }, { id: "g1-1-none" }, { id: "g2-0-high" }];
+  is("nothing seen means everything shows", unseenAlerts(alerts, []).length, 3);
+  is("a dismissed one is gone", unseenAlerts(alerts, ["g1-0-high"]).map(a => a.id).join(","), "g1-1-none,g2-0-high");
+  is("and all of them can be", unseenAlerts(alerts, ["g1-0-high", "g1-1-none", "g2-0-high"]).length, 0);
+  is("a missing list is survivable", unseenAlerts(alerts, null).length, 3);
+  is("and a missing alert list is empty rather than fatal", unseenAlerts(null, []).length, 0);
+  // Stored keys are untrusted like any other stored value.
+  is("junk in the seen list is dropped", usableSeen('["a",null,3,"b"]').join(","), "a,b");
+  is("broken JSON is empty rather than fatal", usableSeen("{{{").length, 0);
+  ok("and the list is bounded, because nothing ever removes an entry", MAX_SEEN > 0 && MAX_SEEN <= 1000);
+  ok("under a namespaced key", /^gemlyx_/.test(SEEN_KEY));
+
+  // ── AND IT SAYS SOMETHING ─────────────────────────────────────────
+  // "Day 1 now looks clearer than before" is the shape of a fact without being
+  // one, and every number it needed was already on the slot it was built from.
+  {
+    const dry = describeWeatherChange({
+      dayLabel: "Day 1", oldRisk: "high", newRisk: "none",
+      slot: { temperature_c: 18.4, precipitation_mm: 0, wind_speed_ms: 4.2 },
+    });
+    ok("it gives the temperature", /18°/.test(dry));
+    ok("and the wind", /4 m\/s wind/.test(dry));
+    ok("and says dry rather than nought millimetres", /dry/.test(dry) && !/0 mm/.test(dry));
+    ok("and what it was before", /It was rain when the guide was built/.test(dry));
+    ok("and never the old adjective", !/clearer than before/.test(dry));
+
+    const wet = describeWeatherChange({
+      dayLabel: "Day 3", oldRisk: "none", newRisk: "high",
+      slot: { temperature_c: 13.6, precipitation_mm: 6.25, wind_speed_ms: 9 },
+    });
+    ok("rain is given in millimetres", /6\.3 mm of rain/.test(wet));
+    ok("with the temperature", /14°/.test(wet));
+    ok("and what it was", /It was dry when the guide was built/.test(wet));
+  }
+  // A slot with nothing on it must still produce a sentence rather than "NaN°".
+  {
+    const bare = describeWeatherChange({ dayLabel: "Day 2", oldRisk: "none", newRisk: "high", slot: null });
+    ok("a bare slot still says something", /Day 2/.test(bare) && /rain/.test(bare));
+    ok("and never prints NaN at a reader", !/NaN|undefined/.test(bare));
+    ok("nor does a call with no arguments at all", !/NaN|undefined/.test(describeWeatherChange()));
+  }
+  is("the bell's own line is singular when it is one", alertCountLine(1), "1 weather change on a saved trip");
+  ok("and plural otherwise", /^3 weather changes/.test(alertCountLine(3)));
+
+  // ── AND IT IS A BELL ──────────────────────────────────────────────
+  {
+    const appW = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    const bell = readFileSync(join(root, "src/components/WeatherBell.jsx"), "utf8");
+    ok("the corner holds a bell rather than a card", /<WeatherBell/.test(appW));
+    ok("and the old card is gone", !/weatherAlerts\.map\(a =>/.test(appW));
+    ok("dismissing writes it down", /markAlertSeen\(id\)/.test(appW));
+    ok("and the seen list is consulted before anything is shown", /unseenAlerts\(alerts, seenAlerts\(\)\)/.test(appW));
+    ok("the alert carries its own sentence", /line: describeWeatherChange\(/.test(appW));
+    // The count is what makes a bell read as a notification rather than as a
+    // settings icon.
+    ok("the bell carries a count", /\{alerts\.length\}<\/span>/.test(bell));
+    ok("and says nothing when there is nothing", /if \(!alerts\.length\) return null;/.test(bell));
+    // Closed it is one button: the list is behind a press.
+    ok("the list is behind a press", /\{open && \(/.test(bell));
+  }
+}
+
+
+// ── "IT PUT NIGHTLIFE TO KØDBYEN", 5 SEP 2026 ───────────────────────
+//
+// Oliver's own conversation, exported and read slot by slot. He answered four
+// questions in a row with the answer and nothing else:
+//
+//   "Where are you flying into?"          "Billund"
+//   "How many days have you got?"         "7"
+//   "How are you all getting around?"     "bikes and cars"
+//   "Have you booked somewhere to stay?"  "The lodge billund we got"
+//
+// The exported brief recorded all four as DECLINED — the state that means asked
+// and refused — with `missing: []` and `ready: true`. Party held the literal
+// string "said in the conversation" for a man travelling alone with eight
+// children. The guide was then built with no origin, no length, no transport and
+// no hotel in the brief, and it sent him to a bar in Kødbyen, which is in
+// Copenhagen, described as being in Aarhus.
+//
+// The whole transcript is the fixture, because the bug is not in any one reader.
+// It is that a bare answer to a direct question was not read as an answer.
+{
+  const { readBrief, directAnswers, askedBeforeTurns, lastAskedOnScreen, isRefusal, withoutCorrectionLead,
+          looksLikePlaceAnswer, daysAnswer, transportAnswer, stayAnswer, partyAnswer,
+          partyLine, widestMode, isKnownPlace } = M;
+
+  const HIS_TURNS = [
+    "yoyoyoyoyoyo I'm going to Denmark soon",
+    "Billund", "7", "It's in december", "I'm alone with 8 kids",
+    "I was thinking of nightlife, a couple of beers, and then some nature",
+    "bikes and cars", "The lodge billund we got",
+  ];
+  const HIS_ASKS = [[], ["origin"], ["days"], ["when"], ["party"], ["interests"], ["transport"], ["stay"]];
+  const hisBrief = (over = {}) => readBrief({
+    travellerText: HIS_TURNS.join("\n"), travellerTurns: HIS_TURNS,
+    answering: HIS_ASKS, intake: {}, asked: ["origin", "days", "when", "party", "interests", "transport", "stay"],
+    today: new Date("2026-09-05"), ...over,
+  });
+
+  // ── THE FOUR THAT WERE CALLED REFUSALS ────────────────────────────
+  {
+    const b = hisBrief();
+    is("Billund is where the trip starts", b.known.origin?.value, "Billund");
+    is("7 is seven days", b.known.days?.value, 7);
+    is("bikes and cars is how they get around", b.known.transport?.value, "bikes and cars");
+    is("and the lodge is booked", b.known.stay?.value, "booked");
+    is("so nothing in this conversation was refused", b.declined, []);
+    // The state the whole bug lived in: `declined` swallows a slot so `missing`
+    // is empty so `ready` is true. Ready is still true here, and now it is true
+    // because the brief is actually full.
+    ok("and the brief is ready on facts rather than on silence",
+       b.ready && Object.keys(b.known).length >= 7);
+  }
+
+  // ── AND EIGHT CHILDREN ARE EIGHT CHILDREN ─────────────────────────
+  //
+  // Oliver, 4 Sep, on the previous build: "this review was after a chat where I
+  // mentioned travelling with 7 kids.. yet it puts me on a bar/club for 21+".
+  // There is no age gate anywhere in this app, and this is why one could not be
+  // written: the party slot was a BOOLEAN wearing a value's clothes, so nothing
+  // downstream had ever been told there were children at all.
+  {
+    const b = hisBrief();
+    is("the party is a party and not a note that one was mentioned", b.known.party?.adults, 1);
+    is("with the children counted", b.known.party?.kids, 8);
+    is("and a total", b.known.party?.total, 9);
+    is("and it reads as a sentence for the model", b.known.party?.value, "1 adult and 8 children");
+    ok("the placeholder is not what it says any more",
+       b.known.party?.value !== "said in the conversation");
+  }
+
+  // ── THE READERS, ONE AT A TIME ────────────────────────────────────
+  is("a bare town name is a place", looksLikePlaceAnswer("Billund"), "Billund");
+  is("an airport is the town it is at", looksLikePlaceAnswer("Billund airport"), "Billund");
+  is("and a town nobody here has heard of is still a place",
+     looksLikePlaceAnswer("Hamburg"), "Hamburg");
+  // The one thing this must never do is turn a shrug into a fact: a blocking
+  // slot filled from "no idea" stops the gate asking, which is worse than the
+  // bug being fixed.
+  is("a shrug is not a place", looksLikePlaceAnswer("not sure yet"), null);
+  // The lead-in is not part of the answer. Without this the origin slot fills
+  // with the string "actually Copenhagen", which is not a place and is what a
+  // geocoder would be handed.
+  is("a correction lead-in comes off the front", looksLikePlaceAnswer("actually Copenhagen"), "Copenhagen");
+  is("including two of them", withoutCorrectionLead("sorry, actually Copenhagen"), "Copenhagen");
+  is("and it leaves an ordinary answer alone", withoutCorrectionLead("Billund"), "Billund");
+  is("nor is a question back", looksLikePlaceAnswer("does it matter?"), null);
+  is("nor is a sentence", looksLikePlaceAnswer("well we haven't booked the flights but probably somewhere in Jutland"), null);
+  ok("the kommune list is what makes a bare name certain", isKnownPlace("billund") && isKnownPlace("Tønder"));
+
+  is("a bare number is a day count", daysAnswer("7"), 7);
+  is("a week is seven", daysAnswer("a week"), 7);
+  is("a week and a half is eleven, counting both ends", daysAnswer("a week and a half"), 11);
+  is("ten nights is eleven days", daysAnswer("10 nights"), 11);
+  is("and so is halvanden uge", daysAnswer("halvanden uge"), 11);
+  is("3 nætter is four days", daysAnswer("3 nætter"), 4);
+  is("a long weekend is four", daysAnswer("just a long weekend"), 4);
+  // ── ONE CAP, AND IT IS THE ONE ALREADY WRITTEN DOWN ───────────────
+  // dayCountIn has capped a spoken length at 14 since long before this reader
+  // existed. Two ceilings meant the same sentence read as 20 days or 14
+  // depending on whether the question happened to have been asked, which is not
+  // a difference anybody could explain.
+  is("a hundred days is capped, the way a spoken one always was", daysAnswer("100"), 14);
+  is("and so is twenty", daysAnswer("20 days"), 14);
+  is("but nought is not a trip", daysAnswer("0"), null);
+
+  // ── "BIKES AND CARS" IS BOTH, AND THE CAR DECIDES THE REACH ───────
+  //
+  // travelModeKey resolves slowest-first on purpose, and that rule is right for a
+  // hedge. It is wrong for a conjunction: before this existed the slot stayed
+  // EMPTY on this answer, and an unknown mode means no distance ceiling at all,
+  // so reading it as a bicycle would newly break the route it used to allow.
+  is("a plain list takes the mode that reaches furthest",
+     transportAnswer("bikes and cars")?.mode, "car");
+  is("a hedge keeps the slow one", transportAnswer("mostly walking, might rent bikes one day")?.mode, "walk");
+  is("trains and a bicycle is a train trip", transportAnswer("we'll take trains and cycle")?.mode, "public transport");
+  is("and the words the traveller used are kept as the value",
+     transportAnswer("bikes and cars")?.value, "bikes and cars");
+  is("a negated mode is not a mode", transportAnswer("no car, trains")?.mode, "public transport");
+  is("and a question back settles nothing", transportAnswer("does it matter? we might rent a car or just take trains"), null);
+  is("widestMode alone picks the far end", widestMode("bikes and cars"), "car");
+
+  is("naming the place you sleep is a booking", stayAnswer("The lodge billund we got")?.value, "booked");
+  is("and so is yes with a hotel after it", stayAnswer("yes, Scandic Aarhus for all nights")?.value, "booked");
+  is("not yet is the other answer", stayAnswer("not yet")?.value, "not booked");
+  is("and so is still looking", stayAnswer("still looking")?.value, "not booked");
+
+  is("solo is one adult", partyAnswer("just me")?.adults, 1);
+  is("a couple is two", partyAnswer("me and the wife")?.adults, 2);
+  is("a group of twelve is twelve", partyAnswer("a group of 12")?.total, 12);
+  {
+    const p = partyAnswer("3 adults 2 kids aged 4 and 11");
+    is("adults and children are counted apart", [p.adults, p.kids], [3, 2]);
+    is("and the ages are kept, which is what a 21+ bar needed", p.kidAges, [4, 11]);
+    is("and it reads as a sentence", partyLine(p), "3 adults and 2 children (aged 4, 11)");
+  }
+  // An unknown number of children is not zero children. A guide builder that
+  // cannot tell those apart is how "family" became a party with no ages.
+  is("nothing stated stays null rather than becoming nought", partyAnswer("just me")?.kids, null);
+
+  ok("a shrug is a shrug in every reader",
+     isRefusal("no idea") && isRefusal("dunno") && isRefusal("up to you") && isRefusal("ved det ikke"));
+  ok("and an answer is not", !isRefusal("Billund") && !isRefusal("7") && !isRefusal("bikes and cars"));
+
+  // ── TWO QUESTIONS AT ONCE MAKE A BARE ANSWER AMBIGUOUS ────────────
+  //
+  // Gemlyx may ask for two slots in one reply. "7" after "how many days, and
+  // who's coming?" is genuinely ambiguous, and guessing is how seven children
+  // became a seven-day trip. So a BARE answer only settles a slot when one was
+  // asked; a shaped one still reads, because "2 adults and 2 kids" says which
+  // question it is answering and "7" does not.
+  {
+    const two = directAnswers(["7"], [["days", "party"]]);
+    is("a bare number with two questions on the table settles neither", two, {});
+    const shaped = directAnswers(["2 adults and 2 kids"], [["days", "party"]]);
+    is("but an answer that names itself still counts", shaped.party?.kids, 2);
+    is("and it did not also become a day count", shaped.days, undefined);
+  }
+
+  // ── LATEST ANSWER WINS ────────────────────────────────────────────
+  //
+  // The sentence readers take the FIRST match over the whole joined
+  // conversation, so a correction can never reach them. Here every answer is
+  // tied to the question it answered, so "later" is a fact rather than a guess.
+  {
+    const d = directAnswers(["3", "4"], [["days"], ["days"]]);
+    is("a second answer to the same question replaces the first", d.days?.value, 4);
+    const o = directAnswers(["Billund", "Copenhagen"], [["origin"], ["origin"]]);
+    is("and so does a corrected origin", o.origin?.value, "Copenhagen");
+  }
+
+  // ── AND A SLOT NOBODY ASKED ABOUT IS NOT READ ─────────────────────
+  // The whole module is keyed on the question. A turn with no question before it
+  // is prose, and prose is what the sentence readers are for.
+  is("an unprompted turn settles nothing here", directAnswers(["Billund"], [[]]), {});
+  is("and neither does a missing alignment", directAnswers(["Billund"], null), {});
+
+  // ── THE ALIGNMENT ITSELF ──────────────────────────────────────────
+  //
+  // An off-by-one in this function is the difference between reading "7" as a
+  // day count and reading it as a headcount, so it is asserted rather than
+  // trusted.
+  {
+    const thread = [
+      { role: "assistant", text: "Hi!" },
+      { role: "user", text: "Denmark" },
+      { role: "assistant", text: "Where from?", asked: ["origin"] },
+      { role: "user", text: "Billund" },
+      { role: "assistant", text: "How long?", asked: ["days"] },
+      { role: "user", text: "7" },
+    ];
+    is("each turn carries the question that came before it",
+       askedBeforeTurns(thread), [[], ["origin"], ["days"]]);
+    // ── ONE RULE, IN TWO FUNCTIONS ─────────────────────────────────
+    // This used to return [] the moment it walked back past a traveller turn,
+    // which is the opposite of what askedBeforeTurns does twelve lines above it.
+    // An adversarial review found a real thread where the two disagreed and the
+    // send path and the progress bar read different briefs from one
+    // conversation. Gemlyx has not replied, so it has not accepted an answer.
+    is("the question stays open until Gemlyx replies to it",
+       lastAskedOnScreen(thread), ["days"]);
+    is("and after a reply it is that reply's own asks",
+       lastAskedOnScreen(thread.slice(0, 5)), ["days"]);
+    // ── TWO MESSAGES IN A ROW ARE STILL ANSWERING THAT QUESTION ────
+    //
+    // A double-send while Gemlyx is thinking is nearly always one answer split
+    // in two, or a correction of the first half. Gemlyx has not replied, so it
+    // has not accepted an answer, so the question is still the live one. A
+    // version that cleared the question after the first turn took "Billund" and
+    // threw away "actually Copenhagen".
+    {
+      const doubled = [
+        { role: "assistant", text: "Where from?", asked: ["origin"] },
+        { role: "user", text: "Billund" },
+        { role: "user", text: "actually Copenhagen" },
+        { role: "assistant", text: "How long?", asked: ["days"] },
+        { role: "user", text: "7" },
+      ];
+      is("a double-send is still answering the same question",
+         askedBeforeTurns(doubled), [["origin"], ["origin"], ["days"]]);
+      const d = directAnswers(["Billund", "actually Copenhagen", "7"], askedBeforeTurns(doubled));
+      is("so the correction is the one that lands", d.origin?.value, "Copenhagen");
+      is("and the next question is read on its own", d.days?.value, 7);
+    }
+    // A reply that failed to send asked nothing, and the traveller never saw it.
+    const withError = [
+      { role: "assistant", text: "Where from?", asked: ["origin"] },
+      { role: "assistant", text: "Something went wrong", isError: true },
+      { role: "user", text: "Billund" },
+    ];
+    is("an error bubble does not swallow the real question",
+       askedBeforeTurns(withError), [["origin"]]);
+  }
+
+  // ── THREE MORE THE SAME REVIEW FOUND, 5 SEP ───────────────────────
+  //
+  // Each one produces a WRONG GUIDE silently, and each was found by running the
+  // real readers rather than by reading them.
+  {
+    const { dayCountIn, arrivalDateIn, monthOnlyIn, withoutRefused } = M;
+    const T = new Date("2026-09-05");
+
+    // ── "TODAY" WAS TWO DAYS ────────────────────────────────────────
+    //
+    // `to` is Danish for 2 and `day` is an English day word, so "today" matched
+    // this pattern end to end with nothing at all between the two halves. Every
+    // English sentence containing the word built a two-day trip, and a single
+    // exec over the joined conversation meant the real answer later in the
+    // sentence was never reached.
+    is("today is not a length", dayCountIn("today"), null);
+    is("and it does not hide the real answer beside it",
+       dayCountIn("we land today, staying 10 days"), 10);
+    is("nor does it in the ordinary sentence it turns up in",
+       dayCountIn("I'm booking the flights today, we want 6 days"), 6);
+    // A DIGIT may be glued to its unit; a spelled number may not, because a
+    // spelled number glued to a day word is a longer word rather than a length.
+    is("a digit glued to its unit is still a length", dayCountIn("7days"), 7);
+    is("and the Danish for two days still reads", dayCountIn("to dage"), 2);
+    is("as does a range", dayCountIn("2-3 days"), 3);
+    is("and a week", dayCountIn("a week"), 7);
+
+    // ── A DATE MAY NOT BE BUILT OUT OF TWO MESSAGES ─────────────────
+    //
+    // readBrief joins the traveller's turns with a newline and `\s` matches a
+    // newline, so "It's in december" followed by "2 adults" came back as 2
+    // December at DAY precision — a fabricated exact date on a hard slot, and
+    // worse than a missing one, because day precision means nobody asks which
+    // day and the guide dates its weather and its events to it.
+    is("a month and the next message's number are not a date",
+       arrivalDateIn("It's in december\n2 adults", T), null);
+    is("nor are a number and the next message's month",
+       arrivalDateIn("3\noctober", T), null);
+    ok("the month is still read, which is what was actually said",
+       monthOnlyIn("It's in december\n2 adults", T)?.start?.getMonth() === 11);
+    // Written in one message it reads exactly as it always did.
+    is("a date on one line is still a date",
+       arrivalDateIn("we arrive 12 december", T)?.getDate(), 12);
+    is("in either order", arrivalDateIn("we arrive December 12", T)?.getDate(), 12);
+
+    // ── A THEME THEY REFUSED IS NOT A THEME ─────────────────────────
+    //
+    // readTransport has had a negation scrub since 18 August, because "we have no
+    // car" says they are NOT driving. Interests never got one, so "I don't want
+    // to do museums or castles" filled the blocking slot with museums and
+    // castles — and the brief block prints them under "Never ask about any of
+    // these again", so the guide is built around the two things the traveller
+    // opened by refusing.
+    const themes = (t) => readBrief({ travellerText: t, travellerTurns: [t], today: T }).known.interests?.value ?? null;
+    is("a refused theme fills nothing", themes("I don't want to do museums or castles, none of that"), null);
+    is("nor does a hated one", themes("definitely not nature, we hate hiking"), null);
+    is("nor a christmas market that bores them",
+       themes("we're NOT going in december, christmas markets bore us. march."), null);
+    // ── AND THE SCOPE ENDS AT THE CONTRAST WORD ─────────────────────
+    // One sentence can hold a refusal and an answer. A scrubber that ran to the
+    // full stop would throw away the half that was the answer, which is the same
+    // bug facing the other way.
+    is("but the answer after the but survives", themes("not nature, but food and history"), "food, history");
+    is("and an ordinary answer is untouched",
+       themes("I was thinking of nightlife, a couple of beers, and then some nature"), "nature, nightlife, beer");
+    ok("the scrubber leaves text with nothing refused alone",
+       withoutRefused("nature and good food").trim() === "nature and good food");
+  }
+
+  // ── "THE AI GOTTA SOLVE IT SOMEHOW" ───────────────────────────────
+  //
+  // Oliver, 5 Sep 2026, on the guide built from the transcript above: "It put
+  // nightlife to Kødbyen... if I tell the AI that I got kids with me, and I also
+  // tell it I wanna go drinking, then the AI gotta solve it somehow."
+  //
+  // Both facts were in the brief. Nothing compared them, because every reader
+  // looks at one slot and none of them look at each other — so the block ended
+  // "YOU HAVE EVERYTHING YOU NEED. Do not ask another question", and a man
+  // travelling alone with eight children was given an evening out in a bar an
+  // hour and a half away.
+  //
+  // Asked what solving it should look like, his answer was not a rule about
+  // bars: "Try to get a better understanding of what the customer is looking
+  // for, in such scenarios." So it asks.
+  {
+    const { briefConflicts, conflictLabel, conflictSlots, CONFLICTS, briefBlockC } = M;
+    const fake = (known) => ({ known });
+    const b = hisBrief();
+    const clash = briefConflicts(b);
+    is("his own conversation is noticed", clash.map(c => c.key), ["kids-nightlife"]);
+    ok("and the question counts the children he actually has",
+       /8 children/.test(clash[0]?.question || ""));
+    ok("it offers both readings rather than choosing one",
+       /food hall|taproom/.test(clash[0]?.question) && /somebody to watch them/.test(clash[0]?.question));
+    ok("and it forbids planning the evening until they answer",
+       /do not plan the evening until they say/i.test(clash[0]?.question));
+
+    // ── AND IT SURVIVES THE SENTENCE THAT SILENCED IT ───────────────
+    //
+    // The block is the whole mechanism. A conflict raised anywhere below "YOU
+    // HAVE EVERYTHING YOU NEED. Do not ask another question" is a conflict that
+    // was not raised, because that line is an instruction not to.
+    {
+      const block = briefBlockC(b, clash);
+      ok("the conflict reaches the model", /DO NOT FIT TOGETHER/.test(block));
+      ok("and the do-not-ask line is replaced rather than printed beside it",
+         !/Do not ask another question/.test(block));
+      ok("with one that says to ask this and only this",
+         /ASK THE QUESTION ABOVE AND NOTHING ELSE IN THIS REPLY/.test(block));
+      // ── AND IT IS THE ONLY QUESTION THAT TURN ────────────────────
+      // A conflict firing while a slot is missing used to print both "raise
+      // this" and "ask for THIS ONE and nothing else", each naming a different
+      // thing. A model obeying the second never raises the conflict, and it was
+      // recorded as put to them anyway, so it was silenced for good.
+      const halfKnown = { known: { party: b.known.party, interests: b.known.interests }, missing: ["origin"], vagueToAsk: [], unanswered: [] };
+      const mixed = briefBlockC(halfKnown, briefConflicts(halfKnown));
+      ok("a conflict outranks a missing slot in the same reply",
+         /DO NOT FIT TOGETHER/.test(mixed) && !/STILL MISSING/.test(mixed));
+      // A full brief with nothing conflicting still gets the original ending, or
+      // every finished conversation would end in a question.
+      const calm = briefBlockC(b, []);
+      ok("a brief with no conflict still closes the way it always did",
+         /YOU HAVE EVERYTHING YOU NEED/.test(calm) && !/DO NOT FIT TOGETHER/.test(calm));
+    }
+
+    // ── A COUNT OR THE WORD, BECAUSE BOTH ARRIVE ───────────────────
+    //
+    // Found by mutation: a rule reading only the count passed every assertion
+    // above, because his own party carries one. A party can also come from the
+    // intake form as free text that names children and counts none of them, and
+    // a count-only rule sits silent on exactly that party.
+    ok("a party from the form that names children but counts none still asks",
+       briefConflicts(fake({ party: { value: "2 adults and a child", source: "intake" }, interests: { value: "nightlife" } }))
+         .some(c => c.key === "kids-nightlife"));
+    ok("and the question it asks does not invent a number",
+       !/\bNaN|undefined/.test(briefConflicts(fake({ party: { value: "2 adults and a child", source: "intake" }, interests: { value: "nightlife" } }))[0]?.question || "x"));
+    // Adults only is not a conflict, whatever they want to do in the evening.
+    ok("two adults who want a bar are not a conflict",
+       !briefConflicts(fake({ party: { value: "2 adults", adults: 2, kids: null }, interests: { value: "nightlife, beer" } }))
+         .some(c => c.key === "kids-nightlife"));
+
+    // ── ASKED ONCE ──────────────────────────────────────────────────
+    // Same rule as a slot, for the same reason: a question that keeps coming
+    // back is worse than one that was never asked, and Oliver has reported that
+    // failure already.
+    is("a conflict already put to them is not put again",
+       briefConflicts(b, ["kids-nightlife"]).length, 0);
+
+    // ── THE OTHER THREE ─────────────────────────────────────────────
+    ok("a beach in the Danish winter is a question",
+       briefConflicts(fake({ when: { value: new Date("2026-12-10") }, interests: { value: "beach, swimming" } }))
+         .some(c => c.key === "beach-in-winter"));
+    ok("and the same interests in July are not",
+       !briefConflicts(fake({ when: { value: new Date("2026-07-10") }, interests: { value: "beach, swimming" } }))
+         .some(c => c.key === "beach-in-winter"));
+    ok("nature on foot is a question",
+       briefConflicts(fake({ transport: { mode: "walk" }, interests: { value: "nature, hiking" } }))
+         .some(c => c.key === "walking-a-region"));
+    ok("and nature in a car is not",
+       !briefConflicts(fake({ transport: { mode: "car" }, interests: { value: "nature, hiking" } }))
+         .some(c => c.key === "walking-a-region"));
+
+    // ── A CHECK THAT THROWS MUST NOT TAKE THE CHAT WITH IT ──────────
+    // Each rule reads several slots and any of them can be a shape this file did
+    // not expect. A conversation that dies because a check could not run is a
+    // worse outcome than a conflict nobody noticed.
+    is("a brief of nothing is not a crash", briefConflicts({ known: {} }), []);
+    is("nor is no brief at all", briefConflicts(null), []);
+    is("nor is a party that is still the old placeholder",
+       briefConflicts(fake({ party: { value: "said in the conversation" }, interests: { value: "nightlife" } })), []);
+
+    // Every rule can name itself and name what it read, because a report that
+    // says "kids-nightlife" to a founder says less than one that says what it
+    // means.
+    ok("every conflict has a label and the slots it read",
+       CONFLICTS.every(c => conflictLabel(c.key) !== c.key && conflictSlots(c.key).length === 2));
+  }
+
+  // ── AND IT IS WIRED ON BOTH READS OF THE BRIEF ────────────────────
+  {
+    const appD = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    // The bar the traveller watches and the gate the build sits behind are the
+    // same call, and both have to see the same answers or the button and the
+    // bar disagree again.
+    // Both spellings, because one passes the variable by shorthand and the other
+    // builds the array inline. An assertion that only knew one of them would go
+    // green the day somebody tidied the other into the shape it did not expect.
+    is("both readBrief calls are given what each turn was answering",
+       (appD.match(/\banswering[,:]/g) || []).length, 2);
+    ok("the live bar reads the thread's own asks",
+       /const answering = askedBeforeTurns\(/.test(appD));
+    ok("and the message being typed is read against the question still on screen",
+       /lastAskedOnScreen\(aiMessages\)/.test(appD));
+    // Without this stamp there is nothing to align to, and every bare answer
+    // goes back to being a refusal.
+    ok("every reply records what it asked for",
+       (appD.match(/asked: askedThisTurn/g) || []).length === 2);
+  }
+}
+
+
+// ── "IF SOMETHING IS ON TOP OF ONEANOTHER", 5 SEP 2026 ──────────────
+//
+// Oliver, with five screenshots of his own route map: "If something is on top of
+// oneanother, then when you click it, you should zoom down towards them all. And
+// then when you click one, you zoom into that and you get a short explanation of
+// the place. You can include what is close by, but explain what this is with a
+// short 50 words resume. And when you click out of it, you zoom out again."
+{
+  const { clusterPins, clusterBounds, pixelAt, stopBlurb, stopCard, clusterLabel, clusterHint, OVERLAP_PX, BLURB_WORDS } = M;
+
+  // Two stops in the same town and one far away. His own map has this shape: a
+  // starburst at Tønder where two stops sit a few hundred metres apart, drawn one
+  // on top of the other at national zoom.
+  const LEGO_HOUSE = { name: "Day 2 · LEGO House", lat: 55.7350, lon: 9.1160, note: "The 12,000-square-metre house Bjarke Ingels built out of stacked bricks, with four colour-coded zones of hands-on play and a basement holding a LEGO set from every decade since 1958. It is not the theme park and it is not a museum either; plan half a day and expect the adults to last longer than the children." };
+  const LEGOLAND = { name: "Day 3 · LEGOLAND", lat: 55.7369, lon: 9.1258, note: "The original park, open since 1968." };
+  const RIBE = { name: "Day 4 · Ribe", lat: 55.3280, lon: 8.7650, note: "Denmark's oldest town." };
+  const ROUTE = [LEGO_HOUSE, LEGOLAND, RIBE];
+
+  // ── AT NATIONAL ZOOM THE TWO BILLUND STOPS ARE ONE DOT ────────────
+  {
+    const at8 = clusterPins(ROUTE, 8);
+    is("two stops 600 m apart are one pin at trip zoom", at8.length, 2);
+    is("and the cluster is the two of them", at8[0].indexes, [0, 1]);
+    is("with the far one on its own", at8[1].indexes, [2]);
+    // ── AND ZOOMING IN IS WHAT SEPARATES THEM ───────────────────────
+    // The whole point: whether two pins overlap is a fact about the SCREEN, so
+    // it has a different answer at every zoom. A layer drawn once — which is
+    // what this was — stays a starburst however far in you go.
+    const at16 = clusterPins(ROUTE, 16);
+    is("and three separate pins once you are close", at16.length, 3);
+    ok("every one of them a single stop", at16.every(c => c.indexes.length === 1));
+  }
+  // Every point comes back exactly once, at every zoom, or a stop silently
+  // vanishes from the map — which is the failure this file's neighbours were
+  // written against.
+  for (const z of [6, 8, 10, 12, 14, 16, 18]) {
+    const seen = clusterPins(ROUTE, z).flatMap(c => c.indexes).sort();
+    is(`no stop is lost or doubled at zoom ${z}`, seen, [0, 1, 2]);
+  }
+  // Route order, so the numbers on the map still read left to right.
+  is("clusters come back in route order", clusterPins([RIBE, LEGO_HOUSE, LEGOLAND], 8).map(c => c.indexes[0]), [0, 1]);
+
+  // ── NOT TRANSITIVE, OR A CHAIN SWALLOWS THE COUNTRY ───────────────
+  // A run of pins each just inside the threshold from the last would otherwise
+  // group into one, and a reader clicking a pin in Ribe would be flown to a box
+  // containing Aarhus. The group is what is near the SEED.
+  {
+    const px = OVERLAP_PX;
+    const chain = [0, 1, 2, 3].map(k => ({ lat: 55, lon: 9 + (k * (px * 0.9) * 360) / (256 * Math.pow(2, 10)) }));
+    // ── ASSERTED AS THE EXACT GROUPING ──────────────────────────────
+    // Found by mutation: "more than one group" passed against a version that
+    // reached one hop further than the seed, because four pins still came back
+    // as two groups — just the wrong two. Each pin here is 0.9 thresholds from
+    // the last, so only its immediate neighbour is inside the radius, and the
+    // only correct answer is pairs.
+    const groups = clusterPins(chain, 10);
+    is("a chain groups by what is near the SEED and nothing further",
+       groups.map(g => g.indexes), [[0, 1], [2, 3]]);
+    ok("and still accounts for every pin", groups.flatMap(g => g.indexes).sort().join() === "0,1,2,3");
+  }
+
+  // The box a cluster is opened into. Bounds rather than a zoom number, because
+  // two stops 200 m apart and two 2 km apart need different answers and only the
+  // box knows which this is.
+  {
+    const b = clusterBounds([LEGO_HOUSE, LEGOLAND]);
+    is("the cluster's box holds both", [b[0][0] <= 55.7350, b[1][0] >= 55.7369], [true, true]);
+    is("a cluster of nothing has no box", clusterBounds([]), null);
+    is("and neither does a point with no coordinates", clusterBounds([{ name: "x" }]), null);
+  }
+  // Web Mercator, the same projection the tiles are drawn in, so this is the
+  // arithmetic Leaflet does rather than an approximation of it.
+  ok("a pixel position moves with the zoom",
+     pixelAt(55, 9, 11).x === pixelAt(55, 9, 10).x * 2);
+
+  // ── FIFTY WORDS OF WHAT THE GUIDE ALREADY SAID ────────────────────
+  //
+  // Asked where the words should come from, he picked the guide's own line over
+  // a fresh summary. A model asked for fifty words about LEGO House would
+  // produce fifty words nothing in the pipeline has ever read; the note is
+  // already written and already checked.
+  {
+    const blurb = stopBlurb(LEGO_HOUSE.note);
+    ok("it is about fifty words", blurb.split(" ").length <= BLURB_WORDS);
+    ok("and it is the guide's own words", LEGO_HOUSE.note.startsWith(blurb.replace(/…$/, "").trim()));
+    // ── CUT AT A SENTENCE, NOT AT A WORD ────────────────────────────
+    // "…and it will bore anyone hoping for…" is what a word count produces, and
+    // it is worse than either a shorter whole thought or a longer one.
+    ok("it ends on a full stop rather than mid-clause", /[.!?]$/.test(blurb));
+    is("which is the note's own first sentence", blurb.split(" ").length, 29);
+    // ── AND A ONE-LINE OPENER DOES NOT STAND IN FOR A PARAGRAPH ─────
+    // The sentence cut only wins when what it leaves is still most of the
+    // budget. A note that opens "Free." and then explains itself would otherwise
+    // show a card saying "Free." and nothing else.
+    {
+      const opener = "Free. " + Array.from({ length: 70 }, (_, i) => `word${i}`).join(" ");
+      const cut = stopBlurb(opener);
+      ok("a short opener is not the whole card", cut.split(" ").length > 10);
+      ok("and the card says it was cut", cut.endsWith("…"));
+    }
+    is("a note already short enough is left exactly as it is", stopBlurb(LEGOLAND.note), LEGOLAND.note);
+    is("and no note is no sentence", stopBlurb(""), "");
+    is("nor is a missing one", stopBlurb(undefined), "");
+    // When no sentence ends near the budget, the word cut with an ellipsis says
+    // more than a sentence that is a different note.
+    {
+      const runOn = Array.from({ length: 80 }, (_, i) => `word${i}`).join(" ");
+      const cut = stopBlurb(runOn);
+      is("a note with no sentence break is cut to the budget", cut.split(" ").length, BLURB_WORDS);
+      ok("and says it was cut", cut.endsWith("…"));
+    }
+  }
+
+  // ── WHAT IT IS, THEN WHERE IT IS ──────────────────────────────────
+  //
+  // The card on his own map read "Nothing else in our own guides is within a
+  // 1200 m walk of Day 2 · LEGO House yet." — a true sentence about the
+  // neighbours of a place it never described. He asked what the place WAS.
+  {
+    const where = "In Billund. Nothing else in our own guides is within a 1200 m walk of Day 2 · LEGO House yet.";
+    const card = stopCard(LEGO_HOUSE, where);
+    ok("the card says what the place is", /Bjarke Ingels/.test(card));
+    ok("and still says what is near it", card.endsWith(where));
+    ok("in that order, which is the order somebody who just flew down wants",
+       card.indexOf("Bjarke Ingels") < card.indexOf("Nothing else"));
+    // A stop with no note still gets the sentence it always had rather than a
+    // blank card.
+    is("a stop with no note falls back to the location line", stopCard({ name: "x" }, where), where);
+    is("and a stop with neither says nothing at all", stopCard({ name: "x" }, ""), "");
+  }
+  ok("a cluster names itself as stops rather than as one", /2 stops/.test(clusterLabel(2)));
+  ok("and says what opening it does", /apart/.test(clusterHint(3)));
+
+  // ── AND ALL THREE ARE WIRED INTO THE MAP ──────────────────────────
+  {
+    const grmC = readFileSync(join(root, "src/components/GuideRouteMap.jsx"), "utf8");
+    const gpC = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+    // The pins are a LAYER now, redrawn on zoom. Drawn once — which is what this
+    // was — a starburst of stacked pins stays a starburst however far in you go.
+    ok("the pins are redrawn when the zoom changes", /map\.on\("zoomend", drawPins\)/.test(grmC));
+    ok("and they are clustered by what would overlap on screen", /clusterPins\(points, map\.getZoom\(\)\)/.test(grmC));
+    // Bounds, not a zoom number: two stops 200 m apart and two 2 km apart need
+    // different answers and only the box knows which this is.
+    ok("opening a cluster flies to the box that holds it",
+       /clusterBounds\(cl\.points\)/.test(grmC) && /flyToBounds\(box/.test(grmC));
+    // ── AND CLICKING OUT COMES BACK ─────────────────────────────────
+    // Driven by the selection rather than by the close button, so dismissing the
+    // card any other way returns the same way.
+    ok("the view is remembered on the way down", /beforeFlyRef\.current = beforeFlyRef\.current \|\|/.test(grmC));
+    ok("and restored when nothing is selected any more",
+       /if \(selectedName\) return;[\s\S]{0,400}map\.flyTo\(back\.center, back\.zoom/.test(grmC));
+    ok("remembered once, so it comes back to the route rather than the last hop",
+       (grmC.match(/beforeFlyRef\.current = beforeFlyRef\.current \|\|/g) || []).length === 2);
+    // ── THE CARD SAYS WHAT THE PLACE IS ─────────────────────────────
+    // It read only describeLocation, so on his own map it said "Nothing else in
+    // our own guides is within a 1200 m walk of Day 2 · LEGO House yet." and
+    // never what LEGO House is.
+    ok("the card is built from the guide's own note", /stopCard\(mapPin, describeLocation\(/.test(gpC));
+    ok("and the note reaches the map at all", /note: st\.note \|\| ""/.test(gpC));
+  }
+}
+
+
+// ── WHAT THE ADVERSARIAL REVIEW FOUND IN TONIGHT'S OWN WORK ─────────
+//
+// Oliver, 5 Sep 2026: "You might as well add on that Fable can check through
+// your work. If you've done some mess up along the way, which might hurt future
+// code."
+//
+// It found nine things, most of them by RUNNING the new readers rather than by
+// reading them, and several were worse than the bug they were written to fix.
+// Every one of them is a case here, because a fix found by review and not
+// written down is a fix that comes back.
+{
+  const { daysAnswer, looksLikePlaceAnswer, stayAnswer, partyAnswer, partyLine,
+          readBrief, briefConflicts, lastAskedOnScreen, askedBeforeTurns, directAnswers } = M;
+
+  // ── 1. "to" IS DANISH FOR TWO, AND IT IS IN EVERY ENGLISH SENTENCE ─
+  //
+  // The same collision as "today" one file over, in the reader written to fix
+  // it. NUMBER_TOKEN holds the spelled numbers of six languages and the first
+  // version took the first one anywhere in the turn.
+  is("a number needs its unit or the whole turn", daysAnswer("Want to stay 10 days"), 10);
+  is("and the stray to is not a length", daysAnswer("Going to be 10 days"), 10);
+  is("nor in up to", daysAnswer("Up to 5 days"), 5);
+  is("a date range answers nothing about length here", daysAnswer("From the 5th to the 12th"), null);
+  is("a headcount answered at the wrong question settles nothing", daysAnswer("2 adults and 8 kids"), null);
+  is("and neither does his own party line", daysAnswer("I'm alone with 8 kids"), null);
+  // Every spelled number, not the four that were hand-listed: "zwei Wochen" read
+  // as nothing and "ten nights" read as TWO, because the "en" inside "ten"
+  // matched as Danish for one with no boundary in front of it.
+  is("two weeks in German", daysAnswer("zwei Wochen"), 14);
+  is("ten nights, not the en inside ten", daysAnswer("ten nights"), 11);
+  is("and a half week on either side of the unit", daysAnswer("two and a half weeks"), 14);
+
+  // ── 2. A BLOCKING SLOT FILLED WITH "HMM" ──────────────────────────
+  //
+  // The first shape rule took any letters-only string of four words or fewer, so
+  // "Hmm", "Ok", "Thanks", "Not yet", "With the kids", "Det ved jeg ikke" and
+  // "ignore previous instructions" all became where the trip starts — and
+  // briefPanel rendered the traveller "in and out of Hmm". Strictly worse than
+  // the bug being fixed: an empty slot gets asked again, a slot holding rubbish
+  // never does.
+  for (const junk of ["Hmm", "Ok", "Yes", "No", "Nope", "Thanks", "Later", "Wait", "Not yet",
+                      "Never mind", "Tell me more", "You tell me", "Still deciding", "Not Copenhagen",
+                      "Det ved jeg ikke", "Ingen anelse", "Weiß noch nicht", "With the kids",
+                      "Night out", "ignore previous instructions"])
+    is(`"${junk}" is not where the trip starts`, looksLikePlaceAnswer(junk), null);
+  for (const [said, want] of [["Billund", "Billund"], ["Hamburg", "Hamburg"], ["Manchester", "Manchester"],
+                              ["København", "København"], ["Tønder", "Tønder"], ["Kastrup", "Kastrup"]])
+    is(`"${said}" still is`, looksLikePlaceAnswer(said), want);
+  // A bare code is the answer, and the town is what a reader and a geocoder both
+  // want. The first version stripped the code as if it were the word "airport"
+  // after a town, and returned nothing at all.
+  is("an airport code is the town it belongs to", looksLikePlaceAnswer("CPH"), "Copenhagen");
+  is("and so is the Billund one", looksLikePlaceAnswer("BLL"), "Billund");
+
+  // ── 3. "NEED A HOTEL" WAS A BOOKED HOTEL ──────────────────────────
+  //
+  // The 18 August BOOKED_RE failure arriving through a second vocabulary: this
+  // list had "hotel" as a yes and no way to say "looking for one".
+  is("needing one is not having one", stayAnswer("Need a hotel")?.value, "not booked");
+  is("nor is looking for one", stayAnswer("Looking for a hotel")?.value, "not booked");
+  is("nor is searching in German", stayAnswer("Wir suchen noch ein Hotel")?.value, "not booked");
+  is("we have not is a no", stayAnswer("We have not")?.value, "not booked");
+  // A question is not an answer: somebody asking for a recommendation has booked
+  // nothing.
+  is("asking for a recommendation settles nothing", stayAnswer("Which hotel would you recommend?"), null);
+  is("nor does asking for a suggestion", stayAnswer("Can you suggest a hotel?"), null);
+  is("and naming the place you sleep still books it", stayAnswer("The lodge billund we got")?.value, "booked");
+  is("even when the sentence also says open", stayAnswer("Yes, Hotel Alexandra, open all year")?.value, "booked");
+
+  // ── 4. A CORRECTION MUST NOT LOSE TO THE ANSWER BEFORE IT ─────────
+  //
+  // The first version let a direct answer beat a sentence match, so the sentence
+  // reader would read "we cancelled the lodge, nothing booked now" correctly and
+  // then have it overwritten by the BOOKED read of the turn before.
+  {
+    const turns = ["The lodge billund we got", "we cancelled the lodge, nothing booked now"];
+    const b = readBrief({ travellerText: turns.join("\n"), travellerTurns: turns,
+                          answering: [["stay"], []], today: new Date("2026-09-05") });
+    is("a cancellation is the answer that stands", b.known.stay?.value, "not booked");
+  }
+  {
+    const turns = ["7", "actually we've got 10 days now"];
+    const b = readBrief({ travellerText: turns.join("\n"), travellerTurns: turns,
+                          answering: [["days"], []], today: new Date("2026-09-05") });
+    is("and so is a corrected length", b.known.days?.value, 10);
+  }
+  // The narrow rule stated: it fills an EMPTY slot, and it replaces the
+  // acknowledgement placeholder, which is not a fact. Nothing else.
+  {
+    const turns = ["I'm alone with 8 kids"];
+    const b = readBrief({ travellerText: turns.join("\n"), travellerTurns: turns,
+                          answering: [["party"]], today: new Date("2026-09-05") });
+    ok("the placeholder is the one value it is allowed to replace",
+       b.known.party?.kids === 8 && b.known.party?.value !== "said in the conversation");
+  }
+
+  // ── 5. FOUR PEOPLE REPORTED AS TWO ────────────────────────────────
+  //
+  // "We are 2 adults and 2 kids" came back with total 2, because "we are 2"
+  // matched before the split was read and won, and the line said "2 adults and 2
+  // children, 2 in total".
+  is("a headcount may not contradict the parts", partyAnswer("We are 2 adults and 2 kids")?.total, 4);
+  is("nor when there are eight of them", partyAnswer("There are 2 adults and 8 kids")?.total, 10);
+  is("in Danish too", partyAnswer("vi er 2 voksne og 3 børn")?.total, 5);
+  // Children with no number are still children. "Two adults and our son, he's
+  // 7." came back as "2 adults" and the son vanished, on the one slot where the
+  // presence of a child changes what may be planned.
+  {
+    const p = partyAnswer("Two adults and our son, he's 7.");
+    ok("a child with no count is still a child", p?.hasKids === true);
+    is("and the line says so rather than dropping him", partyLine(p), "2 adults and children");
+  }
+  is("an age given without the word is still a child",
+     partyAnswer("my wife and I plus our 7 year old")?.kidAges, [7]);
+  // A total is only computed when both halves are known: adding what is known to
+  // "me, my wife and our 3 kids" gives 3 for a party of five, and a wrong number
+  // is worse than none because everything downstream believes it.
+  is("half a party is not a total", partyAnswer("me, my wife and our 3 kids")?.total, null);
+
+  // ── 6. "NO KIDS" IS NOT KIDS ──────────────────────────────────────
+  const fakeB = (known) => ({ known });
+  ok("a party that says no kids does not raise the nightlife question",
+     !briefConflicts(fakeB({ party: { value: "2 adults, no kids" }, interests: { value: "bar" } })).length);
+  ok("and neither does a counted zero",
+     !briefConflicts(fakeB({ party: { value: "2 adults and 0 children", kids: 0 }, interests: { value: "bar" } })).length);
+  ok("but a party with children still does",
+     briefConflicts(fakeB({ party: { value: "1 adult and 8 children", kids: 8 }, interests: { value: "nightlife" } })).length === 1);
+
+  // ── 7. ONE RULE, IN TWO FUNCTIONS ─────────────────────────────────
+  //
+  // lastAskedOnScreen used to close the question on the first traveller turn it
+  // walked back past; askedBeforeTurns says the opposite twelve lines above it.
+  // A real thread — an error bubble between two traveller turns — made the send
+  // path and the progress bar read different briefs from one conversation.
+  {
+    const thread = [
+      { role: "assistant", text: "Where from?", asked: ["origin"] },
+      { role: "user", text: "Billund" },
+      { role: "assistant", text: "Hit a snag", isError: true },
+    ];
+    is("the two agree about what is still being answered",
+       lastAskedOnScreen(thread), askedBeforeTurns([...thread, { role: "user", text: "sorry, Kastrup" }]).at(-1));
+    is("and the correction is what lands",
+       directAnswers(["Billund", "sorry, Kastrup"],
+                     askedBeforeTurns([...thread, { role: "user", text: "sorry, Kastrup" }])).origin?.value,
+       "Kastrup");
+  }
+}
+
+
+// ── "IT PUT NIGHTLIFE TO KØDBYEN" ───────────────────────────────────
+//
+// Oliver, 5 Sep 2026. What Gemlyx told him, verbatim: "Aarhus has actual bars
+// with a real local crowd (Mesteren & Lærlingen down in Kødbyen is a solid
+// old-school pick), it's about an hour and a half from Billund".
+//
+// The bar is real and Kødbyen is real. Kødbyen is the old meatpacking yards
+// behind Vesterbro in COPENHAGEN, which is two and three quarter hours from
+// Billund. The right bar, the wrong city, and then the wrong city's drive time
+// quoted as though it had been measured.
+//
+// The published pipeline has coordinate checks and town scoping and would not
+// have let a draft say this. THE CHAT HAS NONE OF THEM.
+{
+  const { DISTRICTS, CLASH_TOWNS, CLASH_WINDOW, districtsIn, townClashes, clashNote, townKey } = M;
+
+  const HIS_REPLY = "Aarhus has actual bars with a real local crowd (Mesteren & Lærlingen down in Kødbyen is a solid old-school pick), it's about an hour and a half from Billund so workable as a day trip.";
+  {
+    const found = townClashes(HIS_REPLY);
+    is("his own reply is caught", found.map(c => [c.district, c.belongsTo, c.saidWith]),
+       [["kødbyen", "Copenhagen", "Aarhus"]]);
+    const note = clashNote(found);
+    ok("and the traveller is told which city it is in",
+       /Kødbyen is in Copenhagen, not in Aarhus/.test(note));
+    // The drive time was measured to the city it wrongly named, so it is wrong
+    // too, and saying only half of that would leave the number standing.
+    ok("and that the travel time went with it", /travel time above was measured to the wrong city/.test(note));
+    ok("the correction is written in Danish for a Danish conversation",
+       /ligger i København, ikke i Aarhus/.test(clashNote(found, "da")));
+  }
+
+  // ── AND A SENTENCE THAT IS RIGHT IS LEFT ALONE ────────────────────
+  //
+  // The whole risk in this file is a confident correction that is itself wrong.
+  // A district named WITH its own town is correct however many other towns are
+  // in the sentence, and a reply that says so must go through untouched.
+  is("a district named with its own town is not a clash",
+     townClashes("Kødbyen in Copenhagen is worth the trip, even from Aarhus."), []);
+  is("nor is one in a sentence about only its own town",
+     townClashes("Vesterbro in Copenhagen has the best food halls."), []);
+  is("nor is a district named with no town at all",
+     townClashes("Nyhavn is beautiful in the evening."), []);
+  is("and prose with no district in it is not read", townClashes("Nothing about districts here."), []);
+  is("neither is an empty reply", townClashes(""), []);
+  is("nor a missing one", townClashes(undefined), []);
+
+  // The other two the table knows about, so the rule is not one fixture.
+  is("Jomfru Ane Gade is in Aalborg", townClashes("Jomfru Ane Gade in Aarhus is the bar street.")[0]?.belongsTo, "Aalborg");
+  is("and Aboulevarden is in Aarhus", townClashes("Try Aboulevarden when you're in Odense.")[0]?.belongsTo, "Aarhus");
+  is("but Aboulevarden with Aarhus is right", townClashes("Aboulevarden runs through Aarhus and is lined with bars."), []);
+
+  // ── TWO SPELLINGS OF ONE TOWN ARE ONE TOWN ────────────────────────
+  // Danish writes both Aarhus and Århus, and both København and Copenhagen. A
+  // correction that treated those as different places would be pure noise, and
+  // it would fire on every correct Danish sentence.
+  is("København is Copenhagen", townKey("København"), "Copenhagen");
+  is("and Århus is Aarhus", townKey("Århus"), "Aarhus");
+  is("so a correct Danish sentence is silent",
+     townClashes("Kødbyen ligger i København og er værd at se."), []);
+
+  // ── A WINDOW, NOT A SENTENCE ──────────────────────────────────────
+  // His own claim crossed a comma and a parenthesis, so a sentence boundary
+  // would have missed the one case this file exists for.
+  ok("the window is wide enough for his sentence", CLASH_WINDOW >= HIS_REPLY.indexOf("Kødbyen"));
+  // And not so wide that a paragraph about Copenhagen makes a later Aarhus
+  // district wrong.
+  is("but not wide enough to reach the next paragraph",
+     townClashes(`We start in Copenhagen for two days.${" ".repeat(CLASH_WINDOW + 40)}Aboulevarden is the place for an evening drink.`), []);
+
+  // ── WHAT IS DELIBERATELY NOT IN THE TABLE ─────────────────────────
+  //
+  // A wrong correction is worse than a missed one, so the table holds only names
+  // that belong to ONE Danish town. Latinerkvarteret is the old quarter of both
+  // Aarhus and Copenhagen, and an entry for it would make this file produce a
+  // confident correction that is itself wrong.
+  ok("the ambiguous quarter is not claimed for anybody",
+     !Object.keys(DISTRICTS).some(k => /latinerkvarter|latin quarter/i.test(k)));
+  // Nor are ordinary street names that exist in fifty towns.
+  ok("nor is a street name every town has",
+     !Object.keys(DISTRICTS).some(k => /^(vestergade|østergade|torvet|algade|nørregade)$/i.test(k)));
+  // Every home town in the table has to be a town the clash check can recognise,
+  // or a district whose town is never matched can never be cleared and would
+  // report a clash against a correct sentence.
+  {
+    const towns = new Set(CLASH_TOWNS.map(townKey));
+    is("every district's own town is one the check knows",
+       Object.values(DISTRICTS).filter(t => !towns.has(townKey(t))), []);
+  }
+  ok("and the table has something in it", Object.keys(DISTRICTS).length >= 15);
+  is("districtsIn reports where it found one", districtsIn("A bar in Kødbyen")[0]?.name, "kødbyen");
+
+  // ── AND IT IS WIRED, BY CODE RATHER THAN BY ASKING THE MODEL ──────
+  {
+    const appG = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("every reply is read for a district in the wrong town",
+       /const note = clashNote\(townClashes\(replyText\)/.test(appG));
+    // Appended, not sent back for a second opinion: the model has just
+    // demonstrated it believes the wrong thing.
+    ok("and the correction is appended by code", /replyText = `\$\{replyText\}\\n\\n\$\{note\}`/.test(appG));
+    ok("in the language the conversation is in", /readerLang\?\.tag\?\.slice\(0, 2\) === "da"/.test(appG));
+  }
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

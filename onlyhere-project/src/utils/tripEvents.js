@@ -98,10 +98,26 @@ export const daysBetween = (start, end) => {
 // Guessing costs a guide built for the wrong month; not guessing costs one more
 // question, which Gemlyx now asks out loud, beside a date picker.
 const MONTH_NAMES = MONTH_INDEX;
+// ── AND A DATE MAY NOT BE BUILT OUT OF TWO MESSAGES ─────────────────
+//
+// Found 5 Sep 2026 by an adversarial review. readBrief hands these readers the
+// traveller's turns JOINED WITH A NEWLINE, and `\s` matches a newline. So:
+//
+//   "It's in december"   then   "2 adults"      ->  2 December, day precision
+//   "in june"            then   "4 of us"       ->  4 June, day precision
+//   "3"                  then   "october"       ->  3 October, day precision
+//
+// A fabricated exact date on a hard slot, and worse than a missing one: day
+// precision means `vague` is empty, so nobody asks which day, and the guide
+// dates its weather and its events to it.
+//
+// The space between a day and its month is a SAME-LINE space. Nothing else about
+// this pattern changes, so a date written in one message reads exactly as it did.
+const SP = "[^\\S\\n]";
 const DATE_RE = new RegExp(
   `(?:^|[^${LETTER}])(?:` +
-    `(?:d\\.\\s*)?(\\d{1,2})(?:st|nd|rd|th|\\.)?\\s*(?:of\\s+|den\\s+|de\\s+)?(${MONTH_PATTERN})` +
-    `|(${MONTH_PATTERN})\\s+(\\d{1,2})(?:st|nd|rd|th|\\.)?` +
+    `(?:d\\.${SP}*)?(\\d{1,2})(?:st|nd|rd|th|\\.)?${SP}*(?:of${SP}+|den${SP}+|de${SP}+)?(${MONTH_PATTERN})` +
+    `|(${MONTH_PATTERN})${SP}+(\\d{1,2})(?:st|nd|rd|th|\\.)?` +
   `)(?![${LETTER}])`, "i");
 
 export const arrivalDateIn = (text, today = new Date()) => {
@@ -190,10 +206,31 @@ const numFrom = (token) => {
   return spelledNumber(t);
 };
 
+// ── AND "TODAY" IS NOT TWO DAYS ─────────────────────────────────────
+//
+// Found 5 Sep 2026 by an adversarial review. `to` is Danish for 2 and `day` is
+// an English day word, so "today" satisfied this pattern end to end: the number
+// token took "to", the separator matched nothing at all, and the day word took
+// "day". Every English sentence containing the word built a two-day trip, and
+// because this is a single exec over the joined conversation, "we land today,
+// staying 10 days" never reached the 10.
+//
+// A DIGIT may be glued to its unit — "7days" is a typo, not an ambiguity. A
+// SPELLED number may not, because a spelled number glued to a day word is not a
+// length, it is a longer word. So the separator is optional after digits and
+// required after letters.
+//
+// And the scan no longer stops at the first match: a rejected candidate must not
+// hide a real answer later in the same sentence.
 export const dayCountIn = (text) => {
   const s = String(text || "");
-  const digits = new RegExp(`(?:^|[^${LETTER}])(${NUMBER_TOKEN})\\s*(?:-|–|to|til|bis|tot)?\\s*(?:${alt(DAY_WORDS)})(?![${LETTER}])`, "i").exec(s);
-  if (digits) { const n = numFrom(digits[1]); if (n) return Math.min(n, 14); }
+  const re = new RegExp(`(?:^|[^${LETTER}])(${NUMBER_TOKEN})(\\s*(?:-|–|to|til|bis|tot)?\\s*)(?:${alt(DAY_WORDS)})(?![${LETTER}])`, "gi");
+  let m = null;
+  while ((m = re.exec(s)) !== null) {
+    if (/^[^\d]/.test(m[1]) && !m[2]) continue;   // "today", "todage", and their kind
+    const n = numFrom(m[1]);
+    if (n) return Math.min(n, 14);
+  }
   const weeks = new RegExp(`(?:^|[^${LETTER}])(${NUMBER_TOKEN})\\s*(?:-|–)?\\s*(?:${alt(WEEK_WORDS)})(?![${LETTER}])`, "i").exec(s);
   if (weeks) { const n = numFrom(weeks[1]); if (n) return Math.min(n * 7, 14); }
   if (new RegExp(`(?:^|[^${LETTER}])(?:${alt(ONE_WEEK)})(?![${LETTER}])`, "i").test(s)) return 7;
