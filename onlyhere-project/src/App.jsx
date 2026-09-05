@@ -191,6 +191,7 @@ import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditPr
 import { resolveUncertainties, CONFIRM_FORMAT } from "./utils/uncertaintyResolve";
 import AccountAvatar from "./components/AccountAvatar";
 import ReadMore from "./components/ReadMore";
+import { dateClaimProblems } from "./utils/dateClaims";
 import { proposals as waitingProposals, describeProposals, writeFor, MOVE as WAIT_MOVE } from "./utils/undatedSweep";
 import { avatarUrl } from "./utils/accountAvatar";
 import { WAITING_TYPE, waitingReason, waitingPayload, waitingLine, waitingDays, waitingOrder, promoted, isWaiting } from "./utils/undatedEvents";
@@ -8344,7 +8345,11 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     essential: "practical things a visitor to Denmark has to do or decide, such as ticket systems, payment, SIM cards, adapters and rules worth a fine. Not places",
   };
   const discoverSourceArrays = () => ({
-    town: towns, festival: [...events, ...majorEvents, ...vikingEvents], free: freeEntrance,
+    // undatedEvents belongs here for both readers of this map. Discover must not
+    // propose a name the memory already holds, and the duplicate gate in
+    // publishDraft must refuse one: a festival published under a name that is
+    // already waiting is the Bork case, four rows deep.
+    town: towns, festival: [...events, ...majorEvents, ...vikingEvents, ...undatedEvents], free: freeEntrance,
     food: foodSpots, foodStreet: foodSpots, night: nightlifeSpots, nightStreet: nightlifeStreets, booking: craftItems, nightTown: nightlifeTowns, essential: essentials,
   });
 
@@ -10361,6 +10366,33 @@ ${researchRules("festival", ev)}`
         );
         return;
       }
+      // ── 4. AND A ROW THAT DISAGREES WITH ITSELF ────────────────
+      //
+      // Oliver, 5 Sep 2026, after a day of cleaning up: "the rest is obviously
+      // bad." Two rows published that afternoon contradicted their own prose:
+      // Bork's description opens "Every August" and its date said March, and
+      // Køge's calls itself "week-long" over a two-day range.
+      //
+      // A GATE rather than a founder note, and the reason is written twenty
+      // lines above about a different field: "auditEntry has carried coordinate
+      // checks since 6 Aug and gated NOTHING... A checker that reports is not a
+      // gate, and a comment saying it gates does not make it one." Both of those
+      // rows would have been caught by a note nobody was going to read.
+      //
+      // IT BLOCKS AN EDIT TOO. The fix is one field in the JSON above, exactly
+      // like the date gate below, and saving a self-contradicting row by hand is
+      // publishing one by another door.
+      {
+        const clashes = dateClaimProblems(shaped);
+        if (clashes.length) {
+          setPublishStatus(null);
+          setDraftEditError(
+            `Not published, because this entry contradicts itself. ${clashes.map(c => c.detail).join(" ")} `
+            + `Fix whichever half is wrong in the draft above and publish again.`
+          );
+          return;
+        }
+      }
       if (studioType === "festival" && !String(shaped.date || "").trim()) {
         setPublishStatus(null);
         // ── AND THE GATE NOW HAS A SECOND EXIT ──────────────────
@@ -10494,6 +10526,35 @@ ${researchRules("festival", ev)}`
         if (!loads) {
           console.warn(`Studio: dropped photo path "${shaped.photo}" before publishing, no such file is deployed. Add the image and republish, or use the Media panel.`);
           delete shaped.photo;
+        }
+      }
+      // ── 5. AND YOU HAVE PUBLISHED THIS ONE ALREADY ─────────────
+      //
+      // 5 Sep 2026, read straight off the table: four Bork Vikingemarked, three
+      // Køge Festuge, two Sebbersund, two Jelling. This function will refuse a
+      // bad coordinate, an unconfirmed venue, a blank tier, a missing date and a
+      // broken offer, and it has never once refused a name it already holds.
+      //
+      // The cost is not the wasted row. liveContent keeps the FIRST row it meets
+      // per type and name and drops the rest with a console warning, so the
+      // loser is in the database, renders nowhere, and is findable only by
+      // reading the console. That is this project's signature bug, and publish
+      // was the widest door to it.
+      //
+      // ONLY ON A FRESH PUBLISH. An edit is meant to land on a row that already
+      // exists, and refusing it because its own name is taken would refuse every
+      // edit ever made.
+      if (!isEditing) {
+        const already = (discoverSourceArrays()[studioType] || []).find(
+          e => String(e?.name || "").trim().toLowerCase() === String(shaped.name || "").trim().toLowerCase());
+        if (already) {
+          setPublishStatus(null);
+          setDraftEditError(
+            `Not published. "${already.name}" is already published as ${TYPE_LABEL[studioType] || studioType}. `
+            + `A second row would not replace it: the site keeps whichever row it meets first and the other one renders nowhere, which is only visible in the console. `
+            + `Open the existing one in Manage Published and edit it, or delete it first if this draft is meant to replace it.`
+          );
+          return;
         }
       }
       const url = isEditing ? `${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${editingId}` : `${SUPABASE_URL}/rest/v1/gemlyx_content`;

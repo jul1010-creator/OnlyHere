@@ -111,6 +111,7 @@ writeFileSync(entry, `
   export { DISTRICTS, CLASH_TOWNS, CLASH_WINDOW, districtsIn, townClashes, clashNote, townKey } from ${JSON.stringify(join(root, "src/utils/chatGeography.js"))};
   export { tripChange, dayExposure, changeImpact, stopExposure, impactLabel, riskWords, OUTDOOR_KINDS, INDOOR_KINDS, MATTERS, MINOR, BETTER, UNSURE, OUTDOOR, INDOOR, UNKNOWN } from ${JSON.stringify(join(root, "src/utils/tripChanges.js"))};
   export { settlingStrength, readConfirmation, matchingUncertainty, resolveUncertainties, describeResolve, claimWords, softenedLine, CONFIRM_FORMAT, MIN_SHARED_WORDS, OPERATOR, AUTHORITY_SOURCE, WEAK } from ${JSON.stringify(join(root, "src/utils/uncertaintyResolve.js"))};
+  export { statedMonths, statedSpan, dateClaimProblems, MONTH_NAMES } from ${JSON.stringify(join(root, "src/utils/dateClaims.js"))};
   export { avatarUrl, avatarFromUser } from ${JSON.stringify(join(root, "src/utils/accountAvatar.js"))};
   export { isFinished, candidates, proposeWaiting, proposals as waitProposals, describeProposals, writeFor, MOVE as WAIT_MOVE, LEAVE as WAIT_LEAVE } from ${JSON.stringify(join(root, "src/utils/undatedSweep.js"))};
   export { WAITING_TYPE, recurrenceIn, waitingReason, waitingPayload, waitingLine, waitingDays, waitingOrder, promoted, isWaiting, prose, lastRunWords, CAN_WAIT, HAS_DATE, NO_EVIDENCE, NEGATION_WINDOW } from ${JSON.stringify(join(root, "src/utils/undatedEvents.js"))};
@@ -46210,12 +46211,16 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // The lookbehind drops the module path in the import line, which is the same
     // word and is not a use of the array.
     const uses = (appW.match(/(?<!utils\/)undatedEvents/g) || []).length;
+    // Six since the duplicate gate: the sixth is discoverSourceArrays, whose two
+    // readers both need it. Discover must not propose a name the memory already
+    // holds, and publishDraft must refuse to publish one. Neither puts a waiting
+    // row on a page, which is what this count is guarding.
     // Five since 5 Sep: the fifth is the duplicate guard on the Keep button,
     // which reads the array to refuse an entry the memory already holds. That is
     // the assertion doing its job rather than being edited around it: a new
     // reader has to be argued for here, and this one reads the array to say NO
     // rather than to put anything on a page.
-    is("undatedEvents is read in exactly five places in App.jsx", uses, 5);
+    is("undatedEvents is read in exactly six places in App.jsx", uses, 6);
     ok("the events grid is still built from events and majorEvents alone",
        /const eventTabSource = eventTab === "local" \? events : majorEvents;/.test(appW));
 
@@ -46652,6 +46657,167 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and the row changes arrays without a reload", /removeLiveRow\(Number\(w\.id\), "festival"\)/.test(appS));
     // A row that cannot be answered is reported, never offered.
     ok("an unanswerable row has no tick at all", /canMove \? \([\s\S]{0,300}?<input type="checkbox"/.test(appS));
+  }
+}
+
+// ── THE ENTRY DISAGREEING WITH ITS OWN DATE FIELD, 5 SEP 2026 ───────
+//
+// Two rows published that afternoon, from one drafting run, both wrong in a way
+// nothing checked:
+//
+//   Bork Vikingemarked, id 234, dated 23 March to 23 April. Its own description
+//   opens "Every August, more than 300 Vikings set up camp."
+//   Køge Festuge, id 231, dated 25 to 26 July. Its own description calls it
+//   "Køge's week-long summer festival."
+//
+// Every other date rule here asks whether a date is PLAUSIBLE: has it passed,
+// is the end before the start, is it the next edition. Both rows pass all of
+// them. Nobody had asked the cheapest question available, which is whether the
+// row agrees with itself.
+{
+  const { statedMonths, statedSpan, dateClaimProblems } = M;
+  const flags = (p) => dateClaimProblems(p).map(f => f.field);
+
+  // ── THE TWO REAL ROWS ───────────────────────────────────────────
+  const bork = { date: "2026-03-23", dateEnd: "2026-04-23",
+    desc: "Every August, more than 300 Vikings set up camp at Bork Vikingehavn for a weekend of trade and craft." };
+  const koge = { date: "2026-07-25", dateEnd: "2026-07-26",
+    desc: "Køge's week-long summer festival mixes free community events with ticketed concerts." };
+  ok("the March date on an August market is caught", flags(bork).includes("date"));
+  ok("and its month-long range on a weekend market too", flags(bork).includes("dateEnd"));
+  ok("a week-long festival given two days is caught", flags(koge).includes("dateEnd"));
+  // The finding names both halves and picks neither, because either could be
+  // the wrong one and this check cannot tell.
+  ok("and it says which two things disagree",
+     /says this happens in August, and the date field says March/.test(dateClaimProblems(bork)[0].detail));
+
+  // ── AND THE SAME ROWS, CORRECT, STAY QUIET ──────────────────────
+  //
+  // The older rows for both festivals. A check that fires on a right entry is
+  // worse than no check: it teaches the reader to click past it, which is the
+  // note glanceExtract already carries about false caveats.
+  is("the same market dated in August is fine",
+     flags({ ...bork, date: "2026-08-07", dateEnd: "2026-08-09" }), []);
+  is("and the same festival given six days",
+     flags({ ...koge, date: "2026-07-31", dateEnd: "2026-08-05" }), []);
+
+  // ── WHEN A MONTH IS A CLAIM, AND WHEN IT IS NOT ─────────────────
+  is("every August is a claim", statedMonths("Every August the Vikings come."), [7]);
+  is("held in June is a claim", statedMonths("Held in June by the fjord."), [5]);
+  is("afholdes i juli is one too", statedMonths("Markedet afholdes i juli."), [6]);
+  // History is not. This is the guard that keeps the rule off "the harbour was
+  // built in March 1878", which is on a great many of these entries.
+  is("a year after the month makes it history", statedMonths("The harbour was built in March 1878."), []);
+  is("and a bare month is not a claim anybody made", statedMonths("August sees the harbour fill up."), []);
+  // Advice about when to book is not a claim about when it happens.
+  is("booking advice does not move the event",
+     flags({ date: "2026-08-07", dateEnd: "2026-08-09", desc: "Book in January if you want a pitch. Held every August by the fjord." }), []);
+  // ── A MONTH LIST IS ONE CLAIM ───────────────────────────────────
+  // Found before shipping by running it over a disjunction: "Held in July or
+  // August" registered July alone and reported a correct August date as a
+  // contradiction, which is the exact failure this rule promises not to make.
+  is("a disjunction names both months", statedMonths("Held in July or August depending on the tides."), [6, 7]);
+  is("and a correct date inside it is left alone",
+     flags({ date: "2026-08-07", dateEnd: "2026-08-09", desc: "Held in July or August depending on the tides." }), []);
+
+  // ── AND HOW LONG IT SAYS IT RUNS ────────────────────────────────
+  is("a week is a range, not a number", [statedSpan("a week-long festival").min, statedSpan("a week-long festival").max], [5, 9]);
+  is("a weekend is two or three", [statedSpan("a weekend of trade").min, statedSpan("a weekend of trade").max], [2, 3]);
+  // Read as three days by the numbered rule rather than as a weekend, or a
+  // correct three-day entry would be flagged for being one day too long.
+  is("a three-day weekend is three", statedSpan("a three-day weekend").min, 3);
+  is("and Danish counts too", statedSpan("markedet varer tre dage").min, 3);
+  is("nothing stated is nothing checked", statedSpan("A market by the fjord."), null);
+  // ── AND THE DAY COUNT IS INCLUSIVE ──────────────────────────────
+  //
+  // Asserted through the rule rather than through the counter, which is private
+  // on purpose: tripEvents.js already exports a daysBetween and two exports of
+  // one name is a build error. 7 to 9 August is THREE days, not two, and a
+  // three-day claim over it has to pass or every correct weekend entry in the
+  // library would be flagged for being one day short.
+  is("a three-day claim over 7 to 9 August is fine",
+     flags({ date: "2026-08-07", dateEnd: "2026-08-09", desc: "A three-day market every August." }), []);
+  is("and the same claim over two days is not",
+     flags({ date: "2026-08-07", dateEnd: "2026-08-08", desc: "A three-day market every August." }), ["dateEnd"]);
+  is("a one-day entry with no end date counts as one",
+     flags({ date: "2026-08-07", dateEnd: "", desc: "A one-day market every August." }), []);
+  // No date, nothing to contradict. The date gate handles that case and this
+  // one must not double up on it.
+  is("an entry with no date is not this rule's business", flags({ date: "", desc: "Every August the Vikings come." }), []);
+
+  // ── AND IT IS A GATE, NOT A NOTE ────────────────────────────────
+  //
+  // publishDraft's own comment, about the coordinate check: "auditEntry has
+  // carried coordinate checks since 6 Aug and gated NOTHING... A checker that
+  // reports is not a gate, and a comment saying it gates does not make it one."
+  // Both bad rows would have sailed past a founder note.
+  {
+    const appD = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    const audD = stripComments(readFileSync(join(root, "src/utils/entryAudit.js"), "utf8"));
+    // ── PINNED TO THE CONDITION, NOT TO THE PIECES ────────────────
+    //
+    // Found by mutation: the first version matched `const clashes = ...` and a
+    // `setDraftEditError(` within 400 characters, and `if (false && clashes.length)`
+    // left both in place. A gate that is present and never fires is exactly the
+    // failure this whole block is about.
+    ok("publish refuses a row that contradicts itself",
+       /const clashes = dateClaimProblems\(shaped\);\n        if \(clashes\.length\) \{/.test(appD));
+    ok("and stops before it writes anything",
+       /if \(clashes\.length\) \{[\s\S]{0,600}?\n          return;\n        \}/.test(appD));
+    ok("and says so in the founder's words", /because this entry contradicts itself/.test(appD));
+    // Free and total: the same rule over every published row, no model calls.
+    ok("and the free sweep runs it over everything already live",
+       /findings\.push\(\.\.\.dateClaimProblems\(p\)\);/.test(audD));
+  }
+
+  // ── AND YOU HAVE PUBLISHED THIS ONE ALREADY ─────────────────────
+  //
+  // Four Bork Vikingemarked, three Køge Festuge, two Sebbersund, two Jelling,
+  // read straight off the table. publishDraft would refuse a bad coordinate, an
+  // unconfirmed venue, a blank tier, a missing date and a broken offer, and had
+  // never once refused a name it already held. The loser of a duplicate is in
+  // the database, renders nowhere, and is findable only in the console.
+  {
+    const appD = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    // Same lesson as the rule above, found by the same mutant: matching the
+    // lookup alone passes with `if (false && already)` in front of it. The
+    // condition and the return are the gate.
+    ok("publish refuses a name already on the site",
+       /const already = \(discoverSourceArrays\(\)\[studioType\] \|\| \[\]\)\.find\([\s\S]{0,200}?\n        if \(already\) \{/.test(appD));
+    ok("and stops before it writes a second row",
+       /if \(already\) \{[\s\S]{0,700}?\n          return;\n        \}/.test(appD));
+    ok("and explains what a second row would actually do",
+       /the site keeps whichever row it meets first and the other one renders nowhere/.test(appD));
+    // An edit is MEANT to land on a row that exists. Refusing it because its own
+    // name is taken would refuse every edit ever made.
+    ok("but only on a fresh publish", /if \(!isEditing\) \{\n        const already =/.test(appD));
+    // The waiting entries count as published for this: a festival published
+    // under a name already in the memory is the Bork case, four rows deep.
+    ok("and the memory counts as the site",
+       /festival: \[\.\.\.events, \.\.\.majorEvents, \.\.\.vikingEvents, \.\.\.undatedEvents\]/.test(appD));
+  }
+
+  // ── AND THE INSTRUMENT THAT WOULD HAVE CAUGHT THE PAGER ─────────
+  //
+  // tests/render.mjs renders one component with react-dom/server and states its
+  // own limit: effects do not run and state stays at its initial value. The
+  // pager bug was an effect writing a style onto a node React also owned, which
+  // is invisible to a string render by construction. tests/browser.mjs is the
+  // other half, and the two are kept apart on purpose.
+  {
+    const br = readFileSync(join(root, "tests/browser.mjs"), "utf8");
+    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    ok("it builds the app rather than testing the source", /vite", "build"/.test(br));
+    ok("and drives it in a real browser", /chromium\.launch/.test(br));
+    ok("clicking every page in the nav", /const NAV = \["Explore"/.test(br));
+    // Asserting the INDEX is what makes it able to fail: the broken build showed
+    // page one for every click, and a test that only checked "something is on
+    // screen" would have passed.
+    ok("and asserting which page arrived", /clicking \$\{label\} moves to its own page/.test(br));
+    ok("it skips rather than fails without a browser", /render tests SKIPPED/.test(br));
+    is("and there is a way to run it", pkg.scripts["test:browser"], "node tests/browser.mjs");
+    // The older instrument is untouched and still imported by this suite.
+    ok("the server-render harness is still there", /export const renderSurface/.test(readFileSync(join(root, "tests/render.mjs"), "utf8")));
   }
 }
 

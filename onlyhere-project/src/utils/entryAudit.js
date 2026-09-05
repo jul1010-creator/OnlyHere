@@ -36,6 +36,7 @@ import { isReferenceHost } from "./pageScan";
 import { tierOf, TIERS } from "./placeThemes";
 import { QUERY_WORDS } from "./sourcePolicy";
 import { stayContradiction, restatementFindings } from "./draftShape";
+import { dateClaimProblems } from "./dateClaims";
 
 // Claims that a place has no public transport. Same pattern as the live
 // pipeline guard, kept in sync deliberately: an entry published before that
@@ -353,6 +354,16 @@ export const auditEntry = (row) => {
   const stayClash = stayContradiction(p);
   if (stayClash) findings.push(stayClash);
   findings.push(...restatementFindings(p));
+
+  // ── AND THE DATE FIELD AGAINST THE ENTRY'S OWN WORDS ──────────
+  //
+  // Two rows published on 5 Sep 2026 disagreed with themselves: a Viking market
+  // whose description opens "Every August" dated to March, and a festival its
+  // own description calls "week-long" given a two-day range. Every date rule in
+  // this project asks whether a date is PLAUSIBLE. Both of those are. Nobody
+  // had asked the cheaper question, which is whether the row agrees with
+  // itself. See utils/dateClaims.js.
+  findings.push(...dateClaimProblems(p));
 
   const all = textOf(p);
 
