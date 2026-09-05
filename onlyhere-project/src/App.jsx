@@ -13752,7 +13752,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     // while it waits is a black page.
     const hidden = typeof document !== "undefined" && document.visibilityState === "hidden";
     if (hidden) setIntroInstant(true);
-    if (reduceMotion) { setIntroFlightDone(true); return; }
+    if (reduceMotion || hidden) { setIntroFlightDone(true); return; }
     if (!splashGo) return; // animations are still paused — timers below must count from the real start
     let cancelled = false;
     let retryTimer, safety;
