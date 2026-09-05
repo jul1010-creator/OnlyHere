@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { Routes, Route, useNavigate, useParams, useLocation } from "react-router-dom";
 // One string, named once. The route table and the effect that opens the page
 // both read it, and two hand-written copies of a path is how a link and the
@@ -14364,36 +14364,56 @@ If the conversation only covers a single day or a few stops with no explicit day
   // while an offset is applied, and the touchend that follows returns at
   // `if (!d)`.
   //
-  // SO PARKING NO LONGER WRITES A SECOND VALUE, IT REMOVES THE OVERRIDE. An
-  // empty string deletes the inline property and hands `transform` back to the
-  // one React owns, which is by definition the parked position for whatever
-  // `active` now is. The imperative value exists only while a finger is down,
-  // so the two can never be left disagreeing.
+  // ── AND MY FIRST FIX FOR IT TOOK THE WHOLE SITE DOWN ──────────────
+  //
+  // Oliver, 5 Sep 2026, after deploying it: "It's not just Detour.. it's every
+  // navigation. Essentials even stays on explore page."
+  //
+  // That version had parking CLEAR the inline transform, on the theory that an
+  // empty string hands the property back to "the one React owns". There is no
+  // such thing. React's style prop writes to element.style, the same object
+  // this function writes to, so clearing it deleted React's value as well, and
+  // React never put it back, because its diff compares against its own previous
+  // render rather than against the DOM.
+  //
+  // The strip therefore sat at translateX(0) after every render, while
+  // `Math.abs(i - tabIdx) <= 1` kept only the pages NEAR the active one
+  // mounted. Every page past the second showed an empty slot, which is the
+  // black screen. Essentials, at index 1, showed EXPLORE, because Explore was
+  // still mounted and slot 0 is what you were looking at. That detail is what
+  // names the bug: a page showing the WRONG page rather than nothing is a strip
+  // in the wrong position, not a page that failed to render.
+  //
+  // SO THERE IS EXACTLY ONE OWNER NOW, AND IT IS THIS FUNCTION. The JSX below
+  // sets no transform and no transition at all. Nothing to diff against,
+  // nothing to disagree with, and no state in which the property is absent.
   const setStrip = (dx, animate) => {
     const el = stripRef.current; if (!el) return;
-    if (!dx) {
-      // Both cleared. The JSX carries the transition too, so the park still
-      // animates: falling back to React's value IS the 0.32s ease.
-      el.style.transition = "";
-      el.style.transform = "";
-      return;
-    }
     el.style.transition = animate ? "transform 0.32s cubic-bezier(0.2, 0.8, 0.3, 1)" : "none";
     el.style.transform = `translateX(calc(${-tabIdxRef.current * (100/TAB_ORDER.length)}% + ${dx}px))`;
   };
 
-  // ── AND EVERY RENDER PARKS IT, UNLESS A FINGER IS DOWN ────────────
+  // ── EVERY RENDER PARKS IT, BEFORE THE BROWSER PAINTS ──────────────
   //
-  // No dependency array on purpose, which is normally a smell and is the point
-  // here. The old effect ran on `active` alone, so a stranded strip could only
-  // be rescued by changing page, and changing page was the one thing the
-  // stranded reader could no longer do comfortably.
+  // useLayoutEffect rather than useEffect, and that is not a preference: with
+  // the transform gone from the JSX there is no value on the element until this
+  // runs, so a plain effect would let the browser paint one frame of page one
+  // on every navigation.
   //
-  // This is the net under the specific path named above: whatever stranded it,
-  // the next render of anything puts it back. It costs two property writes on a
-  // node that already has them, and it cannot fight a live drag because that is
-  // exactly what dragRef holds.
-  useEffect(() => { if (!dragRef.current) setStrip(0, true); });
+  // No dependency array, on purpose. The original ran on `active` alone, so a
+  // strip stranded by an interrupted drag could only be rescued by changing
+  // page, and changing page was the one thing the stranded reader could no
+  // longer do comfortably. It cannot fight a live drag, because that is exactly
+  // what dragRef holds.
+  //
+  // The first park does not animate: there is no previous value to move from,
+  // so a transition would slide the whole site in from page one on load.
+  const paintedRef = useRef(false);
+  useLayoutEffect(() => {
+    if (dragRef.current) return;
+    setStrip(0, paintedRef.current);
+    paintedRef.current = true;
+  });
 
   // Same reason: goTab closes over `active`, so the listeners need the current
   // one rather than the one that existed when they were attached.
@@ -22256,7 +22276,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           row inside these pages. See the swipe listeners near setStrip. */}
       <div ref={pagerRef} style={{ flex: 1, minHeight: 0, overflow: "hidden", position: "relative", overscrollBehaviorX: "contain" }}>
         <div ref={stripRef}
-          style={{ display: "flex", height: "100%", width: `${TAB_ORDER.length * 100}%`, transform: `translateX(${-tabIdx * (100/TAB_ORDER.length)}%)`, transition: "transform 0.32s cubic-bezier(0.2, 0.8, 0.3, 1)" }}>
+          style={{ display: "flex", height: "100%", width: `${TAB_ORDER.length * 100}%` }}>
           {TAB_ORDER.map((tabId, i) => (
             <div key={tabId} style={{ width: `${100/TAB_ORDER.length}%`, height: "100%", overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehaviorY: "contain", paddingBottom: 20 }}>
               {Math.abs(i - tabIdx) <= 1 && renderTab(tabId)}

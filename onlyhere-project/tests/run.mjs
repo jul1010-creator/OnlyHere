@@ -46294,36 +46294,41 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const strip = (appP.match(/const setStrip = \(dx, animate\) => \{[\s\S]{0,1200}?\n  \};/) || [""])[0];
   ok("setStrip is findable", strip.length > 100);
 
-  // ── PARKING REMOVES THE OVERRIDE, IT DOES NOT COMPETE WITH IT ────
-  // An empty string deletes the inline property, which hands `transform` back
-  // to the value React owns. That value is by definition the parked position
-  // for whatever `active` now is, so the two cannot be left disagreeing.
-  ok("parking clears the inline transform", /el\.style\.transform = "";/.test(strip));
-  ok("and the inline transition with it", /el\.style\.transition = "";/.test(strip));
-  ok("on the no-offset branch", /if \(!dx\) \{/.test(strip));
-  // The drag itself still writes a real offset, or the pager does not follow a
-  // finger at all and this "fix" is a mute button.
-  ok("a live drag still writes one", /el\.style\.transform = `translateX\(calc\(/.test(strip));
+  // ── ONE OWNER, AND IT IS setStrip ───────────────────────────────
+  //
+  // The first fix for this had parking CLEAR the inline transform, on the
+  // theory that an empty string hands the property back to "the one React
+  // owns". There is no such thing: React's style prop writes to element.style,
+  // the same object setStrip writes to. Clearing it deleted React's value too,
+  // React never rewrote it (its diff compares against its own previous render,
+  // never the DOM), and the strip sat at translateX(0) after every render while
+  // only the pages near the active one stayed mounted.
+  //
+  // Oliver got that build: "It's not just Detour.. it's every navigation.
+  // Essentials even stays on explore page." Essentials is index 1, Explore was
+  // still mounted, and slot 0 is what he was looking at.
+  ok("parking writes the parked value", /el\.style\.transform = `translateX\(calc\(/.test(strip));
+  ok("and never clears it", !/style\.transform = "";/.test(strip));
+  ok("nor the transition", !/style\.transition = "";/.test(strip));
+  // The half that makes one owner true. With a transform in the JSX as well,
+  // the two disagree the moment a drag moves the strip.
+  ok("the JSX sets no transform at all",
+     !/transform: `translateX\(\$\{-tabIdx \*/.test(appP));
+  ok("and no transition either",
+     !/transition: "transform 0\.32s cubic-bezier\(0\.2, 0\.8, 0\.3, 1\)" \}\}>/.test(appP));
 
-  // ── AND REACT STILL OWNS THE PARKED VALUE ───────────────────────
-  // Clearing the override only works because there is something underneath to
-  // fall back to. Take the transform off the JSX and parking would leave the
-  // strip at translateX(0), which is page one.
-  ok("the JSX carries the parked transform",
-     /transform: `translateX\(\$\{-tabIdx \* \(100\/TAB_ORDER\.length\)\}%\)`/.test(appP));
-  ok("and the transition parking falls back to",
-     /transition: "transform 0\.32s cubic-bezier\(0\.2, 0\.8, 0\.3, 1\)"/.test(appP));
+  // ── AND IT PARKS BEFORE THE BROWSER PAINTS ──────────────────────
+  //
+  // useLayoutEffect, not useEffect. With no transform in the JSX there is no
+  // value on the element until this runs, so a plain effect would paint one
+  // frame of page one on every navigation.
+  ok("the park runs before paint and on every render",
+     /useLayoutEffect\(\(\) => \{\n    if \(dragRef\.current\) return;\n    setStrip\(0, paintedRef\.current\);/.test(appP));
+  // The first park has no previous value to move from, so animating it would
+  // slide the whole site in from page one on load.
+  ok("and the first one does not animate", /const paintedRef = useRef\(false\);/.test(appP));
 
-  // ── EVERY RENDER PARKS IT, UNLESS A FINGER IS DOWN ──────────────
-  // No dependency array, on purpose. The old effect ran on `active` alone, so a
-  // stranded strip could only be rescued by changing page, and changing page
-  // was the one thing the stranded reader could no longer do comfortably.
-  ok("the park effect runs on every render",
-     /useEffect\(\(\) => \{ if \(!dragRef\.current\) setStrip\(0, true\); \}\);/.test(appP));
-  // Guarded, or it fights the drag it is meant to clean up after.
-  ok("and cannot fight a live drag", /if \(!dragRef\.current\)/.test(appP));
-
-  // ── AND NO EXIT FROM A DRAG LEAVES AN OFFSET BEHIND ─────────────
+  // ── NO EXIT FROM A DRAG LEAVES AN OFFSET BEHIND ─────────────────
   // onStart nulled the drag and returned with the last offset still applied,
   // and the touchend that followed returned at `if (!d)`. A second finger
   // landing on one of the sideways card rows is enough to reach it.
