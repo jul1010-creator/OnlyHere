@@ -103,7 +103,13 @@ export const slugCollisions = (places) => {
 // app (a nightlife town is a list view, an essential is a row on the Essentials
 // page), so an address for them would resolve to nothing. They need a page first.
 export const ENTRY_KINDS = [
-  { seg: "event", types: ["festival"], kind: "event" },
+  // "undated" rides with "festival" on purpose, and this ONE line is the whole
+  // wiring: segForType, typesForSeg, entryUrlPath, the middleware share card and
+  // the sitemap all read this table, so a waiting entry gets a real address, an
+  // OG card and a crawlable URL without any of them being told about it
+  // separately. A published page with no address is the "in the database,
+  // rendering nowhere" bug, and it is the reason this table exists.
+  { seg: "event", types: ["festival", "undated"], kind: "event" },
   { seg: "attraction", types: ["free"], kind: "free" },
   { seg: "food", types: ["food", "foodStreet"], kind: "food" },
   { seg: "nightlife", types: ["night", "nightStreet"], kind: "nightlife" },

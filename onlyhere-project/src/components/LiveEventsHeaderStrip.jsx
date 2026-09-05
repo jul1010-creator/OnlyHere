@@ -84,7 +84,6 @@ export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo
             {showList.map(e => (
               <button key={e.name} onClick={() => setEventDetail(e)}
                 style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6, background: "rgba(33,44,68,0.45)", border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                <span style={{ fontSize: 13 }}>{e.emoji}</span>
                 <span style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: "nowrap" }}>{e.name}</span>
                 <span style={{ fontSize: 10.5, color: C.gold, fontWeight: 600, whiteSpace: "nowrap" }}>{getEventDate(e.date, e.dateEnd)}</span>
               </button>
@@ -118,7 +117,6 @@ export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo
                 <button key={`${item._kind}-${item.name}`}
                   onClick={() => { item._kind === "event" ? setEventDetail(item) : item._kind === "free" ? setFreeDetail(item) : setFoodDetail(item); }}
                   style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6, background: "rgba(33,44,68,0.45)", border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                  <span style={{ fontSize: 13 }}>{item.emoji}</span>
                   <span style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: "nowrap" }}>{item.name}</span>
                   <span style={{ fontSize: 10.5, color: C.gold, fontWeight: 600, whiteSpace: "nowrap" }}>{item._kind === "event" ? getEventDate(item.date, item.dateEnd) : `~${Math.round(item._km)} km`}</span>
                 </button>

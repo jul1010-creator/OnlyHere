@@ -95,6 +95,68 @@ export const describeWeatherChange = ({ dayLabel = "That day", oldRisk = "", new
   return `${dayLabel}: ${now}. It was ${was} when the guide was built.`;
 };
 
+// ── READ IS NOT DISMISSED ───────────────────────────────────────────
+//
+// Oliver, 5 Sep 2026, looking at the deployed bell: "when clicking
+// notifications, the '3' should go away. There should be a clear indicator of a
+// new update."
+//
+// He is describing two states that the first version collapsed into one. SEEN
+// above means DISMISSED: the traveller pressed the cross, the notice is gone for
+// good, and it is stored so a remount cannot rebuild it. READ is much lighter
+// and it is what a badge counts: they opened the bell and looked at the list.
+//
+// Collapsing them meant the badge could only go down by dismissing every notice
+// one at a time, so a bell with three unread and three read looked identical to
+// a bell with three unread. A count that never falls is a count nobody reads.
+export const READ_KEY = "gemlyx_weather_read";
+
+export const readAlerts = () => {
+  try { return usableSeen(localStorage.getItem(READ_KEY)); }
+  catch { return []; }
+};
+
+// Bounded the same way and for the same reason as the seen list.
+export const markAlertsRead = (ids) => {
+  const add = (Array.isArray(ids) ? ids : []).filter(k => typeof k === "string" && k);
+  if (!add.length) return false;
+  try {
+    const next = [...readAlerts().filter(k => !add.includes(k)), ...add].slice(-MAX_SEEN);
+    localStorage.setItem(READ_KEY, JSON.stringify(next));
+    return true;
+  } catch { return false; }
+};
+
+// Pure, so the badge can be asserted without a browser.
+export const unreadAlerts = (alerts, read) => {
+  const done = new Set(Array.isArray(read) ? read : []);
+  return (Array.isArray(alerts) ? alerts : []).filter(a => a && !done.has(a.id));
+};
+
+// ── AND SAYING WHAT THE NOTICE IS ABOUT ─────────────────────────────
+//
+// Oliver, same message, reading his own bell: "I also sent a picture here, is
+// this an ungoing trip I got going or?"
+//
+// He could not tell what he was being told. The card named a guide and gave
+// three numbers, and nothing on it said WHY he was seeing it. He is the person
+// who built the feature, so a traveller had no chance.
+//
+// It fires for a saved guide whose first day falls inside the eight-day forecast
+// window, which is a specific and explicable thing, and now the card says it.
+export const tripLine = (startsInDays, dayLabel = "") => {
+  const n = Number(startsInDays);
+  const when = !Number.isFinite(n) ? ""
+    : n <= 0 ? "Starts today"
+    : n === 1 ? "Starts tomorrow"
+    : `Starts in ${n} days`;
+  return [when, dayLabel].filter(Boolean).join(" · ");
+};
+
+// The label above the title, so the card says what KIND of thing it is before it
+// says which one.
+export const SAVED_TRIP_LABEL = "SAVED TRIP";
+
 // The bell's own line, which is all it says while it is closed.
 export const alertCountLine = (n) =>
   n === 1 ? "1 weather change on a saved trip" : `${n} weather changes on saved trips`;

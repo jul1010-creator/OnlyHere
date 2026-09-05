@@ -11,6 +11,17 @@ export const events = [];
 
 export const majorEvents = [];
 
+// ── "IT SHOULD BE IN A MEMORY" ──────────────────────────────────────
+//
+// Oliver, 5 Sep 2026. A festival whose next edition nobody has announced yet.
+// SEPARATE FROM events AND majorEvents ON PURPOSE, and the separation is the
+// whole safety model: an event with no date must never reach a grid, a month
+// chip, a prompt or a guide, and nine different readers take their rows from
+// those two arrays. A row that is not in them cannot be forgotten by any of
+// them. See utils/undatedEvents.js for what is stored and what promotes a row
+// out of here into events.
+export const undatedEvents = [];
+
 // No Studio type publishes into vikingEvents yet — festival rows go to events/
 // majorEvents by __scale. The Events tab's Viking filter will stay empty until
 // either a dedicated Studio type exists or viking festivals are published as

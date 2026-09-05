@@ -25,7 +25,7 @@ import { splitForCheck, CHECK_SCOPE_BLOCK, admissible, checkModeOf, fieldIn } fr
 import { tripWindow, dayCountIn, arrivalDateIn, monthOnlyIn, latestRelativeAnswer } from "./utils/tripEvents";
 import { denmarkFacts } from "./data/denmarkFacts";
 import { orderFor, nextSeed, advancePos, factAt } from "./utils/factRotation";
-import { events, majorEvents, vikingEvents } from "./data/events";
+import { events, majorEvents, vikingEvents, undatedEvents } from "./data/events";
 import { towns, TOWN_COORDS } from "./data/towns";
 import { freeEntrance } from "./data/freeEntrance";
 import { nightlifeSpots } from "./data/nightlife";
@@ -124,7 +124,7 @@ import { askClaude, parseClaudeJSON, askPerplexity, withRetry, askOpenAI, readDa
 import { STUDIO_VOICE, slugify, J, bb, bbBullets, bbData, bulletsBlock, shapeForLive, madeHeading } from "./utils/studioContent";
 import BlogBody from "./components/BlogBody";
 import { studioPrompts } from "./utils/studioPrompts";
-import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow, removeLiveRow, REMOVED, UNKNOWN_TYPE, liveContentFailure } from "./utils/liveContent";
+import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow, removeLiveRow, REMOVED, UNKNOWN_TYPE, liveContentFailure, LIVE_ID_OFFSET } from "./utils/liveContent";
 import { isRecording, startRecording, stopRecording, record, recordedEvents, recordingText, recordingFileName, safeUrl } from "./utils/studioRecorder";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
@@ -148,9 +148,8 @@ import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./
 import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries } from "./utils/ticketLink";
 import { currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLanguage";
 import { LanguageChoice } from "./components/LanguagePicker";
-import { WeatherBell } from "./components/WeatherBell";
 import { NavStrip } from "./components/NavStrip";
-import { alertKey, describeWeatherChange, unseenAlerts, seenAlerts, markAlertSeen } from "./utils/weatherAlerts";
+import { alertKey, describeWeatherChange, unseenAlerts, seenAlerts, markAlertSeen, readAlerts, markAlertsRead, unreadAlerts, tripLine, alertCountLine } from "./utils/weatherAlerts";
 import { placesNamedIn } from "./utils/chatPlaces";
 import { railPlaces, railCss, RAIL_CLASS, INLINE_CARDS_CLASS } from "./utils/chatRail";
 import { briefProgress, progressLine, briefPercent, percentLine } from "./utils/briefPanel";
@@ -189,13 +188,16 @@ import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, 
 import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
 import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
+import { resolveUncertainties, CONFIRM_FORMAT } from "./utils/uncertaintyResolve";
+import { WAITING_TYPE, waitingReason, waitingPayload, waitingLine, waitingDays, waitingOrder, promoted, isWaiting } from "./utils/undatedEvents";
 import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition, venueRatherThanEvent } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
 import { newStreamState, readStreamEvent, visibleText, streamContent, streamContentForApi, streamDiagnosis, streamTrace, ranOutThinking } from "./utils/streamRead";
 import { heroNeedsReplacing, heroPatch, heroStatusLine, isAbsolutePhoto } from "./utils/heroPhoto";
 import { languageBlock, writeInLanguage, readerLanguage, keepLanguageOf } from "./utils/readerLanguage";
 import { guideLanguage, languageBarNote, languageOfProse } from "./utils/travellerLanguage";
-import { describeGuide, guideLanguageMix } from "./utils/guideReading";
+import { describeGuide, guideLanguageMix, stopKind } from "./utils/guideReading";
+import { tripChange, MATTERS, BETTER } from "./utils/tripChanges";
 import { echoInDraft, describeEcho, ECHO_RUN } from "./utils/echoCheck";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AffiliatePanel } from "./components/AffiliatePanel";
@@ -2276,12 +2278,25 @@ function GemlyxApp() {
   const [discoverForType, setDiscoverForType] = useState(null);
   const [updateEventsLoading, setUpdateEventsLoading] = useState(false);
   const [updateEventsResults, setUpdateEventsResults] = useState(null); // [{name, notes, ticketStatus, dateChanged}] — only ones that actually changed
+  // Per row of that panel, keyed by the live id: "saving", "done", or the
+  // reason the promotion was refused. An object rather than one value because
+  // a sweep can find dates for several waiting entries in one run, and a single
+  // status would make the second press look like it undid the first.
+  const [promoting, setPromoting] = useState({});
   const [updateEventsError, setUpdateEventsError] = useState(null);
   const [updateEventsProgress, setUpdateEventsProgress] = useState(null); // "7 / 20" while running
   const [aiTellFlags, setAiTellFlags] = useState([]); // results of the last scan
   const [rephraseSuggestions, setRephraseSuggestions] = useState({}); // flag index -> { original, suggestion }
   const [rephraseLoadingIdx, setRephraseLoadingIdx] = useState(null);
   const [draftEditError, setDraftEditError] = useState(null);
+  // ── THE GATE'S SECOND EXIT ────────────────────────────────────────
+  // Oliver, 5 Sep 2026: "No, but it should be in a memory." Set by the date
+  // gate when a refused festival is one that can honestly wait, holding the
+  // shaped draft and the reason, so the button under the error is offered on
+  // the strength of a check that has already run rather than on the word
+  // "festival". Null the rest of the time, which is most of the time.
+  const [waitingOffer, setWaitingOffer] = useState(null);
+  const [waitingSaveState, setWaitingSaveState] = useState(null);
 
   // ── "I'D LIKE TO BE ABLE TO PUT IN PICTURES" ────────────────────────
   //
@@ -2649,7 +2664,7 @@ If one of them answers something the draft left uncertain, that answer is what t
 
 Say which answer came from which source, so a fact from a vouched page and a fact from a general search result can be told apart.\n\n`
       : "";
-    const prompt = `${namedRule}Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name, (4) any historical or founding claim is accurate — specifically, check whether the draft conflates two different historical events or dates (e.g. an earlier institution, building, or monastery being founded at a place is NOT the same fact as the town/place itself later gaining an official status such as market-town/købstad rights, and a draft that blends these into one date is wrong even if each individual date is real). ONLY report things that are actually WRONG, unverifiable, or missing — do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else. For each real problem found, give the correct real fact where you have it. Be concise — bullet points, not an essay.\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(studioType, studioDraft)}\n\nDraft: ${JSON.stringify(studioDraft)}`;
+    const prompt = `${namedRule}Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name, (4) any historical or founding claim is accurate — specifically, check whether the draft conflates two different historical events or dates (e.g. an earlier institution, building, or monastery being founded at a place is NOT the same fact as the town/place itself later gaining an official status such as market-town/købstad rights, and a draft that blends these into one date is wrong even if each individual date is real). ONLY report things that are actually WRONG, unverifiable, or missing — do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else.\n\nTHE ONE EXCEPTION, AND IT IS NARROW: this draft carries an "uncertainties" list of things the writer could not confirm. If you find a page that SETTLES one of them, say so, because a caveat that has gone false is worse than no caveat: it teaches a reader the caveats are decoration. Write it in exactly this shape, because it is read by code and not by a person:\n\n${CONFIRM_FORMAT}\n\nBoth the QUOTE and the SOURCE are required. A confirmation with no quotation from the page is an opinion and will be discarded, and only the operator's own site or a public authority can settle a caveat: a listing site or an aggregator cannot. Confirm nothing that is not already in the uncertainties list. For each real problem found, give the correct real fact where you have it. Be concise — bullet points, not an essay.\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(studioType, studioDraft)}\n\nDraft: ${JSON.stringify(studioDraft)}`;
     const result = await askPerplexity(prompt);
     if (result.error) { setGoogleCheckError(result.error); setGoogleCheckLoading(false); return; }
     setGoogleCheckResult({ text: result.text, citations: result.citations });
@@ -5763,6 +5778,20 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       if (sType === "festival" && t.dateStart) {
         if (isPastDate(t.dateEnd || t.dateStart, new Date())) {
           console.warn("Studio: dropped a festival date that was already in the past —", t.name, t.dateStart, t.dateEnd);
+          // ── AND WHAT IT REMOVED IS KEPT ─────────────────────────
+          //
+          // Oliver, 5 Sep 2026, on the Bork Vikingemarked draft, which is an
+          // annual Viking market whose 2026 run finished in July: the strip
+          // emptied both fields, the publish gate refused an event with no date,
+          // and there was no way through.
+          //
+          // The strip is right that the run has finished. What was wrong is that
+          // it destroyed the evidence: a bare boolean, and the dates themselves
+          // gone. nextEditionYear needs the old date to work out which year to
+          // ask for, eventDateIssues wants to say "the entry wants the 2027
+          // dates", and the founder cannot see what was there. All three lost
+          // the one fact they needed, to a line that had it in hand.
+          t._datePast = { dateStart: t.dateStart, dateEnd: t.dateEnd || "" };
           t.dateStart = ""; t.dateEnd = "";
           t._dateWasStripped = true;
         }
@@ -9146,6 +9175,78 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
     if (written > 0) { refreshLiveContent(); bumpLiveContent(v => v + 1); }
   };
 
+  // ── "THEN IT APPEARS" ─────────────────────────────────────────────
+  //
+  // Oliver, 5 Sep 2026: "when there is a date, and you do a 'date sweep' then it
+  // appears."
+  //
+  // The date sweep has never written anything. Every row it proposes ends with
+  // "This only flags it — update the real entry in your events data file by
+  // hand once you've verified", which is right for a live event whose date may
+  // have MOVED: that is a correction to something a reader is already looking
+  // at, and sweeps.js states the rule it obeys in its own first paragraph.
+  //
+  // A waiting row is not that. It is on no page, so there is nothing to
+  // corrupt, and the only change available to it is the one thing it is waiting
+  // for. So this stays a proposal he reads and presses, exactly like every
+  // other write in Studio, and the press is one press instead of a redraft.
+  //
+  // ONE PATCH, NOT TWO. The type and the payload move together, so there is no
+  // instant where a row is a festival with no date or a waiting entry holding a
+  // real one. gemlyx_content has no transactions and this is the only reason
+  // that does not matter here.
+  const publishWaitingNow = async (change) => {
+    const row = change?.waitingRow;
+    if (!row || !studioSession) return;
+    const rowId = Number(row.id) - LIVE_ID_OFFSET;
+    if (!Number.isFinite(rowId) || rowId <= 0) return;
+    const key = String(row.id);
+    setPromoting(p => ({ ...p, [key]: "saving" }));
+    try {
+      // Its own gate, and not because the sweep's is weak. This is a SECOND
+      // door into the events grid, and the finding this codebase has made more
+      // often than any other is that a rule enforced on one path is not
+      // enforced. See utils/undatedEvents.js.
+      const out = promoted(row, { start: change.dateChanged, end: change.dateEndChanged || "", source: change.source || change.readVia || "", today: new Date() });
+      if (!out.ok) { setPromoting(p => ({ ...p, [key]: out.why })); return; }
+      const attempt = (token) => fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${rowId}`, {
+        method: "PATCH",
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify({ type: "festival", payload: out.payload }),
+      });
+      let res = await attempt(studioSession.access_token);
+      if (res.status === 401) {
+        const fresh = await refreshStudioSession();
+        if (fresh) res = await attempt(fresh.access_token);
+      }
+      if (!res.ok) {
+        const errBody = await res.text();
+        console.error("Gemlyx promote failed:", res.status, errBody);
+        setPromoting(p => ({ ...p, [key]: `${res.status}: ${errBody.slice(0, 160)}` }));
+        return;
+      }
+      setPromoting(p => ({ ...p, [key]: "done" }));
+      // ── AND THE ROW HAS TO CHANGE ARRAYS ──────────────────────
+      //
+      // refreshLiveContent alone cannot do it. Its own comment says why: it
+      // KEEPS mergedIds on purpose, so a row already folded in is skipped on
+      // the way back through, and this row was folded in as a waiting entry
+      // when the page loaded. Refreshing would leave it sitting under "No
+      // confirmed date yet" with a date, until a full reload.
+      //
+      // removeLiveRow takes it out of undatedEvents and releases both
+      // registries, which is exactly what makes the re-fetch treat it as new.
+      // Two existing, tested operations rather than a third path into the
+      // arrays.
+      removeLiveRow(rowId, WAITING_TYPE);
+      await refreshLiveContent();
+      bumpLiveContent(v => v + 1);
+      showToast(`🎪 ${row.name} is on the events page`, 3000);
+    } catch (err) {
+      setPromoting(p => ({ ...p, [key]: String(err?.message || err).slice(0, 160) }));
+    }
+  };
+
   const updateCurrentEvents = async () => {
     if (updateEventsLoading) return;
     setUpdateEventsLoading(true); setUpdateEventsError(null); setUpdateEventsResults(null); setUpdateEventsProgress(null);
@@ -9168,7 +9269,17 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       // re-checking: it is an annual event whose next edition nobody has written
       // down yet. UPDATE_EVENTS_BATCH_CAP still bounds the spend.
       const checkFrom = new Date();
-      const allUpcoming = [...events, ...majorEvents, ...vikingEvents].filter(e =>
+      // ── AND THE ONES THAT ARE NOT EVENTS YET ────────────────────
+      //
+      // Oliver, 5 Sep 2026: "it should be in a memory. So basically, when there
+      // is a date, and you do a 'date sweep' then it appears."
+      //
+      // THIS is the date sweep he means, and until now it could only see rows
+      // that were already published as events. A festival held back for having
+      // no date was invisible to the one machine whose entire job is finding a
+      // date, which is the same shape as the bug in the paragraph above: the
+      // rows that most needed the tool were the rows it could not reach.
+      const allUpcoming = [...undatedEvents, ...events, ...majorEvents, ...vikingEvents].filter(e =>
         isCurrentlyLive(e.date, e.dateEnd) || isUpcoming(e.date)
         || isUndated(e.date) || isPastDate(e.date, checkFrom));
       // ── THE BROKEN ONES FIRST ───────────────────────────────────
@@ -9176,8 +9287,11 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       // An undated row is the one showing "Dates not confirmed" to a reader; an
       // upcoming row with a good date is already correct and is only being
       // re-checked in case it moved.
+      // A waiting row outranks even an undated published one: it is the only
+      // kind here that is not on the events page at all, so a date found for it
+      // does not correct a card, it creates one.
       const brokenFirst = [...allUpcoming].sort((a, b) => {
-        const rank = (e) => isUndated(e.date) ? 0 : isPastDate(e.date, checkFrom) ? 1 : 2;
+        const rank = (e) => isWaiting(e) ? -1 : isUndated(e.date) ? 0 : isPastDate(e.date, checkFrom) ? 1 : 2;
         return rank(a) - rank(b);
       });
       const batch = brokenFirst.slice(0, UPDATE_EVENTS_BATCH_CAP);
@@ -9421,6 +9535,11 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
             dateChanged: fromSite.start, dateEndChanged: fromSite.end,
             ticketStatusChanged: "", stillHappening: true,
             source: fromSite.host, readVia: fromSite.via,
+            // Carried so the panel can offer the one press that publishes it.
+            // The row itself rather than its id, because promoted() needs the
+            // whole payload and re-reading it from Supabase would be a second
+            // source of truth for a thing already in hand.
+            waitingRow: isWaiting(ev) ? ev : null,
             // A date read off a picture SAYS it was read off a picture, and
             // quotes the characters it read. That is the only way he can check
             // one without opening the site himself, and a poster read is the one
@@ -9513,7 +9632,11 @@ ${researchRules("festival", ev)}`
           if (parsed.ticketStatusChanged && !statusReallyChanged) parsed.ticketStatusChanged = "";
           const hasChange = parsed.stillHappening === false || parsed.dateChanged || parsed.ticketStatusChanged || parsed.ignoredDate;
           if (hasChange) {
-            changed.push({ name: ev.name, town: ev.town, currentDate: ev.date, ...parsed });
+            // AFTER the spread, unlike the three fields before it. Those are
+            // defaults a model reply is allowed to overrule; this one is ours,
+            // it decides whether a Publish button appears, and a model that
+            // happened to echo the key back would be handing itself one.
+            changed.push({ name: ev.name, town: ev.town, currentDate: ev.date, ...parsed, waitingRow: isWaiting(ev) ? ev : null });
           }
           trace.push({ step: "search", why: parsed.dateChanged ? "" : parsed.ignoredDate ? `refused-${parsed.ignoredWhy || "backwards"}` : "search-found-nothing", refused: parsed.ignoredDate || "", found: parsed.dateChanged || "" });
           traces.push({ name: ev.name, town: ev.town, date: ev.date, steps: trace, resolved: parsed.dateChanged || "" });
@@ -9704,6 +9827,57 @@ ${researchRules("festival", ev)}`
     setAiTellFlags([]);
   };
 
+  // ── "IT SHOULD BE IN A MEMORY" ────────────────────────────────────
+  //
+  // The other side of the date gate. Writes the refused festival as a row of
+  // type "undated": published, readable, in NO events array, and picked up by
+  // the date sweep on every run until somebody announces a date.
+  //
+  // A separate function rather than a flag on publishDraft, because publishDraft
+  // is the path with nine gates on it and this one must not be a way around any
+  // of them. It runs only on a draft that has ALREADY been through every gate
+  // and been refused by exactly one, and it writes the shaped object that gate
+  // was looking at rather than re-reading the editor. See utils/undatedEvents.js.
+  const publishAsWaiting = async () => {
+    if (!waitingOffer?.shaped || !studioSession) return;
+    setWaitingSaveState("saving");
+    try {
+      const payload = waitingPayload(waitingOffer.shaped, {
+        past: waitingOffer.past,
+        recurrence: waitingOffer.recurrence,
+        at: new Date(),
+      });
+      const body = JSON.stringify({ type: WAITING_TYPE, payload, published: true });
+      const attempt = (token) => fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body,
+      });
+      let res = await attempt(studioSession.access_token);
+      if (res.status === 401) {
+        const fresh = await refreshStudioSession();
+        if (fresh) res = await attempt(fresh.access_token);
+      }
+      if (!res.ok) {
+        const errBody = await res.text();
+        console.error("Gemlyx waiting-entry save failed:", res.status, errBody);
+        setWaitingSaveState(`${res.status}: ${errBody.slice(0, 200)}`);
+        return;
+      }
+      setWaitingSaveState("saved");
+      setWaitingOffer(null);
+      setDraftEditError(null);
+      // The site has a new row and the reader-facing section reads it from the
+      // same arrays every other page does, so it has to be reloaded rather than
+      // waiting for the next full page load. Same pair the publish path uses.
+      refreshLiveContent();
+      bumpLiveContent(v => v + 1);
+      showToast(`📌 Kept in "No confirmed date yet" — the date sweep will keep looking`, 3200);
+    } catch (err) {
+      setWaitingSaveState(String(err?.message || err).slice(0, 200));
+    }
+  };
+
   const publishDraft = async () => {
     if (!studioDraft || !studioSession) return;
     let editedDraft;
@@ -9714,6 +9888,11 @@ ${researchRules("festival", ev)}`
       return;
     }
     setDraftEditError(null);
+    // The offer belongs to ONE refusal. Carrying it forward would put a button
+    // saying "save it without a date" under an error about a coordinate, on a
+    // draft that has since been given a date.
+    setWaitingOffer(null);
+    setWaitingSaveState(null);
     setPublishStatus("sending");
     try {
       // Editing an existing row: studioDraftText already holds the final SHAPED object
@@ -10085,6 +10264,31 @@ ${researchRules("festival", ev)}`
       }
       if (studioType === "festival" && !String(shaped.date || "").trim()) {
         setPublishStatus(null);
+        // ── AND THE GATE NOW HAS A SECOND EXIT ──────────────────
+        //
+        // Oliver, 5 Sep 2026, asked whether a festival with an explicit
+        // recurrence line should be allowed through without a date: "No, but it
+        // should be in a memory. So basically, when there is a date, and you do
+        // a 'date sweep' then it appears."
+        //
+        // The refusal below is unchanged and the 15 August rule stands. What
+        // was wrong was that the gate had ONE exit, so a draft that had passed
+        // the coordinate check, the venue check, the tier check and the fact
+        // check died on the one field nobody on earth could fill in yet, and
+        // the research died with it.
+        //
+        // The offer is computed here rather than in the button, so the button
+        // exists only when a check has already said yes. waitingReason refuses
+        // a draft with no date, no stripped date and no recurrence claim, which
+        // is not an event waiting for an announcement but research that came
+        // back empty. See utils/undatedEvents.js.
+        const past = (editedDraft?._datePast || studioDraft?._datePast || null);
+        const wait = waitingReason(shaped, {
+          stripped: !!(editedDraft?._dateWasStripped || studioDraft?._dateWasStripped),
+          past,
+          today: new Date(),
+        });
+        setWaitingOffer(wait.ok ? { shaped, past, why: wait.why, from: wait.from, recurrence: wait.recurrence || null } : { blocked: wait.why });
         setDraftEditError(
           // ── THE KEY IT NAMES IS THE KEY IT READS ────────────────
           // This said `dateStart` and the gate two lines up reads `shaped.date`.
@@ -10100,8 +10304,26 @@ ${researchRules("festival", ev)}`
           // followed is not a gate, it is a wall."
           `Not published, because an event with no date is not an event. Fill "${editingId !== null ? "date" : "dateStart"}" in the draft above${shaped.dateEnd ? "" : ` (and "dateEnd" if it runs more than one day)`} and publish again.` +
           ((editedDraft?._dateWasStripped || studioDraft?._dateWasStripped)
-            ? ` This draft HAD a date and the past-date check removed it, which it does when the run has already finished. If the festival is still to come, the date the writer found was wrong; if it is running now, put the real dates in and it will publish.`
+            ? (() => {
+                // Names the date it removed and the year to ask for. The old
+                // sentence told him a date had been removed and not which one,
+                // so the only way to find out was to redraft and watch it happen
+                // again. A gate whose instructions cannot be followed is not a
+                // gate, it is a wall, and this is the same wall twenty lines up.
+                const past = (editedDraft?._datePast || studioDraft?._datePast || null);
+                const had = past?.dateStart ? `${past.dateStart}${past.dateEnd && past.dateEnd !== past.dateStart ? ` to ${past.dateEnd}` : ""}` : "";
+                const year = nextEditionYear(past?.dateStart || "", new Date());
+                return ` This draft HAD ${had ? `${had}, and ` : "a date and "}the past-date check removed it, which it does when the run has already finished.`
+                  + (year ? ` For an annual event the entry wants the ${year} dates.` : "")
+                  + ` If the festival is still to come, the date the writer found was wrong; if it is running now, put the real dates in and it will publish.`;
+              })()
             : ` Nothing in the research stated one. The operator's own site and the ticket listings are the two places worth looking.`)
+          // ── AND WHERE THE OTHER DOOR IS ─────────────────────────
+          // Named in the refusal rather than left to be discovered as a button
+          // underneath it. The gate's own comment twenty lines up says a gate
+          // whose instructions cannot be followed is a wall, and "fill in a
+          // date nobody has announced" is exactly that instruction.
+          + (wait.ok ? ` If the dates genuinely are not out yet, you do not have to lose the research: there is a button under this message to keep it under "No confirmed date yet".` : "")
         );
         return;
       }
@@ -11618,7 +11840,13 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     const kind = kindForSeg(entrySeg);
     if (!kind) return;               // not a segment this site publishes
     const pools = {
-      event: [...events, ...majorEvents, ...vikingEvents],
+      // undatedEvents is HERE and in no other pool in this file. A waiting entry
+      // is a real published page with a real address, so a shared link or a
+      // cold arrival at /denmark/event/<slug> has to open it, or the row is in
+      // the database rendering nowhere — the bug shape this project has now
+      // catalogued five times. It stays out of every pool that PLANS with an
+      // event, because a guide cannot be built around a date nobody has.
+      event: [...events, ...majorEvents, ...vikingEvents, ...undatedEvents],
       free: freeEntrance,
       food: foodSpots,
       nightlife: [...nightlifeSpots, ...nightlifeStreets],
@@ -13864,6 +14092,20 @@ If the conversation only covers a single day or a few stops with no explicit day
   // React 18 and still a leak of a live timer.
   useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); }, []);
   const [weatherAlerts, setWeatherAlerts] = useState([]);
+  // Which notices have been LOOKED AT, as opposed to dismissed. The badge counts
+  // this one, so "the 3 should go away" is one press rather than three crosses.
+  // See utils/weatherAlerts.js for why the two states are separate.
+  const [weatherRead, setWeatherRead] = useState(() => readAlerts());
+  // What the badge counts, in one place, because it is printed twice: once on
+  // the menu button so it is visible before anything is opened, and once on the
+  // Saved trips row so the number says what it is about.
+  const unreadTripChanges = unreadAlerts(weatherAlerts, weatherRead).length;
+  // Opening Saved trips is reading them. "And when you click it, the
+  // notification is considered read."
+  const readTripChanges = () => {
+    markAlertsRead(weatherAlerts.map(a => a.id));
+    setWeatherRead(readAlerts());
+  };
   useEffect(() => {
     // Purely in-app "your weather changed" notice — like an Instagram-style corner
     // pop-in, not a real push notification, since that would need a service worker
@@ -13920,6 +14162,34 @@ If the conversation only covers a single day or a few stops with no explicit day
                 id: alertKey(guide.id, idx, newRisk),
                 guideTitle: guide.title,
                 dayLabel,
+                // ── AND WHY THIS NOTICE EXISTS AT ALL ─────────────
+                // Oliver, reading his own bell: "is this an ungoing trip I got
+                // going or?" It fires only for a saved guide whose first day is
+                // inside the eight-day forecast window, which is the condition
+                // eleven lines up, and the card never said so. Carried on the
+                // alert because the card cannot recompute it.
+                startsInDays: startOffset,
+                // ── AND WHETHER IT MATTERS ────────────────────────
+                //
+                // Oliver, 5 Sep 2026: "you need to demonstrate what has changed
+                // and explain if it can affect your trip."
+                //
+                // Built HERE, where the day, its stops and the forecast slot are
+                // all still in hand. The card cannot reach any of them, and a
+                // second pass that looked them up again would be a second chance
+                // to look up the wrong day. See utils/tripChanges.js.
+                change: tripChange({
+                  guideId: guide.id,
+                  guideTitle: guide.title,
+                  dayIndex: idx,
+                  startsInDays: startOffset,
+                  oldRisk: day.weather.risk,
+                  newRisk,
+                  slot,
+                  stopKinds: (day.stops || []).map(st => stopKind(st.name, lookupRealPlace(st.name))),
+                  mode: guide._mode || null,
+                  day: { source: "forecast", windMs: slot.wind_speed_ms, temp: slot.temperature_c, rainMm: slot.precipitation_mm, symbol: slot.condition },
+                }),
                 oldRisk: day.weather.risk,
                 newRisk,
                 icon: weatherIcon(slot.condition),
@@ -14938,6 +15208,37 @@ ${languageBlock()}`;
   // Redesign pass: the old full-width text rows ("2005 blog") became real
   // cards — media plate with a date badge, monogram fallback instead of a
   // floating emoji, drawn icons, one-line status pills, whole card tappable.
+  // ── "A SECTION UNDER THE EVENT NAVIGATION" ────────────────────────
+  //
+  // Oliver, 5 Sep 2026: "OR we can a section under navigation called 'no
+  // confirmed date yet'", then "Not a new navigation.. but under the event
+  // navigation."
+  //
+  // DELIBERATELY NOT AN EventCard. Every part of that card is built around a
+  // date: the month and day block over the picture, the "4 days away" pill, the
+  // gold date line under the name. A card with all three of those blank looks
+  // like a broken event rather than a different kind of thing, and the one
+  // sentence this card exists to say would be the smallest text on it.
+  //
+  // So it says the sentence and nothing else. No date block, no countdown, and
+  // no month, because the month is exactly the thing nobody has announced.
+  const WaitingCard = ({ event }) => (
+    <div onClick={() => setEventDetail(event)} onMouseMove={tiltMove} onMouseLeave={tiltLeave}
+      style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 14, padding: "14px 16px", cursor: "pointer", transition: "transform 0.18s ease, border-color 0.18s ease", willChange: "transform", display: "flex", gap: 12, alignItems: "flex-start" }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: readableOn(event.color, C.surface), letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 5 }}>{event.type} · {event.town}</div>
+        <div style={{ fontSize: 19, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15, marginBottom: 5 }}>{event.name}</div>
+        <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6 }}>{waitingLine(event)}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.text, fontSize: 12, fontWeight: 700, padding: "10px 0 0" }}>
+          Read it <span style={{ fontSize: 14 }}>›</span>
+        </div>
+      </div>
+      <div style={{ flexShrink: 0, width: 56, height: 56, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.border}` }}>
+        <DKLocator town={event.town} color={event.color} />
+      </div>
+    </div>
+  );
+
   const EventCard = ({ event }) => {
     // ── "Invalid Date" AND NaN, ON THE PUBLIC EVENTS GRID ──────────
     // This was `new Date(event.date + "T00:00:00")`, which assumes every stored
@@ -15942,7 +16243,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         </div>
                         {towns.map(t => (
                           <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
-                            <div style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>{t.emoji} {t.name}</div>
+                            <div style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>{t.name}</div>
                             <button onClick={() => {
                               setStudioType("town");
                               setStudioTown(t.name);
@@ -17391,7 +17692,35 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                         indistinguishable from a check that found nothing. */}
                                     {c.ignoredDate && <div style={{ fontSize: 11.5, color: C.muted }}>Ignored a suggested date of {c.ignoredDate}, because {c.ignoredWhy}.</div>}
                                     {c.notes && <div style={{ fontSize: 11.5, color: C.light, marginTop: 3 }}>{c.notes}</div>}
-                                    <div style={{ fontSize: 10.5, color: C.muted, marginTop: 4 }}>This only flags it — update the real entry in your events data file by hand once you've verified.</div>
+                                    {/* ── "THEN IT APPEARS" ────────────────────
+                                        A waiting entry is on no page, so the
+                                        line below does not apply to it: there
+                                        is no live card to correct by hand and
+                                        no reader looking at the old value. The
+                                        only change available to it is the one
+                                        it has been waiting for, so it is
+                                        offered as a press rather than as
+                                        homework. Still a press: promoted()
+                                        checks the date again before anything
+                                        is written. */}
+                                    {c.waitingRow && c.dateChanged ? (
+                                      <div style={{ marginTop: 8 }}>
+                                        <button onClick={() => publishWaitingNow(c)} disabled={promoting[String(c.waitingRow.id)] === "saving" || promoting[String(c.waitingRow.id)] === "done"}
+                                          style={{ background: promoting[String(c.waitingRow.id)] === "done" ? C.surface : C.gold, border: `1px solid ${C.gold}`, borderRadius: 100, padding: "6px 14px", fontSize: 11, fontWeight: 700, color: promoting[String(c.waitingRow.id)] === "done" ? C.gold : C.onGold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                          {promoting[String(c.waitingRow.id)] === "saving" ? "Publishing…"
+                                            : promoting[String(c.waitingRow.id)] === "done" ? "✓ On the events page"
+                                            : "🎪 Publish it now"}
+                                        </button>
+                                        <div style={{ fontSize: 10.5, color: C.muted, marginTop: 5 }}>
+                                          It has been waiting {waitingDays(c.waitingRow) ?? 0} day{waitingDays(c.waitingRow) === 1 ? "" : "s"} under "No confirmed date yet". Publishing moves it into the events list with these dates.
+                                        </div>
+                                        {promoting[String(c.waitingRow.id)] && !["saving", "done"].includes(promoting[String(c.waitingRow.id)]) && (
+                                          <div style={{ fontSize: 10.5, color: "#FFB347", marginTop: 5 }}>{promoting[String(c.waitingRow.id)]}</div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div style={{ fontSize: 10.5, color: C.muted, marginTop: 4 }}>This only flags it — update the real entry in your events data file by hand once you've verified.</div>
+                                    )}
                                   </div>
                                 ))}
                               </div>
@@ -17944,10 +18273,44 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           );
                         })()}
                         {draftPhotoError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 8 }}>{draftPhotoError}</div>}
-                        <textarea value={studioDraftText} onChange={e => { setStudioDraftText(e.target.value); setDraftEditError(null); }}
+                        <textarea value={studioDraftText} onChange={e => { setStudioDraftText(e.target.value); setDraftEditError(null); setWaitingOffer(null); }}
                           rows={12}
                           style={{ width: "100%", background: C.bg, border: `1px solid ${draftEditError ? "#E23B4E" : C.border}`, borderRadius: 10, padding: "12px", fontSize: 11, color: C.light, lineHeight: 1.6, fontFamily: "monospace", marginBottom: 8, boxSizing: "border-box", resize: "vertical" }} />
                         {draftEditError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 10 }}>{draftEditError}</div>}
+                        {/* ── "IT SHOULD BE IN A MEMORY" ─────────────────
+                            Oliver, 5 Sep 2026, on a Bork Vikingemarked draft
+                            that could not publish: the past-date check had
+                            correctly removed a finished 2026 run, and the date
+                            gate then correctly refused an event with no date,
+                            and between the two of them a fully researched entry
+                            had nowhere to go but the bin.
+
+                            Offered only when waitingReason has already said yes
+                            upstairs, and it says WHY out loud, because the whole
+                            claim being made by this button is that the event
+                            happens again. The refusal is shown too: a draft with
+                            no evidence of recurrence gets told that in the same
+                            place, rather than silently having no button. */}
+                        {waitingOffer?.blocked && (
+                          <div style={{ fontSize: 11, color: C.muted, marginBottom: 10, lineHeight: 1.6 }}>
+                            It cannot be kept for later either. {waitingOffer.blocked}
+                          </div>
+                        )}
+                        {waitingOffer?.shaped && (
+                          <div style={{ background: C.bg, border: `1px dashed ${C.border}`, borderRadius: 10, padding: "11px 12px", marginBottom: 10 }}>
+                            <div style={{ fontSize: 11.5, fontWeight: 700, color: C.text, marginBottom: 4 }}>Keep it without publishing it as an event</div>
+                            <div style={{ fontSize: 11, color: C.light, lineHeight: 1.6, marginBottom: 8 }}>
+                              {waitingOffer.why} It would sit under <b>No confirmed date yet</b> on the Events page, in no events grid and in no guide, and every date sweep would look for its next edition. The moment one is found you publish it in one press.
+                            </div>
+                            <button onClick={publishAsWaiting} disabled={waitingSaveState === "saving"}
+                              style={{ background: C.surface, border: `1px solid ${C.gold}`, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                              {waitingSaveState === "saving" ? "Saving…" : "📌 Keep in \"No confirmed date yet\""}
+                            </button>
+                            {waitingSaveState && waitingSaveState !== "saving" && waitingSaveState !== "saved" && (
+                              <div style={{ fontSize: 10.5, color: "#FFB347", marginTop: 6, fontFamily: "monospace", wordBreak: "break-word" }}>{waitingSaveState}</div>
+                            )}
+                          </div>
+                        )}
 
                         <div style={{ marginBottom: 12 }}>
                           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
@@ -18220,6 +18583,43 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               return (
                                 <div style={{ fontSize: 11, color: "#FFB347", background: "#FFB34714", border: "1px solid #FFB34744", borderRadius: 8, padding: "8px 10px", marginBottom: 10, lineHeight: 1.55 }}>
                                   ⚠ {note}
+                                </div>
+                              );
+                            })()}
+                            {/* ── AND A SETTLED CAVEAT COMES OFF ────────────
+                                Oliver, 5 Sep 2026, pasting a checker's own words:
+                                it had found that an uncertainty on the Jelling
+                                draft was WRONG, quoted the operator's Billet-info
+                                page and gave the URL. He asked what happens to it.
+                                Nothing did. There was no CONFIRMED label, so it
+                                was filed as UNVERIFIED, and nothing writes a fact
+                                check back into the draft in any case.
+
+                                The button is deliberately not automatic. It says
+                                what it will do before it does it, because removing
+                                a caveat is the one edit here that makes the entry
+                                claim MORE than it did. See
+                                utils/uncertaintyResolve.js. */}
+                            {(() => {
+                              const read = readFactCheck(googleCheckResult.text);
+                              const confs = read.findings.filter(f => f.label === "CONFIRMED").map(f => f.text);
+                              if (!confs.length || !studioDraft) return null;
+                              const preview = resolveUncertainties(studioDraft, confs, { name: studioDraft.name, ownSite: studioDraft.website });
+                              if (!preview.why) return null;
+                              return (
+                                <div style={{ fontSize: 11, color: C.light, background: `${C.gold}12`, border: `1px solid ${C.gold}44`, borderRadius: 8, padding: "9px 11px", marginBottom: 10, lineHeight: 1.55 }}>
+                                  <div style={{ marginBottom: preview.removed.length || preview.softened.length ? 8 : 0 }}>{preview.why}</div>
+                                  {(preview.removed.length > 0 || preview.softened.length > 0) && (
+                                    <button onClick={() => {
+                                      const next = resolveUncertainties(studioDraft, confs, { name: studioDraft.name, ownSite: studioDraft.website, at: dayKey(new Date()) });
+                                      setStudioDraft(next.payload);
+                                      setStudioDraftText(JSON.stringify(next.payload, null, 2));
+                                      setDraftEditError(null);
+                                    }}
+                                      style={{ background: C.gold, border: "none", color: C.onGold, borderRadius: 100, padding: "6px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                      Apply to the draft
+                                    </button>
+                                  )}
                                 </div>
                               );
                             })()}
@@ -18924,8 +19324,65 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 );
               })()}
 
-              {savedGuides.length > 0 && (
+              {/* ── WHAT CHANGED, AND WHETHER IT MATTERS ─────────────
+                  Oliver, 5 Sep 2026: "you need to demonstrate what has changed
+                  and explain if it can affect your trip."
+
+                  Demonstrate is the word doing the work. It shows BOTH states,
+                  dry then rain, rather than describing the difference, because a
+                  traveller who remembers packing for a dry Tuesday needs to see
+                  the dry Tuesday. Then the numbers, then one line saying whether
+                  it is worth rearranging a day for, which is computed from how
+                  much of that day is outdoors and from the warnings the app
+                  already writes for the traveller's own mode of travel. See
+                  utils/tripChanges.js. */}
+              {weatherAlerts.length > 0 && (
                 <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>
+                    Changed since you saved {weatherAlerts.length === 1 ? "it" : "them"}
+                  </div>
+                  {weatherAlerts.map(a => {
+                    const ch = a.change;
+                    if (!ch) return null;
+                    const strong = ch.level === MATTERS;
+                    const good = ch.level === BETTER;
+                    const tone = strong ? "#FFB347" : good ? "#4CAF50" : C.border;
+                    return (
+                      <div key={a.id} style={{ background: C.surface, border: `1px solid ${tone}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8 }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 9, fontWeight: 700, color: strong ? "#FFB347" : good ? "#4CAF50" : C.muted, letterSpacing: 1.1, textTransform: "uppercase", marginBottom: 3 }}>
+                              {ch.label}
+                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.3 }}>{ch.guideTitle}</div>
+                            <div style={{ fontSize: 10.5, color: C.muted, fontWeight: 600, marginTop: 2 }}>
+                              {tripLine(ch.startsInDays, ch.dayLabel)}
+                            </div>
+                            {/* Both states, side by side. This is the
+                                "demonstrate" half. */}
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "8px 0 6px" }}>
+                              <span style={{ fontSize: 11, color: C.muted, textDecoration: "line-through" }}>{ch.was}</span>
+                              <span style={{ fontSize: 11, color: C.muted }}>→</span>
+                              <span style={{ fontSize: 11.5, fontWeight: 700, color: C.text }}>{ch.now}</span>
+                            </div>
+                            <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.5 }}>{a.line}</div>
+                            {ch.line && (
+                              <div style={{ fontSize: 11.5, color: strong ? "#FFB347" : C.light, lineHeight: 1.5, marginTop: 5, fontWeight: strong ? 600 : 400 }}>
+                                {ch.line}
+                              </div>
+                            )}
+                          </div>
+                          <button onClick={() => { markAlertSeen(a.id); setWeatherAlerts(prev => prev.filter(x => x.id !== a.id)); }}
+                            aria-label="Dismiss" style={{ background: "none", border: "none", color: C.muted, fontSize: 14, cursor: "pointer", padding: 0, flexShrink: 0, lineHeight: 1 }}>✕</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {savedGuides.length > 0 && (
+                <div id="gx-saved-trips" style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Your Saved Guides</div>
                   {savedGuides.map(g => (
                     <div key={g.id} onClick={() => openSavedGuide(g)}
@@ -19337,6 +19794,45 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   {filteredEvents.map(e => <EventCard key={e.id} event={e} />)}
                 </div>
               )}
+              {/* ── NO CONFIRMED DATE YET ────────────────────────────
+                  Oliver, 5 Sep 2026: "it should be in a memory... OR we can a
+                  section under navigation called 'no confirmed date yet'", and
+                  then "Not a new navigation.. but under the event navigation."
+
+                  BELOW THE GRID RATHER THAN AS A THIRD TAB, for two reasons.
+                  Local and Major is a question about scale and this is a
+                  question about status, so a third button in that row would put
+                  two different questions on one axis. And a tab has to be
+                  clicked: a reader filtering for July would never find it,
+                  whereas the reader who has just finished the dated list is
+                  exactly the reader for whom "and here are the ones we know
+                  about and cannot date" is worth reading.
+
+                  OUTSIDE THE FILTER, on purpose. Nothing here has a month, so
+                  every month filter would empty it, and a section that vanishes
+                  under a filter is a section nobody knows exists.
+
+                  Scoped to the tab, because the rows carry __scale exactly as
+                  the events arrays do, and a Roskilde-sized festival under the
+                  Local tab would be the same category error the tabs exist to
+                  prevent. */}
+              {(() => {
+                const waiting = waitingOrder(
+                  undatedEvents.filter(e => (eventTab === "local") === (e.__scale !== "Major")),
+                );
+                if (!waiting.length) return null;
+                return (
+                  <div style={{ marginTop: 30, borderTop: `1px solid ${C.border}`, paddingTop: 20 }}>
+                    <div style={{ fontSize: 20, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 6 }}>No confirmed date yet</div>
+                    <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7, maxWidth: 560, marginBottom: 14 }}>
+                      {waiting.length === 1 ? "One event we" : `${waiting.length} events we`} have researched and cannot date, because the organiser has not announced the next edition. {waiting.length === 1 ? "It is" : "They are"} kept out of the list above on purpose, and checked again every time we sweep for dates.
+                    </div>
+                    <div className="cards-grid">
+                      {waiting.map(e => <WaitingCard key={e.id} event={e} />)}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -19455,7 +19951,6 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             const spotRow = (spot) => (
               <div key={spot.id} onClick={() => setNightlifeDetail(spot)} style={{ borderTop: `1px solid ${C.border}`, padding: "18px 0 22px", cursor: "pointer" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                  <span style={{ fontSize: 22 }}>{spot.emoji}</span>
                   <div>
                     <div style={{ fontSize: 19, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15 }}><EntryLink type={spot.isStreet ? "nightStreet" : "night"} name={spot.name}>{spot.name}</EntryLink></div>
                     <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, marginTop: 2 }}>{spot.category} · {spot.location}</div>
@@ -19583,7 +20078,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                             </div>
                           )}
-                          <div style={{ fontSize: 28, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 8 }}>{townContent.emoji} {townContent.name}</div>
+                          <div style={{ fontSize: 28, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 8 }}>{townContent.name}</div>
                           <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7 }}>{townContent.desc}</div>
                           {townContent.gemlyxFind && (
                             <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginTop: 12, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
@@ -19629,7 +20124,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                           </div>
                         )}
-                        <div style={{ fontSize: 28, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 6 }}>{street.emoji || "🍻"} {street.name}</div>
+                        <div style={{ fontSize: 28, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 6 }}>{street.name}</div>
                         <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 }}>
                           {street.category || "Bar street"}{street.location ? ` · ${street.location}` : ""}
                         </div>
@@ -21411,11 +21906,40 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 onFocus={e => { if (window.innerWidth < 900) e.target.style.width = "170px"; }}
                 onBlur={e => { if (window.innerWidth < 900) e.target.style.width = "104px"; }} />
             </div>
-            {/* Hamburger menu — full navigation on mobile */}
-            <button className="gemlyx-burger" onClick={() => setShowMenu(!showMenu)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, fontSize: 14, cursor: "pointer", padding: "7px 11px", borderRadius: 8, display: "flex", gap: 4, flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+            {/* ── THE MENU CARRIES THE COUNT ───────────────────────
+                Oliver, 5 Sep 2026, with a screenshot of Facebook's account menu:
+                "Replace this with the burger menu if you got an account and then
+                put saved trips into it. And when you get a notification, you get
+                a '1' or '2' flashing on the 'saved trips'." And: "the
+                notification also need to be on top of the frame at start, so
+                people can see there is a notification."
+
+                So the count is on the BUTTON, where it is visible before
+                anything is opened, and again on the Saved trips row inside,
+                where it says what the count is about. The separate bell that
+                shipped this morning is gone: it was a second control saying the
+                same thing, and its `position: fixed` was drawn on top of this
+                very button, which is how the whole menu disappeared for a day.
+
+                One menu, not two. The burger already held the navigation, the
+                theme and the language, and a signed-in menu that dropped any of
+                those would take the site's navigation away on a phone. */}
+            <button className="gemlyx-burger" onClick={() => setShowMenu(!showMenu)}
+              aria-label={unreadTripChanges > 0 ? `${uiT("header.menu", uiLang)}. ${alertCountLine(unreadTripChanges)}` : uiT("header.menu", uiLang)}
+              title={unreadTripChanges > 0 ? alertCountLine(unreadTripChanges) : uiT("header.menu", uiLang)}
+              style={{ position: "relative", background: "none", border: `1px solid ${C.border}`, color: C.muted, fontSize: 14, cursor: "pointer", padding: "7px 11px", borderRadius: 8, display: "flex", gap: 4, flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
               <div className="gemlyx-burger-bar" style={{ width: 17, height: 2, background: C.muted, borderRadius: 2 }} />
               <div className="gemlyx-burger-bar" style={{ width: 17, height: 2, background: C.muted, borderRadius: 2 }} />
               <div className="gemlyx-burger-bar" style={{ width: 17, height: 2, background: C.muted, borderRadius: 2 }} />
+              {unreadTripChanges > 0 && (
+                <span style={{
+                  position: "absolute", top: -6, right: -6, minWidth: 16, height: 16,
+                  borderRadius: 100, background: "#E5484D", color: "#fff",
+                  fontSize: 10, fontWeight: 700, lineHeight: "16px", textAlign: "center",
+                  padding: "0 3px", fontFamily: "'Inter', sans-serif",
+                  border: `2px solid ${C.bg}`, boxSizing: "content-box",
+                }}>{unreadTripChanges}</span>
+              )}
             </button>
           </div>
         </div>
@@ -21453,7 +21977,49 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
       {showMenu && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 300 }} onClick={() => setShowMenu(false)}>
           <div style={{ position: "absolute", top: 70, right: 16, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "8px", minWidth: 220, boxShadow: "0 8px 32px rgba(0,0,0,0.6)", maxHeight: "70vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
-            <style>{`@keyframes fadeSlideIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }`}</style>
+            <style>{`@keyframes fadeSlideIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+              @keyframes gxPulse { 0%,100% { opacity: 1 } 50% { opacity: .45 } }
+              @media (prefers-reduced-motion: reduce) { .gx-pulse { animation: none !important } }`}</style>
+            {/* ── WHO IS SIGNED IN, AND THEIR TRIPS ─────────────────
+                Oliver, 5 Sep 2026, with Facebook's account menu on screen:
+                "Replace this with the burger menu if you got an account and then
+                put saved trips into it."
+
+                Signed out this is not drawn at all, because a name and a trip
+                list are the two things a signed-out visitor does not have. The
+                menu keeps everything else it always held, so nothing is lost by
+                not having an account. */}
+            {userSession && (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px 12px" }}>
+                  <div style={{ width: 34, height: 34, borderRadius: "50%", background: `${C.gold}22`, border: `1px solid ${C.gold}55`, color: C.gold, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
+                    {String(userSession.user?.email || "?").trim().charAt(0).toUpperCase()}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {String(userSession.user?.email || "").split("@")[0] || "Account"}
+                    </div>
+                    <div style={{ fontSize: 10.5, color: C.muted }}>{savedGuides.length} saved · {savedPlaces.length} kept</div>
+                  </div>
+                </div>
+                {/* ── SAVED TRIPS, WITH THE COUNT ON IT ──────────────
+                    "you get a '1' or '2' flashing on the 'saved trips'. And when
+                    you click it, the notification is considered read." The count
+                    pulses rather than sits still, because a red dot that never
+                    moves is furniture after a day. */}
+                <button onClick={() => { setShowMenu(false); readTripChanges(); goTab("home"); setTimeout(() => document.getElementById("gx-saved-trips")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); }}
+                  style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "none", border: "none", color: C.text, padding: "10px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left", borderRadius: 10 }}>
+                  <Ico name="book" size={15} color={C.gold} />
+                  <span style={{ flex: 1 }}>Saved trips</span>
+                  {unreadTripChanges > 0 && (
+                    <span className="gx-pulse" style={{ minWidth: 18, height: 18, borderRadius: 100, background: "#E5484D", color: "#fff", fontSize: 10.5, fontWeight: 700, lineHeight: "18px", textAlign: "center", padding: "0 4px", animation: "gxPulse 1.6s ease-in-out infinite" }}>
+                      {unreadTripChanges}
+                    </span>
+                  )}
+                </button>
+                <div style={{ height: 1, background: C.border, margin: "6px 8px 8px" }} />
+              </>
+            )}
             {/* Three swatches rather than a dropdown: the choice is entirely
                 about how something looks, so showing the colour is the whole
                 control. Warm is first because it is the default. */}
@@ -22621,11 +23187,6 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           interrupting for. Oliver, 5 Sep: "Let it be a notification like this."
           Dismissing writes the key to storage, so it closes for good rather
           than until the next mount. */}
-      <WeatherBell
-        alerts={weatherAlerts}
-        C={C}
-        onDismiss={(id) => { markAlertSeen(id); setWeatherAlerts(prev => prev.filter(x => x.id !== id)); }}
-      />
     </div>
   );
 }

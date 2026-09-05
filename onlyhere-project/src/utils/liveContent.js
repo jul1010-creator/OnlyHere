@@ -42,7 +42,7 @@
 // RULE FOR ANY FUTURE WORK HERE: never guard a mutation of a module-level
 // array with component-scoped state (useRef/useState). If the data outlives
 // the component, so must the guard.
-import { events, majorEvents } from "../data/events";
+import { events, majorEvents, undatedEvents } from "../data/events";
 import { towns, TOWN_COORDS } from "../data/towns";
 import { freeEntrance } from "../data/freeEntrance";
 import { nightlifeSpots } from "../data/nightlife";
@@ -55,6 +55,7 @@ import { craftItemsFallback } from "../data/craft";
 import { stripDashesDeep, isInDenmark } from "./helpers";
 import { placeCoords } from "./guideEnrichment";
 import { cleanReaderProse } from "./researchVoice";
+import { WAITING_TYPE } from "./undatedEvents";
 
 // ── THE REFERENCE FRAME GETS CHECKED BEFORE IT REPLACES ANYTHING ────
 //
@@ -190,6 +191,14 @@ const doLoad = async () => {
       // replacing the file. Day one, nothing disappears; each hardcoded entry
       // can then be retired one at a time as a researched version replaces it.
       else if (row.type === "essential") essentials.push({ id, ...item });
+      // ── THE TYPE THAT IS NOT AN EVENT YET ─────────────────────
+      // A festival Gemlyx has researched and cannot date. It is published, so
+      // it is a real row a visitor can read, and it is NOT in events or
+      // majorEvents, so no grid, no month chip, no prompt and no guide can
+      // reach it. That is one branch instead of nine remembered exclusions.
+      // See utils/undatedEvents.js and the "No confirmed date yet" section
+      // under the Events page.
+      else if (row.type === WAITING_TYPE) undatedEvents.push({ id, ...item });
       // AND NOTHING FALLS OFF THE END SILENTLY. Every branch above is a hand
       // registration, and a published row whose type nobody registered used to
       // be fetched, deduped, marked merged, and then dropped with no warning:
@@ -294,6 +303,12 @@ const ARRAY_FOR = {
   nightStreet: nightlifeStreets,
   nightTown: nightlifeTowns,
   essential: essentials,
+  // Registered here as well as in doLoad, so editing one in Studio and deleting
+  // one both land without a full page reload, exactly like every other type.
+  // A type in doLoad and missing from this table is a row that renders and then
+  // cannot be taken off the page: removeLiveRow returns UNKNOWN_TYPE and the
+  // whole app reloads to reflect it.
+  [WAITING_TYPE]: undatedEvents,
 };
 
 export const LIVE_ID_OFFSET = 100000;

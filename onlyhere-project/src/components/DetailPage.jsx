@@ -459,7 +459,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                     {list.map(t => (
                       <button key={t.id} onClick={() => onOpenNearby && onOpenNearby({ ...t, _src: "town" })}
                         style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: onOpenNearby ? "pointer" : "default", fontFamily: "'Inter', sans-serif" }}>
-                        {t.emoji ? `${t.emoji} ` : ""}{t.name}
+                        {t.name}
                         <span style={{ color: C.muted, fontWeight: 600 }}> · {kindLabel(t)}</span>
                       </button>
                     ))}

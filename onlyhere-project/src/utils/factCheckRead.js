@@ -83,9 +83,31 @@ export const admitsNotFound = (text) => NOT_FOUND.some(re => re.test(String(text
 // proof, but the thing whose absence gives the game away: a finding that names
 // no competing value is describing a gap, whatever word it starts with.
 const STATES_A_RIVAL = /\b(?:states|shows|says|lists|gives|according to)\b/i;
+// A link, and a sentence lifted off the page. Straight quotes and the curly and
+// angled pairs a Danish page will actually be typed with, because a confirmation
+// refused over a quotation mark is a confirmation refused for nothing.
+const HAS_URL = /https?:\/\/[^\s)>\]]+/i;
+const HAS_QUOTE = /["\u201C\u201D\u00AB\u00BB\u2018\u2019][^"\u201C\u201D\u00AB\u00BB\u2018\u2019]{12,}["\u201C\u201D\u00AB\u00BB\u2018\u2019]/;
 
 export const CONTRADICTED = "CONTRADICTED";
 export const UNVERIFIED = "UNVERIFIED";
+// ── AND THE ONE THAT DID NOT EXIST ──────────────────────────────────
+//
+// Oliver, 5 Sep 2026, pasting a checker's own words back at me. It had found
+// that an uncertainty on the Jelling festival draft was WRONG: physical ticket
+// sales at Byens Hus on 1 October were confirmed on the operator's own Billet-
+// info page, quoted in Danish, with the URL.
+//
+// He asked what happens to it. The answer was that nothing happens to it, and
+// worse: with only two labels in this file, `label || UNVERIFIED` filed his
+// confirmation as UNVERIFIED, which is the precise opposite of what it said. A
+// page had settled the question and the draft went on telling a reader it was
+// open.
+//
+// This label is what a settled question is filed as. What it is allowed to DO,
+// which is remove the caveat it settles, lives in utils/uncertaintyResolve.js,
+// because the two are separate decisions and only one of them is about parsing.
+export const CONFIRMED = "CONFIRMED";
 
 // ── ONE FINDING, RE-READ AGAINST ITS OWN DEFINITION ─────────────────
 // Returns the label the finding's own words support, plus why it was moved.
@@ -94,8 +116,32 @@ export const UNVERIFIED = "UNVERIFIED";
 // carrying the authority of a correction.
 export const relabel = (line) => {
   const text = String(line || "");
-  const stated = text.match(/^\s*[-*]?\s*\**\s*(CONTRADICTED|UNVERIFIED)\b/i);
+  const stated = text.match(/^\s*[-*]?\s*\**\s*(CONTRADICTED|UNVERIFIED|CONFIRMED)\b/i);
   const label = stated ? stated[1].toUpperCase() : "";
+  // ── A CONFIRMATION HAS TO CARRY ITS PAGE ──────────────────────────
+  //
+  // The rule this whole file is built on is that it only ever makes a finding
+  // WEAKER, because the failure it exists to stop is a non-finding carrying the
+  // authority of a correction. CONFIRMED is the strongest thing a checker can
+  // say, so it gets the same treatment pointing the other way: a confirmation
+  // with no page behind it is a model's opinion about another model's opinion,
+  // and it is read as UNVERIFIED.
+  //
+  // A URL is not enough on its own. The page has to be QUOTED, because a
+  // checker that cannot produce the sentence has not settled anything, it has
+  // only asserted that it looked. See utils/uncertaintyResolve.js, where the
+  // same test decides whether a caveat may be removed.
+  if (label === CONFIRMED) {
+    if (HAS_URL.test(text) && HAS_QUOTE.test(text)) return { label: CONFIRMED, moved: false, why: "", text };
+    return {
+      label: UNVERIFIED,
+      moved: true,
+      why: HAS_URL.test(text)
+        ? "Marked CONFIRMED with a link and no quotation from the page. A confirmation has to carry the sentence it is standing on, or nothing about it can be checked, so it was read as UNVERIFIED."
+        : "Marked CONFIRMED with no page behind it. A confirmation with no source is an opinion, so it was read as UNVERIFIED.",
+      text,
+    };
+  }
   if (label !== CONTRADICTED) return { label: label || UNVERIFIED, moved: false, why: "", text };
 
   if (!admitsNotFound(text)) return { label: CONTRADICTED, moved: false, why: "", text };
@@ -117,9 +163,9 @@ export const relabel = (line) => {
 // whole and unlabelled rather than being chopped up on a guess.
 export const readFactCheck = (raw) => {
   const body = String(raw || "").trim();
-  if (!body) return { findings: [], moved: 0, contradicted: 0, unverified: 0, text: "" };
+  if (!body) return { findings: [], moved: 0, contradicted: 0, unverified: 0, confirmed: 0, text: "" };
   const parts = body
-    .split(/\n(?=\s*[-*]?\s*\**\s*(?:CONTRADICTED|UNVERIFIED)\b)/i)
+    .split(/\n(?=\s*[-*]?\s*\**\s*(?:CONTRADICTED|UNVERIFIED|CONFIRMED)\b)/i)
     .map(s => s.trim())
     .filter(Boolean);
   const findings = parts.map(relabel);
@@ -128,6 +174,7 @@ export const readFactCheck = (raw) => {
     moved: findings.filter(f => f.moved).length,
     contradicted: findings.filter(f => f.label === CONTRADICTED).length,
     unverified: findings.filter(f => f.label === UNVERIFIED).length,
+    confirmed: findings.filter(f => f.label === CONFIRMED).length,
     text: body,
   };
 };
@@ -136,6 +183,13 @@ export const readFactCheck = (raw) => {
 // that appears every time is a banner nobody reads.
 export const describeFactCheck = (r) => {
   if (!r?.moved) return "";
+  // Two different downgrades share this counter now, so the banner says which
+  // one happened rather than describing the older one at both.
+  const soft = (r.findings || []).filter(f => f.moved && /Marked CONFIRMED/.test(f.why || ""));
+  if (soft.length && soft.length === r.moved) {
+    const c = soft.length;
+    return `${c} finding${c === 1 ? "" : "s"} said CONFIRMED without carrying the page ${c === 1 ? "it was" : "they were"} standing on. A confirmation has to quote the sentence that settles the question, or nothing about it can be checked, so ${c === 1 ? "it was" : "they were"} read as UNVERIFIED.`;
+  }
   const n = r.moved;
   return `${n} finding${n === 1 ? "" : "s"} said CONTRADICTED and then admitted the search came up empty. ${n === 1 ? "It has" : "They have"} been re-read as UNVERIFIED. A check that did not find something is not evidence the draft is wrong, and this exact mistake nearly deleted a correct festival date that was sitting on the festival's own front page.`;
 };

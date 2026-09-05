@@ -109,6 +109,10 @@ writeFileSync(entry, `
   export { briefConflicts, conflictLabel, conflictSlots, CONFLICTS } from ${JSON.stringify(join(root, "src/utils/briefConflicts.js"))};
   export { clusterPins, clusterBounds, pixelAt, stopBlurb, stopCard, clusterLabel, clusterHint, OVERLAP_PX, BLURB_WORDS } from ${JSON.stringify(join(root, "src/utils/mapStops.js"))};
   export { DISTRICTS, CLASH_TOWNS, CLASH_WINDOW, districtsIn, townClashes, clashNote, townKey } from ${JSON.stringify(join(root, "src/utils/chatGeography.js"))};
+  export { tripChange, dayExposure, changeImpact, stopExposure, impactLabel, riskWords, OUTDOOR_KINDS, INDOOR_KINDS, MATTERS, MINOR, BETTER, UNSURE, OUTDOOR, INDOOR, UNKNOWN } from ${JSON.stringify(join(root, "src/utils/tripChanges.js"))};
+  export { settlingStrength, readConfirmation, matchingUncertainty, resolveUncertainties, describeResolve, claimWords, softenedLine, CONFIRM_FORMAT, MIN_SHARED_WORDS, OPERATOR, AUTHORITY_SOURCE, WEAK } from ${JSON.stringify(join(root, "src/utils/uncertaintyResolve.js"))};
+  export { WAITING_TYPE, recurrenceIn, waitingReason, waitingPayload, waitingLine, waitingDays, waitingOrder, promoted, isWaiting, prose, lastRunWords, CAN_WAIT, HAS_DATE, NO_EVIDENCE, NEGATION_WINDOW } from ${JSON.stringify(join(root, "src/utils/undatedEvents.js"))};
+  export { CONFIRMED, readFactCheck as readFC, describeFactCheck as describeFC } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { briefBlock as briefBlockC } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { withoutCorrectionLead, directAnswers, askedBeforeTurns, lastAskedOnScreen, isRefusal, looksLikePlaceAnswer, daysAnswer, transportAnswer, stayAnswer, partyAnswer, partyLine, widestMode, isKnownPlace } from ${JSON.stringify(join(root, "src/utils/directAnswer.js"))};
   export { readableOn, contrastRatio, overlay, parseHex, luminance, READABLE_MIN, MAX_INK_SATURATION, PILL_ALPHA } from ${JSON.stringify(join(root, "src/utils/readableColor.js"))};
@@ -19030,12 +19034,43 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // It blocks an EDIT too, unlike the coordinate gate, and the reason is in the
   // comment: a wrong pin on a live row is a thing you are stuck with, an empty
   // date is one field away from fixed.
-  const gate = (appK.match(/if \(studioType === "festival" && !String\(shaped\.date[\s\S]{0,3000}?\n      \}/) || [""])[0];
+  // ── THE CAP IS A RUNAWAY GUARD, NOT A MEASUREMENT ─────────────────
+  //
+  // This was 3000 and broke the moment a comment was written inside the gate,
+  // taking six assertions with it, none of which is about length. stripComments
+  // BLANKS rather than deletes, so a comment costs its own characters here even
+  // though it contributes no code, and every one of these `ok`s then failed for
+  // a reason that had nothing to do with what it checks.
+  //
+  // That is the assertion shape this suite already has a note about: one that
+  // breaks when something is added beside it teaches the next person to edit the
+  // assertion rather than the code. The lazy `?` still stops at the FIRST
+  // closing brace at that indent, so the cap only exists to stop the match
+  // running away if that brace ever disappears. Generous on purpose.
+  const gate = (appK.match(/if \(studioType === "festival" && !String\(shaped\.date[\s\S]{0,12000}?\n      \}/) || [""])[0];
   ok("the date gate is findable", gate.length > 100);
   ok("and it does not exempt an edit the way the coordinate gate does", !/isEditing/.test(gate));
   // A stripped draft is told a different thing from one that never had a date,
   // because those are different problems with different fixes.
-  ok("a stripped draft is told its date was removed", /This draft HAD a date and the past-date check removed it/.test(gate));
+  ok("a stripped draft is told its date was removed", /the past-date check removed it/.test(gate));
+  // ── AND WHICH DATE, AND WHICH YEAR TO ASK FOR ─────────────────────
+  //
+  // Oliver, 5 Sep 2026, on the Bork Vikingemarked draft: an annual Viking market
+  // whose 2026 run finished in July. The strip emptied both fields, the gate
+  // refused an event with no date, and the message named neither the date it had
+  // removed nor the year to ask for, so the only way to find out was to redraft
+  // and watch it happen again.
+  ok("and which date it was", /This draft HAD \$\{had \? `\$\{had\}, and ` : "a date and "\}/.test(gate));
+  ok("and which year an annual entry wants instead", /For an annual event the entry wants the \$\{year\} dates/.test(gate));
+  {
+    // The strip has to KEEP what it removed, or none of the above can be said:
+    // nextEditionYear needs the old date to work out the year.
+    const appStrip = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the strip records the date it removed",
+       /t\._datePast = \{ dateStart: t\.dateStart, dateEnd: t\.dateEnd \|\| "" \};/.test(appStrip));
+    ok("before emptying the fields",
+       appStrip.indexOf("t._datePast = {") < appStrip.indexOf('t.dateStart = ""; t.dateEnd = "";'));
+  }
   ok("and one that never had a date is told where to look", /The operator's own site and the ticket listings are the two places worth looking/.test(gate));
   // ── THE KEY IT NAMES IS THE KEY IT READS, 19 AUG 2026 ────────────
   // The message said `dateStart` and the gate reads `shaped.date`. On a fresh
@@ -44659,21 +44694,60 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("the bell's own line is singular when it is one", alertCountLine(1), "1 weather change on a saved trip");
   ok("and plural otherwise", /^3 weather changes/.test(alertCountLine(3)));
 
-  // ── AND IT IS A BELL ──────────────────────────────────────────────
+  // ── AND THE COUNT LIVES ON THE MENU ───────────────────────────────
+  //
+  // Oliver, 5 Sep 2026, with a screenshot of Facebook's account menu: "Replace
+  // this with the burger menu if you got an account and then put saved trips
+  // into it. And when you get a notification, you get a '1' or '2' flashing on
+  // the 'saved trips'. And when you click it, the notification is considered
+  // read." And: "the notification also need to be on top of the frame at start,
+  // so people can see there is a notification."
+  //
+  // The separate bell that shipped that morning is gone. It was a second control
+  // saying the same thing, and its own `position: fixed` was drawn on top of the
+  // burger button, which is how the whole menu disappeared for a day.
   {
     const appW = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
-    const bell = readFileSync(join(root, "src/components/WeatherBell.jsx"), "utf8");
-    ok("the corner holds a bell rather than a card", /<WeatherBell/.test(appW));
-    ok("and the old card is gone", !/weatherAlerts\.map\(a =>/.test(appW));
-    ok("dismissing writes it down", /markAlertSeen\(id\)/.test(appW));
+    // ── ON TOP OF THE FRAME, BEFORE ANYTHING IS OPENED ────────────
+    // A count nobody can see until they open a menu is not a notification.
+    ok("the count is on the menu button itself",
+       /\{unreadTripChanges > 0 && \([\s\S]{0,700}\{unreadTripChanges\}<\/span>/.test(appW));
+    ok("and again on the Saved trips row, where it says what it is about",
+       /<span style=\{\{ flex: 1 \}\}>Saved trips<\/span>[\s\S]{0,400}\{unreadTripChanges\}/.test(appW));
+    ok("it pulses rather than sitting still", /animation: "gxPulse/.test(appW));
+    ok("and a still badge is what somebody who asked for less motion gets",
+       /prefers-reduced-motion: reduce\) \{ \.gx-pulse \{ animation: none/.test(appW));
+    // Clicking the row is reading them: one press, not one cross per notice.
+    ok("opening saved trips marks them read", /readTripChanges\(\); goTab\("home"\)/.test(appW));
+    ok("which is what the badge counts",
+       /const unreadTripChanges = unreadAlerts\(weatherAlerts, weatherRead\)\.length;/.test(appW));
+    // The account rows are the part that needs an account. Everything the burger
+    // held is still there without one, or a phone would lose its navigation.
+    // stripComments blanks rather than deletes, so this distance is measured in
+    // the original source and the paragraphs explaining the change sit inside it.
+    ok("the account rows only exist when there is an account", /\{userSession && \([\s\S]{0,2600}Saved trips/.test(appW));
+    // A count with no words beside it is a red dot. The button says what it is
+    // counting, which is the one line alertCountLine has always been for.
+    ok("and the button says what the count is about", /alertCountLine\(unreadTripChanges\)/.test(appW));
+    ok("and the navigation is still in the same menu", /NAV_ITEMS\.map/.test(appW));
+    // Dismissing is still the heavier state and is still written down.
+    ok("dismissing writes it down", /markAlertSeen\(a\.id\)/.test(appW));
     ok("and the seen list is consulted before anything is shown", /unseenAlerts\(alerts, seenAlerts\(\)\)/.test(appW));
     ok("the alert carries its own sentence", /line: describeWeatherChange\(/.test(appW));
-    // The count is what makes a bell read as a notification rather than as a
-    // settings icon.
-    ok("the bell carries a count", /\{alerts\.length\}<\/span>/.test(bell));
-    ok("and says nothing when there is nothing", /if \(!alerts\.length\) return null;/.test(bell));
-    // Closed it is one button: the list is behind a press.
-    ok("the list is behind a press", /\{open && \(/.test(bell));
+    ok("and what its trip is", /startsInDays: startOffset/.test(appW));
+    // ── DEMONSTRATE WHAT CHANGED ──────────────────────────────────
+    // "you need to demonstrate what has changed and explain if it can affect
+    // your trip." Demonstrate means showing BOTH states rather than describing
+    // the difference: somebody who packed for a dry Tuesday needs to see the dry
+    // Tuesday with a line through it.
+    ok("the card shows the state it was in", /\{ch\.was\}<\/span>/.test(appW));
+    ok("and the state it is in now", /\{ch\.now\}<\/span>/.test(appW));
+    ok("and whether it is worth acting on", /\{ch\.label\}/.test(appW) && /\{ch\.line\}/.test(appW));
+    ok("and the block sits with the saved trips it is about", /id="gx-saved-trips"/.test(appW));
+    // The component the bell lived in is deleted rather than left unrendered:
+    // this project's rule is that an exported thing nothing calls does not stay.
+    ok("the superseded bell component is gone",
+       !existsSync(join(root, "src/components/WeatherBell.jsx")));
   }
 }
 
@@ -45524,6 +45598,646 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // demonstrated it believes the wrong thing.
     ok("and the correction is appended by code", /replyText = `\$\{replyText\}\\n\\n\$\{note\}`/.test(appG));
     ok("in the language the conversation is in", /readerLang\?\.tag\?\.slice\(0, 2\) === "da"/.test(appG));
+  }
+}
+
+
+// ── "THE EMOJIS ON NAVIGATIONS AND BLOGS IS NOT NECESSARY" ──────────
+//
+// Oliver, 5 Sep 2026: "I'm not even sure I like all the emojis. I think it's
+// childish." And then, sharpening it himself: "I like the emojis the AI uses
+// when chatting to express itself. But the emojis on navigations and blogs is
+// not necessary."
+//
+// That is a rule rather than a sweep, and the distinction is the whole of it: an
+// emoji STANDS IN for a missing photograph in some places and is DECORATION next
+// to a name in others. The first is load-bearing, especially now, because most
+// published rows have no usable photo and stripping the fallback would leave a
+// column of empty grey tiles. The second is what he is objecting to.
+{
+  const readerFiles = {
+    "src/components/DetailPage.jsx": readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8"),
+    "src/components/LiveEventsHeaderStrip.jsx": readFileSync(join(root, "src/components/LiveEventsHeaderStrip.jsx"), "utf8"),
+    "src/App.jsx": readFileSync(join(root, "src/App.jsx"), "utf8"),
+  };
+
+  // ── GONE: BESIDE A NAME ───────────────────────────────────────────
+  // Each of these printed an emoji immediately before or after a name the reader
+  // was already reading.
+  ok("an entry's name in a list carries no emoji",
+     !/\{t\.emoji \? `\$\{t\.emoji\} ` : ""\}\{t\.name\}/.test(readerFiles["src/components/DetailPage.jsx"]));
+  ok("nor does an event pill on the front page",
+     !/<span style=\{\{ fontSize: 13 \}\}>\{e\.emoji\}<\/span>/.test(readerFiles["src/components/LiveEventsHeaderStrip.jsx"]));
+  ok("nor does what is closest to me",
+     !/<span style=\{\{ fontSize: 13 \}\}>\{item\.emoji\}<\/span>/.test(readerFiles["src/components/LiveEventsHeaderStrip.jsx"]));
+  ok("nor a bar row", !/<span style=\{\{ fontSize: 22 \}\}>\{spot\.emoji\}<\/span>/.test(readerFiles["src/App.jsx"]));
+  ok("nor a nightlife town heading", !/\{townContent\.emoji\} \{townContent\.name\}/.test(readerFiles["src/App.jsx"]));
+  ok("nor a bar street heading", !/\{street\.emoji \|\| "🍻"\} \{street\.name\}/.test(readerFiles["src/App.jsx"]));
+
+  // ── KEPT: WHERE IT IS THE PICTURE ─────────────────────────────────
+  //
+  // The front-page sweep of the live site found that not one card in either row
+  // had a photograph: five grey placeholder letters where the entries should be.
+  // Removing the fallback as well as the decoration would have turned every one
+  // of those into an empty tile, which is the change looking like a bug.
+  ok("a detail hero with no photo still has something to draw",
+     /\{item\.emoji\}/.test(readerFiles["src/components/DetailPage.jsx"]));
+  ok("and a nightlife town with no photo does too",
+     /townContent\?\.photo \? \([\s\S]{0,400}townContent\?\.emoji \|\| "🍺"/.test(readerFiles["src/App.jsx"]));
+  {
+    const cards = readFileSync(join(root, "src/components/ChatPlaceCards.jsx"), "utf8");
+    ok("and a picture in the chat keeps its stand-in behind a broken image",
+       /\{place\.emoji \|\| "📍"\}/.test(cards));
+  }
+  // The chat's own voice is untouched: "I like the emojis the AI uses when
+  // chatting to express itself."
+  {
+    const appE = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("nothing strips an emoji out of what Gemlyx says",
+       !/stripEmoji|removeEmoji|noEmoji/.test(appE));
+  }
+  // And the top nav never had one: those are drawn SVG icons, by name, through
+  // the Icon component. Asserted so that nobody "helpfully" adds one.
+  ok("the navigation names icons rather than emoji",
+     /\{ id: "home", label: uiT\("nav\.home", uiLang\), ico: "compass" \}/.test(readerFiles["src/App.jsx"]));
+}
+
+
+// ── "EXPLAIN IF IT CAN AFFECT YOUR TRIP", 5 SEP 2026 ────────────────
+//
+// Oliver: "you need to demonstrate what has changed and explain if it can affect
+// your trip."
+//
+// The notice had already been through two rounds. First "Day 1 now looks clearer
+// than before", which is the shape of a fact without being one. Then "Day 1: 1.6
+// mm of rain, 18 degrees, 4 m/s wind", which is true, specific, and still leaves
+// the traveller to work out whether any of it matters.
+//
+// 1.6 mm on a day of four museums is nothing. The same 1.6 mm on a beach, a
+// cliff walk and a harbour, for somebody on a bicycle, is the day. The app knew
+// which of those it was and was not saying.
+{
+  const { tripChange, dayExposure, changeImpact, stopExposure, impactLabel, riskWords,
+          OUTDOOR_KINDS, INDOOR_KINDS, MATTERS, MINOR, BETTER, UNSURE, OUTDOOR, INDOOR, UNKNOWN } = M;
+
+  // ── THE SAME RAIN, TWO DIFFERENT ANSWERS ──────────────────────────
+  {
+    const slot = { temperature_c: 18, precipitation_mm: 1.6, wind_speed_ms: 4 };
+    const beachDay = tripChange({ guideTitle: "Dragør with Ten Six-Year-Olds", dayIndex: 0, startsInDays: 3,
+      oldRisk: "none", newRisk: "high", slot, stopKinds: ["Beach", "Harbour", "Park", "Restaurant"] });
+    is("a day that is mostly outdoors is worth acting on", beachDay.level, MATTERS);
+    is("and it says how much of the day, in stops rather than a percentage",
+       beachDay.line, "3 stops of 4 that day are outdoors, so this one is worth moving things around for.");
+
+    const museumDay = tripChange({ dayIndex: 2, oldRisk: "none", newRisk: "high", slot,
+      stopKinds: ["Museum", "Castle", "Restaurant"] });
+    is("the same rain on an indoor day is not", museumDay.level, MINOR);
+    is("and it says why", museumDay.line, "Every stop we can place that day is indoors, so rain changes little.");
+  }
+
+  // ── DEMONSTRATE MEANS BOTH STATES ─────────────────────────────────
+  // Showing the difference is not showing what changed. A traveller who packed
+  // for a dry Tuesday needs to see the dry Tuesday.
+  {
+    const ch = tripChange({ dayIndex: 0, oldRisk: "none", newRisk: "high", stopKinds: ["Beach"] });
+    is("the card carries the state it was in", ch.was, "dry");
+    is("and the state it is in now", ch.now, "rain");
+    is("in words a reader has seen before, not the stored key", [riskWords("high"), riskWords("low"), riskWords("none")], ["rain", "cloud", "dry"]);
+    is("and the day it is about", ch.dayLabel, "Day 1");
+  }
+
+  // ── RAIN THAT WENT AWAY IS ALSO A CHANGE ──────────────────────────
+  // Somebody who moved their outdoor day once should be told they need not have.
+  {
+    const better = changeImpact({ exposure: dayExposure(["Beach", "Park"]), oldRisk: "high", newRisk: "none" });
+    is("rain lifting is its own kind of news", better.level, BETTER);
+    ok("and it names what it frees up", /2 stops are outside/.test(better.line));
+  }
+
+  // ── AND IT SAYS WHEN IT CANNOT TELL ───────────────────────────────
+  //
+  // The one thing this must not do is produce a confident half. A day whose
+  // stops it cannot classify gets an admission, not a guess, which is the same
+  // call every other reader in this project makes.
+  is("a day of unplaceable stops is not guessed at",
+     changeImpact({ exposure: dayExposure([null, "", undefined]), newRisk: "high" }).level, UNSURE);
+  ok("and it says so in words",
+     /cannot tell how much of that day is outdoors/.test(changeImpact({ exposure: dayExposure(["", ""]), newRisk: "high" }).line));
+  is("and a day with no stops on it says that instead",
+     changeImpact({ exposure: dayExposure([]), newRisk: "high" }).from, "empty");
+
+  // ── A REAL WARNING OUTRANKS THE ARITHMETIC ────────────────────────
+  //
+  // dayWarnings is already tuned to the travel mode, so a cyclist and a driver
+  // get different answers about the same wind. Those sentences are written and
+  // asserted elsewhere; restating them here in this file's words would be a
+  // second opinion from the same source.
+  {
+    const gale = changeImpact({ exposure: dayExposure(["Museum"]), newRisk: "high",
+      warnings: [{ level: "warn", text: "Gale force wind, 15 m/s. On a bike this is the day, not a detail." }] });
+    is("a gale on an indoor day still matters", gale.level, MATTERS);
+    is("and the warning's own sentence is what is shown", gale.from, "warning");
+    ok("word for word", /On a bike this is the day/.test(gale.line));
+  }
+
+  // ── THE TWO SETS ARE THE SAME VOCABULARY stopKind USES ────────────
+  //
+  // Adding a kind to stopKind and forgetting it here is the one way this drifts,
+  // and a forgotten kind reads as UNKNOWN, which is safe but silent. Asserted
+  // against the reader's own labels rather than against a copy of them.
+  {
+    const gr = readFileSync(join(root, "src/utils/guideReading.js"), "utf8");
+    const block = gr.slice(gr.indexOf("const STOP_KINDS"), gr.indexOf("const BY_SOURCE"));
+    const labels = [...new Set([...block.matchAll(/,\s*"([A-ZÆØÅ][^"]*)"\]/g)].map(m => m[1]))];
+    ok("the reader's labels were found", labels.length >= 15);
+    const unplaced = labels.filter(l => !OUTDOOR_KINDS.has(l) && !INDOOR_KINDS.has(l));
+    is("every kind the reader can return is placed indoors or out", unplaced, []);
+    // And nothing is in both, or the arithmetic double counts.
+    is("and none of them is in both", [...OUTDOOR_KINDS].filter(k => INDOOR_KINDS.has(k)), []);
+  }
+  is("a beach is outdoors", stopExposure("Beach"), OUTDOOR);
+  is("a museum is not", stopExposure("Museum"), INDOOR);
+  is("and a kind nobody knows is unknown rather than either", stopExposure("Wormhole"), UNKNOWN);
+  is("nothing at all is unknown too", stopExposure(""), UNKNOWN);
+  ok("every level has a label a person can read", [MATTERS, MINOR, BETTER, UNSURE].every(l => impactLabel(l).length > 4));
+
+  // ── AND IT IS BUILT WHERE THE FACTS ARE ───────────────────────────
+  {
+    const appT = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    // Beside the alert, where the day, its stops and the forecast slot are all
+    // still in hand. A second pass that looked them up again would be a second
+    // chance to look up the wrong day, which this file's neighbours have done.
+    ok("the change is computed beside the alert that carries it", /change: tripChange\(\{/.test(appT));
+    ok("from the day's own stops", /stopKinds: \(day\.stops \|\| \[\]\)\.map\(st => stopKind\(st\.name, lookupRealPlace\(st\.name\)\)\)/.test(appT));
+    ok("and the trip's own mode, so a cyclist is warned as a cyclist", /mode: guide\._mode \|\| null/.test(appT));
+  }
+}
+
+
+// ── "IF GOOGLE CONFIRMS IT, DOESN'T IT CHANGE THE DRAFT?" ───────────
+//
+// Oliver, 5 Sep 2026, pasting a checker's own words back. It had found that an
+// uncertainty on the Jelling festival draft was WRONG: physical ticket sales at
+// Byens Hus on 1 October are stated on the operator's own Billet-info page,
+// quoted in Danish, with the URL.
+//
+// The answer was no, at three layers. The prompt told the checker not to
+// confirm. There was no CONFIRMED label, so `label || UNVERIFIED` filed his
+// confirmation as the precise opposite of what it said. And nothing writes a
+// fact check back into a draft: googleAICheck ends at setGoogleCheckResult and
+// fixFactCheckWithClaude never mentions uncertainties.
+//
+// So the entry would publish with a caveat sitting beside the fact that
+// disproves it, and glanceExtract already wrote why that is worse than it
+// sounds: a false caveat teaches a reader the caveats are decoration.
+{
+  const { CONFIRMED, readFC, describeFC, settlingStrength, readConfirmation, matchingUncertainty,
+          resolveUncertainties, claimWords, softenedLine, CONFIRM_FORMAT,
+          OPERATOR, AUTHORITY_SOURCE, WEAK } = M;
+
+  const HIS = `CONFIRMED: the note saying physical ticket sales at Byens Hus in Jelling on 1 October 10:00-18:00 could not be verified is wrong.
+QUOTE: "Billetsalget starter d. 1. oktober kl. 10.00 online og fysisk i Byens Hus i Jelling kl. 10.00-18.00."
+SOURCE: https://jellingmusikfestival.dk/info/billet-info`;
+
+  // ── THE LABEL THAT DID NOT EXIST ──────────────────────────────────
+  {
+    const r = readFC(HIS);
+    is("a confirmation is read as one", r.findings.map(f => f.label), [CONFIRMED]);
+    is("and counted as one", r.confirmed, 1);
+    // The label existing is the precondition for everything else: with two
+    // labels, `label || UNVERIFIED` filed his confirmation as UNVERIFIED.
+    is("rather than as its own opposite", r.unverified, 0);
+  }
+  // ── AND IT HAS TO CARRY ITS PAGE ──────────────────────────────────
+  //
+  // This file's own rule is that it only ever makes a finding WEAKER, because
+  // the failure it exists to stop is a non-finding carrying the authority of a
+  // correction. CONFIRMED is the strongest thing a checker can say, so it gets
+  // the same treatment pointing the other way.
+  {
+    const noQuote = readFC(`CONFIRMED: ticket sales are real. Source: https://jellingmusikfestival.dk/info/billet-info`);
+    is("a confirmation with a link and no quotation is not one", noQuote.findings[0].label, "UNVERIFIED");
+    ok("and it says why", /has to carry the sentence/.test(noQuote.findings[0].why));
+    const noUrl = readFC(`CONFIRMED: the page says "Billetsalget starter d. 1. oktober kl. 10.00 i Byens Hus."`);
+    is("nor is one with a quotation and no page", noUrl.findings[0].label, "UNVERIFIED");
+    ok("and the banner names the new downgrade rather than the old one",
+       /said CONFIRMED without carrying the page/.test(describeFC(readFC(noUrl.text))));
+  }
+
+  // ── WHICH PAGE MAY SETTLE A CAVEAT ────────────────────────────────
+  //
+  // An uncertainty was raised because a fact could not be confirmed, so what
+  // clears it has to be at least as strong as what would have been accepted at
+  // drafting time. The blocked list is sourcePolicy's own, read rather than
+  // copied.
+  is("the operator's own domain can settle one",
+     settlingStrength("https://jellingmusikfestival.dk/info/billet-info", { name: "Jelling Musikfestival" }), OPERATOR);
+  is("and so can the recorded website, whatever the name looks like",
+     settlingStrength("https://ringkobingfjordmuseer.dk/aktivitetskalender", { name: "Bork Vikingemarked", ownSite: "https://ringkobingfjordmuseer.dk" }), OPERATOR);
+  is("a kommune can", settlingStrength("https://vejle.kommune.dk/nyheder", { name: "Jelling Musikfestival" }), AUTHORITY_SOURCE);
+  is("and the national rail operator can", settlingStrength("https://www.dsb.dk/find-produkter", { name: "x" }), AUTHORITY_SOURCE);
+  is("a listing site cannot", settlingStrength("https://www.tripadvisor.com/x", { name: "Jelling Musikfestival" }), WEAK);
+  // ── AND A FACEBOOK PAGE RECORDED AS THE VENUE'S SITE ──────────────
+  //
+  // Plenty of small Danish venues record a facebook.com page as their website,
+  // which looks like it needs its own guard on the own-site path. Mutation
+  // showed it does not: for the recorded site to match the cited url, the cited
+  // url has to be on that same blocked domain, and the source check has already
+  // refused it. Asserted anyway, because the behaviour is what matters and the
+  // day the source check narrows is the day this stops being covered.
+  is("nor a social page recorded as the venue's own site",
+     settlingStrength("https://www.facebook.com/borkvikingehavn/posts/1", { name: "Bork Vikingemarked", ownSite: "https://www.facebook.com/borkvikingehavn" }), WEAK);
+  is("nor can a search engine's own page", settlingStrength("https://www.google.com/search?q=x", { name: "x" }), WEAK);
+  is("nor a blog nobody vouched for", settlingStrength("https://someblog.example/post", { name: "Jelling Musikfestival" }), WEAK);
+  is("and nothing at all cannot", settlingStrength("", { name: "x" }), WEAK);
+
+  // ── READING WHAT THE CHECKER WROTE ────────────────────────────────
+  {
+    const c = readConfirmation(HIS);
+    is("the URL comes out", c.url, "https://jellingmusikfestival.dk/info/billet-info");
+    ok("the quotation comes out whole, in its own language", /^Billetsalget starter d\. 1\. oktober/.test(c.quote));
+    ok("and what it is about", /Byens Hus/.test(c.says) && !/QUOTE|https?:/.test(c.says));
+    // The shape is dictated rather than guessed at, the same way
+    // INVENTED_CHECK_FORMAT dictates its own.
+    ok("and the shape is stated for the checker", /CONFIRMED:/.test(CONFIRM_FORMAT) && /QUOTE:/.test(CONFIRM_FORMAT) && /SOURCE:/.test(CONFIRM_FORMAT));
+  }
+
+  // ── WHICH LINE IT SETTLES ─────────────────────────────────────────
+  //
+  // The bar is deliberately high. Removing the WRONG caveat is a worse outcome
+  // than removing none, and it is invisible afterwards.
+  {
+    const lines = [
+      "Physical ticket sales at Byens Hus in Jelling on 1 October, 10:00-18:00, could not be verified.",
+      "The 2027 line-up is not announced, so no artist is named here.",
+    ];
+    is("a confirmation finds the line it is about",
+       matchingUncertainty(readConfirmation(HIS).says, lines), 0);
+    is("and one about nothing in this draft finds nothing",
+       matchingUncertainty("the parking charge at Skagen Grenen was confirmed", lines), -1);
+    // Common words are dropped, or "the note stating that the price" would
+    // overlap with every uncertainty ever written and settle all of them.
+    // Common words are dropped, or "the note stating that the price" would
+    // overlap with every uncertainty ever written and settle all of them. Named
+    // claimWords rather than distinctiveWords: danishNames.js already owns that
+    // name for a different job, stripping generic PLACE words, and one name for
+    // two jobs reads as a reuse when it is a collision.
+    ok("common words are not what it matches on",
+       !claimWords("the note stating that this could not be verified on the official site").length);
+  }
+
+  // ── AND WHAT IT DOES TO THE DRAFT ─────────────────────────────────
+  {
+    const draft = {
+      name: "Jelling Musikfestival",
+      website: "https://jellingmusikfestival.dk",
+      uncertainties: [
+        "Physical ticket sales at Byens Hus in Jelling on 1 October, 10:00-18:00, could not be verified.",
+        "The 2027 line-up is not announced, so no artist is named here.",
+      ],
+    };
+    const out = resolveUncertainties(draft, [HIS], { name: draft.name, ownSite: draft.website, at: "2026-09-05" });
+    is("the settled caveat comes out", out.payload.uncertainties.length, 1);
+    ok("and the one nothing settled stays", /2027 line-up/.test(out.payload.uncertainties[0]));
+    // ── OUT OF THE PAGE, INTO THE RECORD ────────────────────────────
+    // A reader is not the audience for the checking, which this codebase has
+    // already said twice in its own words. The audit trail goes where it already
+    // lives.
+    is("the removal is recorded", out.payload.__corrections.length, 1);
+    ok("with the page that settled it", out.payload.__corrections[0].source === "https://jellingmusikfestival.dk/info/billet-info");
+    ok("and the sentence it stands on", /Billetsalget starter/.test(out.payload.__corrections[0].why));
+    ok("and the day it happened", out.payload.__corrections[0].at === "2026-09-05");
+    ok("said out loud rather than quietly", /settled and removed/.test(out.why));
+    // Nothing is mutated: the caller shows before and after side by side.
+    is("the draft it was handed is untouched", draft.uncertainties.length, 2);
+  }
+
+  // ── ONE OF THE TWO SOFTENS, IT DOES NOT CLEAR ─────────────────────
+  //
+  // Forcing every case into keep or kill is how a rule this strict starts
+  // getting worked around.
+  {
+    const draft = { name: "Jelling Musikfestival", uncertainties: ["Physical ticket sales at Byens Hus in Jelling on 1 October could not be verified."] };
+    const weak = `CONFIRMED: physical ticket sales at Byens Hus in Jelling on 1 October are real.
+QUOTE: "Billetsalget starter d. 1. oktober i Byens Hus i Jelling."
+SOURCE: https://www.tripadvisor.com/whatever`;
+    const out = resolveUncertainties(draft, [weak], { name: draft.name });
+    is("a quotation from a page that cannot settle it keeps the caveat", out.payload.uncertainties.length, 1);
+    ok("and writes what is now known into it", /not confirmed on the operator's own site/.test(out.payload.uncertainties[0]));
+    is("and records no correction", out.payload.__corrections, undefined);
+    ok("the softened line still contains the original", /could not be verified/.test(softenedLine("x could not be verified.", "https://a.dk")));
+    // And the other half of the pair: the operator's own page with no quotation
+    // from it. readFactCheck refuses that shape before it gets here, and the
+    // resolver holds the line on its own anyway, because a guard that depends on
+    // its caller having already checked is not a guard.
+    {
+      const noQuote = `CONFIRMED: physical ticket sales at Byens Hus in Jelling on 1 October are real. SOURCE: https://jellingmusikfestival.dk/info/billet-info`;
+      const d2 = { name: "Jelling Musikfestival", uncertainties: ["Physical ticket sales at Byens Hus in Jelling on 1 October could not be verified."] };
+      const out2 = resolveUncertainties(d2, [noQuote], { name: d2.name });
+      is("the operator's own page with no quotation does not clear it", out2.payload.uncertainties.length, 1);
+      is("and nothing is recorded as settled", out2.removed.length, 0);
+    }
+  }
+  // A confirmation that names nothing in the draft changes nothing and is
+  // reported rather than applied to the closest line.
+  {
+    const draft = { name: "x", uncertainties: ["The 2027 line-up is not announced."] };
+    const out = resolveUncertainties(draft, [HIS], { name: "x" });
+    is("a confirmation about another entry changes nothing", out.payload.uncertainties.length, 1);
+    is("and is reported", out.ignored.length, 1);
+    ok("by name", /named no uncertainty in this draft/.test(out.why));
+  }
+  // A draft with no uncertainties at all is not a crash.
+  is("a draft with nothing to settle is left alone",
+     resolveUncertainties({ name: "x" }, [HIS], { name: "x" }).payload.uncertainties, []);
+
+  // ── AND IT IS WIRED, BEHIND A PRESS ───────────────────────────────
+  {
+    const appU = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    // The checker is TOLD it may confirm, in the shape code reads. Without this
+    // the label can never appear, whatever the reader is willing to accept.
+    ok("the check is told it may settle a caveat", /\$\{CONFIRM_FORMAT\}/.test(appU));
+    ok("and told both halves are required", /A confirmation with no quotation from the page is an opinion/.test(appU));
+    ok("and which pages can settle one", /only the operator's own site or a public authority can settle a caveat/.test(appU));
+    // Not automatic. Removing a caveat is the one edit here that makes the entry
+    // claim MORE than it did, so it says what it will do before it does it.
+    ok("the founder sees what it will do first", /\{preview\.why\}/.test(appU));
+    ok("and presses to apply it", /Apply to the draft/.test(appU));
+    ok("which writes the draft Publish actually reads", /setStudioDraftText\(JSON\.stringify\(next\.payload, null, 2\)\)/.test(appU));
+  }
+}
+
+// ── "IT SHOULD BE IN A MEMORY", 5 SEP 2026 ──────────────────────────
+//
+// Oliver, holding a Bork Vikingemarked draft that could not publish. The
+// past-date check had correctly removed a 2026 run that finished in July, and
+// the date gate had then correctly refused an event with no date, and between
+// two correct rules a fully researched entry had nowhere to go.
+//
+// I asked whether a festival carrying an explicit recurrence line should be
+// allowed through without a date. His answer:
+//
+//   "No, but it should be in a memory. So basically, when there is a date, and
+//    you do a 'date sweep' then it appears. OR we can a section under
+//    navigation called 'no confirmed date yet'"
+//
+// and on where that section lives: "Not a new navigation.. but under the event
+// navigation."
+//
+// So the 15 August rule stands unchanged. What changed is that the gate has a
+// second exit, and the thing on the other side of it is visible.
+{
+  const { WAITING_TYPE, recurrenceIn, waitingReason, waitingPayload, waitingLine, waitingDays,
+          waitingOrder, promoted, isWaiting, prose, lastRunWords, CAN_WAIT, HAS_DATE, NO_EVIDENCE } = M;
+  const SEP = new Date(2026, 8, 5);
+  const bork = {
+    name: "Bork Vikingemarked", town: "Nørre Bork", type: "Viking Market", date: "", dateEnd: "",
+    desc: "A Viking market held every summer on the fjord at Bork Havn.",
+    blogBody: [{ type: "heading", content: "Atmosphere" }, { type: "paragraph", content: "Longships pulled up on the sand." }],
+  };
+
+  // ── DOES THIS THING HAPPEN AGAIN ──────────────────────────────────
+  //
+  // The question the whole feature turns on. Without it the memory is a bin: a
+  // draft with no date and nothing saying it recurs is not an event waiting for
+  // an announcement, it is research that came back empty, and filing it behind
+  // a hopeful label hides a bad draft instead of showing it.
+  is("an entry that says it runs every summer recurs", recurrenceIn(bork.desc)?.period, "annual");
+  is("and so does a Danish one", recurrenceIn("Markedet afholdes hvert år i juli.")?.period, "annual");
+  is("and a bare 'annual' counts", recurrenceIn("The annual Viking market draws 20,000.")?.period, "annual");
+  is("a founding year is not a recurrence", recurrenceIn("Founded in 1975 by a group of locals."), null);
+  // entryAudit.js has this exact sentence written down: Aalborg shipped "no
+  // single big annual festival" about the city with the largest carnival in
+  // Scandinavia. It contains the word and asserts the opposite.
+  is("and neither is a sentence denying one",
+     recurrenceIn("There is no single big annual festival tying the city together."), null);
+  // ── AND THE NEGATION THAT COMES AFTER THE CLAIM ───────────────────
+  //
+  // The first version of this file read backwards only, so "The annual market
+  // ended in 2019" put a dead festival straight into the waiting room, where
+  // nothing would ever have taken it out again. tripBrief.js already ran its
+  // scrub in both directions and I did not reuse it.
+  is("a festival that ended does not recur", recurrenceIn("The annual market ended in 2019."), null);
+  is("nor one no longer held", recurrenceIn("The annual market is no longer held."), null);
+  // Forwards is deliberately narrower than backwards: a parade ends at the
+  // harbour and a market day ends at four, and neither says the festival is
+  // over. A bare "ends" must not kill a real recurrence claim.
+  is("but a day that ends is not a festival that ended",
+     recurrenceIn("Held every July. The parade ends at the harbour.")?.period, "annual");
+  // A negated sentence does not silence a real claim elsewhere in the entry.
+  is("and a denial about something else does not hide a real one",
+     recurrenceIn("No annual festival could be confirmed, but the herring market runs every July.")?.period, "annual");
+  // ── HOW OFTEN IS NOT DECIDED BY WHICH PATTERN MATCHED ─────────────
+  //
+  // "Runs every other year" is caught by the RUNS EVERY rule, whose captured
+  // phrase is "Runs every other": the word `year` is one character past the end
+  // of it. Testing the phrase called it annual, which is the difference between
+  // telling a reader to plan for next summer and for the one after.
+  is("every other year is biennial", recurrenceIn("Runs every other year in Ribe.")?.period, "biennial");
+  is("and so is hvert andet år", recurrenceIn("Markedet holdes hvert andet år.")?.period, "biennial");
+  // The claim can be anywhere a reader would meet it, because which field it
+  // landed in is an accident of the drafting pass.
+  ok("a claim in the body counts too",
+     !!recurrenceIn(prose({ desc: "", blogBody: [{ type: "paragraph", content: "It has run every August since 1974." }] })));
+
+  // ── WHO IS ALLOWED TO WAIT ────────────────────────────────────────
+  {
+    // ── ASSERTED ON `ok`, WHICH IS THE FIELD THAT DECIDES ─────────
+    //
+    // Found by mutation: flipping `ok: false` to `ok: true` in the no-evidence
+    // branch killed NOTHING, because every assertion here read `.code` and the
+    // code was unchanged. `ok` is the field the gate actually branches on
+    // (`setWaitingOffer(wait.ok ? ... : ...)`), so the one thing that decides
+    // whether the button appears was the one thing not being tested.
+    const stripped = waitingReason(bork, { stripped: true, past: { dateStart: "2026-07-25", dateEnd: "2026-07-26" }, today: SEP });
+    is("a draft whose finished date was stripped can wait", [stripped.ok, stripped.code], [true, CAN_WAIT]);
+    is("on the strength of the run that happened", stripped.from, "stripped");
+    // The year is the half that matters. getEventDate drops it inside the
+    // current year, which is right on an events card and wrong here: "it ran 25
+    // Jul" could be six weeks ago or six years ago, and which of those it is
+    // decides whether the entry is worth waiting for at all.
+    ok("and the sentence carries the year", /2026/.test(stripped.why));
+    const said = waitingReason(bork, { today: SEP });
+    is("an entry that says it recurs can wait", [said.ok, said.from], [true, "said"]);
+    // The refusal is the useful half.
+    const nothing = waitingReason({ name: "x", desc: "A one-off show in a warehouse." }, { today: SEP });
+    is("one that says nothing cannot", [nothing.ok, nothing.code], [false, NO_EVIDENCE]);
+    const dated = waitingReason({ name: "x", date: "2026-12-01" }, { today: SEP });
+    is("and one that has a date is not a waiting case at all", [dated.ok, dated.code], [false, HAS_DATE]);
+  }
+
+  // ── WHAT IS STORED ────────────────────────────────────────────────
+  const kept = waitingPayload(bork, { past: { dateStart: "2026-07-25", dateEnd: "2026-07-26" }, at: SEP });
+  is("the stored row has no date", [kept.date, kept.dateEnd], ["", ""]);
+  // Written as empty strings rather than left off. A key that is absent and one
+  // that is empty read the same here, but only one survives into a shape
+  // somebody later spreads into a festival, and the failure mode of the missing
+  // one is a row the 15 August gate cannot see.
+  ok("and says so with the keys present, not by dropping them", "date" in kept && "dateEnd" in kept);
+  // ── AND THE BLANKING IS TESTED ON A ROW THAT HAS SOMETHING TO BLANK ──
+  //
+  // The line above passed with the blanking DELETED, because `bork` already
+  // carries two empty strings and the spread copied them. An assertion that
+  // holds whether or not the code runs is the shape this suite has a note about
+  // three hundred lines up: it passes without testing anything.
+  //
+  // And the case it was supposed to cover is real. The gate fires on
+  // `shaped.date` alone, and shapeForLive carries dateEnd separately, so a
+  // draft with no start and an end date reaches here with a dateEnd in hand.
+  // Storing that is a row with an end and no beginning, which every date reader
+  // in the app would then have to have an opinion about.
+  {
+    const halfDated = waitingPayload({ name: "Half", date: "", dateEnd: "2027-07-26", desc: "Held every summer." }, { at: SEP });
+    is("an end date with no start is blanked too", [halfDated.date, halfDated.dateEnd], ["", ""]);
+    const stillDated = waitingPayload({ name: "Both", date: "2027-07-24", dateEnd: "2027-07-26", desc: "Held every summer." }, { at: SEP });
+    is("and so is a date that somehow survived this far", [stillDated.date, stillDated.dateEnd], ["", ""]);
+  }
+  is("it remembers the edition that finished", kept.__waiting.lastStart, "2026-07-25");
+  is("and the year a reader is waiting for", kept.__waiting.expectYear, 2027);
+  ok("and the sentence the entry made", /every summer/.test(kept.__waiting.recurrence.says));
+  ok("the research is kept whole", kept.desc === bork.desc && kept.blogBody.length === 2);
+  ok("and it is recognisable as a waiting row", isWaiting(kept) && !isWaiting(bork));
+
+  // ── WHAT THE READER IS TOLD ───────────────────────────────────────
+  //
+  // Two true things and no third. It never names a month it was not given: a
+  // festival that ran in July will almost certainly run in July again, and
+  // almost certainly is how a guess gets printed beside a flight booking.
+  {
+    const line = waitingLine(kept, SEP);
+    ok("the card says when it last ran, with the year", /Last ran .*2026/.test(line));
+    ok("and that the next dates are not out", /2027 dates are not announced yet/.test(line));
+    ok("and it names no month for the next one", !/(January|February|March|April|May|June|July|August|September|October|November|December)/.test(line.split("Last ran")[1] || ""));
+    const only = waitingLine(waitingPayload({ name: "Y", desc: "Runs every other year in Ribe." }, { at: SEP }), SEP);
+    is("an entry with no last edition says only what it knows",
+       only, "It runs every other year. The next dates are not announced yet.");
+  }
+  is("and how long it has been sitting there", waitingDays(kept, new Date(2026, 8, 20)), 15);
+
+  // ── "THEN IT APPEARS" ─────────────────────────────────────────────
+  //
+  // Its own gate, and not because the sweep's is weak. This is a SECOND door
+  // into the events grid, and the finding this codebase has made more often
+  // than any other is that a rule enforced on one path is not enforced: the
+  // coordinate check "has carried coordinate checks since 6 Aug and gated
+  // NOTHING", the tier default was removed on the strength of a block that was
+  // never built, and the date gate named a key it did not read.
+  {
+    const live = { ...kept, id: 100047 };
+    const good = promoted(live, { start: "2027-07-24", end: "2027-07-25", source: "borkvikingehavn.dk", today: SEP });
+    ok("a real future date promotes", good.ok);
+    is("and the row becomes a dated event", [good.payload.date, good.payload.dateEnd], ["2027-07-24", "2027-07-25"]);
+    ok("the waiting mark comes off", !("__waiting" in good.payload));
+    // Kept rather than discarded: the row is about to stop being a waiting
+    // entry and the only record of how long it waited and what settled it would
+    // go with it.
+    is("but the record of the wait survives", good.payload.__waited.settledFrom, "borkvikingehavn.dk");
+    // Every row in these arrays carries the SYNTHETIC id liveContent stamps on
+    // at load, and no stored payload has ever had one. Promoting straight from
+    // the in-memory row would write 100047 into the payload of row 47.
+    ok("and the live id does not go into the payload", !("id" in good.payload));
+
+    ok("a date already finished is refused", !promoted(live, { start: "2026-07-25", today: SEP }).ok);
+    ok("and says why in the founder's words", /already finished/.test(promoted(live, { start: "2026-07-25", today: SEP }).why));
+    ok("an unreadable date is refused", !promoted(live, { start: "sometime in July", today: SEP }).ok);
+    ok("an end before the start is refused", !promoted(live, { start: "2027-07-24", end: "2027-07-20", today: SEP }).ok);
+    ok("no date at all is refused", !promoted(live, { start: "", today: SEP }).ok);
+    ok("and a row that was never waiting cannot be promoted", !promoted(bork, { start: "2027-07-24", today: SEP }).ok);
+    // A festival that opened yesterday and runs all week has not finished, and
+    // it is the single week it is most worth publishing. Same reading of the
+    // END that eventDateIssues uses.
+    ok("a run that has started and not ended still promotes",
+       promoted(live, { start: "2026-09-03", end: "2026-09-08", today: SEP }).ok);
+  }
+
+  // ── THE ORDER THEY ARE SHOWN IN ───────────────────────────────────
+  // From the current month forward, so a reader in September meets the ones
+  // whose season is coming rather than the ones that just finished.
+  {
+    const july = waitingPayload({ name: "July one" }, { past: { dateStart: "2026-07-25" }, at: SEP });
+    const oct = waitingPayload({ name: "October one" }, { past: { dateStart: "2025-10-02" }, at: SEP });
+    const none = waitingPayload({ name: "Undatable", desc: "Held annually." }, { at: SEP });
+    is("the next season comes first and the unplaceable last",
+       waitingOrder([july, none, oct], SEP).map(r => r.name), ["October one", "July one", "Undatable"]);
+  }
+
+  // ── AND IT IS WIRED, WHICH IS THE HALF THAT IS ALWAYS LEFT OUT ────
+  {
+    const appW = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    const liveW = stripComments(readFileSync(join(root, "src/utils/liveContent.js"), "utf8"));
+    const evW = stripComments(readFileSync(join(root, "src/data/events.js"), "utf8"));
+    const urlW = stripComments(readFileSync(join(root, "src/utils/placeUrl.js"), "utf8"));
+
+    is("the row type is one word", WAITING_TYPE, "undated");
+    ok("the array exists", /export const undatedEvents = \[\];/.test(evW));
+    ok("the loader has a branch for it", /row\.type === WAITING_TYPE\) undatedEvents\.push/.test(liveW));
+    // ── AND IT IS IN THE REGISTRY TOO ─────────────────────────────
+    // A type in doLoad and missing from ARRAY_FOR is a row that renders and
+    // then cannot be taken off the page: removeLiveRow answers UNKNOWN_TYPE and
+    // the whole app reloads. It is also what makes promotion work, because
+    // removeLiveRow is what releases the row's claim so the re-fetch treats it
+    // as new.
+    ok("and the registry every edit and delete reads", /\[WAITING_TYPE\]: undatedEvents/.test(liveW));
+
+    // ── THE SAFETY MODEL, ASSERTED AS A COUNT ─────────────────────
+    //
+    // This is the whole reason it is a TYPE and not a flag on a festival row.
+    // Nine readers take their rows from `events` and `majorEvents`: the grid,
+    // the month chips, the type chips, DetailPage's other-events, the header
+    // strip, the front page rows, the chat's UPCOMING EVENTS block, the guide
+    // builder and tripEvents. A flag would have to be honoured by all nine. An
+    // array they do not read cannot be forgotten by any of them.
+    //
+    // So the count is the assertion: undatedEvents may appear in App.jsx in the
+    // import, the entry-route pool, the date sweep and the section under the
+    // Events page, and nowhere else. A tenth use is either a real leak into a
+    // grid or a new reader that has to be argued for here first.
+    // The lookbehind drops the module path in the import line, which is the same
+    // word and is not a use of the array.
+    const uses = (appW.match(/(?<!utils\/)undatedEvents/g) || []).length;
+    is("undatedEvents is read in exactly four places in App.jsx", uses, 4);
+    ok("the events grid is still built from events and majorEvents alone",
+       /const eventTabSource = eventTab === "local" \? events : majorEvents;/.test(appW));
+
+    // ── THE GATE'S SECOND EXIT ────────────────────────────────────
+    ok("the date gate asks whether it can wait", /const wait = waitingReason\(shaped, \{/.test(appW));
+    ok("and offers the memory only when it can", /setWaitingOffer\(wait\.ok \?/.test(appW));
+    ok("and says so in the refusal itself", /there is a button under this message to keep it under/.test(appW));
+    ok("the button writes the waiting type", /type: WAITING_TYPE, payload, published: true/.test(appW));
+    // Never as an event. The 15 August rule is the thing this whole feature is
+    // built around obeying.
+    ok("and the gate still refuses to publish it as one",
+       /if \(studioType === "festival" && !String\(shaped\.date \|\| ""\)\.trim\(\)\) \{/.test(appW));
+
+    // ── THE DATE SWEEP CAN SEE THEM ───────────────────────────────
+    // Until now it could only see rows already published as events, so a
+    // festival held back for having no date was invisible to the one machine
+    // whose entire job is finding a date.
+    ok("the sweep batch includes the waiting rows",
+       /const allUpcoming = \[\.\.\.undatedEvents, \.\.\.events, \.\.\.majorEvents, \.\.\.vikingEvents\]/.test(appW));
+    ok("and they go first", /isWaiting\(e\) \? -1 :/.test(appW));
+    ok("a found date is offered as one press", /🎪 Publish it now/.test(appW));
+    ok("which checks the date again before writing", /const out = promoted\(row, \{ start: change\.dateChanged/.test(appW));
+    ok("and moves the row between arrays rather than trusting a refresh",
+       /removeLiveRow\(rowId, WAITING_TYPE\)/.test(appW));
+
+    // ── THE SECTION HE ASKED FOR ──────────────────────────────────
+    ok("the Events page has the section", /No confirmed date yet/.test(appW));
+    ok("scoped to the tab, like the grid above it",
+       /\(eventTab === "local"\) === \(e\.__scale !== "Major"\)/.test(appW));
+
+    // ── AND IT HAS AN ADDRESS ─────────────────────────────────────
+    // A published page with no URL is the "in the database, rendering nowhere"
+    // bug. One line in ENTRY_KINDS gives it the route, the share card and the
+    // sitemap, because all three read that table.
+    ok("a waiting entry has a real address",
+       /\{ seg: "event", types: \["festival", "undated"\], kind: "event" \}/.test(urlW));
+    is("and it is the same segment as a dated one", M.segForType("undated"), M.segForType("festival"));
+    // Deliberately NOT draftable: nothing creates one from scratch and no
+    // source can be scoped to one. It still needs a label, or the Manage panel
+    // heads the group "undated".
+    ok("but it is not a type anybody drafts", !M.CONTENT_TYPES.includes("undated"));
+    is("and it is still named in the Manage panel", M.TYPE_LABEL.undated, "No confirmed date yet");
   }
 }
 

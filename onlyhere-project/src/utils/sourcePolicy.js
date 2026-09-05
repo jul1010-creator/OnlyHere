@@ -120,6 +120,14 @@ export const CONTENT_TYPES = ["town", "festival", "free", "food", "foodStreet", 
 export const TYPE_LABEL = {
   "": "Everything", town: "Towns", festival: "Events", free: "Attractions", food: "Food",
   foodStreet: "Food streets", night: "Nightlife", nightStreet: "Bar streets", nightTown: "Nightlife towns", booking: "Workshops", essential: "Essentials",
+  // ── A LABEL FOR A TYPE THAT IS DELIBERATELY NOT DRAFTABLE ─────────
+  // "undated" is a real row type in gemlyx_content and is deliberately NOT in
+  // CONTENT_TYPES above: nothing drafts one from scratch and no source can be
+  // scoped to one. It is only ever produced by the date gate, from a festival
+  // draft that passed every other check. It needs a label anyway, because the
+  // Manage panel groups by type and would otherwise head the group "undated".
+  // See utils/undatedEvents.js.
+  undated: "No confirmed date yet",
 };
 
 // ── A VENUE CALLED "TRAIN" POISONS ITS OWN RESEARCH ─────────────────
