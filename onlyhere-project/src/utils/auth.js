@@ -1,3 +1,4 @@
+import { avatarFromUser } from "./accountAvatar";
 // ── Traveler accounts ──────────────────────────────────────────────
 // Oliver's decisions, 5 Aug 2026: Google sign in AND email + password, both
 // offered; accounts fully OPTIONAL (browse, plan and build a guide with no
@@ -23,7 +24,14 @@ const write = (session) => {
   } catch { /* private mode — the session just won't survive a reload */ }
 };
 
+// ── AND THE PICTURE THE PROVIDER ALREADY SENT ───────────────────────
+// This function kept five things off a sign-in and dropped the whole `user`
+// object, which is where Google puts the account photo. So every Google sign-in
+// has carried an avatar since the day that button shipped and the app has never
+// once been able to see it. See utils/accountAvatar.js for why it is checked
+// rather than trusted.
 const shape = (data) => (data?.access_token ? {
+  avatar: avatarFromUser(data.user),
   token: data.access_token,
   refreshToken: data.refresh_token,
   // Supabase gives expires_in (seconds). Stored as an absolute moment so a
@@ -68,7 +76,10 @@ export const getSession = async () => {
     // exact moment it renews.
     const fresh = shape(data);
     if (!fresh) { write(null); return null; }
-    const next = { ...fresh, userId: fresh.userId || stored.userId, email: fresh.email || stored.email };
+    // Same reason the id and the email are kept: a refresh response may carry no
+    // user object at all, and an hour-old Google session must not lose its face
+    // at the exact moment it renews.
+    const next = { ...fresh, userId: fresh.userId || stored.userId, email: fresh.email || stored.email, avatar: fresh.avatar || stored.avatar || "" };
     write(next);
     return next.userId ? next : await withUser(next);
   } catch { write(null); return null; }
@@ -188,7 +199,7 @@ const withUser = async (session) => {
     if (!r.ok) return session;
     const u = await r.json();
     if (!u?.id) return session;
-    const full = { ...session, email: u.email || session.email || "", userId: u.id };
+    const full = { ...session, email: u.email || session.email || "", userId: u.id, avatar: avatarFromUser(u) || session.avatar || "" };
     write(full);
     return full;
   } catch { return session; }

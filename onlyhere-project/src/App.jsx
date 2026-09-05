@@ -189,6 +189,8 @@ import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "
 import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
 import { resolveUncertainties, CONFIRM_FORMAT } from "./utils/uncertaintyResolve";
+import AccountAvatar from "./components/AccountAvatar";
+import { avatarUrl } from "./utils/accountAvatar";
 import { WAITING_TYPE, waitingReason, waitingPayload, waitingLine, waitingDays, waitingOrder, promoted, isWaiting } from "./utils/undatedEvents";
 import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition, venueRatherThanEvent } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
@@ -9840,6 +9842,33 @@ ${researchRules("festival", ev)}`
   // was looking at rather than re-reading the editor. See utils/undatedEvents.js.
   const publishAsWaiting = async () => {
     if (!waitingOffer?.shaped || !studioSession) return;
+    // ── AND IT ONLY GOES IN ONCE ──────────────────────────────────
+    //
+    // Oliver's console, 5 Sep 2026: `undated "Bork Vikingemarked" (row id 232)`
+    // in the loader's duplicate list, beside `festival "Bork Vikingemarked"
+    // (row id 61)`. Two ways to reach that and this button had no guard against
+    // either. Press Publish, be refused, press Keep, then press Publish again
+    // and the offer comes back with the button under it. And the market was
+    // already in the library as a festival, so the memory was about to hold a
+    // second copy of an entry the site already publishes.
+    //
+    // A duplicate here is worse than a duplicate elsewhere, because liveContent
+    // keeps the FIRST row it meets per type and name and drops the rest with a
+    // console warning: the extra row is in the database, renders nowhere, and
+    // is only findable by reading the console. This project's signature bug,
+    // and this button was a new door to it.
+    //
+    // Checked against what is actually loaded rather than against the database,
+    // because that is the same set the reader sees and it costs no request.
+    const already = [...undatedEvents, ...events, ...majorEvents]
+      .find(e => String(e?.name || "").trim().toLowerCase() === String(waitingOffer.shaped.name || "").trim().toLowerCase());
+    if (already) {
+      setWaitingSaveState(
+        `Not kept. "${already.name}" is already published${already.__waiting ? ` under "No confirmed date yet"` : " as an event"}. `
+        + `Keeping it again would put a second row in the database that renders nowhere. Edit or delete the existing one in Manage Published instead.`
+      );
+      return;
+    }
     setWaitingSaveState("saving");
     try {
       const payload = waitingPayload(waitingOffer.shaped, {
@@ -13676,6 +13705,34 @@ If the conversation only covers a single day or a few stops with no explicit day
   // it. splashGo drives the .gx-go class; the flight-trigger effect below also
   // waits for it so its own fallback timers count from the real start.
   const [splashGo, setSplashGo] = useState(false);
+  // ── "GEMLYX DETOUR IS BLACK SCREEN NOW" ───────────────────────────
+  //
+  // Oliver, 5 Sep 2026. Measured on the live site: the whole landing screen was
+  // in the DOM, complete, and computed to `opacity: 0` with its transform still
+  // at the start of the rise. Its two CSS transitions were reported as running
+  // with currentTime PINNED AT 0, fill "backwards", and the document's own
+  // animation timeline had not advanced a millisecond in a second and a half.
+  //
+  // The tab was not visible. In a hidden tab Chrome does not advance the
+  // animation timeline and never calls requestAnimationFrame, and the intro is
+  // built on both: splashGo is set inside a double rAF, and the card is faded in
+  // by a transition with a 0.3s delay whose backwards fill holds it invisible
+  // until it starts. Neither ever starts, so the site is a black rectangle with
+  // the two position:fixed buttons floating on it.
+  //
+  // A page opened in a background tab is an ordinary thing to do: a
+  // middle-click, a restored session, a link opened to read later. This is the
+  // one screen where losing an animation means losing the page.
+  //
+  // So a hidden document takes the SAME path reduced motion already takes,
+  // which is to skip the flight and show the finished state. Held in state
+  // rather than read at render time because it decides a class name, and it
+  // never goes back to false: once the intro has been skipped, playing it later
+  // because somebody switched tabs would be an animation arriving after the
+  // thing it was introducing.
+  const [introInstant, setIntroInstant] = useState(
+    () => typeof document !== "undefined" && document.visibilityState === "hidden"
+  );
   useEffect(() => {
     if (entered || introFlightDone || splashGo) return;
     let raf1, raf2, t;
@@ -13689,6 +13746,12 @@ If the conversation only covers a single day or a few stops with no explicit day
   useEffect(() => {
     if (entered || introFlightDone) return;
     const reduceMotion = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // A hidden tab cannot run this. rAF never fires, so splashGo below never
+    // arrives and every timer this effect sets counts from a start that has not
+    // happened. Waiting for it is waiting forever, and what the reader gets
+    // while it waits is a black page.
+    const hidden = typeof document !== "undefined" && document.visibilityState === "hidden";
+    if (hidden) setIntroInstant(true);
     if (reduceMotion) { setIntroFlightDone(true); return; }
     if (!splashGo) return; // animations are still paused — timers below must count from the real start
     let cancelled = false;
@@ -21400,8 +21463,6 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           .gemlyx-search-input { width: 130px !important; font-size: 14px !important; padding: 9px 14px 9px 32px !important; }
           .gemlyx-search-input:focus { width: 210px !important; }
           .gemlyx-search-icon { left: 12px !important; width: 14px !important; height: 14px !important; }
-          .gemlyx-burger { padding: 9px 13px !important; }
-          .gemlyx-burger-bar { width: 19px !important; }
         }
         /* ── THE NAVIGATION, LAID OUT LIKE A WEBSITE ──────────────
            Oliver, 21 Aug 2026: "Maybe on PC we gotta cut the drop down
@@ -21471,7 +21532,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           its own. Served from a 2x-upscaled export (front-page-2x.jpg) to
           cut the phone blur from the 1024px original. */}
       {!entered && (
-        <div className={`gxa-root${leaving ? " gxa-leaving" : ""}`} style={{ position: "fixed", inset: 0, zIndex: 2000, overflow: "hidden", background: "#0F0D08" }}>
+        <div className={`gxa-root${leaving ? " gxa-leaving" : ""}${introInstant ? " gxa-instant" : ""}`} style={{ position: "fixed", inset: 0, zIndex: 2000, overflow: "hidden", background: "#0F0D08" }}>
           <style>{`
             .gxa-pan { position:absolute; inset:0; overflow:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
             .gxa-pan::-webkit-scrollbar { display:none; }
@@ -21664,6 +21725,22 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               animation: gxSplashCurtain 1.4s ease-in-out .5s both; }
             @keyframes gxSplashCurtain { from { opacity: 1; } to { opacity: 0; } }
             .gx-splash-mark { position: relative; z-index: 1; }
+            /* ── THE SAME FINISHED STATE, FOR A TAB THAT CANNOT ANIMATE ──
+               A hidden tab freezes the animation timeline, so a transition with
+               a delay sits at its backwards fill, which for this card is
+               opacity 0. Everything below is a copy of what the reduced-motion
+               block already asserts about the landing chrome, applied by a
+               class instead of a media query, because the condition is the
+               state of the tab rather than a preference.
+
+               Deliberately only the four selectors that decide whether the page
+               is VISIBLE. The keyboard, the glow and the mushrooms are
+               decoration: if they are still when nobody is looking, nobody is
+               looking. */
+            .gxa-instant .gxa-choose, .gxa-instant .gxa-topbar { transition: none !important; opacity: 1 !important; }
+            .gxa-instant .gxa-choose { transform: none !important; }
+            .gxa-instant .gxa-why { opacity: 1 !important; transform: none !important; }
+            .gxa-instant .gxa-fly { opacity: 0 !important; }
             @media (prefers-reduced-motion: reduce) {
               .gxa-kb, .gxa-glow, .gxa-shroom, .gxa-archlight, .gxa-fly, .gxa-front { animation: none !important; }
               .gxa-front { transform: none !important; }
@@ -21980,13 +22057,23 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 One menu, not two. The burger already held the navigation, the
                 theme and the language, and a signed-in menu that dropped any of
                 those would take the site's navigation away on a phone. */}
-            <button className="gemlyx-burger" onClick={() => setShowMenu(!showMenu)}
-              aria-label={unreadTripChanges > 0 ? `${uiT("header.menu", uiLang)}. ${alertCountLine(unreadTripChanges)}` : uiT("header.menu", uiLang)}
+            {/* ── AND IT IS A FACE, NOT THREE LINES ────────────────
+                Oliver, 5 Sep 2026: "Can you make the burger menu be an account
+                icon? Like a golden person inside a white circle (like the
+                Gemlyx symbol) if no profile picture. But if you got a profile
+                picture, then a circle like Facebook."
+
+                The same button, doing the same thing. It still opens the menu
+                that holds the navigation on a phone, so nothing is lost by the
+                change; what it gains is that the control you press to reach
+                your account looks like your account. See
+                components/AccountAvatar.jsx for why the person is drawn
+                underneath the picture rather than instead of it. */}
+            <button className="gemlyx-account" onClick={() => setShowMenu(!showMenu)}
+              aria-label={[uiT("header.menu", uiLang), userSession ? accountLabel() : "", unreadTripChanges > 0 ? alertCountLine(unreadTripChanges) : ""].filter(Boolean).join(". ")}
               title={unreadTripChanges > 0 ? alertCountLine(unreadTripChanges) : uiT("header.menu", uiLang)}
-              style={{ position: "relative", background: "none", border: `1px solid ${C.border}`, color: C.muted, fontSize: 14, cursor: "pointer", padding: "7px 11px", borderRadius: 8, display: "flex", gap: 4, flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-              <div className="gemlyx-burger-bar" style={{ width: 17, height: 2, background: C.muted, borderRadius: 2 }} />
-              <div className="gemlyx-burger-bar" style={{ width: 17, height: 2, background: C.muted, borderRadius: 2 }} />
-              <div className="gemlyx-burger-bar" style={{ width: 17, height: 2, background: C.muted, borderRadius: 2 }} />
+              style={{ position: "relative", background: "none", border: "none", padding: 0, cursor: "pointer", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <AccountAvatar url={avatarUrl(userSession, userProfile)} size={32} alt="" />
               {unreadTripChanges > 0 && (
                 <span style={{
                   position: "absolute", top: -6, right: -6, minWidth: 16, height: 16,
@@ -22048,12 +22135,22 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             {userSession && (
               <>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px 12px" }}>
-                  <div style={{ width: 34, height: 34, borderRadius: "50%", background: `${C.gold}22`, border: `1px solid ${C.gold}55`, color: C.gold, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
-                    {String(userSession.user?.email || "?").trim().charAt(0).toUpperCase()}
-                  </div>
+                  {/* ── AND THE SAME FACE AS THE BUTTON THAT OPENED IT ──
+                      Both read one function, so the picture cannot appear in
+                      the header and not in the menu.
+
+                      IT ALSO READ A KEY THAT DOES NOT EXIST. Both lines below
+                      said `userSession.user?.email`, and utils/auth.js `shape()`
+                      keeps `email` at the top level and drops the whole `user`
+                      object, so the circle has shown "?" and the name has read
+                      "Account" for every signed-in person since this menu
+                      shipped. accountLabel(), forty lines up, has always read it
+                      correctly: two readers of one object in one file, and only
+                      one of them right. */}
+                  <AccountAvatar url={avatarUrl(userSession, userProfile)} size={34} alt="" />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {String(userSession.user?.email || "").split("@")[0] || "Account"}
+                      {accountLabel()}
                     </div>
                     <div style={{ fontSize: 10.5, color: C.muted }}>{savedGuides.length} saved · {savedPlaces.length} kept</div>
                   </div>

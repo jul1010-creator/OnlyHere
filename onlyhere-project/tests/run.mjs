@@ -111,6 +111,7 @@ writeFileSync(entry, `
   export { DISTRICTS, CLASH_TOWNS, CLASH_WINDOW, districtsIn, townClashes, clashNote, townKey } from ${JSON.stringify(join(root, "src/utils/chatGeography.js"))};
   export { tripChange, dayExposure, changeImpact, stopExposure, impactLabel, riskWords, OUTDOOR_KINDS, INDOOR_KINDS, MATTERS, MINOR, BETTER, UNSURE, OUTDOOR, INDOOR, UNKNOWN } from ${JSON.stringify(join(root, "src/utils/tripChanges.js"))};
   export { settlingStrength, readConfirmation, matchingUncertainty, resolveUncertainties, describeResolve, claimWords, softenedLine, CONFIRM_FORMAT, MIN_SHARED_WORDS, OPERATOR, AUTHORITY_SOURCE, WEAK } from ${JSON.stringify(join(root, "src/utils/uncertaintyResolve.js"))};
+  export { avatarUrl, avatarFromUser } from ${JSON.stringify(join(root, "src/utils/accountAvatar.js"))};
   export { WAITING_TYPE, recurrenceIn, waitingReason, waitingPayload, waitingLine, waitingDays, waitingOrder, promoted, isWaiting, prose, lastRunWords, CAN_WAIT, HAS_DATE, NO_EVIDENCE, NEGATION_WINDOW } from ${JSON.stringify(join(root, "src/utils/undatedEvents.js"))};
   export { CONFIRMED, readFactCheck as readFC, describeFactCheck as describeFC } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { briefBlock as briefBlockC } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
@@ -46208,7 +46209,12 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // The lookbehind drops the module path in the import line, which is the same
     // word and is not a use of the array.
     const uses = (appW.match(/(?<!utils\/)undatedEvents/g) || []).length;
-    is("undatedEvents is read in exactly four places in App.jsx", uses, 4);
+    // Five since 5 Sep: the fifth is the duplicate guard on the Keep button,
+    // which reads the array to refuse an entry the memory already holds. That is
+    // the assertion doing its job rather than being edited around it: a new
+    // reader has to be argued for here, and this one reads the array to say NO
+    // rather than to put anything on a page.
+    is("undatedEvents is read in exactly five places in App.jsx", uses, 5);
     ok("the events grid is still built from events and majorEvents alone",
        /const eventTabSource = eventTab === "local" \? events : majorEvents;/.test(appW));
 
@@ -46217,6 +46223,15 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and offers the memory only when it can", /setWaitingOffer\(wait\.ok \?/.test(appW));
     ok("and says so in the refusal itself", /there is a button under this message to keep it under/.test(appW));
     ok("the button writes the waiting type", /type: WAITING_TYPE, payload, published: true/.test(appW));
+    // ── AND IT ONLY GOES IN ONCE ──────────────────────────────────
+    // Oliver's console: `undated "Bork Vikingemarked" (row id 232)` in the
+    // loader's duplicate list, beside a festival row of the same name. The
+    // loader keeps the FIRST row per type and name and drops the rest with a
+    // warning, so a second row is in the database, renders nowhere, and is only
+    // findable by reading the console.
+    ok("and refuses a name the library already holds",
+       /const already = \[\.\.\.undatedEvents, \.\.\.events, \.\.\.majorEvents\]/.test(appW));
+    ok("saying which shelf it is on", /is already published\$\{already\.__waiting \? /.test(appW));
     // Never as an event. The 15 August rule is the thing this whole feature is
     // built around obeying.
     ok("and the gate still refuses to publish it as one",
@@ -46310,6 +46325,125 @@ SOURCE: https://www.tripadvisor.com/whatever`;
      /if \(dragRef\.current\) setStripRef\.current\(0, true\);\n      dragRef\.current = null;/.test(appP));
   ok("and so does a drag that committed to no axis",
      /if \(!d \|\| d\.axis !== "x"\) \{ setStripRef\.current\(0, true\); return; \}/.test(appP));
+}
+
+// ── "A GOLDEN PERSON INSIDE A WHITE CIRCLE", 5 SEP 2026 ─────────────
+//
+// Oliver: "Can you make the burger menu be an account icon? Like a golden
+// person inside a white circle (like the Gemlyx symbol) if no profile picture.
+// But if you got a profile picture, then a circle like Facebook."
+{
+  const { avatarUrl, avatarFromUser } = M;
+  const G = "https://lh3.googleusercontent.com/a/ACg8ocK";
+
+  // ── THE PICTURE THE APP ALREADY HAD AND COULD NOT SEE ───────────
+  // utils/auth.js shape() kept five fields off a sign-in and dropped the whole
+  // `user` object, which is where Google puts the account photo. Every Google
+  // sign-in has carried one since that button shipped.
+  is("a Google avatar is read off the user", avatarFromUser({ user_metadata: { avatar_url: G } }), G);
+  is("and the OAuth claim spelling too", avatarFromUser({ user_metadata: { picture: G } }), G);
+  is("a user with no picture gives nothing", avatarFromUser({ user_metadata: {} }), "");
+  is("and neither does no user at all", avatarFromUser(null), "");
+
+  // ── AND IT IS CHECKED RATHER THAN TRUSTED ───────────────────────
+  //
+  // This value comes back from an identity provider and goes straight into an
+  // <img src>, which is the one place in this app where a string from outside
+  // becomes a request the browser makes for the reader. Refused by construction
+  // rather than by a blocklist, because a blocklist is a list somebody has to
+  // keep complete.
+  is("javascript: is not a picture", avatarUrl({ avatar: "javascript:alert(1)" }), "");
+  is("nor is a data URL", avatarUrl({ avatar: "data:image/svg+xml;base64,PHN2Zz4=" }), "");
+  is("nor plain http", avatarUrl({ avatar: "http://example.com/a.jpg" }), "");
+  is("nor a bare string", avatarUrl({ avatar: "not a url" }), "");
+  is("https is", avatarUrl({ avatar: G }), G);
+
+  // What the person chose beats what a provider handed us. The first source is
+  // for a profile photo Gemlyx does not have yet, and it is there so that adding
+  // one is a field name rather than a rewrite of every place a face is drawn.
+  is("their own photo wins", avatarUrl({ avatar: G }, { photo: "https://gemlyx.example/me.jpg" }), "https://gemlyx.example/me.jpg");
+  is("and nothing at all is empty, not a broken src", avatarUrl(null, null), "");
+
+  // ── THE GLYPH IS UNDERNEATH, NOT INSTEAD ────────────────────────
+  //
+  // `url ? <img> : <glyph>` has a hole that only shows on somebody else's
+  // connection: nothing in the circle between render and load, and nothing in it
+  // forever if the picture 404s. An empty ring in a header reads as a broken
+  // page rather than a slow one.
+  {
+    const av = stripComments(readFileSync(join(root, "src/components/AccountAvatar.jsx"), "utf8"));
+    ok("the person is always drawn", /<Ico name="user"/.test(av));
+    ok("and the picture is laid over it", /position: "absolute", inset: 0/.test(av));
+    ok("rather than replacing it", !/url \?[\s\S]{0,40}<Ico/.test(av));
+    ok("a picture that fails to load falls back", /onError=\{\(\) => setBroken\(true\)\}/.test(av));
+    // Without this a failed picture keeps the glyph showing after signing in
+    // with a working one, because `broken` would still be true from the last
+    // account.
+    ok("and a new address gets a new attempt", /useEffect\(\(\) => \{ setBroken\(false\); \}, \[url\]\)/.test(av));
+    ok("the circle is white as asked", /background: "#FFFFFF"/.test(av));
+    ok("with the brand's gold on the person", /color=\{C\.gold\}/.test(av));
+    // components/Icon.jsx has carried `user` since the icon set replaced the
+    // emoji. A hand-drawn path here would be a second person glyph that drifts
+    // from the first the day either is touched.
+    ok("and it is Icon.jsx's person, not a second copy",
+       !/\bd="M12 12a4 4/.test(av) && /from "\.\/Icon"/.test(av));
+  }
+
+  {
+    const appA = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the header button is the face", /<AccountAvatar url=\{avatarUrl\(userSession, userProfile\)\} size=\{32\}/.test(appA));
+    ok("and the menu shows the same one", /<AccountAvatar url=\{avatarUrl\(userSession, userProfile\)\} size=\{34\}/.test(appA));
+    // The count still rides on the button. "the notification also need to be on
+    // top of the frame at start, so people can see there is a notification."
+    ok("the unread count is still on it", /className="gemlyx-account"[\s\S]{0,900}unreadTripChanges > 0 && \(/.test(appA));
+    // ── AND THE MENU READ A KEY THAT DOES NOT EXIST ───────────────
+    // Both lines said `userSession.user?.email`, and auth.js shape() keeps
+    // `email` at the top level and drops the whole `user` object. So the circle
+    // showed "?" and the name read "Account" for every signed-in person since
+    // this menu shipped, while accountLabel() forty lines up read it correctly.
+    ok("nothing reads userSession.user any more", !/userSession\.user\?\.email/.test(appA));
+    ok("and the name comes from the one reader that was right", /\{accountLabel\(\)\}/.test(appA));
+    // Dead CSS is an invitation. The bars are gone, so their media query is too.
+    ok("the burger bars are gone", !/gemlyx-burger-bar/.test(appA));
+    ok("and so is the burger itself", !/gemlyx-burger/.test(appA));
+  }
+}
+
+// ── "GEMLYX DETOUR IS BLACK SCREEN NOW", 5 SEP 2026 ─────────────────
+//
+// Measured on the live site: the landing screen was in the DOM, complete, and
+// computed to opacity 0 with its transform still at the start of the rise. Its
+// two CSS transitions reported playState "running" with currentTime PINNED AT
+// 0, fill "backwards", and document.timeline.currentTime had not advanced in a
+// second and a half. document.visibilityState was "hidden".
+//
+// A hidden tab freezes the animation timeline and never calls
+// requestAnimationFrame. The intro needs both: splashGo is set inside a double
+// rAF, and the card is faded in by a transition with a 0.3s delay whose
+// backwards fill holds it invisible until it starts. Neither ever happens, so
+// the site is a black rectangle with two position:fixed buttons on it.
+//
+// Opening a page in a background tab is an ordinary thing to do. This is the one
+// screen where losing an animation means losing the page.
+{
+  const appB = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("a hidden tab is known at mount",
+     /useState\(\s*\(\) => typeof document !== "undefined" && document\.visibilityState === "hidden"\s*\)/.test(appB));
+  // The same exit reduced motion already takes, because the answer is the same:
+  // do not wait for an animation that will not run, show the finished state.
+  ok("and takes the exit reduced motion already takes",
+     /if \(reduceMotion \|\| hidden\) \{ setIntroFlightDone\(true\); return; \}/.test(appB));
+  ok("marking the root so the transitions do not pin", /introInstant \? " gxa-instant" : ""/.test(appB));
+  // The transition is what pins it. Turning it off is what makes the inline
+  // opacity:1 the value that actually paints.
+  ok("the card is forced visible with no transition",
+     /\.gxa-instant \.gxa-choose, \.gxa-instant \.gxa-topbar \{ transition: none !important; opacity: 1 !important; \}/.test(appB));
+  ok("and its rise is skipped rather than left half done",
+     /\.gxa-instant \.gxa-choose \{ transform: none !important; \}/.test(appB));
+  // Only the four selectors that decide whether the page is visible. The
+  // keyboard, the glow and the mushrooms are decoration: if they are still when
+  // nobody is looking, nobody is looking.
+  ok("the decoration is left alone", !/\.gxa-instant \.gxa-kb/.test(appB));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
