@@ -46462,5 +46462,45 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("the decoration is left alone", !/\.gxa-instant \.gxa-kb/.test(appB));
 }
 
+// ── "MAKE THE BLOGS A 'READ MORE'", 5 SEP 2026 ──────────────────────
+//
+// Oliver, on the Aarhus nightlife town page: "can you make the blogs a 'read
+// more'? Right under the gemlyx find. So people can instantly click into bars."
+//
+// The nightTown prompt asks for Who It's For, After Dark, The Reality Check and
+// three What to Be Aware Of bullets, and every word of it rendered between the
+// Gemlyx Find and the list of bars. Good prose standing in the wrong place for
+// the job that page is doing.
+//
+// Driven in a real browser before it shipped, not reasoned about: closed, the
+// prose is out of the DOM and the bar list sits at y=51; open, it is in and the
+// list moves to y=69; closed again, back to 51, with no page errors.
+{
+  const rm = stripComments(readFileSync(join(root, "src/components/ReadMore.jsx"), "utf8"));
+  const appR = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+
+  ok("the body is behind the toggle", /\{open && children\}/.test(rm));
+  // Conditional rather than hidden with CSS, because BlogBody can mount an
+  // InstagramEmbed and an iframe nobody can see still costs the reader their
+  // data. A page whose whole point is getting out of the way should not load an
+  // embed on the way past.
+  ok("and not merely hidden", !/display: "none"/.test(rm) && !/visibility:/.test(rm));
+  ok("it starts closed, which is the whole request", /useState\(false\)/.test(rm));
+  ok("and says which state it is in, for a screen reader too", /aria-expanded=\{open\}/.test(rm));
+  ok("the label changes with it", /\{open \? less : more\}/.test(rm));
+
+  // ── WHERE HE ASKED FOR IT ───────────────────────────────────────
+  // "Right under the gemlyx find." The Gemlyx Find block, then the toggle, then
+  // the bars. Asserted as an ORDER rather than as adjacency, so adding a line
+  // between them is a design decision rather than a broken test.
+  const findAt = appR.indexOf("◆ <b>Gemlyx Find:</b> {townContent.gemlyxFind}");
+  const moreAt = appR.indexOf("<ReadMore C={C}");
+  ok("the town page has both", findAt > 0 && moreAt > 0);
+  ok("and the toggle comes after the Gemlyx Find", moreAt > findAt);
+  ok("with the prose inside it", /<ReadMore C=\{C\}[\s\S]{0,400}?<BlogBody blocks=\{townContent\.blogBody\}/.test(appR));
+  // Nothing is cut. The words are one press away, not gone.
+  ok("and the body is still the published one", /blocks=\{townContent\.blogBody\}/.test(appR));
+}
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }

@@ -190,6 +190,7 @@ import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange,
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
 import { resolveUncertainties, CONFIRM_FORMAT } from "./utils/uncertaintyResolve";
 import AccountAvatar from "./components/AccountAvatar";
+import ReadMore from "./components/ReadMore";
 import { avatarUrl } from "./utils/accountAvatar";
 import { WAITING_TYPE, waitingReason, waitingPayload, waitingLine, waitingDays, waitingOrder, promoted, isWaiting } from "./utils/undatedEvents";
 import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition, venueRatherThanEvent } from "./utils/eventDates";
@@ -20235,8 +20236,20 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               nobody. The suite's own "the publish path carries
                               a verdict for every type" passed the whole time,
                               because the verdict was in a body nothing showed. */}
-                          <BlogBody blocks={townContent.blogBody} C={C} name={townContent.name}
-                            InstagramEmbed={InstagramEmbed} style={{ marginTop: 16 }} />
+                          {/* ── AND IT IS BEHIND A PRESS NOW ───────────
+                              Oliver, 5 Sep 2026: "can you make the blogs a
+                              'read more'? Right under the gemlyx find. So
+                              people can instantly click into bars."
+
+                              Two hundred and thirty to three hundred words sat
+                              between somebody who came to find a bar and the
+                              bars. Nothing is cut: the toggle is exactly where
+                              he asked for it, and the list starts a screen
+                              higher. */}
+                          <ReadMore C={C} style={{ marginTop: 4 }}>
+                            <BlogBody blocks={townContent.blogBody} C={C} name={townContent.name}
+                              InstagramEmbed={InstagramEmbed} style={{ marginTop: 12 }} />
+                          </ReadMore>
                         </div>
                       );
                     }
