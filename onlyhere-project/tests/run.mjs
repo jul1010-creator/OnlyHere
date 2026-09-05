@@ -46254,5 +46254,63 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   }
 }
 
+// ── THE PAGE THAT STOPPED HALF WAY INTO THE NEXT ONE, 5 SEP 2026 ────
+//
+// Oliver, on the live Events page: clicking Local or Major slid the whole site
+// left and left it there. Events was cut off at the screen edge and the Food
+// page sat parked in the right third, with the nav still saying Events.
+// Clicking the other tab re-rendered the grid correctly and did not move the
+// page back. Only a reload did.
+//
+// TWO OWNERS OF ONE CSS PROPERTY. The strip's `transform` is written by the JSX
+// and by setStrip. React only writes a style property when it differs from the
+// PREVIOUS RENDER's value, and it never reads the DOM, so once setStrip wrote a
+// different transform React believed the parked value was still there and every
+// later render wrote nothing. The offset could not be cleared by re-rendering,
+// which is why the symptom was a page that would not go back.
+{
+  const appP = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  const strip = (appP.match(/const setStrip = \(dx, animate\) => \{[\s\S]{0,1200}?\n  \};/) || [""])[0];
+  ok("setStrip is findable", strip.length > 100);
+
+  // ── PARKING REMOVES THE OVERRIDE, IT DOES NOT COMPETE WITH IT ────
+  // An empty string deletes the inline property, which hands `transform` back
+  // to the value React owns. That value is by definition the parked position
+  // for whatever `active` now is, so the two cannot be left disagreeing.
+  ok("parking clears the inline transform", /el\.style\.transform = "";/.test(strip));
+  ok("and the inline transition with it", /el\.style\.transition = "";/.test(strip));
+  ok("on the no-offset branch", /if \(!dx\) \{/.test(strip));
+  // The drag itself still writes a real offset, or the pager does not follow a
+  // finger at all and this "fix" is a mute button.
+  ok("a live drag still writes one", /el\.style\.transform = `translateX\(calc\(/.test(strip));
+
+  // ── AND REACT STILL OWNS THE PARKED VALUE ───────────────────────
+  // Clearing the override only works because there is something underneath to
+  // fall back to. Take the transform off the JSX and parking would leave the
+  // strip at translateX(0), which is page one.
+  ok("the JSX carries the parked transform",
+     /transform: `translateX\(\$\{-tabIdx \* \(100\/TAB_ORDER\.length\)\}%\)`/.test(appP));
+  ok("and the transition parking falls back to",
+     /transition: "transform 0\.32s cubic-bezier\(0\.2, 0\.8, 0\.3, 1\)"/.test(appP));
+
+  // ── EVERY RENDER PARKS IT, UNLESS A FINGER IS DOWN ──────────────
+  // No dependency array, on purpose. The old effect ran on `active` alone, so a
+  // stranded strip could only be rescued by changing page, and changing page
+  // was the one thing the stranded reader could no longer do comfortably.
+  ok("the park effect runs on every render",
+     /useEffect\(\(\) => \{ if \(!dragRef\.current\) setStrip\(0, true\); \}\);/.test(appP));
+  // Guarded, or it fights the drag it is meant to clean up after.
+  ok("and cannot fight a live drag", /if \(!dragRef\.current\)/.test(appP));
+
+  // ── AND NO EXIT FROM A DRAG LEAVES AN OFFSET BEHIND ─────────────
+  // onStart nulled the drag and returned with the last offset still applied,
+  // and the touchend that followed returned at `if (!d)`. A second finger
+  // landing on one of the sideways card rows is enough to reach it.
+  ok("abandoning a drag puts the page back",
+     /if \(dragRef\.current\) setStripRef\.current\(0, true\);\n      dragRef\.current = null;/.test(appP));
+  ok("and so does a drag that committed to no axis",
+     /if \(!d \|\| d\.axis !== "x"\) \{ setStripRef\.current\(0, true\); return; \}/.test(appP));
+}
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }

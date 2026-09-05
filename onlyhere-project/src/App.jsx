@@ -14267,6 +14267,10 @@ If the conversation only covers a single day or a few stops with no explicit day
     setActive(id);
   };
   const stripRef = useRef(null);
+  // Declared up here rather than beside the swipe listeners, because the
+  // park-on-every-render effect below reads it and a ref read above its own
+  // declaration is a thing this file has been caught by before.
+  const dragRef = useRef(null);
   const tabIdx = TAB_ORDER.indexOf(active);
 
   // The live page index, readable from the swipe listeners below. Those are
@@ -14276,13 +14280,57 @@ If the conversation only covers a single day or a few stops with no explicit day
   const tabIdxRef = useRef(tabIdx);
   tabIdxRef.current = tabIdx;
 
+  // ── THE PAGE THAT STOPPED HALF WAY INTO THE NEXT ONE ──────────────
+  //
+  // Oliver, 5 Sep 2026, on the Events page: clicking Local or Major slid the
+  // whole site left and left it there, Events cut off at the screen edge and
+  // the Food page parked in the right third. Clicking the other tab re-rendered
+  // the grid correctly and did not move the page back. Only a reload did.
+  //
+  // TWO OWNERS OF ONE CSS PROPERTY, AND REACT CANNOT WIN. The strip's
+  // `transform` is written by the JSX below AND by this function. React only
+  // writes a style property when its value differs from the PREVIOUS RENDER's
+  // value; it does not read the DOM. So the moment this function writes a
+  // different transform, React still believes the property holds the parked
+  // value, and every render after that writes nothing. The offset is permanent
+  // and no amount of re-rendering can clear it.
+  //
+  // Any drag that ends without reaching onEnd strands the page that way, and
+  // there is a plain path to it: a second touch landing on one of the sideways
+  // card rows makes onStart null the drag (its early return is above the reset)
+  // while an offset is applied, and the touchend that follows returns at
+  // `if (!d)`.
+  //
+  // SO PARKING NO LONGER WRITES A SECOND VALUE, IT REMOVES THE OVERRIDE. An
+  // empty string deletes the inline property and hands `transform` back to the
+  // one React owns, which is by definition the parked position for whatever
+  // `active` now is. The imperative value exists only while a finger is down,
+  // so the two can never be left disagreeing.
   const setStrip = (dx, animate) => {
     const el = stripRef.current; if (!el) return;
+    if (!dx) {
+      // Both cleared. The JSX carries the transition too, so the park still
+      // animates: falling back to React's value IS the 0.32s ease.
+      el.style.transition = "";
+      el.style.transform = "";
+      return;
+    }
     el.style.transition = animate ? "transform 0.32s cubic-bezier(0.2, 0.8, 0.3, 1)" : "none";
     el.style.transform = `translateX(calc(${-tabIdxRef.current * (100/TAB_ORDER.length)}% + ${dx}px))`;
   };
 
-  useEffect(() => { setStrip(0, true); }, [active]);
+  // ── AND EVERY RENDER PARKS IT, UNLESS A FINGER IS DOWN ────────────
+  //
+  // No dependency array on purpose, which is normally a smell and is the point
+  // here. The old effect ran on `active` alone, so a stranded strip could only
+  // be rescued by changing page, and changing page was the one thing the
+  // stranded reader could no longer do comfortably.
+  //
+  // This is the net under the specific path named above: whatever stranded it,
+  // the next render of anything puts it back. It costs two property writes on a
+  // node that already has them, and it cannot fight a live drag because that is
+  // exactly what dragRef holds.
+  useEffect(() => { if (!dragRef.current) setStrip(0, true); });
 
   // Same reason: goTab closes over `active`, so the listeners need the current
   // one rather than the one that existed when they were attached.
@@ -14327,8 +14375,6 @@ If the conversation only covers a single day or a few stops with no explicit day
   //    drag still tracks the finger, at a fifth of the distance, so it reads as
   //    "there is nothing that way" rather than as the page having come loose.
   const pagerRef = useRef(null);
-  const dragRef = useRef(null);
-
   useEffect(() => {
     const root = pagerRef.current;
     if (!root) return;
@@ -14347,6 +14393,13 @@ If the conversation only covers a single day or a few stops with no explicit day
     };
 
     const onStart = (e) => {
+      // ── ABANDONING A DRAG PUTS THE PAGE BACK ──────────────────
+      // This nulled the drag and returned, with the strip still holding
+      // whatever offset the last touchmove wrote, and the touchend that
+      // followed returned at `if (!d)`. A second finger landing on one of the
+      // sideways card rows is enough, and that is how the page came to sit half
+      // way into the next one with no way back but a reload.
+      if (dragRef.current) setStripRef.current(0, true);
       dragRef.current = null;
       if (e.touches.length !== 1) return;
       const t = e.touches[0];
@@ -14374,7 +14427,10 @@ If the conversation only covers a single day or a few stops with no explicit day
     const onEnd = (e) => {
       const d = dragRef.current;
       dragRef.current = null;
-      if (!d || d.axis !== "x") return;
+      // Same reason. A drag that committed to neither axis wrote no offset, but
+      // saying so costs nothing and means no exit from this function can leave
+      // one behind.
+      if (!d || d.axis !== "x") { setStripRef.current(0, true); return; }
       const i = tabIdxRef.current;
       // Either a decisive distance or a flick, never both. See utils/swipe.js.
       const next = swipeTarget(d.dx, e.timeStamp - d.t0, d.w, i, TAB_ORDER.length);
