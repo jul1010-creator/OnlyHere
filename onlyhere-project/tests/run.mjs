@@ -112,6 +112,7 @@ writeFileSync(entry, `
   export { tripChange, dayExposure, changeImpact, stopExposure, impactLabel, riskWords, OUTDOOR_KINDS, INDOOR_KINDS, MATTERS, MINOR, BETTER, UNSURE, OUTDOOR, INDOOR, UNKNOWN } from ${JSON.stringify(join(root, "src/utils/tripChanges.js"))};
   export { settlingStrength, readConfirmation, matchingUncertainty, resolveUncertainties, describeResolve, claimWords, softenedLine, CONFIRM_FORMAT, MIN_SHARED_WORDS, OPERATOR, AUTHORITY_SOURCE, WEAK } from ${JSON.stringify(join(root, "src/utils/uncertaintyResolve.js"))};
   export { avatarUrl, avatarFromUser } from ${JSON.stringify(join(root, "src/utils/accountAvatar.js"))};
+  export { isFinished, candidates, proposeWaiting, proposals as waitProposals, describeProposals, writeFor, MOVE as WAIT_MOVE, LEAVE as WAIT_LEAVE } from ${JSON.stringify(join(root, "src/utils/undatedSweep.js"))};
   export { WAITING_TYPE, recurrenceIn, waitingReason, waitingPayload, waitingLine, waitingDays, waitingOrder, promoted, isWaiting, prose, lastRunWords, CAN_WAIT, HAS_DATE, NO_EVIDENCE, NEGATION_WINDOW } from ${JSON.stringify(join(root, "src/utils/undatedEvents.js"))};
   export { CONFIRMED, readFactCheck as readFC, describeFactCheck as describeFC } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { briefBlock as briefBlockC } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
@@ -46500,6 +46501,143 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("with the prose inside it", /<ReadMore C=\{C\}[\s\S]{0,400}?<BlogBody blocks=\{townContent\.blogBody\}/.test(appR));
   // Nothing is cut. The words are one press away, not gone.
   ok("and the body is still the published one", /blocks=\{townContent\.blogBody\}/.test(appR));
+}
+
+// ── THE ENTRIES NOBODY CAN SEE, 5 SEP 2026 ──────────────────────────
+//
+// Read off gemlyx_content that evening: 52 event rows, 28 upcoming, 10 with no
+// date and 14 whose dates had finished. Those 14 are correct, fully researched
+// entries no visitor will ever meet, and eventDates.js has been saying so one
+// row at a time for three weeks, in a founder note nobody could act on:
+//
+//   "The entry is correct and INVISIBLE: every events grid shows upcoming
+//    events only, so no visitor will ever see it."
+//
+// Oliver: "build whatever you want to build."
+{
+  const { isFinished, candidates, proposeWaiting, waitProposals, describeProposals,
+          writeFor, WAIT_MOVE, WAIT_LEAVE, WAITING_TYPE } = M;
+  const SEP = new Date(2026, 8, 5);
+  const row = (id, name, date, dateEnd, desc, type = "festival") => ({ id, type, payload: { name, date, dateEnd, desc } });
+
+  // ── WHICH ROWS ARE EVEN ASKED ABOUT ─────────────────────────────
+  //
+  // The END decides, not the start. A festival that opened yesterday and runs
+  // all week has not finished, and it is the single week it is most worth
+  // showing. Same reading eventDateIssues uses.
+  ok("a run that has ended is finished", isFinished({ date: "2026-08-02", dateEnd: "2026-08-09" }, SEP));
+  ok("a run still going is not", !isFinished({ date: "2026-09-03", dateEnd: "2026-09-08" }, SEP));
+  ok("nor is one still ahead", !isFinished({ date: "2026-12-01", dateEnd: "2026-12-03" }, SEP));
+  ok("a row with no date at all is", isFinished({ date: "" }, SEP));
+  // A date nobody can parse is not a date. This is the row that would otherwise
+  // sit in the grid printing "Invalid Date".
+  ok("and so is one nobody can read", isFinished({ date: "sometime in July" }, SEP));
+
+  {
+    const rows = [
+      row(61, "Bork Vikingemarked", "2026-08-07", "2026-08-09", "Every August, more than 300 Vikings set up camp at Bork Vikingehavn."),
+      row(12, "Still To Come", "2026-12-01", "2026-12-03", "Held every December."),
+      row(55, "Running Now", "2026-09-03", "2026-09-08", "Held every year."),
+      { id: 88, type: "undated", payload: { name: "Already Waiting", date: "", __waiting: {} } },
+      { id: 9, type: "town", payload: { name: "Ribe", date: "" } },
+    ];
+    is("only finished festivals are candidates", candidates(rows, SEP).map(r => r.id), [61]);
+  }
+
+  // ── AND THE ONE THING THAT DECIDES ──────────────────────────────
+  //
+  // Whether the event HAPPENS AGAIN, read from the entry's own prose. A row
+  // that never claims to recur is left where it is, because telling a reader
+  // "the next dates are not announced yet" about a one-off is a promise nobody
+  // made.
+  {
+    const p = proposeWaiting(row(61, "Bork Vikingemarked", "2026-08-07", "2026-08-09",
+      "Every August, more than 300 Vikings set up camp at Bork Vikingehavn."), SEP);
+    is("an entry that says it recurs can move", p.verdict, WAIT_MOVE);
+    ok("and the sentence is quoted back, not summarised", /Every August, more than 300 Vikings/.test(p.why));
+    // The whole reason a FINISHED row is a better candidate than a dateless
+    // one: it knows when it last ran, so the card can say so.
+    is("the dates it ran on go with it",
+       [p.payload.__waiting.lastStart, p.payload.__waiting.lastEnd], ["2026-08-07", "2026-08-09"]);
+    is("and the year a reader is waiting for", p.payload.__waiting.expectYear, 2027);
+    is("the row itself loses its date", [p.payload.date, p.payload.dateEnd], ["", ""]);
+    // What you review is what you publish: the proposal shows the finished
+    // sentence rather than describing what it would say.
+    is("and the table shows the card it would make",
+       p.line, "Last ran 7 Aug to 9 Aug 2026. It runs every year. The 2027 dates are not announced yet.");
+    is("the write is one row, type and payload together", writeFor(p).type, WAITING_TYPE);
+    ok("addressed by id", writeFor(p).id === 61);
+  }
+  {
+    const p = proposeWaiting(row(99, "One Off Gala", "2026-08-01", "", "A single gala evening marking the town's anniversary."), SEP);
+    is("a one-off stays where it is", p.verdict, WAIT_LEAVE);
+    ok("with the reason", /Nothing in this entry says it happens again/.test(p.why));
+    // Actionable rather than merely refused: the fix is a sentence in the entry.
+    ok("and what to do about it", /If it is annual, say so in the entry and run this again/.test(p.why));
+    ok("and no payload is built for it", !p.payload);
+  }
+  // A dateless row moves too, and says only what it knows.
+  {
+    const p = proposeWaiting(row(77, "Wonderfestiwall", "", "", "The annual Bornholm festival in Allinge."), SEP);
+    is("a dateless entry that recurs moves", p.verdict, WAIT_MOVE);
+    is("and claims no last run it does not have", p.line, "It runs every year. The next dates are not announced yet.");
+  }
+
+  // ── AND THE SIZE OF THE CHANGE IS LEGIBLE FIRST ─────────────────
+  {
+    const rows = [
+      row(61, "Bork", "2026-08-07", "2026-08-09", "Every August the Vikings come."),
+      row(99, "One Off", "2026-08-01", "", "A single gala evening."),
+    ];
+    const list = waitProposals(rows, SEP);
+    const said = describeProposals(list, SEP);
+    ok("the summary counts both kinds", /2 festivals/.test(said) && /1 of them/.test(said) && /1 row stays/.test(said));
+    ok("and an empty library says so plainly", /Every event on the site has a date that is still ahead/.test(describeProposals([], SEP)));
+  }
+
+  // ── PROPOSE, THEN WRITE, AND NEVER THE OTHER WAY ROUND ──────────
+  {
+    const appS = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the panel exists", /Events nobody can see/.test(appS));
+    // ── ASSERTED AS THE CLAIM, NOT AS PROXIMITY ───────────────────
+    //
+    // The first version of this matched the fetch and the call within 200
+    // characters of each other, which is a fact about line lengths rather than
+    // about cost, and it broke on the first comment written between them.
+    // The claim is "one request, no model calls", so the function body is
+    // sliced out and both halves are asked of it directly.
+    const runBody = appS.slice(appS.indexOf("const runWaitingSweep = async () => {"),
+                               appS.indexOf("const applyWaitingSweep = async () => {"));
+    ok("the sweep reader is findable", runBody.length > 200);
+    is("it makes exactly one request", (runBody.match(/await fetch\(/g) || []).length, 1);
+    ok("and that request is the library", /gemlyx_content\?select=id,type,payload&published=eq\.true/.test(runBody));
+    ok("the proposals come from the pure reader", /waitingProposals\(rows, today\)/.test(runBody));
+    // The half that makes "free" true. Any of these in here and the button
+    // would be spending money it does not warn about.
+    ok("no model is asked anything",
+       !/askPerplexity|askClaude|askOpenAI|\/api\/anthropic|\/api\/scan-source|firecrawl/i.test(runBody));
+    ok("and it says the run is free", /Costs nothing to run/.test(appS));
+    // sweeps.js rule one, scaled to this panel: what you review is what you
+    // write, and the write is a separate, explicit act.
+    ok("writing is a separate press", /onClick=\{applyWaitingSweep\}/.test(appS));
+    // ── AND THE TICKS HAVE TO REACH THE WRITER ────────────────────
+    //
+    // Found by mutation: this searched the whole file, and `waitChosen.has(p.id)`
+    // also appears in the checkbox, so deleting it from the WRITE filter left
+    // the assertion passing while every proposal was written whether ticked or
+    // not. The claim is about what gets written, so it is asked of the writer.
+    const applyBody = appS.slice(appS.indexOf("const applyWaitingSweep = async () => {"),
+                                 appS.indexOf("const updateCurrentEvents = async () => {"));
+    ok("the writer is findable", applyBody.length > 200);
+    ok("and it writes only the rows still ticked", /waitChosen\.has\(p\.id\)/.test(applyBody));
+    ok("and only the ones that may move at all", /p\.verdict === WAIT_MOVE/.test(applyBody));
+    // ONE PATCH per row, so no row is ever a festival with no date or a waiting
+    // entry with no __waiting.
+    ok("type and payload move together", /body: JSON\.stringify\(\{ type: w\.type, payload: w\.payload \}\)/.test(appS));
+    ok("and the row changes arrays without a reload", /removeLiveRow\(Number\(w\.id\), "festival"\)/.test(appS));
+    // A row that cannot be answered is reported, never offered.
+    ok("an unanswerable row has no tick at all", /canMove \? \([\s\S]{0,300}?<input type="checkbox"/.test(appS));
+  }
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

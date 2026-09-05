@@ -191,6 +191,7 @@ import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditPr
 import { resolveUncertainties, CONFIRM_FORMAT } from "./utils/uncertaintyResolve";
 import AccountAvatar from "./components/AccountAvatar";
 import ReadMore from "./components/ReadMore";
+import { proposals as waitingProposals, describeProposals, writeFor, MOVE as WAIT_MOVE } from "./utils/undatedSweep";
 import { avatarUrl } from "./utils/accountAvatar";
 import { WAITING_TYPE, waitingReason, waitingPayload, waitingLine, waitingDays, waitingOrder, promoted, isWaiting } from "./utils/undatedEvents";
 import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition, venueRatherThanEvent } from "./utils/eventDates";
@@ -8958,6 +8959,14 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   const [sweepId, setSweepId] = useState(SWEEPS[0]?.id || "");
   const [sweepState, setSweepState] = useState(null);        // null | {phase, done, total, name, skipped, error}
   const [sweepProposals, setSweepProposals] = useState(null);
+  // ── THE FOURTEEN ENTRIES NOBODY CAN SEE ───────────────────────────
+  // Oliver, 5 Sep 2026, on 52 events of which 28 are visible: "build whatever
+  // you want to build". `chosen` is a set of row ids rather than a flag on each
+  // proposal, so unticking one cannot mutate the table underneath the person
+  // reading it. See utils/undatedSweep.js.
+  const [waitSweep, setWaitSweep] = useState(null);        // { list, summary } | { error }
+  const [waitChosen, setWaitChosen] = useState(() => new Set());
+  const [waitWriting, setWaitWriting] = useState(null);    // { done, total, failed[] } | null
   const [sweepWriteState, setSweepWriteState] = useState(null);
   const [sweepSnapshot, setSweepSnapshot] = useState(null);  // {name, count} once downloaded, gates the Save button
   const sweepRestoreRef = useRef(null);
@@ -9248,6 +9257,66 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
     } catch (err) {
       setPromoting(p => ({ ...p, [key]: String(err?.message || err).slice(0, 160) }));
     }
+  };
+
+  // ── PROPOSE, THEN WRITE, AND NEVER THE OTHER WAY ROUND ────────────
+  //
+  // The read is one request and no model calls. Every question this sweep asks
+  // is answered by reading the row: has the last day gone, does the entry's own
+  // prose claim it happens again, what year would the next edition fall in. So
+  // it costs nothing to run and it can be run as often as he likes.
+  const runWaitingSweep = async () => {
+    setWaitSweep(null); setWaitWriting(null); setWaitChosen(new Set());
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true&order=id.desc`, { headers: sweepHeaders() });
+      if (!res.ok) { setWaitSweep({ error: `Could not read the library (${res.status}).` }); return; }
+      const rows = await res.json();
+      if (!Array.isArray(rows)) { setWaitSweep({ error: "The library did not come back as a list." }); return; }
+      const today = new Date();
+      const list = waitingProposals(rows, today);
+      setWaitSweep({ list, summary: describeProposals(list, today) });
+      // Pre-ticked, because the ones that can move are the answer to the
+      // question he pressed the button to ask. Unticking is one press and
+      // reading the table is the point; making him tick fourteen boxes to get
+      // the thing he asked for is ceremony, not review.
+      setWaitChosen(new Set(list.filter(p => p.verdict === WAIT_MOVE).map(p => p.id)));
+    } catch (err) {
+      setWaitSweep({ error: String(err?.message || err).slice(0, 200) });
+    }
+  };
+
+  const applyWaitingSweep = async () => {
+    const list = (waitSweep?.list || []).filter(p => p.verdict === WAIT_MOVE && waitChosen.has(p.id));
+    if (!list.length) return;
+    setWaitWriting({ done: 0, total: list.length, failed: [] });
+    const failed = [];
+    for (let i = 0; i < list.length; i++) {
+      const w = writeFor(list[i]);
+      try {
+        // ONE PATCH per row, type and payload together, so no row is ever a
+        // festival with no date or a waiting entry with no __waiting. Serial
+        // and paced, like every other write loop in this panel: a burst of
+        // fourteen PATCHes is how a rate limit turns half a sweep into a mess.
+        const attempt = (token) => fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${encodeURIComponent(String(w.id))}`, {
+          method: "PATCH",
+          headers: { ...sweepHeaders(), "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify({ type: w.type, payload: w.payload }),
+        });
+        let res = await attempt(studioSession?.access_token);
+        if (res.status === 401) { const fresh = await refreshStudioSession(); if (fresh) res = await attempt(fresh.access_token); }
+        if (!res.ok) failed.push(`${list[i].name}: ${res.status}`);
+        else {
+          // Out of the events arrays and into the waiting one, without a full
+          // page reload. removeLiveRow releases the row's claim in both
+          // registries, which is what makes the re-fetch treat it as new.
+          removeLiveRow(Number(w.id), "festival");
+        }
+      } catch (err) { failed.push(`${list[i].name}: ${String(err?.message || err).slice(0, 60)}`); }
+      setWaitWriting({ done: i + 1, total: list.length, failed: [...failed] });
+      await new Promise(r => setTimeout(r, 200));
+    }
+    if (failed.length < list.length) { await refreshLiveContent(); bumpLiveContent(v => v + 1); }
+    showToast(`📌 ${list.length - failed.length} moved to "No confirmed date yet"`, 3200);
   };
 
   const updateCurrentEvents = async () => {
@@ -17909,6 +17978,88 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         )}
                       </div>
                     )}
+
+                    {/* ── THE ENTRIES NOBODY CAN SEE ──────────────────────
+                        Oliver, 5 Sep 2026, on a library of 52 events of which
+                        28 are visible: "build whatever you want to build."
+
+                        eventDateIssues has been saying this one row at a time
+                        for three weeks, in a founder note nobody could act on:
+                        "The entry is correct and INVISIBLE: every events grid
+                        shows upcoming events only, so no visitor will ever see
+                        it." This is the act.
+
+                        FREE, AND SAYS SO. No model, no search, no Firecrawl.
+                        Every question is answered by reading the row, which is
+                        why it can be run as often as he likes and why the
+                        button does not warn about cost. */}
+                    <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>📌 Events nobody can see</div>
+                          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                            Finished and undated festivals, and which of them say in their own words that they happen again. Costs nothing to run. Nothing is written until you have read the table.
+                          </div>
+                        </div>
+                        <button onClick={runWaitingSweep} disabled={!!waitWriting}
+                          style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                          Look at them
+                        </button>
+                      </div>
+
+                      {waitSweep?.error && <div style={{ fontSize: 11.5, color: "#FFB347" }}>{waitSweep.error}</div>}
+                      {waitSweep?.summary && <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{waitSweep.summary}</div>}
+
+                      {waitSweep?.list?.length > 0 && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                          {waitSweep.list.map(p => {
+                            const canMove = p.verdict === WAIT_MOVE;
+                            const on = canMove && waitChosen.has(p.id);
+                            return (
+                              <div key={p.id} style={{ background: C.bg, border: `1px solid ${on ? `${C.gold}55` : C.border}`, borderRadius: 10, padding: "9px 11px" }}>
+                                <div style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                                  {/* A row that cannot move has no tick, rather
+                                      than a disabled one: an unanswerable row is
+                                      reported, never offered. */}
+                                  {canMove ? (
+                                    <input type="checkbox" checked={on} disabled={!!waitWriting}
+                                      onChange={() => setWaitChosen(prev => { const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; })}
+                                      style={{ marginTop: 3, accentColor: C.gold, cursor: "pointer" }} />
+                                  ) : <span style={{ width: 13, flexShrink: 0 }} />}
+                                  <div style={{ minWidth: 0, flex: 1 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 700, color: canMove ? C.text : C.muted }}>
+                                      {p.name}
+                                      <span style={{ fontWeight: 500, color: C.muted }}> · {p.had ? `${p.had}${p.hadEnd && p.hadEnd !== p.had ? ` to ${p.hadEnd}` : ""}` : "no date"}</span>
+                                    </div>
+                                    {/* The sentence out of the entry that
+                                        justifies the move, quoted rather than
+                                        summarised. Every value carries its own
+                                        provenance: see sweeps.js, rule four. */}
+                                    <div style={{ fontSize: 10.8, color: C.muted, marginTop: 3, lineHeight: 1.55 }}>{p.why}</div>
+                                    {/* And what the card would actually read.
+                                        Showing the outcome rather than
+                                        describing it: what you review is what
+                                        you publish. */}
+                                    {canMove && <div style={{ fontSize: 11, color: C.gold, marginTop: 4, lineHeight: 1.5 }}>Card would read: {p.line}</div>}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {waitSweep.list.some(p => p.verdict === WAIT_MOVE) && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
+                              <button onClick={applyWaitingSweep} disabled={!!waitWriting || waitChosen.size === 0}
+                                style={{ background: waitChosen.size ? C.gold : "none", border: `1px solid ${C.gold}`, color: waitChosen.size ? C.onGold : C.muted, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: waitChosen.size ? "pointer" : "default", fontFamily: "'Inter', sans-serif" }}>
+                                {waitWriting ? `Moving ${waitWriting.done}/${waitWriting.total}…` : `Move ${waitChosen.size} to "No confirmed date yet"`}
+                              </button>
+                              {waitWriting?.failed?.length > 0 && (
+                                <div style={{ fontSize: 10.5, color: "#FFB347" }}>{waitWriting.failed.length} failed: {waitWriting.failed.slice(0, 3).join("; ")}</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
 
                     {/* ── SWEEPS: A SMALL CHANGE, APPLIED TO MANY ROWS ────
                         The fourth maintenance panel, and the first one with a
