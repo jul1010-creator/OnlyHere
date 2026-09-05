@@ -46057,6 +46057,19 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // Jul" could be six weeks ago or six years ago, and which of those it is
     // decides whether the entry is worth waiting for at all.
     ok("and the sentence carries the year", /2026/.test(stripped.why));
+    // ── AND A STRIP WITH NO RECORD OF WHAT IT TOOK ───────────────
+    //
+    // Oliver's own Bork draft, 5 Sep 2026: `_dateWasStripped` true and
+    // `_datePast` absent, because the draft was written by a build from before
+    // the strip started keeping the dates it removed. The first version of this
+    // asked for both and refused it.
+    //
+    // They are not the same claim. The strip only ever fires on a real date it
+    // has worked out has passed, so the flag alone already proves the event
+    // ran. The record only changes the sentence.
+    const noRecord = waitingReason({ name: "z", desc: "A one-off." }, { stripped: true, today: SEP });
+    is("a stripped draft can wait even with no record of the date", [noRecord.ok, noRecord.from], [true, "stripped"]);
+    ok("and says the dates themselves were not kept", /dates themselves were not kept/.test(noRecord.why));
     const said = waitingReason(bork, { today: SEP });
     is("an entry that says it recurs can wait", [said.ok, said.from], [true, "said"]);
     // The refusal is the useful half.

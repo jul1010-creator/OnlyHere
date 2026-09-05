@@ -206,11 +206,25 @@ export const waitingReason = (entry, { stripped = false, past = null, today = ne
   if (start && parseEventDate(start)) {
     return { ok: false, code: HAS_DATE, why: "This entry has a readable date, so it publishes as an event." };
   }
+  // ── THE STRIP IS THE EVIDENCE, NOT THE RECORD OF IT ───────────────
+  //
+  // This asked for `stripped && had`, and Oliver's own Bork draft failed it:
+  // `_dateWasStripped` true, `_datePast` absent, because the draft was written
+  // by a build from before the strip started keeping what it removed.
+  //
+  // The two are not the same claim. `_dateWasStripped` is only ever set by a
+  // strip that found a real date and worked out it had passed, so on its own it
+  // already proves the event ran. `_datePast` is our note of WHICH date, and it
+  // only changes the sentence. Refusing on a missing note is refusing an event
+  // for a gap in our bookkeeping, which is the shape of every gate in this file
+  // that had to be widened later.
   const had = clean(past?.dateStart);
-  if (stripped && had) {
+  if (stripped) {
     return {
       ok: true, code: CAN_WAIT, from: "stripped",
-      why: `It ran ${lastRunWords(had, clean(past?.dateEnd), today)}, and the past-date check removed those dates because that edition has finished. An event that ran is an event that exists.`,
+      why: had
+        ? `It ran ${lastRunWords(had, clean(past?.dateEnd), today)}, and the past-date check removed those dates because that edition has finished. An event that ran is an event that exists.`
+        : `A date was found for it and the past-date check removed it, which it does when that edition has finished. The dates themselves were not kept, so the card will say only that the next ones are not announced. An event that ran is an event that exists.`,
     };
   }
   const rec = recurrenceIn(prose(entry));
