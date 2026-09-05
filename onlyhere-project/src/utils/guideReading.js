@@ -344,3 +344,96 @@ export const clampNote = (note) => {
   if (hidden < NOTE_MIN_HIDDEN) return { shown: text, hidden: 0, clipped: false };
   return { shown: text.slice(0, cut).trimEnd(), hidden, clipped: true };
 };
+
+// ── WHAT THE GUIDE ACTUALLY CAME OUT AS ─────────────────────────────
+//
+// Oliver, 5 Sep 2026: "Maybe include into the build report how the guide ends
+// up looking."
+//
+// The guide-build log records fifteen STAGES and nothing about the thing they
+// produced. Every line in it is about the pipeline: planning, rebalancing,
+// polishing, a last pass. A run can be fifteen green stages and end in a guide
+// with an empty day in the middle of it, and the report reads identically.
+//
+// So this is the one line about the OUTPUT rather than about the work, and it is
+// pure so the suite can drive it over a guide nobody has to build.
+//
+// ── AND IT ANSWERS THE LANGUAGE QUESTION WHILE IT IS HERE ───────────
+//
+// Same message, the sentence before: "fix the English/Danish mix that happens in
+// the end." A mix is only findable by reading the finished guide, which is
+// exactly what this function is already holding. languageOfProse is the same
+// reader guideLanguage uses to decide what the guide should be written in, so
+// asking it what the guide IS written in costs nothing new and uses the same
+// judgement in both directions.
+//
+// Reported per field rather than as one verdict, because a guide that is Danish
+// with three English fields in it is the case he calls worse than either
+// language alone, and a single "reads as Danish" would hide precisely that.
+export const guideProseOf = (guide) => {
+  const out = [];
+  const push = (where, text) => {
+    const t = String(text ?? "").trim();
+    if (t) out.push({ where, text: t });
+  };
+  push("title", guide?.title);
+  const e = guide?.essentials || {};
+  push("budgetReality", e.budgetReality);
+  push("transportTip", e.transportTip);
+  push("keepInMind", e.keepInMind);
+  (Array.isArray(guide?.days) ? guide.days : []).forEach((d, i) => {
+    push(`day ${d?.day ?? i + 1} title`, d?.title);
+    (Array.isArray(d?.stops) ? d.stops : []).forEach(s => push(`${s?.name || "a stop"}`, s?.note));
+  });
+  return out;
+};
+
+// The mixed-language finding. `languageOf` is passed in rather than imported so
+// this file stays a leaf: guideReading is imported by the render and by the
+// suite, and travellerLanguage pulls in the marker tables.
+export const guideLanguageMix = (guide, languageOf) => {
+  const fields = guideProseOf(guide);
+  const read = fields.map(f => ({ ...f, lang: languageOf(f.text) })).filter(f => f.lang);
+  if (read.length < 2) return null;
+  const counts = read.reduce((a, f) => ({ ...a, [f.lang]: (a[f.lang] || 0) + 1 }), {});
+  const langs = Object.keys(counts);
+  if (langs.length < 2) return null;
+  // The majority is what the guide is; the rest is the mix. The alphabetical
+  // second key is not cosmetic: on an even split the count alone leaves the
+  // answer to whichever field happened to be read first, and a guide that is
+  // half English and half Danish would then describe itself differently
+  // depending on the order of its own days.
+  const main = langs.sort((a, b) => counts[b] - counts[a] || a.localeCompare(b))[0];
+  const odd = read.filter(f => f.lang !== main);
+  return { main, counts, odd: odd.map(f => f.where) };
+};
+
+export const describeGuide = (guide, languageOf = null) => {
+  const days = Array.isArray(guide?.days) ? guide.days : [];
+  const stops = days.flatMap(d => Array.isArray(d?.stops) ? d.stops : []);
+  const noted = stops.filter(s => String(s?.note ?? "").trim()).length;
+  const e = guide?.essentials || {};
+  const essentials = ["budgetReality", "transportTip", "keepInMind"];
+  const emptyEssentials = essentials.filter(k => !String(e[k] ?? "").trim());
+  // An empty day is the one shape a reader notices immediately and the stage
+  // list cannot show, so it is named rather than counted.
+  const emptyDays = days
+    .map((d, i) => ({ n: d?.day ?? i + 1, stops: (Array.isArray(d?.stops) ? d.stops : []).length }))
+    .filter(d => !d.stops)
+    .map(d => `day ${d.n}`);
+
+  const parts = [
+    `"${String(guide?.title || "(untitled)").slice(0, 70)}"`,
+    `${days.length} day${days.length === 1 ? "" : "s"}`,
+    `${stops.length} stop${stops.length === 1 ? "" : "s"}`,
+    noted === stops.length ? "every stop has a note" : `${noted} of ${stops.length} stops have a note`,
+    emptyDays.length ? `EMPTY: ${emptyDays.join(", ")}` : "",
+    emptyEssentials.length ? `no ${emptyEssentials.join(", no ")}` : "all three essentials written",
+  ].filter(Boolean);
+
+  const mix = languageOf ? guideLanguageMix(guide, languageOf) : null;
+  if (mix) {
+    parts.push(`MIXED LANGUAGE: mostly ${mix.main}, but ${mix.odd.length} field${mix.odd.length === 1 ? "" : "s"} read as another: ${mix.odd.slice(0, 6).join(", ")}${mix.odd.length > 6 ? `, and ${mix.odd.length - 6} more` : ""}`);
+  }
+  return parts.join(" · ");
+};

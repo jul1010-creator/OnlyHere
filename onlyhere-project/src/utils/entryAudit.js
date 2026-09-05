@@ -1028,8 +1028,69 @@ const conditionAround = (t, at, len, nextAt) => {
 // identically to having failed.
 // Folded before matching, for the same reason and with the same trap: "fri
 // entré" ends in a non-word character, so a trailing \b would refuse it.
-const FREE_PHRASE = /\b(?:gratis(?:\s+adgang|\s+entre)?|fri\s+entre|fri\s+adgang|gratis\s+at\s+deltage|free\s+(?:entry|admission|to\s+attend)|no\s+ticket\s+required)\b/;
-const saysFreeIn = (text) => FREE_PHRASE.test(fold(text));
+//
+// ── AND "GRATIS" ON ITS OWN IS NOT A FREE DOOR ──────────────────────
+//
+// Oliver's run log, 4 Sep 2026, drafting Nibe Festival. Step 22 read
+// nibefestival.dk/billetter/partout/partout/ and reported "says entry is free".
+// Step 31 read THE SAME URL and reported 2305 DKK, correctly. One page, one
+// run, two functions, opposite answers, and the free one is the one that
+// reaches a reader.
+//
+// Three more the same week: koldingginfestival.dk (a paid gin festival, no
+// price on the page at all), denkongeligesamling.dk/amalienborgmuseet/billetter
+// (whose only "gratis" is "Børn og unge under 18 år har gratis adgang"), and
+// festivalabroad.com on that same 2305-krone festival.
+//
+// WHY IT FIRES. This branch is only reached when no priced figure was bound to
+// a ticket word, so it is the fallback for "the page states no price". A bare
+// "gratis" anywhere on a Danish page then answered a question nobody asked it:
+// gratis parkering, gratis afbestilling, gratis nyhedsbrev, gratis for børn.
+//
+// entryPrice.js has had the rule since 27 August and states it plainly: "an
+// UNQUALIFIED free claim is a free attraction. Anything else is a fact about
+// somebody or something else." Its isUnqualifiedFree cannot be imported here,
+// and that is the interesting part rather than an inconvenience: it works by
+// SUBTRACTION on a short stored field, where an empty residue means nothing
+// qualified the claim. This function is handed a three-thousand-character web
+// page, where the residue is never empty and the test would refuse everything.
+// Same rule, different shape of input, so it is implemented the way THIS file
+// already tests a price rather than copied from the way that one tests a field.
+//
+// THE SHAPE, and every list in it already existed here:
+//
+//   A phrase that names entry itself ("gratis adgang", "free admission") says
+//   what it is about and needs nothing near it. A BARE "gratis" does not, so it
+//   is held to the same bar a figure is: TICKET_WORD within TICKET_WINDOW, which
+//   is the rule ticketPriceOn applies to every number it considers.
+//
+//   Either way it is refused when CONCESSION is in its sentence, because "free
+//   for children" is a fact about children, and when BESIDE_THE_TICKET is in its
+//   window, because free parking is a fact about a car park.
+const FREE_ENTRY_PHRASE = "fri\\s+entre|fri\\s+adgang|gratis\\s+adgang|gratis\\s+entre|gratis\\s+at\\s+deltage|free\\s+(?:entry|admission|to\\s+attend)|no\\s+ticket\\s+required";
+const FREE_PHRASE = new RegExp(`\\b(?:${FREE_ENTRY_PHRASE}|gratis)\\b`);
+const NAMES_ENTRY = new RegExp(`^(?:${FREE_ENTRY_PHRASE})$`);
+
+const saysFreeIn = (text) => {
+  const t = fold(String(text || ""));
+  const re = new RegExp(FREE_PHRASE.source, "g");
+  let m;
+  while ((m = re.exec(t)) !== null) {
+    const at = m.index;
+    const after = t.slice(at + m[0].length, at + m[0].length + TICKET_WINDOW);
+    const before = t.slice(Math.max(0, at - TICKET_WINDOW), at);
+    // The phrase's own words are NOT in the window. "gratis adgang" would
+    // otherwise satisfy the ticket-word test with the second half of itself,
+    // which is the whole distinction this function is drawing.
+    const around = `${before} ${after}`;
+    if (BESIDE_THE_TICKET.test(around)) continue;
+    if (CONCESSION.test(`${sentenceBefore(t, at)} ${after}`)) continue;
+    if (NAMES_ENTRY.test(m[0])) return true;
+    TICKET_WORD.lastIndex = 0;
+    if (TICKET_WORD.test(around)) return true;
+  }
+  return false;
+};
 
 // What a PAGE says a ticket costs. null when it does not say, which is a real
 // and common answer and is never dressed up as zero.

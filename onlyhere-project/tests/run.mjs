@@ -239,6 +239,9 @@ writeFileSync(entry, `
   export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { keepLanguageOf } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
+  export { describeGuide, guideLanguageMix, guideProseOf } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
+  export { usableRuns } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
+  export { savableThread, restorableThread, saveThread, loadThread, CHAT_KEY, MAX_SAVED_MESSAGES } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { UI_LANGUAGES, UI_CODES, UI_STRINGS, UI_KEYS, UI_LANGUAGE_KEY, DEFAULT_UI_LANGUAGE, t, resolveUiLanguage, isUiLanguage, uiLanguageMeta, storedUiLanguage, setStoredUiLanguage, currentUiLanguage } from ${JSON.stringify(join(root, "src/utils/uiLanguage.js"))};
   export { datesFromListings, cityRankOf, cityWanted, CITY_MATCH, CITY_UNKNOWN, CITY_DIFFERENT } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, PRICE_NOT_PUBLISHED, PRICE_UNKNOWN } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -26312,11 +26315,29 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // order must never drift apart again, and two hand-written lists is exactly
   // how they drifted the first time.
   is("both the bar and the menu render the same list", (appN.match(/NAV_ITEMS\.map\(/g) || []).length, 2);
-  ok("the bar is hidden until there is room for it", /\.gx-topnav \{ display: none; \}/.test(appN));
+  ok("the bar is hidden until there is room for it", /\.gx-topnav \{ display: none;/.test(appN));
   // Measured in a browser, not estimated: the bar's content is about 750px and
   // with the logo, the search field and the menu beside it the row only stops
   // overflowing at about 1160.
-  ok("and shown only where it fits, which was measured", /@media \(min-width: 1180px\) \{\s*\.gx-topnav \{ display: flex;/.test(appN));
+  //
+  // ── AND THE MEASUREMENT IS PER LANGUAGE NOW, 5 SEP 2026 ─────────
+  // One number was right for as long as there was one set of labels. Across the
+  // eight, Danish is about fifty pixels wider than English and German about a
+  // hundred and forty, and 1180 was where ENGLISH stopped overflowing. The
+  // language picker added its own width to the row on top of that, so English
+  // moved to 1240 and the other two got their own.
+  //
+  // The rule this line has always protected is unchanged: the bar is not shown
+  // at a width where it does not fit. What changed is that "fits" now depends on
+  // what the labels say, which is why documentElement.lang is set.
+  ok("and shown only where it fits, which was measured",
+     /@media \(min-width: 1240px\) \{\s*html:not\(\[lang="da"\]\):not\(\[lang="de"\]\) \.gx-topnav \{ display: flex;/.test(appN));
+  ok("with a wider one for Danish", /@media \(min-width: 1300px\) \{\s*html\[lang="da"\] \.gx-topnav \{ display: flex;/.test(appN));
+  ok("and the widest for German", /@media \(min-width: 1400px\) \{\s*html\[lang="de"\] \.gx-topnav \{ display: flex;/.test(appN));
+  // A language nobody has declared yet, and the moment before the effect sets
+  // the attribute at all, must still get a nav rather than losing one.
+  ok("and an unknown language falls back to the English width rather than to nothing",
+     /html:not\(\[lang="da"\]\):not\(\[lang="de"\]\)/.test(appN));
   // The hamburger stays at every width: on a phone it is the navigation, and on
   // a desktop it keeps the theme picker, the account, the FAQ, the photo credits
   // and support, which have no place in a page bar.
@@ -28779,7 +28800,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the pipeline button writes through the guarded transition",
      /setAiMessages\(prev => withTestBrief\(prev, brief\)\);/.test(appT));
   ok("and the crashing expression is gone", !/setAiMessages\(prev => \[prev\[0\]/.test(appT));
-  ok("the thread starts from one place", /useState\(openingThread\)/.test(appT));
+  // ── AND IT IS RESTORED BEFORE IT IS OPENED, 5 SEP 2026 ──────────
+  // Oliver: "everytime I click back.. the whole fking shit resets. My chat
+  // resets." It did, and the cause was here: useState(openingThread) with
+  // nothing anywhere writing the thread down. The RULE this line protects is
+  // unchanged, that the greeting comes from openingThread and from nowhere
+  // else, so it still asks for that and now also asks that a restored thread is
+  // tried first. loadThread returns null unless it has a SOUND thread with real
+  // messages in it, so the greeting is still where a fresh tab starts.
+  ok("the thread starts from one place", /useState\(\(\) => loadThread\(\) \|\| openingThread\(\)\)/.test(appT));
+  ok("and it is written down as it changes, or back eats it again",
+     /useEffect\(\(\) => \{ saveThread\(aiMessages\); \}, \[aiMessages\]\);/.test(appT));
   ok("nothing slices the thread by position any more",
      !/setAiMessages\(prev => prev\.slice\(0, -1\)\)/.test(appT) && !/setAiMessages\(prev => prev\.slice\(0, -1\)\)/.test(prevT));
   ok("the preview closes by identity", /setAiMessages\(withoutTestBrief\);/.test(prevT));
@@ -43442,7 +43473,6 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     "src/utils/apiCost.js:currentRun",
     "src/utils/arrival.js:tripAnchor",
     "src/utils/briefPanel.js:briefPanel",
-    "src/utils/chatThread.js:threadIsSound",
     "src/utils/constraintCheck.js:constraintNote",
     "src/utils/constraintCheck.js:repairWorked",
     "src/utils/constraintCheck.js:violationsOfKind",
@@ -43683,8 +43713,21 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("...and there is something to check", UI_KEYS.length > 10 && UI_LANGUAGES.length === 3);
   is("English is the source language and is first", UI_LANGUAGES[0].code, "en");
   is("the three are English, Danish and German", UI_CODES.join(","), "en,da,de");
-  ok("every language carries a flag and its own name for itself",
-     UI_LANGUAGES.every(l => l.flag && l.name) && uiLanguageMeta("da").name === "Dansk");
+  ok("every language names itself in its own words",
+     UI_LANGUAGES.every(l => l.name) && uiLanguageMeta("da").name === "Dansk");
+  // ── AND THE FLAG IS DRAWN, NOT TYPED, 5 SEP ───────────────────
+  // The emoji rendered as "GB" / "DK" / "DE" on Windows, which ships no font
+  // for regional-indicator pairs. So every language must have artwork, and no
+  // emoji may creep back into the data as a substitute for it.
+  {
+    const picker = readFileSync(join(root, "src/components/LanguagePicker.jsx"), "utf8");
+    ok("every language has a flag drawn for it",
+       UI_LANGUAGES.every(l => new RegExp(`^\\s{2}${l.code}: \\(`, "m").test(picker)));
+    ok("and they are SVG rather than characters", /<rect width="20" height="14"/.test(picker));
+    const ui = readFileSync(join(root, "src/utils/uiLanguage.js"), "utf8");
+    ok("no flag emoji is left in the catalogue data",
+       !/[\u{1F1E6}-\u{1F1FF}]/u.test(ui.slice(ui.indexOf("export const UI_LANGUAGES"), ui.indexOf("export const UI_CODES"))));
+  }
 
   // ── AND THE COLUMNS ARE NOT COPIES OF EACH OTHER ──────────────────
   // The failure this catches is the one that looks like success: a translation
@@ -43812,6 +43855,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the picker is mounted in the header", /<LanguagePicker lang=\{uiLang\} onChange=\{changeUiLanguage\} C=\{C\} \/>/.test(app));
     ok("the choice is persisted rather than held in memory", /setStoredUiLanguage\(code\)/.test(app));
     ok("and the page declares what language it is in", /document\.documentElement\.lang = uiLang/.test(app));
+    // ── THE BAR THAT OVERFLOWED, 5 SEP ──────────────────────────
+    // German drew the picker on top of the Gemlyx Detour button and "Entdecken"
+    // on top of the logo. The nav had `flex: 1; min-width: 0` and no overflow
+    // rule, so it shrank and its nowrap contents did not.
+    ok("the nav clips rather than drawing over its neighbours", /\.gx-topnav \{[^}]*overflow: hidden/.test(app));
+    // And it collapses into the burger at the width each language needs, which
+    // is what documentElement.lang is for.
+    ok("English keeps the narrowest breakpoint", /min-width: 1240px[^@]*html:not\(\[lang="da"\]\):not\(\[lang="de"\]\) \.gx-topnav/.test(app));
+    ok("Danish needs more room", /min-width: 1300px[^@]*html\[lang="da"\] \.gx-topnav/.test(app));
+    ok("and German needs the most", /min-width: 1400px[^@]*html\[lang="de"\] \.gx-topnav/.test(app));
   }
 }
 
@@ -43880,6 +43933,255 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the screen tags itself so it can be read back", /data-preview-screen/.test(pv));
     ok("and the report reads it", /querySelector\("\[data-preview-screen\]"\)/.test(pv));
     ok("posting to the table that already exists", /gemlyx_suggestions/.test(pv));
+  }
+}
+
+
+// ── "SAYS ENTRY IS FREE" ON A 2305-KRONE FESTIVAL, 5 SEP 2026 ───────
+//
+// Oliver's run log of 4 Sep, drafting Nibe Festival. Step 22 read
+// nibefestival.dk/billetter/partout/partout/ and reported "says entry is free".
+// Step 31 read the SAME URL and reported 2305 DKK. One page, one run, two
+// functions, opposite answers.
+//
+// Tested through ticketPriceOn rather than through saysFreeIn, which is module
+// private: that is the path the pipeline takes, and the fallback only matters
+// where the pipeline reaches it.
+{
+  const { ticketPriceOn } = M;
+  const free = (text) => ticketPriceOn(text)?.free === true;
+
+  // ── THE FOUR THAT WERE REPORTED FREE AND ARE NOT ────────────────
+  // Amalienborg's ticket page. Its only "gratis" is the under-18s line, and it
+  // states no price at all, so this branch is exactly what read it.
+  ok("a concession is not a free door",
+     !free("Amalienborgmuseet. Born og unge under 18 ar har gratis adgang. Se abningstider her."));
+  ok("in the spelling the page actually uses",
+     !free("Børn og unge under 18 år har gratis adgang."));
+  // The shapes a Danish festival page carries beside its ticket table, which is
+  // what the Nibe and festivalabroad reads almost certainly hit.
+  ok("free parking is a fact about a car park", !free("Gratis parkering ved indgangen til pladsen."));
+  ok("free camping is a fact about a field", !free("Der er gratis camping for partoutgaester."));
+  ok("free cancellation is a fact about a refund", !free("Gratis afbestilling indtil 14 dage for."));
+  ok("and a free newsletter is not a free festival", !free("Tilmeld dig vores gratis nyhedsbrev og fa nyt om festivalen."));
+  // ── THE ONE THE TICKET-WORD TEST DOES NOT CATCH ─────────────────
+  // Found by mutation: deleting the BESIDE_THE_TICKET guard broke nothing,
+  // because every ancillary case above ALSO has no ticket word near it and was
+  // already refused one line down. The guard earns its place only where both
+  // are true, which is the ordinary shape of a festival's ticket page: the word
+  // billet and the word parkering in the same breath, and no figure between
+  // them. Without this line the mutant lived and the guard read as dead code.
+  ok("free parking beside a ticket line is still about the car park",
+     !free("Billetter kan kobes ved indgangen. Gratis parkering for alle gaester."));
+  ok("and free camping beside one is still about a field",
+     !free("Billetter til partout. Gratis camping hele weekenden."));
+
+  // ── AND IT STILL SAYS YES TO THE ONES THAT ARE ──────────────────
+  // Or the rule is a mute button. FREE IS AN ANSWER, and it is the most common
+  // answer for the small Danish events this app exists to write about.
+  ok("a phrase that names entry needs nothing beside it", free("Gratis adgang hele aret."));
+  ok("in either Danish spelling", free("Fri entre til hele museet.") && free("Fri adgang for alle."));
+  ok("and in English", free("Free admission for all visitors.") && free("Free entry, no ticket required."));
+  ok("gratis at deltage is one too", free("Det er gratis at deltage i turen."));
+  // A bare "gratis" is held to the bar a figure is held to: a ticket word near
+  // it. This is the one that says the fix did not simply delete the word.
+  ok("a bare gratis counts when it sits next to a ticket word", free("Billetter til koncerten: gratis."));
+  ok("and entre counts as one", free("Entre: gratis for alle."));
+
+  // ── AND A PRICED PAGE IS STILL PRICED ───────────────────────────
+  // The order at the top of ticketPriceOn is unchanged: an amount beats the
+  // word free, always. This branch is only reached when nothing was priced.
+  is("a page that states a fare is not free", ticketPriceOn("Billetter: partout 2305 kr. Gratis afbestilling.")?.lo, 2305);
+  ok("and it is not marked free either", !free("Billetter: partout 2305 kr. Gratis afbestilling."));
+  // ── AND THE FIGURE STILL NEEDS A TICKET WORD TO COUNT ───────────
+  // Written down because the first draft of the line above did not have one and
+  // came back null. That is ticketPriceOn behaving as designed, and it is also
+  // the likely reason the Nibe partout page reached the free branch at all: a
+  // price in a table more than TICKET_WINDOW characters from the word billet is
+  // not read as a price, and then the fallback got its turn. Worth a look at the
+  // real page before widening anything, because widening this window is how a
+  // booking fee became the price of Roskilde.
+  is("a bare figure with no ticket word near it is not a fare", ticketPriceOn("Partout 2305 kr."), null);
+  // The honest third answer, which is what all four of those pages should have
+  // given: this page does not say.
+  is("a page that says nothing about money says nothing", ticketPriceOn("Nibe Festival finder sted i juni."), null);
+}
+
+
+// ── THE CONVERSATION SURVIVES BACK, 5 SEP 2026 ──────────────────────
+{
+  const { savableThread, restorableThread, threadIsSound, openingThread, GREETING, MAX_SAVED_MESSAGES } = M;
+
+  const real = [GREETING, { role: "user", text: "Skagen and Aalborg, 7 kids" }, { role: "assistant", text: "How long?" }];
+
+  // ── SAVING ────────────────────────────────────────────────────────
+  is("a real conversation is saved whole", savableThread(real).length, 3);
+  // A message frozen mid-stream would come back with a cursor blinking on it
+  // forever, waiting for a request that died with the page.
+  ok("a streaming flag does not survive the save",
+     savableThread([GREETING, { role: "assistant", text: "half a sen", streaming: true }]).every(m => !("streaming" in m)));
+  is("but the text it had reached does", savableThread([GREETING, { role: "assistant", text: "half a sen", streaming: true }])[1].text, "half a sen");
+  ok("junk is dropped rather than stored", savableThread([GREETING, null, {}, { role: "user", text: "x" }]).length === 2);
+  is("a missing thread saves nothing rather than throwing", savableThread(null).length, 0);
+  // The greeting is index 0 by the rule at the top of chatThread.js, so a long
+  // thread is trimmed from the MIDDLE. Trimming from the front would lose it.
+  {
+    const long = [GREETING, ...Array.from({ length: 200 }, (_, i) => ({ role: "user", text: `m${i}` }))];
+    const cut = savableThread(long);
+    is("a very long conversation is capped", cut.length, MAX_SAVED_MESSAGES);
+    is("the greeting survives the cap", cut[0].text, GREETING.text);
+    is("and the newest message does too", cut[cut.length - 1].text, "m199");
+    ok("which is still a sound thread", threadIsSound(cut));
+  }
+
+  // ── RESTORING ─────────────────────────────────────────────────────
+  is("a saved conversation comes back", restorableThread(JSON.stringify(real))?.length, 3);
+  ok("and it is sound", threadIsSound(restorableThread(JSON.stringify(real))));
+  // Stored text is untrusted input like any other. A hole in the thread is a
+  // white screen on the next render, which is worse than starting fresh.
+  is("a thread with a hole in it is refused, not half-restored", restorableThread('[{"role":"assistant"},null]'), null);
+  is("so is one that is not a list", restorableThread('{"role":"user"}'), null);
+  is("so is broken JSON", restorableThread("{{{"), null);
+  is("and nothing at all", restorableThread(null), null);
+  // A new tab must not be handed a "resumed" conversation it never had.
+  is("a thread that is only the greeting is nothing to restore", restorableThread(JSON.stringify(openingThread())), null);
+}
+
+
+// ── THE BUILD REPORT SAYS WHAT THE GUIDE BECAME, 5 SEP 2026 ─────────
+//
+// Oliver: "Maybe include into the build report how the guide ends up looking."
+// And, the sentence before: "fix the English/Danish mix that happens in the
+// end." One function answers both, because a mix is only findable by reading
+// the finished guide and that is what this is already holding.
+{
+  const { describeGuide, guideLanguageMix, guideProseOf, languageOfProse } = M;
+
+  const good = {
+    title: "Four days on the north coast",
+    essentials: { budgetReality: "About 900 kr a day.", transportTip: "The train runs hourly.", keepInMind: "Book the museum ahead." },
+    days: [
+      { day: 1, title: "Arrive in Skagen", stops: [{ name: "Grenen", note: "Walk out to the point where the seas meet." }] },
+      { day: 2, title: "South to Aalborg", stops: [{ name: "Utzon Center", note: "An hour is enough unless there is a show on." }, { name: "Pier 5", note: "The harbour end is where the evening happens." }] },
+    ],
+  };
+
+  // ── THE SHAPE ─────────────────────────────────────────────────────
+  ok("it names the guide", /Four days on the north coast/.test(describeGuide(good)));
+  ok("counts the days and the stops", /2 days/.test(describeGuide(good)) && /3 stops/.test(describeGuide(good)));
+  ok("and says every stop is written", /every stop has a note/.test(describeGuide(good)));
+  ok("and that the essentials are there", /all three essentials written/.test(describeGuide(good)));
+
+  // An empty day is the one shape a reader notices at once and the stage list
+  // cannot show: fifteen green stages and a hole in the middle of the trip.
+  const holed = { ...good, days: [...good.days, { day: 3, title: "Back", stops: [] }] };
+  ok("an empty day is named, not counted", /EMPTY: day 3/.test(describeGuide(holed)));
+  const bare = { ...good, days: [{ day: 1, title: "x", stops: [{ name: "Grenen" }, { name: "Pier 5", note: "y" }] }] };
+  ok("and unwritten stops are counted", /1 of 2 stops have a note/.test(describeGuide(bare)));
+  const thin = { title: "t", essentials: { budgetReality: "b" }, days: [] };
+  ok("missing essentials are named", /no transportTip, no keepInMind/.test(describeGuide(thin)));
+  // Junk in must not throw: this runs at the end of a build that already cost
+  // three minutes, and the log is never allowed to be the thing that fails.
+  ok("a missing guide describes rather than throws", typeof describeGuide(null) === "string");
+  ok("and so does one with nothing in it", typeof describeGuide({}) === "string");
+
+  // ── THE MIX ───────────────────────────────────────────────────────
+  // title, three essentials, two day titles, three stop notes.
+  is("prose is collected from every field a reader sees", guideProseOf(good).length, 9);
+  is("one language is not a mix", guideLanguageMix(good, languageOfProse), null);
+  is("and neither is nothing at all", guideLanguageMix({}, languageOfProse), null);
+
+  // The case he calls worse than either language alone: mostly Danish, with
+  // fields that came back English from a pass that did not know better.
+  const mixed = {
+    title: "Fire dage på nordkysten",
+    essentials: {
+      budgetReality: "Regn med omkring 900 kroner om dagen til mad og transport.",
+      transportTip: "Toget kører hver time fra Aalborg og det tager omkring en halv time.",
+      keepInMind: "The museum is closed on Mondays and you should book ahead for the tour.",
+    },
+    days: [{ day: 1, title: "Ankomst i Skagen", stops: [
+      { name: "Grenen", note: "Gå ud til spidsen hvor de to have mødes, det tager omkring tyve minutter hver vej." },
+      { name: "Pier 5", note: "This is where the evening happens, and it is worth staying for the harbour view." },
+    ] }],
+  };
+  const mix = guideLanguageMix(mixed, languageOfProse);
+  ok("a mixed guide is found at all", !!mix);
+  is("the majority language is named", mix.main, "da");
+  ok("and the odd fields are named rather than counted",
+     mix.odd.includes("keepInMind") && mix.odd.includes("Pier 5"));
+  ok("the description says so in words", /MIXED LANGUAGE: mostly da/.test(describeGuide(mixed, languageOfProse)));
+  // ── AND THE MAJORITY IS COUNTED, NOT MET FIRST ──────────────────
+  // Found by mutation: replacing the sort with langs[0] broke nothing, because
+  // in the fixture above the first field read is also the majority. A guide
+  // whose TITLE came back English over Danish prose is the ordinary shape of
+  // this bug, and there the first language seen is the wrong answer.
+  {
+    // A clear majority, not a tie: the first draft of this fixture was three
+    // fields each way, where "mostly" is not a true word about it either way.
+    const titleOdd = {
+      ...mixed,
+      title: "Four days on the north coast of Denmark",
+      days: [{ ...mixed.days[0], stops: [...mixed.days[0].stops, { name: "Skagen Museum", note: "Museet ligger midt i byen og der er omkring en time i det, hvis man vil se det hele." }] }],
+    };
+    const m2 = guideLanguageMix(titleOdd, languageOfProse);
+    is("the first field read is not the verdict", m2.main, "da");
+    ok("and the title is named as the odd one", m2.odd.includes("title"));
+  }
+  ok("and names them", /keepInMind/.test(describeGuide(mixed, languageOfProse)));
+  // Without the reader it says nothing about language rather than guessing.
+  ok("no language reader means no language claim", !/MIXED/.test(describeGuide(mixed)));
+
+  // ── AND IT IS IN THE BUILD LOG ────────────────────────────────────
+  {
+    const appG = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the build reports what it built", /note\("How the guide came out"/.test(appG));
+    ok("reading the finished guide, not the parsed one",
+       /const shaped = \{ \.\.\.parsed, essentials: finalEssentials \|\| parsed\.essentials \};/.test(appG));
+    ok("and a mix is shouted rather than logged as fine",
+       /outcome: mix \? "found" : "ok"/.test(appG));
+  }
+}
+
+
+// ── THE RUN LOG KEPT NOTHING OLDER THAN THIS SESSION, 5 SEP 2026 ────
+//
+// Oliver: "it doesn't keep old records."
+//
+// `finished` is a module array that starts empty on every page load, and endLog
+// writes THAT array to storage. So the first draft finished after a load wrote
+// itself over every run before it. Not a cap and not a quota: the history was
+// read from a place it was never put back into.
+{
+  const { usableRuns } = M;
+
+  is("a stored history comes back", usableRuns('[{"label":"a"},{"label":"b"}]').length, 2);
+  is("junk inside it is dropped rather than crashing summariseLog", usableRuns('[{"label":"a"},null,3,"x"]').length, 1);
+  is("an empty store is empty", usableRuns("[]").length, 0);
+  is("so is a missing one", usableRuns(null).length, 0);
+  is("and broken JSON is empty rather than fatal", usableRuns("{{{").length, 0);
+  is("a stored value that is not a list is refused", usableRuns('{"label":"a"}').length, 0);
+
+  // The order of the two calls in endLog is the entire fix, and it is not
+  // something a pure function can hold: the array has to be seeded BEFORE the
+  // new run is put on the front of it, or the write is one run long again.
+  {
+    const rl = readFileSync(join(root, "src/utils/runLog.js"), "utf8");
+    const end = rl.slice(rl.indexOf("export const endLog"), rl.indexOf("export const currentLog"));
+    ok("endLog seeds the shelf before it adds to it",
+       end.indexOf("hydrate()") > 0 && end.indexOf("hydrate()") < end.indexOf("finished.unshift(done)"));
+    ok("and the write happens after both", end.indexOf("finished.unshift(done)") < end.indexOf("localStorage.setItem"));
+    // recentLogs had two paths and took whichever depended on whether this
+    // session had finished a run yet, which is how the in-memory list and the
+    // stored list were allowed to be different things.
+    // Bounded by the section that follows it. usableRuns is defined ABOVE
+    // recentLogs, so slicing to it gave an empty string and a green assertion
+    // over nothing, which is the shape this file warns about most often.
+    const recentAt = rl.indexOf("export const recentLogs");
+    const recent = rl.slice(recentAt, rl.indexOf("// ── READING IT", recentAt));
+    ok("the recentLogs slice is not empty", recent.length > 40);
+    ok("recentLogs reads one list rather than choosing between two",
+       /hydrate\(\);\s*return finished\.slice\(\);/.test(recent) && !/if \(finished\.length\)/.test(recent));
   }
 }
 

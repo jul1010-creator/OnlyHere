@@ -34,10 +34,16 @@
 // English is first and is the source language: every other column is checked
 // against it, and a key missing elsewhere falls back to it rather than rendering
 // a key name at a traveller.
+// ── AND THE FLAG IS NOT A CHARACTER ─────────────────────────────
+// This carried a flag emoji per language until 5 Sep 2026, when Oliver's own
+// header showed "GB", "DK", "DE". Windows ships no font that draws a
+// regional-indicator pair as a flag, so Chrome draws the two letters instead,
+// and no font stack or CSS fixes that. The flags are SVG in LanguagePicker.jsx
+// now, drawn from `code`, so the emoji field is not here to be believed.
 export const UI_LANGUAGES = [
-  { code: "en", flag: "🇬🇧", name: "English" },
-  { code: "da", flag: "🇩🇰", name: "Dansk" },
-  { code: "de", flag: "🇩🇪", name: "Deutsch" },
+  { code: "en", name: "English" },
+  { code: "da", name: "Dansk" },
+  { code: "de", name: "Deutsch" },
 ];
 
 export const UI_CODES = UI_LANGUAGES.map(l => l.code);

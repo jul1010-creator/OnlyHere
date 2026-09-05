@@ -156,7 +156,7 @@ import { ChatPlaceCards } from "./components/ChatPlaceCards";
 import { cardLine } from "./utils/cardLine";
 import { travelModeKey, withoutNonModes } from "./utils/routeOrder";
 import { buildChatReport, chatReportFilename } from "./utils/chatReport";
-import { openingThread, withTestBrief, withoutTestBrief } from "./utils/chatThread";
+import { openingThread, withTestBrief, withoutTestBrief, loadThread, saveThread } from "./utils/chatThread";
 import { downloadReport } from "./utils/previewReport";
 import { briefThemes , essentialsForTrip, essentialsBlock } from "./utils/interestFit";
 import { partnerDisclosure, linkLabel } from "./utils/affiliates";
@@ -188,7 +188,8 @@ import { languageBarrier } from "./utils/languageBarrier";
 import { newStreamState, readStreamEvent, visibleText, streamContent, streamContentForApi, streamDiagnosis, streamTrace, ranOutThinking } from "./utils/streamRead";
 import { heroNeedsReplacing, heroPatch, heroStatusLine, isAbsolutePhoto } from "./utils/heroPhoto";
 import { languageBlock, writeInLanguage, readerLanguage, keepLanguageOf } from "./utils/readerLanguage";
-import { guideLanguage, languageBarNote } from "./utils/travellerLanguage";
+import { guideLanguage, languageBarNote, languageOfProse } from "./utils/travellerLanguage";
+import { describeGuide, guideLanguageMix } from "./utils/guideReading";
 import { echoInDraft, describeEcho, ECHO_RUN } from "./utils/echoCheck";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AffiliatePanel } from "./components/AffiliatePanel";
@@ -12539,6 +12540,38 @@ If the conversation only covers a single day or a few stops with no explicit day
       const finalEssentials = stripDashesDeep(weatherNote
         ? { ...(parsed.essentials || {}), weatherNote }
         : (parsed.essentials || null));
+      // ── AND WHAT IT ALL CAME OUT AS ──────────────────────────────
+      //
+      // Oliver, 5 Sep 2026: "Maybe include into the build report how the guide
+      // ends up looking."
+      //
+      // Every other line in this log is about the WORK: planning, rebalancing,
+      // polishing, a last pass. Fifteen green stages and not one of them says
+      // whether the thing they produced has an empty day in the middle of it.
+      //
+      // Last, and AFTER finalEssentials rather than before: the weather note is
+      // written into the essentials on the line above, and a description taken a
+      // moment earlier would report an essential as missing that a reader is
+      // about to see.
+      //
+      // languageOfProse is handed in rather than imported by guideReading, and
+      // it is the same reader guideLanguage used to DECIDE the language at the
+      // top of this build. Asking it what the guide turned out to BE costs
+      // nothing new, and it reports the mix per field, which is the half a
+      // single verdict would hide.
+      {
+        const shaped = { ...parsed, essentials: finalEssentials || parsed.essentials };
+        const mix = guideLanguageMix(shaped, languageOfProse);
+        note("How the guide came out", {
+          detail: "the finished guide, rather than the work that made it",
+          outcome: mix ? "found" : "ok",
+          got: describeGuide(shaped, languageOfProse),
+          why: mix
+            ? `A guide that changes language halfway down is worse than one written entirely in the wrong language: a reader who can follow ${mix.main} hits a field they cannot, with no way to ask for the rest. The fields are named above so they can be read rather than hunted for.`
+            : "",
+          used: !mix,
+        });
+      }
 
       // ── THE DASH BAN, ENFORCED ─────────────────────────────────
       // Five em dashes shipped inside a saved guide payload on 7 Aug. The rule
@@ -13028,7 +13061,11 @@ If the conversation only covers a single day or a few stops with no explicit day
   // there. See utils/chatThread.js: on 18 Aug an empty thread made that read
   // `undefined` and put a hole in the messages array, which crashes every
   // consumer in the app.
-  const [aiMessages, setAiMessages] = useState(openingThread);
+  // ── RESTORED, BECAUSE BACK USED TO EAT IT ─────────────────────────
+  // See utils/chatThread.js. sessionStorage, so it survives back, forward, a
+  // reload and a remount inside this tab, and is gone when the tab closes.
+  const [aiMessages, setAiMessages] = useState(() => loadThread() || openingThread());
+  useEffect(() => { saveThread(aiMessages); }, [aiMessages]);
   // Which assistant message index has already finished its typewriter reveal
   // (or never needed one, like the opening greeting) — see
   // components/TypewriterText.jsx. Only the newest assistant reply streams in;
@@ -20597,10 +20634,45 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
            on a desktop the seven pages have moved into the bar and it keeps what
            has no place there, which is the theme picker, the account, the FAQ,
            the photo credits and support. That is where a website puts them too. */
-        .gx-topnav { display: none; }
-        @media (min-width: 1180px) {
-          .gx-topnav { display: flex; align-items: center; gap: 2px; margin: 0 14px; flex: 1; min-width: 0; justify-content: center; }
-          .gx-nav-in-menu { display: none !important; }
+        /* ── AND THE BAR OVERFLOWED THE MOMENT IT WAS TRANSLATED ────
+           Oliver, 5 Sep 2026, on the German header: the language control was
+           drawn ON TOP of the Gemlyx Detour button, and "Entdecken" was drawn on
+           top of the GEMLYX logo at the other end.
+
+           Not the picker's fault. This rule had "flex: 1; min-width: 0" and NO
+           overflow rule, and every button inside it is "white-space: nowrap".
+           So the flex box shrank exactly as told and its contents did not, and
+           spilled out of both ends over whatever was next to them. Invisible for
+           as long as the eight labels were English, because English is the
+           shortest of the three: measured across the eight, Danish is about
+           fifty pixels wider and German about a hundred and forty.
+
+           TWO FIXES, because they answer different questions.
+
+           "overflow: hidden" is the guarantee. Whatever a future language does,
+           whatever a future page is called, this bar can no longer draw itself
+           over its neighbours. It clips instead, which is wrong-looking rather
+           than broken-looking, and it needs no number to be right.
+
+           The per-language widths are so it never has to. "document.
+           documentElement.lang" is set from the picker, so the breakpoint can
+           ask what language is being rendered and collapse into the burger at
+           the width where that language actually stops fitting. The :not() pair
+           is the fallback: anything that is not Danish or German, INCLUDING a
+           missing lang attribute before the effect has run, uses the English
+           width rather than losing its nav. */
+        .gx-topnav { display: none; align-items: center; gap: 2px; margin: 0 14px; flex: 1; min-width: 0; overflow: hidden; justify-content: center; }
+        @media (min-width: 1240px) {
+          html:not([lang="da"]):not([lang="de"]) .gx-topnav { display: flex; }
+          html:not([lang="da"]):not([lang="de"]) .gx-nav-in-menu { display: none !important; }
+        }
+        @media (min-width: 1300px) {
+          html[lang="da"] .gx-topnav { display: flex; }
+          html[lang="da"] .gx-nav-in-menu { display: none !important; }
+        }
+        @media (min-width: 1400px) {
+          html[lang="de"] .gx-topnav { display: flex; }
+          html[lang="de"] .gx-nav-in-menu { display: none !important; }
         }
         .products-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         @media (min-width: 600px) { .products-grid { grid-template-columns: 1fr 1fr 1fr; } }

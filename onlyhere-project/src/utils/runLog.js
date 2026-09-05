@@ -83,6 +83,44 @@ const finished = [];
 const MAX_KEPT = 12;
 const STORE_KEY = "gemlyx_run_log";
 
+// ── AND THE SHELF STARTED EMPTY EVERY TIME ──────────────────────────
+//
+// Oliver, 5 Sep 2026: "it doesn't keep old records."
+//
+// It did not, and the reason is worse than dropping them. `finished` is a
+// module array that starts EMPTY on every page load, and endLog writes that
+// array to storage. recentLogs reads storage only while the array is still
+// empty, which is true right up until the first run of the session ends. So:
+//
+//   load the page   -> finished = []           storage still holds twelve runs
+//   finish one draft -> finished = [that one]  STORAGE NOW HOLDS ONE RUN
+//
+// The first draft of every session overwrote every run before it. Not a cap
+// being hit and not a quota: the history was read from a place it was never put
+// back into. It looks like a store and behaves like a status bar, which is the
+// exact distinction the comment in endLog claims this write is here to make.
+//
+// Lazily, and never at module load: a module-level localStorage read runs in the
+// test bundle and in any SSR pass, where it either throws or is meaningless.
+// Both writers call it before they touch the array.
+let hydrated = false;
+const hydrate = () => {
+  if (hydrated) return;
+  hydrated = true;
+  try { for (const r of usableRuns(localStorage.getItem(STORE_KEY))) finished.push(r); }
+  catch { /* no storage: this session only, which is what it did before */ }
+};
+
+// Pure, and exported for the reason every transition in chatThread.js is: a
+// sequence of module-level side effects is not something the suite can drive,
+// and the shape check is the part worth driving. A stored run is untrusted like
+// any other stored value, and a null in this array is a crash in summariseLog.
+export const usableRuns = (raw) => {
+  let parsed = null;
+  try { parsed = JSON.parse(String(raw ?? "") || "[]"); } catch { return []; }
+  return Array.isArray(parsed) ? parsed.filter(r => r && typeof r === "object") : [];
+};
+
 const now = () => (typeof performance !== "undefined" ? performance.now() : 0);
 
 export const startLog = (label, subject) => {
@@ -121,6 +159,8 @@ export const endLog = () => {
   delete run.t0;
   const done = run;
   run = null;
+  // BEFORE the unshift, or this run is once again the only one written.
+  hydrate();
   finished.unshift(done);
   if (finished.length > MAX_KEPT) finished.length = MAX_KEPT;
   // Survives a reload, which is the difference between a log and a status bar.
@@ -144,11 +184,11 @@ export const endLog = () => {
 
 export const currentLog = () => run;
 export const recentLogs = () => {
-  if (finished.length) return finished.slice();
-  try {
-    const raw = JSON.parse(localStorage.getItem(STORE_KEY) || "[]");
-    return Array.isArray(raw) ? raw : [];
-  } catch { return []; }
+  // One path now. The old version had two, and the branch it took depended on
+  // whether this session had finished a run yet, which is how the in-memory
+  // list and the stored list were allowed to be different things.
+  hydrate();
+  return finished.slice();
 };
 
 // ── READING IT ──────────────────────────────────────────────────────
