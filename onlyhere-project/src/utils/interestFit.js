@@ -457,3 +457,40 @@ export const offerReason = (entry) => {
   const town = String(place.city || place.town || place.location || "").split(",")[0].trim();
   return town ? `Gemlyx's own pick in ${town}` : "Gemlyx's own pick here";
 };
+
+
+// ── THE FRONT PAGE ROW THAT IS ABOUT YOU ────────────────────────────
+//
+// Oliver, 5 Sep 2026: "I think we remake this. So instead it's account
+// specific. So it's 'worth the trip right now' and 'fitting your preferences'."
+// And: "So if no account, it will say 'account needed'."
+//
+// The row it replaces was "Hidden gems this week", which picked on
+// popularityTag and tier: facts about the ENTRY. This one picks on facts about
+// the READER, and the difference is the whole point of asking people to sign
+// up. It is also the first thing on the front page that an account visibly buys.
+//
+// Three states and not a boolean, because the two empty ones need different
+// words and different buttons. A signed-in person shown "account needed" would
+// be a bug wearing the costume of a feature, and it is the ordinary case: the
+// profile's interests are optional and plenty of accounts will have none.
+//
+//   no-account    nobody is signed in            offer the account
+//   no-interests  signed in, nothing stated      offer the profile
+//   ready         signed in, interests stated    show the row
+//
+// briefThemes does the mapping, rather than a second table written here. It
+// already folds a list of stated interests into the same THEME_WORDS the brief
+// is read with, so a profile saying "History" and a traveller typing "we like
+// old towns" land on the same theme by the same route. A private map here would
+// be a second answer to a question this file already answers.
+export const PREF_NO_ACCOUNT = "no-account";
+export const PREF_NO_INTERESTS = "no-interests";
+export const PREF_READY = "ready";
+
+export const preferenceRowState = (profile, signedIn) => {
+  if (!signedIn) return { state: PREF_NO_ACCOUNT, want: null };
+  const want = briefThemes("", profile?.interests);
+  if (!want || !want.size) return { state: PREF_NO_INTERESTS, want: null };
+  return { state: PREF_READY, want };
+};

@@ -144,7 +144,7 @@ import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
 import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries } from "./utils/ticketLink";
 import { currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLanguage";
-import { LanguagePicker } from "./components/LanguagePicker";
+import { LanguageChoice } from "./components/LanguagePicker";
 import { placesNamedIn } from "./utils/chatPlaces";
 import { railPlaces, railCss, RAIL_CLASS, INLINE_CARDS_CLASS } from "./utils/chatRail";
 import { briefProgress, progressLine, briefPercent, percentLine } from "./utils/briefPanel";
@@ -156,9 +156,9 @@ import { ChatPlaceCards } from "./components/ChatPlaceCards";
 import { cardLine } from "./utils/cardLine";
 import { travelModeKey, withoutNonModes } from "./utils/routeOrder";
 import { buildChatReport, chatReportFilename } from "./utils/chatReport";
-import { openingThread, withTestBrief, withoutTestBrief, loadThread, saveThread } from "./utils/chatThread";
+import { openingThread, withTestBrief, withoutTestBrief, loadThread, saveThread, clearThread } from "./utils/chatThread";
 import { downloadReport } from "./utils/previewReport";
-import { briefThemes , essentialsForTrip, essentialsBlock } from "./utils/interestFit";
+import { briefThemes , essentialsForTrip, essentialsBlock, fitsBrief, preferenceRowState, PREF_READY, PREF_NO_ACCOUNT } from "./utils/interestFit";
 import { partnerDisclosure, linkLabel } from "./utils/affiliates";
 // ── "SOME THINGS ARE ESSENTIALS WHILE OTHERS ARE TIPS" ──────────────
 // Oliver, 30 Aug 2026. See utils/essentialKind.js: the categories were never
@@ -13108,6 +13108,7 @@ If the conversation only covers a single day or a few stops with no explicit day
   // stuck to it). GuidePage renders it as a "Pipeline test" card.
   const randomTestProfileRef = useRef(null);
   const [aiInput, setAiInput] = useState("");
+  const [chatResetAsk, setChatResetAsk] = useState(false);
   const [intakeArrival, setIntakeArrival] = useState("");
   const departurePickerRef = useRef(null);
   const [intakeDeparture, setIntakeDeparture] = useState("");
@@ -15403,6 +15404,40 @@ ${languageBlock()}`;
                   <div style={{ fontSize: 12, color: "#FFB347", textAlign: "center", marginBottom: 12 }}>{guideError}</div>
                 )}
 
+                {/* ── STARTING OVER ────────────────────────────────
+                    Oliver, 5 Sep 2026: "make me able to reset the AI chat."
+
+                    It needed one the moment the thread started surviving a
+                    reload. Closing the tab used to BE the reset, and taking away
+                    the only way out is a worse product even though the change
+                    that took it away fixed a real bug.
+
+                    Only once there is something to clear: over the bare greeting
+                    it is a button that does nothing, and it confirms before it
+                    fires because the conversation is the most expensive thing on
+                    this screen and the one he has been losing all week. */}
+                {aiMessages.length > 1 && (
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+                    {chatResetAsk ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 12, color: C.light }}>{uiT("chat.resetConfirm", uiLang)}</span>
+                        <button onClick={() => { setAiMessages(clearThread()); setChatResetAsk(false); }}
+                          style={{ background: `${C.gold}18`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          {uiT("chat.resetYes", uiLang)}
+                        </button>
+                        <button onClick={() => setChatResetAsk(false)}
+                          style={{ background: "none", border: "none", color: C.muted, fontSize: 12, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          {uiT("chat.resetNo", uiLang)}
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setChatResetAsk(true)}
+                        style={{ background: "none", border: "none", color: C.muted, fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", textDecoration: "underline", textUnderlineOffset: 3 }}>
+                        {uiT("chat.reset", uiLang)}
+                      </button>
+                    )}
+                  </div>
+                )}
                 <div style={{ display: "flex", gap: 8 }}>
                   {/* gx-plain: this one already draws itself in the accent at 1.5px, and it
                       is the field the field-affordance rule in theme.js was modelled ON
@@ -18430,20 +18465,33 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   // positive signal from the entry itself, never on silence:
                   // see seasonFit in helpers.js.
                   .filter(x => seasonFit(x, month).fit !== "poor");
+                // ── THE ROW THAT IS ABOUT YOU, 5 SEP 2026 ─────────────
+                //
+                // Oliver: "I think we remake this. So instead it's account
+                // specific. So it's 'worth the trip right now' and 'fitting
+                // your preferences'." And: "So if no account, it will say
+                // 'account needed'."
+                //
+                // The row this replaces picked on popularityTag and tier, which
+                // are facts about the ENTRY. This one picks on facts about the
+                // READER, and that difference is the whole argument for asking
+                // anybody to sign up. It is the first thing on the front page an
+                // account visibly buys.
+                //
+                // The state is computed once, above the lenses, so `pick` stays
+                // a pure test over the pool and the two empty cases are decided
+                // in one place rather than inside a filter that runs per row.
+                const prefRow = preferenceRowState(userProfile, !!userSession);
                 const lenses = [
-                  { key: "gems", title: "Hidden gems this week", sub: "Places most visitors never reach",
-                    // ── tierOf, NOT AN EXACT STRING ────────────────────
-                    // This read `x.tier === "Worth Considering"`. Three lines
-                    // below, its sibling lens carries the comment explaining why
-                    // that is wrong: "a festival stores 'Can't miss out' and a
-                    // town stores 'Can't Miss Out', and an exact match here
-                    // silently hid every festival from this whole section of the
-                    // front page." The fix was applied to the other lens and not
-                    // to this one, so the same trap sat here in the same object.
-                    // tierOf folds and is tested; nothing else should be asking
-                    // this question by hand.
-                    pick: (x) => x.popularityTag === "Hidden Gem" || tierOf(x)?.id === "worth" },
-                  { key: "trend", title: "Worth the trip right now", sub: "The ones we would go out of our way for",
+                  { key: "yours", title: uiT("row.yours.title", uiLang), sub: uiT("row.yours.sub", uiLang),
+                    account: prefRow,
+                    // fitsBrief, not a theme intersection written here: it
+                    // already knows that a row WITH tags is judged on its tags
+                    // and a row with none is read on its own words, which is the
+                    // null case a bare intersection would answer "does not fit"
+                    // to. Most published rows still carry no themes.
+                    pick: (x) => prefRow.state === PREF_READY && fitsBrief(x, prefRow.want).fits },
+                  { key: "trend", title: uiT("row.trend.title", uiLang), sub: uiT("row.trend.sub", uiLang),
                     // Loose, for the same reason as the badge above: a
                     // festival stores "Can't miss out" and a town stores
                     // "Can't Miss Out", and an exact match here silently hid
@@ -18466,7 +18514,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   // with more of it visible rather than a different one, and
                   // resizing the window never reshuffles what is on show.
                   return { ...lens, items: dealt(ranked, rowCards, week * 31 + li) };
-                }).filter(r => r.items.length > 0);
+                  // An empty row is dropped, EXCEPT the one whose emptiness is
+                  // the message. "Account needed" over no cards is the whole
+                  // point of that row when nobody is signed in.
+                }).filter(r => r.items.length > 0 || (r.account && r.account.state !== PREF_READY));
                 // ── HALF THE LIBRARY COULD NEVER APPEAR HERE AT ALL ────────
                 //
                 // Oliver, 19 Aug 2026, with a screenshot of the Food chip
@@ -18524,6 +18575,24 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       <div key={row.key} style={{ marginBottom: 22 }}>
                         <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase" }}>{row.title}</div>
                         <div style={{ fontSize: 12, color: C.muted, margin: "3px 0 12px" }}>{row.sub}</div>
+                        {row.account && row.account.state !== PREF_READY ? (() => {
+                          const needsAccount = row.account.state === PREF_NO_ACCOUNT;
+                          const k = needsAccount ? "needAccount" : "needInterests";
+                          return (
+                            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px" }}>
+                              <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, marginBottom: 4 }}>{uiT(`row.${k}.title`, uiLang)}</div>
+                              <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: 12 }}>{uiT(`row.${k}.detail`, uiLang)}</div>
+                              {/* The account offer does not name an action, so it
+                                  follows the rule rather than forcing Create. See
+                                  authMode's declaration. The profile one DOES name
+                                  one, because there is only one thing to do. */}
+                              <button onClick={() => { if (needsAccount) { setAuthReason(null); setAuthMode("in"); setAuthOpen(true); } else { goTab("me"); } }}
+                                style={{ background: C.gold, border: "none", color: C.onGold, borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                {uiT(`row.${k}.action`, uiLang)}
+                              </button>
+                            </div>
+                          );
+                        })() : (
                         <div style={{ display: "flex", gap: 10, overflowX: "auto", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch", paddingBottom: 6 }}>
                           {row.items.map(x => (
                             <button key={`${x._src}-${x.id}`} onClick={() => openStopDetail(x)}
@@ -18546,6 +18615,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             </button>
                           ))}
                         </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -20662,15 +20732,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
            missing lang attribute before the effect has run, uses the English
            width rather than losing its nav. */
         .gx-topnav { display: none; align-items: center; gap: 2px; margin: 0 14px; flex: 1; min-width: 0; overflow: hidden; justify-content: center; }
-        @media (min-width: 1240px) {
+        @media (min-width: 1180px) {
           html:not([lang="da"]):not([lang="de"]) .gx-topnav { display: flex; }
           html:not([lang="da"]):not([lang="de"]) .gx-nav-in-menu { display: none !important; }
         }
-        @media (min-width: 1300px) {
+        @media (min-width: 1230px) {
           html[lang="da"] .gx-topnav { display: flex; }
           html[lang="da"] .gx-nav-in-menu { display: none !important; }
         }
-        @media (min-width: 1400px) {
+        @media (min-width: 1280px) {
           html[lang="de"] .gx-topnav { display: flex; }
           html[lang="de"] .gx-nav-in-menu { display: none !important; }
         }
@@ -21159,13 +21229,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             ))}
           </nav>
 
-          {/* Right: the language flags, then the small persistent search pill
-              (always visible, not a toggle), then the menu. Oliver asked for the
-              flags "in the right corner"; they go at the HEAD of this cluster so
-              the burger keeps the corner it has always occupied and nothing a
-              returning visitor reaches for moves. */}
+          {/* Right: the small persistent search pill (always visible, not a
+              toggle) + menu. The language flags were here for a day and cost the
+              nav its width; they are a row in the menu now, under Theme. */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-            <LanguagePicker lang={uiLang} onChange={changeUiLanguage} C={C} />
             <div style={{ position: "relative" }}>
               <svg className="gemlyx-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64708C" strokeWidth="2.5" strokeLinecap="round"
                 style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
@@ -21222,7 +21289,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             {/* Three swatches rather than a dropdown: the choice is entirely
                 about how something looks, so showing the colour is the whole
                 control. Warm is first because it is the default. */}
-            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", padding: "8px 16px 6px" }}>Theme</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", padding: "8px 16px 6px" }}>{uiT("header.theme", uiLang)}</div>
             <div style={{ display: "flex", gap: 6, padding: "0 12px 10px" }}>
               {THEME_ORDER.map(key => {
                 const t = THEMES[key];
@@ -21240,6 +21307,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 );
               })}
             </div>
+            {/* Under Theme, because they are the same kind of thing: set once,
+                about how the whole site presents itself rather than about where
+                you are going. Same swatch shape for the same reason. */}
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", padding: "8px 16px 6px" }}>{uiT("header.language", uiLang)}</div>
+            <LanguageChoice lang={uiLang} onChange={changeUiLanguage} C={C} />
             {/* gx-nav-in-menu: at 1080px and up these same pages are in the bar
                 along the top, so repeating them here would be two controls for
                 one thing. Everything BELOW this block stays at every width. */}

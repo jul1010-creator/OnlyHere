@@ -163,17 +163,40 @@ const StudioPickReport = ({ aiMessages, C }) => {
         try { return document.querySelector("[data-preview-screen]")?.innerText || ""; }
         catch { return ""; }
       })();
+      const row = previewReportRow({
+        text,
+        said: travellerTurns(aiMessages),
+        onScreen,
+        url: typeof window !== "undefined" ? window.location.href : "",
+      });
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_suggestions`, {
         method: "POST",
         headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
-        body: JSON.stringify(previewReportRow({
-          text,
-          said: travellerTurns(aiMessages),
-          onScreen,
-          url: typeof window !== "undefined" ? window.location.href : "",
-        })),
+        body: JSON.stringify(row),
       });
-      setStatus(res.ok ? "sent" : "error");
+      // ── AND IT GOES IN THE CLIPBOARD TOO ──────────────────────
+      //
+      // Oliver, 5 Sep 2026: "what does the 'sent in studio suggestions' mean?
+      // Am I not supposed to send it to you? Or can I, in studio, improve on
+      // the AI? Shouldn't it be the coding itself."
+      //
+      // He is right, and the button was half a feature. For the bug he built it
+      // for, a 21+ bar in a trip with ten six-year-olds, there is nothing to fix
+      // in Studio: no age gate exists and the family signal never leaves the
+      // conversation. The fix is CODE. What the report is worth is the evidence,
+      // the brief and the screen at the moment it went wrong, which cannot be
+      // reconstructed an hour later.
+      //
+      // So the row is still written, because it is a record, and the same text
+      // goes to the clipboard so it can be pasted straight into a conversation
+      // with whoever is fixing it. Non-fatal and non-blocking: a browser that
+      // refuses clipboard access must not turn a saved report into a failed one.
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(`${row.type}: ${row.name}\n\n${row.note}`);
+        copied = true;
+      } catch { /* no clipboard permission, the row is still saved */ }
+      setStatus(res.ok ? (copied ? "copied" : "sent") : "error");
       if (res.ok) setText("");
     } catch { setStatus("error"); }
   };
@@ -200,7 +223,11 @@ const StudioPickReport = ({ aiMessages, C }) => {
         The conversation and what this screen is showing are sent with it.
       </div>
       {problem && <div style={{ fontSize: 11.5, color: C.gold, marginTop: 6 }}>{problem}</div>}
-      {status === "sent" && <div style={{ fontSize: 11.5, color: C.gold, marginTop: 6 }}>Sent. It is in Studio suggestions.</div>}
+      {/* "Sent. It is in Studio suggestions." was true and useless: it named a
+          destination rather than saying what was kept. This says what it saved
+          and, when the clipboard allowed it, that it is ready to paste. */}
+      {status === "copied" && <div style={{ fontSize: 11.5, color: C.gold, marginTop: 6 }}>Saved with the conversation and the screen, and copied ready to paste.</div>}
+      {status === "sent" && <div style={{ fontSize: 11.5, color: C.gold, marginTop: 6 }}>Saved with the conversation and the screen. It is in Studio suggestions.</div>}
       {status === "error" && <div style={{ fontSize: 11.5, color: C.gold, marginTop: 6 }}>That did not send. Try again in a moment.</div>}
       <div style={{ display: "flex", gap: 8, marginTop: 9 }}>
         <button onClick={send} disabled={status === "sending"}

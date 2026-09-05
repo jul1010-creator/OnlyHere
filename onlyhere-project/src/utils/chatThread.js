@@ -156,3 +156,22 @@ export const loadThread = () => {
   try { return restorableThread(sessionStorage.getItem(CHAT_KEY)); }
   catch { return null; }
 };
+
+
+// ── AND A WAY BACK OUT ──────────────────────────────────────────────
+//
+// Oliver, 5 Sep 2026: "make me able to reset the AI chat."
+//
+// This became necessary the moment the thread started surviving a reload.
+// Before that, closing the tab WAS the reset, and a persistence change that
+// takes away the only escape hatch somebody had is a worse product even though
+// it fixed the thing it set out to fix.
+//
+// Returns the opening thread rather than an empty array, because the invariant
+// at the top of this file is that a thread is never empty and always opens with
+// the greeting. Clearing storage and returning [] would satisfy the letter of a
+// reset and hand every consumer the hole this file exists to prevent.
+export const clearThread = () => {
+  try { sessionStorage.removeItem(CHAT_KEY); } catch { /* nothing stored, nothing to clear */ }
+  return openingThread();
+};

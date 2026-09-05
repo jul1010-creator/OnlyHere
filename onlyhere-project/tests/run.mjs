@@ -241,7 +241,8 @@ writeFileSync(entry, `
   export { keepLanguageOf } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { describeGuide, guideLanguageMix, guideProseOf } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { usableRuns } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
-  export { savableThread, restorableThread, saveThread, loadThread, CHAT_KEY, MAX_SAVED_MESSAGES } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
+  export { preferenceRowState, PREF_NO_ACCOUNT, PREF_NO_INTERESTS, PREF_READY } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
+  export { savableThread, restorableThread, saveThread, loadThread, clearThread, CHAT_KEY, MAX_SAVED_MESSAGES } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { UI_LANGUAGES, UI_CODES, UI_STRINGS, UI_KEYS, UI_LANGUAGE_KEY, DEFAULT_UI_LANGUAGE, t, resolveUiLanguage, isUiLanguage, uiLanguageMeta, storedUiLanguage, setStoredUiLanguage, currentUiLanguage } from ${JSON.stringify(join(root, "src/utils/uiLanguage.js"))};
   export { datesFromListings, cityRankOf, cityWanted, CITY_MATCH, CITY_UNKNOWN, CITY_DIFFERENT } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, PRICE_NOT_PUBLISHED, PRICE_UNKNOWN } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -26331,9 +26332,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // at a width where it does not fit. What changed is that "fits" now depends on
   // what the labels say, which is why documentElement.lang is set.
   ok("and shown only where it fits, which was measured",
-     /@media \(min-width: 1240px\) \{\s*html:not\(\[lang="da"\]\):not\(\[lang="de"\]\) \.gx-topnav \{ display: flex;/.test(appN));
-  ok("with a wider one for Danish", /@media \(min-width: 1300px\) \{\s*html\[lang="da"\] \.gx-topnav \{ display: flex;/.test(appN));
-  ok("and the widest for German", /@media \(min-width: 1400px\) \{\s*html\[lang="de"\] \.gx-topnav \{ display: flex;/.test(appN));
+     /@media \(min-width: 1180px\) \{\s*html:not\(\[lang="da"\]\):not\(\[lang="de"\]\) \.gx-topnav \{ display: flex;/.test(appN));
+  ok("with a wider one for Danish", /@media \(min-width: 1230px\) \{\s*html\[lang="da"\] \.gx-topnav \{ display: flex;/.test(appN));
+  ok("and the widest for German", /@media \(min-width: 1280px\) \{\s*html\[lang="de"\] \.gx-topnav \{ display: flex;/.test(appN));
   // A language nobody has declared yet, and the moment before the effect sets
   // the attribute at all, must still get a nav rather than losing one.
   ok("and an unknown language falls back to the English width rather than to nothing",
@@ -30795,8 +30796,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // tierOf, not an exact string. Its sibling lens carries the comment saying
     // an exact match "silently hid every festival from this whole section", and
     // the fix had been applied to one of the two.
-    ok("the gems lens folds the tier instead of matching a literal",
-       /pick: \(x\) => x\.popularityTag === "Hidden Gem" \|\| tierOf\(x\)\?\.id === "worth"/.test(appF));
+    // ── THE GEMS LENS IS GONE, 5 SEP 2026 ────────────────────────
+    // Oliver: "I think we remake this. So instead it's account specific." The
+    // hidden-gems row picked on popularityTag and tier, which are facts about
+    // the ENTRY; it is now a row about the READER. So the tier question is only
+    // asked by the trend lens, and this asks it there. The rule underneath is
+    // unchanged and is the line below: nothing compares a tier by hand.
+    ok("the trend lens folds the tier instead of matching a literal",
+       /pick: \(x\) => tierOf\(x\)\?\.id === "must"/.test(appF));
+    ok("and the front page no longer ranks anyone by hidden-gem-ness", !/"Hidden gems this week"/.test(appF));
     ok("and no lens compares a tier string by hand", !/x\.tier === "Worth Considering"/.test(stripNonCode(appF)));
     // The fallback, and that it is REACHED. A grep for the fallback alone passes
     // while nothing renders it, which is the mutant that survived first time.
@@ -43852,7 +43860,28 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("and there are plenty of them", usedKeys.length >= 15);
     is("every key the app asks for is in the catalogue",
        [...new Set(usedKeys)].filter(k => !UI_KEYS.includes(k)).join(", "), "");
-    ok("the picker is mounted in the header", /<LanguagePicker lang=\{uiLang\} onChange=\{changeUiLanguage\} C=\{C\} \/>/.test(app));
+    // ── AND IT LIVES IN THE MENU, 5 SEP 2026 ────────────────────
+    // Oliver: "just put the language options into the burger menu under the
+    // theme option. And then put back the navigations to the header." A picker
+    // in the header cost about fifty-six pixels of the tightest row on the
+    // page, and the eight page links are what paid for it. The nav is used
+    // every visit; the language is set once.
+    ok("the language control is in the menu", /<LanguageChoice lang=\{uiLang\} onChange=\{changeUiLanguage\} C=\{C\} \/>/.test(app));
+    ok("and no longer in the header row", !/<LanguagePicker /.test(app));
+    // Under Theme rather than anywhere in the panel: they are the same kind of
+    // thing, set once and about how the site presents itself.
+    {
+      const menuAt = app.indexOf('>{uiT("header.theme", uiLang)}<');
+      ok("the theme heading is in the menu at all", menuAt > 0);
+      // Bounded by the nav block that follows both, rather than by a character
+      // count: the theme swatches are about sixteen hundred characters of JSX
+      // and a guessed window was one short of reaching past them.
+      const navAt = app.indexOf('className="gx-nav-in-menu"', menuAt);
+      ok("the menu's nav block follows both", navAt > menuAt);
+      const after = app.slice(menuAt, navAt);
+      ok("the language row comes after the theme row", /<LanguageChoice /.test(after));
+      ok("and is labelled in the reader's language", /\{uiT\("header\.language", uiLang\)\}/.test(after));
+    }
     ok("the choice is persisted rather than held in memory", /setStoredUiLanguage\(code\)/.test(app));
     ok("and the page declares what language it is in", /document\.documentElement\.lang = uiLang/.test(app));
     // ── THE BAR THAT OVERFLOWED, 5 SEP ──────────────────────────
@@ -43862,9 +43891,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the nav clips rather than drawing over its neighbours", /\.gx-topnav \{[^}]*overflow: hidden/.test(app));
     // And it collapses into the burger at the width each language needs, which
     // is what documentElement.lang is for.
-    ok("English keeps the narrowest breakpoint", /min-width: 1240px[^@]*html:not\(\[lang="da"\]\):not\(\[lang="de"\]\) \.gx-topnav/.test(app));
-    ok("Danish needs more room", /min-width: 1300px[^@]*html\[lang="da"\] \.gx-topnav/.test(app));
-    ok("and German needs the most", /min-width: 1400px[^@]*html\[lang="de"\] \.gx-topnav/.test(app));
+    ok("English keeps the narrowest breakpoint", /min-width: 1180px[^@]*html:not\(\[lang="da"\]\):not\(\[lang="de"\]\) \.gx-topnav/.test(app));
+    ok("Danish needs more room", /min-width: 1230px[^@]*html\[lang="da"\] \.gx-topnav/.test(app));
+    ok("and German needs the most", /min-width: 1280px[^@]*html\[lang="de"\] \.gx-topnav/.test(app));
   }
 }
 
@@ -44183,6 +44212,123 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("recentLogs reads one list rather than choosing between two",
        /hydrate\(\);\s*return finished\.slice\(\);/.test(recent) && !/if \(finished\.length\)/.test(recent));
   }
+}
+
+
+// ── THE FRONT PAGE ROW THAT IS ABOUT YOU, 5 SEP 2026 ────────────────
+//
+// Oliver: "I think we remake this. So instead it's account specific. So it's
+// 'worth the trip right now' and 'fitting your preferences'." And: "So if no
+// account, it will say 'account needed'."
+{
+  const { preferenceRowState, PREF_NO_ACCOUNT, PREF_NO_INTERESTS, PREF_READY, fitsBrief } = M;
+
+  // Three states, not a boolean. A signed-in person shown "Account needed"
+  // would be a bug wearing the costume of a feature, and an account with no
+  // stated interests is the ORDINARY case: the field is optional.
+  is("nobody signed in is asked for an account", preferenceRowState(null, false).state, PREF_NO_ACCOUNT);
+  is("and a profile without a session is still nobody",
+     preferenceRowState({ interests: ["History"] }, false).state, PREF_NO_ACCOUNT);
+  is("signed in with nothing stated is asked for interests, not an account",
+     preferenceRowState({}, true).state, PREF_NO_INTERESTS);
+  is("and so is an empty list", preferenceRowState({ interests: [] }, true).state, PREF_NO_INTERESTS);
+  is("signed in with interests is ready", preferenceRowState({ interests: ["History"] }, true).state, PREF_READY);
+
+  // briefThemes does the mapping, rather than a second table: a profile saying
+  // "History" and a traveller typing "we like old towns" must land on the same
+  // theme by the same route.
+  {
+    const r = preferenceRowState({ interests: ["History", "Nature"] }, true);
+    ok("the stated interests become themes", r.want.has("history") && r.want.has("nature"));
+    ok("and nothing else comes along", !r.want.has("nightlife"));
+    // And the themes are the ones the pool is actually filtered by.
+    ok("a history row fits a history reader", fitsBrief({ themes: ["history"], name: "Koldinghus" }, r.want).fits);
+    ok("a nightlife row does not", !fitsBrief({ themes: ["nightlife"], name: "Heidi's" }, r.want).fits);
+    // The null case, which is most of the library: a row with NO themes is read
+    // on its own words rather than answered "does not fit".
+    ok("an untagged row is read on its words instead of refused",
+       fitsBrief({ name: "Ribe Domkirke", desc: "A cathedral with eight hundred years of history in it." }, r.want).fits);
+  }
+  is("an empty state carries no themes to filter on", preferenceRowState(null, false).want, null);
+
+  // ── AND IT IS THE ROW ON THE PAGE ─────────────────────────────────
+  {
+    const appP = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the row is built from the account state", /const prefRow = preferenceRowState\(userProfile, !!userSession\);/.test(appP));
+    ok("and picks on the reader rather than the entry",
+       /pick: \(x\) => prefRow\.state === PREF_READY && fitsBrief\(x, prefRow\.want\)\.fits/.test(appP));
+    // The empty row is the message, so it must survive the filter that drops
+    // rows with no cards in them.
+    ok("an empty preference row is kept, because its emptiness is the point",
+       /r\.items\.length > 0 \|\| \(r\.account && r\.account\.state !== PREF_READY\)/.test(appP));
+    ok("and it renders a panel instead of cards",
+       /row\.account && row\.account\.state !== PREF_READY \? \(\(\) => \{/.test(appP));
+    // Two states, two buttons: one opens the account, one opens the profile.
+    ok("no account offers the account", /setAuthReason\(null\); setAuthMode\("in"\); setAuthOpen\(true\);/.test(appP));
+    ok("and no interests offers the profile", /goTab\("me"\)/.test(appP));
+    // Both rows and both empty states are translated, or this page is the next
+    // place the English frame leaks back in.
+    for (const k of ["row.yours.title", "row.yours.sub", "row.trend.title", "row.trend.sub"])
+      ok(`${k} comes from the catalogue`, appP.includes(`uiT("${k}", uiLang)`));
+  }
+}
+
+
+// ── STARTING THE CONVERSATION OVER, 5 SEP 2026 ──────────────────────
+//
+// Oliver: "make me able to reset the AI chat." It needed one the moment the
+// thread started surviving a reload: closing the tab used to BE the reset.
+{
+  const { clearThread, threadIsSound, openingThread, GREETING } = M;
+  const cleared = clearThread();
+  ok("clearing returns a sound thread rather than an empty one", threadIsSound(cleared));
+  is("and it is the opening one", cleared.length, openingThread().length);
+  // Optional-chained on purpose: a clearThread that returned [] crashed this
+  // line instead of failing it, and a gate that dies noisily when it regresses
+  // tells you less than one that reports. Same trap as the priceProblems index.
+  is("which opens with the greeting", cleared[0]?.text, GREETING.text);
+  // The invariant this whole file exists for: [] would satisfy the letter of a
+  // reset and hand every consumer the hole it is written to prevent.
+  ok("never an empty array", cleared.length > 0);
+
+  {
+    const appR = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the control clears through the guarded transition",
+       /setAiMessages\(clearThread\(\)\)/.test(appR));
+    // ── ANCHORED TO THE CONTROL, NOT TO THE FILE ─────────────────
+    // Found by mutation: `aiMessages.length > 1 && (` appears TWICE in App.jsx,
+    // so a file-wide grep for it stayed green while the reset itself was
+    // ungated. The slice runs backwards from the control to the guard that has
+    // to be in front of it.
+    const resetAt = appR.indexOf("setAiMessages(clearThread())");
+    ok("the reset control is findable", resetAt > 0);
+    const resetBlock = appR.slice(Math.max(0, resetAt - 900), resetAt);
+    // Only when there is something to clear: over a bare greeting it is a
+    // button that does nothing.
+    ok("and only shows once there is a conversation", /aiMessages\.length > 1 && \(/.test(resetBlock));
+    // It asks first. The conversation is the most expensive thing on the screen
+    // and the one he has spent the week losing.
+    ok("it confirms before it fires", /chatResetAsk \?/.test(resetBlock));
+    ok("and is translated", appR.includes('uiT("chat.reset", uiLang)'));
+  }
+}
+
+// ── AND THE REPORT SAYS WHAT IT DID, 5 SEP 2026 ─────────────────────
+//
+// Oliver: "what does the 'sent in studio suggestions' mean? Am I not supposed
+// to send it to you? [...] Shouldn't it be the coding itself." Right on both
+// counts: for the bug he built it for there is nothing to fix in Studio, so the
+// report's value is the evidence and it should be ready to hand over.
+{
+  const pv = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  ok("the row is still written, because it is a record", /gemlyx_suggestions/.test(pv));
+  ok("and the same text goes to the clipboard", /navigator\.clipboard\.writeText/.test(pv));
+  // A browser that refuses the clipboard must not turn a saved report into a
+  // failed one: the row is what matters and it is already written by then.
+  ok("a refused clipboard is not a failed report", /catch \{ \/\* no clipboard permission, the row is still saved \*\/ \}/.test(pv));
+  ok("the confirmation says what was kept rather than naming a table",
+     /Saved with the conversation and the screen/.test(pv));
+  ok("and no longer only names a destination", !/>Sent\. It is in Studio suggestions\.</.test(pv));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

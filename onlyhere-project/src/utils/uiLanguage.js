@@ -95,11 +95,37 @@ export const UI_STRINGS = {
   "filter.all":   { en: "Everything", da: "Alt",         de: "Alles" },
   "filter.craft": { en: "Workshops",  da: "Værksteder",  de: "Werkstätten" },
 
+  // The two front-page rows. "Worth the trip right now" is about the PLACE and
+  // "Fitting your preferences" is about the READER, which is the first thing on
+  // this page that an account visibly buys.
+  "row.yours.title":   { en: "Fitting your preferences", da: "Passer til dine interesser", de: "Passend zu deinen Interessen" },
+  "row.yours.sub":     { en: "Matched to what you told us you like", da: "Ud fra det du har fortalt os", de: "Nach dem, was du uns gesagt hast" },
+  "row.trend.title":   { en: "Worth the trip right now",  da: "Værd at rejse efter lige nu",  de: "Jetzt eine Reise wert" },
+  "row.trend.sub":     { en: "The ones we would go out of our way for", da: "Dem vi selv ville køre en omvej for", de: "Die, für die wir einen Umweg fahren würden" },
+  // Two empty states, because they need different buttons. A signed-in person
+  // shown "Account needed" would be a bug wearing the costume of a feature.
+  "row.needAccount.title":  { en: "Account needed",  da: "Kræver en konto",  de: "Konto erforderlich" },
+  "row.needAccount.detail": { en: "Gemlyx matches places to what you like once you have an account.", da: "Gemlyx finder steder ud fra dine interesser, når du har en konto.", de: "Mit einem Konto sucht Gemlyx Orte nach deinen Interessen aus." },
+  "row.needAccount.action": { en: "Sign in",         da: "Log ind",         de: "Anmelden" },
+  "row.needInterests.title":  { en: "Tell Gemlyx what you like", da: "Fortæl Gemlyx hvad du kan lide", de: "Sag Gemlyx, was dir gefällt" },
+  "row.needInterests.detail": { en: "Pick a few interests and this row fills itself in.", da: "Vælg et par interesser, så fylder rækken sig selv ud.", de: "Wähl ein paar Interessen, dann füllt sich diese Reihe von selbst." },
+  "row.needInterests.action": { en: "Open my profile", da: "Åbn min profil",  de: "Mein Profil öffnen" },
+
+  // Starting the conversation over. It needed a control the moment the thread
+  // started surviving a reload: before that, closing the tab WAS the reset.
+  "chat.reset":        { en: "Start over",   da: "Start forfra",   de: "Neu anfangen" },
+  "chat.resetConfirm": { en: "Clear this conversation and start again?", da: "Ryd samtalen og start forfra?", de: "Unterhaltung löschen und neu anfangen?" },
+  "chat.resetYes":     { en: "Clear it",     da: "Ryd den",        de: "Löschen" },
+  "chat.resetNo":      { en: "Keep it",      da: "Behold den",     de: "Behalten" },
+
   // The header chrome, which renders on every page of the site.
   "header.search":       { en: "Search",                 da: "Søg",                    de: "Suchen" },
   "header.back":         { en: "Back to the front page", da: "Tilbage til forsiden",   de: "Zurück zur Startseite" },
   "header.menu":         { en: "Menu",                   da: "Menu",                   de: "Menü" },
   "header.language":     { en: "Language",               da: "Sprog",                  de: "Sprache" },
+  // The section heading above the language row in the menu, which sits right
+  // beside it and was the only English word left in that panel's own chrome.
+  "header.theme":        { en: "Theme",                  da: "Tema",                   de: "Design" },
   "header.chooseLanguage": { en: "Choose a language",    da: "Vælg sprog",             de: "Sprache wählen" },
 };
 

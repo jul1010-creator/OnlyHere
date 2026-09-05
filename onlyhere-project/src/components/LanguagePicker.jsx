@@ -61,89 +61,39 @@ export const Flag = ({ code, size = 15 }) => {
   );
 };
 
-// ── THE PICKER, IN THE RIGHT CORNER ─────────────────────────────────
+// ── AND IT BELONGS IN THE MENU, NOT THE BAR ─────────────────────────
 //
-// Oliver, 4 Sep 2026: "Put flags in the right corner as 'languages' for the
-// interface."
+// Oliver, 5 Sep 2026: "Why did you move it from the top header to the burger
+// menu? I prefer the header.. just put the language options into the burger
+// menu under the theme option. And then put back the navigations to the header."
 //
-// Sits at the head of the header's right cluster, so the order reads
-// [flag][search][menu] and the burger keeps the corner it has always had. Above
-// the language's own breakpoint the pages are along the top; below it they are
-// in the burger, and this control is in the same place either way, which is why
-// it is in the cluster rather than in the nav.
-export const LanguagePicker = ({ lang, onChange, C }) => {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
-  const current = uiLanguageMeta(lang);
-
-  // Closing on an outside press, because this opens on click rather than on
-  // hover and a dropdown you can only close with the control that opened it is
-  // the one people tap twice and give up on.
-  useEffect(() => {
-    if (!open) return;
-    const away = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
-    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", away);
-    document.addEventListener("keydown", esc);
-    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
-  }, [open]);
-
-  return (
-    <div ref={wrapRef} style={{ position: "relative", flexShrink: 0 }}>
-      {/* aria-label carries the word "Language" in the language being rendered,
-          so a screen reader in Danish does not announce an English label for the
-          one control whose whole job is to change the language. */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        aria-label={t("header.language", lang)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        title={t("header.language", lang)}
-        style={{
-          display: "flex", alignItems: "center", gap: 5, background: "none",
-          border: `1px solid ${C.border}`, color: C.muted, borderRadius: 8,
-          padding: "6px 8px", cursor: "pointer", lineHeight: 1,
-          fontFamily: "'Inter', sans-serif",
-        }}>
-        <Flag code={current.code} />
-        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="3" strokeLinecap="round"
-          style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s ease" }}>
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </button>
-
-      {open && (
-        <div role="listbox" aria-label={t("header.chooseLanguage", lang)}
+// He is right and the trade was mine to notice rather than his. A picker in the
+// header cost about fifty-six pixels of the one row that was already the tightest
+// thing on the page, and paying for it with the eight page links was paying with
+// the wrong thing: the nav is what people use on every visit and the language is
+// what they set once.
+//
+// So it is a row in the menu, under Theme, and it is built like the theme
+// swatches rather than as a dropdown. Same reason that block gives for showing
+// three colours instead of a select: the choice is small, closed and visual, so
+// showing all of it IS the control. A dropdown inside a dropdown would also be
+// the second one on that panel to need opening.
+export const LanguageChoice = ({ lang, onChange, C }) => (
+  <div style={{ display: "flex", gap: 6, padding: "0 12px 10px" }}>
+    {UI_LANGUAGES.map(l => {
+      const on = l.code === lang;
+      return (
+        <button key={l.code} onClick={() => onChange(l.code)} aria-pressed={on} title={l.name}
           style={{
-            position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 300,
-            background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
-            boxShadow: "0 18px 50px rgba(0,0,0,0.55)", overflow: "hidden", minWidth: 168,
+            flex: 1, background: "transparent", border: `1px solid ${on ? C.gold : C.border}`,
+            borderRadius: 10, padding: "7px 6px 6px", cursor: "pointer",
+            fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: "column",
+            alignItems: "center", gap: 5,
           }}>
-          {UI_LANGUAGES.map(l => (
-            <button key={l.code} role="option" aria-selected={l.code === current.code}
-              onClick={() => { onChange(l.code); setOpen(false); }}
-              style={{
-                display: "flex", alignItems: "center", gap: 9, width: "100%",
-                background: l.code === current.code ? `${C.gold}14` : "none",
-                border: "none", borderBottom: `1px solid ${C.border}`,
-                color: l.code === current.code ? C.text : C.light,
-                padding: "10px 13px", fontSize: 13, cursor: "pointer",
-                fontWeight: l.code === current.code ? 700 : 500,
-                fontFamily: "'Inter', sans-serif", textAlign: "left",
-              }}>
-              <Flag code={l.code} size={17} />
-              <span style={{ flex: 1 }}>{l.name}</span>
-              {/* The tick, so the current one is readable without relying on the
-                  weight and the tint alone. */}
-              {l.code === current.code && (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.gold} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
+          <Flag code={l.code} size={18} />
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: on ? C.gold : C.muted }}>{l.name}</span>
+        </button>
+      );
+    })}
+  </div>
+);
