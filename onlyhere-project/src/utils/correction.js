@@ -1,3 +1,4 @@
+import { isoDay } from "./eventDates";
 // ── "Google AI says this is wrong. Correct it." ─────────────────────
 // Oliver, 6 Aug 2026: "Is it possible to make an AI where I can write 'Google AI
 // says this is wrong. Correct it.' So when we spot these mistakes, I don't need
@@ -371,6 +372,84 @@ export const settleVerdict = ({ parsed, hasSource = false, selfEvidentUrl = fals
   return { verdict, evidence, inverted, sourceless };
 };
 
+// ── AND THEN ASK THE PLACE ITSELF ───────────────────────────────────
+//
+// Oliver, 6 Sep 2026, on a Da Vinci Bar draft. He pasted Gemini's fact-check,
+// which said the bar "is legally restricted as an explicit 23+ age-limit
+// venue", citing a MapQuest listing. The verification search found no primary
+// source, the claim fell to unresolved, and the asserted rule below applied it
+// on his word: "Nothing contradicted it, and no primary source confirmed it
+// either."
+//
+// davincibar.dk, the bar's own site, says 18+. Google found it in one search.
+// His words: "Google took in sources from shitty ones early on, but then later
+// on it used the website's own 18+ ... Gemlyx draft fact-checker did not stop
+// it. It would have denied the change if it had checked their own website."
+//
+// He is right, and the gap is one tier wide. VERIFY_PROMPT above already TELLS
+// the search to prefer the venue's own site, and telling is not asking: a
+// general web search that surfaces aggregators returns aggregators. The row
+// already carries the operator's own address in `website`, and nothing ever
+// pointed a question at it.
+//
+// ── WHY THIS IS NOT JUST ANOTHER SEARCH ─────────────────────────────
+//
+// The asserted rule exists for a real reason and is not being undone: rule 1 of
+// this file, that criticism is a lead and not a source, once produced a tool
+// that ignored him, and handoff 6 records "he is right more often than the
+// fact-checker is". Silence must not block him.
+//
+// But silence is what this pass could not tell apart from an unasked question.
+// A claim nobody has put to the operator is not a claim nothing contradicts.
+// One search closes that, and it can only ever move a claim OFF unresolved: it
+// confirms, it rejects, or it changes nothing.
+export const ownSiteFor = (entry, name) => {
+  const url = String(entry?.website || "").trim();
+  if (!/^https?:\/\//i.test(url)) return "";
+  // hostMatchesName, the same test the website-claim branch already uses. A
+  // `website` field holding an aggregator is exactly the case that must NOT be
+  // treated as the operator speaking, because that is the failure this whole
+  // tier exists to fix, one level up.
+  if (!hostMatchesName(url, name)) return "";
+  try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
+};
+
+export const OWN_SITE_PROMPT = (name, host, claim) => `Search ${host}, the official website of "${name}" in Denmark, and answer ONE question from that site alone.
+
+The claim to check: ${claim?.says || ""}${claim?.proposed ? `\nThe correction proposed: ${claim.proposed}` : ""}
+
+Rules, and they are strict:
+- ONLY ${host} counts. Not an aggregator, not a listings site, not a review site, not a maps profile. If the answer is on any other domain, that is NOT an answer to this question.
+- If ${host} states something that CONTRADICTS the claim, say so and quote it. That is the most useful answer you can give.
+- If ${host} does not address it at all, say exactly "not on their site". Do not reason from what is likely.
+
+Reply as JSON only:
+{"verdict":"confirmed"|"rejected"|"unresolved","correctValue":"what their own site says, or empty","evidence":"the sentence from their site, quoted","sourceUrl":"the page on ${host} you read"}`;
+
+// The settler, pure and separate for the reason settleVerdict is: a rule that
+// lives inside a network call cannot be tested and this one decides whether a
+// wrong fact reaches a published page.
+//
+// THE SOURCE HAS TO BE ON THEIR OWN HOST. A reply that answers from MapQuest is
+// the thing being fixed, not a weaker version of it, so it settles nothing.
+export const settleOwnSite = ({ parsed, host } = {}) => {
+  const said = String(parsed?.verdict || "");
+  const src = String(parsed?.sourceUrl || "").trim();
+  const clean = String(host || "").trim().toLowerCase();
+  let onTheirSite = false;
+  try { onTheirSite = !!clean && new URL(src).hostname.replace(/^www\./, "").toLowerCase().endsWith(clean); } catch { onTheirSite = false; }
+  if (!onTheirSite || (said !== "confirmed" && said !== "rejected")) {
+    return { verdict: "unresolved", asked: true, evidence: `${clean || "Their own site"} was asked directly and did not answer this. ${parsed?.evidence || ""}`.trim(), sourceUrl: "" };
+  }
+  return {
+    verdict: said,
+    asked: true,
+    correctValue: String(parsed?.correctValue || "").trim(),
+    evidence: `${clean}, their own site, ${said === "rejected" ? "contradicts this" : "states this"}. ${parsed?.evidence || ""}`.trim(),
+    sourceUrl: src,
+  };
+};
+
 export const VERIFY_PROMPT = (name, claim, rules) => `Check ONE factual claim about "${name}" in Denmark using real, current web search.
 
 The claim: ${claim.says}${claim.proposed ? `\nThe correction proposed: ${claim.proposed}` : ""}
@@ -695,6 +774,47 @@ If none of them is what he means, answer null. That is a normal answer and it is
 Reply with ONLY this JSON:
 {"sweep": "the id, or null", "why": "one plain sentence saying what you think he wants, in his own terms"}`;
 
+// ── AND WHOSE WORD IS IT ────────────────────────────────────────────
+//
+// Oliver, 6 Sep 2026, reading "5 confirmed, 8 on your word, 1 rejected": "having
+// '8' on my word is alot.. this is from Gemini.. so Gemini might be wrong as
+// well. That's the problem." Then: "I can now click apply to draft.. but then
+// I'll apply 5 confirmed and 8 that might be wrong."
+//
+// He is right and the label was wrong. The asserted rule was written for HIS
+// corrections, and handoff 6's "he is right more often than the fact-checker
+// is" is about him, not about a model he pasted. The panel he types into says
+// "Paste what Gemini said" in its own subtitle, and everything pasted there
+// arrived as "your word".
+//
+// Rule 1 at the top of this file already settles it for the pasted case:
+// criticism is a LEAD AND NOT A SOURCE. What was missing is that the pass could
+// not tell the two apart, so it applied the second on the strength of the first.
+//
+// ── THE SIGNAL IS THE ONE routeMessage ALREADY USES ─────────────────
+//
+// A founder correction is short and first-person: "really it is 60 minutes".
+// A pasted fact-check is long, impersonal and structured, and the router
+// already reads exactly that at the bottom of routeMessage: "a long paste with
+// no instruction is a fact-check dropped in whole". The threshold is shared
+// rather than restated, because two copies of one number is how the router and
+// this would come to disagree about what a paste is.
+export const PASTED_MIN = 400;
+
+// The shapes a fact-check arrives in, on top of length. Any one of them and the
+// text is somebody's report rather than his sentence: a claim list, a verdict
+// list, or a cited source. Deliberately narrow — the length test carries most
+// of it and these only catch a short, structured paste.
+const REPORTED = /(^|\n)\s*[*\-•]?\s*(?:claim|what is wrong|finding|verdict|source|evidence)\s*:/i;
+const CITES = /https?:\/\/\S+/;
+
+export const whoseWord = (criticism) => {
+  const t = String(criticism || "").trim();
+  if (!t) return "founder";
+  if (t.length > PASTED_MIN) return "pasted";
+  return REPORTED.test(t) || CITES.test(t) ? "pasted" : "founder";
+};
+
 export const routeMessage = (text) => {
   const t = String(text || "").trim();
   if (!t) return "ask";
@@ -713,7 +833,7 @@ export const routeMessage = (text) => {
   if (WRONG_HALF.test(t) || RIGHT_HALF.test(t)) return "correct";
   // A long paste with no instruction is a fact-check dropped in whole. That is
   // still a correction request, it just did not come with a covering sentence.
-  if (t.length > 400 && /\b(wrong|incorrect|inaccurate|error|should be|actually|resolved|verify)\b/i.test(t)) return "correct";
+  if (t.length > PASTED_MIN && /\b(wrong|incorrect|inaccurate|error|should be|actually|resolved|verify)\b/i.test(t)) return "correct";
   return "ask";
 };
 
@@ -783,6 +903,10 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
   const stage = (label, percent) => { try { onStage?.({ label, percent }); } catch { /* UI only */ } };
   const name = entry?.name || "this entry";
   const entryJson = JSON.stringify(entry, null, 2);
+  // Resolved once, before the loop, because it is a property of the entry
+  // rather than of a claim and asking it per claim would read the same field
+  // five times to get the same answer.
+  const ownSite = ownSiteFor(entry, name);
 
   // 1. split
   stage("Reading the criticism", 10);
@@ -834,12 +958,35 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
     // cannot drift apart the way two copies of a function in this repo have
     // four times.
     const settled = settleVerdict({ parsed, hasSource, selfEvidentUrl });
+    // ── AND IF NOTHING SETTLED IT, ASK THE PLACE ITSELF ─────────────
+    //
+    // One search, only on the claims that would otherwise be applied on his
+    // word, and only when the row carries the operator's own address. It is the
+    // step Google took on its second pass and this pass never took at all: a
+    // claim nobody has put to the operator is not a claim nothing contradicts.
+    if (settled.verdict === "unresolved" && ownSite && String(c.proposed || "").trim()) {
+      try {
+        const own = await askPerplexity(OWN_SITE_PROMPT(name, ownSite, c));
+        const ownParsed = own?.error || !own?.text ? null : await parseJSON(own.text, 2048).catch(() => null);
+        const fromThem = settleOwnSite({ parsed: ownParsed, host: ownSite });
+        if (fromThem.verdict === "confirmed" || fromThem.verdict === "rejected") {
+          verified.push({ ...c, kind, verdict: fromThem.verdict, correctValue: fromThem.correctValue || parsed.correctValue || "", evidence: fromThem.evidence, sourceUrl: fromThem.sourceUrl, askedOwnSite: true });
+          continue;
+        }
+        // Asked and unanswered is still worth recording, because it is what the
+        // asserted sentence below now gets to say instead of implying nobody
+        // could have known.
+        verified.push({ ...c, kind, verdict: "unresolved", correctValue: parsed.correctValue || "", evidence: `${settled.evidence} ${fromThem.evidence}`.trim(), sourceUrl: "", askedOwnSite: true });
+        continue;
+      } catch { /* their site failing is not a reason to lose the claim */ }
+    }
     verified.push({
       ...c, kind,
       verdict: settled.verdict,
       correctValue: parsed.correctValue || "",
       evidence: settled.evidence,
       sourceUrl: parsed.sourceUrl || (selfEvidentUrl ? (parsed.correctValue || c.proposed) : ""),
+      askedOwnSite: false,
     });
   }
 
@@ -862,24 +1009,49 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
   //              mistaken later for something a source confirmed.
   //   unresolved with no value supplied. Still changes nothing, because there
   //              is nothing to write.
+  //
+  // ── AND ONLY WHEN IT IS ACTUALLY HIS WORD ───────────────────────────
+  // Everything above is about a correction HE makes. A pasted fact-check is
+  // rule 1's case, a lead and not a source, and applying eight of them on the
+  // strength of a rule written about him is what put "8 on your word" over
+  // Gemini's claims. whoseWord tells the two apart; a pasted claim that no
+  // source settled is reported and left alone, which is what "unresolved"
+  // already means.
+  const mine = whoseWord(criticism) === "founder";
   const asserted = [];
   for (const v of verified) {
     if (v.verdict !== "unresolved") continue;
     const value = String(v.proposed || "").trim();
     if (!value) continue;
+    if (!mine) {
+      v.evidence = `Not applied. This came from a pasted fact-check rather than from you, and no source settled it: ${v.askedOwnSite ? "their own site was asked directly and does not address it" : "nothing contradicted it and nothing confirmed it"}. ${v.evidence || ""}`.trim();
+      continue;
+    }
     v.verdict = "asserted";
     v.correctValue = value;
-    v.evidence = `Applied on your word. Nothing contradicted it, and no primary source confirmed it either. ${v.evidence || ""}`.trim();
+    // ── AND IT SAYS WHETHER THE PLACE ITSELF WAS ASKED ─────────────
+    // "No primary source confirmed it" read as "nobody could have known", and
+    // on the Da Vinci draft that was not true: their own site says 18+ and
+    // nothing had asked it. The two states are now different sentences, because
+    // one of them means he should go and look.
+    v.evidence = v.askedOwnSite
+      ? `Applied on your word. Their own site was asked directly and does not address it, and no other primary source confirmed it. ${v.evidence || ""}`.trim()
+      : `Applied on your word. Nothing contradicted it, and no primary source confirmed it either. ${ownSite ? "" : "This entry carries no official website, so there was no operator page to ask. "}${v.evidence || ""}`.trim();
     asserted.push(v);
   }
 
   const confirmed = verified.filter(v => v.verdict === "confirmed");
   const rejected = verified.filter(v => v.verdict === "rejected");
   const unresolved = verified.filter(v => v.verdict === "unresolved");
+  // asserted is empty unless the words were his, so this is the same line it
+  // always was and it now cannot carry somebody else's claim.
   const applying = [...confirmed, ...asserted];
 
   if (applying.length === 0) {
-    return { claims: verified, confirmed, rejected, unresolved, asserted, patched: null, changed: [], reverted: [], unchangedReason: "Nothing was confirmed, and nothing came with a value to apply, so the entry was left exactly as it is." };
+    return { claims: verified, confirmed, rejected, unresolved, asserted, fromPaste: !mine, patched: null, changed: [], reverted: [],
+      unchangedReason: mine
+        ? "Nothing was confirmed, and nothing came with a value to apply, so the entry was left exactly as it is."
+        : "Nothing held up against a source. This was a pasted fact-check rather than your own correction, so the unconfirmed claims were reported and not applied." };
   }
 
   // 3. patch, scoped
@@ -895,7 +1067,11 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
   const { patched, reverted } = enforceScope(entry, candidate, allowed);
 
   // 5. record what happened, in the payload itself
-  const at = new Date().toISOString().slice(0, 10);
+  // isoDay, not toISOString: this stamps the day a correction was made onto the
+  // row, and toISOString converts to UTC first, so a correction applied between
+  // midnight and 02:00 Danish time was filed under yesterday. Small, and it is
+  // the line a future audit reads to know when something changed.
+  const at = isoDay(new Date());
   patched.__corrections = [
     ...(Array.isArray(entry?.__corrections) ? entry.__corrections : []),
     ...applying.map(c => ({
@@ -925,7 +1101,7 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
   }
 
   const changed = Object.keys(patched).filter(k => JSON.stringify(patched[k]) !== JSON.stringify(entry?.[k]));
-  return { claims: verified, confirmed, rejected, unresolved, asserted, patched, changed, reverted, allowed };
+  return { claims: verified, confirmed, rejected, unresolved, asserted, fromPaste: !mine, patched, changed, reverted, allowed };
 };
 
 // ── THE REWRITE PASS ────────────────────────────────────────────────

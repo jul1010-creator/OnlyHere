@@ -1225,19 +1225,57 @@ export const pricesAdmission = (found) => !!found && !NOT_ADMISSION.has(found.ki
 //
 // Optional, and every existing caller keeps working without it — the phrase
 // falls back to the old wording rather than inventing a host it was not given.
-export const findTicketPrice = ({ siteText = "", listingText = "", siteHosts = [], listingHosts = [] } = {}) => {
+// ── WHICH PAGE SAID IT, WHEN THE CALLER CAN SAY ─────────────────────
+//
+// Oliver's Sebbersund run, 5 Sep 2026: "10 DKK, from vikingeskibsmuseet.dk",
+// which is the Viking Ship Museum in Roskilde, a different institution on a
+// different island, 250 km from a market near Nibe. Whatever 10 DKK was, it was
+// not the entry price of that market.
+//
+// The figure was right and the citation was invented. This function was handed
+// ONE concatenated blob of every site page and one of every listing page, so it
+// could not know which page carried the number, and the caller printed
+// hosts[0]: the first host in the list, never the one that answered.
+//
+// Reading the pages ONE AT A TIME answers it exactly, and costs nothing: the
+// text was already fetched and already kept per URL. The first page that prices
+// admission wins, which is the same order the blob produced, and now it can say
+// its name.
+//
+// AND IT REMOVES A FALSE POSITIVE NOBODY HAD NOTICED. A concatenated blob can
+// match a price that no single page states, when a figure at the end of one
+// page meets a currency at the start of the next. Per page, that cannot happen.
+//
+// `blob` stays the fallback for a caller with no pages to hand, so every
+// existing call behaves exactly as it did and simply cannot name a host.
+const readPages = (pages, blob) => {
+  const list = (Array.isArray(pages) ? pages : []).filter(x => String(x?.text || "").trim());
+  if (!list.length) return { got: ticketPriceOn(blob), host: "" };
+  let fallback = null;
+  for (const x of list) {
+    const got = ticketPriceOn(String(x.text));
+    const host = String(x.host || "").trim();
+    if (pricesAdmission(got)) return { got, host };
+    // A concession-only read is kept in case nothing prices admission, because
+    // that is the case the branch at the bottom of this function exists for.
+    if (got && !fallback) fallback = { got, host };
+  }
+  return fallback || { got: null, host: "" };
+};
+
+export const findTicketPrice = ({ siteText = "", listingText = "", siteHosts = [], listingHosts = [], sitePages = null, listingPages = null } = {}) => {
   const hosts = { siteHosts, listingHosts };
-  const site = ticketPriceOn(siteText);
-  if (pricesAdmission(site)) return { ...site, ...hosts, from: "official-site", why: "the operator's own page states it" };
-  const listing = ticketPriceOn(listingText);
-  if (pricesAdmission(listing)) return { ...listing, ...hosts, from: "listing", why: "a ticket shop or calendar states it and the operator's own page does not" };
+  const site = readPages(sitePages, siteText);
+  if (pricesAdmission(site.got)) return { ...site.got, ...hosts, host: site.host, from: "official-site", why: "the operator's own page states it" };
+  const listing = readPages(listingPages, listingText);
+  if (pricesAdmission(listing.got)) return { ...listing.got, ...hosts, host: listing.host, from: "listing", why: "a ticket shop or calendar states it and the operator's own page does not" };
   // ── AND THIS IS THE ORDER THAT FIXES THE FOOD FESTIVAL CASE ──────
   // The operator's page carried ONLY the IDA-members rate, so it no longer wins
   // outright, and the agent's page carries the table anyone can buy from. His
   // hierarchy is untouched: the operator still outranks the reseller on any
   // price they BOTH state. It stops outranking it on a price it does not state.
-  const only = site || listing;
-  if (only) return { ...only, ...hosts, from: site ? "official-site" : "listing", why: "the only prices on the page are concession rates" };
+  const only = site.got || listing.got;
+  if (only) return { ...only, ...hosts, host: site.got ? site.host : listing.host, from: site.got ? "official-site" : "listing", why: "the only prices on the page are concession rates" };
   return null;
 };
 
@@ -1246,7 +1284,13 @@ const moneyText = (p) => `${p.lo}${p.hi !== p.lo ? ` to ${p.hi}` : ""} ${String(
 // phrase when it did not. A host is the difference between a finding he can
 // act on and one he can only wonder about: "akkc.dk states 280 DKK" is
 // checkable in one click, "a ticket shop states 280 DKK" is not.
-const whoSaid = (from, found = null) => {
+export const whoSaid = (from, found = null) => {
+  // ── THE PAGE THAT ANSWERED, WHEN THE READ KNOWS IT ────────────────
+  // findTicketPrice reads the pages one at a time when it is given them, so the
+  // host is exact rather than "the first of the ones we read". The hedge below
+  // is what happens when it was handed a blob and genuinely cannot tell.
+  const exact = String(found?.host || "").trim();
+  if (exact) return exact;
   const hosts = from === "official-site" ? found?.siteHosts : found?.listingHosts;
   const named = (Array.isArray(hosts) ? hosts : []).filter(Boolean);
   if (named.length) return named.length === 1 ? named[0] : `${named[0]} (of ${named.length} pages read)`;

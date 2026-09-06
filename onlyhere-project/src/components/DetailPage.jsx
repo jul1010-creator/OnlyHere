@@ -18,7 +18,7 @@ import { ReviewsSection } from "./ReviewsSection";
 import { ArticleFeedback } from "./ArticleFeedback";
 import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
-import { bookingUrl, airbnbUrl, STAY_DISCLOSURE, ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote } from "../utils/affiliates";
+import { bookingUrl, airbnbUrl, STAY_DISCLOSURE, ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote, isWegotripUrl } from "../utils/affiliates";
 import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl } from "../utils/ticketLink";
 import { offerView, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
 import { saveLabel, saveHint, planFromSavedLabel } from "../utils/savedTrip";
@@ -721,6 +721,30 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             .gx-fig-right { float: right; clear: right; width: 44%; margin: 4px 0 16px 22px; }
             .gx-fig-left  { float: left;  clear: left;  width: 44%; margin: 4px 22px 16px 0; }
           }
+          /* ── AND THE ONE BLOCK THAT CANNOT REFLOW ──────────────────
+             Oliver, 6 Sep 2026, on /#/town/copenhagen: "the instagram reel here
+             is completely hidden inbetween an image."
+
+             Measured in his browser rather than guessed. That page's body ends
+
+               … 7 prose · 8 figure(right) · 9 INSTAGRAM
+
+             and the embed's own element carries no class, so it had no float
+             and no clear while the figure beside it floated right at 44%. The
+             embed was being laid out in the channel left over.
+
+             PROSE IS SUPPOSED TO DO THAT. Text wrapping around a picture is the
+             whole point of the float, and a paragraph, a heading and a bullet
+             list all reflow into whatever width is left. An Instagram embed
+             does not: it is a fixed media card holding an iframe with a minimum
+             width of its own, so a 56% channel either squeezes it or clips it,
+             and on a phone-width column there is no channel at all.
+
+             So it clears both sides, which is the same thing ::after below does
+             for the end of the body — and the reason the bug existed is that
+             ::after runs AFTER the embed, making the last block the one block
+             guaranteed to land beside the last picture. */
+          .gx-embed { clear: both; }
           .gx-body::after { content: ""; display: block; clear: both; }
         `}</style>
         {item.blogBody && item.blogBody.length > 0 && (
@@ -731,7 +755,13 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                   {block.items.map((it, j) => <li key={j} style={{ marginBottom: 4 }}>{it}</li>)}
                 </ul>
               ) : block.type === "instagram" ? (
-                <InstagramEmbed key={i} url={block.url} />
+                // Wrapped rather than given the class inside InstagramEmbed:
+                // that component is also rendered by BlogBody.jsx on the
+                // nightlife-town page, which has no floats and no .gx-body, and
+                // a clear it does not need is a rule that reads as required.
+                <div key={i} className="gx-embed">
+                  <InstagramEmbed url={block.url} />
+                </div>
               ) : block.type === "video" ? (
                 <div key={i} className={`gx-fig gx-fig-${block._side || "right"}`} style={{ marginBottom: 16 }}>
                   <video src={block.src} controls playsInline preload="metadata" style={{ width: "100%", aspectRatio: "4 / 3", objectFit: "contain", borderRadius: 14, display: "block", background: "#000" }} />
@@ -1017,7 +1047,12 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             in that state, so nothing claims a commission that is not earned. */}
         {(() => {
           const dest = String(item?.__audio?.url || "").trim();
-          if (!/^https:\/\/(?:[a-z0-9-]+\.)*wegotrip\.com\//i.test(dest)) return null;
+          // isWegotripUrl rather than a fourth hand-written host regex. This
+          // file had its own, studioContent had none and costLedger had a bare
+          // scheme test, which is three answers to one question. The scheme is
+          // still asked here, because isWegotripUrl accepts http and an anchor
+          // on a public page should not.
+          if (!/^https:\/\//i.test(dest) || !isWegotripUrl(dest)) return null;
           const count = Number(item.__audio.count) || 1;
           const title = String(item.__audio.title || "").trim();
           const town = String(item.__audio.town || "").trim() || item.name;

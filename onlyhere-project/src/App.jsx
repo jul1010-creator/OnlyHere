@@ -47,7 +47,7 @@ import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filt
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, appearances, otherDatesHere, alsoPlayingLine, describeAppearances, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured, TICKET_HUNT_PROMPT, ticketHuntUrls } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT, correctionLanded, describeCorrection } from "./utils/factCheckRead";
-import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, launderedAbsence, priceSource, priceMisses, findTicketPrice, ticketPriceOn, pricesAdmission, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit, LIVING_TYPES, VENUE_KINDS, UNCONFIRMED_IDENTITY, UNVERIFIED_PROSE } from "./utils/entryAudit";
+import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, launderedAbsence, priceSource, priceMisses, findTicketPrice, whoSaid, ticketPriceOn, pricesAdmission, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit, LIVING_TYPES, VENUE_KINDS, UNCONFIRMED_IDENTITY, UNVERIFIED_PROSE } from "./utils/entryAudit";
 import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM, upgradeWorthIt, onFootMinutes } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems, travellerBudget, budgetTierMismatch } from "./utils/accommodation";
@@ -137,6 +137,8 @@ import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverS
 import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn, danishAddressIn } from "./utils/regions";
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
 import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoice";
+import { hashForTab, tabForHash, ownsTheAddress } from "./utils/tabUrl";
+import { venueVerdict, venueVia, describeVenue, VENUE_MAX_KM } from "./utils/venueMatch";
 import { cityFromLocation } from "./utils/guideEnrichment";
 import { readBrief, briefBlock, nextAsks, buildBlockedNote } from "./utils/tripBrief";
 import { askedBeforeTurns, lastAskedOnScreen } from "./utils/directAnswer";
@@ -167,6 +169,7 @@ import { briefThemes , essentialsForTrip, essentialsBlock, fitsBrief, preference
 import { partnerDisclosure, linkLabel, affiliateHref } from "./utils/affiliates";
 import { sweepPlan, describeSweepPlan, ticketProposal, describeTicketFindings, affiliateWriteFor, agentLabel, FOUND as AFF_FOUND, RESWEEP_DAYS } from "./utils/affiliateSweep";
 import { wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO } from "./utils/wegotripMatch";
+import { CHECKED_ON as WEGO_CHECKED_ON, WEGOTRIP_SOURCE } from "./data/wegotrip";
 import { wegotripActive } from "./utils/affiliates";
 // ── "SOME THINGS ARE ESSENTIALS WHILE OTHERS ARE TIPS" ──────────────
 // Oliver, 30 Aug 2026. See utils/essentialKind.js: the categories were never
@@ -802,7 +805,23 @@ function GemlyxApp() {
   }, []);
   // null when the published library loaded, a string saying why when it did not.
   const [libraryFailed, setLibraryFailed] = useState(null);
-  const [active, setActive] = useState("home");
+  // ── THE PAGE COMES FROM THE ADDRESS, AND GOES BACK INTO IT ────────
+  //
+  // Oliver, 6 Sep 2026, four screenshots of four different pages all showing
+  // "#/nightlife/theaarhusriverfront": "Pages should have their individual ..
+  // but they don't. After being into Aarhus bar street, it just stays."
+  //
+  // Nothing but the entry effect had ever written an address, so the hash from
+  // the last entry opened survived every tab he moved to afterwards. Reading
+  // the tab out of the address here is the other half of the same fix, and it
+  // is what makes a page shareable at all: #events now opens Events.
+  //
+  // The lazy initialiser, not an effect, so the first paint is already the
+  // right page. An effect would paint Explore and then jump.
+  const [active, setActive] = useState(() => {
+    if (typeof window === "undefined") return "home";
+    return tabForHash(window.location.hash) || "home";
+  });
   const [shopTab, setShopTab] = useState("shops");
   const [selectedCity, setSelectedCity] = useState(cities[0]);
   const [category, setCategory] = useState("All");
@@ -2853,6 +2872,11 @@ Say which answer came from which source, so a fact from a vouched page and a fac
     // Why the coordinate was refused, so the note below can say it. Empty when
     // Google simply had nothing, which is a different fact.
     let placesRefused = "";
+  // ── AND THE LISTING ITSELF, NOT ONLY THE SENTENCE ABOUT IT ────────
+  // Pass one throws away a listing whose name is not the drafted name, which is
+  // right and stays right. It kept only a sentence, so the second attempt could
+  // not ask the different question a venue deserves. See utils/venueMatch.js.
+  let refusedListing = null;
     // ── WHERE IT IS, BEFORE ANYTHING IS SEARCHED ──────────────────────
     //
     // Oliver, 13 Aug 2026: "So when doing research, make maps be one of the
@@ -3008,6 +3032,12 @@ Say which answer came from which source, so a fact from a vouched page and a fac
             if (pd.town && !draftTown) draftTown = pd.town;
           } else if (placesOk) {
             placesRefused = describeListingRefusal(name, draftTown, pd.name || pd.address);
+            // `pd.name` only, never `pd.name || pd.address`: venueCore refuses
+            // an address on purpose, because looking for "Vardevej 1" in the
+            // research matches the contact block of everything on that road.
+            if (String(pd.name || "").trim()) {
+              refusedListing = { name: String(pd.name).trim(), town: String(pd.town || "").trim(), lat: pd.lat, lon: pd.lon };
+            }
           }
         } catch { /* named in the log below, never fatal: a draft with no coordinate still runs */ }
       }
@@ -3497,6 +3527,72 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // scopes them, and well before the frozen facts, so the nearest stop gets
       // looked up from a real coordinate. Placing it after the draft would have
       // been easier and would have fixed nothing that matters.
+      // ── THE VENUE PASS ONE REFUSED, ASKED ABOUT DIFFERENTLY ─────────
+      //
+      // Read off twelve run logs, 5 Sep 2026: "Where this place is" came back
+      // empty on nine of eleven runs, and the listings being thrown away were
+      // MCH Messecenter Herning for the Danish Travel Show, Bellahøj Hallerne
+      // for Bellahøj Kræmmermarked and Vikingebyen for Sebbersund
+      // Vikingemarked. Five drafts ended completely unplaced, every one of them
+      // then had "every place-scoped source is left out", and "no transit
+      // itinerary was measured" appeared fourteen times.
+      //
+      // Pass one is not wrong and is not loosened. A listing whose name is not
+      // the drafted name is not the drafted place, and accepting one on a shared
+      // town is how Rungsted Festival became Ringsted. This asks the OTHER
+      // question, here, where the pages have been read: is that listing the
+      // place this is held at, according to the research we now have.
+      //
+      // FIRST, BEFORE THE POSTCODE TIER, for two reasons. It is free, where the
+      // postcode tier geocodes. And it lands on Google's own point for the
+      // building, where a postcode lands on the middle of a postal district and
+      // marks itself imprecise.
+      if (!placed && refusedListing) {
+        try {
+          // The distance is measured here and handed in as a number, so the
+          // rule stays pure. townPointFor holds 34 towns and misses most of the
+          // ones in these runs, so null is the common case: venueMatch treats
+          // that as "no cross-check available" and asks for more mentions
+          // instead, rather than reading a missing distance as zero.
+          const centre = draftTown ? townPointFor(draftTown) : null;
+          const kmFromTown = centre && Number.isFinite(refusedListing.lat)
+            ? haversineKm({ lat: centre.lat, lon: centre.lon }, { lat: refusedListing.lat, lon: refusedListing.lon })
+            : null;
+          const verdict = venueVerdict(refusedListing, { town: draftTown, text: context, kmFromTown });
+          if (verdict.ok) {
+            const coords = { lat: refusedListing.lat, lon: refusedListing.lon };
+            // precise: a venue IS where the event happens, so a walking time
+            // measured from it is real. What it is NOT is the event's own
+            // listing, and `via` says so rather than claiming the stronger
+            // thing.
+            placed = { ...coords, precise: true, via: venueVia(verdict), region: regionAt(coords.lat, coords.lon), kommune: kommuneNameAt(coords.lat, coords.lon) };
+            // THE NAME IS NOT TAKEN. placesName feeds the relevance filter, and
+            // renaming Danish Travel Show to MCH Messecenter Herning would send
+            // every later check looking for the hall instead of the fair. The
+            // town is taken, because that is the thing the draft was missing.
+            if (refusedListing.town && !draftTown) draftTown = refusedListing.town;
+          }
+          note("Where this place is, the venue", {
+            provider: "google",
+            detail: "the listing pass one refused, tested against the research instead of against the name",
+            outcome: verdict.ok ? "ok" : "empty",
+            used: verdict.ok,
+            got: verdict.ok
+              ? `${placed.lat.toFixed(4)}, ${placed.lon.toFixed(4)} from "${verdict.core}", ${describeRegion(placed.lat, placed.lon, true)}`
+              : describeVenue(verdict),
+            why: verdict.ok
+              ? describeVenue(verdict)
+              : `A venue is accepted only when the research names it, and refused past ${VENUE_MAX_KM} km from the town. Refusing costs a weaker draft; accepting the wrong one costs a draft about the wrong place.`,
+          });
+          ui(setStudioPlaced, placed);
+        } catch (e) {
+          note("Where this place is, the venue", {
+            provider: "google", detail: "testing the refused listing against the research", outcome: "failed", used: false,
+            why: String(e?.message || e).slice(0, 160),
+            got: "the venue check threw, so the postcode tier below still runs",
+          });
+        }
+      }
       if (!placed) {
         try {
           const found = danishAddressIn(context);
@@ -4469,6 +4565,14 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
       // listing", which is the same unactionable shape as "a source was
       // blocked" that the scan log already fixed.
       const listingDomains = [];
+      // ── AND THE TEXT PER PAGE, NOT ONLY THE HOSTS ─────────────────
+      // listingDomains records WHICH pages were read; these record what each
+      // one SAID. findTicketPrice reads them one at a time so it can name the
+      // page that carried a figure, instead of the caller printing hosts[0] and
+      // putting the Roskilde Viking Ship Museum under a price for a market near
+      // Nibe. The blobs are still built, because everything else reads those.
+      const sitePages = [];
+      const listingPages = [];
       // Ticket pages a hunt named and no reader could stand up. They price
       // nothing and date nothing; they are kept only so a working buy link is
       // not thrown away with the failed read. See the note at the hunt.
@@ -5101,6 +5205,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
                 // calendar" with no host is the unactionable shape the run log
                 // was rebuilt to stop.
                 listingSiteText += ` ${scanData.text}`;
+                listingPages.push({ host: domainOf(url), text: scanData.text });
                 if (!listingDomains.includes(domainOf(url))) listingDomains.push(domainOf(url));
                 if (tier === "other") notOperator.push(domainOf(url));
               } else {
@@ -5108,6 +5213,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
                 // the hours reconciliation below has the site's own words to read
                 // rather than a blob that also contains Tavily and Perplexity.
                 scrapedSiteText += ` ${scanData.text}`;
+                sitePages.push({ host: domainOf(url), text: scanData.text });
                 // ── AND "OFFICIAL" MEANS THE HOST, NOT THE HEADLINE ──
                 // Oliver's run log, 12 Aug 2026, step 16:
                 //
@@ -5204,6 +5310,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
             if (tData.text) {
               pagesByUrl[l.href] = tData.text;
               listingSiteText += ` ${tData.text}`;
+              listingPages.push({ host: domainOf(l.href), text: tData.text });
               if (!listingDomains.includes(domainOf(l.href))) listingDomains.push(domainOf(l.href));
               if (!candidateUrls.includes(l.href)) candidateUrls.push(l.href);
               context += `\nTHE TICKET AGENT THE OPERATOR LINKS TO (${domainOf(l.href)}), reached from a "${(l.text || "tickets").slice(0, 40)}" link on ${domainOf(l.from)}. This is where the tickets are actually sold, so it is the authority on the PRICE and on what is still buyable. It is NOT the operator and may not be called the official site. Attribute it in uncertainties, never inside a glance field: ${tData.text.slice(0, 2200)}`;
@@ -5233,7 +5340,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
         // discarded with a line saying so. Nothing a model TYPED can reach the
         // draft as a price: the model finds the door, the code checks it opens.
         {
-          const priced = findTicketPrice({ siteText: scrapedSiteText, listingText: listingSiteText });
+          const priced = findTicketPrice({ siteText: scrapedSiteText, listingText: listingSiteText, sitePages, listingPages });
           // ── "A SWEEP FIX ON ALL THE FREE" ──────────────────────
           //
           // Oliver, 27 Aug 2026: "Legoland is obviously not a free entrance,
@@ -5358,6 +5465,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
                   if (hData.text && real) {
                     pagesByUrl[u] = hData.text;
                     listingSiteText += ` ${hData.text}`;
+                    listingPages.push({ host: domainOf(u), text: hData.text });
                     if (!listingDomains.includes(domainOf(u))) listingDomains.push(domainOf(u));
                     if (!candidateUrls.includes(u)) candidateUrls.push(u);
                     context += `\nA TICKET PAGE FOUND BY ASKING WHERE THIS EVENT'S TICKETS ARE SOLD (${domainOf(u)}). Its price was read by this pipeline off the page itself, not stated by a model. It is a ticket shop and NOT the operator, so it may price and date this event and may never be called the official site: ${hData.text.slice(0, 2200)}`;
@@ -6482,6 +6590,9 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         const priceOpts = {
           siteText: scrapedSiteText, listingText: listingSiteText,
           siteHosts: [...new Set(officialHosts)], listingHosts: [...new Set(listingDomains)],
+          // The pages themselves, so the finding can name the one that carried
+          // the figure rather than the first host in the list.
+          sitePages, listingPages,
         };
         // ── AND A FOOD HALL HAS NO DOOR ─────────────────────────
         //
@@ -6523,9 +6634,16 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         //
         // A found price the draft is missing is not an empty result. It is a
         // finding, and it now says so where he is looking.
-        const priceFrom = (w) => (w.from === "official-site"
-          ? (w.siteHosts?.[0] || "the operator's own page")
-          : (w.listingHosts?.[0] || "a ticket shop or calendar"));
+        // ── ONE ANSWER TO "WHO SAID IT", NOT TWO ──────────────────
+        //
+        // This was a local copy that printed hosts[0], the FIRST host read,
+        // never the one that carried the figure, and it put vikingeskibsmuseet.dk
+        // under a Sebbersund price on the most actionable line in a 49-step run.
+        // entryAudit's whoSaid already knew how to answer honestly and already
+        // hedged when it could not tell; the two have been one function since
+        // 6 Sep 2026, and findTicketPrice now reads the pages one at a time so
+        // there is usually nothing to hedge about.
+        const priceFrom = (w) => whoSaid(w.from, w);
         note(`What the pages say a ticket costs${suffix}`, {
           provider: "fetch",
           detail: "the operator's own page first, then a ticket shop or calendar, per the source order",
@@ -9313,6 +9431,51 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
     return { rows };
   };
 
+  // ── READ, MERGE, WRITE. NEVER WRITE A SNAPSHOT BACK ───────────────
+  //
+  // Both sweeps below used to PATCH the whole payload they had read at the
+  // count. An adversarial review found what that costs: the count happens once,
+  // the paid run takes minutes, and there are two Add buttons. Add the WeGoTrip
+  // links, then add the ticket links, and the second write puts the payload
+  // back as it was before the first, silently undoing it. Any edit made in
+  // Studio during the run goes the same way. gemlyx_content has no versioning,
+  // no audit log and no soft delete, so none of that is recoverable.
+  //
+  // So a proposal carries only the keys it changes and this re-reads the row
+  // immediately before merging them in. One extra Supabase GET per written row,
+  // which costs nothing, against a class of silent data loss that does.
+  //
+  // return=representation rather than minimal, for the reason the date sweep
+  // already gives: with minimal, a row deleted between the count and the write
+  // answers 204 and is counted as added.
+  const patchRowPayload = async (id, set) => {
+    const rowId = Number(id);
+    if (!Number.isFinite(rowId) || !set || !Object.keys(set).length) return { ok: false, why: "nothing to write" };
+    const read = async (token) => fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${rowId}&select=payload`, { headers: { ...sweepHeaders(), ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
+    let got = await read(studioSession?.access_token);
+    if (got.status === 401) { const fresh = await refreshStudioSession(); if (fresh) got = await read(fresh.access_token); }
+    if (!got.ok) return { ok: false, why: `could not re-read (${got.status})` };
+    const rows = await got.json().catch(() => null);
+    if (!Array.isArray(rows) || !rows.length) return { ok: false, why: "the row is gone" };
+    const merged = { ...(rows[0].payload || {}), ...set };
+    const attempt = (token) => fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${rowId}`, {
+      method: "PATCH",
+      headers: { ...sweepHeaders(), Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=representation" },
+      body: JSON.stringify({ payload: merged }),
+    });
+    let res = await attempt(studioSession?.access_token);
+    if (res.status === 401) { const fresh = await refreshStudioSession(); if (fresh) res = await attempt(fresh.access_token); }
+    const back = await res.json().catch(() => null);
+    if (!res.ok) return { ok: false, why: String(res.status) };
+    if (!Array.isArray(back) || !back.length) return { ok: false, why: "the row was not there to update" };
+    // The panel above this one reads manageItems, and every other single-row
+    // write in Studio patches it. Without this the Affiliates panel still says
+    // "no link at all" for a row that now has one, and the page opened in the
+    // same session shows no button, which reads as the sweep having failed.
+    setManageItems(prev => (prev || []).map(r => (r.id === rowId ? { ...r, payload: merged } : r)));
+    return { ok: true, payload: merged };
+  };
+
   // ── STEP ONE, AND IT COSTS NOTHING ────────────────────────────────
   //
   // The classification is free: has this row a link, is that link bookable,
@@ -9336,9 +9499,13 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       // FREE, so it runs here rather than behind the paid button. No search, no
       // scrape, no model: twenty catalogue rows matched by name against the
       // library already in hand. See utils/wegotripMatch.js.
-      const wego = wegotripProposals(got.rows, { today: new Date() });
+      // wraps and wegotripLive injected for the reason affiliateAudit injects
+      // isBookable: one judgement, one place. Without them the sweep proposed
+      // replacing an earning Tiqets link with a WeGoTrip link that earns
+      // nothing, pre-ticked, on the two rows that are on both.
+      const wego = wegotripProposals(got.rows, { today: new Date(), wraps: affiliateHref, wegotripLive: wegotripActive() });
       setAffWego({ list: wego, summary: describeWegotrip(wego, got.rows) });
-      setWegoChosen(new Set(wego.map(p => p.id)));
+      setWegoChosen(new Set(wego.filter(p => !p.blocked).map(p => p.id)));
     } catch (err) {
       setAffPlan({ error: String(err?.message || err).slice(0, 200) });
     }
@@ -9356,27 +9523,30 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
   // other is "accept what the catalogue already knew". Sharing a button would
   // make one tick stand for both.
   const applyWegotripSweep = async () => {
-    const list = (affWego?.list || []).filter(p => wegoChosen.has(p.id));
+    // `blocked` is a report, not an offer: it is a row whose existing link
+    // already earns while WeGoTrip's template is empty. It carries no `set`,
+    // and filtering it here as well as leaving it untickable is deliberate
+    // belt and braces on the one press that cannot be undone.
+    const list = (affWego?.list || []).filter(p => !p.blocked && p.set && wegoChosen.has(p.id));
     if (!list.length) return;
     setWegoWriting({ done: 0, total: list.length, failed: [] });
     const failed = [];
     for (let i = 0; i < list.length; i++) {
       const w = wegotripWriteFor(list[i]);
       try {
-        const attempt = (token) => fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${encodeURIComponent(String(w.id))}`, {
-          method: "PATCH",
-          headers: { ...sweepHeaders(), "Content-Type": "application/json", Prefer: "return=minimal" },
-          body: JSON.stringify({ payload: w.payload }),
-        });
-        let res = await attempt(studioSession?.access_token);
-        if (res.status === 401) { const fresh = await refreshStudioSession(); if (fresh) res = await attempt(fresh.access_token); }
-        if (!res.ok) failed.push(`${list[i].name}: ${res.status}`);
+        const out = await patchRowPayload(w.id, w.set);
+        if (!out.ok) failed.push(`${list[i].name}: ${out.why}`);
       } catch (err) { failed.push(`${list[i].name}: ${String(err?.message || err).slice(0, 60)}`); }
       setWegoWriting({ done: i + 1, total: list.length, failed: [...failed] });
       await new Promise(r => setTimeout(r, 200));
     }
     if (failed.length < list.length) { await refreshLiveContent(); bumpLiveContent(v => v + 1); }
-    showToast(`🎧 ${list.length - failed.length} WeGoTrip link${list.length - failed.length === 1 ? "" : "s"} added`, 3200);
+    // The proposals were built from a snapshot this has now changed. Clearing
+    // them is the honest state: a table describing rows as they were before the
+    // press is not a review of anything, and leaving it on screen beside a
+    // second Add button is how the two writers overwrote each other.
+    setAffWego(null); setWegoChosen(new Set());
+    showToast(`🎧 ${list.length - failed.length} WeGoTrip link${list.length - failed.length === 1 ? "" : "s"} added. Press Count them again for a fresh table.`, 3600);
   };
 
   const runAffiliateSweep = async () => {
@@ -9391,20 +9561,25 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       const name = rows[i].name;
       const town = rows[i].town || "";
       const results = [];
+      // COUNTED, NOT SWALLOWED. See the FAILED verdict in affiliateSweep.js: a
+      // quota or a rate limit part-way through a sweep looks exactly like
+      // "nobody sells tickets to this", and recording it as one hides the row
+      // for ninety days.
+      let failed = 0;
       for (const q of ticketQueries(name, town)) {
         try {
           const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
           const data = await res.json();
-          if (!res.ok || data.error) continue;
+          if (!res.ok || data.error) { failed += 1; continue; }
           for (const r of data.results || []) results.push({ url: r.url, snippet: `${r.title || ""} ${r.snippet || r.content || ""}` });
           // Stop at the first query that yields something this gate would take.
           // The second search is only worth paying for when the first found
           // nothing usable, which is the same order the draft pipeline uses.
           if (pickTicketUrl(results, { name, town })) break;
-        } catch { /* one query failing is not a reason to lose the sweep */ }
+        } catch { failed += 1; }
         await new Promise(r => setTimeout(r, 150));
       }
-      if (row) list.push(ticketProposal(row, results, { today: new Date() }));
+      if (row) list.push(ticketProposal(row, results, { today: new Date(), failed }));
       setAffRunning({ done: i + 1, total: rows.length, name });
     }
     setAffRunning(null);
@@ -9424,7 +9599,11 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
   // find an answer for, so it says so on the button.
   const applyAffiliateSweep = async () => {
     const found = (affSweep?.list || []).filter(p => p.verdict === AFF_FOUND && affChosen.has(p.id));
-    const noes = (affSweep?.list || []).filter(p => p.verdict !== AFF_FOUND);
+    // ── AND A ROW WHOSE SEARCH FAILED IS NOT A NO ─────────────────
+    // `p.set` is the gate rather than the verdict name, because a FAILED
+    // proposal is built without one: there is nothing to write and nothing that
+    // could accidentally write it. See affiliateSweep.js.
+    const noes = (affSweep?.list || []).filter(p => p.verdict !== AFF_FOUND && p.set);
     const list = [...found, ...noes];
     if (!list.length) return;
     setAffWriting({ done: 0, total: list.length, failed: [] });
@@ -9432,17 +9611,11 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
     for (let i = 0; i < list.length; i++) {
       const w = affiliateWriteFor(list[i]);
       try {
-        // PAYLOAD ONLY. This sweep changes what a row links to, never what a
-        // row IS, so no type is sent and a whole class of mistake cannot be
-        // made here.
-        const attempt = (token) => fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${encodeURIComponent(String(w.id))}`, {
-          method: "PATCH",
-          headers: { ...sweepHeaders(), "Content-Type": "application/json", Prefer: "return=minimal" },
-          body: JSON.stringify({ payload: w.payload }),
-        });
-        let res = await attempt(studioSession?.access_token);
-        if (res.status === 401) { const fresh = await refreshStudioSession(); if (fresh) res = await attempt(fresh.access_token); }
-        if (!res.ok) failed.push(`${list[i].name}: ${res.status}`);
+        // PAYLOAD ONLY, and only the keys that changed. This sweep changes what
+        // a row links to, never what a row IS, so no type is sent and a whole
+        // class of mistake cannot be made here.
+        const out = await patchRowPayload(w.id, w.set);
+        if (!out.ok) failed.push(`${list[i].name}: ${out.why}`);
       } catch (err) { failed.push(`${list[i].name}: ${String(err?.message || err).slice(0, 60)}`); }
       setAffWriting({ done: i + 1, total: list.length, failed: [...failed] });
       await new Promise(r => setTimeout(r, 200));
@@ -9452,7 +9625,9 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
     // saying nine landed when two 409'd is the one line he would believe.
     const lost = found.filter(x => failed.some(f => f.startsWith(`${x.name}:`))).length;
     const added = found.length - lost;
-    showToast(`🎫 ${added} ticket link${added === 1 ? "" : "s"} added${noes.length ? `, ${noes.length} stamped as asked` : ""}`, 3200);
+    const couldNotAsk = (affSweep?.list || []).filter(p => !p.set && p.verdict !== AFF_FOUND).length;
+    setAffSweep(null); setAffChosen(new Set());
+    showToast(`🎫 ${added} ticket link${added === 1 ? "" : "s"} added${noes.length ? `, ${noes.length} stamped as asked` : ""}${couldNotAsk ? `, ${couldNotAsk} left alone because the search failed` : ""}`, 3600);
   };
 
   const runWaitingSweep = async () => {
@@ -14644,6 +14819,58 @@ If the conversation only covers a single day or a few stops with no explicit day
     setSlideDir(b > a ? "next" : b < a ? "prev" : null);
     setActive(id);
   };
+  // ── A SHARED PAGE LINK GOES TO THE PAGE ───────────────────────────
+  //
+  // Reading the tab out of the address is only half of making one shareable:
+  // without this, #events sets the tab correctly and the reader still meets the
+  // front door with Events waiting behind it. Same call the deep-link effect
+  // makes for a shared entry, and the same reason it gives: "a shared link goes
+  // straight to the entry, not the front door."
+  //
+  // ONCE, on arrival. Pressing Explore later must not re-open anything, and the
+  // ref is what keeps this an arrival rule rather than a standing one.
+  const tabLinkDone = useRef(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || tabLinkDone.current) return;
+    tabLinkDone.current = true;
+    if (tabForHash(window.location.hash)) setEntered(true);
+  }, []);
+
+  // ── AND THE ADDRESS FOLLOWS THE PAGE ──────────────────────────────
+  //
+  // DECLARED HERE, BELOW `entered`, AND NOT BESIDE THE ENTRY PUSHER IT
+  // COMPLEMENTS. A dependency array is evaluated where it is written, and
+  // `entered` is a const about a thousand lines further down: reading it from
+  // up there is what took the entire front page out once already, on every
+  // render, with "Cannot access 'entered' before initialization".
+  //
+  // The other half of the effect above. Runs when the page changes AND when an
+  // entry closes, which is what clears a stale "#/nightlife/..." rather than
+  // leaving it in the bar while the reader is three pages away.
+  //
+  // replaceState, not push. Back already means "close what is open" and the
+  // pager swipes through pages one drag at a time; pushing would bury the entry
+  // history under a page per swipe and make Back walk sideways instead of out.
+  //
+  // TWO ADDRESSES ARE NOT OURS. An open entry owns the hash while it is open,
+  // and #studio decides whether Studio mounts at all, so replacing it would
+  // throw him out of Studio mid-edit. And a reader on /denmark/ribe has a real
+  // path already; a hash on top of it is the "same page wearing two addresses"
+  // the entry effect above spells out.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // Not while the front door is still up: the address should name what is
+    // on screen, and the landing is not a page in TAB_ORDER.
+    if (!entered || openEntryNow) return;
+    if (isEntryUrl(window.location.pathname)) return;
+    if (!ownsTheAddress(window.location.hash)) return;
+    const want = hashForTab(active);
+    if (want && window.location.hash !== want) {
+      window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}${want}`);
+    }
+  }, [active, openEntryNow, entered]);
+
+
   const stripRef = useRef(null);
   // Declared up here rather than beside the swipe listeners, because the
   // park-on-every-render effect below reads it and a ref read above its own
@@ -18081,18 +18308,39 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           go in ticketUrl like any other agent. */}
                       {affWego?.list?.length > 0 && (
                         <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "11px 12px", marginBottom: 10 }}>
-                          <div style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, marginBottom: 3 }}>🎧 WeGoTrip, free to check</div>
+                          <div style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, marginBottom: 3 }}>
+                            🎧 WeGoTrip, free to check
+                            {/* The one maintenance action a hand-checked list
+                                has. A product that disappears leaves a dead
+                                link on a public card, so the date is on screen
+                                and the page it was read off is one press away
+                                rather than a path in a comment. */}
+                            <a href={WEGOTRIP_SOURCE} target="_blank" rel="noreferrer"
+                              style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 500, color: C.muted, textDecoration: "underline" }}>
+                              catalogue read {WEGO_CHECKED_ON} ↗
+                            </a>
+                          </div>
                           <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.55, marginBottom: 8 }}>{affWego.summary}</div>
                           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                             {affWego.list.map(p => {
-                              const on = wegoChosen.has(p.id);
+                              const on = !p.blocked && wegoChosen.has(p.id);
                               return (
                                 <div key={`w-${p.id}`} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
-                                  <input type="checkbox" checked={on} disabled={!!wegoWriting}
-                                    onChange={() => setWegoChosen(prev => { const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; })}
-                                    style={{ marginTop: 3, accentColor: C.gold, cursor: "pointer" }} />
+                                  {/* A row that must not change has no tick
+                                      rather than an unticked one, the same rule
+                                      the waiting sweep follows: an
+                                      unanswerable row is reported, never
+                                      offered. Here it is stronger than a style
+                                      choice, because the thing being refused is
+                                      trading a link that earns for one that
+                                      does not. */}
+                                  {p.blocked ? <span style={{ width: 13, flexShrink: 0 }} /> : (
+                                    <input type="checkbox" checked={on} disabled={!!wegoWriting}
+                                      onChange={() => setWegoChosen(prev => { const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; })}
+                                      style={{ marginTop: 3, accentColor: C.gold, cursor: "pointer" }} />
+                                  )}
                                   <div style={{ minWidth: 0, flex: 1 }}>
-                                    <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>
+                                    <div style={{ fontSize: 12, fontWeight: 700, color: p.blocked ? C.muted : C.text }}>
                                       {p.name}
                                       <span style={{ fontWeight: 500, color: C.muted }}> · {p.kind === WEGO_AUDIO ? "audio walk" : "admission"}</span>
                                     </div>
@@ -18192,9 +18440,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 for, and a reader of the button alone would not
                                 know. The stamp is what stops the next run
                                 paying for the same no. */}
-                            {affSweep.list.some(p => p.verdict !== AFF_FOUND) && (
+                            {affSweep.list.some(p => p.verdict !== AFF_FOUND && p.set) && (
                               <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5 }}>
-                                {affSweep.list.filter(p => p.verdict !== AFF_FOUND).length} with no agent page are stamped as asked either way, so the next sweep skips them for {RESWEEP_DAYS} days.
+                                {affSweep.list.filter(p => p.verdict !== AFF_FOUND && p.set).length} with no agent page are stamped as asked either way, so the next sweep skips them for {RESWEEP_DAYS} days.
+                              </div>
+                            )}
+                            {/* COUNTED APART, because "we asked and were told
+                                no" and "we could not ask" are different facts
+                                and only the first is worth remembering. */}
+                            {affSweep.list.some(p => !p.set && p.verdict !== AFF_FOUND) && (
+                              <div style={{ fontSize: 10.5, color: "#FFB347", lineHeight: 1.5 }}>
+                                {affSweep.list.filter(p => !p.set && p.verdict !== AFF_FOUND).length} could not be searched at all. Nothing is written for those and they stay in the list, so a quota or a rate limit does not get remembered as an answer.
                               </div>
                             )}
                             {affWriting?.failed?.length > 0 && (
@@ -20710,15 +20966,28 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <div style={{ display: "flex", alignItems: "flex-start", gap: 9, background: `${C.gold}12`, border: `1px solid ${C.gold}33`, borderRadius: 10, padding: "10px 13px", marginBottom: 16 }}>
                 <span style={{ fontSize: 13, lineHeight: 1.5, flexShrink: 0 }}>💡</span>
                 <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6 }}>
-                  <b style={{ color: C.gold }}>Tip:</b> ask if the bars take Nightpay.
-                  {nightpayTab && (
-                    <>
-                      {" "}
-                      <span onClick={() => goTab(nightpayTab)} style={{ color: C.gold, fontWeight: 700, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2 }}>
-                        What that is
-                      </span>
-                    </>
-                  )}
+                  {/* ── THE NAME IS THE LINK ──────────────────────────
+                      Oliver, 6 Sep 2026: "put hyperlink on nightpay instead.
+                      And delete the what that is."
+
+                      It read "ask if the bars take Nightpay. What that is",
+                      which is two sentences to offer one thing, and the second
+                      one is not a sentence. The word a reader does not
+                      recognise is the word they would click, so that is what
+                      carries the link.
+
+                      NO ROW, NO LINK, unchanged: Nightpay is a Studio row whose
+                      kind is his to set, and tabForEssential returns nothing
+                      when it is not published anywhere. The tip still shows,
+                      the name is simply plain text, which is the same graceful
+                      fallback as before rather than a link to a page that
+                      cannot explain itself. */}
+                  <b style={{ color: C.gold }}>Tip:</b> ask if the bars take{" "}
+                  {nightpayTab ? (
+                    <span onClick={() => goTab(nightpayTab)} style={{ color: C.gold, fontWeight: 700, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2 }}>
+                      Nightpay
+                    </span>
+                  ) : "Nightpay"}.
                 </div>
               </div>
             );
@@ -22119,7 +22388,30 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
            scrollbar, which at this size is thicker than the text it sits under. */
         .gx-navstrip { scrollbar-width: none; -ms-overflow-style: none; }
         .gx-navstrip::-webkit-scrollbar { display: none; }
-        .gx-topnav-ai { display: none; }
+        /* ── AND THE INLINE STYLE WAS BEATING THIS THE WHOLE TIME ──
+           Oliver, 6 Sep 2026: "On the phone, the burger menu for the navigation
+           is gone." Measured in a real browser at 430px rather than guessed:
+
+             header bar   width 398, scrollWidth 417   → overflowing by 19px
+             logo         16 → 144
+             gx-topnav-ai 152 → 287    display: FLEX   ← should have been none
+             account row  291 → 433                    ← past a 430px screen
+
+           and document.elementFromPoint at the account button's centre returned
+           an SVG path, because the button is off the right edge entirely.
+           onScreen came back false.
+
+           The Detour pill carried display: inline-flex in its inline style AND
+           this class, and an inline style beats a stylesheet rule, so the
+           display: none here has never once applied. 135px of button that was
+           meant to be desktop-only has been pushing the only navigation a phone
+           has off the screen.
+
+           This is the two-owners-of-one-property failure the pager comment
+           spends thirty lines on, in CSS instead of in an effect. One owner: the
+           class decides, and align-items comes with it so the pair cannot be
+           separated again. */
+        .gx-topnav-ai { display: none; align-items: center; }
         @media (min-width: 1024px) {
           .gx-topnav { display: flex; }
           .gx-topnav-ai { display: inline-flex; }
@@ -22633,7 +22925,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           {/* Outside the strip and flexShrink: 0, so nothing can take a pixel
               off it however long the eight labels beside it get. */}
           <button className="gx-topnav-ai" onClick={() => goTab("ai")}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#fff", border: "none", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginLeft: 8, marginRight: 4, whiteSpace: "nowrap", flexShrink: 0, boxShadow: `0 2px 10px ${C.gold}33` }}>
+            /* NO `display` HERE. The .gx-topnav-ai class owns it, and an inline
+               one silently beat the class for as long as this button has
+               existed. Detour is not lost on a phone: it is the gradient row at
+               the top of the menu's Navigate list. */
+            style={{ gap: 6, background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#fff", border: "none", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginLeft: 8, marginRight: 4, whiteSpace: "nowrap", flexShrink: 0, boxShadow: `0 2px 10px ${C.gold}33` }}>
             {NAV_ITEMS.find(item => item.id === "ai")?.label}
           </button>
 

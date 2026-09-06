@@ -8,6 +8,7 @@
 import { normaliseTicketStatus } from "./tickets";
 import { cleanKind } from "./essentialKind";
 import { isBookableTicketUrl } from "./ticketLink";
+import { isWegotripUrl } from "./affiliates";
 import { cleanOffer, offerProblems } from "./offer";
 import { placeCoords } from "./guideEnrichment";
 // PRICE_UNKNOWN, not the literal "See website" this branch used to fall back to:
@@ -574,7 +575,13 @@ export const shapeForLive = (type, t) => {
   // walks, and a "🎫 Book tickets" button over a walking tour of Copenhagen is
   // a label that is not true. The admissions go in ticketUrl through the
   // ordinary gate; the walks live here and get their own button.
-  if (t?.__audio?.url) {
+  // isWegotripUrl, not a truthy check. ticketUrl one block up is validated on
+  // the way in by isBookableTicketUrl, and this had no gate at all: a
+  // hand-edited row could store any address here and the guide's costs list
+  // would print "Listen to a sample ↗ ... on WeGoTrip" over it. Found by an
+  // adversarial review, and it is the same field being asked about three
+  // different ways in three files.
+  if (isWegotripUrl(t?.__audio?.url)) {
     out = { ...out, __audio: {
       url: String(t.__audio.url),
       count: Number(t.__audio.count) || 1,

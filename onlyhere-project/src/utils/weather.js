@@ -1,3 +1,5 @@
+import { dayKey } from "./calendarDay";
+
 // ── "WE ARE ABLE TO PREDICT HOW THE WEATHER IS GONNA BE" ────────────
 //
 // Oliver, 9 Aug 2026: "weather icons need to be more prominent. I have two
@@ -376,7 +378,22 @@ export const weatherChanges = (before, after) => {
 export const dayWeather = async ({ point, date, daysOut, fetchJson }) => {
   if (!point || typeof fetchJson !== "function") return null;
   const source = weatherSourceFor(daysOut);
-  const iso = date instanceof Date ? date.toISOString().slice(0, 10) : String(date || "").slice(0, 10);
+  // ── THE DAY IS A LOCAL DAY, AND toISOString MOVES IT ──────────────
+  //
+  // 6 Sep 2026, auditing every day-string in this codebase after Oliver's
+  // pre-push hook caught the same mistake in the affiliate sweep.
+  //
+  // `date` arrives from tripDayDate → dayPlus → dayStart, and dayStart builds
+  // it with `new Date(y, m - 1, d)`, which is LOCAL midnight. toISOString
+  // converts to UTC first, so in Denmark every trip day was asked about as the
+  // day BEFORE: day one of a trip starting 12 June fetched the normals for
+  // 11 June, all summer, for everyone east of Greenwich.
+  //
+  // dayKey rather than a fourth formatter: it is the exact inverse of dayStart,
+  // lives beside it, and reads getFullYear/getMonth/getDate, which are local by
+  // definition. A string that is already a day is passed through untouched, as
+  // before, because it never went near a Date.
+  const iso = date instanceof Date ? (dayKey(date) || "") : String(date || "").slice(0, 10);
   if (source === NORMALS) {
     const n = await fetchJson(`/api/weather?lat=${point.lat}&lon=${point.lon}&mode=normals&date=${iso}`);
     return weatherBadge({ source: NORMALS, normals: n });

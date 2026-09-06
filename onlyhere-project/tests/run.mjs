@@ -67,6 +67,8 @@ writeFileSync(entry, `
   export { isWegotripUrl, wegotripUrl, wegotripBrowseUrl, wegotripActive, wegotripDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { TOWN_TYPES, townNameOf, audioFor, audioLine, ticketFor, unmatchedProducts, wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO, TICKET as WEGO_TICKET } from ${JSON.stringify(join(root, "src/utils/wegotripMatch.js"))};
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
+  export { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
+  export { venueCore, venueMentions, venueQuote, venueVerdict, venueVia, describeVenue, VENUE_MIN_MENTIONS, VENUE_MIN_MENTIONS_NO_TOWN, VENUE_MAX_KM, NO_NAME as V_NO_NAME, NOT_NAMED as V_NOT_NAMED, TOO_FAR as V_TOO_FAR, IS_AN_EVENT as V_IS_AN_EVENT, OK as V_OK } from ${JSON.stringify(join(root, "src/utils/venueMatch.js"))};
   export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isWegotripTicketUrl } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
@@ -104,7 +106,7 @@ writeFileSync(entry, `
   export { PAID_PLANS_LIVE } from ${JSON.stringify(join(root, "src/config.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
-  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, keepMeasured, isPipelineOwned, MEASURED_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS, feedbackProblem, feedbackRow } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { previewReportRow, travellerTurns, PREVIEW_SAID_CAP, PREVIEW_SCREEN_CAP } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { trimFillerRuns, trimFillerAgainst } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -117,7 +119,7 @@ writeFileSync(entry, `
   export { statedMonths, statedSpan, dateClaimProblems, MONTH_NAMES } from ${JSON.stringify(join(root, "src/utils/dateClaims.js"))};
   export { avatarUrl, avatarFromUser } from ${JSON.stringify(join(root, "src/utils/accountAvatar.js"))};
   export { isFinished, candidates, proposeWaiting, proposals as waitProposals, describeProposals, writeFor, MOVE as WAIT_MOVE, LEAVE as WAIT_LEAVE } from ${JSON.stringify(join(root, "src/utils/undatedSweep.js"))};
-  export { SWEEP_STATE, RESWEEP_DAYS, sweptAt, askedRecently, hasADoor as rowHasADoor, rowState, rowStates, sweepPlan, describeSweepPlan, ticketProposal, describeTicketFindings, affiliateWriteFor, FOUND as AFF_FOUND, NOTHING as AFF_NOTHING } from ${JSON.stringify(join(root, "src/utils/affiliateSweep.js"))};
+  export { SWEEP_STATE, RESWEEP_DAYS, sweptAt, askedRecently, hasADoor as rowHasADoor, rowState, rowStates, sweepPlan, describeSweepPlan, ticketProposal, describeTicketFindings, affiliateWriteFor, FOUND as AFF_FOUND, NOTHING as AFF_NOTHING, FAILED as AFF_FAILED } from ${JSON.stringify(join(root, "src/utils/affiliateSweep.js"))};
   export { TYPES_WITH_A_DOOR } from ${JSON.stringify(join(root, "src/utils/entryPrice.js"))};
   export { WAITING_TYPE, recurrenceIn, waitingReason, waitingPayload, waitingLine, waitingDays, waitingOrder, promoted, isWaiting, prose, lastRunWords, CAN_WAIT, HAS_DATE, NO_EVIDENCE, NEGATION_WINDOW } from ${JSON.stringify(join(root, "src/utils/undatedEvents.js"))};
   export { CONFIRMED, readFactCheck as readFC, describeFactCheck as describeFC } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
@@ -266,7 +268,7 @@ writeFileSync(entry, `
   export { datesFromListings, cityRankOf, cityWanted, CITY_MATCH, CITY_UNKNOWN, CITY_DIFFERENT } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, PRICE_NOT_PUBLISHED, PRICE_UNKNOWN } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { sourceFit, describeSourceFit, LIVING_TYPES } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
-  export { costContradictions, bareOccurrence, questionWordsFor, questionWords, EVERYDAY_WORDS, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, priceMisses, pricesAdmission, NOT_ADMISSION, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { costContradictions, bareOccurrence, questionWordsFor, questionWords, EVERYDAY_WORDS, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, whoSaid, priceMisses, pricesAdmission, NOT_ADMISSION, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 // ── ESBUILD THROUGH ITS NODE API, NOT ITS BINARY ────────────────────
 // This spawned node_modules/.bin/esbuild, located with existsSync. That works
@@ -4204,6 +4206,24 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // 620px column, and stopped at the right-hand edge once each side cleared its
   // own.
   ok("a figure clears the last figure on its own side", /\.gx-fig-right \{ float: right; clear: right;/.test(dp) && /\.gx-fig-left  \{ float: left;  clear: left;/.test(dp));
+  // ── AND THE ONE BLOCK THAT CANNOT WRAP AROUND ONE ──────────────
+  //
+  // Oliver, 6 Sep 2026, on the Copenhagen town page: "the instagram reel here
+  // is completely hidden inbetween an image." Measured in his browser: that
+  // body ends "prose, figure(right), INSTAGRAM", and the embed's element
+  // carried no class, so it was laid out in the 56% channel beside a floated
+  // photograph. Prose is meant to do that. A fixed-width media card holding an
+  // iframe is not.
+  //
+  // ASSERTED AS THE PAIR, because either half alone is useless: a rule nothing
+  // carries, or a class with no rule behind it.
+  ok("an Instagram embed clears the pictures instead of sitting beside one",
+     /\.gx-embed \{ clear: both; \}/.test(dp)
+     && /className="gx-embed"[\s\S]{0,120}?<InstagramEmbed/.test(dp));
+  // And it is the LAST thing before the body's own clear, which is why it was
+  // the one block that could never be rescued by ::after.
+  ok("the body's own clear still runs after everything",
+     dp.indexOf(".gx-embed { clear: both; }") < dp.indexOf(".gx-body::after"));
   ok("a picture that fails takes its caption and credit with it", /closest\("\.gx-fig"\)/.test(dp));
   // The credit is NOT gated on _showCaption. CC BY-SA requires attribution
   // beside the work, and the deduplication above is about the descriptive line.
@@ -7248,6 +7268,54 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     fetchJson: async () => ({ forecast: [{ date: D, temperature_c: 16.4, condition: "rain" }] }) });
   is("a stale deployed API still renders", legacy.temp, 16);
   is("no point, no badge", await dayWeather({ point: null, date: D, daysOut: 1, fetchJson: canned }), null);
+
+  // ── AND THE DAY IT ASKS ABOUT IS THE DAY THE READER MEANS ───────
+  //
+  // 6 Sep 2026, auditing every day-string in the codebase after Oliver's
+  // pre-push hook caught this shape in the affiliate sweep. This one was worse
+  // placed: `date` arrives from tripDayDate → dayPlus → dayStart, which builds
+  // LOCAL midnight, and it was formatted with toISOString, which converts to
+  // UTC first. Every trip day in Denmark was asked about as the day before.
+  //
+  // Pinned at both ends of the day, because at UTC the two agree and nothing
+  // can catch it: east of Greenwich the first fails, west of it the second.
+  {
+    const asked = [];
+    const spy = async (url) => { asked.push(url); return { available: true, high_c: 1, low_c: 0, wet_day_share: 0, years: 10 }; };
+    for (const [label, when] of [
+      ["just after midnight", new Date(2026, 5, 12, 0, 30)],
+      ["and just before the next", new Date(2026, 5, 12, 23, 30)],
+    ]) {
+      asked.length = 0;
+      await dayWeather({ point: { lat: 55, lon: 12 }, date: when, daysOut: 200, fetchJson: spy });
+      ok(`the normals are asked for the local day, ${label}`, /date=2026-06-12/.test(asked[0] || ""));
+    }
+    // A string that is already a day never went near a Date and is passed
+    // through untouched, as it always was.
+    asked.length = 0;
+    await dayWeather({ point: { lat: 55, lon: 12 }, date: "2026-06-12", daysOut: 200, fetchJson: spy });
+    ok("and a plain day string is left alone", /date=2026-06-12/.test(asked[0] || ""));
+    // dayKey rather than a fourth day formatter: it is the exact inverse of the
+    // dayStart that built the Date, and lives beside it.
+    const wsrc = stripComments(readFileSync(join(root, "src/utils/weather.js"), "utf8"));
+    ok("through the formatter that matches the builder", /dayKey\(date\)/.test(wsrc));
+    ok("and no UTC day-string is left in it", !/toISOString\(\)\.slice\(0, ?10\)/.test(wsrc));
+  }
+  // ── THE SAME AUDIT, THE OTHER TWO SITES ─────────────────────────
+  {
+    const corr = stripComments(readFileSync(join(root, "src/utils/correction.js"), "utf8"));
+    ok("a correction is stamped with the local day", /const at = isoDay\(new Date\(\)\);/.test(corr));
+    // AND ONE THAT IS RIGHT AS IT IS. profile.js builds its Date explicitly in
+    // UTC on the line above, so the round trip through toISOString is exact
+    // everywhere; isoDay there would read local getters and reject every valid
+    // birthday west of Greenwich. Asserted so nobody "fixes" it.
+    const prof = stripComments(readFileSync(join(root, "src/utils/profile.js"), "utf8"));
+    ok("a birthday round-trips in UTC, because it was built in UTC",
+       /new Date\(`\$\{t\}T00:00:00Z`\)/.test(prof) && /d\.toISOString\(\)\.slice\(0, 10\) !== t/.test(prof));
+    const { cleanBornDate } = M;
+    is("and a real birthday survives", cleanBornDate("1994-02-28"), "1994-02-28");
+    is("while a day the calendar does not have does not", cleanBornDate("1994-02-31"), "");
+  }
 }
 
 
@@ -16144,6 +16212,63 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("a shop answers when the operator does not",
      findTicketPrice({ siteText: "Velkommen til festivalen", listingText: "Pris: Entré: 400 kr." })?.from, "listing");
   is("and nothing answers when neither says", findTicketPrice({ siteText: "hej", listingText: "hej" }), null);
+
+  // ── WHICH PAGE ACTUALLY SAID IT, 6 SEP 2026 ─────────────────────
+  //
+  // Oliver's Sebbersund run: "10 DKK, from vikingeskibsmuseet.dk", which is the
+  // Viking Ship Museum in Roskilde, a different institution on a different
+  // island, 250 km from a market near Nibe. The figure was read correctly and
+  // the citation was invented: this function was handed ONE concatenated blob
+  // of every page, so it could not know which one carried the number, and the
+  // caller printed hosts[0], the first host in the list.
+  {
+    const { whoSaid } = M;
+    const pages = [
+      { host: "vikingeskibsmuseet.dk", text: "Museet i Roskilde. Åbningstider og praktisk information." },
+      { host: "sebbersundvikingemarked.dk", text: "Entré: 10 kr. for voksne." },
+    ];
+    const found = findTicketPrice({ listingText: pages.map(p => p.text).join(" "), listingPages: pages, listingHosts: pages.map(p => p.host) });
+    // Guarded, so a reader that stops finding the price FAILS here rather than
+    // throwing and taking every assertion after it down with the suite. A
+    // mutation made exactly that happen, for the third time tonight.
+    is("the page that carried the figure is the one named", found?.host, "sebbersundvikingemarked.dk");
+    ok("and it is not merely the first page read", found?.host !== pages[0].host);
+    is("whoSaid says the same thing", whoSaid(found?.from, found), "sebbersundvikingemarked.dk");
+    is("and the figure is unchanged", found?.lo, 10);
+  }
+  // ── AND WITH NO PAGES IT HEDGES, AS IT ALWAYS DID ───────────────
+  //
+  // entryAudit's own note: "a citation that names the wrong page is worse than
+  // one that admits it does not know". A caller with only a blob gets the
+  // hedge rather than a guess dressed as a fact.
+  {
+    const { whoSaid } = M;
+    const blob = findTicketPrice({ listingText: "Entré: 10 kr.", listingHosts: ["a.dk", "b.dk", "c.dk"] });
+    is("no pages, no host", blob.host, "");
+    is("and the sentence admits it", whoSaid(blob.from, blob), "a.dk (of 3 pages read)");
+    is("one page read needs no hedge",
+       whoSaid("listing", { listingHosts: ["only.dk"] }), "only.dk");
+    is("and nothing read at all still says something true",
+       whoSaid("official-site", {}), "The operator's own page");
+  }
+  // A blob can match a price NO SINGLE PAGE STATES, when a figure at the end of
+  // one page meets a currency at the start of the next. Per page, it cannot.
+  {
+    const split = [{ host: "a.dk", text: "Entré: 10" }, { host: "b.dk", text: "kr. for voksne" }];
+    ok("a price split across two pages is not a price",
+       !findTicketPrice({ listingText: split.map(p => p.text).join(" "), listingPages: split }));
+  }
+  // ── AND THE RUN LOG USES THE SAME FUNCTION ──────────────────────
+  {
+    const appP = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the log asks whoSaid rather than keeping its own copy",
+       /const priceFrom = \(w\) => whoSaid\(w\.from, w\);/.test(appP));
+    ok("and no local hosts\[0\] guess is left", !/w\.siteHosts\?\.\[0\]/.test(appP));
+    ok("the pages are kept as the text is appended",
+       /sitePages\.push\(\{ host: domainOf\(url\), text: scanData\.text \}\)/.test(appP)
+       && (appP.match(/listingPages\.push\(\{ host: domainOf\(/g) || []).length === 3);
+    ok("and handed to the price read", /sitePages, listingPages,/.test(appP));
+  }
   is("no pages at all is null, not zero", findTicketPrice({}), null);
 
   // ── THE MISS, WHICH IS THE WHOLE POINT ───────────────────────────
@@ -41838,12 +41963,23 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("and placed exactly once", (appN.match(/\{nightpayTip\}/g) || []).length, 1);
   ok("above the branch, so all three nightlife levels carry it",
      appN.indexOf("{nightpayTip}") < appN.indexOf("{!nightlifeTownView ? ("));
-  ok("in his words", /<b style=\{\{ color: C\.gold \}\}>Tip:<\/b> ask if the bars take Nightpay\./.test(appN));
+  ok("in his words", /<b style=\{\{ color: C\.gold \}\}>Tip:<\/b> ask if the bars take\{" "\}/.test(appN));
+  // ── AND THE NAME CARRIES THE LINK ───────────────────────────────
+  //
+  // Oliver, 6 Sep 2026: "put hyperlink on nightpay instead. And delete the what
+  // that is." It read "ask if the bars take Nightpay. What that is", which is
+  // two sentences to offer one thing and the second is not a sentence. The word
+  // a reader does not recognise is the word they would click.
+  ok("the word itself is what you click",
+     /goTab\(nightpayTab\)\}[\s\S]{0,200}?>\s*Nightpay\s*<\/span>/.test(appN));
+  ok("and the old second sentence is gone", !/>\s*What that is\s*</.test(appN));
   ok("and the link goes to the tab the row is actually on",
      /const nightpayTab = tabForEssential\(essentials, "nightpay"\);/.test(appN)
      && /onClick=\{\(\) => goTab\(nightpayTab\)\}/.test(appN));
+  // NO ROW, NO LINK, and the tip still reads as a sentence: the name stays,
+  // as plain text, rather than the sentence losing its object.
   ok("with no link rendered when nothing is published",
-     /\{nightpayTab && \(/.test(appN));
+     /\{nightpayTab \? \(/.test(appN) && /\) : "Nightpay"\}\./.test(appN));
 }
 
 // ── THE PIPELINE TALKING TO ITSELF IN FRONT OF A TRAVELLER ──────────
@@ -46782,7 +46918,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 {
   const { SWEEP_STATE, RESWEEP_DAYS, sweptAt, askedRecently, rowHasADoor, rowState,
           sweepPlan, describeSweepPlan, ticketProposal, describeTicketFindings,
-          affiliateWriteFor, AFF_FOUND, AFF_NOTHING, TYPES_WITH_A_DOOR, affiliateHref } = M;
+          affiliateWriteFor, AFF_FOUND, AFF_NOTHING, AFF_FAILED, TYPES_WITH_A_DOOR, affiliateHref } = M;
   const SEP = new Date(2026, 8, 6);
   const TIVOLI = "https://www.tiqets.com/en/copenhagen-attractions-c66144/tickets-for-tivoli-gardens-l178305/";
   const LEGO = "https://www.tiqets.com/en/billund-attractions-c123/tickets-for-legoland-billund-p974091/";
@@ -46884,11 +47020,11 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ], { today: SEP });
     is("a bookable page about this place is proposed", p.verdict, AFF_FOUND);
     is("and it is the product page, not the category", p.url, TIVOLI);
-    is("written onto the row as the plain agent URL", p.payload.ticketUrl, TIVOLI);
+    is("written onto the row as the plain agent URL", p.set.ticketUrl, TIVOLI);
     // Storing a tracked link would freeze today's marker into every row and
     // mean a migration the day any of it changes. The wrapper runs at render.
-    ok("never a tracked one", !/tp\.media|tpx\.li|evyy/.test(p.payload.ticketUrl));
-    is("the stamp records the answer", [p.payload.__ticketSweep.found, p.payload.__ticketSweep.at], [true, "2026-09-06"]);
+    ok("never a tracked one", !/tp\.media|tpx\.li|evyy/.test(p.set.ticketUrl));
+    is("the stamp records the answer", [p.set.__ticketSweep.found, p.set.__ticketSweep.at], [true, "2026-09-06"]);
     // ── AND IT IS THE LOCAL DAY, NOT THE UTC ONE ────────────────
     //
     // Oliver's pre-push hook caught this and the suite did not: it read
@@ -46906,14 +47042,22 @@ SOURCE: https://www.tripadvisor.com/whatever`;
       ["and just before the next", new Date(2026, 8, 6, 23, 30), "2026-09-06"],
     ]) {
       const q = ticketProposal(tivoli, [{ url: TIVOLI, snippet: "Tivoli Gardens tickets Copenhagen" }], { today: when });
-      is(`the stamp is the day it was where he is, ${label}`, q.payload.__ticketSweep.at, day);
+      is(`the stamp is the day it was where he is, ${label}`, q.set.__ticketSweep.at, day);
     }
-    ok("and nothing else on the row is touched", p.payload.desc === "The gardens." && p.payload.name === "Tivoli Gardens");
+    // ── A DELTA, WHICH IS WHAT MAKES THAT ASSERTABLE ─────────────
+    // This read `p.payload.desc === "The gardens."`, which asks whether a
+    // spread preserved a field rather than whether the write touches it. An
+    // adversarial review found what the whole payload cost: the library is read
+    // once at the count, the paid run takes minutes, and with two Add presses
+    // the second write put back the payload from before the first. Only the
+    // changed keys are sent now, so this is a fact about the request.
+    is("the write carries only what changed", Object.keys(p.set || {}).sort(), ["__ticketSweep", "ticketUrl"]);
     // THE SAFETY PROPERTY. This sweep changes what a row links to, never what a
     // row IS, so no type is ever sent and a whole class of mistake cannot be
     // made by it.
     const w = affiliateWriteFor(p);
     ok("the write carries no type at all", !("type" in w));
+    ok("and no whole payload to overwrite a newer one with", !("payload" in w));
     is("and is addressed by the real row id", w.id, 10);
   }
   {
@@ -46924,8 +47068,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     const p = ticketProposal(row(11, "free", { name: "Rosenborg Slot", town: "Copenhagen" }),
       [{ url: LEGO, snippet: "LEGOLAND Billund Resort entry ticket" }], { today: SEP });
     is("a bookable page about somewhere else is refused", p.verdict, AFF_NOTHING);
-    ok("and the row is left without a link", !p.payload.ticketUrl);
-    ok("with the stamp saying it was asked", p.payload.__ticketSweep.found === false);
+    ok("and the row is left without a link", !p.set.ticketUrl);
+    ok("with the stamp saying it was asked", p.set.__ticketSweep.found === false);
     ok("and the reason names the case rather than saying nothing found",
        /none of them is clearly about/.test(p.why));
   }
@@ -46940,6 +47084,38 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     is("no agent page at all is nothing", p.verdict, AFF_NOTHING);
     ok("and that is reported as a normal answer, not a failure",
        /sell through their own site|no ticket link is the right answer/.test(p.why));
+  }
+  // ── AND "WE COULD NOT ASK" IS NOT "NOBODY SELLS THIS" ───────────
+  //
+  // The most expensive thing an adversarial review found in this file. The run
+  // loop swallowed every /api/search failure, so a Tavily quota or a 429
+  // part-way through a hundred-row sweep gave every later row an empty result
+  // list. Those rows came out as NOTHING, were stamped found:false, were
+  // written whether ticked or not, and dropped out of the paid list until
+  // December, while the panel reported it as an answer.
+  {
+    const r = row(40, "free", { name: "Tivoli Gardens", town: "Copenhagen" });
+    const p = ticketProposal(r, [], { today: SEP, failed: 2 });
+    is("a search that failed is its own verdict", p.verdict, AFF_FAILED);
+    // NO `set`, which is what makes it unwritable rather than merely
+    // undisplayed: the writer has nothing to send.
+    ok("and nothing can be written for it", !p.set);
+    ok("the reason says the row stays in the list", /stays in the list/.test(p.why));
+    ok("and names what it would otherwise have hidden", new RegExp(`${RESWEEP_DAYS} days`).test(p.why));
+    // A found page is a found page however the other query went. Only a BLANK
+    // answer is poisoned by a failure, because the query that failed is the one
+    // that might have had it.
+    const still = ticketProposal(r, [{ url: TIVOLI, snippet: "Tivoli Gardens tickets Copenhagen" }], { today: SEP, failed: 1 });
+    is("a page found while the other query failed is still a page", still.verdict, AFF_FOUND);
+    // And with no failures a blank answer is a real no, stamped as before.
+    const no = ticketProposal(r, [], { today: SEP, failed: 0 });
+    is("a clean search that found nothing is still a no", no.verdict, AFF_NOTHING);
+    ok("and that one does get stamped", no.set.__ticketSweep.found === false);
+    const said = describeTicketFindings([p, no]);
+    ok("the summary leads with what could not be asked", /^1 of 2 could not be searched at all/.test(said));
+    ok("and does not count it among the answers", /1 rows? asked/.test(said));
+    ok("a run where everything failed says only that",
+       /^2 of 2 could not be searched at all/.test(describeTicketFindings([p, ticketProposal(r, [], { today: SEP, failed: 2 })])));
   }
   {
     const found = ticketProposal(row(14, "free", { name: "Tivoli Gardens", town: "Copenhagen" }),
@@ -46978,6 +47154,18 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // Two queries, and the second is only bought when the first found nothing
     // this gate would take. Same order the draft pipeline uses.
     ok("and it stops at the first that answers", /if \(pickTicketUrl\(results, \{ name, town \}\)\) break;/.test(runBody));
+    // ── AND A FAILED QUERY IS COUNTED, NOT SWALLOWED ──────────────
+    //
+    // A mutation put `continue` back without the count and every test still
+    // passed: affiliateSweep's FAILED verdict was asserted on its own and
+    // nothing checked that the caller can ever produce one. That is the same
+    // shape as a helper written and called from nowhere, one level down, and it
+    // is the most expensive finding of the night sitting behind it — a quota
+    // part-way through a sweep being recorded as "nobody sells tickets to this"
+    // for every remaining row.
+    ok("a query that failed is counted", /\{ failed \+= 1; continue; \}/.test(runBody));
+    ok("and so is one that threw", /catch \{ failed \+= 1; \}/.test(runBody));
+    ok("and the count reaches the proposal", /ticketProposal\(row, results, \{ today: new Date\(\), failed \}\)/.test(runBody));
 
     const applyBody = appS.slice(appS.indexOf("const applyAffiliateSweep = async () => {"),
                                  appS.indexOf("const runWaitingSweep = async () => {"));
@@ -46987,12 +47175,32 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // gets WRITTEN is asked of the writer.
     ok("only the ticked links are written", /affChosen\.has\(p\.id\)/.test(applyBody));
     ok("and only the ones an agent answered for", /p\.verdict === AFF_FOUND/.test(applyBody));
-    // THE SAFETY PROPERTY, asserted where it can be broken. The waiting sweep
-    // sends type and payload together on purpose; this one must never send a
-    // type at all.
+    // ── THE SAFETY PROPERTIES, ASSERTED ON THE SHARED WRITER ─────
+    //
+    // Both applies went through their own inline PATCH of the whole payload
+    // they had read at the count. An adversarial review found the cost: two Add
+    // presses in one session, and the second write puts back the payload from
+    // before the first, silently. So both now hand a DELTA to one writer that
+    // re-reads the row and merges, and the properties are asserted there, where
+    // there is one place to break them.
+    const writerBody = appS.slice(appS.indexOf("const patchRowPayload = async (id, set) => {"),
+                                  appS.indexOf("const planAffiliateSweep = async () => {"));
+    ok("the shared writer is findable", writerBody.length > 400);
+    ok("it re-reads the row before writing it", /select=payload/.test(writerBody));
+    ok("and merges the delta onto what it read, not onto a snapshot",
+       /\{ \.\.\.\(rows\[0\]\.payload \|\| \{\}\), \.\.\.set \}/.test(writerBody));
     ok("the PATCH carries the payload and nothing else",
-       /body: JSON\.stringify\(\{ payload: w\.payload \}\)/.test(applyBody));
-    ok("and no type is sent", !/type: /.test(applyBody));
+       /body: JSON\.stringify\(\{ payload: merged \}\)/.test(writerBody));
+    ok("and no type is sent", !/type: /.test(writerBody));
+    // With return=minimal a row deleted between the count and the write answers
+    // 204 and is counted as added. The date sweep already carries this note.
+    ok("a row that is gone is not counted as written", /return=representation/.test(writerBody));
+    // Every other single-row write in Studio patches manageItems. Without it
+    // the Affiliates panel above still says "no link at all" for a row that has
+    // one, which reads as the sweep having failed.
+    ok("and the panel above it sees the change", /setManageItems\(prev =>/.test(writerBody));
+    ok("both applies go through it",
+       /patchRowPayload\(w\.id, w\.set\)/.test(applyBody));
     // The one sweep in this panel that writes a row it found no answer for.
     // Leaving the noes off would make it expensive forever.
     ok("the noes are written too, so the next run is cheap", /const noes = /.test(applyBody) && /\.\.\.found, \.\.\.noes/.test(applyBody));
@@ -47136,9 +47344,19 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   }
 
   // ── WHICH ROWS ARE A TOWN ───────────────────────────────────────
-  is("towns and nightlife towns, and nothing else", TOWN_TYPES, ["town", "nightTown"]);
+  // ── TOWN ROWS, AND NOT NIGHTLIFE-TOWN ROWS ──────────────────────
+  //
+  // This held "nightTown" for an hour. An adversarial review took it out on two
+  // counts: a nightlife-town page draws its body through BlogBody.jsx and never
+  // through DetailPage, which is the only reader of __audio outside the guide,
+  // so the write would have landed where nothing renders while the panel
+  // reported a success. And all five of WeGoTrip's audio towns have a town row
+  // already, so the offer is not lost, it would only have appeared twice to the
+  // same reader.
+  is("town rows, and nothing else", TOWN_TYPES, ["town"]);
   is("a town row is its own town", townNameOf(row(1, "town", { name: "Aalborg" })), "Aalborg");
-  is("so is a nightlife town", townNameOf(row(2, "nightTown", { name: "Aarhus" })), "Aarhus");
+  ok("a nightlife town gets nothing, because nothing would draw it",
+     !townNameOf(row(2, "nightTown", { name: "Aarhus" })) && !audioFor(row(2, "nightTown", { name: "Aarhus" })));
   is("an attraction is not", townNameOf(row(3, "free", { name: "Aalborg" })), "");
   // ── THE ONE sweeps.js ALREADY PAID FOR ─────────────────────────
   // "Nørresundby (Aalborg)" contains Aalborg as a whole word and is not
@@ -47203,20 +47421,30 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     is("the town gets an audio walk", list[0].kind, WEGO_AUDIO);
     is("and the attraction gets an admission", list[1].kind, WEGO_TICKET);
     is("the walk is stored under its own field, never ticketUrl",
-       [!!list[0].payload.__audio?.url, list[0].payload.ticketUrl], [true, undefined]);
+       [!!list[0].set.__audio?.url, list[0].set.ticketUrl], [true, undefined]);
     is("and the admission goes in ticketUrl like any other agent",
-       list[1].payload.ticketUrl, tickets.find(p => /legoland/.test(p.url)).url);
-    ok("the stamp says when it was matched", list[0].payload.__audio.at === "2026-09-06");
+       list[1].set.ticketUrl, tickets.find(p => /legoland/.test(p.url)).url);
+    ok("the stamp says when it was matched", list[0].set.__audio.at === "2026-09-06");
+    is("and each write carries only its own key",
+       [Object.keys(list[0].set || {}), Object.keys(list[1].set || {})], [["__audio"], ["ticketUrl"]]);
     // Same trap, same file evening, same fix. See the ticket sweep's block.
     for (const [label, when] of [["after midnight", new Date(2026, 8, 6, 0, 30)], ["before the next", new Date(2026, 8, 6, 23, 30)]]) {
       const q = wegotripProposals([rows[0]], { today: when });
-      is(`the walk is stamped with the local day, ${label}`, q[0].payload.__audio.at, "2026-09-06");
+      is(`the walk is stamped with the local day, ${label}`, q[0].set.__audio.at, "2026-09-06");
     }
     // THE PLAIN URL, never the tracked one. Storing a tracked link would freeze
     // today's marker into every row and make changing it a migration.
-    ok("nothing tracked is stored", !/tp\.media|tpx\.li/.test(list[0].payload.__audio.url));
+    ok("nothing tracked is stored", !/tp\.media|tpx\.li/.test(list[0].set.__audio.url));
     // Payload only. This sweep changes what a row links to, never what a row is.
+    // Both halves of the sweep, because a mutation showed the assertion had
+    // only ever been made about the other one: putting the whole payload back
+    // into wegotripWriteFor left every test passing.
     ok("the write carries no type", !("type" in wegotripWriteFor(list[0])));
+    ok("and no whole payload to overwrite a newer one with", !("payload" in wegotripWriteFor(list[0])));
+    // Guarded, so a writer that hands back a payload instead FAILS here rather
+    // than throwing and taking every assertion after it down with the suite. A
+    // mutation made exactly that happen, twice tonight in two different blocks.
+    is("only the delta is sent", Object.keys(wegotripWriteFor(list[0]).set || {}), ["__audio"]);
     // A review table full of no-ops teaches somebody to tick everything without
     // reading it, which is the opposite of what the table is for.
     {
@@ -47230,6 +47458,47 @@ SOURCE: https://www.tripadvisor.com/whatever`;
       is("replacing an existing link is named as a replacement", had[0].replaces, "https://www.tiqets.com/en/x-p9/");
       ok("and the reason says so", /would replace it/.test(had[0].why));
     }
+    // ── AND NEVER TRADE AN EARNING LINK FOR ONE THAT PAYS NOTHING ─
+    //
+    // Found by an adversarial review, and it was the pre-ticked default.
+    // Legoland and Home of Carlsberg are on Tiqets AND on WeGoTrip, Tiqets has
+    // a template and WeGoTrip does not, so one tick-through turned a row the
+    // panel above calls "earning" into one it calls "earning nothing" — with a
+    // reason line that read "this row has no ticket link".
+    {
+      const earning = "https://www.tiqets.com/en/billund-attractions-c1/tickets-for-legoland-p9/";
+      const wraps = (u) => (u === earning ? "https://tp.media/r?u=x" : u);
+      const withLink = [{ ...rows[1], payload: { ...rows[1].payload, ticketUrl: earning } }];
+      const held = wegotripProposals(withLink, { today: SEP, wraps, wegotripLive: false });
+      ok("an earning link is not swapped for one that earns nothing", held[0].blocked === true);
+      ok("and it carries nothing that could be written", !held[0].set);
+      ok("the reason says what it is protecting", /trade a paying link for one that pays nothing/.test(held[0].why));
+      ok("and names the one thing that would change the answer", /WEGOTRIP_AFFILIATE_TEMPLATE/.test(held[0].why));
+      // The day the template lands it becomes a real choice again.
+      const live = wegotripProposals(withLink, { today: SEP, wraps, wegotripLive: true });
+      ok("once WeGoTrip pays, the swap is offered like any other", !live[0].blocked && !!live[0].set);
+      // A link that earns NOTHING today is replaceable either way: there is
+      // nothing to protect.
+      const plain = wegotripProposals([{ ...rows[1], payload: { ...rows[1].payload, ticketUrl: "https://www.tiqets.com/en/x-p9/" } }],
+        { today: SEP, wraps: (u) => u, wegotripLive: false });
+      ok("and an unwrapped link is not protected, because it pays nothing", !plain[0].blocked);
+    }
+    // ── A RESTAURANT DOES NOT SELL ADMISSION ─────────────────────
+    // With no type gate a `food` row called "Home of Carlsberg" picked up the
+    // brewery's entry ticket, which is a Book tickets button on a restaurant
+    // card: the wrong-link failure the whole gate exists to prevent.
+    ok("a food row never gets an admission link",
+       !ticketFor(row(41, "food", { name: "Home of Carlsberg", town: "Copenhagen" })));
+    ok("and the attraction row still does",
+       !!ticketFor(row(42, "free", { name: "Home of Carlsberg", town: "Copenhagen" })));
+    // ── AND A DANISH NAME IS THE SAME PLACE ──────────────────────
+    // samePlaceName, not fold. tickets.js already carries this exact note: "It
+    // is an EXONYM, not a spelling... samePlaceName knows the pairs — and I
+    // reached for fold." Two of WeGoTrip's five audio towns are those pairs.
+    ok("a town published under its Danish name still matches",
+       !!audioFor(row(43, "town", { name: "København" })));
+    ok("and so does the Danish spelling of Elsinore",
+       !!audioFor(row(44, "town", { name: "Helsingør" })));
     const said = describeWegotrip(list, rows);
     ok("the summary counts both halves", /1 town page/.test(said) && /1 attraction/.test(said));
     ok("and dates the catalogue", new RegExp(WEGOTRIP_CHECKED_ON).test(said));
@@ -47264,8 +47533,16 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("tracked at render rather than at publish", /affiliateHref\(dest\) \|\| dest/.test(detail));
     // A stored value that is not a WeGoTrip address renders nothing at all,
     // rather than a bare link asking a reader for money.
+    // isWegotripUrl, not a fourth hand-written host regex. This file had its
+    // own, studioContent had no gate at all and costLedger had a bare scheme
+    // test: three answers to one question, and the loosest of them would have
+    // printed "on WeGoTrip" over somebody else's site.
     ok("and anything that is not WeGoTrip renders nothing",
-       /wegotrip\\\.com\\\//.test(detail) && /return null;/.test(detail));
+       /!isWegotripUrl\(dest\)/.test(detail) && /return null;/.test(detail));
+    ok("the same gate guards what is stored",
+       /isWegotripUrl\(t\?\.__audio\?\.url\)/.test(stripComments(readFileSync(join(root, "src/utils/studioContent.js"), "utf8"))));
+    ok("and what a guide prints",
+       /!isWegotripUrl\(href\)/.test(stripComments(readFileSync(join(root, "src/utils/costLedger.js"), "utf8"))));
     // The Essentials row taught this: a button pointing at a site nobody has
     // heard of has to say whose it is.
     ok("the merchant is named on the card", /On WeGoTrip/.test(detail));
@@ -47338,12 +47615,465 @@ SOURCE: https://www.tripadvisor.com/whatever`;
                              appS.indexOf("const runAffiliateSweep = async () => {"));
     ok("the writer is findable", wBody.length > 400);
     ok("and writes only what is ticked", /wegoChosen\.has\(p\.id\)/.test(wBody));
-    ok("payload only, never a type", /body: JSON\.stringify\(\{ payload: w\.payload \}\)/.test(wBody) && !/type: /.test(wBody));
+    ok("payload only, never a type, through the shared writer",
+       /patchRowPayload\(w\.id, w\.set\)/.test(wBody) && !/type: /.test(wBody));
+    // A row whose existing link already earns while WeGoTrip's template is
+    // empty is a REPORT, not an offer. Filtered in the writer as well as left
+    // untickable, on the one press that cannot be undone.
+    ok("and never trades an earning link for one that pays nothing",
+       /!p\.blocked && p\.set && wegoChosen\.has\(p\.id\)/.test(wBody));
     // A button that adds a link earning nothing today must not read like one
     // that pays, and must stop saying so the day the template lands.
     ok("the panel is honest about the missing template", /WEGOTRIP_AFFILIATE_TEMPLATE is filled in/.test(appS));
     ok("and reads the programme rather than assuming it", /wegotripActive\(\)/.test(appS));
   }
+}
+
+// ── THE VENUE THE LOCATOR WAS THROWING AWAY, 6 SEP 2026 ─────────────
+//
+// Twelve run logs: "Where this place is" came back empty on nine of eleven
+// runs, and what it was refusing was MCH Messecenter Herning for the Danish
+// Travel Show, Bellahøj Hallerne for Bellahøj Kræmmermarked and Vikingebyen for
+// Sebbersund Vikingemarked. Five drafts ended unplaced, every one of those then
+// printed "every place-scoped source is left out", and "no transit itinerary
+// was measured" appeared fourteen times.
+//
+// Pass one is not loosened. This is a SECOND question asked later, with
+// evidence pass one did not have: not "is this listing the event" but "is this
+// listing the place the event is held at, according to the pages now read".
+{
+  const { venueCore, venueMentions, venueVerdict, venueVia, describeVenue,
+          VENUE_MAX_KM, V_NO_NAME, V_NOT_NAMED, V_TOO_FAR, V_IS_AN_EVENT, V_OK } = M;
+  const verdict = (name, opts) => venueVerdict({ name }, opts);
+
+  // ── THE THREE IT WAS WRONG TO REFUSE ────────────────────────────
+  {
+    const cases = [
+      ["MCH Messecenter Herning", "Herning", "The fair is held at MCH Messecenter Herning. Doors at MCH Messecenter Herning open at 10."],
+      ["Bellahoej Hallerne", "Copenhagen", "Held at Bellahoej Hallerne. Bellahoej Hallernes car park is free."],
+      ["Vikingebyen", "Nibe", "The market fills Vikingebyen each September. Vikingebyens gates open at ten."],
+    ];
+    for (const [listing, town, text] of cases) {
+      const v = verdict(listing, { town, text, kmFromTown: 5 });
+      is(`${listing} is accepted as the venue`, v.code, V_OK);
+      ok(`and ${listing} says why, with the sentence quoted`, /named 2 times/.test(v.why) && !!v.quote);
+    }
+    // AND IT IS RECORDED AS A VENUE. Claiming this coordinate is the event's own
+    // listing is the same overstatement the refusal exists to prevent, one step
+    // further along.
+    const v = verdict("MCH Messecenter Herning", { town: "Herning", text: "MCH Messecenter Herning. MCH Messecenter Herning.", kmFromTown: 2 });
+    ok("the provenance says venue, not event", /^the venue "/.test(venueVia(v)));
+    ok("and the log line says the name is left alone", /not as the event's own listing/.test(describeVenue(v)));
+  }
+
+  // ── AND THE TWO IT WAS RIGHT TO ─────────────────────────────────
+  //
+  // Both survive the town strip as ordinary distinctive names and both would be
+  // named repeatedly in their own research. What separates them from a hall is
+  // that they are EVENTS. Found by an adversarial review: nothing enforced this
+  // and the file's own header claimed it did.
+  is("a different festival is refused however often it is named",
+     verdict("Strib Vinterfestival", { town: "Ringkobing", text: "Strib Vinterfestival ".repeat(6), kmFromTown: 3 }).code, V_IS_AN_EVENT);
+  is("and so is a different fest in the same town",
+     verdict("Naestved Metalfest", { town: "Naestved", text: "Naestved Metalfest ".repeat(6), kmFromTown: 1 }).code, V_IS_AN_EVENT);
+  // ── WITHOUT REFUSING A BUILDING FOR CONTAINING "MESSE" ──────────
+  // The first version of the event test read GENERIC_PLACE_WORDS, which holds
+  // "festival" and "marked" alongside "hallen", so it made Vinterfestival a
+  // venue. The second refused MCH Messecenter for containing "messe". The rule
+  // asks both questions: an event word marks an event only when no word in the
+  // name marks a place.
+  // ── AND THE TWO LISTS STAY SEPARATE ─────────────────────────────
+  // The first version of the event test read GENERIC_PLACE_WORDS, which holds
+  // "festival" and "marked" beside "hallen" and "arena" because it answers a
+  // different question: which words do not IDENTIFY a place. Read as "which
+  // words say this IS a place", it made Vinterfestival a venue. The pair of
+  // assertions above and below is what holds the two apart.
+  is("a Messecenter is a building, not a trade fair",
+     verdict("MCH Messecenter", { town: "Herning", text: "MCH Messecenter. MCH Messecenter.", kmFromTown: 1 }).code, V_OK);
+  is("and a Festivalplads is a field, not a festival",
+     verdict("Roskilde Festivalpladsen", { town: "Roskilde", text: "at Roskilde Festivalpladsen. Roskilde Festivalpladsen holds", kmFromTown: 1 }).code, V_OK);
+
+  // ── THE RUNGSTED AND RINGSTED GUARD ─────────────────────────────
+  is("a listing sixty kilometres away is refused",
+     verdict("Ringsted Lystanlaeg", { town: "Rungsted", text: "Ringsted Lystanlaeg ".repeat(5), kmFromTown: 55 }).code, V_TOO_FAR);
+  ok("and the refusal names the shape", /Rungsted and Ringsted/.test(
+     verdict("Ringsted Lystanlaeg", { town: "Rungsted", text: "x", kmFromTown: 55 }).why));
+  // ── AND Number(null) IS 0, WHICH PASSED EVERY DISTANCE TEST ─────
+  //
+  // Found by an adversarial review before this was wired, and it would have
+  // been the common case rather than a corner: townPointFor holds 34 towns and
+  // none of Herning, Ringsted, Rungsted, Naestved or Sebbersund is among them,
+  // so kmFromTown is null on every example in the file's own header. The guard
+  // read that as zero kilometres and the log said "sits 0.0 km from Herning".
+  //
+  // With no distance to check against, the mention bar goes UP instead.
+  {
+    const text = "MCH Messecenter Herning. MCH Messecenter Herning.";
+    is("no distance means no distance, not zero",
+       verdict("MCH Messecenter Herning", { town: "Herning", text }).code, V_NOT_NAMED);
+    is("and a third mention carries it instead",
+       verdict("MCH Messecenter Herning", { town: "Herning", text: `${text} MCH Messecenter Herning.` }).code, V_OK);
+    ok("nothing claims a distance it does not have",
+       !/0\.0 km/.test(verdict("MCH Messecenter Herning", { town: "Herning", text: `${text} MCH Messecenter Herning.` }).why));
+  }
+
+  // ── NOTHING TO LOOK FOR IS A REFUSAL, NOT AN EMPTY SEARCH ───────
+  //
+  // foundAt walks a loop bounded by the needle's length, and an empty needle
+  // there once HUNG the suite rather than failing it. A core that reduces to
+  // nothing must never reach it.
+  is("a listing named only for its town", verdict("Herning", { town: "Herning", text: "Herning ".repeat(5), kmFromTown: 1 }).code, V_NO_NAME);
+  is("a listing that is only a category", verdict("Kulturhuset", { town: "Vejle", text: "Kulturhuset ".repeat(5), kmFromTown: 1 }).code, V_NO_NAME);
+  // The definite article is a suffix, so GENERIC_PLACE_WORDS holding "kulturhus"
+  // did not catch "Kulturhuset" until the ending came off first.
+  is("even with the Danish article stuck on it", venueCore("Kulturhuset", "Vejle"), "");
+  is("a listing with no name at all", verdict("", { town: "Herning", text: "x" }).code, V_NO_NAME);
+  ok("and it says there is nothing to look for", /nothing to look for/.test(verdict("", { town: "x", text: "y" }).why));
+  // An ADDRESS is not a name. Looking for "Vardevej 1" in the research matches
+  // the contact block of everything on that road, which is why the caller is
+  // told to pass pd.name and never pd.name || pd.address.
+  is("a street address identifies nothing", venueCore("Vardevej 1, 7400 Herning", "Herning"), "");
+  // THE POSTCODE IS THE TELL, not any digit. A venue really can be called
+  // "Godsbanen Hal 3", and refusing every name with a number in it would cost
+  // more than it saves. The house number comes off with the other numerals, so
+  // what is left is the part that identifies the place.
+  is("but a small number in a real name is not an address", venueCore("Godsbanen Hal 3", "Aarhus"), "Godsbanen Hal");
+  is("and the postcode form of the same place is", venueCore("Godsbanen, 8000 Aarhus", "Aarhus"), "");
+  // "Hal 7" reduces to "Hal", which is a category and identifies nothing, so it
+  // is refused for a different reason and that is also right.
+  is("a name that is only a category and a number identifies nothing", venueCore("Hal 7 Aarhus", "Aarhus"), "");
+
+  // ── COUNTING, AND THE DANISH ENDING THAT BREAKS WHOLE WORDS ─────
+  //
+  // A page about the site writes Vikingebyen, Vikingebyens and Vikingebyens
+  // åbningstider. Requiring a word boundary on the right throws away most of
+  // the evidence, and the comment in this file used to claim the opposite.
+  is("a genitive is the same name", venueMentions("Vikingebyen", "Vikingebyens billetter"), 1);
+  is("and both forms count", venueMentions("Vikingebyen", "Vikingebyen og Vikingebyens porte"), 2);
+  // ── AND A LENGTH RULE IS NOT AN ENDING RULE ────────────────────
+  // The first version allowed any run-on of up to three letters, and a test run
+  // caught it at once: Borkum is Bork plus two, so a German ferry port counted
+  // as a mention of a Danish market.
+  is("Borkum is not Bork", venueMentions("Bork", "the Borkum ferry leaves at nine"), 0);
+  is("but Borks is", venueMentions("Bork", "Bork Havn, and Borks marked"), 2);
+  is("nothing is looked for when there is nothing to look for", venueMentions("", "anything at all"), 0);
+
+  // ── AND IT IS WIRED, WHICH IS THE HALF THAT KEEPS BEING MISSED ──
+  {
+    const appS = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the venue tier exists", /Where this place is, the venue/.test(appS));
+    const tier = appS.slice(appS.indexOf("if (!placed && refusedListing) {"),
+                            appS.indexOf("const found = danishAddressIn(context);"));
+    ok("the tier is findable", tier.length > 400);
+    // BEFORE the postcode tier: it is free where that one geocodes, and it
+    // lands on Google's point for the building where that one lands on the
+    // middle of a postal district.
+    ok("and runs before the postcode tier",
+       appS.indexOf("Where this place is, the venue") < appS.indexOf("const found = danishAddressIn(context);"));
+    // Pass one keeps the listing now, not only a sentence about it.
+    ok("pass one keeps the listing it refused", /refusedListing = \{ name: String\(pd\.name\)\.trim\(\)/.test(appS));
+    ok("and keeps the name, never the address", !/refusedListing = \{ name: String\(pd\.name \|\| pd\.address\)/.test(appS));
+    ok("the research is what it is tested against", /venueVerdict\(refusedListing, \{ town: draftTown, text: context/.test(tier));
+    // THE NAME IS NOT TAKEN. placesName feeds the relevance filter, and
+    // renaming Danish Travel Show to MCH Messecenter Herning would send every
+    // later check looking for the hall.
+    ok("an accepted venue never renames the draft", !/placesName = /.test(tier));
+    ok("but it does give the draft its town", /draftTown = refusedListing\.town/.test(tier));
+    ok("and the coordinate is marked precise, because a venue is where it happens", /precise: true/.test(tier));
+    ok("the distance is measured by the caller and handed in", /haversineKm\(/.test(tier) && /kmFromTown/.test(tier));
+    // Pass one's own rule is untouched: this is a second question, not a looser
+    // version of the first.
+    ok("and pass one still refuses on the name",
+       /const placesAbout = placesOk && listingMatchesSubject\(name, draftTown, pd\.name \|\| pd\.address/.test(appS));
+  }
+}
+
+// ── EVERY PAGE HAS AN ADDRESS, 6 SEP 2026 ───────────────────────────
+//
+// Oliver, four screenshots of four different pages with one URL in the bar:
+// "Pages should have their individual .. but they don't. After being into
+// Aarhus bar street, it just stays." Attractions, Events and Tips all showed
+// #/nightlife/theaarhusriverfront.
+//
+// Two faults, one cause. Opening an entry pushed an address and NOTHING ELSE IN
+// THE APP EVER WROTE ONE, so the last entry's hash outlived every page he moved
+// to afterwards. Giving the pages addresses fixes both: the stale one cannot
+// survive, because something else always overwrites it.
+{
+  const { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } = M;
+  const appT = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+
+  // ── ONE WORD PER PAGE, AND THE SET MATCHES THE NAV ──────────────
+  //
+  // Read out of App.jsx rather than restated, because a page added to the nav
+  // and not to this map gets no address and says nothing about it.
+  {
+    const order = (appT.match(/const TAB_ORDER = \[([^\]]*)\]/) || [])[1] || "";
+    const ids = order.split(",").map(x => x.trim().replace(/^"|"$/g, "")).filter(Boolean);
+    ok("the nav is findable", ids.length > 5);
+    is("every page in the nav has an address", ids.filter(id => !TAB_HASH[id]), []);
+    is("and no address belongs to a page that is not there", Object.keys(TAB_HASH).filter(id => !ids.includes(id)), []);
+    // No two pages may share a word, or one of them is unreachable by link.
+    is("every address is its own", new Set(Object.values(TAB_HASH)).size, Object.keys(TAB_HASH).length);
+  }
+  // The word is the READER'S, not the routing key. `home` is called Explore and
+  // `visits` is called Towns, and an address is read by people.
+  is("the front page is Explore", hashForTab("home"), "#explore");
+  is("and visits is Towns", hashForTab("visits"), "#towns");
+  is("a page nobody has heard of gets no address", hashForTab("nonsense"), "");
+  is("and neither does nothing", hashForTab(""), "");
+  // Both directions, because one without the other is a link that writes and
+  // never opens, or opens and never writes.
+  is("an address opens its page", tabForHash("#events"), "events");
+  is("in any case, because a link gets pasted", tabForHash("#EVENTS"), "events");
+  is("with or without the hash", tabForHash("towns"), "visits");
+  is("and an address nobody wrote opens nothing", tabForHash("#nonsense"), "");
+  ok("every page round-trips", Object.keys(TAB_HASH).every(id => tabForHash(hashForTab(id)) === id));
+
+  // ── THE TWO ADDRESSES THIS MUST NEVER TOUCH ─────────────────────
+  //
+  // An open entry owns the hash while it is open: overwriting it would strand a
+  // reader inside a page whose address says they are on the list behind it, and
+  // Back reads it to decide whether to close one. #studio is read at module
+  // scope to decide whether Studio mounts at all, so replacing it navigates him
+  // out of Studio mid-edit.
+  ok("an open entry keeps its own address", !ownsTheAddress("#/nightlife/theaarhusriverfront"));
+  ok("and so does Studio", !ownsTheAddress(STUDIO_HASH));
+  ok("but a page address is ours to keep current", ownsTheAddress("#events"));
+  ok("and so is no address at all", ownsTheAddress(""));
+  ok("an entry address is recognised by its shape", isEntryHash("#/town/ribe") && !isEntryHash("#towns"));
+
+  // ── AND IT IS WIRED, BOTH WAYS ──────────────────────────────────
+  {
+    ok("the page is read out of the address on arrival",
+       /useState\(\(\) => \{[\s\S]{0,200}?tabForHash\(window\.location\.hash\) \|\| "home"/.test(appT));
+    const writer = appT.slice(appT.indexOf("const tabLinkDone = useRef(false);"),
+                              appT.indexOf("const stripRef = useRef(null);"));
+    ok("the writer is findable", writer.length > 400);
+    ok("and the address follows the page", /const want = hashForTab\(active\);/.test(writer));
+    // replaceState, not push: Back already means "close what is open", and the
+    // pager swipes a page per drag, which would bury the entry history.
+    ok("it replaces rather than pushes", /window\.history\.replaceState\(/.test(writer) && !/pushState/.test(writer));
+    ok("it refuses an address that is not ours", /!ownsTheAddress\(window\.location\.hash\)/.test(writer));
+    ok("it waits while an entry is open", /openEntryNow/.test(writer));
+    // Which is what clears the stale one: an entry closing re-runs this.
+    ok("and runs again when one closes", /\}, \[active, openEntryNow, entered\]\);/.test(writer));
+    ok("it leaves a real path alone", /isEntryUrl\(window\.location\.pathname\)/.test(writer));
+    // The front door is not a page in TAB_ORDER, so the address must not claim
+    // the reader is on one.
+    ok("and says nothing while the front door is up", /!entered \|\| openEntryNow/.test(writer));
+    // A shared #events link has to open Events, not the front door with Events
+    // waiting behind it. Same call the deep-link effect makes for an entry.
+    ok("a shared page link goes to the page", /if \(tabForHash\(window\.location\.hash\)\) setEntered\(true\);/.test(writer));
+    ok("once, on arrival, not every time Explore is pressed", /tabLinkDone\.current/.test(writer));
+    // DECLARED BELOW `entered`. A dependency array is evaluated where it is
+    // written, and reading that const from higher up took the whole front page
+    // out once already.
+    ok("and it is written below the const it reads",
+       appT.indexOf("const [entered, setEntered] = useState(false);") < appT.indexOf("const want = hashForTab(active);"));
+  }
+}
+
+// ── ASK THE PLACE ITSELF, 6 SEP 2026 ────────────────────────────────
+//
+// Oliver pasted Gemini's fact-check of a Da Vinci Bar draft. It said the bar
+// "is legally restricted as an explicit 23+ age-limit venue", citing a MapQuest
+// listing. The verification search found no primary source, the claim fell to
+// unresolved, and the asserted rule applied it on his word.
+//
+// davincibar.dk, the bar's own site, says 18+, and Google found it in one
+// search. In his words: "Google took in sources from shitty ones early on, but
+// then later on it used the website's own 18+ ... Gemlyx draft fact-checker did
+// not stop it. It would have denied the change if it had checked their own
+// website."
+//
+// VERIFY_PROMPT already TELLS the search to prefer the venue's own site, and
+// telling is not asking. The row carried davincibar.dk in `website` the whole
+// time and nothing ever pointed a question at it.
+{
+  const { ownSiteFor, OWN_SITE_PROMPT, settleOwnSite } = M;
+
+  // ── WHOSE SITE COUNTS AS THEIRS ─────────────────────────────────
+  is("the operator's own address is theirs",
+     ownSiteFor({ website: "https://www.davincibar.dk/" }, "Da Vinci Bar"), "davincibar.dk");
+  // hostMatchesName, the same test the website-claim branch uses. A `website`
+  // field holding an aggregator is the exact failure this tier exists to fix,
+  // so treating it as the operator speaking would rebuild the bug one level up.
+  is("an aggregator in the website field is not",
+     ownSiteFor({ website: "https://www.mapquest.com/dk/da-vinci-bar-526983651" }, "Da Vinci Bar"), "");
+  is("and a row with no site has nobody to ask", ownSiteFor({}, "Da Vinci Bar"), "");
+  is("nor does one holding something that is not a link", ownSiteFor({ website: "davincibar" }, "Da Vinci Bar"), "");
+
+  // ── THE QUESTION IS POINTED AT ONE DOMAIN ───────────────────────
+  {
+    const q = OWN_SITE_PROMPT("Da Vinci Bar", "davincibar.dk", { says: "it is a 23+ venue", proposed: "23+" });
+    ok("the prompt names the site to search", /Search davincibar\.dk, the official website/.test(q));
+    ok("and refuses the sources that caused this", /Not an aggregator[\s\S]*?maps profile/.test(q));
+    ok("and asks for a contradiction out loud, because that is the useful answer",
+       /CONTRADICTS the claim, say so and quote it/.test(q));
+    ok("and forbids reasoning from what is likely", /Do not reason from what is likely/.test(q));
+  }
+
+  // ── AND THE ANSWER ONLY COUNTS FROM THEIR OWN HOST ──────────────
+  //
+  // This is the whole tier. A reply that answers from MapQuest is the thing
+  // being fixed, not a weaker version of it.
+  {
+    const rejected = settleOwnSite({
+      parsed: { verdict: "rejected", correctValue: "18+", evidence: "Minimum age 18.", sourceUrl: "https://www.davincibar.dk/praktisk" },
+      host: "davincibar.dk",
+    });
+    is("their own site contradicting the claim rejects it", rejected.verdict, "rejected");
+    is("and hands back what they actually say", rejected.correctValue, "18+");
+    ok("and says whose page said it", /davincibar\.dk, their own site, contradicts this/.test(rejected.evidence));
+    // THE CASE THAT STARTED THIS. 23+ off a maps profile, 18+ on their own site.
+    const fromMapquest = settleOwnSite({
+      parsed: { verdict: "confirmed", correctValue: "23+", evidence: "MapQuest lists 23+.", sourceUrl: "https://www.mapquest.com/dk/da-vinci-bar-526983651" },
+      host: "davincibar.dk",
+    });
+    is("an answer from anywhere else settles nothing", fromMapquest.verdict, "unresolved");
+    ok("however confidently it is given", !fromMapquest.sourceUrl);
+    const confirmed = settleOwnSite({
+      parsed: { verdict: "confirmed", correctValue: "23+", evidence: "Our door policy is 23+.", sourceUrl: "https://davincibar.dk/info" },
+      host: "davincibar.dk",
+    });
+    is("and their own site agreeing confirms it", confirmed.verdict, "confirmed");
+    is("nothing at all is unresolved, not rejected", settleOwnSite({ parsed: null, host: "davincibar.dk" }).verdict, "unresolved");
+    ok("and it records that they were asked", settleOwnSite({ parsed: null, host: "davincibar.dk" }).asked === true);
+    ok("with a sentence that says so", /asked directly and did not answer/.test(settleOwnSite({ parsed: null, host: "davincibar.dk" }).evidence));
+  }
+
+  // ── AND IT RUNS BEFORE ANYTHING IS APPLIED ON HIS WORD ──────────
+  {
+    const corr = stripComments(readFileSync(join(root, "src/utils/correction.js"), "utf8"));
+    ok("the site is resolved once, off the entry", /const ownSite = ownSiteFor\(entry, name\);/.test(corr));
+    ok("and asked only when nothing else settled it",
+       /settled\.verdict === "unresolved" && ownSite && String\(c\.proposed \|\| ""\)\.trim\(\)/.test(corr));
+    ok("their answer can reject as well as confirm",
+       /fromThem\.verdict === "confirmed" \|\| fromThem\.verdict === "rejected"/.test(corr));
+    // THE ASSERTED RULE IS NOT UNDONE. It exists because ignoring him produced a
+    // tool that ignored him, and handoff 6 records "he is right more often than
+    // the fact-checker is". This only takes away the case where nobody asked.
+    ok("silence still does not block him", /v\.verdict = "asserted";/.test(corr));
+    // But the sentence now says WHICH silence it was, because one of the two
+    // means he should go and look.
+    ok("and the sentence says whether they were asked", /v\.askedOwnSite\s*\n?\s*\?/.test(corr));
+    ok("or that there was nobody to ask", /no official website, so there was no operator page to ask/.test(corr));
+  }
+}
+
+// ── "8 ON MY WORD IS ALOT.. THIS IS FROM GEMINI", 6 SEP 2026 ────────
+//
+// Oliver, reading "5 confirmed, 8 on your word, 1 rejected" over a single Apply
+// button: "this is from Gemini.. so Gemini might be wrong as well. That's the
+// problem." And: "I can now click apply to draft.. but then I'll apply 5
+// confirmed and 8 that might be wrong."
+//
+// The asserted rule was written for HIS corrections, and handoff 6's "he is
+// right more often than the fact-checker is" is about him, not about a model he
+// pasted. Rule 1 at the top of correction.js already settles the pasted case —
+// criticism is a lead and not a source — and what was missing is that the pass
+// could not tell the two apart, so it applied the second under the first's rule.
+{
+  const { whoseWord, PASTED_MIN } = M;
+
+  // A founder correction is short and first-person.
+  is("a short correction is his", whoseWord("really it is 60 minutes, not 90"), "founder");
+  is("even a blunt one", whoseWord("wrong, the ferry is faster than that"), "founder");
+  is("and nothing at all is his", whoseWord(""), "founder");
+  // A pasted fact-check is long, impersonal and structured. The threshold is
+  // the router's own, shared rather than restated, because two copies of one
+  // number is how they would come to disagree about what a paste is.
+  ok("the threshold is the router's", PASTED_MIN === 400);
+  is("a long paste is not his", whoseWord("x".repeat(PASTED_MIN + 1)), "pasted");
+  is("and length is not the only tell", whoseWord("* Claim: the bar is 23+\n* What is wrong: it is not"), "pasted");
+  is("nor is a cited source", whoseWord("it is 23+ per https://www.mapquest.com/dk/x"), "pasted");
+  // ── ANCHORED ON THE ROUTER'S OWN LINE ───────────────────────────
+  // A mutation put the literal 400 back in the router and this still passed:
+  // the pattern "t.length > PASTED_MIN" also appears in whoseWord two functions
+  // up, so it was reading the wrong line. The `&&` is what makes it the
+  // router's, and the second half asserts the absence rather than the presence,
+  // which is the half a re-introduced copy would break.
+  {
+    const corrSrc = stripComments(readFileSync(join(root, "src/utils/correction.js"), "utf8"));
+    ok("the router reads the same number", /t\.length > PASTED_MIN && \//.test(corrSrc));
+    // The NUMBER, not any number: offersCorrection two functions down has its
+    // own threshold of 200 for a different question, and that is not a copy of
+    // this one. A re-introduced 400 is.
+    ok("and keeps no copy of the number itself", !new RegExp(`t\\.length > ${PASTED_MIN}\\b`).test(corrSrc));
+  }
+
+  // ── AND ONLY HIS WORD IS APPLIED ON HIS WORD ────────────────────
+  {
+    const corr = stripComments(readFileSync(join(root, "src/utils/correction.js"), "utf8"));
+    ok("the pass asks whose word it is", /const mine = whoseWord\(criticism\) === "founder";/.test(corr));
+    // A pasted claim that no source settled is REPORTED and left alone, which
+    // is what unresolved already meant before eight of them started riding in
+    // under a rule about him.
+    ok("a pasted claim is never promoted to asserted", /if \(!mine\) \{[\s\S]{0,400}?continue;/.test(corr));
+    ok("and it says why, in the reader's terms", /came from a pasted fact-check rather than from you/.test(corr));
+    // THE ESCAPE HATCH IS NOT CLOSED. Ignoring him is what produced a tool that
+    // ignored him; his own correction still lands when nothing contradicts it.
+    ok("his own correction still lands on his word", /v\.verdict = "asserted";/.test(corr));
+    // And the caller can tell the two apart, because the count over the Apply
+    // button has to say what will actually be applied.
+    ok("the result says which it was", (corr.match(/fromPaste: !mine/g) || []).length === 2);
+    const panel = stripComments(readFileSync(join(root, "src/components/StudioAssistant.jsx"), "utf8"));
+    ok("and the count stops calling them settled",
+       /unconfirmed and NOT applied/.test(panel));
+    ok("and stops saying he gave no value for somebody else's claim",
+       /result\.fromPaste[\s\S]{0,120}?NOT applied/.test(panel));
+  }
+}
+
+// ── THE ONLY NAVIGATION A PHONE HAS, PUSHED OFF THE SCREEN ──────────
+//
+// Oliver, 6 Sep 2026: "On the phone, the burger menu for the navigation is
+// gone." Measured in a real browser at 430px rather than reasoned about:
+//
+//   header bar    width 398, scrollWidth 417   overflowing by 19px
+//   logo          16 → 144
+//   gx-topnav-ai  152 → 287   display: FLEX    should have been none
+//   account row   291 → 433                    past a 430px screen
+//
+// and elementFromPoint at the account button's centre returned an SVG path from
+// somewhere else, because the button was off the right edge. onScreen: false.
+//
+// THE DETOUR PILL CARRIED `display: "inline-flex"` IN ITS INLINE STYLE AND ALSO
+// the .gx-topnav-ai class whose whole job is to hide it below 1024px. An inline
+// style beats a stylesheet rule, so that `display: none` had never once
+// applied, and 135px of desktop-only button had been pushing a phone's only
+// navigation off the screen for as long as the button existed.
+//
+// Same shape as the pager: two owners of one property, and the one that looks
+// like it is in charge is not. There it was React and an effect; here it is a
+// class and an inline style.
+{
+  const appM = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const stripped = stripComments(appM);
+  // The class owns it, and align-items travels with the display it needs so the
+  // pair cannot be separated again.
+  ok("the class hides the Detour pill by default",
+     /\.gx-topnav-ai \{ display: none; align-items: center; \}/.test(stripped));
+  ok("and shows it only where there is room", /@media \(min-width: 1024px\) \{[\s\S]{0,200}?\.gx-topnav-ai \{ display: inline-flex; \}/.test(stripped));
+  // THE HALF THAT WAS BROKEN. An inline display on that button silently wins,
+  // and nothing on screen says so.
+  {
+    const pill = stripped.slice(stripped.indexOf('className="gx-topnav-ai"'));
+    const style = pill.slice(pill.indexOf("style={{"), pill.indexOf("}}>"));
+    ok("the pill is findable", style.length > 60 && style.length < 900);
+    ok("and carries no display of its own", !/display:/.test(style));
+    ok("nor an align-items the class has taken over", !/alignItems:/.test(style));
+  }
+  // The account button is the whole navigation on a phone, so it may never be
+  // given a width-costing neighbour that the stylesheet believes is hidden.
+  ok("the account button is still the one that opens the menu",
+     /className="gemlyx-account" onClick=\{\(\) => setShowMenu\(!showMenu\)\}/.test(stripped));
+  // And the menu still holds every page below 1024px, which is what makes the
+  // button navigation rather than decoration.
+  ok("the menu carries the navigation where the bar does not",
+     /<div className="gx-nav-in-menu">/.test(stripped)
+     && /@media \(min-width: 1024px\) \{[\s\S]{0,260}?\.gx-nav-in-menu \{ display: none !important; \}/.test(stripped));
 }
 
 // ── THE ENTRY DISAGREEING WITH ITS OWN DATE FIELD, 5 SEP 2026 ───────

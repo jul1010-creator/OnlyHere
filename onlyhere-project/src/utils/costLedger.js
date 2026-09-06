@@ -64,7 +64,7 @@
 import { normaliseTicketStatus } from "./tickets";
 import { isBookableTicketUrl } from "./ticketLink";
 import { stopEventWhen } from "./guideReading";
-import { affiliateHref, isPartnerLink, carRentalFits, carRentalUrl, bookingUrl } from "./affiliates";
+import { affiliateHref, isPartnerLink, carRentalFits, carRentalUrl, bookingUrl, isWegotripUrl } from "./affiliates";
 import { OPERATORS } from "./operators";
 import { isFerryText } from "./helpers";
 
@@ -335,7 +335,11 @@ export const costLines = ({
         const row = lookup(String(st?.name || "").trim());
         const audio = row?.__audio;
         const href = String(audio?.url || "").trim();
-        if (!href || !/^https:\/\//i.test(href)) return;
+        // isWegotripUrl AND the scheme. The host check is the one that stops a
+        // guide printing "on WeGoTrip" over somebody else's site; the scheme
+        // check is what stops a javascript: URL reaching an anchor. Two
+        // different failures, so both are asked.
+        if (!href || !/^https:\/\//i.test(href) || !isWegotripUrl(href)) return;
         const town = String(audio.town || "").trim() || String(st?.name || "").trim();
         if (towns.has(town)) return;
         towns.add(town);

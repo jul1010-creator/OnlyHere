@@ -187,7 +187,15 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
       const why = c.verdict === "rejected"
         ? `\n   Not applied, a source says otherwise. ${c.evidence}`
         : c.verdict === "unresolved"
-        ? `\n   Left alone, nothing settled it and you gave no value to use. ${c.evidence}`
+        // ── "8 ON MY WORD IS ALOT.. THIS IS FROM GEMINI" ─────────
+        // Oliver, 6 Sep 2026. An unresolved claim out of a PASTED fact-check is
+        // not left alone for want of a value: it has one, and it was refused
+        // because nobody but the model that wrote it says so. Saying "you gave
+        // no value to use" about somebody else's claim is the same confusion
+        // that had eight of them riding in under "on your word".
+        ? (result.fromPaste
+            ? `\n   NOT applied. ${c.evidence}`
+            : `\n   Left alone, nothing settled it and you gave no value to use. ${c.evidence}`)
         : c.verdict === "asserted"
         ? `\n   Applied on your word, still unconfirmed. ${c.evidence}`
         : `\n   ${c.evidence}${c.sourceUrl ? `\n   Source: ${c.sourceUrl}` : ""}`;
@@ -201,11 +209,18 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
     const revertNote = result.reverted.length
       ? `\n\nIt also tried to change ${result.reverted.join(", ")}, which nothing asked for. Those were put back.`
       : "";
+    // ── THE COUNT HAS TO SAY WHAT WILL BE APPLIED ─────────────────
+    // "5 confirmed, 8 on your word, 1 rejected" over one Apply button read as
+    // thirteen changes, eight of them somebody else's guess. The unconfirmed
+    // ones out of a paste are not applied at all now, and the line says so
+    // rather than counting them alongside the ones that held.
     const counts = [
       `${result.confirmed.length} confirmed`,
       result.asserted?.length ? `${result.asserted.length} on your word` : null,
       `${result.rejected.length} rejected`,
-      `${result.unresolved.length} unsettled`,
+      result.fromPaste && result.unresolved.length
+        ? `${result.unresolved.length} unconfirmed and NOT applied`
+        : `${result.unresolved.length} unsettled`,
     ].filter(Boolean).join(", ");
     say("gemlyx", `${counts}.\n\n${lines.join("\n\n")}${revertNote}`);
     setPending({ mode: onDraft ? "draft" : "row", rowId, before, after: result.patched, changed: result.changed });

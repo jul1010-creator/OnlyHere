@@ -214,6 +214,20 @@ export const describeSweepPlan = (plan) => {
 // ticket link is not a weak fact, it is a reader who paid for something else.
 export const FOUND = "found";
 export const NOTHING = "nothing";
+// ── AND "THE SEARCH DID NOT HAPPEN" IS NOT "NOBODY SELLS THIS" ──────
+//
+// Found by an adversarial review, and it is the most expensive thing in this
+// file. The run loop swallows every /api/search failure and carries on, so a
+// Tavily quota, a 429 or a missing key partway through a hundred-row sweep
+// produced an empty result list for every row after it. Those rows then came
+// out of ticketProposal as NOTHING, were stamped __ticketSweep.found = false,
+// were written whether or not they were ticked, and dropped out of the paid
+// list until December — while the panel reported it as an answer.
+//
+// Two of this codebase's own rules say that must not happen: a field that
+// cannot be answered stays empty and SAYS SO, and a refusal carries its reason.
+// "We asked and were told no" and "we could not ask" are different facts.
+export const FAILED = "failed";
 
 // ── AN AGENT HAS A NAME, AND IT IS NOT ITS KEY ──────────────────────
 // ticketAgentOf returns "tiqets" and "ticketmaster" because they are keys. Both
@@ -225,13 +239,24 @@ export const NOTHING = "nothing";
 const AGENT_LABEL = { tiqets: "Tiqets", ticketmaster: "Ticketmaster", wegotrip: "WeGoTrip" };
 export const agentLabel = (agent) => AGENT_LABEL[clean(agent)] || "a ticket agent";
 
-export const ticketProposal = (row, results, { today = new Date() } = {}) => {
+export const ticketProposal = (row, results, { today = new Date(), failed = 0 } = {}) => {
   const payload = row?.payload || {};
   const name = clean(payload.name) || "(unnamed)";
   const town = parentTownOf(payload);
   const list = (Array.isArray(results) ? results : []).filter(r => r?.url);
   const url = pickTicketUrl(list, { name, town });
   const at = isoDay(today instanceof Date ? today : new Date(today));
+  // ── ANY FAILED QUERY POISONS A "NO" AND NOT A "YES" ───────────────
+  // A found page is a found page however the other query went. A blank answer
+  // with a failed query behind it is not an answer at all, because the query
+  // that failed is the one that might have had it. No `set`, so the writer has
+  // nothing to send and this row stays in the paid list for next time.
+  if (!url && Number(failed) > 0) {
+    return {
+      id: row?.id, name, verdict: FAILED, at,
+      why: `The search itself failed for this row${Number(failed) > 1 ? ` on both queries` : ""}, so nothing is known either way. Nothing is written and it stays in the list to try again. A quota or a rate limit part-way through a sweep looks exactly like "nobody sells tickets to this", and recording it as one would hide the row for ${RESWEEP_DAYS} days.`,
+    };
+  }
   if (!url) {
     return {
       id: row?.id, name, verdict: NOTHING, at,
@@ -240,7 +265,7 @@ export const ticketProposal = (row, results, { today = new Date() } = {}) => {
       // bookable pages that are about something else. Each is a different thing
       // for him to do, and "nothing found" told three times is one thing.
       why: describeTicketSearch(list, { name, town }),
-      payload: { ...payload, __ticketSweep: { at, found: false } },
+      set: { __ticketSweep: { at, found: false } },
     };
   }
   return {
@@ -249,17 +274,25 @@ export const ticketProposal = (row, results, { today = new Date() } = {}) => {
     // Quoted back rather than summarised, rule 4. This is the line he reads
     // when deciding whether to accept, and "found a page" is not evidence.
     why: `${agentLabel(ticketAgentOf(url))} has a bookable page whose own title or slug names this place${town ? ` in ${town}` : ""}.`,
-    payload: { ...payload, ticketUrl: url, __ticketSweep: { at, found: true, url } },
+    set: { ticketUrl: url, __ticketSweep: { at, found: true, url } },
   };
 };
 
 export const describeTicketFindings = (list) => {
   const all = Array.isArray(list) ? list : [];
   if (!all.length) return "Nothing was searched.";
+  const broke = all.filter(p => p?.verdict === FAILED);
   const found = all.filter(p => p?.verdict === FOUND);
+  // Said FIRST and separately, because a run that half failed is a different
+  // event from a run that found little, and the counts below would read as the
+  // second when it was the first.
+  const lead = broke.length
+    ? `${broke.length} of ${all.length} could not be searched at all, so nothing is known about ${broke.length === 1 ? "it" : "them"} and nothing will be written for ${broke.length === 1 ? "it" : "them"}. That is usually a quota or a rate limit. `
+    : "";
+  if (!found.length && broke.length === all.length) return lead.trim();
   const agents = [...new Set(found.map(p => agentLabel(p.agent)).filter(Boolean))];
-  if (!found.length) return `${all.length} ${all.length === 1 ? "row" : "rows"} asked, and no agent sells a ticket to any of them. Plenty of Danish places sell only through their own site, and no ticket link is the right answer for those. Each one is stamped so the next sweep skips it for ${RESWEEP_DAYS} days.`;
-  return `${found.length} of ${all.length} have a bookable page${agents.length ? ` on ${agents.join(" and ")}` : ""}. Ticking one writes the plain agent URL onto the row; the tracking marker is added at render from config.js, so it is never frozen into the database.`;
+  if (!found.length) return `${lead}${all.length - broke.length} ${all.length - broke.length === 1 ? "row" : "rows"} asked, and no agent sells a ticket to any of them. Plenty of Danish places sell only through their own site, and no ticket link is the right answer for those. Each one is stamped so the next sweep skips it for ${RESWEEP_DAYS} days.`;
+  return `${lead}${found.length} of ${all.length - broke.length} have a bookable page${agents.length ? ` on ${agents.join(" and ")}` : ""}. Ticking one writes the plain agent URL onto the row; the tracking marker is added at render from config.js, so it is never frozen into the database.`;
 };
 
 // The write, as data rather than as a fetch, so the shape can be asserted
@@ -269,4 +302,9 @@ export const describeTicketFindings = (list) => {
 // TYPE IS NOT TOUCHED. This sweep changes what a row links to, never what a row
 // IS, so a PATCH carrying a type would be a whole class of mistake this cannot
 // make.
-export const affiliateWriteFor = (p) => ({ id: p?.id, payload: p?.payload });
+// A DELTA, NOT A PAYLOAD. See the same note on wegotripWriteFor: this returned
+// the whole payload out of a snapshot read minutes earlier, so two applies in
+// one session, or one Studio edit during the paid run, silently put the older
+// version back. Returns null-ish `set` for a verdict that must not be written,
+// which is what makes FAILED unwritable rather than merely undisplayed.
+export const affiliateWriteFor = (p) => ({ id: p?.id, set: p?.set });

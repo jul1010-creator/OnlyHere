@@ -85,6 +85,12 @@ export const BORN_DATE_MAX = `${BORN_LATEST}-12-31`;
 export const cleanBornDate = (raw) => {
   const t = String(raw ?? "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return "";
+  // ── AND THIS toISOString IS THE RIGHT ONE ─────────────────────────
+  // Audited 6 Sep 2026 alongside three that were wrong, and left alone. The
+  // Date is built explicitly in UTC on the line above, so the round trip back
+  // through toISOString is exact in every timezone. isoDay here would BREAK it:
+  // it reads the local getters, so west of Greenwich 2026-09-06T00:00:00Z is
+  // still the 5th locally and every valid birthday would be rejected.
   const d = new Date(`${t}T00:00:00Z`);
   if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== t) return "";
   if (t < BORN_DATE_MIN || t > BORN_DATE_MAX) return "";
