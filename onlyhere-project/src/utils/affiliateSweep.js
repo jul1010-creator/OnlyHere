@@ -61,6 +61,20 @@ import { ticketQueries, pickTicketUrl, describeTicketSearch, isBookableTicketUrl
 import { ticketDestination } from "./affiliateAudit";
 import { TYPES_WITH_A_DOOR } from "./entryPrice";
 import { parentTownOf } from "./previewMatch";
+// ── isoDay, NOT toISOString().slice(0, 10) ──────────────────────────
+//
+// 6 Sep 2026, found by Oliver's pre-push hook and not by me: the suite passed
+// here and failed on his machine with
+//
+//   expected [true,"2026-09-06"]   actual [true,"2026-09-05"]
+//
+// toISOString converts to UTC first. This sandbox runs on UTC so the two agree;
+// Denmark is two hours ahead, so a Date built at local midnight is 22:00 the
+// PREVIOUS day in UTC, and every stamp written between midnight and 02:00 would
+// have been dated yesterday. isoDay reads getFullYear/getMonth/getDate, which
+// are local by definition, and it is the formatter the rest of this codebase
+// already uses for a day string.
+import { isoDay } from "./eventDates";
 
 const clean = (v) => String(v == null ? "" : v).trim();
 
@@ -208,7 +222,7 @@ export const NOTHING = "nothing";
 // honest generic rather than a capitalised key: PARTNER_MERCHANTS in
 // affiliates.js already carries the comment about why "Gjhkxmoh" is the failure
 // mode of capitalising whatever happens to be there.
-const AGENT_LABEL = { tiqets: "Tiqets", ticketmaster: "Ticketmaster" };
+const AGENT_LABEL = { tiqets: "Tiqets", ticketmaster: "Ticketmaster", wegotrip: "WeGoTrip" };
 export const agentLabel = (agent) => AGENT_LABEL[clean(agent)] || "a ticket agent";
 
 export const ticketProposal = (row, results, { today = new Date() } = {}) => {
@@ -217,7 +231,7 @@ export const ticketProposal = (row, results, { today = new Date() } = {}) => {
   const town = parentTownOf(payload);
   const list = (Array.isArray(results) ? results : []).filter(r => r?.url);
   const url = pickTicketUrl(list, { name, town });
-  const at = (today instanceof Date ? today : new Date(today)).toISOString().slice(0, 10);
+  const at = isoDay(today instanceof Date ? today : new Date(today));
   if (!url) {
     return {
       id: row?.id, name, verdict: NOTHING, at,

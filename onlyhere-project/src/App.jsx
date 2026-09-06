@@ -166,6 +166,8 @@ import { downloadReport } from "./utils/previewReport";
 import { briefThemes , essentialsForTrip, essentialsBlock, fitsBrief, preferenceRowState, PREF_READY, PREF_NO_ACCOUNT } from "./utils/interestFit";
 import { partnerDisclosure, linkLabel, affiliateHref } from "./utils/affiliates";
 import { sweepPlan, describeSweepPlan, ticketProposal, describeTicketFindings, affiliateWriteFor, agentLabel, FOUND as AFF_FOUND, RESWEEP_DAYS } from "./utils/affiliateSweep";
+import { wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO } from "./utils/wegotripMatch";
+import { wegotripActive } from "./utils/affiliates";
 // ── "SOME THINGS ARE ESSENTIALS WHILE OTHERS ARE TIPS" ──────────────
 // Oliver, 30 Aug 2026. See utils/essentialKind.js: the categories were never
 // the problem, two documents sharing one list were.
@@ -8986,6 +8988,12 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   // first and the spend is a separate, deliberate act. See
   // utils/affiliateSweep.js.
   const [affPlan, setAffPlan] = useState(null);            // { plan, summary } | { error }
+  // The WeGoTrip half, which is free and therefore lands on the SAME press as
+  // the count. Its whole Danish catalogue is twenty rows in src/data/wegotrip.js,
+  // so there is nothing to buy and no reason to make him press again for it.
+  const [affWego, setAffWego] = useState(null);            // { list, summary } | null
+  const [wegoChosen, setWegoChosen] = useState(() => new Set());
+  const [wegoWriting, setWegoWriting] = useState(null);    // { done, total, failed[] } | null
   const [affSweep, setAffSweep] = useState(null);          // { list, summary } | { error }
   const [affRunning, setAffRunning] = useState(null);      // { done, total, name } | null
   const [affChosen, setAffChosen] = useState(() => new Set());
@@ -9312,7 +9320,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
   // what is left after all four gets a search, and this is where he sees how
   // many that is before deciding.
   const planAffiliateSweep = async () => {
-    setAffPlan(null); setAffSweep(null); setAffChosen(new Set()); setAffWriting(null);
+    setAffPlan(null); setAffSweep(null); setAffChosen(new Set()); setAffWriting(null); setAffWego(null); setWegoChosen(new Set()); setWegoWriting(null);
     try {
       const got = await readPublishedRows();
       if (got.error) { setAffPlan({ error: got.error }); return; }
@@ -9325,6 +9333,12 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       // library between the two presses would sweep a different set than the
       // one he priced.
       setAffPlan({ plan, rows: got.rows, summary: describeSweepPlan(plan) });
+      // FREE, so it runs here rather than behind the paid button. No search, no
+      // scrape, no model: twenty catalogue rows matched by name against the
+      // library already in hand. See utils/wegotripMatch.js.
+      const wego = wegotripProposals(got.rows, { today: new Date() });
+      setAffWego({ list: wego, summary: describeWegotrip(wego, got.rows) });
+      setWegoChosen(new Set(wego.map(p => p.id)));
     } catch (err) {
       setAffPlan({ error: String(err?.message || err).slice(0, 200) });
     }
@@ -9336,6 +9350,35 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
   // hundred searches is how a rate limit turns a sweep into a mess, and the
   // progress line names the row being asked about so a slow run is legible
   // rather than merely slow.
+  // ── AND THE FREE ONE'S WRITER ─────────────────────────────────────
+  // Identical shape to applyAffiliateSweep, and separate from it because these
+  // are two different decisions: one is "accept what the search found" and the
+  // other is "accept what the catalogue already knew". Sharing a button would
+  // make one tick stand for both.
+  const applyWegotripSweep = async () => {
+    const list = (affWego?.list || []).filter(p => wegoChosen.has(p.id));
+    if (!list.length) return;
+    setWegoWriting({ done: 0, total: list.length, failed: [] });
+    const failed = [];
+    for (let i = 0; i < list.length; i++) {
+      const w = wegotripWriteFor(list[i]);
+      try {
+        const attempt = (token) => fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${encodeURIComponent(String(w.id))}`, {
+          method: "PATCH",
+          headers: { ...sweepHeaders(), "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify({ payload: w.payload }),
+        });
+        let res = await attempt(studioSession?.access_token);
+        if (res.status === 401) { const fresh = await refreshStudioSession(); if (fresh) res = await attempt(fresh.access_token); }
+        if (!res.ok) failed.push(`${list[i].name}: ${res.status}`);
+      } catch (err) { failed.push(`${list[i].name}: ${String(err?.message || err).slice(0, 60)}`); }
+      setWegoWriting({ done: i + 1, total: list.length, failed: [...failed] });
+      await new Promise(r => setTimeout(r, 200));
+    }
+    if (failed.length < list.length) { await refreshLiveContent(); bumpLiveContent(v => v + 1); }
+    showToast(`🎧 ${list.length - failed.length} WeGoTrip link${list.length - failed.length === 1 ? "" : "s"} added`, 3200);
+  };
+
   const runAffiliateSweep = async () => {
     const rows = affPlan?.plan?.searchable || [];
     const byId = new Map((affPlan?.rows || []).map(r => [r.id, r]));
@@ -18024,6 +18067,72 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
                       {affPlan?.error && <div style={{ fontSize: 11.5, color: "#FFB347" }}>{affPlan.error}</div>}
                       {affPlan?.summary && <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{affPlan.summary}</div>}
+
+                      {/* ── THE FREE HALF, ON THE SAME PRESS ───────────
+                          WeGoTrip publishes its whole Danish catalogue on one
+                          page, so src/data/wegotrip.js holds it and matching is
+                          twenty rows against the library in memory. Nothing to
+                          buy, so nothing to warn about and no second button to
+                          get here.
+
+                          Audio walks are all TOWN-level, every one of the
+                          thirteen, so they land on town and nightlife-town
+                          pages. The seven admissions are attraction-level and
+                          go in ticketUrl like any other agent. */}
+                      {affWego?.list?.length > 0 && (
+                        <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "11px 12px", marginBottom: 10 }}>
+                          <div style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, marginBottom: 3 }}>🎧 WeGoTrip, free to check</div>
+                          <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.55, marginBottom: 8 }}>{affWego.summary}</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {affWego.list.map(p => {
+                              const on = wegoChosen.has(p.id);
+                              return (
+                                <div key={`w-${p.id}`} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                                  <input type="checkbox" checked={on} disabled={!!wegoWriting}
+                                    onChange={() => setWegoChosen(prev => { const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; })}
+                                    style={{ marginTop: 3, accentColor: C.gold, cursor: "pointer" }} />
+                                  <div style={{ minWidth: 0, flex: 1 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>
+                                      {p.name}
+                                      <span style={{ fontWeight: 500, color: C.muted }}> · {p.kind === WEGO_AUDIO ? "audio walk" : "admission"}</span>
+                                    </div>
+                                    <div style={{ fontSize: 10.8, color: C.muted, marginTop: 2, lineHeight: 1.55 }}>{p.why}</div>
+                                    {/* What the card would read, and the URL
+                                        under it. What you review is what you
+                                        publish, and the half that can be wrong
+                                        is which page it points at. */}
+                                    <div style={{ fontSize: 11, color: C.gold, marginTop: 3 }}>Card would read: {p.line}</div>
+                                    <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2, wordBreak: "break-all" }}>{p.url}</div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 9, flexWrap: "wrap" }}>
+                            <button onClick={applyWegotripSweep} disabled={!!wegoWriting || wegoChosen.size === 0}
+                              style={{ background: wegoChosen.size ? C.gold : "none", border: `1px solid ${C.gold}`, color: wegoChosen.size ? C.onGold : C.muted, borderRadius: 10, padding: "7px 13px", fontSize: 11.5, fontWeight: 700, cursor: wegoChosen.size ? "pointer" : "default", fontFamily: "'Inter', sans-serif" }}>
+                              {wegoWriting ? `Writing ${wegoWriting.done}/${wegoWriting.total}…` : `Add ${wegoChosen.size} WeGoTrip link${wegoChosen.size === 1 ? "" : "s"}`}
+                            </button>
+                            {/* SAID OUT LOUD, because a button that adds a link
+                                which earns nothing today would otherwise look
+                                like one that pays. The template is empty until
+                                the long-form Travelpayouts link is in config,
+                                and every stored link starts paying the moment
+                                it is: wegotripUrl is read at render. */}
+                            <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5 }}>
+                              {wegotripActive()
+                                ? "Tracked through the WeGoTrip template in config.js, so every one of these earns."
+                                : "These earn nothing until WEGOTRIP_AFFILIATE_TEMPLATE is filled in. The links still work, and they all start paying the day it is, with no republish."}
+                            </div>
+                            {wegoWriting?.failed?.length > 0 && (
+                              <div style={{ fontSize: 10.5, color: "#FFB347" }}>{wegoWriting.failed.length} failed: {wegoWriting.failed.slice(0, 3).join("; ")}</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {affWego && !affWego.list.length && (
+                        <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.55, marginBottom: 10 }}>🎧 {affWego.summary}</div>
+                      )}
 
                       {/* THE SPEND, NAMED BEFORE IT HAPPENS. The button says how
                           many searches it is about to run, because a button

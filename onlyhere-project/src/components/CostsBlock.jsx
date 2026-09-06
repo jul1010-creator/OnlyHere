@@ -49,6 +49,9 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
     kind === COST_KIND.TRANSPORT || kind === COST_KIND.FERRY ? "Check times and fares"
       : kind === COST_KIND.STAY ? "Find a room"
       : kind === COST_KIND.CAR ? "Book the car"
+      // A walking tour is not a ticket, and "Buy tickets" over one is the label
+      // that made it need its own kind in the first place.
+      : kind === COST_KIND.AUDIO ? "Listen to a sample"
       : "Buy tickets";
 
   return (

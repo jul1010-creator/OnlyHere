@@ -999,6 +999,46 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           );
         })()}
 
+        {/* ── AND A SELF-GUIDED AUDIO WALK, WHERE THERE IS ONE ────
+            Oliver, 6 Sep 2026: "add audio to this tour on the blogs that has
+            the possible". WeGoTrip's thirteen Danish audio walks are every one
+            of them about a TOWN rather than an attraction, so this only ever
+            appears on a town or nightlife-town page. See utils/wegotripMatch.js
+            and data/wegotrip.js.
+
+            ITS OWN BUTTON, NOT THE TICKET ONE, because a walking tour is not
+            admission and "🎫 Book tickets" over one is a label that is not
+            true. Same rule that made ticketUrl refuse a Tiqets category page.
+
+            The stored value is the plain WeGoTrip URL. Tracking is added here,
+            at render, from the template in config.js, which is empty today: the
+            reader still reaches the walk and Gemlyx earns nothing until the
+            long-form Travelpayouts link is pasted in. affiliateNote returns ""
+            in that state, so nothing claims a commission that is not earned. */}
+        {(() => {
+          const dest = String(item?.__audio?.url || "").trim();
+          if (!/^https:\/\/(?:[a-z0-9-]+\.)*wegotrip\.com\//i.test(dest)) return null;
+          const count = Number(item.__audio.count) || 1;
+          const title = String(item.__audio.title || "").trim();
+          const town = String(item.__audio.town || "").trim() || item.name;
+          const href = affiliateHref(dest) || dest;
+          const note = affiliateNote(dest);
+          return (
+            <div style={{ marginBottom: 10 }}>
+              <a href={href} target="_blank" rel={note ? "noreferrer sponsored nofollow" : "noreferrer"}
+                style={{ display: "block", textAlign: "center", background: C.surface, border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 12, padding: "13px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
+                🎧 {count > 1 ? `${count} self-guided audio walks in ${town}` : (title || `Self-guided audio walk in ${town}`)}
+              </a>
+              {/* NAMED, always. The Essentials row taught this one: a button
+                  pointing at a site nobody has heard of has to say whose it is,
+                  or the reader is asked to trust a stranger. */}
+              <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 5, textAlign: "center" }}>
+                On WeGoTrip{note ? `. ${note}` : ""}
+              </div>
+            </div>
+          );
+        })()}
+
         <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.mapHint || `${item.name} ${item.city || item.location || ""} Denmark`)}`} target="_blank" rel="noreferrer"
           style={{ display: "block", textAlign: "center", background: color, color: "#fff", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 700, textDecoration: "none" }}>
           ↗ Get Directions

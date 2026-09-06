@@ -36,7 +36,7 @@
 //                               solves exactly this for research sources and
 //                               already knows that an ordinary name like
 //                               "Harbour" needs corroborating.
-import { isTiqetsUrl, isTicketmasterUrl } from "./affiliates";
+import { isTiqetsUrl, isTicketmasterUrl, isWegotripUrl } from "./affiliates";
 import { sourceIsAboutPlace } from "./sourcePolicy";
 
 // ── WHICH TIQETS PAGES ARE WORTH LINKING TO ─────────────────────────
@@ -108,16 +108,52 @@ const pathOf = (url) => {
 export const isTicketmasterEventUrl = (url) =>
   isTicketmasterUrl(url) && TICKET_EVENT_PATH.test(pathOf(url));
 
+// ── AND THE THIRD AGENT, 6 SEP 2026 ─────────────────────────────────
+//
+// WeGoTrip sells seven Danish admissions: LEGOLAND Billund, both WOW PARKs,
+// Givskud Zoo, Home of Carlsberg and IKONO. See src/data/wegotrip.js.
+//
+// ITS URLS CARRY A TYPED ID LIKE TIQETS', with a different alphabet:
+//
+//   ...-p20636/    a PRODUCT, one bookable thing              maybe
+//   ...-a9255/     an ATTRACTION page, tours for one place    reject
+//   ...-d2618425/  a DESTINATION, every product in a city     reject
+//   ...-s2623032/  a COUNTRY                                  reject
+//
+// "maybe", because a WeGoTrip product is either an admission or a self-guided
+// AUDIO WALK, and a walk is not a ticket. A "🎫 Book tickets" button over an
+// audio tour of Copenhagen is a label that is not true, which is the same
+// failure as an OFFICIAL SITE button over a reseller.
+//
+// THE SLUG SETTLES IT, and only in this direction. All seven admissions say
+// "ticket" in the slug and not one of the thirteen walks does, so the word is
+// sufficient evidence of an admission. The reverse is NOT true and is why this
+// file does not try to identify a walk: "Best of Copenhagen: Get to know the
+// capital of Denmark" says neither and is an audio tour, checked on its own
+// page. Recognising a walk needs the catalogue; recognising a ticket does not.
+const WEGOTRIP_PRODUCT = /-p\d+$/;
+const SAYS_TICKET = /(?:^|-)(?:ticket|tickets|billet|billetter)(?:-|$)/i;
+
+export const isWegotripTicketUrl = (url) => {
+  if (!isWegotripUrl(url)) return false;
+  const seg = lastSegment(url);
+  return WEGOTRIP_PRODUCT.test(seg) && SAYS_TICKET.test(seg);
+};
+
 // ── ONE QUESTION, ASKED IN ONE PLACE ────────────────────────────────
 // Everything downstream asks "may this be stored and shown as a ticket link",
-// never "is this Tiqets". Adding a third agent later is a line here rather than
-// an edit in the publish gate, the render and the picker.
+// never "is this Tiqets". Adding a third agent was a line here rather than an
+// edit in the publish gate, the render and the picker, which is what this
+// comment promised on 15 August and what it cost on 6 September.
 export const isBookableTicketUrl = (url) =>
-  isTiqetsProductUrl(url) || isTicketmasterEventUrl(url);
+  isTiqetsProductUrl(url) || isTicketmasterEventUrl(url) || isWegotripTicketUrl(url);
 
 // Which agent it is, for the render, which has to reach for the right template.
 export const ticketAgentOf = (url) =>
-  isTiqetsProductUrl(url) ? "tiqets" : isTicketmasterEventUrl(url) ? "ticketmaster" : "";
+  isTiqetsProductUrl(url) ? "tiqets"
+  : isTicketmasterEventUrl(url) ? "ticketmaster"
+  : isWegotripTicketUrl(url) ? "wegotrip"
+  : "";
 
 // ── AND IS IT ABOUT THE PLACE THIS ENTRY IS ABOUT ───────────────────
 // sourceIsAboutPlace, not a name comparison written here. It is the function

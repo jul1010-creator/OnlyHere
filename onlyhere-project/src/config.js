@@ -236,3 +236,27 @@ export const CAR_RENTAL_LINK = "https://autoeurope.tpx.li/SFG4IdAn";
 // wrote "please don't send us to Legoland" gets sold one. See utils/exclusions.js
 // — that failure is four hours old and it must not come back through a partner.
 export const WEGOTRIP_LINK = "https://wegotrip.tpx.li/FqqNAbzW";
+
+// ── AND THE DEEP LINK, WHICH IS THE HALF THAT IS MISSING ────────────
+//
+// 6 Sep 2026. WEGOTRIP_LINK above is the SHORT link: one fixed destination,
+// which makes it a browse button and nothing else. The same paragraph the
+// Tiqets block spends on this applies word for word here, and it now costs
+// something real, because src/data/wegotrip.js holds twenty named Danish
+// products and every one of them has its own page.
+//
+// EMPTY IS NOT A BUG AND IT IS NOT A BLOCKER. Exactly like Tiqets on the day he
+// signed up: the links are found, stored and rendered, and they earn nothing
+// until a template is here. wegotripUrl is read AT RENDER, so pasting the long
+// form below turns every stored WeGoTrip link on the site into a paying one at
+// once, with no migration, no republish and no redraft.
+//
+// WHERE TO GET IT: Travelpayouts, the WeGoTrip campaign, the link generator
+// rather than the "get link" button. It comes out shaped like the Tiqets one
+//
+//   https://tp.media/r?campaign_id=<theirs>&marker=765061&p=<theirs>&trs=<yours>&u={url}
+//
+// and `u` MUST BE LAST, for the reason spelled out in the Tiqets block: the
+// destination is appended encoded, and a parameter after it would be swallowed
+// into the URL rather than read by Travelpayouts.
+export const WEGOTRIP_AFFILIATE_TEMPLATE = "";

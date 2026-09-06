@@ -1,8 +1,8 @@
 import { C } from "../utils/theme";
 import { auditRows, auditSummary, auditNote, programmeState } from "../utils/affiliateAudit";
 import { isBookableTicketUrl, ticketAgentOf } from "../utils/ticketLink";
-import { affiliateHref } from "../utils/affiliates";
-import { BOOKING_AFFILIATE_ID, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, TICKETMASTER_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_LINK } from "../config";
+import { affiliateHref, wegotripBrowseUrl } from "../utils/affiliates";
+import { BOOKING_AFFILIATE_ID, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, TICKETMASTER_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_AFFILIATE_TEMPLATE } from "../config";
 
 // ── WHAT DO MY AFFILIATES ACTUALLY CONNECT TO ───────────────────────
 //
@@ -28,7 +28,10 @@ export const AffiliatePanel = ({ rows }) => {
     ticketmasterTemplate: TICKETMASTER_AFFILIATE_TEMPLATE,
     bookingId: BOOKING_AFFILIATE_ID,
     carRental: CAR_RENTAL_LINK,
-    wegotrip: WEGOTRIP_LINK,
+    // Through the builder rather than the constant, so this panel and whatever
+    // renders the browse button can never disagree about whether one exists.
+    wegotrip: wegotripBrowseUrl(),
+    wegotripTemplate: WEGOTRIP_AFFILIATE_TEMPLATE,
   });
   // The work queue, which is the useful half. A count of failures nobody can act
   // on is a count; a list of near misses is a to-do list.

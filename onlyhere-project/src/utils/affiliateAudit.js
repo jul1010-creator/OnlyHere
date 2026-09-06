@@ -116,7 +116,7 @@ export const auditNote = (s) => {
 // switched on at all. An empty template is not a bug and is not a mistake, and
 // there is no way to tell an empty one from a filled one without opening
 // config.js, which is exactly the state this panel exists to end.
-export const programmeState = ({ tiqetsTemplate, tiqetsBrowse, ticketmasterTemplate, bookingId, carRental, wegotrip } = {}) => [
+export const programmeState = ({ tiqetsTemplate, tiqetsBrowse, ticketmasterTemplate, bookingId, carRental, wegotrip, wegotripTemplate } = {}) => [
   { name: "Tiqets", what: "attraction tickets, deep link", on: !!clean(tiqetsTemplate),
     note: clean(tiqetsTemplate) ? "live on every row with a Tiqets product page" : "no template, so Tiqets product pages render a button that earns nothing" },
   { name: "Tiqets browse", what: "one generic button per guide", on: !!clean(tiqetsBrowse),
@@ -127,8 +127,28 @@ export const programmeState = ({ tiqetsTemplate, tiqetsBrowse, ticketmasterTempl
     note: clean(bookingId) ? "aid appended to every stay link" : "no id, so every stay link is a plain search and the disclosure says so" },
   { name: "Airbnb", what: "stays", on: false,
     note: "Associates closed in March 2021 and has not reopened. There is nothing to attach and adding a ref would earn nothing while reading as a tracking tag." },
-  { name: "WeGoTrip", what: "self-guided audio tours", on: !!clean(wegotrip),
-    note: clean(wegotrip) ? "browse link configured. Sells Legoland Billund entry, so whatever renders it must go through the exclusion gate" : "no link configured" },
+  // ── TWO ROWS, LIKE TIQETS, AND FOR THE SAME REASON ────────────────
+  // 6 Sep 2026. This was one row reading the SHORT link, and it printed
+  // "browse link configured" while nothing on the reader-facing site rendered
+  // WeGoTrip at all. Oliver read it as the site's state, which is a fair thing
+  // to do with a panel called "what my affiliates reach", and it was the
+  // programme's state. The deep link is what makes a named link pay, so it gets
+  // its own line and its own dot.
+  { name: "WeGoTrip browse", what: "one generic button", on: !!clean(wegotrip),
+    note: clean(wegotrip) ? "short link configured. One fixed destination, so it can never point at a particular walk" : "no browse link configured" },
+  //
+  // AND THE LEGOLAND WARNING STAYS ON THE ROW THAT RENDERS LINKS. WeGoTrip
+  // sells LEGOLAND Billund entry, and the traveller who wrote "please don't
+  // send us to Legoland" must not be sold one through a partner. The gate is
+  // structural rather than a check: both render sites reach a WeGoTrip link
+  // only through a row that is already on the page or already a stop in a
+  // guide, and the exclusion filter runs before either. Written down because
+  // the day something offers WeGoTrip from a list of suggestions instead, that
+  // stops being true.
+  { name: "WeGoTrip", what: "audio walks and admissions, deep link", on: !!clean(wegotripTemplate),
+    note: `${clean(wegotripTemplate)
+      ? "live on every row the sweep matched to their Danish catalogue"
+      : "no template, so their Danish products render real links that earn nothing. Travelpayouts, WeGoTrip campaign, link generator"}. Sells Legoland Billund entry, so anything that OFFERS it rather than answering for a row already on screen has to go through the exclusion gate` },
   { name: "Car hire", what: "rentals", on: !!clean(carRental),
     note: clean(carRental) ? "AutoEurope, real Danish inventory at 9 airports. Only renders on a trip the traveller said is a driving one" : "empty: the link on hand had no Danish inventory, and a button that opens on an empty result costs more than the commission pays" },
 ];

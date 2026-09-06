@@ -64,7 +64,10 @@ writeFileSync(entry, `
   export { TICKET_HUNT_PROMPT, ticketHuntUrls } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, partnerMerchant, linkLabel, affiliateHref, affiliateNote, isAffiliateHref } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
-  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
+  export { isWegotripUrl, wegotripUrl, wegotripBrowseUrl, wegotripActive, wegotripDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
+  export { TOWN_TYPES, townNameOf, audioFor, audioLine, ticketFor, unmatchedProducts, wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO, TICKET as WEGO_TICKET } from ${JSON.stringify(join(root, "src/utils/wegotripMatch.js"))};
+  export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
+  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isWegotripTicketUrl } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
@@ -21028,8 +21031,19 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      /const agent = ticketAgentOf\(dest\);\s*\n\s*if \(!agent\) return null;/.test(stripComments(detail)));
   // Each agent still gets its own template; the branch just moved into
   // affiliateHref so every render site gets it rather than this one.
+  // THREE AGENTS SINCE 6 SEP 2026. Asserted as the loop AND as behaviour: the
+  // source check catches a wrapper dropped from the door, and the call catches
+  // one that is in the door and does not wrap.
   ok("each agent has its own template behind the door",
-     /for \(const wrap of \[ticketmasterUrl, tiqetsUrl\]\)/.test(readFileSync(join(root, "src/utils/affiliates.js"), "utf8")));
+     /for \(const wrap of \[ticketmasterUrl, tiqetsUrl, wegotripUrl\]\)/.test(readFileSync(join(root, "src/utils/affiliates.js"), "utf8")));
+  {
+    const wego = "https://wegotrip.com/billund-d2624144/legoland-billund-entry-ticket-p20636/";
+    ok("and the third one wraps when it has a template",
+       M.wegotripUrl(wego, "https://tp.media/r?campaign_id=1&u={url}") === `https://tp.media/r?campaign_id=1&u=${encodeURIComponent(wego)}`);
+    is("and hands back the plain link when it has none", M.wegotripUrl(wego, ""), wego);
+    is("and never wraps a destination that is not theirs",
+       M.wegotripUrl("https://www.tiqets.com/en/x-p1/", "https://tp.media/r?u={url}"), "https://www.tiqets.com/en/x-p1/");
+  }
   // ── AND THE ROW HE ALREADY PUBLISHED IS ENOUGH ──────────────────
   // Koge Festuge and Copenhell were drafted before any of this and carry
   // __ticket.url on the live row. Reading it here is what lights them up with
@@ -38631,7 +38645,21 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   {
     const ps = programmeState({ tiqetsTemplate: "https://tp.media/r?u={url}", tiqetsBrowse: "", ticketmasterTemplate: "", bookingId: "", carRental: "https://autoeurope.tpx.li/x", wegotrip: "https://wegotrip.tpx.li/y" });
     const on = ps.filter(p => p.on).map(p => p.name);
-    is("only the configured ones read as on", on.slice().sort(), ["Car hire", "Tiqets", "WeGoTrip"]);
+    // ── A BROWSE LINK IS NOT A PROGRAMME ─────────────────────────
+    //
+    // 6 Sep 2026, and this is the bug the split fixes. WeGoTrip had ONE row
+    // reading the short link, so the panel printed a lit dot next to it while
+    // nothing on the reader-facing site rendered WeGoTrip at all. Oliver read
+    // that dot as the site's state, which is the only fair way to read a panel
+    // called "what my affiliates reach". Tiqets has had two rows for this exact
+    // reason since 26 August.
+    is("only the configured ones read as on", on.slice().sort(), ["Car hire", "Tiqets", "WeGoTrip browse"]);
+    is("the deep link is off until a template exists", ps.find(p => p.name === "WeGoTrip").on, false);
+    ok("and it says where to get one", /Travelpayouts/.test(ps.find(p => p.name === "WeGoTrip").note));
+    {
+      const lit = programmeState({ wegotrip: "https://wegotrip.tpx.li/y", wegotripTemplate: "https://tp.media/r?u={url}" });
+      is("and on once it does", lit.find(p => p.name === "WeGoTrip").on, true);
+    }
     // Airbnb can never be on: Associates closed in March 2021 and has not
     // reopened, so there is nothing to attach.
     is("Airbnb is always off, because there is nothing to attach", ps.find(p => p.name === "Airbnb").on, false);
@@ -46861,6 +46889,25 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // mean a migration the day any of it changes. The wrapper runs at render.
     ok("never a tracked one", !/tp\.media|tpx\.li|evyy/.test(p.payload.ticketUrl));
     is("the stamp records the answer", [p.payload.__ticketSweep.found, p.payload.__ticketSweep.at], [true, "2026-09-06"]);
+    // ── AND IT IS THE LOCAL DAY, NOT THE UTC ONE ────────────────
+    //
+    // Oliver's pre-push hook caught this and the suite did not: it read
+    // toISOString().slice(0, 10), the sandbox runs on UTC so the two agreed
+    // here, and Denmark is two hours ahead, so a stamp written between midnight
+    // and 02:00 came out dated YESTERDAY.
+    //
+    // A stamp cannot be tested against "today" without picking a clock, so both
+    // ends of the day are pinned instead. At UTC these two are the same as the
+    // UTC day and nothing can catch the bug; east of Greenwich the first fails
+    // and west of it the second, which is every machine this will ever run on
+    // except the one it was written on.
+    for (const [label, when, day] of [
+      ["just after midnight", new Date(2026, 8, 6, 0, 30), "2026-09-06"],
+      ["and just before the next", new Date(2026, 8, 6, 23, 30), "2026-09-06"],
+    ]) {
+      const q = ticketProposal(tivoli, [{ url: TIVOLI, snippet: "Tivoli Gardens tickets Copenhagen" }], { today: when });
+      is(`the stamp is the day it was where he is, ${label}`, q.payload.__ticketSweep.at, day);
+    }
     ok("and nothing else on the row is touched", p.payload.desc === "The gardens." && p.payload.name === "Tivoli Gardens");
     // THE SAFETY PROPERTY. This sweep changes what a row links to, never what a
     // row IS, so no type is ever sent and a whole class of mistake cannot be
@@ -46993,6 +47040,309 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("the door list is imported, not redeclared",
        /import \{[^}]*TYPES_WITH_A_DOOR[^}]*\} from "\.\/utils\/entryPrice"/.test(appS)
        && !/const TYPES_WITH_A_DOOR = /.test(appS));
+  }
+}
+
+// ── WEGOTRIP, THE THIRD AGENT AND THE AUDIO WALKS, 6 SEP 2026 ───────
+//
+// Oliver: "Is it possible to do a sweep with wegotrip that is 'add audio to
+// this tour' on the blogs that has the possible?"
+//
+// It was, and reading their country page changed the shape of the answer.
+// WeGoTrip's ENTIRE Danish catalogue is twenty products on one page, so this
+// sweep costs no search at all, and the twenty split two ways:
+//
+//   thirteen audio walks, every one about a TOWN and none about an attraction
+//   seven admissions to named attractions, six of which are held here
+//
+// Which is why the walks land on town pages and the admissions land in
+// ticketUrl beside Tiqets and Ticketmaster.
+{
+  const { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, WEGOTRIP_CHECKED_ON,
+          isWegotripUrl, isWegotripTicketUrl, isBookableTicketUrl, ticketAgentOf,
+          TOWN_TYPES, townNameOf, audioFor, audioLine, ticketFor, unmatchedProducts,
+          wegotripProposals, describeWegotrip, wegotripWriteFor, WEGO_AUDIO, WEGO_TICKET } = M;
+  const SEP = new Date(2026, 8, 6);
+  const row = (id, type, payload) => ({ id, type, payload });
+  const audio = WEGOTRIP_DK.filter(p => p.kind === "audio");
+  const tickets = WEGOTRIP_DK.filter(p => p.kind === "ticket");
+
+  // ── THE CATALOGUE ITSELF ────────────────────────────────────────
+  //
+  // A hand-checked list is only as good as the day it was checked, and every
+  // entry in it becomes a link on a public card. A dead one is the failure this
+  // codebase minds most, so the shape is asserted rather than trusted.
+  ok("every product is a real https WeGoTrip address",
+     WEGOTRIP_DK.every(p => /^https:\/\/wegotrip\.com\//.test(p.url) && isWegotripUrl(p.url)));
+  ok("and carries a town and a title", WEGOTRIP_DK.every(p => p.town && p.title));
+  ok("no two entries point at the same page",
+     new Set(WEGOTRIP_DK.map(p => p.url)).size === WEGOTRIP_DK.length);
+  ok("the list says when it was checked", /^\d{4}-\d{2}-\d{2}$/.test(WEGOTRIP_CHECKED_ON));
+  // An admission has to name the PLACE it admits you to, separately from
+  // WeGoTrip's marketing title, or ticketFor has nothing to match a row on.
+  ok("every admission names the place it admits you to", tickets.every(p => !!p.place));
+  // ── AND THE INVARIANT audioFor DEPENDS ON ──────────────────────
+  //
+  // A town with several walks links to WeGoTrip's page for that town, because
+  // picking one of eight on the reader's behalf is an arbitrary answer. With no
+  // town page configured audioFor returns null, which is the right refusal and
+  // a SILENT one: the offer just never appears. So the pair is asserted.
+  {
+    const counts = {};
+    for (const p of audio) counts[p.town] = (counts[p.town] || 0) + 1;
+    const missing = Object.keys(counts).filter(t => counts[t] > 1 && !WEGOTRIP_TOWN_PAGE[t]);
+    is("every town with several walks has a page to send them to", missing, []);
+    ok("and Copenhagen is the one that needs it", counts.Copenhagen > 1);
+  }
+
+  // ── WHICH WEGOTRIP PAGES ARE A TICKET ───────────────────────────
+  //
+  // The slug settles it in ONE direction. All six admissions say "ticket" and
+  // not one of the thirteen walks does, so the word is sufficient evidence of
+  // an admission. The reverse is not true, which is why ticketLink.js does not
+  // try to identify a walk: "Best of Copenhagen: Get to know the capital of
+  // Denmark" says neither and IS an audio tour, checked on its own page.
+  ok("every admission reads as a ticket", tickets.every(p => isWegotripTicketUrl(p.url)));
+  ok("and no audio walk does", audio.every(p => !isWegotripTicketUrl(p.url)));
+  ok("including the one whose slug says neither",
+     audio.some(p => /best-of-copenhagen/.test(p.url)) && !isWegotripTicketUrl(audio.find(p => /best-of-copenhagen/.test(p.url)).url));
+  // A destination, an attraction page and a country sell nothing, exactly as a
+  // Tiqets category page sells nothing.
+  ok("a city page is not a ticket", !isWegotripTicketUrl("https://wegotrip.com/copenhagen-d2618425/"));
+  // ── AND THE LETTER IS DOING THE WORK, NOT THE WORD ────────────
+  // Found by mutation: widening the id to /-[pd]\d+$/ left every assertion
+  // above passing, because no city slug happens to contain "ticket". A page
+  // whose slug says both is the case that separates them, and WeGoTrip names
+  // its city pages freely enough that one could.
+  ok("a city page that says ticket is still not one",
+     !isWegotripTicketUrl("https://wegotrip.com/copenhagen-tickets-d2618425/"));
+  ok("nor an attraction page that says it",
+     !isWegotripTicketUrl("https://wegotrip.com/tivoli-entry-ticket-a9255/"));
+  ok("and a product that says it is", isWegotripTicketUrl("https://wegotrip.com/x-d1/y-entry-ticket-p2/"));
+  ok("nor a country page", !isWegotripTicketUrl("https://wegotrip.com/denmark-s2623032/"));
+  ok("nor an attraction page", !isWegotripTicketUrl("https://wegotrip.com/copenhagen-city-hall-a9255/"));
+  ok("and nor is somebody else's site", !isWegotripTicketUrl("https://www.tiqets.com/en/x-entry-ticket-p1/"));
+
+  // ── AND THE ONE DOOR EVERYTHING DOWNSTREAM ASKS ─────────────────
+  {
+    const legoland = tickets.find(p => /legoland/.test(p.url)).url;
+    ok("an admission is bookable", isBookableTicketUrl(legoland));
+    is("and names its agent", ticketAgentOf(legoland), "wegotrip");
+    // The label matters more than the link here. A "🎫 Book tickets" button
+    // over a walking tour is a statement that is not true, and DetailPage
+    // renders no button at all when ticketAgentOf comes back empty.
+    is("an audio walk is not a ticket and gets no agent", ticketAgentOf(audio[0].url), "");
+    ok("so it can never reach the ticket field", !isBookableTicketUrl(audio[0].url));
+  }
+
+  // ── WHICH ROWS ARE A TOWN ───────────────────────────────────────
+  is("towns and nightlife towns, and nothing else", TOWN_TYPES, ["town", "nightTown"]);
+  is("a town row is its own town", townNameOf(row(1, "town", { name: "Aalborg" })), "Aalborg");
+  is("so is a nightlife town", townNameOf(row(2, "nightTown", { name: "Aarhus" })), "Aarhus");
+  is("an attraction is not", townNameOf(row(3, "free", { name: "Aalborg" })), "");
+  // ── THE ONE sweeps.js ALREADY PAID FOR ─────────────────────────
+  // "Nørresundby (Aalborg)" contains Aalborg as a whole word and is not
+  // Aalborg. An audio walk of Aalborg sold on the Nørresundby page is the same
+  // class of mistake as partOf collapsing a village into an island.
+  is("and a bracket does not make a place its parent",
+     townNameOf(row(4, "town", { name: "Nørresundby (Aalborg)" })), "Nørresundby");
+  ok("so Nørresundby is offered nothing", !audioFor(row(4, "town", { name: "Nørresundby (Aalborg)" })));
+
+  // ── THE AUDIO HALF ──────────────────────────────────────────────
+  {
+    const cph = audioFor(row(10, "town", { name: "Copenhagen" }));
+    // OPTIONAL, so a town dropped out of WEGOTRIP_TOWN_PAGE FAILS here rather
+    // than throwing. Found by mutation: deleting Copenhagen from the map made
+    // this a TypeError, which takes the whole suite down and stops every
+    // assertion after it running, including the invariant that would have
+    // named the real problem.
+    ok("Copenhagen has several walks", (cph?.count || 0) > 1);
+    is("so it links to the set rather than picking one", cph?.url, WEGOTRIP_TOWN_PAGE.Copenhagen);
+    ok("and the card counts them", /self-guided audio walks in Copenhagen/.test(audioLine(cph)));
+    const alb = audioFor(row(11, "town", { name: "Aalborg" }));
+    is("Aalborg has one, so it links straight to it", alb?.count, 1);
+    ok("and the card names it", /Fjord and Time/.test(audioLine(alb)));
+    ok("the deep link is the product page, not the town page", /-p\d+\/$/.test(alb?.url || ""));
+    // Rule three: a field that cannot be answered stays empty. A town with
+    // several walks and no page to send them to is offered nothing rather than
+    // being offered whichever walk came first.
+    ok("several walks and nowhere honest to send them offers nothing",
+       !audioFor(row(12, "town", { name: "Copenhagen" }), WEGOTRIP_DK, {}));
+    ok("a town WeGoTrip does not cover gets nothing", !audioFor(row(13, "town", { name: "Ribe" })));
+  }
+
+  // ── THE TICKET HALF, AND WHY IT MATCHES ONE WAY ─────────────────
+  {
+    is("a row whose name contains the place matches",
+       ticketFor(row(20, "free", { name: "Legoland Billund Resort", town: "Billund" }))?.place, "Legoland Billund");
+    // THE REVERSE WOULD BE A DISASTER. "Billund" is a whole word inside
+    // "Legoland Billund", so matching that way round would put a Book tickets
+    // button selling Legoland admission on the town page for Billund.
+    ok("a row named only for the town does not", !ticketFor(row(21, "town", { name: "Billund" })));
+    ok("and nor does a different attraction in the same town",
+       !ticketFor(row(22, "free", { name: "Lalandia Billund", town: "Billund" })));
+    // Two attractions can share a name and only one of them is where the
+    // catalogue says.
+    ok("a stated town that disagrees is refused",
+       !ticketFor(row(23, "free", { name: "Home of Carlsberg", town: "Aarhus" })));
+    is("and one that agrees is kept",
+       ticketFor(row(24, "free", { name: "Home of Carlsberg", town: "Copenhagen" }))?.place, "Home of Carlsberg");
+    ok("a row that states no town at all still matches on the name",
+       !!ticketFor(row(25, "free", { name: "IKONO Copenhagen" })));
+  }
+
+  // ── PROPOSALS ───────────────────────────────────────────────────
+  {
+    const rows = [
+      row(30, "town", { name: "Aalborg" }),
+      row(31, "free", { name: "Legoland Billund Resort", town: "Billund" }),
+      row(32, "town", { name: "Ribe" }),
+    ];
+    const list = wegotripProposals(rows, { today: SEP });
+    is("one proposal per row that can carry something", list.map(p => p.id), [30, 31]);
+    is("the town gets an audio walk", list[0].kind, WEGO_AUDIO);
+    is("and the attraction gets an admission", list[1].kind, WEGO_TICKET);
+    is("the walk is stored under its own field, never ticketUrl",
+       [!!list[0].payload.__audio?.url, list[0].payload.ticketUrl], [true, undefined]);
+    is("and the admission goes in ticketUrl like any other agent",
+       list[1].payload.ticketUrl, tickets.find(p => /legoland/.test(p.url)).url);
+    ok("the stamp says when it was matched", list[0].payload.__audio.at === "2026-09-06");
+    // Same trap, same file evening, same fix. See the ticket sweep's block.
+    for (const [label, when] of [["after midnight", new Date(2026, 8, 6, 0, 30)], ["before the next", new Date(2026, 8, 6, 23, 30)]]) {
+      const q = wegotripProposals([rows[0]], { today: when });
+      is(`the walk is stamped with the local day, ${label}`, q[0].payload.__audio.at, "2026-09-06");
+    }
+    // THE PLAIN URL, never the tracked one. Storing a tracked link would freeze
+    // today's marker into every row and make changing it a migration.
+    ok("nothing tracked is stored", !/tp\.media|tpx\.li/.test(list[0].payload.__audio.url));
+    // Payload only. This sweep changes what a row links to, never what a row is.
+    ok("the write carries no type", !("type" in wegotripWriteFor(list[0])));
+    // A review table full of no-ops teaches somebody to tick everything without
+    // reading it, which is the opposite of what the table is for.
+    {
+      const already = wegotripProposals([{ ...rows[0], payload: { ...rows[0].payload, __audio: { url: list[0].url } } }], { today: SEP });
+      is("a row already carrying the same link is not proposed again", already, []);
+    }
+    // Replacing an existing ticket link is a different decision from adding
+    // one, so the proposal says which it is and names what would go.
+    {
+      const had = wegotripProposals([{ ...rows[1], payload: { ...rows[1].payload, ticketUrl: "https://www.tiqets.com/en/x-p9/" } }], { today: SEP });
+      is("replacing an existing link is named as a replacement", had[0].replaces, "https://www.tiqets.com/en/x-p9/");
+      ok("and the reason says so", /would replace it/.test(had[0].why));
+    }
+    const said = describeWegotrip(list, rows);
+    ok("the summary counts both halves", /1 town page/.test(said) && /1 attraction/.test(said));
+    ok("and dates the catalogue", new RegExp(WEGOTRIP_CHECKED_ON).test(said));
+    ok("and says it costs nothing", /costs nothing to run/.test(said));
+    // ── THE OTHER DIRECTION, WHICH NOBODY ELSE REPORTS ───────────
+    // Seven admissions and which rows they landed on is readable in ten
+    // seconds. A silent four of seven is a number nobody ever learns.
+    const spare = unmatchedProducts(rows);
+    ok("products with no published row are reported", spare.some(p => p.place === "Givskud Zoo"));
+    ok("and matched ones are not", !spare.some(p => p.place === "Legoland Billund"));
+    ok("and the summary turns them into pages he could write",
+       /pages you could write rather than links you are missing/.test(said));
+  }
+
+  // ── IT SURVIVES A REDRAFT ───────────────────────────────────────
+  // sweeps.js rule five, run rather than read, for the same reason the ticket
+  // stamp is: `false &&` in front of the branch leaves the identifier in the
+  // source and the assertion passing.
+  {
+    const kept = M.shapeForLive("town", {
+      name: "Aalborg", desc: "d", special: "s", whoFor: "w", realityCheck: "r", thingsToKnow: [],
+      __audio: { url: audio[0].url, count: 1, title: audio[0].title, town: "Aalborg", at: "2026-09-06" },
+    });
+    is("the audio walk survives publish", kept.__audio?.url, audio[0].url);
+    is("with the count that decides what the card says", kept.__audio?.count, 1);
+  }
+
+  // ── AND IT IS ON SCREEN, IN BOTH PLACES HE CHOSE ────────────────
+  {
+    const detail = stripComments(readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8"));
+    ok("the town page offers the walk", /🎧 \{count > 1/.test(detail));
+    ok("tracked at render rather than at publish", /affiliateHref\(dest\) \|\| dest/.test(detail));
+    // A stored value that is not a WeGoTrip address renders nothing at all,
+    // rather than a bare link asking a reader for money.
+    ok("and anything that is not WeGoTrip renders nothing",
+       /wegotrip\\\.com\\\//.test(detail) && /return null;/.test(detail));
+    // The Essentials row taught this: a button pointing at a site nobody has
+    // heard of has to say whose it is.
+    ok("the merchant is named on the card", /On WeGoTrip/.test(detail));
+
+    const ledger = stripComments(readFileSync(join(root, "src/utils/costLedger.js"), "utf8"));
+    ok("the guide has its own kind for it", /AUDIO: "audio"/.test(ledger));
+    const block = stripComments(readFileSync(join(root, "src/components/CostsBlock.jsx"), "utf8"));
+    ok("and its own action word, because a walk is not a ticket",
+       /COST_KIND\.AUDIO \? "Listen to a sample"/.test(block));
+  }
+
+  // ── THE GUIDE HALF, RUN ─────────────────────────────────────────
+  {
+    const { costLines, byUrgency, COST_KIND } = M;
+    const guide = { days: [
+      { day: 1, stops: [{ name: "Copenhagen" }, { name: "Copenhagen" }] },
+      { day: 2, stops: [{ name: "Aalborg" }] },
+      { day: 3, stops: [{ name: "Ribe" }] },
+    ] };
+    const rowsByName = {
+      Copenhagen: { name: "Copenhagen", __audio: { url: WEGOTRIP_TOWN_PAGE.Copenhagen, count: 8, title: "", town: "Copenhagen" } },
+      Aalborg: { name: "Aalborg", __audio: { url: audio.find(p => p.town === "Aalborg").url, count: 1, title: "Aalborg: Self-Guided Audio Tour Through Fjord and Time", town: "Aalborg" } },
+      Ribe: { name: "Ribe" },
+    };
+    const lines = costLines({ guide, rowFor: (n) => rowsByName[n] || null });
+    const walks = lines.filter(l => l.kind === COST_KIND.AUDIO);
+    is("one line per town, not one per stop", walks.map(l => l.day), [1, 2]);
+    // Indexed with a guard, so a catalogue change that removes a line FAILS the
+    // line above rather than throwing here and taking the suite with it. Found
+    // by mutation, twice, in two different blocks: a checker that crashes
+    // reports one thing and a checker that fails reports the thing it was asked.
+    ok("the town with several says how many", /8 .*walks in Copenhagen|Self-guided audio walks in Copenhagen/.test(walks[0]?.name || ""));
+    ok("the town with one names it", /Fjord and Time/.test(walks[1]?.name || ""));
+    ok("a town with no walk gets no line", !walks.some(l => /Ribe/.test(l.name)));
+    // ── AND NOTHING THAT IS NOT A LINK BECOMES ONE ──────────────
+    // Found by mutation: every fixture here holds a real https address, so
+    // dropping the scheme check changed nothing and survived. A stored value
+    // that is not an https URL is the case that matters, because href goes
+    // straight into an anchor on a public page.
+    {
+      const bad = costLines({
+        guide: { days: [{ day: 1, stops: [{ name: "Odense" }] }] },
+        rowFor: () => ({ name: "Odense", __audio: { url: "javascript:alert(1)", count: 1, town: "Odense" } }),
+      });
+      is("a stored value that is not an https link renders no line",
+         bad.filter(l => l.kind === COST_KIND.AUDIO), []);
+    }
+    // A self-guided walk cannot sell out, so nothing is lost by buying it on
+    // the morning and it sorts below the things that stop being possible.
+    ok("and none of them is marked book ahead", walks.every(l => !l.bookAhead));
+    ok("it is optional and says so", walks.every(l => /Optional/.test(l.forWhat)));
+    ok("and it names the merchant", walks.every(l => /WeGoTrip/.test(l.forWhat)));
+    const ordered = byUrgency(lines);
+    ok("a bookable thing outranks it", ordered.findIndex(l => l.bookAhead && l.href) < 0 || ordered.findIndex(l => l.bookAhead && l.href) < ordered.findIndex(l => l.kind === COST_KIND.AUDIO));
+  }
+
+  // ── AND THE PANEL, WHICH SPENDS NOTHING ON THIS HALF ────────────
+  {
+    const appS = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the free half is on screen", /WeGoTrip, free to check/.test(appS));
+    // ON THE SAME PRESS AS THE COUNT. There is nothing to buy, so there is no
+    // reason to make him press again for it.
+    const planBody = appS.slice(appS.indexOf("const planAffiliateSweep = async () => {"),
+                                appS.indexOf("const applyWegotripSweep = async () => {"));
+    ok("it runs on the counting press", /wegotripProposals\(got\.rows/.test(planBody));
+    ok("and buys nothing to do it",
+       !/\/api\/search|askPerplexity|askClaude|askOpenAI|firecrawl|scan-source/i.test(planBody));
+
+    const wBody = appS.slice(appS.indexOf("const applyWegotripSweep = async () => {"),
+                             appS.indexOf("const runAffiliateSweep = async () => {"));
+    ok("the writer is findable", wBody.length > 400);
+    ok("and writes only what is ticked", /wegoChosen\.has\(p\.id\)/.test(wBody));
+    ok("payload only, never a type", /body: JSON\.stringify\(\{ payload: w\.payload \}\)/.test(wBody) && !/type: /.test(wBody));
+    // A button that adds a link earning nothing today must not read like one
+    // that pays, and must stop saying so the day the template lands.
+    ok("the panel is honest about the missing template", /WEGOTRIP_AFFILIATE_TEMPLATE is filled in/.test(appS));
+    ok("and reads the programme rather than assuming it", /wegotripActive\(\)/.test(appS));
   }
 }
 

@@ -1,4 +1,4 @@
-import { BOOKING_AFFILIATE_ID, TICKETMASTER_AFFILIATE_TEMPLATE, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK } from "../config";
+import { BOOKING_AFFILIATE_ID, TICKETMASTER_AFFILIATE_TEMPLATE, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_LINK, WEGOTRIP_AFFILIATE_TEMPLATE } from "../config";
 // hostOf, not a fourth copy of it. See pageScan.js, and see the four other
 // functions this codebase has already found existing twice.
 import { hostOf } from "./pageScan";
@@ -284,6 +284,56 @@ export const tiqetsDisclosure = (url, template = TIQETS_AFFILIATE_TEMPLATE) =>
     ? "Booking through this link may earn Gemlyx a small commission. It costs you nothing and does not change the price."
     : "";
 
+// ── WEGOTRIP, THROUGH TRAVELPAYOUTS ─────────────────────────────────
+//
+// Oliver, 6 Sep 2026: "Is it possible to do a sweep with wegotrip that is 'add
+// audio to this tour' on the blogs that has the possible?"
+//
+// It was, and the sweep found the harder half of this file was missing.
+// WEGOTRIP_LINK had been in config.js since 26 August, imported by exactly one
+// file, AffiliatePanel.jsx, and used there only to print an on/off dot. Nothing
+// on the reader-facing site could render it. Tenth helper in this codebase
+// found written and called from nowhere, and the first one that was a live
+// affiliate link rather than a function.
+//
+// THE SAME CONTRACT AS ticketmasterUrl AND tiqetsUrl, deliberately: the three
+// are read side by side and a different shape in one is how that one gets
+// forgotten. Returns the tracked link, or the ORIGINAL url, or null when there
+// is nothing worth linking to, and never wraps a destination that is not
+// WeGoTrip.
+const WEGOTRIP_HOSTS = ["wegotrip.com"];
+
+export const isWegotripUrl = (url) => {
+  const h = hostOf(url);
+  return !!h && WEGOTRIP_HOSTS.some(d => h === d || h.endsWith(`.${d}`));
+};
+
+export const wegotripUrl = (url, template = WEGOTRIP_AFFILIATE_TEMPLATE) => {
+  const raw = String(url || "").trim();
+  if (!/^https?:\/\//i.test(raw)) return null;
+  if (!template || !isWegotripUrl(raw)) return raw;
+  return template.replace("{url}", encodeURIComponent(raw));
+};
+
+// The general "see what WeGoTrip has" link, for a caller with no particular
+// product to point at. Null rather than a bare wegotrip.com when nothing is
+// configured, so a caller renders no button at all rather than an untracked one
+// that pretends. Same as tiqetsBrowseUrl, same reason.
+export const wegotripBrowseUrl = (link = WEGOTRIP_LINK) => {
+  const raw = String(link || "").trim();
+  return /^https?:\/\//i.test(raw) ? raw : null;
+};
+
+// THE TEMPLATE, not the short link, for the reason tiqetsActive spells out: a
+// version of this reading the browse link would report the programme live while
+// every WeGoTrip link on the site was untracked and earning nothing.
+export const wegotripActive = (template = WEGOTRIP_AFFILIATE_TEMPLATE) => !!template;
+
+export const wegotripDisclosure = (url, template = WEGOTRIP_AFFILIATE_TEMPLATE) =>
+  !!template && isWegotripUrl(url)
+    ? "Booking through this link may earn Gemlyx a small commission. It costs you nothing and does not change the price."
+    : "";
+
 // ── CAR HIRE, AND WHY THERE IS NO LINK HERE YET ─────────────────────
 //
 // Oliver, 15 Aug 2026, sending a GetRentacar link: "I guess multiple car ones
@@ -395,6 +445,7 @@ const PARTNER_MERCHANTS = {
   getrentacar: "GetRentacar",
   kiwi: "Kiwi.com",
   aviasales: "Aviasales",
+  wegotrip: "WeGoTrip",
 };
 // ── ONE DOOR FOR EVERY OUTBOUND LINK ────────────────────────────────
 //
@@ -423,7 +474,7 @@ export const affiliateHref = (url) => {
   // The same refusal both wrappers make, kept here so a caller gets one
   // contract: null means "this is not a link", never "this is not a partner".
   if (!/^https?:\/\//i.test(raw)) return null;
-  for (const wrap of [ticketmasterUrl, tiqetsUrl]) {
+  for (const wrap of [ticketmasterUrl, tiqetsUrl, wegotripUrl]) {
     const out = wrap(raw);
     if (out && out !== raw) return out;
   }
@@ -437,7 +488,7 @@ export const affiliateHref = (url) => {
 //
 // Empty for a link that earns nothing, because "this may earn us a commission"
 // printed over a link that earns nothing is a false statement about money.
-export const affiliateNote = (url) => ticketDisclosure(url) || tiqetsDisclosure(url) || "";
+export const affiliateNote = (url) => ticketDisclosure(url) || tiqetsDisclosure(url) || wegotripDisclosure(url) || "";
 
 // True when the link is going through a programme, for a caller that has to set
 // rel="sponsored nofollow", which is what Google asks of a paid link.

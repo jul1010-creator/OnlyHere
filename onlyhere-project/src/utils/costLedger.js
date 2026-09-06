@@ -75,6 +75,10 @@ export const COST_KIND = {
   FERRY: "ferry",
   CAR: "car",
   STAY: "stay",
+  // 6 Sep 2026. A self-guided audio walk is not admission and not transport,
+  // and giving it one of their kinds would have printed "Buy tickets" over a
+  // walking tour. Its own kind, its own action word.
+  AUDIO: "audio",
 };
 
 // ── WHY A LINE MAY NOT CARRY A BUY LINK ─────────────────────────────
@@ -307,6 +311,53 @@ export const costLines = ({
     if (legs.some(isFerryText)) ferryDays.push(dayNo);
     if ((d?.stops || []).length && i > 0) travelDays.push(dayNo);
   });
+
+  // ── AND A WALK OF THE TOWN THEY ARE ALREADY IN ────────────────────
+  //
+  // Oliver, 6 Sep 2026, choosing where WeGoTrip's audio walks appear: town
+  // pages AND guides. This is the guide half, and it is a SECOND pass rather
+  // than a branch in the loop above on purpose: entryLine drops a row with no
+  // price and no ticket link, which is exactly what a town row is, so a town
+  // carrying __audio never reaches that loop's output.
+  //
+  // ONE LINE PER TOWN, not per walk. Copenhagen has eight and __audio already
+  // holds the honest single destination for that case, chosen by
+  // utils/wegotripMatch.js when the sweep wrote it.
+  //
+  // NOT bookAhead. A self-guided walk cannot sell out and nothing is lost by
+  // buying it on the morning, so it sorts below the things that stop being
+  // possible if ignored. byUrgency does the rest.
+  {
+    const towns = new Set();
+    days.forEach((d, i) => {
+      const dayNo = d?.day || i + 1;
+      (d?.stops || []).forEach((st) => {
+        const row = lookup(String(st?.name || "").trim());
+        const audio = row?.__audio;
+        const href = String(audio?.url || "").trim();
+        if (!href || !/^https:\/\//i.test(href)) return;
+        const town = String(audio.town || "").trim() || String(st?.name || "").trim();
+        if (towns.has(town)) return;
+        towns.add(town);
+        const count = Number(audio.count) || 1;
+        const wrapped = affiliateHref(href) || href;
+        out.push({
+          kind: COST_KIND.AUDIO,
+          name: count > 1 ? `Self-guided audio walks in ${town}` : (String(audio.title || "").trim() || `Self-guided audio walk in ${town}`),
+          day: dayNo,
+          forWhat: count > 1
+            ? `${count} walking tours of ${town} you play on your phone, on WeGoTrip. Optional, and separate from anything in this guide.`
+            : `A walking tour of ${town} you play on your phone, on WeGoTrip. Optional, and separate from anything in this guide.`,
+          price: "",
+          priceFrom: null,
+          href: wrapped,
+          partner: isPartnerLink(wrapped),
+          refused: "",
+          bookAhead: false,
+        });
+      });
+    });
+  }
 
   out.push(...transportLines({ mode, ferryDays, travelDays: travelDays.slice(0, 4) }));
 

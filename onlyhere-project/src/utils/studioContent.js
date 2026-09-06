@@ -563,6 +563,26 @@ export const shapeForLive = (type, t) => {
   // listing has one the week tickets go on sale. affiliateSweep re-asks after
   // RESWEEP_DAYS, so an old stamp costs a search rather than a wrong answer,
   // which is the right way round for this to be wrong.
+  // ── AND THE SELF-GUIDED AUDIO WALK, IF THIS TOWN HAS ONE ──────────
+  //
+  // utils/wegotripMatch.js, 6 Sep 2026. Carried here for the same reason as the
+  // stamp below it: sweeps.js's fifth rule, and a field added to the database
+  // but not to this allow-list works perfectly until the row is redrafted and
+  // then vanishes without a word.
+  //
+  // NOT ticketUrl, deliberately. WeGoTrip sells both admissions and audio
+  // walks, and a "🎫 Book tickets" button over a walking tour of Copenhagen is
+  // a label that is not true. The admissions go in ticketUrl through the
+  // ordinary gate; the walks live here and get their own button.
+  if (t?.__audio?.url) {
+    out = { ...out, __audio: {
+      url: String(t.__audio.url),
+      count: Number(t.__audio.count) || 1,
+      title: String(t.__audio.title || ""),
+      town: String(t.__audio.town || ""),
+      at: String(t.__audio.at || ""),
+    } };
+  }
   if (t?.__ticketSweep?.at) {
     out = { ...out, __ticketSweep: { at: String(t.__ticketSweep.at), found: !!t.__ticketSweep.found, ...(t.__ticketSweep.url ? { url: String(t.__ticketSweep.url) } : {}) } };
   }
