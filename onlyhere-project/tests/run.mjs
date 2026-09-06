@@ -48,7 +48,7 @@ writeFileSync(entry, `
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS, foundAt, matchVariantsOf, GENERIC_ALIASES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, townOfStreet, streetForSpot, barsOnStreet, nightlifeForTown } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
-  export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
+  export { supabaseFailure, studioErrorMessage, refreshIsDead, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, dateRangesInText, isoDay, anchoredEdition, venueRatherThanEvent, PROGRAMME_DATES, dateMentions, labelledAt, otherLabelAt, CALENDAR_DATES, DATE_LABEL_WINDOW, looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER, OFFICE_CONTEXT_WINDOW, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
@@ -153,12 +153,12 @@ writeFileSync(entry, `
   export { layoutBody, trimCaption } from ${JSON.stringify(join(root, "src/utils/articleLayout.js"))};
   export { instagramTarget, isEmbeddablePost } from ${JSON.stringify(join(root, "src/components/InstagramEmbed.jsx"))};
   export { EXAMPLE_GUIDE, EXAMPLE_GUIDE_PATH, EXAMPLE_GUIDE_NOTE, exampleGuideProblems, hasExampleGuide } from ${JSON.stringify(join(root, "src/data/exampleGuide.js"))};
-  export { placesNamedIn, CHAT_PLACE_CAP } from ${JSON.stringify(join(root, "src/utils/chatPlaces.js"))};
+  export { placesNamedIn, rejectedIn, CHAT_PLACE_CAP } from ${JSON.stringify(join(root, "src/utils/chatPlaces.js"))};
   export { isOwnRoute, RETURN_PARAM, captureRedirectSession, startGoogleSignIn } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
   export { GOOGLE_SIGN_IN } from ${JSON.stringify(join(root, "src/config.js"))};
   export { writeInLanguage } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { guideLanguage, languageOfProse, ruledOutLanguages, briefSentences, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS, MARKER_FLOOR, MARKER_MARGIN } from ${JSON.stringify(join(root, "src/utils/travellerLanguage.js"))};
-  export { railPlaces, railCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
+  export { railPlaces, mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
   export { costLines, byUrgency, linkGaps, readPrice, refuseTicket, REFUSAL, COST_KIND } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
@@ -5124,7 +5124,12 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const app11 = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the editor exists on town rows", /row\.type === "town" && \(/.test(app11));
   ok("it patches the three fields rather than the whole payload", /const patch = placePatch\(row\.payload \|\| \{\}, placeDraft\);/.test(app11));
-  ok("through the one auth helper", /savePlaceEdit[\s\S]{0,900}\.\.\.studioAuth\(\)/.test(app11));
+  // 6 Sep 2026: the helper is supaFetch now, and the claim got stronger rather
+  // than moved. studioAuth only built a header; supaFetch builds it AND renews
+  // it, so "through the one auth helper" finally means the save survives an
+  // hour-old token instead of merely being spelled consistently.
+  ok("through the one auth helper", /savePlaceEdit[\s\S]{0,900}await supaFetch\(/.test(app11));
+  ok("and it builds no Authorization of its own", !/savePlaceEdit[\s\S]{0,900}Authorization/.test(app11));
   ok("and warns when the row is one of several", /is published \{dupes\.length\} times/.test(app11));
 }
 
@@ -16749,7 +16754,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ok("only on an entry that has a body", /\(row\.payload\?\.blogBody \|\| \[\]\)\.length > 0 && \(/.test(appB));
   // The re-read is the whole concurrency fix and it has to happen BEFORE the
   // PATCH, so this asserts the order rather than the presence.
-  ok("the row is re-read before it is written", /select=payload`, \{ headers: studioAuth\(\) \}\)/.test(appB));
+  ok("the row is re-read before it is written", /const fresh = await supaFetch\(`\$\{SUPABASE_URL\}[^`]*select=payload`\);/.test(appB));
   // THE GUARD IS PART OF THE ASSERTION. Matching only the error line let a
   // mutation replacing the condition with `if (false)` stay green, because the
   // unreachable line was still there to match. Trap two, for the second time
@@ -24761,6 +24766,116 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   STUDIO_ONLY_ENDPOINTS.forEach(name => {
     is(`no bare fetch is left pointing at ${name}`, (app16.match(new RegExp(`fetch\\(\`/api/${name}`, "g")) || []).length, 0);
   });
+
+  // ── AND THEN THE SAME BUG AGAIN, WHERE STUDIO ACTUALLY LIVES ─────
+  //
+  // 6 Sep 2026. Oliver sent a Studio recording: click a button, 401, every
+  // time. Then: "Oh, I just had to log in."
+  //
+  // Everything above fixed the twelve calls to our own /api/ routes and did
+  // not touch the calls that go straight to PostgREST, which is most of
+  // Studio. Thirty-nine of those, of which SIX had a hand-written
+  // refresh-and-retry, written one at a time on the days I happened to hit
+  // the expiry there. publishDraft was one of the six. That is why this
+  // never read as a login problem for a second time in two weeks: the one
+  // action that would have said so plainly was, again, the one that worked.
+  //
+  // Six correct call sites are worse than none. They make the failure look
+  // selective, which sends you looking at the buttons instead of the clock.
+  ok("one fetch owns the token for Supabase too", /const supaFetch = async \(url, opts = \{\}\) => \{/.test(app16));
+  // ── THE apikey IS PART OF THE CLAIM ──────────────────────────────
+  // Written the hard way. The migration stripped `...studioAuth(), ` from
+  // every call site with one pass, and the pass matched supaFetch's OWN body,
+  // so for twenty minutes the helper sent no apikey and threw on no session:
+  // PostgREST refuses that outright and every button in Studio would have
+  // gone dead in a new and more interesting way. Nothing was red, because
+  // nothing asserted the inside of the helper. This is that assertion.
+  ok("it sends the apikey and the token together",
+     /const send = \(tok\) => fetch\(url, \{ \.\.\.opts, headers: \{ \.\.\.studioAuth\(\), \.\.\.\(opts\.headers \|\| \{\}\), Authorization: `Bearer \$\{tok\}` \} \}\);/.test(app16));
+  // ORDER, NOT PRESENCE. Authorization has to come last or a call site that
+  // passes a stale header of its own wins the retry, and the second attempt
+  // goes out with the same dead token as the first.
+  ok("and the retry's token beats anything a caller passed",
+     app16.slice(app16.indexOf("const supaFetch")).indexOf("...(opts.headers || {})")
+     < app16.slice(app16.indexOf("const supaFetch")).indexOf("Authorization: `Bearer ${tok}`"));
+  ok("a 401 is retried once with a fresh token",
+     /const supaFetch[\s\S]{0,400}?if \(res\.status !== 401\) return res;[\s\S]{0,200}?const fresh = await refreshStudioSession\(\);[\s\S]{0,120}?return send\(fresh\.access_token\);/.test(app16));
+  ok("and it gives up rather than looping when the refresh fails",
+     /const supaFetch[\s\S]{0,400}?if \(!fresh\) return res;/.test(app16));
+  // studioAuth THROWS on no session at all, and every one of the thirty-nine
+  // call sites relied on that before the migration. Expired and absent stay
+  // different things: absent is a bug and fails loudly, expired fixes itself.
+  ok("no session at all still fails loudly rather than quietly",
+     /const studioAuth = \(\) => \{[\s\S]{0,200}?if \(!tok\) throw new Error/.test(app16));
+
+  // ── THE CENSUS, WHICH IS WHAT ACTUALLY STOPS THIS COMING BACK ────
+  //
+  // Naming the helper does nothing; a fortieth call site typed next month is
+  // exactly how the first fix decayed into this one. So every single call to
+  // Supabase is counted, and the ones NOT going through supaFetch are listed
+  // by name here rather than merely tolerated.
+  //
+  // The five are legitimate and each for its own reason:
+  //   the two /auth/v1/token calls MINT the session, so there is nothing to
+  //   renew and asking supaFetch would be circular;
+  //   gemlyx_suggestions, craft_items and craft_requests are READER-FACING and
+  //   must work signed out, so they carry the anon key on purpose.
+  // Anything else appearing in this list is the bug growing back.
+  const bareSupabase = [...app16.matchAll(/[^a-zA-Z]fetch\(`\$\{SUPABASE_URL\}([^`]*)`/g)].map(m => m[1]);
+  is("every founder-gated Supabase call goes through it", bareSupabase, [
+    "/auth/v1/token?grant_type=refresh_token",
+    "/auth/v1/token?grant_type=password",
+    "/rest/v1/gemlyx_suggestions",
+    "/rest/v1/craft_items?select=*&order=id",
+    "/rest/v1/craft_requests",
+  ]);
+  ok("and there are plenty that do", [...app16.matchAll(/supaFetch\(`\$\{SUPABASE_URL\}/g)].length > 25);
+  // ONE PLACE KNOWS THE TOKEN EXPIRES. Six hand-rolled retries are gone; the
+  // only two callers left are the two helpers. A third means somebody has
+  // started writing the seventh.
+  is("only the two helpers renew a session", (app16.match(/await refreshStudioSession\(\)/g) || []).length, 2);
+
+  // ── THE ASSISTANT IS INSIDE STUDIO AND WAS OUTSIDE THE FIX ──────
+  // Its three calls sent session.access_token once, so an hour in it could
+  // not read a row, run an audit, or save a correction it had just talked him
+  // through. It gets the helper as a prop rather than building a second one,
+  // because App.jsx owns the session state and a second copy of the retry is
+  // the duplication that let this survive the first fix.
+  const assistant = readFileSync(join(root, "src/components/StudioAssistant.jsx"), "utf8");
+  ok("the assistant is handed the helper", /supaFetch,/.test(assistant));
+  is("and builds no Authorization of its own", (assistant.match(/Authorization/g) || []).length, 0);
+  is("no bare Supabase call is left in it", [...assistant.matchAll(/[^a-zA-Z]fetch\(`\$\{SUPABASE_URL\}/g)].length, 0);
+  is("all three of its calls go through the helper", [...assistant.matchAll(/supaFetch\(`\$\{SUPABASE_URL\}/g)].length, 3);
+  // A prop that is not passed is undefined, and undefined(...) is a crash on
+  // the first correction rather than a 401. Both mount points, because this
+  // component is rendered twice and one of them is the floating one.
+  is("both mount points pass it", (app16.match(/supaFetch=\{supaFetch\}/g) || []).length, 2);
+
+  // ── AND WHEN THE REFRESH TOKEN IS DEAD TOO ───────────────────────
+  // The one case a retry cannot fix. Supabase says invalid_grant, he is
+  // logged out, and the truthful screen is the login form.
+  ok("a dead refresh token is recognised", M.refreshIsDead(400, { error: "invalid_grant", error_description: "Invalid Refresh Token: Already Used" }));
+  ok("under the newer error_code spelling as well", M.refreshIsDead(400, { error_code: "refresh_token_not_found", msg: "Invalid Refresh Token" }));
+  // THE HALF THAT MATTERS MORE. A blip must never sign him out mid-draft, so
+  // anything that is not Supabase naming the token is false on purpose.
+  ok("a server error is not a dead token", !M.refreshIsDead(500, { message: "upstream unavailable" }));
+  // ── THE STATUS GUARD, WHICH NONE OF THE OTHERS REACH ─────────────
+  // Found by mutation: replacing the status check with `if (false)` left every
+  // assertion here green, because a 500 body about an upstream failure does
+  // not contain the words either way. So the guard was untested. A failing
+  // gateway CAN echo the request back, words and all, and a 500 that happens
+  // to say "Invalid Refresh Token" is a server falling over rather than
+  // Supabase answering a question about the token. Signing him out on that is
+  // the exact blip this guard exists to survive.
+  ok("a 500 that echoes the words is still not an answer",
+     !M.refreshIsDead(500, { message: "Invalid Refresh Token" }));
+  ok("a rate limit is not a dead token", !M.refreshIsDead(429, { message: "too many requests" }));
+  ok("and neither is a body it could not read", !M.refreshIsDead(400, null));
+  ok("nor a 400 about something else entirely", !M.refreshIsDead(400, { error: "validation_failed", msg: "missing field" }));
+  ok("only the dead case clears the session",
+     /if \(refreshIsDead\(res\.status, data\)\) \{\s*\n\s*localStorage\.removeItem\("gemlyx_studio_session"\);/.test(app16));
+  ok("and it says so rather than failing silently",
+     /setLoginError\("Your Studio session ended\. Log in again\."\);/.test(app16));
 }
 
 
@@ -26019,10 +26134,31 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // null — a change that did not touch the rule this assertion is about. The
   // rule is that a session with no id is refused; what the refusal looks like is
   // the caller's business and has now changed twice.
-  for (const [file, count] of [["src/utils/userSaves.js", 2], ["src/utils/profile.js", 2]]) {
+  // ── AND THE DOORS NOW SHARE ONE GATE ─────────────────────────────
+  //
+  // 6 Sep 2026. Counting the guard was right while there were two copies of it
+  // per file. Both files now resolve the session through a `live` helper that
+  // holds the guard once and renews the token, because the frozen-session bug
+  // below made the guard pass with a token an hour past its expiry — refusing a
+  // session with no id was never the same thing as refusing a session with a
+  // dead one.
+  //
+  // So the count moved to one, and the claim it stood for is asserted properly
+  // instead: the guard exists, and NEITHER DOOR gets past it. That second half
+  // is what the count was really buying, and it was buying it by accident.
+  for (const file of ["src/utils/userSaves.js", "src/utils/profile.js"]) {
     const src = stripComments(readFileSync(join(root, file), "utf8"));
-    is(`${file} refuses a session with no id, at every door`,
-      (src.match(/if \(!session\?\.token \|\| !session\?\.userId\)/g) || []).length, count);
+    is(`${file} refuses a session with no id, in one place`,
+      (src.match(/if \(!session\?\.token \|\| !session\?\.userId\) return null;/g) || []).length, 1);
+    is(`${file} sends both doors through it`,
+      (src.match(/= await live\(session\);/g) || []).length, 2);
+    // The renewal is the point of the helper, not a detail of it: without this
+    // line `live` is a rename of the old guard and the frozen token is back.
+    ok(`${file} resolves a fresh token rather than the held one`,
+      /const fresh = await getSession\(\);/.test(src));
+    // And nothing may keep using the stale object once `live` has answered.
+    ok(`${file} uses the resolved session, not the argument`,
+      !/headers\(session\)/.test(src) && !/user_id: session\.userId/.test(src));
   }
   // fetchCloudSaves itself is not called here: it does network I/O, and the
   // header of this file says nothing in it touches the network. The DECISION it
@@ -41359,7 +41495,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // twice on a 300-pixel panel.
 {
   const { renderSurface: rsr } = await import(pathToFileURL(join(root, "tests/render.mjs")).href);
-  const { railPlaces, railCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX } = M;
+  const { railPlaces, mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, placesNamedIn, rejectedIn } = M;
   const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
 
   // ── WHICH REPLY THE RAIL IS SHOWING ──────────────────────────────
@@ -41401,6 +41537,198 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // The rail is inside the flex row, not floating after it.
   ok("the messages and the rail share one flex row", /<div className="chat-with-rail">[\s\S]{0,400}<div className="ai-msgs"/.test(appR));
   ok("and the message list can shrink so the rail has room", /className="ai-msgs" style=\{\{ flex: "1 1 auto", minWidth: 0/.test(appR));
+
+  // ── THE MAP UNDER THE CHAT ───────────────────────────────────────
+  //
+  // Oliver, 6 Sep 2026: "is it possible that Gemlyx can explain using a map?
+  // ... right now there is not much else than just chatting." He chose "the
+  // trip taking shape" over three narrower readings of that.
+  //
+  // THE WALK IS THE OPPOSITE OF railPlaces AND THAT IS THE POINT. The rail
+  // carries one reply because an accumulating gallery is what chatPlaces
+  // exists to prevent. A map with one pin says nothing: the thing a map is for
+  // is places in relation to each other. Same file, two rules, and this block
+  // asserts they stay different.
+  {
+    const P = (name, lat, lon) => ({ name, lat, lon });
+    const pools = [P("Ribe", 55.33, 8.77), P("Skagen", 57.72, 10.58), P("Aarhus", 56.15, 10.21), P("Nowhere")];
+    // Sorted by where the name falls in the sentence, because that is what
+    // placesNamedIn does and a fake that orders by POOL order would make this
+    // block's order assertions a fact about the fake.
+    const named = (t) => pools
+      .filter(p => new RegExp(`\\b${p.name}\\b`, "i").test(t))
+      .sort((a, b) => t.toLowerCase().indexOf(a.name.toLowerCase()) - t.toLowerCase().indexOf(b.name.toLowerCase()));
+    const turned = (t) => pools.filter(p => new RegExp(`not ${p.name}`, "i").test(t)).map(p => p.name.toLowerCase());
+    const coords = (p) => (Number.isFinite(p.lat) && Number.isFinite(p.lon) ? { lat: p.lat, lon: p.lon } : null);
+    const run = (messages, cap) => mapPlaces({ messages, placesFor: named, rejectsFor: turned, coordsFor: coords, ...(cap ? { cap } : {}) });
+    const names = (r) => r.pins.map(p => p.place.name);
+
+    const trip = [
+      { role: "user", text: "I'm coming up from Germany" },
+      { role: "assistant", text: "Ribe is right there, Denmark's oldest town." },
+      { role: "user", text: "we've got five days" },
+      { role: "assistant", text: "Then Aarhus, and Skagen at the top." },
+    ];
+    is("the pins accumulate across the whole conversation", names(run(trip)), ["Ribe", "Aarhus", "Skagen"]);
+    // In FIRST-MENTION order, which is not itinerary order and is never drawn
+    // as one. Asserted because the order is what a reader would read a number
+    // off, if anybody ever put numbers on these pins.
+    is("in the order they were first named", names(run([...trip, { role: "assistant", text: "Ribe again, then." }])),
+       ["Ribe", "Aarhus", "Skagen"]);
+    is("and a place named twice is one pin", run([...trip, { role: "assistant", text: "Ribe again, then." }]).pins.length, 3);
+    // BOTH SIDES OF THE CONVERSATION, unlike the rail: a map that leaves out
+    // the town they said they were flying into is wrong about the trip.
+    is("the traveller's own places are pinned too", names(run([{ role: "user", text: "we fly into Aarhus" }])), ["Aarhus"]);
+    // ── NO COORDINATE, NO PIN ──────────────────────────────────────
+    // A pin is a claim about where something is, and a guess in that format is
+    // the most believable way to be wrong. PlaceMiniMap's rule, and it matters
+    // more here because this map is built out of a conversation.
+    is("a place with no coordinate gets no pin", names(run([{ role: "assistant", text: "Nowhere is lovely." }])), []);
+    // ── AND A PLACE TURNED DOWN COMES OFF ──────────────────────────
+    // The rail never needed this: its cards live and die with one reply. A pin
+    // dropped four replies ago stays until something takes it off, and "not
+    // Ribe then" leaving Ribe pinned is the map asserting a trip nobody agreed
+    // to.
+    is("a place turned down later is unpinned",
+       names(run([{ role: "assistant", text: "Ribe and Aarhus." }, { role: "user", text: "not Ribe, we did that last year" }])), ["Aarhus"]);
+    is("an error is not a reply here either",
+       names(run([{ role: "assistant", text: "Ribe." }, { role: "assistant", isError: true, text: "Hit a snag near Skagen" }])), ["Ribe"]);
+    // The newest ones are drawn larger, and they are the ones the reply just
+    // introduced — which is also what the photo above the map is showing, so
+    // the big pin and the picture agree.
+    is("the newest reply's places are marked", run(trip).pins.filter(p => p.latest).map(p => p.place.name), ["Aarhus", "Skagen"]);
+    ok("and the older ones are not", run(trip).pins.filter(p => !p.latest).map(p => p.place.name).join() === "Ribe");
+    // OVER THE CAP THE OLDEST GO, and the count is SAID rather than swallowed.
+    // A map quietly showing part of a conversation is a map of another trip.
+    const capped = run([{ role: "assistant", text: "Ribe Aarhus Skagen" }], 2);
+    is("over the cap the oldest go", names(capped), ["Aarhus", "Skagen"]);
+    is("and the ones left off are counted", capped.dropped, 1);
+    is("nothing dropped is nothing said", run(trip).dropped, 0);
+    ok("the cap is a real number", Number.isFinite(MAP_PIN_CAP) && MAP_PIN_CAP >= 4 && MAP_PIN_CAP <= 30);
+    is("no finder, no pins", mapPlaces({ messages: trip }), { pins: [], dropped: 0 });
+    is("no resolver, no pins", mapPlaces({ messages: trip, placesFor: named }), { pins: [], dropped: 0 });
+
+    // ── THE CARD RULE THAT MUST NOT LEAK ONTO THE MAP ──────────────
+    //
+    // Every rule in placesNamedIn was written for a CARD. Two of them are
+    // about decoration and would be silently wrong as map rules, and the
+    // photograph is the one with a switch on it: "no photograph, no card" is
+    // right, and a PIN needs no photograph. Inheriting it would drop pins for
+    // published places that have a checked coordinate and no picture.
+    const withShot = { name: "Ribe", photo: "https://x/ribe.jpg" };
+    const without = { name: "Skagen", photo: "" };
+    is("a card still needs a photograph", placesNamedIn("Ribe and Skagen", [withShot, without]).map(p => p.name), ["Ribe"]);
+    is("and a pin does not", placesNamedIn("Ribe and Skagen", [withShot, without], { needsPhoto: false }).map(p => p.name), ["Ribe", "Skagen"]);
+    // Opt-out, not opt-in, so every caller written before this keeps what it had.
+    is("the card rule is what you get by default", placesNamedIn("Skagen", [without]).length, 0);
+
+    // rejectedIn asks the same two readers the opposite way round. BOTH, and
+    // in that order: asking isRejectedPlace about a name the sentence never
+    // mentions is how a stray "no" in an unrelated clause unpins somewhere.
+    is("a refusal names the place it refuses", rejectedIn("not Ribe this time, Skagen instead", [withShot, without]), ["ribe"]);
+    is("and a sentence with no refusal in it names nothing", rejectedIn("Ribe and Skagen are both good", [withShot, without]), []);
+  }
+
+  // ── AND THE ROOM IT NEEDED, WHICH WAS MEASURED ───────────────────
+  //
+  // 138px was one card wide. With a card popped up on the map it measured 132
+  // by 108 over a 138 by 192 map: 54 per cent, covering BOTH other pins, so no
+  // pin could be reached while another was open. Oliver, shown that: "make the
+  // chat smaller and broaden the map."
+  //
+  // A PROPORTION WITH BOTH ENDS PINNED, because the binding constraint is the
+  // card's 132px and what is left over either side of it. The lower bound is
+  // the assertion that matters: under about 210 the card is the whole width
+  // again and the bug is back.
+  const mapCss = railMapCss({ surface: "#141A2E" });
+  ok("the map is hidden below the breakpoint, where there is no column for it",
+     new RegExp(`\\.${MAP_CLASS}\\s*\\{[^}]*display:\\s*none`).test(mapCss));
+  ok("and shown above it",
+     new RegExp(`min-width:\\s*${RAIL_BREAKPOINT_PX}px[\\s\\S]*\\.${MAP_CLASS}\\s*\\{[^}]*display:\\s*block`).test(mapCss));
+  const basis = railCss().match(/flex:\s*0\s*0\s*clamp\((\d+)px,\s*\d+%,\s*(\d+)px\)/);
+  ok("the rail is a clamped proportion rather than one number", !!basis);
+  ok("and never narrow enough for a card to be the whole of it", !!basis && Number(basis[1]) >= 200);
+  ok("nor wide enough to be taking room the map has stopped using", !!basis && Number(basis[2]) <= 340);
+  // SCOPED. These restyle Leaflet's own popup chrome, and the place page's map
+  // and the guide's route map are Leaflet too. Written bare they would restyle
+  // both from a file neither imports.
+  const bare = mapCss.split("\n").filter(l => /\.leaflet-popup/.test(l) && !l.includes(POPUP_CLASS));
+  is("every popup rule is scoped to this map's popup", bare, []);
+  ok("the stylesheet carries the map's CSS too", /\$\{railMapCss\(C\)\}/.test(appR));
+  ok("and it is passed the theme, or the tip is white on a dark card", /railMapCss\(C\)/.test(appR));
+
+  // ── THE WIRING, WHICH IS WHERE THE TWO WALKS COULD BE SWAPPED ────
+  const chatMap = readFileSync(join(root, "src/components/ChatMiniMap.jsx"), "utf8");
+  // Comments blanked, positions kept. Needed because the reasoning above these
+  // rules is longer than the rules, and a window measured in characters would
+  // be measuring the prose.
+  const chatCode = stripComments(chatMap);
+  ok("the map is rendered under the rail", /<ChatMiniMap pins=\{onMap\.pins\}/.test(appR));
+  ok("fed by mapPlaces and not by railPlaces", /const onMap = mapPlaces\(\{[\s\S]{0,400}?coordsFor: placeCoords,/.test(appR));
+  // placeCoords, not a fresh `__lat ?? lat` read. Six copies of that question
+  // have been found in this codebase and five of them were wrong.
+  is("and nothing in the map component resolves a coordinate itself",
+     (chatCode.match(/__lat|__lon/g) || []).length, 0);
+  ok("the map's pins drop the card's photo rule", /placesFor: \(text\) => placesNamedIn\(clean\(text\), pools, \{ needsPhoto: false/.test(appR));
+  ok("and the card's keeps it", /placesFor: \(text\) => placesNamedIn\(clean\(text\), pools, \{ alreadyKnown: theirWords \}\)/.test(appR));
+  // ONE POOLS CALL FOR BOTH. The card and the pin have to be looking at the
+  // same published rows, and two copies of a pool expression is how they stop.
+  is("the card and the map read one pool", (appR.match(/const pools = previewPools\(\{/g) || []).length, 1);
+
+  // ── AND THE CARD IN THE POPUP IS THE CARD ────────────────────────
+  //
+  // Leaflet takes an HTML string, which is the trap: a hand-written <img> in
+  // the map component would be a second copy of a photo rule with a LICENCE
+  // CHECK in it. So Leaflet gets an empty div and React renders the real
+  // ChatPlaceCards into it.
+  ok("the popup is a portalled ChatPlaceCards", /createPortal\(\s*<ChatPlaceCards/.test(chatCode));
+  ok("at the layout built for it", /layout="pin"/.test(chatCode));
+  is("and the map writes no <img> of its own", (chatCode.match(/<img|innerHTML/g) || []).length, 0);
+  ok("a pin with no showable photograph gets no card", /const shot = showablePhoto\(p\.place\);\s*if \(!shot\) \{/.test(chatCode));
+  // ── THE PIN LAYOUT IS THE SAME COMPONENT ───────────────────────
+  // A second component would be a second place for the credit to be got wrong.
+  const cards = readFileSync(join(root, "src/components/ChatPlaceCards.jsx"), "utf8");
+  ok("pin is a narrower rail rather than a new card", /const pin = layout === "pin";\s*\n\s*const rail = layout === "rail" \|\| pin;/.test(cards));
+  is("so there is still exactly one credit line in the app",
+     (cards.match(/creditLine\(shot\.credit\)/g) || []).length, 2);   // the test and the render
+
+  // ── WHICH SIDE THE CARD OPENS ON IS COUNTED ──────────────────────
+  //
+  // Three goes, each measured in a browser. Above the pin: 54 per cent and
+  // both pins covered, because Denmark runs south to north and so does a trip
+  // up from Germany. Sideways away from the map's middle: 21 per cent and
+  // still over Aarhus, because the middle of the map has nothing to do with
+  // where the other places are. Counted: nothing covered.
+  ok("the side is chosen by counting what it would cover",
+     /const l = cx - 66, r = cx \+ 66, t = here\.y - 54, b = here\.y \+ 54;\s*const spills[\s\S]{0,120}?return others\.filter\(o => o\.x > l && o\.x < r && o\.y > t && o\.y < b\)\.length \+ spills;/.test(chatCode));
+  ok("and recomputed on every open, because the map refits when a place is added",
+     /marker\.on\("mouseover", \(\) => \{[\s\S]{0,240}?pop\.options\.offset = L\.point\(sideFor\(\)/.test(chatCode));
+  // ── SPILLING COSTS LESS THAN HIDING, AND THE NUMBER IS THE CLAIM ─
+  // At 1 they tied, the tie-break sent Ribe's card right, and Aarhus became
+  // unreachable. Off the edge Leaflet pans and everything stays reachable;
+  // over a pin, that pin cannot be hovered or tapped at all. So a spill must
+  // LOSE to a clean fit and BEAT a covered pin, which is a number strictly
+  // between 0 and 1. Asserted as the range with the reason, not as 0.4,
+  // because a test written against the constant cannot catch the constant
+  // being wrong.
+  const spill = chatCode.match(/const spills = l < 0 \|\| r > size\.x \? ([0-9.]+) : 0;/);
+  ok("a spill has a cost at all", !!spill && Number(spill[1]) > 0);
+  ok("and it is cheaper than hiding a pin", !!spill && Number(spill[1]) < 1);
+  // ── THE MAP IS BUILT ONCE AND THE PINS REDRAWN ──────────────────
+  // Its pins change on almost every reply. Rebuilding the Leaflet instance
+  // each time re-downloads every tile and throws away wherever the person had
+  // panned to, mid-conversation.
+  ok("the mount effect does not depend on the pins", /\}, \[any\]\);/.test(chatCode));
+  ok("and the pin effect depends on them by value, not by array identity", /\}, \[pinKey\]\);/.test(chatCode));
+  ok("the open handler is held in a ref so a new closure cannot invalidate anything",
+     /openRef\.current = onOpen;/.test(chatCode));
+  // Found in the browser: hovering a pin with no card left the PREVIOUS
+  // place's card open, so you pointed at Skagen and read Aarhus, and the stale
+  // card covered the pin so the click opened Aarhus too.
+  ok("a pin with no card still takes the open one down", /marker\.on\("mouseover", \(\) => map\.closePopup\(\)\);/.test(chatCode));
+  // Clicking the map must not close it, or the click that lands on the card
+  // closes the card first and the entry never opens.
+  ok("and a click on the card is not swallowed by the map", /closeOnClick: false/.test(chatCode));
 
   // ── AND THE CARD ITSELF STILL SAYS WHAT IT HAS TO ────────────────
   //
@@ -46863,12 +47191,25 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // same real Supabase ids, so the fetch was lifted into readPublishedRows
     // rather than typed a second time. The claim under test is unchanged, "one
     // request, no model calls", so it is asked of the pair.
+    // ── AND THE SLICE HAD BEEN WRONG SINCE THE DAY IT MOVED ──────
+    //
+    // It ran to planAffiliateSweep, which puts patchRowPayload and its two
+    // calls inside the thing being counted. It passed anyway, because it
+    // counted `await fetch(` and patchRowPayload spelled its calls
+    // `const attempt = (token) => fetch(` — a hand-rolled retry, invisible to
+    // this regex. So an assertion about how many requests readPublishedRows
+    // makes was really an assertion about which SPELLING the neighbours used,
+    // and it went red on 6 Sep only because the migration made every call site
+    // read the same way. Ended at the next function, where it always belonged.
     const readBody = appS.slice(appS.indexOf("const readPublishedRows = async () => {"),
-                                appS.indexOf("const planAffiliateSweep = async () => {"));
+                                appS.indexOf("const patchRowPayload = async (id, set) => {"));
     const runBody = readBody + appS.slice(appS.indexOf("const runWaitingSweep = async () => {"),
                                           appS.indexOf("const applyWaitingSweep = async () => {"));
     ok("the sweep reader is findable", readBody.length > 100 && runBody.length > 300);
-    is("it makes exactly one request", (runBody.match(/await fetch\(/g) || []).length, 1);
+    is("it makes exactly one request", (runBody.match(/await supaFetch\(/g) || []).length, 1);
+    // Belt and braces after the 6 Sep migration: a bare fetch reappearing here
+    // would be one request too, and would be the un-renewing kind.
+    is("and none of it is a bare fetch", (runBody.match(/await fetch\(/g) || []).length, 0);
     ok("and that request is the library", /gemlyx_content\?select=id,type,payload&published=eq\.true/.test(readBody));
     ok("and the waiting sweep goes through it", /await readPublishedRows\(\)/.test(runBody));
     ok("the proposals come from the pure reader", /waitingProposals\(rows, today\)/.test(runBody));

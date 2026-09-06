@@ -14,6 +14,7 @@
 // signed-out users. The account is a sync layer on top, so nothing breaks when
 // someone is offline, signed out, or in private mode.
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
+import { getSession } from "./auth";
 
 const headers = (session) => ({
   apikey: SUPABASE_KEY,
@@ -55,12 +56,41 @@ export const SYNC = {
   OFFLINE: "offline",         // the request never completed
 };
 
+// ── THE SESSION HANDED IN IS AS OLD AS THE PAGE ─────────────────────
+//
+// 6 Sep 2026, from a console log: "saves sync no-table: JWT expired". The
+// table is fine. The token was an hour old.
+//
+// App.jsx calls getSession() ONCE, at mount, and holds the answer in state.
+// Both functions below then took that frozen object and used its token
+// forever. auth.js has renewed tokens correctly since the day it was
+// written, and its comment above getSession says exactly why: "saves would
+// silently stop syncing mid-session and the person would have no idea
+// anything was wrong, which is the worst kind of failure: no error, just
+// quietly lost data." That is what was happening anyway, because renewing
+// only helps the caller who asks.
+//
+// WORSE ON THE WRITE THAN ON THE READ. A stale read is a banner. A stale
+// pushCloudSaves returns false, the toast has already said "Saved", and the
+// place never reaches the account at all.
+//
+// So the token is resolved at the moment of use, not at mount. getSession
+// returns the stored one when it is still good, renews it a couple of
+// minutes early, and clears the session when the refresh token itself is
+// dead — so a null here means signed out, which is the honest answer.
+const live = async (session) => {
+  if (!session?.token || !session?.userId) return null;
+  const fresh = await getSession();
+  return fresh?.token && fresh?.userId ? fresh : null;
+};
+
 export const fetchCloudSaves = async (session) => {
-  if (!session?.token || !session?.userId) return { ok: false, why: SYNC.NO_SESSION };
+  const now = await live(session);
+  if (!now) return { ok: false, why: SYNC.NO_SESSION };
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/gemlyx_user_data?user_id=eq.${session.userId}&select=saved_places,saved_guides`,
-      { headers: headers(session) }
+      `${SUPABASE_URL}/rest/v1/gemlyx_user_data?user_id=eq.${now.userId}&select=saved_places,saved_guides`,
+      { headers: headers(now) }
     );
     const rows = await res.json();
     // PostgREST answers an error with an OBJECT carrying `message` and `code`,
@@ -103,13 +133,14 @@ export const syncFailureNote = (result, { localPlaces = 0, localGuides = 0 } = {
 };
 
 export const pushCloudSaves = async (session, places, guides) => {
-  if (!session?.token || !session?.userId) return false;
+  const now = await live(session);
+  if (!now) return false;
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_user_data?on_conflict=user_id`, {
       method: "POST",
-      headers: { ...headers(session), Prefer: "resolution=merge-duplicates,return=minimal" },
+      headers: { ...headers(now), Prefer: "resolution=merge-duplicates,return=minimal" },
       body: JSON.stringify({
-        user_id: session.userId,
+        user_id: now.userId,
         saved_places: places,
         saved_guides: guides,
         updated_at: new Date().toISOString(),

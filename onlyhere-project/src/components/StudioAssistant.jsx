@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { C } from "../utils/theme";
-import { SUPABASE_URL, SUPABASE_KEY } from "../config";
+import { SUPABASE_URL } from "../config";
 import { askClaude, askPerplexity, parseClaudeJSON, citationUrls } from "../utils/aiClient";
 import { auditEntry, auditAll } from "../utils/entryAudit";
 import { correctEntry, editEntry, routeMessage, offersCorrection, ASK_PROMPT, LOOKUP_PROMPT, NOT_IN_ENTRY, SWEEP_PROMPT } from "../utils/correction";
@@ -90,7 +90,14 @@ export const rowIdForItem = (item) => {
 // directly under the draft it is talking about. Same routing, same claim
 // splitting, same Perplexity verification, same scope guard, same Save. The
 // only difference is that it is sitting where the work is.
-export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraftPatched, onSaved, onSweepRequested, inline }) => {
+// ── supaFetch COMES IN AS A PROP, IT IS NOT REBUILT HERE ───────────
+// 6 Sep 2026. These three calls sent `session.access_token` once and took
+// the answer as final, so an hour into a Studio session the assistant could
+// no longer read a row, run an audit, or save a correction it had just
+// talked him through. App.jsx owns the refresh, because App.jsx owns the
+// session state; a second copy of the retry living down here is exactly the
+// duplication that let this survive the first fix.
+export const StudioAssistant = ({ session, supaFetch, item, kind, draft, draftKind, onDraftPatched, onSaved, onSweepRequested, inline }) => {
   const [open, setOpen] = useState(!!inline);
   const [input, setInput] = useState("");
   const [log, setLog] = useState([]);
@@ -148,9 +155,7 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
   // id offset and whatever the arrays added. The row is fetched fresh before
   // correcting so the patch is built against exactly what is stored.
   const fetchRow = async (id) => {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${id}&select=id,type,payload`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${session.access_token}` },
-    });
+    const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${id}&select=id,type,payload`);
     const rows = await res.json();
     return Array.isArray(rows) ? rows[0] : null;
   };
@@ -355,9 +360,7 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
   };
 
   const runAudit = async () => {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${session.access_token}` },
-    });
+    const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true`);
     const rows = await res.json();
     if (!Array.isArray(rows)) { say("gemlyx", "Could not load the published rows."); return; }
     const scored = auditAll(rows).filter(r => r.score >= 8).slice(0, 12);
@@ -419,9 +422,9 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
     }
     setSaving(true);
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${pending.rowId}`, {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${pending.rowId}`, {
         method: "PATCH",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
         body: JSON.stringify({ payload: pending.after }),
       });
       if (!res.ok) {

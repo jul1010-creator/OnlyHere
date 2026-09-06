@@ -21,6 +21,7 @@
 // one: a Danish business collecting a field it never uses has taken on a
 // liability in exchange for nothing.
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
+import { getSession } from "./auth";
 // The five parts of Denmark, as one list rather than two. See OBSERVED_VOCAB
 // below for why this is imported rather than retyped.
 import { PARTS } from "./geography";
@@ -651,15 +652,27 @@ const headers = (session) => ({
   "Content-Type": "application/json",
 });
 
+// Same as utils/userSaves.js, and for the same reason: App.jsx reads the
+// session once at mount and holds it, so by the time somebody edits their
+// profile the token in that object can be hours old. saveProfile is the one
+// that hurts, because it answers { ok: false } and the form shows a save
+// error for a profile that was perfectly saveable.
+const live = async (session) => {
+  if (!session?.token || !session?.userId) return null;
+  const fresh = await getSession();
+  return fresh?.token && fresh?.userId ? fresh : null;
+};
+
 // Returns { profile } on success, { missingColumn: true } when the column is
 // not there, or null when the call simply failed. Three different situations
 // that a bare null would flatten into one.
 export const fetchProfile = async (session) => {
-  if (!session?.token || !session?.userId) return null;
+  const now = await live(session);
+  if (!now) return null;
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/gemlyx_user_data?user_id=eq.${session.userId}&select=profile`,
-      { headers: headers(session) }
+      `${SUPABASE_URL}/rest/v1/gemlyx_user_data?user_id=eq.${now.userId}&select=profile`,
+      { headers: headers(now) }
     );
     const body = await res.json();
     if (!Array.isArray(body)) {
@@ -671,13 +684,14 @@ export const fetchProfile = async (session) => {
 };
 
 export const saveProfile = async (session, profile) => {
-  if (!session?.token || !session?.userId) return { ok: false };
+  const now = await live(session);
+  if (!now) return { ok: false };
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_user_data?on_conflict=user_id`, {
       method: "POST",
-      headers: { ...headers(session), Prefer: "resolution=merge-duplicates,return=minimal" },
+      headers: { ...headers(now), Prefer: "resolution=merge-duplicates,return=minimal" },
       body: JSON.stringify({
-        user_id: session.userId,
+        user_id: now.userId,
         profile: cleanProfile(profile),
         updated_at: new Date().toISOString(),
       }),

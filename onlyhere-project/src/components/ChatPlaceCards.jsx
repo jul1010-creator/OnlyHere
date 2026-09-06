@@ -104,8 +104,25 @@ export const showablePhoto = (place) => {
 // strip when the row became a shared picture on 5 Sep. The names are kept
 // because they are what the two call sites pass and what the CSS in chatRail.js
 // switches between; "row" means "under the reply" and "rail" means "beside it".
+// ── AND A THIRD LAYOUT, INSIDE A MAP PIN ────────────────────────────
+//
+// Oliver, 6 Sep 2026, having seen the pins: "coordinate the map with these..
+// so basically on the map, have them as small pop ups with a picture."
+//
+// A third layout rather than a second component, for the reason the second
+// layout gives one screen up: "a second component would be a second place for
+// the licence credit rule to be got wrong, and that rule is the one with a
+// legal edge on it." A popup on a 148px map is the smallest thing this card
+// has ever had to fit in, which makes it exactly the place somebody would be
+// tempted to hand-write a bit of HTML with an <img> in it and no credit.
+//
+// So "pin" is "rail", narrower and with a shorter photograph. Everything that
+// matters — showablePhoto's licence check, the OUR PAGE mark, the wording and
+// its five translations, the credit that wraps rather than truncating — is the
+// same code running in a smaller box.
 export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "row", className = "" }) => {
-  const rail = layout === "rail";
+  const pin = layout === "pin";
+  const rail = layout === "rail" || pin;
   const rows = (Array.isArray(places) ? places : [])
     .map(p => ({ place: p, shot: showablePhoto(p) }))
     .filter(x => x.shot);
@@ -117,7 +134,8 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
     <div
       className={className || undefined}
       style={rail ? {
-        display: "flex", flexDirection: "column", gap: 10, width: "100%",
+        display: "flex", flexDirection: "column", gap: 10,
+        width: pin ? 132 : "100%",
       } : {
         // ── SHOWN, NOT SHELVED ──────────────────────────────────────
         // A column under the reply, left-aligned with it, one picture per row.
@@ -148,7 +166,7 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
             animationDelay: `${idx * 90}ms`,
           }}
         >
-          <div style={{ position: "relative", height: rail ? 88 : 132, background: `${C.gold}18` }}>
+          <div style={{ position: "relative", height: pin ? 62 : rail ? 88 : 132, background: `${C.gold}18` }}>
             <img
               src={shot.photo}
               alt={place.name}

@@ -87,3 +87,30 @@ export const studioErrorMessage = (what, status, body) => {
   const message = String((body && typeof body === "object" && body.message) || "");
   return `Could not read ${what} (${status}${code ? ` ${code}` : ""}). ${message.slice(0, 160)}`.trim();
 };
+
+// ── WHEN THE REFRESH TOKEN ITSELF IS DEAD ──────────────────────────
+//
+// 6 Sep 2026. Oliver, on a Studio where every button had started answering
+// 401: "Oh, I just had to log in." He should not have had to. The refresh
+// token was in localStorage the whole time and refreshStudioSession has
+// worked for weeks; almost nothing called it.
+//
+// Now that everything does, one case is left over: the refresh token is
+// dead too. Supabase answers that with 400 invalid_grant, and no amount of
+// retrying changes it. He IS logged out, and the only truthful screen is
+// the login form.
+//
+// THE DISTINCTION THAT MATTERS is dead-token against unreachable-server. A
+// thrown fetch, a 500, a 429, a captive portal: those are not an answer
+// about the token, and treating them as one would sign him out every time
+// his laptop woke up on a slow network. So this returns true ONLY when
+// Supabase actually answered AND named the refresh token as the problem.
+// Anything it cannot read is false, on purpose: staying logged in through a
+// blip is recoverable, being logged out mid-draft is not.
+export const refreshIsDead = (status, body) => {
+  if (status !== 400 && status !== 401) return false;
+  const o = body && typeof body === "object" ? body : {};
+  const said = `${o.error || ""} ${o.error_code || ""} ${o.error_description || ""} ${o.msg || ""} ${o.message || ""}`;
+  if (/invalid_grant/i.test(said)) return true;
+  return /refresh[ _]?token/i.test(said);
+};

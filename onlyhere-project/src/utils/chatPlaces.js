@@ -63,7 +63,27 @@ const mentions = (hay, name) => {
   return new RegExp(`(?:^|[^\\p{L}])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "iu").test(hay);
 };
 
-export const placesNamedIn = (text, pools, { cap = CHAT_PLACE_CAP, alreadyKnown = "" } = {}) => {
+// ── needsPhoto: THE CARD RULE THAT MUST NOT LEAK ONTO THE MAP ───────
+//
+// 6 Sep 2026, adding the chat map. Every rule in this function was written for
+// a CARD, and the map reuses the matching rather than growing a second copy of
+// it — which is the right call and the dangerous one, because two of these
+// rules are about decoration and would be silently wrong as map rules.
+//
+// The photograph is the first. "No photograph, no card" is correct: an empty
+// 210-pixel frame is worse than nothing. A PIN needs no photograph. Inheriting
+// that rule would drop pins for published places that have a checked coordinate
+// and no picture, and the map would be quietly missing somewhere Gemlyx had
+// just recommended, for a reason that has nothing to do with where it is.
+//
+// (The second is `alreadyKnown`, and the caller handles that one by not passing
+// it: a place the traveller named needs no INTRODUCING, but a map exists to
+// show where things are, and leaving out the town they are flying into is the
+// map being wrong about the shape of the trip.)
+//
+// Defaults to true, so every existing caller keeps the behaviour it was
+// written with and this is opt-out rather than opt-in.
+export const placesNamedIn = (text, pools, { cap = CHAT_PLACE_CAP, alreadyKnown = "", needsPhoto = true } = {}) => {
   const said = String(text || "");
   if (!said.trim()) return [];
   // What the traveller has already named. A place they asked for is a place they
@@ -84,8 +104,9 @@ export const placesNamedIn = (text, pools, { cap = CHAT_PLACE_CAP, alreadyKnown 
     // suggestion is exactly what a photograph is for.
     if (theirs && mentions(theirs, name)) continue;
     // No photograph, no card. The entry may still be excellent; this is a
-    // picture feature and an empty frame is worse than nothing.
-    if (!String(p?.photo || "").trim()) continue;
+    // picture feature and an empty frame is worse than nothing. A map pin is
+    // not a picture feature, which is what needsPhoto is for.
+    if (needsPhoto && !String(p?.photo || "").trim()) continue;
     // A craft row is a product rather than a place, which is the same exclusion
     // guideHero makes and for the same reason: a product shot is not a picture
     // of somewhere you can stand.
@@ -107,4 +128,32 @@ export const placesNamedIn = (text, pools, { cap = CHAT_PLACE_CAP, alreadyKnown 
     .sort((a, b) => a.at - b.at)
     .slice(0, Math.max(0, cap))
     .map(x => x.place);
+};
+
+// ── AND THE ONES THAT WERE TURNED DOWN ──────────────────────────────
+//
+// 6 Sep 2026, for the chat map. placesNamedIn already refuses to CARD a place
+// the sentence rejects ("ikke København denne gang"), which is enough when the
+// card lives and dies with one reply. The map accumulates, so a pin dropped
+// four replies ago stays on screen unless something takes it off, and "not
+// Ribe then" leaving Ribe pinned is the map asserting a trip nobody agreed to.
+//
+// Same two readers, asked the opposite way round: which of these pools does
+// this sentence NAME and TURN DOWN. Names are returned folded, because the
+// caller keys its pins the same way.
+export const rejectedIn = (text, pools) => {
+  const said = String(text || "");
+  if (!said.trim()) return [];
+  const out = [];
+  for (const p of (Array.isArray(pools) ? pools : [])) {
+    const name = String(p?.name || "").trim();
+    if (!name) continue;
+    // BOTH, and in this order. isRejectedPlace looks for a refusal near a name;
+    // asking it about a name the sentence never mentions is how a stray "no" in
+    // an unrelated clause unpins somewhere.
+    if (!mentionsPlace(said, name)) continue;
+    if (!isRejectedPlace(said, name)) continue;
+    out.push(name.toLowerCase());
+  }
+  return out;
 };

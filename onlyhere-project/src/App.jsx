@@ -152,8 +152,9 @@ import { currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLang
 import { LanguageChoice } from "./components/LanguagePicker";
 import { NavStrip } from "./components/NavStrip";
 import { alertKey, describeWeatherChange, unseenAlerts, seenAlerts, markAlertSeen, readAlerts, markAlertsRead, unreadAlerts, tripLine, alertCountLine } from "./utils/weatherAlerts";
-import { placesNamedIn } from "./utils/chatPlaces";
-import { railPlaces, railCss, RAIL_CLASS, INLINE_CARDS_CLASS } from "./utils/chatRail";
+import { placesNamedIn, rejectedIn } from "./utils/chatPlaces";
+import { railPlaces, mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, MAP_CLASS } from "./utils/chatRail";
+import { ChatMiniMap } from "./components/ChatMiniMap";
 import { briefProgress, progressLine, briefPercent, percentLine } from "./utils/briefPanel";
 import { EXAMPLE_GUIDE, EXAMPLE_GUIDE_PATH, hasExampleGuide } from "./data/exampleGuide";
 import { ChatPlaceCards } from "./components/ChatPlaceCards";
@@ -191,7 +192,7 @@ import { dayKey, dayStart, dayPlus } from "./utils/calendarDay";
 import { arrivalPoint } from "./utils/arrival";
 import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, nightlifeForTown, barsOnStreet, townOfLocation } from "./utils/nightlife";
 import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
-import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
+import { supabaseFailure, studioErrorMessage, refreshIsDead, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
 import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
 import { resolveUncertainties, CONFIRM_FORMAT } from "./utils/uncertaintyResolve";
@@ -1281,7 +1282,7 @@ function GemlyxApp() {
       // one is open for minutes, and the reason it exists is that more than one
       // person will be using it. One GET is a cheap price for not silently
       // eating somebody's paragraph.
-      const fresh = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(row.id)}&select=payload`, { headers: studioAuth() });
+      const fresh = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(row.id)}&select=payload`);
       const rows = await fresh.json().catch(() => null);
       if (!fresh.ok) { setBodyError(studioErrorMessage("this entry", fresh.status, rows)); setBodySaving(false); return; }
       const live = rows?.[0]?.payload || {};
@@ -1301,9 +1302,9 @@ function GemlyxApp() {
         blocks: changedIndexes(live.blogBody, nextBody),
         problems,
       });
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(row.id)}`, {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(row.id)}`, {
         method: "PATCH",
-        headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=representation" },
+        headers: { "Content-Type": "application/json", Prefer: "return=representation" },
         body: JSON.stringify({ payload: merged }),
       });
       const saved = await res.json().catch(() => null);
@@ -1338,9 +1339,9 @@ function GemlyxApp() {
     setKindSaving(true); setKindError(null);
     try {
       const merged = { ...(row.payload || {}), ...patch };
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(row.id)}`, {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(row.id)}`, {
         method: "PATCH",
-        headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=representation" },
+        headers: { "Content-Type": "application/json", Prefer: "return=representation" },
         body: JSON.stringify({ payload: merged }),
       });
       const body = await res.json().catch(() => null);
@@ -1370,9 +1371,9 @@ function GemlyxApp() {
     setPlaceSaving(true); setPlaceError(null);
     try {
       const merged = { ...(row.payload || {}), ...patch };
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(row.id)}`, {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(row.id)}`, {
         method: "PATCH",
-        headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=representation" },
+        headers: { "Content-Type": "application/json", Prefer: "return=representation" },
         body: JSON.stringify({ payload: merged }),
       });
       const body = await res.json().catch(() => null);
@@ -1435,8 +1436,22 @@ function GemlyxApp() {
         headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({ refresh_token: studioSession.refresh_token }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.access_token) return null;
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.access_token) {
+        // ── A DEAD REFRESH TOKEN IS NOT A FAILED REQUEST ────────────
+        // Returning a bare null told every caller "the refresh did not
+        // work", which is true of a 500, a captive portal and a revoked
+        // token alike. Only the last of those is permanent, and only the
+        // last of those means he is logged out. refreshIsDead answers that
+        // one question, and nothing else clears the session: a blip must
+        // not sign him out mid-draft.
+        if (refreshIsDead(res.status, data)) {
+          localStorage.removeItem("gemlyx_studio_session");
+          setStudioSession(null);
+          setLoginError("Your Studio session ended. Log in again.");
+        }
+        return null;
+      }
       const session = { access_token: data.access_token, refresh_token: data.refresh_token, email: studioSession.email };
       localStorage.setItem("gemlyx_studio_session", JSON.stringify(session));
       setStudioSession(session);
@@ -1473,6 +1488,41 @@ function GemlyxApp() {
     const fresh = await refreshStudioSession();
     if (!fresh) return res;
     return withToken(fresh.access_token);
+  };
+
+  // ── AND THEN THE SAME BUG, ONE LAYER DOWN, THIRTY-FIVE TIMES ──────
+  //
+  // 6 Sep 2026. Oliver, with a Studio recording: every button 401. Then:
+  // "Oh, I just had to log in." That is the part that should not be true.
+  //
+  // studioFetch above fixed the twelve calls to OUR OWN /api/ routes. It
+  // never touched the calls that go straight to PostgREST, and those are
+  // where Studio actually lives: 39 of them, of which exactly four had a
+  // hand-written refresh-and-retry (promote, patchRowPayload, and two
+  // sweep writers) because I hit the expiry there and fixed it THERE.
+  //
+  // So the pattern this codebase keeps re-finding held one more time, and
+  // the earlier fix is what disguised it: publishing worked, promoting
+  // worked, the sweeps wrote fine, and every other button in Studio went
+  // dead an hour into the session. Four correct call sites are worse than
+  // none, because they make it look like a login problem rather than a
+  // missing retry.
+  //
+  // supaFetch is the only thing that may talk to Supabase with his token
+  // now, and the four hand-rolled retries are gone. One place knows the
+  // token expires. A test asserts nobody else grows a second one.
+  //
+  // studioAuth() inside, not a token argument, because it THROWS when
+  // there is no session at all, which is what all 39 call sites already
+  // relied on. Expired and absent stay different things: absent is a
+  // programming error and fails loudly, expired quietly fixes itself.
+  const supaFetch = async (url, opts = {}) => {
+    const send = (tok) => fetch(url, { ...opts, headers: { ...studioAuth(), ...(opts.headers || {}), Authorization: `Bearer ${tok}` } });
+    const res = await send(studioSession?.access_token);
+    if (res.status !== 401) return res;
+    const fresh = await refreshStudioSession();
+    if (!fresh) return res;
+    return send(fresh.access_token);
   };
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -1617,9 +1667,7 @@ function GemlyxApp() {
     if (!studioSession) return;
     setManageLoading(true);
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload,published,created_at&order=id.desc`, {
-        headers: studioAuth(),
-      });
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload,published,created_at&order=id.desc`);
       const rows = await res.json();
       const list = Array.isArray(rows) ? rows : [];
       setManageItems(list);
@@ -1783,9 +1831,9 @@ function GemlyxApp() {
   // because the likely cause really is that the one-time bucket SQL has not
   // been run and that is a thing you can go and do.
   const uploadToMedia = async (file, path) => {
-    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/gemlyx-media/${path}`, {
+    const res = await supaFetch(`${SUPABASE_URL}/storage/v1/object/gemlyx-media/${path}`, {
       method: "POST",
-      headers: { ...studioAuth(), "Content-Type": file?.type || "image/jpeg", "x-upsert": "true" },
+      headers: { "Content-Type": file?.type || "image/jpeg", "x-upsert": "true" },
       body: file,
     });
     if (!res.ok) {
@@ -1806,9 +1854,9 @@ function GemlyxApp() {
   };
 
   const patchContentPayload = async (row, newPayload) => {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
+    const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
       method: "PATCH",
-      headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=minimal" },
+      headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
       body: JSON.stringify({ payload: newPayload }),
     });
     if (!res.ok) throw new Error(`Save failed (${res.status}). Check the update RLS policy on gemlyx_content`);
@@ -2161,9 +2209,8 @@ function GemlyxApp() {
     if (!studioSession || !window.confirm("Delete this from Gemlyx? This can't be undone.")) return;
     setDeletingId(id);
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${id}`, {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${id}`, {
         method: "DELETE",
-        headers: studioAuth(),
       });
       if (res.ok) {
         // ── AND DELETE STOPPED THROWING THE PANEL AWAY ────────────
@@ -3281,9 +3328,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       //   alter table gemlyx_research enable row level security;
       //   create policy "auth all gemlyx_research" on gemlyx_research for all to authenticated using (true) with check (true);
       try {
-        const memRes = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_research?name=eq.${encodeURIComponent(name)}&type=eq.${encodeURIComponent(sType)}&select=*`, {
-          headers: studioAuth(),
-        });
+        const memRes = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_research?name=eq.${encodeURIComponent(name)}&type=eq.${encodeURIComponent(sType)}&select=*`);
         if (!memRes.ok) {
           // ── "IS STILL SAYS THIS!!!!!!!" ──────────────────────────
           // Oliver, 9 Aug 2026, pasting the SQL banner back at me for the second
@@ -7879,9 +7924,9 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
       try {
         const freshOnly = (rawResearch || "").includes("FRESH RESEARCH: ") ? (rawResearch || "").split("FRESH RESEARCH: ").pop() : (rawResearch || "");
         if (freshOnly.trim()) {
-          const saved = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_research?on_conflict=name,type`, {
+          const saved = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_research?on_conflict=name,type`, {
             method: "POST",
-            headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+            headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
             body: JSON.stringify({ name, type: sType, notes: freshOnly.slice(0, 6000), urls: [...new Set(candidateUrls)].slice(0, 8), created_at: new Date().toISOString() }),
           });
           // Still never blocks a finished draft. It just stops pretending it
@@ -8104,7 +8149,7 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
     try { headers = studioAuth(); }
     catch (e) { setResearchProbe({ state: "done", line: `No Studio token at all. ${String(e.message || e)}` }); return; }
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_research?select=name,type,created_at&limit=3`, { headers });
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_research?select=name,type,created_at&limit=3`, { headers });
       const body = await res.json().catch(() => null);
       const code = body && typeof body === "object" && !Array.isArray(body) ? String(body.code || "") : "";
       const msg = body && typeof body === "object" && !Array.isArray(body) ? String(body.message || "") : "";
@@ -8140,7 +8185,7 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
     try { headers = studioAuth(); }
     catch (e) { setFactError(String(e.message || e)); return; }
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_facts?select=*&order=created_at.desc`, { headers });
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_facts?select=*&order=created_at.desc`, { headers });
       const rows = await res.json();
       if (Array.isArray(rows)) { setFactSaved(rows); return; }
       setFactSaved([]);
@@ -8279,9 +8324,9 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
   const saveFact = async (draft) => {
     setFactError(null);
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_facts`, {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_facts`, {
         method: "POST",
-        headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=representation" },
+        headers: { "Content-Type": "application/json", Prefer: "return=representation" },
         body: JSON.stringify({
           fact: draft.fact, subject: draft.subject, category: draft.category,
           photo: draft.photo || null, source_url: draft.sourceUrl || null, published: true,
@@ -8299,9 +8344,8 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
 
   const deleteFact = async (row) => {
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_facts?id=eq.${row.id}`, {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_facts?id=eq.${row.id}`, {
         method: "DELETE",
-        headers: studioAuth(),
       });
       if (!res.ok) throw new Error((await res.text()).slice(0, 200));
       setFactSaved(prev => prev.filter(f => f.id !== row.id));
@@ -8797,9 +8841,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     if (photoFixState?.running) return;
     setPhotoFixState({ running: true, done: 0, total: 0, fixed: 0, skipped: 0, notFound: [], failed: [] });
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true`, {
-        headers: studioAuth(),
-      });
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true`);
       const rows = await res.json();
       if (!Array.isArray(rows)) { setPhotoFixState({ running: false, done: 0, total: 0, fixed: 0, skipped: 0, notFound: [], failed: ["Could not read the published rows."] }); return; }
 
@@ -8840,9 +8882,9 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
           .find(b => b?.type === "image" && /^https?:\/\//i.test(String(b.src || "").trim()));
         if (own) {
           try {
-            const patch = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
+            const patch = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
               method: "PATCH",
-              headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=minimal" },
+              headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
               // heroPatch(true, ...) rather than a hand-written spread. The
               // decision was already made upstream — this row only reaches here
               // because its hero failed imageLoads — so `true` is the honest
@@ -8870,9 +8912,9 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
           else {
             const src = String(hit.url).split("?")[0];
             const block = { type: "image", src, credit: { ...hit.credit }, ...(useCommonsCaption && hit.caption ? { caption: hit.caption } : {}) };
-            const patch = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
+            const patch = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
               method: "PATCH",
-              headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=minimal" },
+              headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
               body: JSON.stringify({ payload: { ...p, ...heroPatch(true, src, hit.credit), blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), block] } }),
             });
             if (patch.ok) fixed++; else failed.push(`${p.name}: save failed (${patch.status})`);
@@ -8896,9 +8938,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     if (geoFixState?.running) return;
     setGeoFixState({ running: true, done: 0, total: 0, fixed: 0, failed: [] });
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true`, {
-        headers: studioAuth(),
-      });
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true`);
       const rows = await res.json();
       if (!Array.isArray(rows)) { setGeoFixState({ running: false, done: 0, total: 0, fixed: 0, failed: ["Could not read the published rows."] }); return; }
       const missing = rows.filter(r => r?.payload?.name && (r.payload.__lat == null || r.payload.__lon == null));
@@ -8912,9 +8952,9 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
         let coords = null;
         try { coords = await geocodePlace(where && !row.payload.name.includes(where) ? `${row.payload.name}, ${where}` : row.payload.name); } catch { /* handled below */ }
         if (coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lon)) {
-          const patch = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
+          const patch = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
             method: "PATCH",
-            headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=minimal" },
+            headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
             body: JSON.stringify({ payload: { ...row.payload, __lat: coords.lat, __lon: coords.lon } }),
           });
           if (patch.ok) fixed++; else failed.push(`${row.payload.name}: save failed (${patch.status})`);
@@ -8997,7 +9037,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     try { headers = studioAuth(); }
     catch (e) { setSourceError(String(e.message || e)); return; }
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_sources?select=*&order=id.asc`, { headers });
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_sources?select=*&order=id.asc`, { headers });
       const rows = await res.json();
       if (Array.isArray(rows)) { setSourceRows(rows); return; }
       setSourceRows([]);
@@ -9032,9 +9072,9 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     }
     setSourceBusy(true); setSourceError(null);
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_sources`, {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_sources`, {
         method: "POST",
-        headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=representation" },
+        headers: { "Content-Type": "application/json", Prefer: "return=representation" },
         body: JSON.stringify({ domain, note: cleanNote(newSourceNote), applies_to: newSourceType, applies_place: cleanPlace(newSourcePlace), enabled: true }),
       });
       const body = await res.json().catch(() => null);
@@ -9063,9 +9103,9 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   const setSourceEnabled = async (row, enabled) => {
     setSourceBusy(true); setSourceError(null);
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_sources?id=eq.${Number(row.id)}`, {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_sources?id=eq.${Number(row.id)}`, {
         method: "PATCH",
-        headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=representation" },
+        headers: { "Content-Type": "application/json", Prefer: "return=representation" },
         body: JSON.stringify({ enabled }),
       });
       const body = await res.json().catch(() => null);
@@ -9078,8 +9118,8 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   const deleteSource = async (row) => {
     setSourceBusy(true); setSourceError(null);
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_sources?id=eq.${Number(row.id)}`, {
-        method: "DELETE", headers: studioAuth(),
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_sources?id=eq.${Number(row.id)}`, {
+        method: "DELETE",
       });
       if (!res.ok) setSourceError(sourcesErrorFor(res.status, await res.json().catch(() => null)));
       else { setSourceRows(prev => prev.filter(r => r.id !== row.id)); refreshSources(); }
@@ -9124,7 +9164,6 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   const sweepRestoreRef = useRef(null);
   const sweepCancelRef = useRef(false);
 
-  const sweepHeaders = () => studioAuth();
   const sweepBusy = sweepState?.phase === "reading" || sweepState?.phase === "proposing";
 
   const proposeSweepRun = async (idOverride) => {
@@ -9140,7 +9179,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     setSweepProposals(null); setSweepWriteState(null); setSweepSnapshot(null);
     setSweepState({ phase: "reading", done: 0, total: 0, skipped: 0, error: null, sweep: id });
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true`, { headers: sweepHeaders() });
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true`);
       const rows = await res.json();
       if (!Array.isArray(rows)) { setSweepState({ phase: "done", done: 0, total: 0, skipped: 0, error: "Could not read the published rows. Your Studio login may have expired.", sweep: id }); return; }
 
@@ -9187,7 +9226,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     setSweepWriteState({ running: true, phase: "snapshot", done: 0, total: accepted.length, written: 0, unchanged: 0, failed: [] });
     try {
       const ids = [...new Set(accepted.map(p => Number(p.rowId)))];
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&id=in.(${ids.join(",")})`, { headers: sweepHeaders() });
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&id=in.(${ids.join(",")})`);
       const rows = await res.json();
       if (!Array.isArray(rows) || rows.length !== ids.length) throw new Error(`It came back with ${Array.isArray(rows) ? rows.length : 0} of ${ids.length} rows, so it would not be a complete undo.`);
       const at = new Date().toISOString();
@@ -9241,7 +9280,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
           // the loop makes "current" fourteen seconds stale by the fortieth row,
           // and this is the only thing standing between a bulk pass and silently
           // reverting a correction somebody made while the table sat on screen.
-          const r = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(prop.rowId)}&select=id,payload`, { headers: sweepHeaders() });
+          const r = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(prop.rowId)}&select=id,payload`);
           const rows = await r.json();
           row = Array.isArray(rows) ? rows[0] : null;
         } catch (err) { failed.push(`${prop.name}: could not be re-read (${err?.message || err})`); step(); continue; }
@@ -9264,9 +9303,9 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
         // which reads as total failure when in fact everything already landed.
         if (!changed.length) { unchanged++; step(); continue; }
         try {
-          const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(prop.rowId)}`, {
+          const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(prop.rowId)}`, {
             method: "PATCH",
-            headers: { ...sweepHeaders(), "Content-Type": "application/json", Prefer: "return=representation" },
+            headers: { "Content-Type": "application/json", Prefer: "return=representation" },
             body: JSON.stringify({ payload: patched }),
           });
           // return=representation, not minimal: PostgREST answers 204 for a PATCH
@@ -9322,9 +9361,9 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       if (sweepCancelRef.current) { setSweepWriteState({ running: false, phase: "restore", done: i, total: snap.rows.length, written, unchanged: 0, failed, stopped: true }); if (written) { refreshLiveContent(); bumpLiveContent(v => v + 1); } return; }
       const row = snap.rows[i];
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${encodeURIComponent(String(row.id))}`, {
+        const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${encodeURIComponent(String(row.id))}`, {
           method: "PATCH",
-          headers: { ...sweepHeaders(), "Content-Type": "application/json", Prefer: "return=representation" },
+          headers: { "Content-Type": "application/json", Prefer: "return=representation" },
           body: JSON.stringify({ payload: row.payload }),
         });
         const body = res.ok ? await res.json().catch(() => null) : null;
@@ -9373,16 +9412,11 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       // enforced. See utils/undatedEvents.js.
       const out = promoted(row, { start: change.dateChanged, end: change.dateEndChanged || "", source: change.source || change.readVia || "", today: new Date() });
       if (!out.ok) { setPromoting(p => ({ ...p, [key]: out.why })); return; }
-      const attempt = (token) => fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${rowId}`, {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${rowId}`, {
         method: "PATCH",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
         body: JSON.stringify({ type: "festival", payload: out.payload }),
       });
-      let res = await attempt(studioSession.access_token);
-      if (res.status === 401) {
-        const fresh = await refreshStudioSession();
-        if (fresh) res = await attempt(fresh.access_token);
-      }
       if (!res.ok) {
         const errBody = await res.text();
         console.error("Gemlyx promote failed:", res.status, errBody);
@@ -9424,7 +9458,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
   // id = 100000 + the row id and PATCHing that number would write to a row that
   // does not exist or, worse, to the wrong one."
   const readPublishedRows = async () => {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true&order=id.desc`, { headers: sweepHeaders() });
+    const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true&order=id.desc`);
     if (!res.ok) return { error: `Could not read the library (${res.status}).` };
     const rows = await res.json();
     if (!Array.isArray(rows)) return { error: "The library did not come back as a list." };
@@ -9451,20 +9485,16 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
   const patchRowPayload = async (id, set) => {
     const rowId = Number(id);
     if (!Number.isFinite(rowId) || !set || !Object.keys(set).length) return { ok: false, why: "nothing to write" };
-    const read = async (token) => fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${rowId}&select=payload`, { headers: { ...sweepHeaders(), ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
-    let got = await read(studioSession?.access_token);
-    if (got.status === 401) { const fresh = await refreshStudioSession(); if (fresh) got = await read(fresh.access_token); }
+    const got = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${rowId}&select=payload`);
     if (!got.ok) return { ok: false, why: `could not re-read (${got.status})` };
     const rows = await got.json().catch(() => null);
     if (!Array.isArray(rows) || !rows.length) return { ok: false, why: "the row is gone" };
     const merged = { ...(rows[0].payload || {}), ...set };
-    const attempt = (token) => fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${rowId}`, {
+    const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${rowId}`, {
       method: "PATCH",
-      headers: { ...sweepHeaders(), Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=representation" },
+      headers: { "Content-Type": "application/json", Prefer: "return=representation" },
       body: JSON.stringify({ payload: merged }),
     });
-    let res = await attempt(studioSession?.access_token);
-    if (res.status === 401) { const fresh = await refreshStudioSession(); if (fresh) res = await attempt(fresh.access_token); }
     const back = await res.json().catch(() => null);
     if (!res.ok) return { ok: false, why: String(res.status) };
     if (!Array.isArray(back) || !back.length) return { ok: false, why: "the row was not there to update" };
@@ -9661,13 +9691,11 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         // festival with no date or a waiting entry with no __waiting. Serial
         // and paced, like every other write loop in this panel: a burst of
         // fourteen PATCHes is how a rate limit turns half a sweep into a mess.
-        const attempt = (token) => fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${encodeURIComponent(String(w.id))}`, {
+        const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${encodeURIComponent(String(w.id))}`, {
           method: "PATCH",
-          headers: { ...sweepHeaders(), "Content-Type": "application/json", Prefer: "return=minimal" },
+          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
           body: JSON.stringify({ type: w.type, payload: w.payload }),
         });
-        let res = await attempt(studioSession?.access_token);
-        if (res.status === 401) { const fresh = await refreshStudioSession(); if (fresh) res = await attempt(fresh.access_token); }
         if (!res.ok) failed.push(`${list[i].name}: ${res.status}`);
         else {
           // Out of the events arrays and into the waiting one, without a full
@@ -10311,16 +10339,11 @@ ${researchRules("festival", ev)}`
         at: new Date(),
       });
       const body = JSON.stringify({ type: WAITING_TYPE, payload, published: true });
-      const attempt = (token) => fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content`, {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content`, {
         method: "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
         body,
       });
-      let res = await attempt(studioSession.access_token);
-      if (res.status === 401) {
-        const fresh = await refreshStudioSession();
-        if (fresh) res = await attempt(fresh.access_token);
-      }
       if (!res.ok) {
         const errBody = await res.text();
         console.error("Gemlyx waiting-entry save failed:", res.status, errBody);
@@ -10918,16 +10941,11 @@ ${researchRules("festival", ev)}`
       }
       const url = isEditing ? `${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${editingId}` : `${SUPABASE_URL}/rest/v1/gemlyx_content`;
       const body = isEditing ? JSON.stringify({ payload: shaped }) : JSON.stringify({ type: studioType, payload: shaped, published: true });
-      const attempt = (token) => fetch(url, {
+      const res = await supaFetch(url, {
         method: isEditing ? "PATCH" : "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
         body,
       });
-      let res = await attempt(studioSession.access_token);
-      if (res.status === 401) {
-        const fresh = await refreshStudioSession();
-        if (fresh) res = await attempt(fresh.access_token);
-      }
       if (!res.ok) {
         const errBody = await res.text();
         console.error("Gemlyx publish failed:", res.status, errBody);
@@ -16334,18 +16352,48 @@ ${languageBlock()}`;
                       while somebody is typing an answer to the question under
                       it. railPlaces owns that walk. */}
                   <div className={RAIL_CLASS}>
-                    <ChatPlaceCards
-                      layout="rail"
-                      places={railPlaces({
-                        messages: aiMessages.slice(1),
-                        placesFor: (text) => placesNamedIn(stripMarkdown(stripReadyMarker(text)), previewPools({
-                          towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
-                        }), { alreadyKnown: aiMessages.filter(x => x.role === "user" && !x.isError).map(x => x.text).join("\n") }),
-                      })}
-                      C={C}
-                      onOpen={openStopDetail}
-                      lang={readerLanguage()}
-                    />
+                    {(() => {
+                      // One pools call and one cleaner for both, rather than
+                      // the same expression typed twice: the card and the pin
+                      // must be looking at the same published rows, and two
+                      // copies of a pool expression is how they stop.
+                      const pools = previewPools({
+                        towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
+                      });
+                      const convo = aiMessages.slice(1);
+                      const clean = (text) => stripMarkdown(stripReadyMarker(text));
+                      const theirWords = aiMessages.filter(x => x.role === "user" && !x.isError).map(x => x.text).join("\n");
+                      // ── THE MAP IS FED DIFFERENTLY FROM THE CARD ──────
+                      // No alreadyKnown, so a town the traveller named is
+                      // still pinned: they need no INTRODUCING to it and they
+                      // may well still not know where it is. needsPhoto false,
+                      // because a pin is not a picture. cap 6 rather than the
+                      // card's 3, since a reply naming five towns should pin
+                      // five. chatRail.mapPlaces has the reasoning.
+                      const onMap = mapPlaces({
+                        messages: convo,
+                        placesFor: (text) => placesNamedIn(clean(text), pools, { needsPhoto: false, cap: 6 }),
+                        rejectsFor: (text) => rejectedIn(clean(text), pools),
+                        coordsFor: placeCoords,
+                      });
+                      return (
+                        <>
+                          <ChatPlaceCards
+                            layout="rail"
+                            places={railPlaces({
+                              messages: convo,
+                              placesFor: (text) => placesNamedIn(clean(text), pools, { alreadyKnown: theirWords }),
+                            })}
+                            C={C}
+                            onOpen={openStopDetail}
+                            lang={readerLanguage()}
+                          />
+                          <div className={MAP_CLASS}>
+                            <ChatMiniMap pins={onMap.pins} dropped={onMap.dropped} C={C} onOpen={openStopDetail} lang={readerLanguage()} />
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                   </div>
                 )}
@@ -19091,6 +19139,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             key={`assistant-${editingId ?? "new"}-${studioDraft?.name || ""}`}
                             inline
                             session={studioSession}
+                            supaFetch={supaFetch}
                             draft={(() => { try { return JSON.parse(studioDraftText); } catch { return studioDraft; } })()}
                             draftKind={srcForType(studioType)}
                             onDraftPatched={(next) => { setStudioDraft(next); setStudioDraftText(JSON.stringify(next, null, 2)); setDraftEditError(null); }}
@@ -22337,6 +22386,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         @keyframes gemlyxMsgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         .gemlyx-msg-in { animation: gemlyxMsgIn 0.28s ease both; }
         ${railCss()}
+        ${railMapCss(C)}
         .gemlyx-thinking-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: ${C.gold}; margin: 0 2px; animation: gemlyxDotPulse 1.1s ease infinite; }
         @media (min-width: 900px) { .mobile-only { display: none !important; } }
         @media (max-width: 899px) { .desktop-only { display: none !important; } }
@@ -23339,6 +23389,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         return <StudioAssistant
           key={`assistant-floating-${openKind || "draft"}-${openDetail?.name || liveDraft?.name || ""}`}
           session={studioSession}
+          supaFetch={supaFetch}
           item={openDetail}
           kind={openKind}
           draft={liveDraft}
