@@ -91,10 +91,49 @@ export const PARTY_POSSESSIVE = [
 // A couple travelling together says "our son". That is not an edge case, it is
 // the normal way two people describe a third, and it is the exact sentence this
 // slot exists to catch.
+// ── THE SPOUSE WORDS ON THEIR OWN, WHICH IS A DIFFERENT QUESTION ────
+//
+// 6 Sep 2026. Oliver's own run: "I'm with my gay husband and 2 kids" came back
+// as a party of 2 CHILDREN and no adults, and partyLine's comment says that
+// line "is what the guide builder reads". A guide was planned for two
+// unaccompanied children.
+//
+// PARTY_POSSESSIVE above is the list for "did they say who is coming", so it
+// holds children and parents too, and it is the wrong list for "are they a
+// couple": a man travelling with his parents is three people, not two. This is
+// the subset that means exactly one other adult.
+//
+// Bare "man" and "mand" are in here because they are husband in Dutch and
+// Danish. They are only ever matched behind a possessive, which is the same
+// guard PARTY_RE uses and for the same reason: "man kan tage toget til Ribe"
+// must not report that somebody said who was coming.
+export const PARTNER_WORDS = [
+  "wife", "husband", "spouse", "partner", "girlfriend", "boyfriend", "missus", "other half",
+  "kone", "mand", "kæreste", "ægtefælle",
+  "frau", "mann", "ehefrau", "ehemann", "freundin", "freund",
+  "vrouw", "vriendin", "vriend",
+  "fru", "make", "maka", "sambo", "flickvän", "pojkvän",
+  "kjæreste", "ektefelle",
+];
+
+// The words that put a person BESIDE the traveller rather than listing them.
+// "me and my husband" was read and "I'm with my husband" was not, which is one
+// preposition between a correct party and a party of children on their own.
+export const WITH_WORDS = [
+  "with", "together with", "along with",
+  "med", "sammen med", "tillsammans med", "ilag med",
+  "mit", "zusammen mit", "met", "samen met", "con",
+];
+
+// First person singular, for "<possessive> <partner> and me".
+export const ME_WORDS = ["me", "i", "mig", "jeg", "ich", "mir", "ik", "jag", "mi", "meg"];
+
 export const PARTY_POSSESSIVES = [
   "my", "our", "ours",
   "min", "mit", "mine", "vores", "vor", "vore",
-  "mein", "meine", "unser", "unsere", "unseren", "unserem",
+  // The German dative forms too: "mit meiner Frau" is how the preposition shape
+  // below is actually written, and "meine" alone never matches it.
+  "mein", "meine", "meiner", "meinem", "meinen", "unser", "unsere", "unserer", "unseren", "unserem",
   "mijn", "m'n", "onze", "ons",
   "vår", "vårt", "våra", "var", "vart",
   "mi", "nuestro", "nuestra",

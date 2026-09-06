@@ -27,6 +27,7 @@
 
 import { haversineKm } from "./helpers";
 import { MODE_DAY_KM, travelModeKey } from "./routeOrder";
+import { shutOnVisit, openAtVisit, describeClosedAt } from "./openingHours";
 
 export const MIN_STOPS_MIDDLE_DAY = 2;
 
@@ -354,6 +355,49 @@ export const checkPlan = (days, coords = {}, opts = {}) => {
   const matched = typeof opts.isPublished === "function"
     ? allStops.filter(s => opts.isPublished(s.name)).length
     : null;
+
+  // ── 8. A DOOR THAT IS LOCKED WHEN THEY GET THERE ──────────────────
+  //
+  // Oliver, 6 Sep 2026: "it's quite odd to go to Hive at 20:30 and then to a
+  // bar at Gothersgade 22:30... that makes no logical sense." Hive opens at
+  // 23:00 and only Thursday to Saturday. The plan sent him to a locked door
+  // two and a half hours early.
+  //
+  // NOTHING WAS BROKEN AND NOTHING WAS MISSING. The hours were stored on the
+  // row as __hours. shutOnVisit had answered "is it shut that day" since it was
+  // written, with a timezone bug found and fixed inside it. openingHours.js had
+  // never once been imported by anything except App.jsx, for two other
+  // functions. The check existed, the data existed, and no reader ever met
+  // either.
+  //
+  // HERE RATHER THAN AT RENDER, because the gate has a retry and a warning does
+  // not. A reader told their club opens later can do nothing about it; a
+  // planner told the same thing moves the stop.
+  //
+  // Both callbacks are optional and the rule is silent without them, which is
+  // the same shape as the coordinate rule above: a gate that cannot judge
+  // something says nothing rather than guessing at it.
+  if (typeof opts.hoursFor === "function" && opts.arrivalDate) {
+    list.forEach((d, i) => {
+      const dayNo = d.day || i + 1;
+      (d.stops || []).forEach(st => {
+        if (!st?.name) return;
+        const stored = opts.hoursFor(st.name);
+        if (!stored) return;
+        const shut = shutOnVisit(stored, opts.arrivalDate, dayNo);
+        if (shut) {
+          problems.push({ code: "SHUT_THAT_DAY", day: dayNo, stop: st.name,
+            detail: `${st.name} is on day ${dayNo}, which is a ${shut.dayName}, and it is closed on ${shut.dayName}s.` });
+          return;
+        }
+        const late = openAtVisit(stored, opts.arrivalDate, dayNo, st.arrivalTime);
+        if (late) {
+          problems.push({ code: "SHUT_AT_THAT_HOUR", day: dayNo, stop: st.name,
+            detail: describeClosedAt(late, `${st.name} (day ${dayNo})`) });
+        }
+      });
+    });
+  }
 
   return {
     ok: problems.length === 0,

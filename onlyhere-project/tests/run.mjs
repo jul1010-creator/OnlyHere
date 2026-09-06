@@ -143,7 +143,7 @@ writeFileSync(entry, `
   export { isResearchVoice, researchVoiceSentences, stripResearchVoice, cleanReaderProse, researchVoiceIn } from ${JSON.stringify(join(root, "src/utils/researchVoice.js"))};
   export { repairBody, headingsOf, bodyProblems, priceProblems, priceWorklist, bookingProblems, bookingWorklist, voiceProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, TYPE_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
   export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, missingRequired, cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS, cleanBornDate, birthYear, BORN_DATE_MIN, BORN_DATE_MAX, REQUIRED_PROFILE, REQUIRED_LABEL, AGE_BANDS, BORN_YEARS, bandForYear, ageFrom, underMinimumAge, MIN_ACCOUNT_AGE, TERMS_VERSION, holdProfile, takeHeldProfile, PENDING_PROFILE_KEY, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
-  export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
+  export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit, openAtVisit, windowsOn, describeClosedAt, HHMM } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, formatLogs, logChips, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { fieldProvenance, correctionProvenance, entrySources, untracedFields, describeProvenance, readerCorrection, readerCorrections, isCheckerVoice, readerUncertainty, readerUncertainties, READER_UNCERTAINTY_LIMIT } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
@@ -233,7 +233,7 @@ writeFileSync(entry, `
   export { TILE_STYLES, tileConfig, tileCss, DEFAULT_TILE_STYLE, addTileLayer, styleRefused, __resetRefusedStyles, TILE_ERROR_LIMIT, readRefusedMemo, writeRefusedMemo, REFUSED_TTL_MS } from ${JSON.stringify(join(root, "src/utils/mapTiles.js"))};
   export { coverageByPart, thinnestParts, coverageSummary, discoveryFraming, isAlreadyCovered, splitAlreadyCovered } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget, placeFromText, candidateFitsTarget, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
-  export { checkPlan, titlePromises, MAX_DAY_KM, dayCeilingKm } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
+  export { checkPlan, planProblemsForPrompt, titlePromises, MAX_DAY_KM, dayCeilingKm } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { isOwnSiteFor, urlNames, isKommuneHost, isTownWord, ownershipWords, subjectIsEvent, EVENT_SUBJECT_TYPES, isTourismHost, KOMMUNE_HOSTS } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { detectLegMode as detectLegModeX, isFerryText } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fold as foldName } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
@@ -2404,6 +2404,139 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // should be a deliberate one, not something that creeps in.
     const oh = readFileSync(join(root, "src/utils/openingHours.js"), "utf8");
     ok("the check lives beside the other hours rules", /export const shutOnVisit/.test(oh));
+
+    // ── AND THE HOUR, WHICH IS THE HALF NOBODY CHECKED ─────────────
+    //
+    // Oliver, 6 Sep 2026, on a guide built from his own conversation: "it's
+    // quite odd to go to Hive at 20:30 and then to a bar at Gothersgade
+    // 22:30... that makes no logical sense."
+    //
+    // HIVE OPENS AT 23:00, Thursday to Saturday only. He was sent to a locked
+    // door two and a half hours early, and the bar was put AFTER the club.
+    //
+    // shutOnVisit answered the other half of this question the whole time and
+    // sat on KNOWN_UNWIRED. Both halves are wired into the plan gate now, which
+    // is why that list is one name shorter.
+    const { openAtVisit, windowsOn, describeClosedAt } = M;
+    {
+      const hive = { hours: [
+        "Monday: Closed", "Tuesday: Closed", "Wednesday: Closed",
+        "Thursday: 23:00 – 05:00", "Friday: 23:00 – 05:00", "Saturday: 23:00 – 05:00", "Sunday: Closed",
+      ], fetchedAt: "2026-09-06" };
+      const thu = "2026-10-01";   // a Thursday
+      const at = (dayNo, time) => openAtVisit(hive, thu, dayNo, time);
+      ok("the evening that started this is caught", !!at(1, "20:30"));
+      is("and it says why, with the real hour", describeClosedAt(at(1, "20:30"), "Hive"),
+         "Hive is planned for 20:30 on a Thursday and does not open until 23:00.");
+      is("the same stop at an hour it is open passes", at(1, "23:30"), null);
+      // ── PAST MIDNIGHT IS THE WHOLE POINT ────────────────────────
+      // "23:00 – 05:00" closes before it opens by the clock. Read as a plain
+      // interval it says a club is shut at one in the morning and open at
+      // noon, which is worse than not checking at all.
+      is("01:00 on the Friday is Thursday night, and open", at(2, "01:00"), null);
+      is("04:00 on the Saturday is Friday night, and open", at(3, "04:00"), null);
+      ok("06:00 on the Friday is after it shut", !!at(2, "06:00"));
+      // A day it is closed outright belongs to shutOnVisit, which says it
+      // better. Two functions must not both answer, or a reader gets two
+      // sentences about one door.
+      is("a day it is shut is left to the other check", at(4, "23:30"), null);
+      ok("and that check does answer it", !!shutOnVisit(hive, thu, 4));
+    }
+    {
+      // ── A LUNCH GAP IS NOT "AFTER CLOSING" ──────────────────────
+      // Found in the browser of this suite rather than by reasoning: a kitchen
+      // open 11:00 to 14:00 and again 17:00 to 22:00, visited at 15:00, was
+      // reported as "closes at 22:00" — true of the day, false of the moment,
+      // and nonsense to anybody holding the opening times.
+      const split = { hours: [
+        "Monday: 11:00 – 14:00, 17:00 – 22:00", "Tuesday: Closed", "Wednesday: Closed",
+        "Thursday: Closed", "Friday: Closed", "Saturday: Closed", "Sunday: Closed",
+      ], fetchedAt: "2026-09-06" };
+      const mon = openAtVisit(split, "2026-10-01", 5, "15:00");
+      is("the gap is named as a gap", describeClosedAt(mon, "It"),
+         "It is planned for 15:00 on a Monday, and it shuts from 14:00 until 17:00.");
+      is("inside the first window is fine", openAtVisit(split, "2026-10-01", 5, "12:00"), null);
+      is("inside the second is fine too", openAtVisit(split, "2026-10-01", 5, "19:00"), null);
+      ok("before it opens reads as too early", openAtVisit(split, "2026-10-01", 5, "09:00")?.early === true);
+      ok("after it closes does not", openAtVisit(split, "2026-10-01", 5, "23:00")?.early === false);
+      is("both windows are read", windowsOn(split.hours, 1)?.length, 2);
+    }
+    // ── AND IT SAYS NOTHING WHENEVER IT DOES NOT KNOW ──────────────
+    // The output of this is a sentence telling somebody their evening is
+    // wrong. Every one of these is a case where guessing would be worse than
+    // silence, which is the same rule the coordinate work landed on.
+    {
+      const week = { hours: ["Sunday: 10:00 – 17:00", "Monday: Closed", "Tuesday: 10:00 – 17:00",
+        "Wednesday: 10:00 – 17:00", "Thursday: 10:00 – 17:00", "Friday: 10:00 – 17:00", "Saturday: 10:00 – 17:00"] };
+      is("no stored hours, no opinion", openAtVisit({ hours: [] }, "2026-10-01", 1, "20:30"), null);
+      is("no hours object at all, no opinion", openAtVisit(null, "2026-10-01", 1, "20:30"), null);
+      is("no trip date, no weekday to check", openAtVisit(week, null, 1, "20:30"), null);
+      // The clock time is model-written free text and arrives as prose often
+      // enough. Unreadable is unreadable, never a guess at nine.
+      is("no clock time on the stop, no opinion", openAtVisit(week, "2026-10-01", 1, "sometime in the evening"), null);
+      is("and a line this cannot parse is not a closed venue",
+         openAtVisit({ hours: ["Thursday: open late"] }, "2026-10-01", 1, "20:30"), null);
+      // An odd number of times is half a window, and half a window is not an
+      // answer about anything.
+      is("an odd count of times reads as unparseable", windowsOn(["Thursday: from 10:00"], 4), null);
+    }
+
+    // ── THE GATE, WHICH IS WHERE IT HAD TO GO ──────────────────────
+    //
+    // Not the render. A reader told their club opens later can do nothing
+    // about it; the planner gets one retry and can move the stop. Same reason
+    // every other plan rule lives here.
+    {
+      const { checkPlan, planProblemsForPrompt } = M;
+      const hive = { hours: ["Monday: Closed", "Tuesday: Closed", "Wednesday: Closed", "Thursday: 23:00 – 05:00",
+        "Friday: 23:00 – 05:00", "Saturday: 23:00 – 05:00", "Sunday: Closed"], fetchedAt: "2026-09-06" };
+      const bar = { hours: Array(7).fill(0).map((_, i) =>
+        `${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][i]}: 20:00 – 05:00`), fetchedAt: "2026-09-06" };
+      const HOURS = { Hive: hive, "Da Vinci Bar": bar };
+      const coords = { Hive: { lat: 55.679, lon: 12.573 }, "Da Vinci Bar": { lat: 55.683, lon: 12.581 } };
+      const opts = { isPublished: () => true, mode: "public transport", hoursFor: (n) => HOURS[n] || null, arrivalDate: "2026-10-01" };
+      // His evening, exactly as the guide built it.
+      const his = [{ day: 1, stops: [
+        { name: "Hive", town: "Copenhagen", arrivalTime: "20:30" },
+        { name: "Da Vinci Bar", town: "Copenhagen", arrivalTime: "22:30" },
+      ] }];
+      const v = checkPlan(his, coords, opts);
+      const shutty = v.problems.filter(p => /^SHUT/.test(p.code));
+      is("the gate catches the locked door", shutty.map(p => p.code), ["SHUT_AT_THAT_HOUR"]);
+      ok("and hands the planner the real hour to fix it with",
+         planProblemsForPrompt(shutty).includes("does not open until 23:00"));
+      // The bar before the club, the club after 23:00. Which is the evening.
+      const fixed = [{ day: 1, stops: [
+        { name: "Da Vinci Bar", town: "Copenhagen", arrivalTime: "21:00" },
+        { name: "Hive", town: "Copenhagen", arrivalTime: "23:30" },
+      ] }];
+      is("and the corrected evening passes", checkPlan(fixed, coords, opts).problems.filter(p => /^SHUT/.test(p.code)).length, 0);
+      // A day the club does not open at all is the other code, so a planner can
+      // tell "move the hour" from "move the day".
+      const sunday = [{ day: 4, stops: [{ name: "Hive", town: "Copenhagen", arrivalTime: "23:30" }] }];
+      is("a closed day is its own problem", checkPlan(sunday, coords, opts).problems.filter(p => /^SHUT/.test(p.code)).map(p => p.code), ["SHUT_THAT_DAY"]);
+      // ── AND SILENT WITHOUT THE CALLBACKS ─────────────────────────
+      // Same shape as the coordinate rule: a gate that cannot judge something
+      // says nothing rather than guessing at it.
+      is("no hours supplied, no opinion", checkPlan(his, coords, { isPublished: () => true, mode: "public transport" })
+        .problems.filter(p => /^SHUT/.test(p.code)).length, 0);
+      is("no arrival date, no opinion", checkPlan(his, coords, { isPublished: () => true, hoursFor: (n) => HOURS[n] || null })
+        .problems.filter(p => /^SHUT/.test(p.code)).length, 0);
+    }
+    // THE WIRING. Naming the rule does nothing if App.jsx never passes it the
+    // two things it needs, and this whole finding is a check that existed and
+    // was never called.
+    const appHrs = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the gate is given the hours and the date", /checkPlan\(skeleton\.days, gateCoords, \{ isPublished, mode: gateMode, hoursFor, arrivalDate \}\)/.test(appHrs));
+    ok("and so is the retry, or a fixed plan is judged on less than the first one",
+       /checkPlan\(fixed\.days, fixedCoords, \{ isPublished, mode: gateMode, hoursFor, arrivalDate \}\)/.test(appHrs));
+    // lookupRealPlace, the same resolver the coordinates use. Two resolvers
+    // answering "which published row is this" differently is the fault this
+    // codebase has now found six times.
+    ok("the hours come from the same row as the coordinate",
+       /const hoursFor = \(n\) => lookupRealPlace\(n\)\?\.__hours \|\| null;/.test(appHrs));
+    ok("and the planner is told how to fix each of them",
+       /A place planned for an hour it is shut/.test(appHrs) && /A place closed on the day it is planned for/.test(appHrs));
     const guideBuildSlice = readFileSync(join(root, "src/App.jsx"), "utf8");
     // Anchored on the FETCH, not the bare string: the second occurrence is a
   // comment mentioning the endpoint, which is the comment trap that has cost
@@ -7795,6 +7928,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 {
   const { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded,
     overlapDays, interestScore, arrivalDateIn, dayCountIn, daysBetween, describePicks, MAX_EVENT_PICKS } = M;
+  // readBrief and briefBlock, because the cap is only half a finding until the
+  // slot carries it and the model is told to say it.
+  const { readBrief, briefBlock } = M;
   const TODAY = new Date(2026, 7, 14);        // 14 August 2026, fixed
   const ev = (name, date, dateEnd, extra = {}) => ({ name, town: "Copenhagen", date, dateEnd, ...extra });
   const POOL = [
@@ -7929,6 +8065,77 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("two weeks", dayCountIn("2 weeks in Jutland"), 14);
   is("a fortnight", dayCountIn("a fortnight"), 14);
   is("and it is capped at a fortnight", dayCountIn("30 days"), 14);
+
+  // ── AND THE CAP MUST BE ASKABLE, NOT ONLY APPLIED ────────────────
+  //
+  // 6 Sep 2026. Oliver said "No I mean 15 days" and the brief recorded 14. The
+  // reply agreed with him in words ("15 days total, that's a proper trip"), the
+  // preview said "your 15 days", and the plan was built for fourteen. Every
+  // screen agreed with him and the number underneath them did not, so one day
+  // of a fortnight had no plan and nothing said which day or why.
+  //
+  // The ceiling is fine. `Math.min` as the whole answer is not: it is a silent
+  // edit of what somebody told you, and nothing downstream could tell an
+  // answer of fourteen from an answer of thirty.
+  is("the cap still applies by default", dayCountIn("15 days"), 14);
+  is("and a caller can ask what they actually said", dayCountIn("15 days", { cap: Infinity }), 15);
+  is("weeks are capped through the same door", [dayCountIn("3 weeks"), dayCountIn("3 weeks", { cap: Infinity })], [14, 21]);
+  is("and a length under the cap is untouched either way",
+     [dayCountIn("5 days"), dayCountIn("5 days", { cap: Infinity })], [5, 5]);
+  {
+    // The whole way through: his sentence, the slot, and the line the model reads.
+    const b = readBrief({ travellerText: "No I mean 15 days", travellerTurns: ["No I mean 15 days"], today: new Date("2026-09-06T09:00:00Z") });
+    is("the brief plans the fourteen it can", b.known.days?.value, 14);
+    is("and keeps the fifteen he said", b.known.days?.askedFor, 15);
+    is("and carries it where a screen can reach it", b.cappedDays, 15);
+    ok("and the model is told to say so out loud", /THEY SAID 15 DAYS AND THE PLAN COVERS 14/.test(briefBlock(b)));
+    // Nothing to say when nothing was cut. A line about a ceiling nobody hit is
+    // noise, and noise in this block is what teaches a model to skim it.
+    const under = readBrief({ travellerText: "we have 5 days", travellerTurns: ["we have 5 days"], today: new Date("2026-09-06T09:00:00Z") });
+    is("and says nothing when they asked for less", under.cappedDays, null);
+    ok("nor prints the line", !/THE PLAN COVERS/.test(briefBlock(under)));
+  }
+
+  // ── A PARTY OF CHILDREN WITH NOBODY TO TRAVEL WITH THEM ──────────
+  //
+  // The general half of the same night's finding. The regex that lost his
+  // husband is fixed in directAnswer.js; this is the rule that catches the next
+  // sentence it cannot read. A party of children and no adult is not an
+  // underspecified party, it is an impossible one.
+  //
+  // VAGUE, NOT MISSING, deliberately. `missing` blocks the build, and refusing
+  // a plan to somebody who has told you about their children over a headcount
+  // is the intake form he has objected to twice. Vague asks once and lets the
+  // trip go ahead.
+  {
+    const kidsOnly = readBrief({
+      travellerText: "we have 10 days\nmy son is 7 and he is coming",
+      travellerTurns: ["we have 10 days", "my son is 7 and he is coming"],
+      answering: [[], ["party"]],
+      today: new Date("2026-09-06T09:00:00Z"),
+    });
+    ok("children with no adults is flagged", (kidsOnly.vague || []).includes("party"));
+    ok("and it is asked about rather than blocking the build", !(kidsOnly.missing || []).includes("party"));
+    ok("and the model is told not to guess a number",
+       /reads as children travelling on their own/.test(briefBlock(kidsOnly)));
+    // A party that names its adults is not vague, however little else it says.
+    const withAdults = readBrief({
+      travellerText: "we have 10 days\nmy husband and I with our 2 kids",
+      travellerTurns: ["we have 10 days", "my husband and I with our 2 kids"],
+      answering: [[], ["party"]],
+      today: new Date("2026-09-06T09:00:00Z"),
+    });
+    ok("a counted party is not flagged", !(withAdults.vague || []).includes("party"));
+    is("and it counted four people", withAdults.known.party?.value, "2 adults and 2 children");
+    // And a party with no children at all was never the question.
+    const couple = readBrief({
+      travellerText: "we have 10 days\njust the two of us",
+      travellerTurns: ["we have 10 days", "just the two of us"],
+      answering: [[], ["party"]],
+      today: new Date("2026-09-06T09:00:00Z"),
+    });
+    ok("two adults on their own is not flagged", !(couple.vague || []).includes("party"));
+  }
   is("nothing stated", dayCountIn("a nice long trip"), null);
   is("day before month", arrivalDateIn("the 12th of March", TODAY)?.getMonth() ?? null, 2);
   is("month before day", arrivalDateIn("March 12th", TODAY)?.getMonth() ?? null, 2);
@@ -41730,6 +41937,47 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // closes the card first and the entry never opens.
   ok("and a click on the card is not swallowed by the map", /closeOnClick: false/.test(chatCode));
 
+  // ── "WELL THAT WAS BORING" ───────────────────────────────────────
+  //
+  // Oliver, 6 Sep 2026, watching the first pin land: one dot on a tight crop of
+  // Copenhagen, with "Tap the pin to see it" under it. He was right, and the
+  // reason is the argument for having a map at all: it is supposed to show
+  // WHERE, and a single pin at street scale shows nothing you did not know.
+  //
+  // "The map should start from up, and then zoom down to Copenhagen with a
+  // Copenhagen image/description, popping up. And then the rest should come up
+  // too afterwards."
+  ok("the map opens on the whole country, not on a pin", /\.fitBounds\(DENMARK, \{ padding: \[6, 6\] \}\)/.test(chatCode));
+  // Bounds rather than a hand-picked zoom, because the column is a clamped
+  // proportion now and a number right at 300px is wrong at 210.
+  ok("and the country is bounds rather than a zoom number", /const DENMARK = \[\[54\.5, 8\.0\], \[57\.8, 15\.3\]\];/.test(chatCode));
+  ok("the first set flies and the rest pan",
+     /const first = !flownRef\.current;[\s\S]{0,520}?flyToBounds\(bounds, \{ maxZoom: 10, duration: first \? 1\.9 : 0\.9 \}\)/.test(chatCode));
+  // A title sequence on every reply is not a map. The flag has to be set, or
+  // every new place re-flies from altitude.
+  ok("and the flight happens once", /flownRef\.current = true;/.test(chatCode));
+  // Somebody who asked their system for less movement gets none, and still
+  // ends up looking at the same map.
+  ok("reduced motion is honoured", /prefers-reduced-motion: reduce/.test(chatCode));
+  ok("and it lands in the same place without animating",
+     /if \(still\) map\.fitBounds\(bounds, \{ maxZoom: 10, animate: false \}\);/.test(chatCode));
+  // ── THE CARD OPENS WHEN IT LANDS, NOT BEFORE ───────────────────
+  // Opening it first would drag the card across the screen for two seconds and
+  // open it on the wrong side, because sideFor measures where the pins are at
+  // the moment it runs.
+  ok("the card waits for the flight to finish", /map\.once\("moveend", landed\)/.test(chatCode));
+  ok("and opens through the same handler a hover uses", /marker\.fire\("mouseover"\)/.test(chatCode));
+  // ── AND IT IS THE NEWEST CARD, NOT THE NEWEST PIN ──────────────
+  // Found in the browser: a third pin arrived, nothing popped up, and the card
+  // already open closed itself. The newest place had no photograph, so no card
+  // was ever bound to it, and a pin with no card takes the open one down by
+  // design. A reply naming somewhere with no picture is not a reason to show
+  // nothing.
+  ok("only pins that have a card are candidates",
+     /const carded = list\.filter\(p => markersRef\.current\.get\(p\.key\)\?\.getPopup\(\)\);/.test(chatCode));
+  ok("and the last of this reply's wins, falling back to the last on the map",
+     /const newest = \[\.\.\.carded\]\.reverse\(\)\.find\(p => p\.latest\) \|\| carded\[carded\.length - 1\];/.test(chatCode));
+
   // ── AND THE CARD ITSELF STILL SAYS WHAT IT HAS TO ────────────────
   //
   // The licence credit is the one with a legal edge on it, and a second layout
@@ -44346,7 +44594,6 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     "src/utils/mapTiles.js:styleRefused",
     "src/utils/modelProvenance.js:readerFacingStages",
     "src/utils/nearbyPlaces.js:nearbyLabel",
-    "src/utils/openingHours.js:shutOnVisit",
     "src/utils/operators.js:isLongLeg",
     "src/utils/pageScan.js:describeRead",
     "src/utils/placeChoice.js:applyChoice",
@@ -45451,6 +45698,43 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // An unknown number of children is not zero children. A guide builder that
   // cannot tell those apart is how "family" became a party with no ages.
   is("nothing stated stays null rather than becoming nought", partyAnswer("just me")?.kids, null);
+
+  // ── "I'M WITH MY GAY HUSBAND AND 2 KIDS" ─────────────────────────
+  //
+  // 6 Sep 2026. That sentence, from Oliver's own run, came back as a party of
+  // TWO CHILDREN and no adults, and partyLine's own comment says the line it
+  // produces "is what the guide builder reads". A fifteen-day Denmark trip was
+  // planned for two unaccompanied children.
+  //
+  // The whole cause was one preposition. COUPLE knew "me AND my husband" and
+  // "my husband and me" and not the third way anybody says it, which is to put
+  // the other person after a preposition.
+  {
+    const his = partyAnswer("I'm with my gay husband and 2 kids.");
+    is("the sentence that started this counts four people", [his?.adults, his?.kids, his?.total], [2, 2, 4]);
+    is("and reads as one", partyLine(his), "2 adults and 2 children");
+    // The adjective is not incidental: "with my wife" matched before this and
+    // "with my GAY husband" did not, over one word in the middle. People
+    // describe who they travel with.
+    is("an adjective in the middle is allowed", partyAnswer("with my new wife")?.adults, 2);
+    is("two of them are allowed", partyAnswer("travelling with my very patient wife")?.adults, 2);
+    // ── AND THE GUARDS THAT STOP IT OVERCOUNTING ──────────────────
+    // A couple is exactly one other adult. Everything below is somebody else.
+    is("parents are not a couple", partyAnswer("I'm going with my parents"), null);
+    is("nor a sibling", partyAnswer("with my brother"), null);
+    // The conjunction guard. "my sister and her husband" is two other people
+    // and reading it as a couple would undercount a party of three.
+    is("and not somebody else's husband", partyAnswer("with my sister and her husband"), null);
+    // Bare "man" and "mand" are husband in Dutch and Danish AND the impersonal
+    // pronoun. The possessive is what tells them apart, in both readers.
+    is("the impersonal pronoun is still not a party", partyAnswer("man kan tage toget til Ribe"), null);
+    // It was English-only while PARTY_RE has spoken five languages since 23
+    // August, which is the split that had his father asked forever.
+    is("Danish counts too", partyLine(partyAnswer("sammen med min kone og 2 børn")), "2 adults and 2 children");
+    is("and German", partyAnswer("mit meiner Frau")?.adults, 2);
+    // Unchanged by all of it.
+    is("solo with children is still one adult", [partyAnswer("I'm alone with 8 kids")?.adults, partyAnswer("I'm alone with 8 kids")?.kids], [1, 8]);
+  }
 
   ok("a shrug is a shrug in every reader",
      isRefusal("no idea") && isRefusal("dunno") && isRefusal("up to you") && isRefusal("ved det ikke"));

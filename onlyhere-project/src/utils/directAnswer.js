@@ -59,7 +59,8 @@
 // answer, and a double-send takes the correction rather than the first half.
 // It does not make this module win against tripBrief.js; see above.
 import { SPELLED_NUMBERS, NUMBER_TOKEN, VEHICLE_WORDS, TRANSPORT_VERBS,
-         PUBLIC_TRANSPORT, YES_WORDS, NO_WORDS, alt, LETTER } from "./travellerWords";
+         PUBLIC_TRANSPORT, YES_WORDS, NO_WORDS, PARTNER_WORDS, WITH_WORDS, ME_WORDS,
+         PARTY_POSSESSIVES, alt, LETTER } from "./travellerWords";
 import { travelModeKey, withoutNonModes } from "./routeOrder";
 import { KOMMUNER, K } from "../data/kommuner";
 import { TOWN_COORDS } from "../data/towns";
@@ -401,7 +402,43 @@ const firstNum = (re, text) => {
 // and only one of them has an arithmetic.
 const NAMES_A_CHILD = /\b(?:kids?|child|children|toddlers?|bab(?:y|ies)|teens?|teenagers?|son|daughter|grandkids?|grandchildren|b(?:ø|o)rn|barnet|kinder|sohn|tochter)\b|\b(?:1[0-7]|[1-9])\s*(?:year|yr|år|jahre)s?[- ]?old\b/i;
 const SOLO = /\b(?:alone|just me|only me|solo|by myself|on my own|alene|kun mig|allein(?:e)?|alleen|ensam|da solo)\b/i;
-const COUPLE = /\b(?:me and (?:my|the) (?:wife|husband|partner|girlfriend|boyfriend|missus|other half)|(?:my|the) (?:wife|husband|partner) and (?:me|i)|a couple|just the two of us|us two|os to|zu zweit|z'n twee(?:ë|e)n|vi to)\b/i;
+// ── "I'M WITH MY HUSBAND" WAS NOT A COUPLE ──────────────────────────
+//
+// 6 Sep 2026, from Oliver's own run. This list had "me AND my husband" and "my
+// husband and me" and not the third way anybody says it, which is to put the
+// other person after a preposition: "I'm with my husband", "travelling with my
+// wife", "sammen med min kone".
+//
+// The cost was not a missing nicety. adultCount came back null, the party
+// rendered as "2 children", and partyLine's own comment says that string is
+// what the guide builder reads. FOUR PEOPLE WERE PLANNED FOR AS TWO CHILDREN
+// TRAVELLING ALONE, over one preposition.
+//
+// It was also English-only while PARTY_RE has spoken five languages since 23
+// August, which is the same split that had his father asked who was coming
+// forever. Built from travellerWords now, so a sixth language is a list entry
+// and the two readers cannot drift apart again.
+const COUPLE = new RegExp(
+  `(?:^|[^${LETTER}])(?:`
+  + `me and (?:${alt(PARTY_POSSESSIVES)}|the)\\s+(?:${alt(PARTNER_WORDS)})`
+  + `|(?:${alt(PARTY_POSSESSIVES)}|the)\\s+(?:${alt(PARTNER_WORDS)})\\s+(?:and|og|und|en|och)\\s+(?:${alt(ME_WORDS)})`
+  // The preposition shape. The possessive is required, so bare "man" and
+  // "mand" cannot match the impersonal pronoun they also are.
+  //
+  // ── AND AN ADJECTIVE MAY SIT IN THE MIDDLE ───────────────────────
+  // His actual sentence was "I'm with my GAY husband and 2 kids", and a
+  // pattern with only whitespace between the possessive and the relation read
+  // "with my wife" and not that. People describe the person they are
+  // travelling with: my new wife, my ex-husband, my lovely partner. Same shape
+  // BOOKED_RE in tripBrief.js already allows for a hotel's name.
+  //
+  // Two words, not four, and never across a conjunction: "with my sister and
+  // her husband" is not a couple and must not read as one.
+  + `|(?:${alt(WITH_WORDS)})\\s+(?:${alt(PARTY_POSSESSIVES)})\\s+`
+  + `(?:(?!(?:and|og|und|och|en|plus)(?:[^${LETTER}]|$))[${LETTER}'’-]+\\s+){0,2}`
+  + `(?:${alt(PARTNER_WORDS)})`
+  + `|a couple|just the two of us|us two|os to|zu zweit|z'n twee(?:ë|e)n|vi to`
+  + `)(?![${LETTER}])`, "i");
 
 export const partyAnswer = (turn) => {
   const t = String(turn ?? "").trim();

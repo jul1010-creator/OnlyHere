@@ -12737,6 +12737,12 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
               if (key) gateCoords[st.name] = { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
             }));
             const isPublished = (n) => !!lookupRealPlace(n);
+            // ── AND THE HOURS, THROUGH THE SAME RESOLVER ──────────
+            // lookupRealPlace, not a second lookup: the gate must judge the
+            // coordinate and the opening hours of the SAME row, and two
+            // resolvers answering "which published place is this" differently
+            // is the fault this codebase has now found six times.
+            const hoursFor = (n) => lookupRealPlace(n)?.__hours || null;
             // ── THE MODE REACHES THE GATE ─────────────────────────
             // Until 19 Aug it did not, so every day was judged against a flat
             // 120 km whatever the traveller said they travelled by: a 100 km day
@@ -12747,7 +12753,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
             // Their words only, for the reason written at the mode block below: the
       // assistant's own question names three modes and would answer the gate.
       const gateMode = travelModeKey(saidByTravellerForGuide);
-            let verdict = checkPlan(skeleton.days, gateCoords, { isPublished, mode: gateMode });
+            let verdict = checkPlan(skeleton.days, gateCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate });
             let planDays = skeleton.days;
 
             // ONE RETRY, NEVER A REFUSAL. Some trips genuinely are awkward, and
@@ -12760,7 +12766,9 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
               buildStage("Rebalancing the days", 29);
               try {
                 const fixRes = await askOpenAI(
-                  `This itinerary skeleton has specific, checkable problems. Fix them and return the corrected skeleton.\n\nPROBLEMS:\n${planProblemsForPrompt(verdict.problems)}\n\nHOW TO FIX EACH KIND:\n- A day with too few stops: add real places in or near that day's town, from the conversation, never invented.\n- The same place on two days: that is where they are STAYING. Keep it once, and give the other day its own places in that town or nearby.\n- Too few different places overall: the trip is thinner than the number of days it claims. Add real ones from the conversation.\n- A day that covers too much ground: move a stop to a neighbouring day, or drop the one that forces the long haul. A day that is mostly transit is a day the trip did not have.\n- A crowded arrival day: they land, queue at passport control, collect bags, cross the city and check in before any of it. Keep the two best things and move the rest to a later day. Do not compensate by overfilling day two.\n\nSame JSON shape, nothing else: {"days": [{"day": 1, "stops": [{"name": "...", "town": "...", "arrivalTime": "..."}]}]}. Only real place names from the conversation.\n\nCurrent skeleton:\n${JSON.stringify(skeleton)}\n\nConversation:\n${convoText}`,
+                  `This itinerary skeleton has specific, checkable problems. Fix them and return the corrected skeleton.\n\nPROBLEMS:\n${planProblemsForPrompt(verdict.problems)}\n\nHOW TO FIX EACH KIND:\n- A day with too few stops: add real places in or near that day's town, from the conversation, never invented.\n- The same place on two days: that is where they are STAYING. Keep it once, and give the other day its own places in that town or nearby.\n- Too few different places overall: the trip is thinner than the number of days it claims. Add real ones from the conversation.\n- A day that covers too much ground: move a stop to a neighbouring day, or drop the one that forces the long haul. A day that is mostly transit is a day the trip did not have.\n- A crowded arrival day: they land, queue at passport control, collect bags, cross the city and check in before any of it. Keep the two best things and move the rest to a later day. Do not compensate by overfilling day two.
+- A place closed on the day it is planned for: move it to a day it is open, or drop it. Never leave it where it is with a note.
+- A place planned for an hour it is shut: change its arrivalTime to one inside its opening hours. A club that opens at 23:00 belongs at 23:00 or later, and the bar you were going to visit afterwards goes BEFORE it, not after. Do not compress the rest of the day to make room; move or drop something instead.\n\nSame JSON shape, nothing else: {"days": [{"day": 1, "stops": [{"name": "...", "town": "...", "arrivalTime": "..."}]}]}. Only real place names from the conversation.\n\nCurrent skeleton:\n${JSON.stringify(skeleton)}\n\nConversation:\n${convoText}`,
                   1200
                 );
                 if (!fixRes.error && fixRes.text) {
@@ -12775,7 +12783,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
                       const key = townKeyFor(st.town || "") || townKeyFor(st.name);
                       if (key) fixedCoords[st.name] = { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
                     }));
-                    const second = checkPlan(fixed.days, fixedCoords, { isPublished, mode: gateMode });
+                    const second = checkPlan(fixed.days, fixedCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate });
                     // Keep whichever is actually better. A "fix" that trades two
                     // problems for three is not a fix.
                     if (second.problems.length < verdict.problems.length) { verdict = second; planDays = fixed.days; }

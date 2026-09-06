@@ -263,3 +263,129 @@ export const shutOnVisit = (storedHours, arrivalDate, dayNumber) => {
     checkedOn: storedHours.fetchedAt ? String(storedHours.fetchedAt).slice(0, 10) : "",
   };
 };
+
+// ── AND THE HOUR, WHICH IS THE HALF NOBODY CHECKED ──────────────────
+//
+// Oliver, 6 Sep 2026, on a guide built from his own conversation: "it's quite
+// odd to go to Hive at 20:30 and then to a bar at Gothersgade 22:30... that
+// makes no logical sense."
+//
+// HIVE OPENS AT 23:00, and only Thursday to Saturday. The plan had him outside
+// a locked door two and a half hours early, and then put the bar AFTER the
+// club, which is the evening backwards.
+//
+// Nothing in the app could have caught it. `arrivalTime` is written entirely by
+// the model, the plan prompt tells it to build "roughly 9am-9pm", and a
+// nightclub does not fit in a window that ends at nine, so it got squeezed into
+// the one it was given. shutOnVisit above answers "is this place shut that DAY"
+// and has never been called by anything. Neither half of the question reached a
+// reader.
+//
+// This is the other half: is it open at that HOUR.
+//
+// ── PAST MIDNIGHT IS THE WHOLE POINT ────────────────────────────────
+//
+// "23:00 – 05:00" closes BEFORE it opens by the clock, and reading it as a
+// plain interval says a club is shut at one in the morning and open at noon,
+// which is worse than not checking. A window whose end is at or before its
+// start wraps into the next day.
+const DAY_TITLE = (d) => DAY_NAMES[d].replace(/^./, c => c.toUpperCase());
+const toMinutes = (hhmm) => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || "").trim());
+  if (!m) return null;
+  const h = Number(m[1]), mi = Number(m[2]);
+  return h >= 0 && h <= 23 && mi >= 0 && mi <= 59 ? h * 60 + mi : null;
+};
+
+// The windows on one weekday's line, as minute pairs. Google writes them as
+// "Friday: 11:00 – 17:00" and sometimes "Friday: 11:00 – 14:00, 17:00 – 22:00",
+// so the times come out in order and are paired off. An odd count means the
+// line is not something this can read, and an unreadable line is NOT a closed
+// venue: it returns nothing and the caller stays silent.
+export const windowsOn = (hours, day) => {
+  const line = (Array.isArray(hours) ? hours : [])
+    .find(l => new RegExp(`^\\s*${DAY_NAMES[day]}\\b`, "i").test(String(l || "")));
+  if (!line) return null;
+  const times = timesIn(line).map(toMinutes).filter(n => n !== null);
+  // timesIn dedupes through a Set, so a genuine "09:00 – 09:00" collapses. That
+  // is unreadable rather than closed, same rule as an odd count.
+  if (!times.length || times.length % 2 !== 0) return null;
+  const out = [];
+  for (let i = 0; i < times.length; i += 2) {
+    const from = times[i];
+    let to = times[i + 1];
+    // Wraps past midnight. 23:00 to 05:00 is six hours of the next morning, not
+    // a negative eighteen.
+    if (to <= from) to += 24 * 60;
+    out.push([from, to]);
+  }
+  return out;
+};
+
+export const HHMM = (mins) => {
+  const m = ((Number(mins) || 0) % (24 * 60) + 24 * 60) % (24 * 60);
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+};
+
+// ── THE ANSWER, PER STOP ────────────────────────────────────────────
+//
+// null whenever it does not know, which is most of the time and is the right
+// answer then: no stored hours, no trip date, no readable clock time on the
+// stop, or a line this cannot parse. The one thing it must never do is guess,
+// because the output of this is a sentence telling somebody their evening is
+// wrong.
+//
+// A stop on a day the place is SHUT is left to shutOnVisit, which says that
+// better. This answers only the open-day-wrong-hour case.
+export const openAtVisit = (storedHours, arrivalDate, dayNumber, arrivalTime) => {
+  const hours = storedHours?.hours;
+  if (!Array.isArray(hours) || !hours.length) return null;
+  const day = dayOfVisit(arrivalDate, dayNumber);
+  if (day === null) return null;
+  if (closedDays(hours).includes(day)) return null;   // shutOnVisit's job
+  const at = toMinutes(String(arrivalTime || "").replace(/[^\d:.]/g, "").replace(".", ":"));
+  if (at === null) return null;
+  const windows = windowsOn(hours, day);
+  if (!windows || !windows.length) return null;
+  // Inside any window, including one that ran over from the night before: a
+  // 01:00 arrival at a place open 23:00 to 05:00 is open, and the window is
+  // stored on the previous day's line.
+  const yesterday = windowsOn(hours, (day + 6) % 7) || [];
+  const inAny = windows.some(([f, t]) => at >= f && at < t)
+    || yesterday.some(([f, t]) => t > 24 * 60 && at + 24 * 60 >= f && at + 24 * 60 < t);
+  if (inAny) return null;
+  const opens = Math.min(...windows.map(w => w[0]));
+  const closes = Math.max(...windows.map(w => w[1]));
+  // ── AND A LUNCH GAP IS NOT "AFTER CLOSING" ────────────────────────
+  // Caught in test rather than in reasoning. A kitchen open 11:00 to 14:00 and
+  // again 17:00 to 22:00, visited at 15:00, was reported as "closes at 22:00",
+  // which is true of the day and false of the moment and reads as nonsense to
+  // anybody holding the opening times. Three cases, not two.
+  const sorted = [...windows].sort((a, b) => a[0] - b[0]);
+  const after = sorted.find(w => w[0] > at);
+  const before = [...sorted].reverse().find(w => w[1] <= at);
+  const inGap = at > opens && at < closes;
+  return {
+    day,
+    dayName: DAY_TITLE(day),
+    at: HHMM(at),
+    opensAt: HHMM(opens),
+    closesAt: HHMM(closes),
+    // Which side of the window they landed on, because "too early", "too late"
+    // and "in the gap" are three different mistakes and a planner fixes each
+    // one differently.
+    early: at < opens,
+    gap: inGap && !!after && !!before ? { shutFrom: HHMM(before[1]), backAt: HHMM(after[0]) } : null,
+    checkedOn: storedHours.fetchedAt ? String(storedHours.fetchedAt).slice(0, 10) : "",
+  };
+};
+
+// The sentence, for a reader and for the planner's retry. Written here so the
+// two cannot describe the same finding differently.
+export const describeClosedAt = (v, name = "this stop") => {
+  if (!v) return "";
+  const head = `${name} is planned for ${v.at} on a ${v.dayName}`;
+  if (v.early) return `${head} and does not open until ${v.opensAt}.`;
+  if (v.gap) return `${head}, and it shuts from ${v.gap.shutFrom} until ${v.gap.backAt}.`;
+  return `${head} and closes at ${v.closesAt}.`;
+};

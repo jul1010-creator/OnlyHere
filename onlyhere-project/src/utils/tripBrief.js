@@ -44,7 +44,7 @@
 // repeating: the app suggests things, so one sentence back from it reading
 // "Copenhagen has excellent museums" would otherwise become evidence that the
 // traveller asked for museums.
-import { arrivalDateIn, departureDateIn, dayCountIn, monthOnlyIn, latestRelativeAnswer, daysBetween } from "./tripEvents";
+import { arrivalDateIn, departureDateIn, dayCountIn, monthOnlyIn, latestRelativeAnswer, daysBetween, MAX_TRIP_DAYS } from "./tripEvents";
 import { PARTY_BARE, PARTY_POSSESSIVE, PARTY_POSSESSIVES, PARTY_COUNT, TRAVEL_VERBS, FROM_WORDS, TRANSPORT_PREPS, VEHICLE_WORDS, TRANSPORT_VERBS, PUBLIC_TRANSPORT, alt, LETTER } from "./travellerWords";
 import { dayStart } from "./calendarDay";
 import { travelModeKey, withoutNonModes } from "./routeOrder";
@@ -179,8 +179,17 @@ const readWhen = (text, turns, intakeArrival, intakeDeparture, today) => {
 const readDays = (text, intakeArrival, intakeDeparture, today = new Date()) => {
   const both = daysBetween(intakeArrival, intakeDeparture);
   if (both && both > 0) return { value: both, source: "intake" };
-  const spoken = dayCountIn(text);
-  if (spoken) return { value: spoken, source: "said" };
+  // ── READ UNCAPPED, THEN CAP, AND KEEP WHAT THEY SAID ──────────────
+  // "No I mean 15 days" was stored as 14 and nothing anywhere held the 15, so
+  // no screen could say which day had been dropped or that one had been. The
+  // ceiling still applies; it just stops being invisible.
+  const raw = dayCountIn(text, { cap: Infinity });
+  if (raw) {
+    const value = Math.min(raw, MAX_TRIP_DAYS);
+    return raw > value
+      ? { value, source: "said", askedFor: raw }
+      : { value, source: "said" };
+  }
   // ── AND TWO DATES IN A SENTENCE ARE A LENGTH ──────────────────────
   // Oliver's test brief opened "flying into Billund on Thursday 8 October 2026
   // ... and out of Aalborg on Monday the 12th at 11:00", and this slot came back
@@ -603,12 +612,39 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   // TRUE about the brief and never stops being true; `vagueToAsk` is what is
   // still worth a question, which asking once uses up. Folding them into one
   // was the bug: it let "we asked" quietly mean "it is precise now".
-  const vague = known.when?.precision === "month" ? ["when"] : [];
+  // ── AND CHILDREN WITH NOBODY TO TRAVEL WITH THEM ──────────────────
+  //
+  // 6 Sep 2026, from Oliver's own run. "I'm with my gay husband and 2 kids"
+  // came back as adults: null, kids: 2, and partyLine printed "2 children" —
+  // the string its own comment says the guide builder reads. A fifteen-day
+  // Denmark trip was planned for two unaccompanied children and NOTHING
+  // ANYWHERE OBJECTED, because a party is a party once anything at all is
+  // known about it.
+  //
+  // The regex that missed it is fixed in directAnswer.js, and that is the
+  // narrow half. This is the general one: a party of children and no adult is
+  // not an underspecified party, it is an impossible one, and the brief should
+  // say so rather than plan for it.
+  //
+  // VAGUE, NOT MISSING, and the difference is deliberate. `missing` blocks the
+  // build; a traveller who has told you about their children has answered the
+  // question and being refused a plan over a headcount would be the intake
+  // form he has objected to twice. `vague` asks once, through the machinery
+  // `when` already uses, and lets the trip go ahead either way.
+  // Carried out of `known` so briefBlock can say it without re-deriving the
+  // cap, and so a screen can print "15 days, planned as 14" rather than 14.
+  const cappedDays = known.days?.askedFor || null;
+  const party = known.party;
+  const childrenAlone = !!party && party.hasKids && party.adults == null;
+  const vague = [
+    ...(known.when?.precision === "month" ? ["when"] : []),
+    ...(childrenAlone ? ["party"] : []),
+  ];
   const vagueToAsk = vague.filter(k => !wasAsked.has(k));
   // Asked, unanswered, and required anyway. Kept apart from `missing` so the
   // asking cadence is unchanged and only the BUILD is gated.
   const unanswered = HARD_SLOTS.filter(k => !known[k] && wasAsked.has(k));
-  return { known, missing, declined, vague, vagueToAsk, unanswered, ready: missing.length === 0 && unanswered.length === 0 };
+  return { known, missing, declined, vague, vagueToAsk, unanswered, cappedDays, ready: missing.length === 0 && unanswered.length === 0 };
 };
 
 export const briefReady = (brief) => !!brief && brief.missing.length === 0 && !(brief.unanswered || []).length;
@@ -704,6 +740,13 @@ export const briefBlock = (brief, conflicts = []) => {
       lines.push(`  ${s.label}: ${k.value}${k.source === "intake" ? " (from the form they filled in)" : ""}`);
     });
   }
+  // ── AND SAY IT WHEN THE NUMBER IS NOT THEIRS ──────────────────────
+  // He said fifteen days and the plan is built for fourteen. The reply agreed
+  // with him in words while the data disagreed, which is the worst of both:
+  // he had no reason to check and no way to find the missing day.
+  if (brief.cappedDays) {
+    lines.push(`THEY SAID ${brief.cappedDays} DAYS AND THE PLAN COVERS ${MAX_TRIP_DAYS}. Say so plainly, once, in the same reply you first use the length: you are planning their first ${MAX_TRIP_DAYS} days and the rest is theirs. Never repeat their number back as though the whole trip were planned, and never write "${brief.cappedDays} days" about what you have built.`);
+  }
   // Asked, and they did not answer. Named so it is not asked again, and named as
   // an assumption so the reply does not speak as if it knew.
   // The hard ones are pulled out first: they are asked and unanswered too, and
@@ -760,6 +803,9 @@ export const briefBlock = (brief, conflicts = []) => {
   asks.forEach(s => lines.push(`  ${s.label}: ${s.ask}`));
   if ((brief.vagueToAsk || []).includes("when")) {
     lines.push("They named a month but not a date. That is enough to rule out an event in another month and not enough to place a day, so ask for the dates once and never again.");
+  }
+  if ((brief.vagueToAsk || []).includes("party")) {
+    lines.push("They have told you about children and not about the adults, so the party currently reads as children travelling on their own. Ask how many adults are coming, once, and never again. Do not guess a number and do not plan a single day until you have it or they have declined to say.");
   }
   // ── AND ASKING IS NOT THE WHOLE TURN ──────────────────────────────
   // The old line ended "One short paragraph, then the question or questions",

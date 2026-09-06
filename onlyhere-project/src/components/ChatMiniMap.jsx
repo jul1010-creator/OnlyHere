@@ -31,6 +31,11 @@ import { POPUP_CLASS } from "../utils/chatRail";
 // wherever the person had panned to, mid-conversation. So: one effect that
 // mounts the map and never re-runs, and a second that clears a layer group and
 // draws into it.
+// Skagen down to the German border, Blåvand across to Bornholm. Framed by
+// fitBounds rather than by a hand-picked zoom, so a 210px column and a 300px
+// one both get the country instead of one of them getting Jutland.
+const DENMARK = [[54.5, 8.0], [57.8, 15.3]];
+
 export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, height = 220 }) => {
   const holderRef = useRef(null);
   const mapRef = useRef(null);
@@ -38,6 +43,24 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   // The container listener is added per pin-redraw and has to come off with it,
   // or a conversation of twenty replies leaves twenty of them on one element.
   const cleanRef = useRef(null);
+  // ── "WELL THAT WAS BORING" ──────────────────────────────────────
+  //
+  // Oliver, 6 Sep 2026, watching the first pin land: one dot on a tight crop of
+  // Copenhagen with "Tap the pin to see it" under it. He was right. A map
+  // showing one place at street scale has told you nothing you did not already
+  // know, and the whole argument for putting a map here was that it shows
+  // WHERE.
+  //
+  // "The map should start from up, and then zoom down to Copenhagen with a
+  // Copenhagen image/description, popping up. And then the rest should come up
+  // too afterwards."
+  //
+  // So it opens on the whole country and flies down to the place, and the card
+  // opens itself when it lands. The country is the context and the flight is
+  // what hands it over: you see Denmark, then you see which part of Denmark
+  // this is. A jump cut to a crop gives you the second half only.
+  const flownRef = useRef(false);
+  const markersRef = useRef(new Map());
   // ── THE POPUP IS A REAL CARD, PORTALLED IN ──────────────────────
   //
   // Oliver, 6 Sep: "have them as small pop ups with a picture."
@@ -73,7 +96,10 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       scrollWheelZoom: false,
       dragging: true,
       attributionControl: false,
-    }).setView([56.0, 10.4], 6);   // Denmark, until there are pins to fit
+    // The whole country, which is where every one of these starts. Bounds
+    // rather than a fixed zoom, so it frames Denmark at 300 pixels wide and at
+    // 210, instead of being right at one of them.
+    }).fitBounds(DENMARK, { padding: [6, 6] });
     addTileLayer(L, map);
     L.control.zoom({ position: "bottomright" }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);
@@ -101,6 +127,7 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // asserts a route nobody has agreed to. mapPlaces says why at length.
     const ordered = [...list].sort((a, b) => Number(!!a.latest) - Number(!!b.latest));
     const made = [];
+    markersRef.current = new Map();
     ordered.forEach(p => {
       const gold = C?.gold || "#E5B769";
       const size = p.latest ? 15 : 11;
@@ -218,15 +245,60 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       // the card impossible to reach. The container's mouseleave below is the
       // honest boundary, because the card is inside the container.
       made.push({ key: p.key, place: p.place, host });
+      markersRef.current.set(p.key, marker);
     });
     // Set once per pin change, not per render: the effect below it does not
     // re-run on this, because its dep is pinKey and pinKey has not moved.
     setHosts(made);
+    // ── THE FLIGHT DOWN, AND WHY ONLY THE FIRST ONE FLIES ────────
+    //
     // Refit whenever the pins change and NOT otherwise, which is what makes
     // this readable: a new place appears and the map opens up to include it,
     // and a pan the person made themselves survives every keystroke in between.
     // maxZoom 10 so a single pin does not land on a street plan of one square.
-    map.fitBounds(L.latLngBounds(list.map(p => [p.lat, p.lon])).pad(0.35), { maxZoom: 10 });
+    //
+    // The FIRST set flies, from the country down to the place, because that is
+    // the move that says where in Denmark this is. Every set after it is a
+    // shorter eased pan: the country has been established by then, and
+    // re-flying from altitude on every reply is a title sequence, not a map.
+    const bounds = L.latLngBounds(list.map(p => [p.lat, p.lon])).pad(0.35);
+    const first = !flownRef.current;
+    flownRef.current = true;
+    // Somebody who has asked their system for less movement gets none. The map
+    // still ends up in the same place, which is the half carrying the meaning.
+    const still = typeof window !== "undefined" && typeof window.matchMedia === "function"
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (still) map.fitBounds(bounds, { maxZoom: 10, animate: false });
+    else map.flyToBounds(bounds, { maxZoom: 10, duration: first ? 1.9 : 0.9 });
+    // ── AND THE CARD OPENS ITSELF WHEN IT LANDS ──────────────────
+    //
+    // "with a Copenhagen image/description, popping up." Opening it before the
+    // flight would drag the card across the screen for two seconds AND open it
+    // on the wrong side, because sideFor measures where the pins are at the
+    // moment it runs. So it waits for moveend, which fires once at the end of
+    // the flight, and once is why this is `once` rather than `on`.
+    // ── WHICH CARD OPENS, AND WHY IT IS NOT SIMPLY THE NEWEST ────
+    //
+    // Caught in the browser: the third pin arrived, nothing popped up, and the
+    // card that WAS open closed itself. The newest place had no photograph, so
+    // no card was ever bound to it, and a pin with no card takes the open one
+    // down on hover by design.
+    //
+    // A reply naming somewhere with no picture is not a reason to show nothing.
+    // So: the newest pin that actually HAS a card, preferring the ones this
+    // reply introduced, and falling back to the most recent card on the map.
+    // Reversed, because several pins can be `latest` and the last of them is
+    // the one the sentence ended on.
+    const carded = list.filter(p => markersRef.current.get(p.key)?.getPopup());
+    const newest = [...carded].reverse().find(p => p.latest) || carded[carded.length - 1];
+    const landed = () => {
+      const marker = newest && markersRef.current.get(newest.key);
+      // Through the same handler a hover uses, so the card that opens itself
+      // and the card you point at are chosen the same way. A second path here
+      // is how the two would start disagreeing about which side to open on.
+      if (marker?.getPopup()) marker.fire("mouseover");
+    };
+    if (still) landed(); else map.once("moveend", landed);
     const shut = () => map.closePopup();
     map.getContainer().addEventListener("mouseleave", shut);
     cleanRef.current = () => map.getContainer().removeEventListener("mouseleave", shut);

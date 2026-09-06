@@ -222,26 +222,42 @@ const numFrom = (token) => {
 //
 // And the scan no longer stops at the first match: a rejected candidate must not
 // hide a real answer later in the same sentence.
-export const dayCountIn = (text) => {
+// ── THE CAP, NAMED, BECAUSE IT USED TO EAT A DAY IN SILENCE ─────────
+//
+// 6 Sep 2026. Oliver said "No I mean 15 days" and the brief recorded 14. The
+// reply said "15 days total, that's a proper trip", the preview said "your 15
+// days", and the plan prompt built `requestedDays` days. Every screen agreed
+// with him and the number underneath them did not, so one day of a fortnight
+// had no plan and nothing said which day or why.
+//
+// The ceiling itself is fine and directAnswer.js already aligned its own to
+// this one on purpose. What was wrong is that `Math.min` is not an answer, it
+// is a silent edit of what somebody told you. A caller that wants to KNOW they
+// were told more can now pass `cap: Infinity` and compare, which is what
+// readBrief does so Gemlyx can say it out loud.
+export const MAX_TRIP_DAYS = 14;
+
+export const dayCountIn = (text, { cap = MAX_TRIP_DAYS } = {}) => {
   const s = String(text || "");
+  const lid = (n) => Math.min(n, cap);
   const re = new RegExp(`(?:^|[^${LETTER}])(${NUMBER_TOKEN})(\\s*(?:-|–|to|til|bis|tot)?\\s*)(?:${alt(DAY_WORDS)})(?![${LETTER}])`, "gi");
   let m = null;
   while ((m = re.exec(s)) !== null) {
     if (/^[^\d]/.test(m[1]) && !m[2]) continue;   // "today", "todage", and their kind
     const n = numFrom(m[1]);
-    if (n) return Math.min(n, 14);
+    if (n) return lid(n);
   }
   const weeks = new RegExp(`(?:^|[^${LETTER}])(${NUMBER_TOKEN})\\s*(?:-|–)?\\s*(?:${alt(WEEK_WORDS)})(?![${LETTER}])`, "i").exec(s);
-  if (weeks) { const n = numFrom(weeks[1]); if (n) return Math.min(n * 7, 14); }
-  if (new RegExp(`(?:^|[^${LETTER}])(?:${alt(ONE_WEEK)})(?![${LETTER}])`, "i").test(s)) return 7;
+  if (weeks) { const n = numFrom(weeks[1]); if (n) return lid(n * 7); }
+  if (new RegExp(`(?:^|[^${LETTER}])(?:${alt(ONE_WEEK)})(?![${LETTER}])`, "i").test(s)) return lid(7);
   // "en uge", "hele ugen". `uge` alone is not enough: "i ugen" and "ugens" turn
   // up in ordinary sentences that are not an answer about length.
   // NOT \b before the alternation: é is not an ASCII word character, so a word
   // boundary in front of "én" never matches and that spelling fell through.
-  if (/(?:^|[^\wÆØÅæøå])(?:én|en|hele|den ene)\s+(?:hel\s+)?uge[nr]?\b/i.test(s)) return 7;
-  if (new RegExp(`(?:^|[^${LETTER}])(?:to|2|zwei|twee|två)\\s+(?:${alt(WEEK_WORDS)})(?![${LETTER}])`, "i").test(s)) return 14;
-  if (/\b(?:a|an|the|one)\s+fortnight\b/i.test(s)) return 14;
-  if (/\b(?:to|2)\s+uger\b/i.test(s)) return 14;
+  if (/(?:^|[^\wÆØÅæøå])(?:én|en|hele|den ene)\s+(?:hel\s+)?uge[nr]?\b/i.test(s)) return lid(7);
+  if (new RegExp(`(?:^|[^${LETTER}])(?:to|2|zwei|twee|två)\\s+(?:${alt(WEEK_WORDS)})(?![${LETTER}])`, "i").test(s)) return lid(14);
+  if (/\b(?:a|an|the|one)\s+fortnight\b/i.test(s)) return lid(14);
+  if (/\b(?:to|2)\s+uger\b/i.test(s)) return lid(14);
   return null;
 };
 
