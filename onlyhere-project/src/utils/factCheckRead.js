@@ -573,13 +573,49 @@ export const claimLanded = (finding, before, after) => {
   return { finding, anchors, survived, verdict: survived.length ? "survived" : "gone" };
 };
 
+// ── AND WHICH KIND OF FINDING SURVIVED ──────────────────────────────
+//
+// Oliver, 6 Sep 2026, on a live entry this told him to fix: "'Camping itself
+// opens Thursday at 10:00' searched it up.. it's true though."
+//
+// He is right, and the run that flagged it says why in its own numbers: SEVEN
+// CLAIMS FLAGGED, ONE CONTRADICTED AND SIX UNVERIFIED. This function was handed
+// a flat list of strings — the caller did `findings.map(f => f.text)`, throwing
+// the label away one line before it mattered — so the survivor came back with no
+// kind attached, and describeCorrection called it "a claim the checker
+// contradicted" on a six-in-seven chance that it was not.
+//
+// The distinction is the one this whole file exists to keep. CONTRADICTED means
+// a page said otherwise. UNVERIFIED means the search did not find it, and
+// journey.js already has the sentence for that: "A search that came back with no
+// festivals is a fact about the search." Telling a founder to delete a true
+// sentence because a search did not reach the page it lives on is the exact
+// failure he warned about on 16 August, in his own words: "it was correcting
+// stuff that didn't need correction, because it was already true."
+//
+// So the label travels. `findings` may be strings or the {label, text} objects
+// readInventedCheck produces, because both callers exist and neither should have
+// to know which this wants.
 export const correctionLanded = (findings, before, after) => {
-  const list = (Array.isArray(findings) ? findings : []).map(f => String(f || "")).filter(Boolean);
-  const results = list.map(f => claimLanded(f, before, after));
+  const list = (Array.isArray(findings) ? findings : [])
+    .map(f => (f && typeof f === "object" ? { label: String(f.label || ""), text: String(f.text || "") } : { label: "", text: String(f || "") }))
+    .filter(f => f.text);
+  const results = list.map(f => ({ ...claimLanded(f.text, before, after), label: f.label }));
+  const survived = results.filter(r => r.verdict === "survived");
   return {
     results,
     gone: results.filter(r => r.verdict === "gone").length,
-    survived: results.filter(r => r.verdict === "survived"),
+    survived,
+    // Split, because the two need opposite advice and a count that merges them
+    // can only give one.
+    //
+    // AN UNKNOWN LABEL COUNTS AS THE SERIOUS ONE. A caller that passes bare
+    // strings, as one still does, tells us nothing about kind, and the safe
+    // default is the loud message: silently softening a real contradiction into
+    // "worth a look" because somebody forgot to pass a label is the direction
+    // that gets a wrong fact published. Only an explicit UNVERIFIED is quieter.
+    survivedContradicted: survived.filter(r => r.label !== UNVERIFIED),
+    survivedUnverified: survived.filter(r => r.label === UNVERIFIED),
     uncheckable: results.filter(r => r.verdict === "uncheckable").length,
   };
 };
@@ -607,11 +643,32 @@ export const describeCorrection = (r) => {
   // this one truncates a warning into something that reads like a shrug. So the
   // GROWING part is bounded here, where the growth is, and the sentence around
   // it is always complete. The caller no longer needs a slice and no longer has one.
-  const shown = survived.slice(0, MAX_LISTED_CLAIMS);
-  const more = survived.length - shown.length;
-  const list = shown.map(s => s.survived.map(a => `"${String(a).slice(0, 40)}"`).join(", ")).join("; ")
-    + (more > 0 ? `, and ${more} more` : "");
-  return `THE CORRECTION DID NOT LAND. ${survived.length} flagged claim${survived.length === 1 ? " is" : "s are"} still in the draft after the rewrite, on the draft's own words: ${list}. The rewrite was asked to remove or replace ${survived.length === 1 ? "it" : "them"} and did not, so the draft below still carries ${survived.length === 1 ? "a claim" : "claims"} the checker contradicted. Fix by hand or redraft, and do not read the banner above as a pass.`;
+  const quote = (group) => {
+    const shown = group.slice(0, MAX_LISTED_CLAIMS);
+    const more = group.length - shown.length;
+    return shown.map(s => s.survived.map(a => `"${String(a).slice(0, 40)}"`).join(", ")).join("; ")
+      + (more > 0 ? `, and ${more} more` : "");
+  };
+  const hard = Array.isArray(res.survivedContradicted) ? res.survivedContradicted : survived;
+  const soft = Array.isArray(res.survivedUnverified) ? res.survivedUnverified : [];
+
+  // ── A CONTRADICTED CLAIM SURVIVING IS THE SERIOUS ONE ─────────────
+  // A page said otherwise and the rewrite kept it anyway. That is the case this
+  // message was written for and its wording is unchanged.
+  const lines = [];
+  if (hard.length) {
+    lines.push(`THE CORRECTION DID NOT LAND. ${hard.length} flagged claim${hard.length === 1 ? " is" : "s are"} still in the draft after the rewrite, on the draft's own words: ${quote(hard)}. A page said otherwise and the rewrite was asked to remove or replace ${hard.length === 1 ? "it" : "them"} and did not. Fix by hand or redraft, and do not read the banner above as a pass.`);
+  }
+  // ── AND AN UNVERIFIED ONE SURVIVING IS OFTEN CORRECT ──────────────
+  //
+  // The writer kept something the search could not reach. Camping hours live on
+  // a page a web search does not open, and Oliver found that one in a minute by
+  // hand. Reported, because he should know which sentence to spot-check, and NOT
+  // called a failure, because most of the time it is not one.
+  if (soft.length) {
+    lines.push(`${soft.length} claim${soft.length === 1 ? "" : "s"} the check could not VERIFY ${soft.length === 1 ? "is" : "are"} still in the draft: ${quote(soft)}. Unverified is a fact about the search, not about the claim: it means nothing it read said this, which is the ordinary outcome for a detail that lives on a page a search does not open. Worth a look before publishing, and not a reason to delete a sentence that may well be right.`);
+  }
+  return lines.join(" ");
 };
 
 // ── THE CHECKER COULD NOT SEE THE RESEARCH IT WAS CHECKING ──────────

@@ -60,6 +60,22 @@
 // the list on purpose even though it describes add-ons rather than entry: a row
 // carrying "Audio guide 40 DKK" is not disqualified from being free by it, and
 // the amount rule below is scoped so it cannot be.
+// ── WHICH TYPES CHARGE AT A DOOR ─────────────────────────────────
+// A festival, an attraction and a workshop have one gate and one admission
+// price. A restaurant, a food street, a bar, a bar street, a town and a
+// nightlife town do not: their prices are per dish, per pint, per venue, and
+// the cheapest figure on a page is a beer rather than a fare. Every check that
+// reasons about "the ticket price" belongs to this list and nothing else.
+//
+// LIVED IN App.jsx UNTIL 6 SEP 2026, as a module-private const, which was fine
+// while the price hunt was its only reader. utils/affiliateSweep.js needs the
+// same list to decide which rows an agent could even sell a ticket to, and
+// journeyScope.js has already written down what happens next: "it was already a
+// hand-written list copied from CONTENT_TYPES", and the copy is the one that
+// drifted. So it lives here, where the rest of the admission-price judgement
+// lives, and App.jsx imports it.
+export const TYPES_WITH_A_DOOR = ["festival", "free", "booking"];
+
 export const PRICE_FIELDS = ["ticketsGlance", "priceNote", "price", "ticketInfo"];
 export const EXTRA_FIELDS = ["extraCosts"];
 

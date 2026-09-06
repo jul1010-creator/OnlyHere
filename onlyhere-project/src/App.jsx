@@ -164,7 +164,8 @@ import { buildChatReport, chatReportFilename } from "./utils/chatReport";
 import { openingThread, withTestBrief, withoutTestBrief, loadThread, saveThread, clearThread } from "./utils/chatThread";
 import { downloadReport } from "./utils/previewReport";
 import { briefThemes , essentialsForTrip, essentialsBlock, fitsBrief, preferenceRowState, PREF_READY, PREF_NO_ACCOUNT } from "./utils/interestFit";
-import { partnerDisclosure, linkLabel } from "./utils/affiliates";
+import { partnerDisclosure, linkLabel, affiliateHref } from "./utils/affiliates";
+import { sweepPlan, describeSweepPlan, ticketProposal, describeTicketFindings, affiliateWriteFor, agentLabel, FOUND as AFF_FOUND, RESWEEP_DAYS } from "./utils/affiliateSweep";
 // ── "SOME THINGS ARE ESSENTIALS WHILE OTHERS ARE TIPS" ──────────────
 // Oliver, 30 Aug 2026. See utils/essentialKind.js: the categories were never
 // the problem, two documents sharing one list were.
@@ -174,7 +175,7 @@ import { essentialsOnly, tipsOnly, categoriesPresent, linksOf, isMerged, tabForE
 // out of the CATEGORY NAME: the attractions pool's Studio type is called
 // `free`, it used to mean it, and it holds Legoland now. See utils/entryPrice.js
 // for the whole argument; nothing in that file may read a type.
-import { entryPrice, entryBooking, priceChip, entryKindLabel } from "./utils/entryPrice";
+import { entryPrice, entryBooking, priceChip, entryKindLabel, TYPES_WITH_A_DOOR } from "./utils/entryPrice";
 // ── "HIGH-END" AND "CASUAL" ─────────────────────────────────────────
 // Oliver, 27 Aug 2026, relaying his friend. The axis every nightlife row was
 // missing: the fields all say what FORMAT a place is, none says what REGISTER.
@@ -381,13 +382,10 @@ const PLACE_TYPES_WITH_A_JOURNEY = CONTENT_TYPES.filter(t => t !== "essential");
 // asserted against CONTENT_TYPES so a new type has to be classified.
 const PLACES_THAT_ARE_ONE_BUSINESS = ["free", "booking", "food", "night"];
 
-// ── WHICH TYPES CHARGE AT A DOOR ────────────────────────────────────
-// A festival, an attraction and a workshop have one gate and one admission
-// price. A restaurant, a food street, a bar, a bar street, a town and a
-// nightlife town do not: their prices are per dish, per pint, per venue, and
-// the cheapest figure on a page is a beer rather than a fare. Every check that
-// reasons about "the ticket price" belongs to this list and nothing else.
-const TYPES_WITH_A_DOOR = ["festival", "free", "booking"];
+// TYPES_WITH_A_DOOR moved to utils/entryPrice.js on 6 Sep 2026 and is imported
+// above. utils/affiliateSweep.js needs the same list to decide which rows an
+// agent could sell a ticket to, and a second hand-written copy is the failure
+// journeyScope.js already has a comment about.
 
 // ── AND WHICH TYPE IS A STREET AND NOTHING ELSE ─────────────────────
 // A bar street is definitionally not a business: the prompt for it opens "This
@@ -7703,8 +7701,12 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
                   // nobody verified. This costs no second Perplexity call: the
                   // check already said which claims are wrong, and whether they
                   // are still there is a string comparison. See correctionLanded.
+                  // The findings themselves, not their text. Stripping the
+                  // label here is what made a merely UNVERIFIED claim come back
+                  // described as one "the checker contradicted", and sent Oliver
+                  // to delete a true sentence about camping hours.
                   const landed = correctionLanded(
-                    inventedRead.findings.map(f => f.text),
+                    inventedRead.findings,
                     beforeCorrection,
                     JSON.stringify(writtenFields(t)),
                   );
@@ -7712,7 +7714,11 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
                   note("Did the correction land", {
                     provider: "claude",
                     detail: "each flagged claim, against the draft that replaced the one it was flagged in",
-                    outcome: landed.survived.length ? "failed" : "ok",
+                    // "failed" only for a CONTRADICTED claim that survived. An
+                    // unverified one surviving is the writer keeping something
+                    // the search could not reach, which is reported rather than
+                    // failed.
+                    outcome: landed.survivedContradicted.length ? "failed" : "ok",
                     used: !landed.survived.length,
                     // NOT SLICED. describeCorrection bounds its own list now, and the 300-character
                     // slice that used to be here cut the message at "so the draft below" —
@@ -8969,6 +8975,21 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   // you want to build". `chosen` is a set of row ids rather than a flag on each
   // proposal, so unticking one cannot mutate the table underneath the person
   // reading it. See utils/undatedSweep.js.
+  // ── THE AFFILIATE SWEEP ───────────────────────────────────────────
+  // Oliver, 6 Sep 2026: "Basically we need an 'affiliate' sweep. So it will
+  // scan through published blogs and our affiliate pages to see links between."
+  //
+  // TWO PRESSES, NOT ONE, and that is the whole design. `affPlan` is free and
+  // says what the searches would cost; `affSweep` is what they came back with.
+  // Every other sweep in this panel is free enough that a single button is
+  // honest. This one spends two Tavily searches a row, so the count comes
+  // first and the spend is a separate, deliberate act. See
+  // utils/affiliateSweep.js.
+  const [affPlan, setAffPlan] = useState(null);            // { plan, summary } | { error }
+  const [affSweep, setAffSweep] = useState(null);          // { list, summary } | { error }
+  const [affRunning, setAffRunning] = useState(null);      // { done, total, name } | null
+  const [affChosen, setAffChosen] = useState(() => new Set());
+  const [affWriting, setAffWriting] = useState(null);      // { done, total, failed[] } | null
   const [waitSweep, setWaitSweep] = useState(null);        // { list, summary } | { error }
   const [waitChosen, setWaitChosen] = useState(() => new Set());
   const [waitWriting, setWaitWriting] = useState(null);    // { done, total, failed[] } | null
@@ -9270,13 +9291,133 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
   // is answered by reading the row: has the last day gone, does the entry's own
   // prose claim it happens again, what year would the next edition fall in. So
   // it costs nothing to run and it can be run as often as he likes.
+  // ── ONE READ, TWO SWEEPS ──────────────────────────────────────────
+  // Both sweeps need the same thing: every published row, with its real
+  // Supabase id. That id is why neither can use manageItems or the merged live
+  // arrays, and sweeps.js says it in one line: "a live item carries
+  // id = 100000 + the row id and PATCHing that number would write to a row that
+  // does not exist or, worse, to the wrong one."
+  const readPublishedRows = async () => {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true&order=id.desc`, { headers: sweepHeaders() });
+    if (!res.ok) return { error: `Could not read the library (${res.status}).` };
+    const rows = await res.json();
+    if (!Array.isArray(rows)) return { error: "The library did not come back as a list." };
+    return { rows };
+  };
+
+  // ── STEP ONE, AND IT COSTS NOTHING ────────────────────────────────
+  //
+  // The classification is free: has this row a link, is that link bookable,
+  // does this type charge at a door at all, was an agent asked recently. Only
+  // what is left after all four gets a search, and this is where he sees how
+  // many that is before deciding.
+  const planAffiliateSweep = async () => {
+    setAffPlan(null); setAffSweep(null); setAffChosen(new Set()); setAffWriting(null);
+    try {
+      const got = await readPublishedRows();
+      if (got.error) { setAffPlan({ error: got.error }); return; }
+      // affiliateHref is passed in rather than imported inside the module, the
+      // same injection affiliateAudit uses, so "earning" here and "earning" in
+      // the panel above can never mean two different things.
+      const plan = sweepPlan(got.rows, { today: new Date(), wrap: affiliateHref });
+      // The rows are kept beside the plan because a proposal is built from the
+      // PAYLOAD and the plan holds only the classification. Re-reading the
+      // library between the two presses would sweep a different set than the
+      // one he priced.
+      setAffPlan({ plan, rows: got.rows, summary: describeSweepPlan(plan) });
+    } catch (err) {
+      setAffPlan({ error: String(err?.message || err).slice(0, 200) });
+    }
+  };
+
+  // ── STEP TWO, WHICH IS THE ONE THAT SPENDS ────────────────────────
+  //
+  // Serial and paced, like every other loop in this panel. A burst of two
+  // hundred searches is how a rate limit turns a sweep into a mess, and the
+  // progress line names the row being asked about so a slow run is legible
+  // rather than merely slow.
+  const runAffiliateSweep = async () => {
+    const rows = affPlan?.plan?.searchable || [];
+    const byId = new Map((affPlan?.rows || []).map(r => [r.id, r]));
+    if (!rows.length) return;
+    setAffSweep(null); setAffChosen(new Set()); setAffRunning({ done: 0, total: rows.length, name: "" });
+    const list = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = byId.get(rows[i].id);
+      setAffRunning({ done: i, total: rows.length, name: rows[i].name });
+      const name = rows[i].name;
+      const town = rows[i].town || "";
+      const results = [];
+      for (const q of ticketQueries(name, town)) {
+        try {
+          const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+          const data = await res.json();
+          if (!res.ok || data.error) continue;
+          for (const r of data.results || []) results.push({ url: r.url, snippet: `${r.title || ""} ${r.snippet || r.content || ""}` });
+          // Stop at the first query that yields something this gate would take.
+          // The second search is only worth paying for when the first found
+          // nothing usable, which is the same order the draft pipeline uses.
+          if (pickTicketUrl(results, { name, town })) break;
+        } catch { /* one query failing is not a reason to lose the sweep */ }
+        await new Promise(r => setTimeout(r, 150));
+      }
+      if (row) list.push(ticketProposal(row, results, { today: new Date() }));
+      setAffRunning({ done: i + 1, total: rows.length, name });
+    }
+    setAffRunning(null);
+    setAffSweep({ list, summary: describeTicketFindings(list) });
+    // Pre-ticked, same call the waiting sweep makes: the found ones are the
+    // answer to the question he pressed the button to ask, and making him tick
+    // them to get what he paid for is ceremony rather than review.
+    setAffChosen(new Set(list.filter(p => p.verdict === AFF_FOUND).map(p => p.id)));
+  };
+
+  // ── AND THE WRITE, WHICH INCLUDES THE NOES ────────────────────────
+  //
+  // A row where no agent had anything is written too, with __ticketSweep
+  // stamped and nothing else changed. That stamp is what stops the next run
+  // paying for the same no, and leaving it off would make this sweep expensive
+  // forever. It is the only sweep in this panel that writes a row it did not
+  // find an answer for, so it says so on the button.
+  const applyAffiliateSweep = async () => {
+    const found = (affSweep?.list || []).filter(p => p.verdict === AFF_FOUND && affChosen.has(p.id));
+    const noes = (affSweep?.list || []).filter(p => p.verdict !== AFF_FOUND);
+    const list = [...found, ...noes];
+    if (!list.length) return;
+    setAffWriting({ done: 0, total: list.length, failed: [] });
+    const failed = [];
+    for (let i = 0; i < list.length; i++) {
+      const w = affiliateWriteFor(list[i]);
+      try {
+        // PAYLOAD ONLY. This sweep changes what a row links to, never what a
+        // row IS, so no type is sent and a whole class of mistake cannot be
+        // made here.
+        const attempt = (token) => fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${encodeURIComponent(String(w.id))}`, {
+          method: "PATCH",
+          headers: { ...sweepHeaders(), "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify({ payload: w.payload }),
+        });
+        let res = await attempt(studioSession?.access_token);
+        if (res.status === 401) { const fresh = await refreshStudioSession(); if (fresh) res = await attempt(fresh.access_token); }
+        if (!res.ok) failed.push(`${list[i].name}: ${res.status}`);
+      } catch (err) { failed.push(`${list[i].name}: ${String(err?.message || err).slice(0, 60)}`); }
+      setAffWriting({ done: i + 1, total: list.length, failed: [...failed] });
+      await new Promise(r => setTimeout(r, 200));
+    }
+    if (failed.length < list.length) { await refreshLiveContent(); bumpLiveContent(v => v + 1); }
+    // Counted off the failures rather than off the intent, because a toast
+    // saying nine landed when two 409'd is the one line he would believe.
+    const lost = found.filter(x => failed.some(f => f.startsWith(`${x.name}:`))).length;
+    const added = found.length - lost;
+    showToast(`🎫 ${added} ticket link${added === 1 ? "" : "s"} added${noes.length ? `, ${noes.length} stamped as asked` : ""}`, 3200);
+  };
+
   const runWaitingSweep = async () => {
     setWaitSweep(null); setWaitWriting(null); setWaitChosen(new Set());
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true&order=id.desc`, { headers: sweepHeaders() });
-      if (!res.ok) { setWaitSweep({ error: `Could not read the library (${res.status}).` }); return; }
-      const rows = await res.json();
-      if (!Array.isArray(rows)) { setWaitSweep({ error: "The library did not come back as a list." }); return; }
+      const got = await readPublishedRows();
+      if (got.error) { setWaitSweep({ error: got.error }); return; }
+      const rows = got.rows;
       const today = new Date();
       const list = waitingProposals(rows, today);
       setWaitSweep({ list, summary: describeProposals(list, today) });
@@ -17849,6 +17990,111 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         fetching: a panel that re-queries would be answering
                         about a different set than the one being managed. */}
                     {Array.isArray(manageItems) && <AffiliatePanel rows={manageItems} />}
+
+                    {/* ── THE AFFILIATE SWEEP ────────────────────────
+                        Oliver, 6 Sep 2026: "We're now missing alot of
+                        affiliates on things that could have had.. Basically we
+                        need an 'affiliate' sweep. So it will scan through
+                        published blogs and our affiliate pages to see links
+                        between."
+
+                        The panel above COUNTS what reaches an affiliate. This
+                        goes and gets the ones that should and do not. Both read
+                        the same judgement out of utils/ticketLink.js, so a row
+                        this finds is a row that panel will call earning.
+
+                        TWO BUTTONS ON PURPOSE. Every other sweep in this column
+                        is free and a single button is honest about that. This
+                        one spends two searches a row, so the count comes first
+                        and the spend is a separate press. See
+                        utils/affiliateSweep.js. */}
+                    <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>🎫 Rows that could be earning</div>
+                          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                            Asks Tiqets and Ticketmaster whether they sell a ticket to each published place that charges at a door and has no link. Counting is free. Nothing is written until you have read the table.
+                          </div>
+                        </div>
+                        <button onClick={planAffiliateSweep} disabled={!!affRunning || !!affWriting}
+                          style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                          Count them
+                        </button>
+                      </div>
+
+                      {affPlan?.error && <div style={{ fontSize: 11.5, color: "#FFB347" }}>{affPlan.error}</div>}
+                      {affPlan?.summary && <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{affPlan.summary}</div>}
+
+                      {/* THE SPEND, NAMED BEFORE IT HAPPENS. The button says how
+                          many searches it is about to run, because a button
+                          reading "Run" over an unnamed number of paid calls is
+                          the thing this whole panel is trying not to be. */}
+                      {affPlan?.plan?.searchable?.length > 0 && !affSweep && (
+                        <button onClick={runAffiliateSweep} disabled={!!affRunning}
+                          style={{ background: affRunning ? "none" : C.gold, border: `1px solid ${C.gold}`, color: affRunning ? C.muted : C.onGold, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: affRunning ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          {affRunning
+                            ? `Asking ${affRunning.done}/${affRunning.total}${affRunning.name ? ` · ${affRunning.name}` : ""}…`
+                            : `Ask the agents about ${affPlan.plan.searchable.length} ${affPlan.plan.searchable.length === 1 ? "row" : "rows"}`}
+                        </button>
+                      )}
+
+                      {affSweep?.summary && <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.6, margin: "10px 0" }}>{affSweep.summary}</div>}
+
+                      {affSweep?.list?.length > 0 && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                          {affSweep.list.map(p => {
+                            const canAdd = p.verdict === AFF_FOUND;
+                            const on = canAdd && affChosen.has(p.id);
+                            return (
+                              <div key={p.id} style={{ background: C.bg, border: `1px solid ${on ? `${C.gold}55` : C.border}`, borderRadius: 10, padding: "9px 11px" }}>
+                                <div style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                                  {/* A row nobody sells a ticket to has no tick
+                                      rather than a disabled one: an
+                                      unanswerable row is reported, never
+                                      offered. Same rule as the waiting sweep. */}
+                                  {canAdd ? (
+                                    <input type="checkbox" checked={on} disabled={!!affWriting}
+                                      onChange={() => setAffChosen(prev => { const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; })}
+                                      style={{ marginTop: 3, accentColor: C.gold, cursor: "pointer" }} />
+                                  ) : <span style={{ width: 13, flexShrink: 0 }} />}
+                                  <div style={{ minWidth: 0, flex: 1 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 700, color: canAdd ? C.text : C.muted }}>
+                                      {p.name}
+                                      {p.agent && <span style={{ fontWeight: 500, color: C.muted }}> · {agentLabel(p.agent)}</span>}
+                                    </div>
+                                    <div style={{ fontSize: 10.8, color: C.muted, marginTop: 3, lineHeight: 1.55 }}>{p.why}</div>
+                                    {/* THE URL ITSELF, not a domain. What you
+                                        review is what you publish, and the half
+                                        of this that can be wrong is which page
+                                        it is, which only the full link shows. */}
+                                    {canAdd && <div style={{ fontSize: 10.5, color: C.gold, marginTop: 4, lineHeight: 1.5, wordBreak: "break-all" }}>{p.url}</div>}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+                            <button onClick={applyAffiliateSweep} disabled={!!affWriting}
+                              style={{ background: C.gold, border: `1px solid ${C.gold}`, color: C.onGold, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                              {affWriting ? `Writing ${affWriting.done}/${affWriting.total}…` : `Add ${affChosen.size} link${affChosen.size === 1 ? "" : "s"}`}
+                            </button>
+                            {/* Said out loud, because it is the one thing on
+                                this panel that writes a row it found no answer
+                                for, and a reader of the button alone would not
+                                know. The stamp is what stops the next run
+                                paying for the same no. */}
+                            {affSweep.list.some(p => p.verdict !== AFF_FOUND) && (
+                              <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5 }}>
+                                {affSweep.list.filter(p => p.verdict !== AFF_FOUND).length} with no agent page are stamped as asked either way, so the next sweep skips them for {RESWEEP_DAYS} days.
+                              </div>
+                            )}
+                            {affWriting?.failed?.length > 0 && (
+                              <div style={{ fontSize: 10.5, color: "#FFB347" }}>{affWriting.failed.length} failed: {affWriting.failed.slice(0, 3).join("; ")}</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
                     <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: geoFixState ? 10 : 0 }}>

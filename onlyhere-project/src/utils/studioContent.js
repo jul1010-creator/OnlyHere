@@ -547,6 +547,25 @@ export const shapeForLive = (type, t) => {
   // this line is actually asking, and it still refuses a front page, a search
   // and a category listing, which is the whole reason the check exists.
   if (isBookableTicketUrl(t?.ticketUrl)) out = { ...out, ticketUrl: String(t.ticketUrl).trim() };
+  // ── AND WHEN AN AGENT WAS LAST ASKED ABOUT THIS ROW ───────────────
+  //
+  // utils/affiliateSweep.js, 6 Sep 2026. sweeps.js's fifth rule is that a sweep
+  // may only write a field this function already carries, so the stamp it
+  // writes is declared here in the same commit rather than discovered missing
+  // three weeks later when a row is redrafted. That is bug #2 from 8 August and
+  // it has a long fuse.
+  //
+  // WHY IT IS STORED AT ALL. "No agent sells a ticket to this" costs two
+  // searches to establish and is worth exactly as much the second time. Without
+  // the stamp the sweep re-pays for every no, every run, forever.
+  //
+  // AND WHY THE DATE IS THE POINT. It is a fact about today: a festival with no
+  // listing has one the week tickets go on sale. affiliateSweep re-asks after
+  // RESWEEP_DAYS, so an old stamp costs a search rather than a wrong answer,
+  // which is the right way round for this to be wrong.
+  if (t?.__ticketSweep?.at) {
+    out = { ...out, __ticketSweep: { at: String(t.__ticketSweep.at), found: !!t.__ticketSweep.found, ...(t.__ticketSweep.url ? { url: String(t.__ticketSweep.url) } : {}) } };
+  }
   // ── WHAT LANGUAGE THE THING ITSELF RUNS IN ────────────────────────
   // Oliver, 15 Aug 2026: "I wonder if we should make people aware that an event
   // might have a great language barrier." Carried on the same terms as __hours

@@ -114,6 +114,8 @@ writeFileSync(entry, `
   export { statedMonths, statedSpan, dateClaimProblems, MONTH_NAMES } from ${JSON.stringify(join(root, "src/utils/dateClaims.js"))};
   export { avatarUrl, avatarFromUser } from ${JSON.stringify(join(root, "src/utils/accountAvatar.js"))};
   export { isFinished, candidates, proposeWaiting, proposals as waitProposals, describeProposals, writeFor, MOVE as WAIT_MOVE, LEAVE as WAIT_LEAVE } from ${JSON.stringify(join(root, "src/utils/undatedSweep.js"))};
+  export { SWEEP_STATE, RESWEEP_DAYS, sweptAt, askedRecently, hasADoor as rowHasADoor, rowState, rowStates, sweepPlan, describeSweepPlan, ticketProposal, describeTicketFindings, affiliateWriteFor, FOUND as AFF_FOUND, NOTHING as AFF_NOTHING } from ${JSON.stringify(join(root, "src/utils/affiliateSweep.js"))};
+  export { TYPES_WITH_A_DOOR } from ${JSON.stringify(join(root, "src/utils/entryPrice.js"))};
   export { WAITING_TYPE, recurrenceIn, waitingReason, waitingPayload, waitingLine, waitingDays, waitingOrder, promoted, isWaiting, prose, lastRunWords, CAN_WAIT, HAS_DATE, NO_EVIDENCE, NEGATION_WINDOW } from ${JSON.stringify(join(root, "src/utils/undatedEvents.js"))};
   export { CONFIRMED, readFactCheck as readFC, describeFactCheck as describeFC } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { briefBlock as briefBlockC } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
@@ -22519,6 +22521,56 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     correctionLanded(researchQuote, BEFORE, FIXED).gone, 0);
   is("no findings means nothing to say", describeCorrection(correctionLanded([], BEFORE, FIXED)), "");
 
+  // ── AND WHICH KIND OF FINDING SURVIVED, 6 SEP 2026 ──────────────
+  //
+  // Oliver, on a live entry this told him to fix: "'Camping itself opens
+  // Thursday at 10:00' searched it up.. it's true though." He is right, and the
+  // run that flagged it says why in its own numbers: seven claims flagged, ONE
+  // contradicted and SIX unverified. correctionLanded was handed a flat list of
+  // strings, so the survivor came back with no kind attached and the message
+  // called it "a claim the checker contradicted" on a six-in-seven chance that
+  // it was not.
+  //
+  // CONTRADICTED means a page said otherwise. UNVERIFIED means the search did
+  // not find it, and journey.js already has the sentence for that: "A search
+  // that came back with no festivals is a fact about the search."
+  {
+    const KEPT = 'UNVERIFIED: "Camping itself opens Thursday at 10:00" in realityCheck.';
+    const HARD = 'CONTRADICTED: the site says the ticket is 327 DKK, not the 2,600 DKK in the draft.';
+    const drafted = JSON.stringify({ realityCheck: "Camping itself opens Thursday at 10:00.", price: "2,600 DKK" });
+
+    const soft = describeCorrection(correctionLanded(
+      [{ label: "UNVERIFIED", text: KEPT }], drafted, drafted));
+    // ── AND IT HAS TO SAY SOMETHING TO NOT SAY THAT ──────────────
+    // Found by mutation: as a bare negative this passed on an EMPTY message,
+    // because "" does not contain "DID NOT LAND" either. A negative assertion
+    // needs proof the thing exists at all, or emptying the branch it guards
+    // looks like success.
+    ok("an unverified claim that survives is not called a failure",
+       soft.length > 0 && !/DID NOT LAND/.test(soft));
+    ok("it says what unverified actually means", /a fact about the search, not about the claim/.test(soft));
+    ok("and does not tell him to delete it", /not a reason to delete a sentence that may well be right/.test(soft));
+
+    const hard = describeCorrection(correctionLanded(
+      [{ label: "CONTRADICTED", text: HARD }], drafted, drafted));
+    ok("a contradicted claim that survives still is", /DID NOT LAND/.test(hard));
+    ok("and still says a page disagreed", /A page said otherwise/.test(hard));
+
+    // Both at once: the two counts are separate, so neither hides the other.
+    const both = correctionLanded(
+      [{ label: "CONTRADICTED", text: HARD }, { label: "UNVERIFIED", text: KEPT }], drafted, drafted);
+    is("the two kinds are counted apart",
+       [both.survivedContradicted.length, both.survivedUnverified.length], [1, 1]);
+    ok("and both are reported", /DID NOT LAND/.test(describeCorrection(both)) && /fact about the search/.test(describeCorrection(both)));
+
+    // ── AN UNKNOWN LABEL IS THE SERIOUS ONE ───────────────────────
+    // A caller passing bare strings tells us nothing about kind, and silently
+    // softening a real contradiction into "worth a look" is the direction that
+    // gets a wrong fact published.
+    ok("a finding with no label is treated as contradicted",
+       /DID NOT LAND/.test(describeCorrection(correctionLanded([HARD], drafted, drafted))));
+  }
+
   // ── AND ALL FOUR ARE WIRED ──────────────────────────────────────
   ok("the gate asks whether the sources cover the subject",
     /const fit = sourceFit\(t\.__sources, \{ type: sType, saidByUrl: urlSaidWhat \}\)/.test(appG));
@@ -22531,7 +22583,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // check computed and thrown away, which is the third time today an assertion
   // proved a call existed without proving anything came of it.
   ok("and what it finds reaches him", /noteToFounder\(describeCorrection\(landed\)\)/.test(appG));
-  ok("and the run log too", /outcome: landed\.survived\.length \? "failed" : "ok"/.test(appG));
+  // ── AND "FAILED" MEANS THE SERIOUS KIND ─────────────────────────
+  // 6 Sep 2026. This read `landed.survived.length`, so a claim the check merely
+  // could not VERIFY marked the step failed and printed "the checker
+  // contradicted" over it. Oliver went and looked one of those up: "'Camping
+  // itself opens Thursday at 10:00' searched it up.. it's true though." The run
+  // that flagged it says so in its own numbers, 1 contradicted and 6 unverified.
+  ok("and the run log too", /outcome: landed\.survivedContradicted\.length \? "failed" : "ok"/.test(appG));
+  // The label has to reach it, or the split above has nothing to split on. The
+  // caller mapped the findings to their text one line before it mattered.
+  ok("with the labels still attached", /const landed = correctionLanded\(\n                    inventedRead\.findings,/.test(appG));
   ok("using the draft as it was before the rewrite", /const beforeCorrection = JSON\.stringify\(writtenFields\(t\)\);/.test(appG));
   // noteToFounder is read by the glance stage now, which sits ABOVE where it used
   // to be declared. A const arrow read before its declaration is a ReferenceError
@@ -39886,10 +39947,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // answer were two hand-written lists of one idea, and only one existed.
     ok("the price hunt is no longer festivals only",
       /HUNTS_FOR_A_PRICE = TYPES_WITH_A_DOOR\.filter/.test(app));
+    // 6 Sep 2026: the list moved to entryPrice.js so utils/affiliateSweep.js
+    // could read the same one. Asserted where it now lives, and asserted as
+    // ABSENT here, because a second declaration in App.jsx is the failure this
+    // pair exists to catch.
+    const priceS = stripComments(readFileSync(join(root, "src/utils/entryPrice.js"), "utf8"));
     ok("and the door list is the one both of them read",
-      /const TYPES_WITH_A_DOOR = \["festival", "free", "booking"\];/.test(app));
+      /export const TYPES_WITH_A_DOOR = \["festival", "free", "booking"\];/.test(priceS)
+      && !/const TYPES_WITH_A_DOOR = /.test(app));
     ok("a town, a street and a bar are not on it",
-      !/TYPES_WITH_A_DOOR = \[[^\]]*(?:"town"|"nightStreet"|"foodStreet"|"night"|"food")/.test(app));
+      !/TYPES_WITH_A_DOOR = \[[^\]]*(?:"town"|"nightStreet"|"foodStreet"|"night"|"food")/.test(priceS));
     ok("and still only runs when nothing read so far prices it",
       /needHunt = HUNTS_FOR_A_PRICE\.includes\(sType\) && !pricesAdmission\(priced\)/.test(app));
     // COSTS NOTHING ON A GENUINELY FREE ATTRACTION: ticketPriceOn returns
@@ -46626,11 +46693,20 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // about cost, and it broke on the first comment written between them.
     // The claim is "one request, no model calls", so the function body is
     // sliced out and both halves are asked of it directly.
-    const runBody = appS.slice(appS.indexOf("const runWaitingSweep = async () => {"),
-                               appS.indexOf("const applyWaitingSweep = async () => {"));
-    ok("the sweep reader is findable", runBody.length > 200);
+    // ── THE READ MOVED, THE CLAIM DID NOT ────────────────────────
+    //
+    // 6 Sep 2026: the affiliate sweep needs the same library read, with the
+    // same real Supabase ids, so the fetch was lifted into readPublishedRows
+    // rather than typed a second time. The claim under test is unchanged, "one
+    // request, no model calls", so it is asked of the pair.
+    const readBody = appS.slice(appS.indexOf("const readPublishedRows = async () => {"),
+                                appS.indexOf("const planAffiliateSweep = async () => {"));
+    const runBody = readBody + appS.slice(appS.indexOf("const runWaitingSweep = async () => {"),
+                                          appS.indexOf("const applyWaitingSweep = async () => {"));
+    ok("the sweep reader is findable", readBody.length > 100 && runBody.length > 300);
     is("it makes exactly one request", (runBody.match(/await fetch\(/g) || []).length, 1);
-    ok("and that request is the library", /gemlyx_content\?select=id,type,payload&published=eq\.true/.test(runBody));
+    ok("and that request is the library", /gemlyx_content\?select=id,type,payload&published=eq\.true/.test(readBody));
+    ok("and the waiting sweep goes through it", /await readPublishedRows\(\)/.test(runBody));
     ok("the proposals come from the pure reader", /waitingProposals\(rows, today\)/.test(runBody));
     // The half that makes "free" true. Any of these in here and the button
     // would be spending money it does not warn about.
@@ -46657,6 +46733,266 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and the row changes arrays without a reload", /removeLiveRow\(Number\(w\.id\), "festival"\)/.test(appS));
     // A row that cannot be answered is reported, never offered.
     ok("an unanswerable row has no tick at all", /canMove \? \([\s\S]{0,300}?<input type="checkbox"/.test(appS));
+  }
+}
+
+// ── THE AFFILIATE SWEEP, 6 SEP 2026 ─────────────────────────────────
+//
+// Oliver: "We're now missing alot of affiliates on things that could have
+// had.. Basically we need an 'affiliate' sweep. So it will scan through
+// published blogs and our affiliate pages to see links between."
+//
+// The cause is dated, not structural. A published row gets a ticket link from
+// __ticket.url, which the Ticketmaster API match has stamped since 13 August,
+// or from ticketUrl, which the pipeline writes. The step that ASKS Tiqets was
+// added on 3 September, so every row published before that has never had the
+// question put to it, and nothing re-asks a published row. Tivoli and Legoland
+// are both on Tiqets and both link to nothing.
+//
+// It is not the gate refusing them: a real Tiqets venue id and a real product
+// id both pass pickTicketUrl. Nobody ran the search.
+{
+  const { SWEEP_STATE, RESWEEP_DAYS, sweptAt, askedRecently, rowHasADoor, rowState,
+          sweepPlan, describeSweepPlan, ticketProposal, describeTicketFindings,
+          affiliateWriteFor, AFF_FOUND, AFF_NOTHING, TYPES_WITH_A_DOOR, affiliateHref } = M;
+  const SEP = new Date(2026, 8, 6);
+  const TIVOLI = "https://www.tiqets.com/en/copenhagen-attractions-c66144/tickets-for-tivoli-gardens-l178305/";
+  const LEGO = "https://www.tiqets.com/en/billund-attractions-c123/tickets-for-legoland-billund-p974091/";
+  const CATEGORY = "https://www.tiqets.com/en/copenhagen-attractions-c66144/";
+  const row = (id, type, payload) => ({ id, type, payload });
+
+  // ── WHICH ROWS AN AGENT COULD EVEN SELL A TICKET TO ─────────────
+  //
+  // TYPES_WITH_A_DOOR, imported from entryPrice.js rather than restated, which
+  // is the whole reason it left App.jsx. journeyScope.js already has the
+  // comment about what a hand-written second copy does.
+  ok("an attraction has a door", rowHasADoor({ type: "free" }));
+  ok("so does a festival", rowHasADoor({ type: "festival" }));
+  ok("and a workshop", rowHasADoor({ type: "booking" }));
+  ok("a restaurant does not", !rowHasADoor({ type: "food" }));
+  ok("nor a bar street", !rowHasADoor({ type: "nightStreet" }));
+  ok("nor a town", !rowHasADoor({ type: "town" }));
+  // Deliberate, and it is the one that looks like an omission. An event with no
+  // confirmed edition has nothing on sale, so a ticket page found for it is
+  // last year's, and last year's ticket page is the failure ticketLink.js
+  // exists to prevent. It returns the moment the date sweep promotes it back.
+  ok("and an undated event is left out on purpose", !rowHasADoor({ type: "undated" }));
+  is("the list is the one entryPrice publishes", TYPES_WITH_A_DOOR, ["festival", "free", "booking"]);
+
+  // ── THE FREE CLASSIFICATION, WHICH IS RULE 2 ────────────────────
+  //
+  // sweeps.js: "the cheapest resolver that can answer, answers". Everything
+  // below is decided by reading the row, so the paid list is as short as it can
+  // honestly be before a single search is bought.
+  {
+    const st = (r) => rowState(r, { today: SEP, wrap: affiliateHref }).state;
+    is("a row with no link and no stamp is worth paying for",
+       st(row(1, "free", { name: "Tivoli" })), SWEEP_STATE.searchable);
+    is("a row already wrapped is not",
+       st(row(2, "free", { name: "Tivoli", ticketUrl: TIVOLI })), SWEEP_STATE.earning);
+    // A search cannot conjure a template. This row needs config.js, not money.
+    is("a bookable page with no template is not either",
+       rowState(row(3, "free", { name: "X", ticketUrl: TIVOLI }), { today: SEP, wrap: (u) => u }).state,
+       SWEEP_STATE.unwrapped);
+    is("a link the gate refused belongs to the other queue",
+       st(row(4, "free", { name: "X", ticketUrl: CATEGORY })), SWEEP_STATE.refused);
+    is("a restaurant is never asked", st(row(5, "food", { name: "Alma" })), SWEEP_STATE.noDoor);
+    // The Ticketmaster stamp counts as a link, because DetailPage reads it as
+    // one. A row earning through __ticket must not be bought a second answer.
+    is("the Ticketmaster stamp counts as a link",
+       st(row(6, "festival", { name: "Copenhell", __ticket: { url: "https://www.ticketmaster.dk/event/copenhell-2027/1234567" } })),
+       SWEEP_STATE.earning);
+  }
+
+  // ── AND THE STAMP, WHICH IS WHY THIS IS AFFORDABLE TWICE ────────
+  //
+  // "No agent sells a ticket to this" costs two searches to establish and is
+  // worth the same the second time. Without the stamp the sweep re-pays for
+  // every no, every run, forever.
+  {
+    const st = (p) => rowState(row(9, "free", { name: "X", ...p }), { today: SEP, wrap: affiliateHref }).state;
+    is("a fresh no is not asked again", st({ __ticketSweep: { at: "2026-08-01", found: false } }), SWEEP_STATE.asked);
+    // AND WHY IT EXPIRES. "No ticket page" is a fact about today: a festival
+    // with no listing has one the week tickets go on sale. A stamp that never
+    // aged would make this answer no forever, cheaply and wrongly.
+    is("an old one comes back on its own", st({ __ticketSweep: { at: "2026-01-01", found: false } }), SWEEP_STATE.searchable);
+    is("and a stamp nobody can read is not an answer", st({ __ticketSweep: { at: "last summer" } }), SWEEP_STATE.searchable);
+    is("no stamp at all reads as unasked", sweptAt({ name: "X" }), "");
+    ok("the window is a season, not a week", RESWEEP_DAYS >= 60 && RESWEEP_DAYS <= 180);
+    ok("and it is measured, not assumed",
+       askedRecently({ __ticketSweep: { at: "2026-08-01" } }, SEP)
+       && !askedRecently({ __ticketSweep: { at: "2026-01-01" } }, SEP));
+  }
+
+  // ── THE PRICE, SAID BEFORE IT IS SPENT ──────────────────────────
+  {
+    const rows = [
+      row(1, "free", { name: "Tivoli" }),
+      row(2, "free", { name: "Legoland" }),
+      row(3, "free", { name: "Rosenborg", ticketUrl: TIVOLI }),
+      row(4, "food", { name: "Alma" }),
+      row(5, "free", { name: "Asked", __ticketSweep: { at: "2026-08-20", found: false } }),
+    ];
+    const plan = sweepPlan(rows, { today: SEP, wrap: affiliateHref });
+    is("only the unanswered rows are paid for", plan.searchable.map(r => r.id), [1, 2]);
+    is("and the worst case is two searches each", plan.searches.max, 4);
+    // Both numbers, not an average: he is deciding whether to press a button,
+    // and the number that decides that is the worst case.
+    is("with the best case named too", plan.searches.min, 2);
+    const said = describeSweepPlan(plan);
+    ok("the summary names the spend", /2 to 4 searches/.test(said));
+    ok("and separates the rows that have no door from the ones that failed", /do not charge at a door/.test(said));
+    ok("an all-answered library says so instead",
+       /has been asked about recently|either has one or has been asked/.test(
+         describeSweepPlan(sweepPlan([rows[2], rows[4]], { today: SEP, wrap: affiliateHref }))));
+  }
+
+  // ── ONE PROPOSAL ────────────────────────────────────────────────
+  {
+    const tivoli = row(10, "free", { name: "Tivoli Gardens", town: "Copenhagen", desc: "The gardens." });
+    const p = ticketProposal(tivoli, [
+      { url: CATEGORY, snippet: "Copenhagen attractions" },
+      { url: TIVOLI, snippet: "Tivoli Gardens tickets Copenhagen" },
+    ], { today: SEP });
+    is("a bookable page about this place is proposed", p.verdict, AFF_FOUND);
+    is("and it is the product page, not the category", p.url, TIVOLI);
+    is("written onto the row as the plain agent URL", p.payload.ticketUrl, TIVOLI);
+    // Storing a tracked link would freeze today's marker into every row and
+    // mean a migration the day any of it changes. The wrapper runs at render.
+    ok("never a tracked one", !/tp\.media|tpx\.li|evyy/.test(p.payload.ticketUrl));
+    is("the stamp records the answer", [p.payload.__ticketSweep.found, p.payload.__ticketSweep.at], [true, "2026-09-06"]);
+    ok("and nothing else on the row is touched", p.payload.desc === "The gardens." && p.payload.name === "Tivoli Gardens");
+    // THE SAFETY PROPERTY. This sweep changes what a row links to, never what a
+    // row IS, so no type is ever sent and a whole class of mistake cannot be
+    // made by it.
+    const w = affiliateWriteFor(p);
+    ok("the write carries no type at all", !("type" in w));
+    is("and is addressed by the real row id", w.id, 10);
+  }
+  {
+    // The same gate that refuses a category page refuses a bookable page about
+    // somewhere else, and that matters more here than anywhere in the app: a
+    // wrong ticket link is not a weak fact, it is a reader who paid for the
+    // wrong thing.
+    const p = ticketProposal(row(11, "free", { name: "Rosenborg Slot", town: "Copenhagen" }),
+      [{ url: LEGO, snippet: "LEGOLAND Billund Resort entry ticket" }], { today: SEP });
+    is("a bookable page about somewhere else is refused", p.verdict, AFF_NOTHING);
+    ok("and the row is left without a link", !p.payload.ticketUrl);
+    ok("with the stamp saying it was asked", p.payload.__ticketSweep.found === false);
+    ok("and the reason names the case rather than saying nothing found",
+       /none of them is clearly about/.test(p.why));
+  }
+  {
+    const p = ticketProposal(row(12, "festival", { name: "Sebbersund Vikingemarked", town: "Nibe" }),
+      [{ url: CATEGORY, snippet: "Copenhagen attractions" }], { today: SEP });
+    is("category pages alone are nothing", p.verdict, AFF_NOTHING);
+    ok("and it says they sell nothing", /only listings and category pages, which sell nothing/.test(p.why));
+  }
+  {
+    const p = ticketProposal(row(13, "festival", { name: "Bork Vikingemarked", town: "Bork Havn" }), [], { today: SEP });
+    is("no agent page at all is nothing", p.verdict, AFF_NOTHING);
+    ok("and that is reported as a normal answer, not a failure",
+       /sell through their own site|no ticket link is the right answer/.test(p.why));
+  }
+  {
+    const found = ticketProposal(row(14, "free", { name: "Tivoli Gardens", town: "Copenhagen" }),
+      [{ url: TIVOLI, snippet: "Tivoli Gardens tickets" }], { today: SEP });
+    const none = ticketProposal(row(15, "festival", { name: "Nowhere Fest" }), [], { today: SEP });
+    const said = describeTicketFindings([found, none]);
+    ok("the findings count what landed", /1 of 2/.test(said));
+    ok("and name the agent by its name, not its key", /on Tiqets/.test(said) && !/on tiqets/.test(said));
+    ok("an empty run says the noes are stamped",
+       new RegExp(`skips it for ${RESWEEP_DAYS} days`).test(describeTicketFindings([none])));
+  }
+
+  // ── THE PANEL: COUNT, THEN SPEND, THEN WRITE ────────────────────
+  {
+    const appS = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the panel exists", /Rows that could be earning/.test(appS));
+    // TWO PRESSES. Every other sweep in this column is free and one button is
+    // honest about that. This one spends two searches a row.
+    ok("counting is its own press", /onClick=\{planAffiliateSweep\}/.test(appS));
+    ok("spending is another", /onClick=\{runAffiliateSweep\}/.test(appS));
+    ok("and writing is a third", /onClick=\{applyAffiliateSweep\}/.test(appS));
+
+    const planBody = appS.slice(appS.indexOf("const planAffiliateSweep = async () => {"),
+                                appS.indexOf("const runAffiliateSweep = async () => {"));
+    ok("the counter is findable", planBody.length > 200);
+    // The half that makes "counting is free" true. Any of these in here and the
+    // first button would be spending money it does not warn about.
+    ok("counting buys nothing",
+       !/\/api\/search|askPerplexity|askClaude|askOpenAI|firecrawl/i.test(planBody));
+
+    const runBody = appS.slice(appS.indexOf("const runAffiliateSweep = async () => {"),
+                               appS.indexOf("const applyAffiliateSweep = async () => {"));
+    ok("the searcher is findable", runBody.length > 400);
+    ok("and it is the one that asks the agents", /\/api\/search\?q=/.test(runBody));
+    ok("through the queries ticketLink already owns", /ticketQueries\(name, town\)/.test(runBody));
+    // Two queries, and the second is only bought when the first found nothing
+    // this gate would take. Same order the draft pipeline uses.
+    ok("and it stops at the first that answers", /if \(pickTicketUrl\(results, \{ name, town \}\)\) break;/.test(runBody));
+
+    const applyBody = appS.slice(appS.indexOf("const applyAffiliateSweep = async () => {"),
+                                 appS.indexOf("const runWaitingSweep = async () => {"));
+    ok("the writer is findable", applyBody.length > 400);
+    // Found by mutation on the waiting sweep and it applies here word for word:
+    // affChosen.has(p.id) also appears in the checkbox, so the claim about what
+    // gets WRITTEN is asked of the writer.
+    ok("only the ticked links are written", /affChosen\.has\(p\.id\)/.test(applyBody));
+    ok("and only the ones an agent answered for", /p\.verdict === AFF_FOUND/.test(applyBody));
+    // THE SAFETY PROPERTY, asserted where it can be broken. The waiting sweep
+    // sends type and payload together on purpose; this one must never send a
+    // type at all.
+    ok("the PATCH carries the payload and nothing else",
+       /body: JSON\.stringify\(\{ payload: w\.payload \}\)/.test(applyBody));
+    ok("and no type is sent", !/type: /.test(applyBody));
+    // The one sweep in this panel that writes a row it found no answer for.
+    // Leaving the noes off would make it expensive forever.
+    ok("the noes are written too, so the next run is cheap", /const noes = /.test(applyBody) && /\.\.\.found, \.\.\.noes/.test(applyBody));
+    ok("and the panel says so out loud", /stamped as asked either way/.test(appS));
+    // A row nobody sells a ticket to is reported, never offered.
+    ok("an unanswerable row has no tick at all", /canAdd \? \([\s\S]{0,300}?<input type="checkbox"/.test(appS));
+    // What you review is what you publish. The half that can be wrong is WHICH
+    // page it is, and only the full URL shows that.
+    ok("and the whole URL is shown, not a domain", /\{p\.url\}<\/div>/.test(appS));
+
+    // ── sweeps.js RULE FIVE, RUN RATHER THAN READ ────────────────
+    //
+    // "A sweep may only write a field shapeForLive already carries." The first
+    // version of this matched /__ticketSweep/ in the source, and a mutation
+    // proved it worthless: putting `false &&` in front of the branch left the
+    // identifier sitting there and the assertion passing while the stamp was
+    // dropped on every redraft. Same shape as the `if (false && ...)` mutants
+    // the gates caught last night. So the function is CALLED.
+    const shaped = M.shapeForLive("free", {
+      name: "Tivoli Gardens", city: "Copenhagen", type: "Attraction", desc: "d", special: "s",
+      whoFor: "w", realityCheck: "r", thingsToKnow: [],
+      ticketUrl: TIVOLI,
+      __ticketSweep: { at: "2026-09-06", found: true, url: TIVOLI },
+    });
+    is("the ticket link survives a redraft", shaped.ticketUrl, TIVOLI);
+    // OPTIONAL, so a dropped stamp FAILS rather than throws. The mutation that
+    // put `false &&` in front of the branch made this line a TypeError, which
+    // takes the whole suite down and stops every assertion after it running.
+    // A checker that crashes reports one thing; a checker that fails reports
+    // the thing it was asked about.
+    is("and so does the stamp that stops the next sweep re-buying it",
+       [shaped.__ticketSweep?.at, shaped.__ticketSweep?.found], ["2026-09-06", true]);
+    // A no is a stamp with no url on it, and it has to survive too, or the
+    // cheapest half of this sweep is lost on every redraft.
+    const shapedNo = M.shapeForLive("festival", {
+      name: "Bork Vikingemarked", town: "Bork Havn", date: "2027-08-06", desc: "d", special: "s",
+      whoFor: "w", realityCheck: "r", thingsToKnow: [],
+      __ticketSweep: { at: "2026-09-06", found: false },
+    });
+    is("a no survives as a no", shapedNo.__ticketSweep?.found, false);
+    ok("and carries no url it does not have", !shapedNo.__ticketSweep?.url);
+
+    // TYPES_WITH_A_DOOR left App.jsx so the sweep and the price hunt cannot
+    // drift. A second declaration is the failure, so its absence is the test.
+    ok("the door list is imported, not redeclared",
+       /import \{[^}]*TYPES_WITH_A_DOOR[^}]*\} from "\.\/utils\/entryPrice"/.test(appS)
+       && !/const TYPES_WITH_A_DOOR = /.test(appS));
   }
 }
 
