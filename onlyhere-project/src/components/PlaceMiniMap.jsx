@@ -29,7 +29,14 @@ import { C } from "../utils/theme";
 // content type rather than towns alone. Entries published before that have
 // none, so they simply do not appear, which is the same rule as the map itself:
 // no coordinate, no pin, rather than a pin somewhere plausible.
-export const PlaceMiniMap = ({ lat, lon, name, color, neighbours, onOpenNeighbour }) => {
+// ── AND A BRAND WITH SEVERAL ADDRESSES ──────────────────────────────
+//
+// Oliver, 7 Sep 2026: "Bones is an example of a restaurant with multiple
+// locations." One pin on a brand with eight branches is a claim about where you
+// can eat, and it is wrong seven times out of eight. `branches` is the output of
+// branchPoints in utils/branches.js, so a single-address entry passes an empty
+// array and everything below behaves exactly as it did.
+export const PlaceMiniMap = ({ lat, lon, name, color, neighbours, onOpenNeighbour, branches }) => {
   const holderRef = useRef(null);
   const mapRef = useRef(null);
   // ── THE MAP WAS TORN DOWN AND REBUILT ON EVERY PARENT RENDER ──────
@@ -52,7 +59,18 @@ export const PlaceMiniMap = ({ lat, lon, name, color, neighbours, onOpenNeighbou
   openNeighbourRef.current = onOpenNeighbour;
   const neighbourKey = (Array.isArray(neighbours) ? neighbours : [])
     .slice(0, 5).map(n => `${n?.name}@${n?.lat},${n?.lon}`).join("|");
-  const ok = Number.isFinite(Number(lat)) && Number.isFinite(Number(lon)) && (Number(lat) !== 0 || Number(lon) !== 0);
+  // Same by-value dependency the neighbours use, and for the same reason: a
+  // fresh array literal every render would tear the Leaflet instance down and
+  // re-download its tiles on any state change anywhere in the page.
+  const spots = (Array.isArray(branches) ? branches : []).filter(b => Number.isFinite(Number(b?.lat)) && Number.isFinite(Number(b?.lon)));
+  const branchKey = spots.map(b => `${b.label || ""}@${b.lat},${b.lon}`).join("|");
+  const hasOwn = Number.isFinite(Number(lat)) && Number.isFinite(Number(lon)) && (Number(lat) !== 0 || Number(lon) !== 0);
+  // ── A BRANCH LIST IS ENOUGH TO DRAW A MAP ─────────────────────────
+  // The entry's own coordinate can be missing while its branches have theirs,
+  // which is exactly the case that started this: a brand nothing could place at
+  // one address. Centring on the first branch beats rendering nothing.
+  const ok = hasOwn || spots.length > 0;
+  const centre = hasOwn ? { lat: Number(lat), lon: Number(lon) } : (spots[0] ? { lat: Number(spots[0].lat), lon: Number(spots[0].lon) } : null);
 
   useEffect(() => {
     if (!ok || !holderRef.current || mapRef.current) return;
@@ -63,7 +81,7 @@ export const PlaceMiniMap = ({ lat, lon, name, color, neighbours, onOpenNeighbou
       scrollWheelZoom: false,
       dragging: true,
       attributionControl: true,
-    }).setView([Number(lat), Number(lon)], 11);
+    }).setView([centre.lat, centre.lon], 11);
     // The basemap comes from utils/mapTiles.js rather than being written out
     // here — this was one of three verbatim copies of the same URL, maxZoom and
     // attribution. Still "dark": a dark panel is the right answer in Studio and
@@ -90,12 +108,30 @@ export const PlaceMiniMap = ({ lat, lon, name, color, neighbours, onOpenNeighbou
       m.bindTooltip(`${n.name}${n.km != null ? ` · ${n.km < 10 ? n.km.toFixed(1) : Math.round(n.km)} km` : ""}`, { direction: "top", offset: [0, -6], opacity: 0.95 });
       m.on("click", () => openNeighbourRef.current?.(n));
     });
-    L.marker([Number(lat), Number(lon)], { icon: pin, zIndexOffset: 1000 }).addTo(map);
+    // ── EVERY BRANCH, IN THE ENTRY'S OWN COLOUR ──────────────────────
+    // Between the 16px own pin and the 10px neighbour dot, and coloured as this
+    // entry rather than as a neighbour, because that is what they are: the same
+    // place at another address, not a different place nearby.
+    spots.forEach(b => {
+      const dot = L.divIcon({
+        className: "gemlyx-branch-pin",
+        html: `<div style="width:13px;height:13px;border-radius:50%;background:${color || C.gold};border:2px solid #0A0F1E;box-shadow:0 0 0 2px ${(color || C.gold)}44, 0 2px 6px rgba(0,0,0,.55);"></div>`,
+        iconSize: [13, 13], iconAnchor: [6.5, 6.5],
+      });
+      L.marker([Number(b.lat), Number(b.lon)], { icon: dot, title: b.label || name, keyboard: false })
+        .addTo(map)
+        .bindTooltip(b.label || name, { direction: "top", offset: [0, -6], opacity: 0.95 });
+    });
+    if (hasOwn) L.marker([Number(lat), Number(lon)], { icon: pin, zIndexOffset: 1000 }).addTo(map);
     // Fit to everything that is actually on the map, so the neighbours are not
     // sitting off the edge at a fixed zoom 11. Padded, and capped at 11 so a
     // lone entry with no neighbours does not zoom to street level.
-    if (near.length) {
-      map.fitBounds(L.latLngBounds([[Number(lat), Number(lon)], ...near.map(n => [n.lat, n.lon])]).pad(0.28), { maxZoom: 11 });
+    // Branches go in the bounds too, and they are the reason the cap moves: two
+    // branches in one city fit at zoom 11, but Aalborg and Copenhagen do not,
+    // and a map fitted to a country needs to be allowed to zoom out to show it.
+    const extra = [...near.map(n => [n.lat, n.lon]), ...spots.map(b => [Number(b.lat), Number(b.lon)])];
+    if (extra.length) {
+      map.fitBounds(L.latLngBounds([...(hasOwn ? [[Number(lat), Number(lon)]] : []), ...extra]).pad(0.28), { maxZoom: 11 });
     }
     mapRef.current = map;
     // Same settle problem the guide map hit: Leaflet measures its container the
@@ -107,7 +143,7 @@ export const PlaceMiniMap = ({ lat, lon, name, color, neighbours, onOpenNeighbou
     // neighbourKey, not `neighbours`: same neighbours in the same places must
     // not count as a change just because the array is a new object.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ok, lat, lon, color, neighbourKey]);
+  }, [ok, lat, lon, color, neighbourKey, branchKey]);
 
   useEffect(() => () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } }, []);
 
@@ -115,9 +151,14 @@ export const PlaceMiniMap = ({ lat, lon, name, color, neighbours, onOpenNeighbou
   return (
     <div style={{ marginBottom: 22 }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>
-        Where {name} is
+        {spots.length > 1 ? `Where ${name} is, all ${spots.length} of them` : `Where ${name} is`}
       </div>
       <div ref={holderRef} style={{ height: 190, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}` }} />
+      {spots.length > 1 && (
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 7, lineHeight: 1.6 }}>
+          Every branch is marked. Hover or tap a dot for its address.
+        </div>
+      )}
       {Array.isArray(neighbours) && neighbours.length > 0 && (
         <div style={{ fontSize: 11, color: C.muted, marginTop: 7, lineHeight: 1.6 }}>
           The pale dots are other Gemlyx entries nearby. Tap one to open it.

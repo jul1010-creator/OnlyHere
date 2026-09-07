@@ -8,6 +8,7 @@
 import { normaliseTicketStatus } from "./tickets";
 import { cleanKind } from "./essentialKind";
 import { isBookableTicketUrl, ticketUrlSaysElsewhere, ticketUrlIsASubEvent } from "./ticketLink";
+import { cleanBranches } from "./branches";
 import { isWegotripUrl } from "./affiliates";
 import { cleanOffer, offerProblems } from "./offer";
 import { placeCoords } from "./guideEnrichment";
@@ -642,6 +643,27 @@ export const shapeForLive = (type, t) => {
   // which is the truth in both cases: no pin.
   const coord = placeCoords(t);
   if (coord) out = { ...out, __lat: coord.lat, __lon: coord.lon };
+  // ── AND EVERY OTHER ADDRESS THE SAME BRAND HAS ────────────────────
+  //
+  // Oliver, 7 Sep 2026: "Bones is an example of a restaurant with multiple
+  // locations." The food and night branches above declare `location` and
+  // `mapHint` and no `town` at all, so a brand with eight addresses stored one
+  // pin, on whichever branch the geocoder reached first, while its own prose
+  // named the others. Prinsens pizza & grill says "Aalborg, Nørresundby" in
+  // `location` and pins one of the two.
+  //
+  // DECLARED HERE, NOT IN THE TYPE BRANCHES, for the same reason the coordinate
+  // two lines up is: this allow-list has eaten eight fields, and a field added
+  // to the database but not to this function works perfectly until the row is
+  // redrafted and then vanishes without a word. A type that cannot have
+  // branches never carries the key, because the array comes back empty and the
+  // spread does not happen.
+  //
+  // cleanBranches, not the raw value: it is our own column and it has been
+  // through jsonb and a network, and an empty object in there would render as a
+  // blank line and match every lookup. See utils/branches.js.
+  const branches = cleanBranches(t?.branches);
+  if (branches.length) out = { ...out, branches };
   if (journey) out = { ...out, __journey: journey };
   if (corrections.length) out = { ...out, __corrections: corrections };
   // The hero replaces the template path rather than sitting beside it, because

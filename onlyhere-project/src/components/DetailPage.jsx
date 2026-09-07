@@ -20,6 +20,7 @@ import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
 import { bookingUrl, airbnbUrl, STAY_DISCLOSURE, ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote, isWegotripUrl } from "../utils/affiliates";
 import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl } from "../utils/ticketLink";
+import { branchPoints, branchesOf, hasBranches, branchLine, branchLabel } from "../utils/branches";
 import { offerView, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
 import { saveLabel, saveHint, planFromSavedLabel } from "../utils/savedTrip";
 import { HowWeKnow } from "./HowWeKnow";
@@ -885,7 +886,48 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           // over carrying the pool it came from. `row` is the original entry;
           // the rest of the neighbour object is the flattened copy the map draws.
           onOpenNeighbour={(n) => onOpenNearby?.({ ...n.row, _src: n.kind })}
+          branches={branchPoints(item)}
         />
+
+        {/* ── AND EVERY ADDRESS, IN WORDS ─────────────────────────────
+            Oliver, 7 Sep 2026: "Bones is an example of a restaurant with
+            multiple locations." Pins are how you find the nearest one on a map;
+            this is how you find it when you already know your town, which is
+            what a reader planning a day is doing.
+
+            A branch with no coordinate still gets a line here and no pin. It is
+            a real branch: knowing there is a Nørresundby one without knowing
+            where it is beats pretending it does not exist, and it is also the
+            state every branch starts in before anything geocodes it.
+
+            Renders on two branches, never on one. "1 location" under every card
+            in the app is a sentence that says nothing. */}
+        {hasBranches(item) && (
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", marginBottom: 22 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>📍 Where you can go</div>
+            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6, marginBottom: 10 }}>{branchLine(item)}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+              {branchesOf(item).map((b, i) => (
+                <div key={`${b.town}-${b.address}-${i}`} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 13, color: C.text, lineHeight: 1.55, minWidth: 0 }}>
+                    {b.town && <b>{b.town}</b>}
+                    {b.town && b.address ? " · " : ""}
+                    {b.address}
+                    {b.hours && <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>{b.hours}</div>}
+                  </div>
+                  {/* The same destination string the single-address button
+                      below uses, per branch, so "take me there" means the one
+                      the reader picked rather than whichever got geocoded. */}
+                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${item.name} ${branchLabel(b)} Denmark`)}`}
+                    target="_blank" rel="noreferrer"
+                    style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, textDecoration: "none", flexShrink: 0 }}>
+                    Directions ↗
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {kind === "town" && item.highlight && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", marginBottom: 22 }}>

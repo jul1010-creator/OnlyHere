@@ -191,6 +191,7 @@ writeFileSync(entry, `
   export { shuffledOrder, identityOrder, advancePos, factAt, seededRandom, orderFor, nextSeed } from ${JSON.stringify(join(root, "src/utils/factRotation.js"))};
   export { claimConflicts, implausibleWalks, checkable, durationsIn, distancesIn, TOLERANCE, MIN_GAP_MINUTES } from ${JSON.stringify(join(root, "src/utils/claimCheck.js"))};
   export { placeSlug, townPath, findBySlug, slugCollisions, sitemapXml, COUNTRY, ENTRY_KINDS, segForType, kindForSeg, typesForSeg, entryUrlPath, parseEntryUrl, isEntryUrl, entryPathForKind } from ${JSON.stringify(join(root, "src/utils/placeUrl.js"))};
+  export { MAX_BRANCHES, cleanBranch, cleanBranches, branchesOf, hasBranches, branchKey, branchLabel, branchPoints, branchTowns, branchForTown, coordForTown, branchLine, branchCandidates, branchFromCandidate, mergeBranches } from ${JSON.stringify(join(root, "src/utils/branches.js"))};
   export { towns as TOWNS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/towns.js"))};
   export { nightlifeStreets as STREETS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/nightlifeStreets.js"))};
   export { PRICES, startRun, endRun, recordModelCall, recordRequestCall, summarise, averageFor, describe, describeAverage, recentRuns, currentRun, __reset } from ${JSON.stringify(join(root, "src/utils/apiCost.js"))};
@@ -1472,7 +1473,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // The Leaflet map was destroyed and rebuilt on every parent render, because
     // its deps held an array literal and a closure that are new each time.
     const mini = readFileSync(join(root, "src/components/PlaceMiniMap.jsx"), "utf8");
-    ok("the map depends on the neighbours by value", /\}, \[ok, lat, lon, color, neighbourKey\]\);/.test(mini));
+    ok("the map depends on the neighbours by value", /\}, \[ok, lat, lon, color, neighbourKey, branchKey\]\);/.test(mini));
+    // Branches join the same by-value dependency and for the same reason: a
+    // fresh array literal every render would tear the Leaflet instance down and
+    // re-download its tiles on any state change anywhere in the page.
+    ok("and on the branches the same way", /const branchKey = spots\.map\(b => `\$\{b\.label \|\| ""\}@\$\{b\.lat\},\$\{b\.lon\}`\)\.join\("\|"\);/.test(mini));
     ok("and the click handler cannot invalidate it", /openNeighbourRef\.current\?\.\(n\)/.test(mini));
 
     // A component type declared in a render body remounts its whole subtree on
@@ -10685,7 +10690,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // the field that is always undefined it answered false for everything, so
   // every stop in every guide was geocoded whether or not a real coordinate
   // was already on file.
-  ok("the geocode skip reads the real field", /const c = placeCoords\(lookupRealPlace\(n\)\);/.test(stripNonCode(appSrc)));
+  // Now through coordForTown, which asks the branch list for the branch in THIS
+  // stop's town before falling back to the entry's single pin. A brand pinned in
+  // Copenhagen on an Aalborg day used to fail coordFitsTown and get geocoded
+  // from its name, which is the slow way to reach an address the row held.
+  ok("the geocode skip reads the real field", /const c = coordForTown\(real, town\) \|\| placeCoords\(real\);/.test(stripNonCode(appSrc)));
   // AND IT NO LONGER TRUSTS THAT FIELD ON SIGHT. This line decides which stops
   // are sent to Nominatim, so a published row carrying a coordinate about
   // somewhere else used to BLOCK the one step that could have corrected it.
@@ -24914,7 +24923,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // five candidates is the same call at the same price as one. The single result
   // was never a cost decision, it was an assumption that the first hit is right.
   const loc = readFileSync(join(root, "api/places-locate.js"), "utf8");
-  ok("the endpoint asks for five", /maxResultCount: 5/.test(loc));
+  // Five by default, so every caller written before branches existed is
+  // unchanged, and up to twelve for the one that is hunting a chain. Text Search
+  // is billed per REQUEST on this field mask, so the larger ask costs the same.
+  ok("the endpoint asks for five by default", /Number\(limit\) \|\| 5, 1\), 12\)/.test(loc));
+  ok("and passes whatever it settled on", /maxResultCount: want/.test(loc));
   ok("and returns them all", /candidates,/.test(loc));
   ok("with the top hit still where every existing caller reads it",
      /found: true,\s*\n\s*name: p\.displayName\?\.text/.test(loc));
@@ -49757,6 +49770,201 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // it he cannot tell a checker that stopped citing from a tier that stopped
   // running.
   ok("and the panel says how many findings came with a page", /finding\$\{n === 1 \? "" : "s"\} cited a page/.test(appC));
+}
+
+// ── "BONES IS AN EXAMPLE OF A RESTAURANT WITH MULTIPLE LOCATIONS" ───
+//
+// Oliver, 7 Sep 2026, correcting a proposal of mine. I had reported fifteen
+// published venue rows as having "no town and no coordinate" and suggested
+// refusing them at the publish gate. He answered: "The issue with multiple of
+// those, is that they have multiple locations."
+//
+// He was right and the proposal would have deleted correct entries for being
+// correct about something the schema could not hold. Prinsens pizza & grill
+// stores location "Aalborg, Nørresundby" and its own prose names both, while
+// mapHint pins one address. shapeForLive's food and night branches declare
+// `location` and `mapHint` and NO `town` at all, so every restaurant and bar in
+// the app is placed by exactly one coordinate.
+//
+// Shown three shapes he picked one card carrying a list of branches, over one
+// row per branch and over pinning the flagship: it is the only one true about
+// both halves, since the writing is about the brand and the map is about
+// addresses.
+{
+  const { cleanBranch, cleanBranches, branchesOf, hasBranches, branchKey, branchLabel,
+          branchPoints, branchTowns, branchForTown, coordForTown,
+          branchLine, branchCandidates, branchFromCandidate, mergeBranches, MAX_BRANCHES } = M;
+
+  const BONES = {
+    id: 26, name: "Bones", __lat: 57.0488, __lon: 9.9217,
+    branches: [
+      { town: "Aalborg", address: "Bispensgade 21, 9000 Aalborg", lat: 57.0488, lon: 9.9217 },
+      { town: "Nørresundby", address: "Lindholmsvej 69, 9400 Nørresundby", lat: 57.0653, lon: 9.9188 },
+      { town: "København", address: "Vesterbrogade 3, 1620 København", lat: 55.6736, lon: 12.5681 },
+    ],
+  };
+  const SOLO = { id: 32, name: "Catch me Sushi", town: "Aalborg", __lat: 57.0488, __lon: 9.9217, mapHint: "Vesterå 5, 9000 Aalborg" };
+
+  // ── WHAT COMES BACK FROM THE DATABASE IS DATA ───────────────────
+  // Our own column, through jsonb and a network, and a row edited by hand in
+  // the Supabase console is a real thing that happens. An empty object in there
+  // would render as a blank line and match every lookup.
+  is("a branch with neither town nor address is not a branch", cleanBranch({ lat: 57, lon: 9 }), null);
+  is("nor is an empty object", cleanBranch({}), null);
+  is("a town alone is enough", cleanBranch({ town: "Ribe" }), { town: "Ribe", address: "" });
+  is("and an address alone is too", cleanBranch({ address: "Torvet 1" }), { town: "", address: "Torvet 1" });
+  // Number.isFinite rather than truthiness, the rule placeCoords states: 0 is a
+  // real number and a missing coordinate is NaN.
+  ok("a half coordinate is no coordinate", cleanBranch({ town: "Ribe", lat: 55 }).lat === undefined);
+
+  // Deduplicated on town AND address, never either alone. Two branches in one
+  // town is the normal case in Copenhagen, and two towns can share a street
+  // name, which is the fault withoutBeen was found to have in beenThere.js.
+  is("two branches in one town both survive",
+     cleanBranches([{ town: "København", address: "Vesterbrogade 3" }, { town: "København", address: "Gothersgade 8" }]).length, 2);
+  is("the same branch twice does not", cleanBranches([{ town: "Ribe", address: "Torvet 1" }, { town: "ribe", address: "torvet 1" }]).length, 1);
+  is("and the list is capped", cleanBranches(Array.from({ length: 30 }, (_, i) => ({ town: `T${i}`, address: `A${i}` }))).length, MAX_BRANCHES);
+
+  // ── ONE PIN PER BRANCH, AND ONE FOR EVERYBODY ELSE ──────────────
+  //
+  // The fallback is the whole reason this returns a list. An entry with no
+  // branches is not an entry with no location, it is the ordinary case, and it
+  // still has to draw one pin. So every caller can loop without asking which
+  // kind of entry it is holding.
+  is("a brand pins every branch", branchPoints(BONES).length, 3);
+  is("and a single address pins once", branchPoints(SOLO).length, 1);
+  ok("the single pin is the entry's own coordinate", branchPoints(SOLO)[0]?.lat === 57.0488);
+  is("an entry with neither has no pins", branchPoints({ name: "X" }).length, 0);
+  // A branch with no coordinate is still a real branch: it shows in the list on
+  // the page and draws no pin, which is also the state every branch starts in.
+  is("a branch with no coordinate yields no pin",
+     branchPoints({ id: 1, branches: [{ town: "Ribe", address: "Torvet 1" }] }).length, 0);
+  is("but it is still in the list", branchesOf({ branches: [{ town: "Ribe", address: "Torvet 1" }] }).length, 1);
+
+  ok("three branches is a brand", hasBranches(BONES));
+  ok("one is not", !hasBranches({ branches: [{ town: "Ribe" }] }));
+  ok("and neither is none", !hasBranches(SOLO));
+
+  // ── WHICH ONE A GUIDE DAY MEANS ─────────────────────────────────
+  //
+  // The town decides, not the distance, and that is the point. Measuring every
+  // branch from the entry's own pin would compare them against the very
+  // coordinate the branch list exists to correct: a brand pinned in Aalborg, on
+  // a Copenhagen day, would measure from Aalborg and pick Aalborg.
+  is("an Aalborg day gets the Aalborg branch", branchForTown(BONES, "Aalborg")?.address, "Bispensgade 21, 9000 Aalborg");
+  is("a Copenhagen day gets the Copenhagen one", branchForTown(BONES, "København")?.town, "København");
+  // Danish letters fold the way they fold everywhere else in this codebase.
+  is("and the town folds", branchForTown(BONES, "Kobenhavn")?.town, "København");
+  is("a town it is not in answers nothing", branchForTown(BONES, "Ribe"), null);
+  is("and no town answers nothing either", branchForTown(BONES, ""), null);
+
+  // coordForTown falls all the way back, so a single-address entry answers
+  // exactly what placeCoords would have and no caller has to branch.
+  is("a brand answers with the day's branch", coordForTown(BONES, "Nørresundby")?.lat, 57.0653);
+  is("a brand outside that town answers with its own pin", coordForTown(BONES, "Ribe")?.lat, 57.0488);
+  is("and a single-address entry answers with its own", coordForTown(SOLO, "Aalborg")?.lat, 57.0488);
+  is("an entry with no coordinate at all answers nothing", coordForTown({ name: "X" }, "Ribe"), null);
+
+  // Distance only breaks a tie WITHIN a town, for a brand with two in one city.
+  const TWO_IN_CPH = { id: 9, branches: [
+    { town: "København", address: "Vesterbrogade 3", lat: 55.6736, lon: 12.5681 },
+    { town: "København", address: "Østerbrogade 90", lat: 55.7075, lon: 12.5770 },
+  ] };
+  is("the nearer of two in one city wins", branchForTown(TWO_IN_CPH, "København", { lat: 55.71, lon: 12.58 })?.address, "Østerbrogade 90");
+  is("and with nothing to measure from, the first stands", branchForTown(TWO_IN_CPH, "København")?.address, "Vesterbrogade 3");
+
+  // There is no by-distance-alone helper here on purpose. One was written and
+  // this suite caught it exported and called from nowhere, which is the eleventh
+  // time this codebase has found that. Every caller has a town, because a stop
+  // in a guide belongs to a day and a day names one.
+
+  // ── THE KEY, MADE IN ONE PLACE ──────────────────────────────────
+  // The been list, the hours lookup and the map all need to say WHICH branch,
+  // and three callers inventing three keys is the fault this codebase has found
+  // six times over "where is this row".
+  ok("two branches of one brand have different keys",
+     branchKey(BONES, BONES.branches[0]) !== branchKey(BONES, BONES.branches[1]));
+  ok("and two brands in one town do too",
+     branchKey({ id: 1 }, { town: "Aalborg" }) !== branchKey({ id: 2 }, { town: "Aalborg" }));
+  is("the label reads as an address", branchLabel(BONES.branches[1]), "Lindholmsvej 69, 9400 Nørresundby, Nørresundby");
+  is("and a town-only branch reads as its town", branchLabel({ town: "Ribe" }), "Ribe");
+
+  is("the towns a brand is in", branchTowns(BONES), ["Aalborg", "Nørresundby", "København"]);
+  is("and a single-address entry answers with its own", branchTowns(SOLO), ["Aalborg"]);
+
+  // ── THE LINE ON THE PAGE ────────────────────────────────────────
+  // Empty on one branch rather than "1 location", which would be a sentence
+  // added to every card in the app to say nothing.
+  is("one address says nothing", branchLine(SOLO), "");
+  // SOLO has no branches array at all, so it answers on the length-0 path and
+  // never reaches the rule. A mutation survived until this line was here.
+  is("and one branch says nothing either", branchLine({ branches: [{ town: "Ribe", address: "Torvet 1" }] }), "");
+  ok("three in three towns names them", /3 branches, in Aalborg, Nørresundby and København\./.test(branchLine(BONES)));
+  ok("two in one town says so", /2 branches, all in København\./.test(branchLine(TWO_IN_CPH)));
+
+  // ── FINDING THEM RATHER THAN TYPING THEM ────────────────────────
+  //
+  // /api/places-locate has returned `candidates` since 17 August, read by
+  // nothing but the "do you mean.." prompt. A text search for "Bones, Denmark"
+  // returns Bones restaurants AND whatever Google thinks is close enough, so a
+  // candidate whose name does not carry the entry's is shown unticked rather
+  // than dropped: a brand trading under two spellings is real, and ticking
+  // somebody else's restaurant by default would put their address on this page.
+  const found = branchCandidates("Bones", [
+    { name: "Bones Aalborg", address: "Bispensgade 21, 9000 Aalborg", town: "Aalborg", lat: 57.05, lon: 9.92 },
+    { name: "Bones", address: "Vesterbrogade 3, 1620 København", town: "København", lat: 55.67, lon: 12.57 },
+    { name: "Jensens Bøfhus", address: "Nytorv 1, 9000 Aalborg", town: "Aalborg", lat: 57.04, lon: 9.91 },
+  ]);
+  is("all three come back", found.length, 3);
+  ok("the two that carry the name are marked", found[0].matches && found[1].matches);
+  ok("and the one that does not is not", !found[2].matches);
+  // containsName rather than a substring test, for the reason danishNames.js
+  // gives: a short name is inside a great many longer ones.
+  ok("a name is not matched on letters alone",
+     !branchCandidates("Bo", [{ name: "Bones", address: "A", town: "T" }])[0].matches);
+
+  is("a candidate becomes a branch with no lookup fields on it",
+     branchFromCandidate(found[0]), { town: "Aalborg", address: "Bispensgade 21, 9000 Aalborg", lat: 57.05, lon: 9.92 });
+
+  // Additive and order-preserving: a branch typed by hand is not replaced by a
+  // lookup, and running the lookup twice adds nothing twice. Same rule markMany
+  // in beenThere.js follows.
+  const hand = [{ town: "Ribe", address: "Torvet 1" }];
+  is("a hand-typed branch survives a lookup", mergeBranches(hand, [branchFromCandidate(found[0])])[0].town, "Ribe");
+  is("and the found one is added", mergeBranches(hand, [branchFromCandidate(found[0])]).length, 2);
+  is("running it twice adds nothing twice",
+     mergeBranches(mergeBranches(hand, [branchFromCandidate(found[0])]), [branchFromCandidate(found[0])]).length, 2);
+
+  // ── AND EVERYTHING THAT HAS TO KNOW ─────────────────────────────
+  const shapeB = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  const appB = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const detB = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  const mapB = readFileSync(join(root, "src/components/PlaceMiniMap.jsx"), "utf8");
+  const apiB = readFileSync(join(root, "api/places-locate.js"), "utf8");
+
+  // Declared at the bottom of shapeForLive beside the coordinate, not inside a
+  // type branch. That allow-list has eaten eight fields, and a field added to
+  // the database but not to this function works until the row is redrafted.
+  ok("the publish gate carries branches", /const branches = cleanBranches\(t\?\.branches\);/.test(shapeB));
+  ok("and cleans them on the way in", /if \(branches\.length\) out = \{ \.\.\.out, branches \};/.test(shapeB));
+  ok("the entry page lists them", /\{hasBranches\(item\) && \(/.test(detB));
+  ok("with directions per branch", /destination=\$\{encodeURIComponent\(`\$\{item\.name\} \$\{branchLabel\(b\)\} Denmark`\)\}/.test(detB));
+  ok("the map is given them", /branches=\{branchPoints\(item\)\}/.test(detB));
+  ok("and pins each one", /gemlyx-branch-pin/.test(mapB));
+  // A brand's branches can be a hundred km apart, so the fitted bounds have to
+  // be allowed to zoom out past the lone-entry cap.
+  ok("and fits the map around them", /\.\.\.spots\.map\(b => \[Number\(b\.lat\), Number\(b\.lon\)\]\)/.test(mapB));
+  // The entry's own coordinate can be missing while its branches have theirs,
+  // which is exactly the case that started this.
+  ok("and draws at all when only the branches are placed", /const ok = hasOwn \|\| spots\.length > 0;/.test(mapB));
+  ok("the guide asks for the branch in the day's town", /coordForTown\(real, town\) \|\| placeCoords\(real\)/.test(appB));
+  ok("Studio can look them up", /const findBranches = async \(\) => \{/.test(appB));
+  ok("and writes through studioDraftText, which is what Publish reads",
+     /applyBranches[\s\S]{0,800}setStudioDraftText\(JSON\.stringify\(draft, null, 2\)\)/.test(appB));
+  // Text Search is billed per request rather than per result on this field
+  // mask, so twelve costs exactly what five cost.
+  ok("the lookup may ask for more than five", /const want = Math\.min\(Math\.max\(Number\(limit\) \|\| 5, 1\), 12\);/.test(apiB));
+  ok("and every existing caller still gets five", /maxResultCount: want/.test(apiB) && /\|\| 5, 1\)/.test(apiB));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

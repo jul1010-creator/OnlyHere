@@ -57,8 +57,15 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: "This account cannot run Studio research." });
     }
   }
-  const { name } = req.query;
+  const { name, limit } = req.query;
   if (!name) return res.status(400).json({ error: "name required" });
+  // ── AND MORE OF THEM WHEN THE CALLER IS LOOKING FOR BRANCHES ──────
+  // 7 Sep 2026. Text Search is billed per REQUEST on this field mask, so five
+  // and twelve cost the same, and a chain with eight Danish branches cannot be
+  // found five at a time. Defaulted to five so every existing caller is
+  // unchanged, and capped at twelve because that is MAX_BRANCHES in
+  // utils/branches.js and a longer list is a chain nobody needs an entry for.
+  const want = Math.min(Math.max(Number(limit) || 5, 1), 12);
   const key = process.env.GOOGLE_MAPS_KEY;
   if (!key) return res.status(500).json({ error: "GOOGLE_MAPS_KEY not set on the server" });
 
@@ -84,7 +91,7 @@ export default async function handler(req, res) {
       // assumption that the first hit is the right one, and his Heidi's draft is
       // what that assumption costs when it is wrong: a full research pass, 167
       // seconds, on a bar whose name the searches could not match.
-      body: JSON.stringify({ textQuery, languageCode: "da", regionCode: "DK", maxResultCount: 5 }),
+      body: JSON.stringify({ textQuery, languageCode: "da", regionCode: "DK", maxResultCount: want }),
     });
     const data = await r.json();
     if (!r.ok) return res.status(r.status).json({ error: data?.error?.message || "Places text search failed" });

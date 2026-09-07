@@ -130,6 +130,7 @@ import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
 import { journeyParts, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, closedButPlanned, arrivalStop, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
 import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS, urlsIn } from "./utils/correction";
+import { branchesOf, branchCandidates, branchFromCandidate, mergeBranches, branchLabel, branchLine, coordForTown, MAX_BRANCHES } from "./utils/branches";
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance, staleUncertainties, describeStale } from "./utils/glanceExtract";
 import { showsJourney, journeyOriginFor, journeyOriginPoint, IS_THE_CENTRE_KM } from "./utils/journeyScope";
 import { readableOn } from "./utils/readableColor";
@@ -2444,6 +2445,12 @@ function GemlyxApp() {
   // disappears after three seconds.
   const [ticketPaste, setTicketPaste] = useState("");
   const [ticketPasteResult, setTicketPasteResult] = useState(null);
+  // ── BRANCHES ────────────────────────────────────────────────────
+  // Oliver, 7 Sep 2026: "Bones is an example of a restaurant with multiple
+  // locations." null before a lookup has run, so an untouched draft shows the
+  // button and nothing else. See utils/branches.js.
+  const [branchFind, setBranchFind] = useState(null);   // { loading, error, list, chosen:Set }
+  const [branchResult, setBranchResult] = useState(null);
   // ── THE GATE'S SECOND EXIT ────────────────────────────────────────
   // Oliver, 5 Sep 2026: "No, but it should be in a memory." Set by the date
   // gate when a refused festival is one that can honestly wait, holding the
@@ -9162,6 +9169,65 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     setTicketPasteResult(verdict);
   };
 
+  // ── FINDING A BRAND'S OTHER ADDRESSES ─────────────────────────────
+  //
+  // One call to /api/places-locate, which has returned `candidates` since 17
+  // August and was read by nothing but the "do you mean.." prompt. Text Search
+  // is billed per request rather than per result, so asking for twelve costs
+  // exactly what asking for five cost.
+  //
+  // Nothing is written by this. It fills a list of tick boxes, and the ones
+  // whose own name carries the entry's name are ticked for him. See
+  // branchCandidates for why the rest are shown rather than dropped.
+  const findBranches = async () => {
+    let draft;
+    try { draft = JSON.parse(studioDraftText); }
+    catch { setBranchFind({ error: "The draft JSON above is not parseable right now. Fix the JSON first." }); return; }
+    const name = String(draft?.name || "").trim();
+    if (!name) { setBranchFind({ error: "The draft has no name yet, so there is nothing to look up." }); return; }
+    setBranchResult(null);
+    setBranchFind({ loading: true });
+    try {
+      const res = await studioFetch(`/api/places-locate?limit=${MAX_BRANCHES}&name=${encodeURIComponent(name)}`);
+      const data = await res.json();
+      if (data?.error) { setBranchFind({ error: String(data.error) }); return; }
+      const list = branchCandidates(name, data?.candidates);
+      // The tick set is built off the ORIGINAL indices rather than off a
+      // filtered copy, so an unticked row keeps its place in the list instead
+      // of shifting the ones under it.
+      setBranchFind({ list, loading: false, chosen: new Set(list.map((c, i) => (c.matches ? i : -1)).filter(i => i >= 0)) });
+    } catch (e) { setBranchFind({ error: String(e?.message || e) }); }
+  };
+
+  // Additive, for the reason mergeBranches gives: a branch he typed by hand is
+  // not replaced by a lookup, and running the lookup twice adds nothing twice.
+  const applyBranches = () => {
+    let draft;
+    try { draft = JSON.parse(studioDraftText); }
+    catch { setBranchResult({ ok: false, reason: "The draft JSON above is not parseable right now, so nothing was written." }); return; }
+    const picked = (branchFind?.list || []).filter((_, i) => branchFind?.chosen?.has(i)).map(branchFromCandidate).filter(Boolean);
+    if (!picked.length) { setBranchResult({ ok: false, reason: "Nothing was ticked, so nothing was written." }); return; }
+    const before = branchesOf(draft).length;
+    draft.branches = mergeBranches(draft.branches, picked);
+    setStudioDraft(draft);
+    setStudioDraftText(JSON.stringify(draft, null, 2));
+    setDraftEditError(null);
+    setBranchFind(null);
+    const after = draft.branches.length;
+    setBranchResult({ ok: true, count: after, added: after - before, line: branchLine(draft) });
+  };
+
+  const clearBranches = () => {
+    let draft;
+    try { draft = JSON.parse(studioDraftText); }
+    catch { setBranchResult({ ok: false, reason: "The draft JSON above is not parseable right now, so nothing was changed." }); return; }
+    delete draft.branches;
+    setStudioDraft(draft);
+    setStudioDraftText(JSON.stringify(draft, null, 2));
+    setDraftEditError(null);
+    setBranchResult({ ok: false, reason: "Removed. The entry is back to one address, the one its coordinate points at." });
+  };
+
   // Removing one is half of editing one, and it is the action the Chicago link
   // needed. It clears the field rather than writing an empty string, because a
   // key holding "" is a key shapeForLive still has to reason about.
@@ -12373,8 +12439,21 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     // It counts as resolved now only if it also agrees with the town the stop
     // names, so a disagreeing row gets a fresh geocode and, if that disagrees
     // too, an honest town-centre fallback.
+    // ── AND FOR A BRAND, THE BRANCH THIS DAY IS IN ────────────────
+    //
+    // Oliver, 7 Sep 2026: "Bones is an example of a restaurant with multiple
+    // locations." This read the entry's ONE stored coordinate, so a brand
+    // pinned in Copenhagen on an Aalborg day failed coordFitsTown and was sent
+    // to Nominatim to be geocoded from its name, which is the slow way to
+    // arrive at an address the row already held.
+    //
+    // coordForTown asks the branch list for the branch in THIS stop's town and
+    // falls back to the entry's own pin, so a single-address entry answers
+    // exactly what placeCoords answered and nothing else changes. See
+    // utils/branches.js for why the town decides rather than the distance.
     const hasPreciseCoords = (n, town) => {
-      const c = placeCoords(lookupRealPlace(n));
+      const real = lookupRealPlace(n);
+      const c = coordForTown(real, town) || placeCoords(real);
       return !!c && coordFitsTown(c, town).ok;
     };
     const names = [...new Set(days.flatMap(d => d.stops.map(s => s.name)))].filter(n => !hasPreciseCoords(n, townByName[n]));
@@ -19568,6 +19647,108 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           );
                         })()}
                         {draftPhotoError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 8 }}>{draftPhotoError}</div>}
+                        {/* ── WHERE ELSE THIS BRAND IS ────────────────
+                            Oliver, 7 Sep 2026, correcting a proposal of mine to
+                            refuse venue rows with no single town: "The issue
+                            with multiple of those, is that they have multiple
+                            locations." And then: "Bones is an example of a
+                            restaurant with multiple locations."
+
+                            shapeForLive's food and night branches declare
+                            `location` and `mapHint` and no `town` at all, so
+                            every restaurant and bar in the app is placed by one
+                            coordinate. A brand with eight addresses got one pin,
+                            on whichever branch the geocoder reached, while its
+                            own prose named the others.
+
+                            NOTHING NEW IS ASKED OF GOOGLE. /api/places-locate
+                            has returned `candidates` since 17 August, read by
+                            nothing but the "do you mean.." prompt, and Text
+                            Search is billed per request rather than per result,
+                            so twelve costs what five cost. */}
+                        {(() => {
+                          const held = (() => { try { return branchesOf(JSON.parse(studioDraftText)); } catch { return []; } })();
+                          return (
+                            <div style={{ background: C.bg, border: `1px dashed ${C.border}`, borderRadius: 10, padding: "11px 12px", marginBottom: 10 }}>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
+                                <div style={{ fontSize: 11.5, fontWeight: 700, color: C.gold }}>📍 Branches</div>
+                                <div style={{ display: "flex", gap: 7 }}>
+                                  <button onClick={findBranches} disabled={!!branchFind?.loading}
+                                    style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                                    {branchFind?.loading ? "Asking Google…" : "Find branches"}
+                                  </button>
+                                  {held.length > 0 && (
+                                    <button onClick={clearBranches}
+                                      style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                                      Remove
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              <div style={{ fontSize: 10.8, color: C.muted, lineHeight: 1.55 }}>
+                                {held.length > 1
+                                  ? <>On this draft: {held.map(b => branchLabel(b)).join(" · ")}</>
+                                  : "One address, which is right for most entries. Use this when the same brand has several, so the map pins each one and a guide can send somebody to the nearest rather than to whichever got geocoded."}
+                              </div>
+
+                              {branchFind?.error && <div style={{ fontSize: 11, color: "#FFB347", marginTop: 8, lineHeight: 1.55 }}>{branchFind.error}</div>}
+
+                              {Array.isArray(branchFind?.list) && (
+                                <div style={{ marginTop: 9 }}>
+                                  {branchFind.list.length === 0 ? (
+                                    <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.55 }}>Google returned nothing usable for that name. Type the branches into the JSON below as {"{ town, address, lat, lon }"} if you know them.</div>
+                                  ) : (
+                                    <>
+                                      {/* A candidate whose own name does not carry the
+                                          entry's is shown UNTICKED rather than dropped:
+                                          a brand trading under two spellings is real,
+                                          and ticking somebody else's restaurant by
+                                          default would put their address on this page. */}
+                                      <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 7, lineHeight: 1.55 }}>
+                                        {branchFind.list.filter(c => c.matches).length} of {branchFind.list.length} carry this entry's name and are ticked. Read the rest before ticking them: a text search returns what Google thinks is close, not only this brand.
+                                      </div>
+                                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                        {branchFind.list.map((c, i) => (
+                                          <label key={`${c.town}-${c.address}-${i}`} style={{ display: "flex", alignItems: "flex-start", gap: 9, cursor: "pointer" }}>
+                                            <input type="checkbox" checked={branchFind.chosen?.has(i) || false}
+                                              onChange={() => setBranchFind(prev => { const n = new Set(prev.chosen); n.has(i) ? n.delete(i) : n.add(i); return { ...prev, chosen: n }; })}
+                                              style={{ marginTop: 3, accentColor: C.gold, cursor: "pointer" }} />
+                                            <div style={{ minWidth: 0, flex: 1 }}>
+                                              <div style={{ fontSize: 12, fontWeight: 700, color: c.matches ? C.text : C.muted }}>
+                                                {c.found || "(unnamed)"}
+                                                {!c.matches && <span style={{ fontWeight: 500 }}> · does not carry this entry's name</span>}
+                                              </div>
+                                              <div style={{ fontSize: 10.8, color: C.muted, marginTop: 2, lineHeight: 1.5 }}>
+                                                {c.address || "(no address)"}{c.lat == null ? " · no coordinate, so no pin" : ""}
+                                              </div>
+                                            </div>
+                                          </label>
+                                        ))}
+                                      </div>
+                                      <button onClick={applyBranches} disabled={!branchFind.chosen?.size}
+                                        style={{ marginTop: 9, background: branchFind.chosen?.size ? C.gold : "none", border: `1px solid ${C.gold}`, color: branchFind.chosen?.size ? C.onGold : C.muted, borderRadius: 8, padding: "7px 13px", fontSize: 11.5, fontWeight: 700, cursor: branchFind.chosen?.size ? "pointer" : "default", fontFamily: "'Inter', sans-serif" }}>
+                                        Use {branchFind.chosen?.size || 0} as branches
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+
+                              {branchResult && (
+                                <div style={{ marginTop: 9, background: C.surface, border: `1px solid ${branchResult.ok ? `${C.gold}66` : "#FFB34755"}`, borderRadius: 8, padding: "9px 10px" }}>
+                                  <div style={{ fontSize: 11.5, fontWeight: 700, color: branchResult.ok ? C.gold : "#FFB347", marginBottom: 4 }}>
+                                    {branchResult.ok ? `✓ ${branchResult.added} written into the draft, ${branchResult.count} in total` : "Nothing written"}
+                                  </div>
+                                  <div style={{ fontSize: 10.8, color: C.light, lineHeight: 1.6 }}>
+                                    {branchResult.ok
+                                      ? <>The entry page will read: <b>{branchResult.line}</b> and the map will pin every one of them. Check the JSON below before publishing.</>
+                                      : branchResult.reason}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                         {/* ── THE AFFILIATE LINK, BY HAND ──────────────
                             Oliver, 7 Sep 2026, after a Danish nightlife entry
                             published with a Tiqets link to a CHICAGO tour:
