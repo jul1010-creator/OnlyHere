@@ -6910,7 +6910,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // is a reader who paid for something else.
         if (!String(t.ticketUrl || "").trim()) {
           const candidates = Object.keys(pagesByUrl).map(u => ({ url: u, snippet: String(pagesByUrl[u] || "").slice(0, 800) }));
-          const picked = pickTicketUrl(candidates, { name, town: draftTown });
+          const picked = pickTicketUrl(candidates, { name, town: draftTown, where: `${t.location || ""} ${t.mapHint || ""}` });
           if (picked) {
             t.ticketUrl = picked;
             note("The ticket link, off a page already read", {
@@ -7318,7 +7318,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
               // page that is not about this place — which matters more here than
               // anywhere else in this pipeline, because a wrong ticket link is
               // not a weak fact, it is a reader who paid for something else.
-              const found = pickTicketUrl(results, { name, town: draftTown });
+              const found = pickTicketUrl(results, { name, town: draftTown, where: `${t.location || ""} ${t.mapHint || ""}` });
               note(`Ask ${domainOf(q.includes("tiqets") ? "https://tiqets.com" : "https://ticketmaster.dk")} directly`, {
                 provider: "tavily",
                 detail: q.slice(0, 110),
@@ -9159,7 +9159,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     let draft;
     try { draft = JSON.parse(studioDraftText); }
     catch { setTicketPasteResult({ ok: false, reason: "The draft JSON above is not parseable right now, so nothing was written. Fix the JSON first." }); return; }
-    const verdict = reviewPastedTicketUrl(ticketPaste, { name: draft?.name || "", town: draft?.town || draft?.city || "" });
+    const verdict = reviewPastedTicketUrl(ticketPaste, { name: draft?.name || "", town: draft?.town || draft?.city || "", where: `${draft?.location || ""} ${draft?.mapHint || ""}` });
     if (!verdict.ok) { setTicketPasteResult(verdict); return; }
     draft.ticketUrl = verdict.url;
     setStudioDraft(draft);

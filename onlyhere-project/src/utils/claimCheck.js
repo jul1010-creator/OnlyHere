@@ -62,25 +62,68 @@ const num = (a, b) => (b == null ? Number(a) : (Number(a) + Number(b)) / 2);
 const DURATION = /(\d+(?:[.,]\d+)?)\s*(?:to|-|–|—)?\s*(\d+(?:[.,]\d+)?)?\s*(hours?|hrs?|h|minutes?|mins?|min)(?![a-z])/gi;
 const DISTANCE = /(\d+(?:[.,]\d+)?)\s*(?:to|-|–|—)?\s*(\d+(?:[.,]\d+)?)?\s*(kilometres?|kilometers?|km|metres?|meters?|m)\b/gi;
 
+// ── "2h 58m" IS A DURATION AND THIS FILE READ IT AS 58 METRES ───────
+//
+// Oliver, 7 Sep 2026, screenshotting the audit: "fucking annoying.." It read
+//
+//   Redraft now · fantasyfestival: ... time looks too long for the distance:
+//   58 m by transit is about 1 minutes, not 120.
+//
+// travelTime was "2h 58m (direct ICL train)". DURATION has no bare `m` in its
+// alternation, so it matched "2h" and stopped, calling it 120 minutes. DISTANCE
+// ends in \b after a bare `m`, so it matched the "58m" the duration had just
+// walked past and called it fifty-eight metres. One string, split down the
+// middle into a wrong time and a distance that was never written.
+//
+// THE HOURS-AND-MINUTES SHAPE IS ITS OWN THING, matched first and taken whole,
+// and both readers below skip anything inside one. A bare `m` is NOT added to
+// DURATION generally, because "500 m walk" is a real sentence and reading it as
+// five hundred minutes would be this bug pointing the other way. It only counts
+// as minutes when an hours component sits directly in front of it, which is the
+// only place it is unambiguous.
+const HOUR_MIN = /(\d+)\s*(?:hours?|hrs?|h)\s*(\d+)\s*m(?:in(?:ute)?s?)?(?![a-z])/gi;
+
+// Where every hours-and-minutes run sits, so a later pass can decline to read
+// inside one. Ranges rather than a boolean, because both readers need to know
+// WHICH characters are spoken for.
+const hourMinRuns = (text) => {
+  const runs = [];
+  const re = new RegExp(HOUR_MIN.source, "gi");
+  let m;
+  while ((m = re.exec(String(text || ""))) !== null) {
+    runs.push({ from: m.index, to: m.index + m[0].length, minutes: Number(m[1]) * 60 + Number(m[2]), raw: m[0] });
+  }
+  return runs;
+};
+
+const insideRun = (runs, at) => runs.some(r => at >= r.from && at < r.to);
+
 const dec = (s) => Number(String(s).replace(",", "."));
 
 export const durationsIn = (text) => {
-  const out = [];
+  const runs = hourMinRuns(text);
+  // The whole "2h 58m" first, as one duration of 178 minutes rather than as a
+  // 2 hour reading with a stray number after it.
+  const out = runs.map(r => ({ minutes: r.minutes, at: r.from, raw: r.raw }));
   const re = new RegExp(DURATION.source, "gi");   // fresh: a /g/ regex is stateful
   let m;
   while ((m = re.exec(String(text || ""))) !== null) {
+    if (insideRun(runs, m.index)) continue;
     const unit = m[3].toLowerCase();
     const value = num(dec(m[1]), m[2] == null ? null : dec(m[2]));
     out.push({ minutes: /^h/.test(unit) ? value * 60 : value, at: m.index, raw: m[0] });
   }
-  return out;
+  return out.sort((a, b) => a.at - b.at);
 };
 
 export const distancesIn = (text) => {
   const out = [];
+  const runs = hourMinRuns(text);
   const re = new RegExp(DISTANCE.source, "gi");
   let m;
   while ((m = re.exec(String(text || ""))) !== null) {
+    // The minutes half of "2h 58m" is not fifty-eight metres. See HOUR_MIN.
+    if (insideRun(runs, m.index)) continue;
     const unit = m[3].toLowerCase();
     const value = num(dec(m[1]), m[2] == null ? null : dec(m[2]));
     // A bare "m" is metres. Not stripped to zero and not assumed to be km: a
@@ -94,7 +137,19 @@ export const distancesIn = (text) => {
 // the same journey and two numbers in different sentences usually are not.
 // Splitting on paragraph would pair a distance in one line with a duration in
 // the next and invent a contradiction between two correct statements.
-const sentences = (text) => String(text || "").split(/(?<=[.!?])\s+/).filter(Boolean);
+// ── AND A LINE BREAK ENDS A SENTENCE TOO ────────────────────────────
+//
+// The other half of the same screenshot. The finding quoted a PRICE string and
+// then complained about a TRAVEL TIME, because entryAudit's textOf joined every
+// field of the payload with a space and almost no short field ends in a full
+// stop. So "Festival pass: adults 349 DKK ... Sunday day ticket" and the
+// travelTime after it were one "sentence" to this splitter, and the rule below
+// that a sentence's numbers belong to one journey was reading two fields.
+//
+// textOf joins on a newline now and this splits on one, so a field boundary is
+// a sentence boundary. A newline is not a word, so nothing that counts words
+// over the same blob changes.
+const sentences = (text) => String(text || "").split(/(?<=[.!?])\s+|\n+/).filter(Boolean);
 
 // How wrong is wrong. Generous on purpose, because the aim is to catch the 42
 // against 6, not to argue about whether a walk is 11 or 14 minutes. Real routes

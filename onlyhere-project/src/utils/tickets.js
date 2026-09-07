@@ -319,7 +319,22 @@ export const isAncillaryListing = (onFileName, candidateName) => {
 //
 // Conservative on purpose: no separator, no refusal. A listing that simply has
 // a long name is judged by nameOverlap as before.
-export const isSubEventListing = (onFileName, candidateName) => {
+// ── AND THE VENUE GOES FIRST TOO, WHICH THIS RULE MISSED ────────────
+//
+// Found by putting realistic listings through the finished gate, 7 Sep 2026.
+// Ticketmaster writes "<act> | <event>" AND it writes "<venue> | <event>", and
+// on the string alone the two are identical. So an entry called Fredagsrock was
+// refused its own listing, "Tivoli | Fredagsrock", as something inside itself.
+//
+// The entry knows the answer and was never asked. `context` is whatever the
+// caller holds about WHERE this entry is — its location line, its map hint, its
+// town — and a leading part that names only things already in there is a venue
+// prefix rather than a second act. "Aliona Baranova" is in none of Comic Con's
+// address; "Tivoli" is in all of Fredagsrock's.
+//
+// Absent context behaves exactly as before, so a caller that has none loses
+// nothing and the rule stays conservative: no separator, no refusal.
+export const isSubEventListing = (onFileName, candidateName, context = "") => {
   const parts = String(candidateName || "").split("|").map(v => v.trim()).filter(Boolean);
   if (parts.length < 2) return false;
   const own = nameTokens(onFileName);
@@ -343,8 +358,8 @@ export const isSubEventListing = (onFileName, candidateName) => {
   // to be a name of its own. An earlier part contributing nothing the event
   // does not already say is punctuation, not a second act, and no earlier part
   // at all means the listing IS the event.
-  const ownSet = new Set(own);
-  return parts.slice(0, holders[0].i).some(part => nameTokens(part).some(w => !ownSet.has(w)));
+  const known = new Set([...own, ...nameTokens(context)]);
+  return parts.slice(0, holders[0].i).some(part => nameTokens(part).some(w => !known.has(w)));
 };
 
 // The words that carry the identity. "Roskilde Festival 2026" and "Roskilde

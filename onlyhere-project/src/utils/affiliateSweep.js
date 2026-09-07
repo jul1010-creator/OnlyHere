@@ -244,7 +244,9 @@ export const ticketProposal = (row, results, { today = new Date(), failed = 0 } 
   const name = clean(payload.name) || "(unnamed)";
   const town = parentTownOf(payload);
   const list = (Array.isArray(results) ? results : []).filter(r => r?.url);
-  const url = pickTicketUrl(list, { name, town });
+  // The row's own address goes too, so a "<venue> | <event>" listing is read as
+  // this entry's rather than as something inside it. See isSubEventListing.
+  const url = pickTicketUrl(list, { name, town, where: `${clean(payload.location)} ${clean(payload.mapHint)}` });
   const at = isoDay(today instanceof Date ? today : new Date(today));
   // ── ANY FAILED QUERY POISONS A "NO" AND NOT A "YES" ───────────────
   // A found page is a found page however the other query went. A blank answer

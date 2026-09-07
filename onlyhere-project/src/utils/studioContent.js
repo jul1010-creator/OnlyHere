@@ -567,7 +567,7 @@ export const shapeForLive = (type, t) => {
   // a redraft and a hand-pasted one never meets the matcher, so it is asked
   // here as well. Both questions are about WHAT is being sold, which is the
   // thing no amount of name matching answers.
-  if (isBookableTicketUrl(t?.ticketUrl) && !ticketUrlSaysElsewhere(t?.ticketUrl, t?.town || t?.city || "") && !ticketUrlIsASubEvent(t?.ticketUrl, t?.name)) out = { ...out, ticketUrl: String(t.ticketUrl).trim() };
+  if (isBookableTicketUrl(t?.ticketUrl) && !ticketUrlSaysElsewhere(t?.ticketUrl, t?.town || t?.city || "") && !ticketUrlIsASubEvent(t?.ticketUrl, t?.name, `${t?.town || t?.city || ""} ${t?.location || ""} ${t?.mapHint || ""}`)) out = { ...out, ticketUrl: String(t.ticketUrl).trim() };
   // ── AND WHEN AN AGENT WAS LAST ASKED ABOUT THIS ROW ───────────────
   //
   // utils/affiliateSweep.js, 6 Sep 2026. sweeps.js's fifth rule is that a sweep

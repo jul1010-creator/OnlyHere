@@ -69,7 +69,7 @@ writeFileSync(entry, `
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
   export { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
   export { venueCore, venueMentions, venueQuote, venueVerdict, venueVia, describeVenue, VENUE_MIN_MENTIONS, VENUE_MIN_MENTIONS_NO_TOWN, VENUE_MAX_KM, NO_NAME as V_NO_NAME, NOT_NAMED as V_NOT_NAMED, TOO_FAR as V_TOO_FAR, IS_AN_EVENT as V_IS_AN_EVENT, OK as V_OK } from ${JSON.stringify(join(root, "src/utils/venueMatch.js"))};
-  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
+  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
@@ -3910,7 +3910,26 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // this crashed every town page: "Cannot read properties of null (reading
   // 'value')".
   const glance = readFileSync(join(root, "src/components/AtAGlanceCard.jsx"), "utf8");
-  ok("AtAGlanceCard tolerates a null row", /filter\(r => r && r\.value\)/.test(glance));
+  ok("AtAGlanceCard tolerates a null row", /filter\(r => r && \(r\.value \|\| r\.link\?\.href\)\)/.test(glance));
+  // ── AND A ROW CAN BE A LINK WITH NOTHING TO SAY ─────────────────
+  //
+  // Oliver, 7 Sep 2026: "is it possible to put the 'book tickets' on the 'at a
+  // glance'? So people won't miss it. Like a hyperlink on the price or
+  // something." The button sits below the fold on a long entry; this card is
+  // the first thing under the title.
+  //
+  // A row carrying a link and no value still renders, because "Tickets: Book
+  // tickets" is complete, and an entry with a bookable link but no ticket
+  // sentence would otherwise show nothing at all.
+  ok("a link with no value keeps its row", /r\.value \|\| r\.link\?\.href/.test(glance));
+  ok("and the link is rendered", /href=\{r\.link\.href\}/.test(glance));
+  // A paid link is nofollow and sponsored, which is what Google asks of one.
+  ok("and marked as paid when it is", /rel=\{r\.link\.note \? "noreferrer sponsored nofollow" : "noreferrer"\}/.test(glance));
+  // ── THE SENTENCE TRAVELS WITH THE LINK ──────────────────────────
+  // The disclosure is under the button too and this is not a duplicate to tidy
+  // away: this card sits ABOVE it, so a reader taking this link would otherwise
+  // click a paid link having never passed the sentence.
+  ok("and the disclosure rides on the row", /r\.link\?\.href && r\.link\?\.note/.test(glance));
 }
 
 // ── A SMALL CHANGE, APPLIED TO MANY ROWS ───────────────────────────
@@ -21651,8 +21670,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Ticketmaster event page renders too. The RULE is unchanged and is the one
   // being asserted: an unrecognised value renders no button at all rather than
   // a bare link asking a reader for money.
+  // The agent lookup moved to the top of the component on 7 Sep so the At a
+  // Glance card could reach it. The RULE is unchanged and is the one being
+  // asserted: an unrecognised value renders no button at all rather than a bare
+  // link asking a reader for money.
   ok("and absent entirely when there is no ticket",
-     /const agent = ticketAgentOf\(dest\);\s*\n\s*if \(!agent\) return null;/.test(stripComments(detail)));
+     /if \(!ticketAgent\) return null;/.test(stripComments(detail))
+     && /const ticketAgent = ticketAgentOf\(ticketDest\);/.test(stripComments(detail)));
   // Each agent still gets its own template; the branch just moved into
   // affiliateHref so every render site gets it rather than this one.
   // THREE AGENTS SINCE 6 SEP 2026. Asserted as the loop AND as behaviour: the
@@ -21675,7 +21699,25 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("a listing already on the row becomes the button with no republish",
      /isBookableTicketUrl\(item\?\.__ticket\?\.url\) \? String\(item\.__ticket\.url\)\.trim\(\) : ""/.test(detail));
   ok("and a hand-corrected ticketUrl still wins over it",
-     /String\(item\.ticketUrl \|\| ""\)\.trim\(\)\s*\n?\s*\|\|/.test(detail));
+     /String\(item\?\.ticketUrl \|\| ""\)\.trim\(\)\s*\n?\s*\|\|/.test(detail));
+  // ── RESOLVED ONCE, FOR TWO RENDER SITES ─────────────────────────
+  // It was computed inside the button's own block, so nothing above it could
+  // reach it. Two readings of "which link does this entry have" is how the pin
+  // and the neighbour dots ended up disagreeing on this same page in August.
+  ok("the destination is resolved once", (detail.match(/const ticketDest = /g) || []).length === 1);
+  ok("and the button reads the hoisted one", /const dest = ticketDest;/.test(detail));
+  // Every row that can carry a price or a ticket offers it, so the link is
+  // where the reader is already looking rather than only under the fold.
+  for (const row of [
+    /\{ icon: "🎟️", label: "Tickets", value: item\.ticketInfo, link: bookRow \}/,
+    /\{ icon: "🎟️", label: "Tickets", value: item\.ticketsGlance, link: bookRow \}/,
+    /\{ icon: "💰", label: "Price", value: item\.price, link: bookRow \}/,
+    /\{ icon: "💰", label: "What it costs", value: item\.priceNote, link: bookRow \}/,
+  ]) ok(`a glance row offers the ticket link: ${String(row).slice(12, 46)}`, row.test(detail));
+  // Null rather than an empty object when there is nothing to link, because the
+  // card already drops nulls and a caller building rows inline should not have
+  // to remember to.
+  ok("and it is null when there is no link", /const bookRow = ticketHref \? \{ href: ticketHref, label: "Book tickets", note: ticketNote \} : null;/.test(detail));
 }
 
 // ── "IT HAS TO BE RANDOMS, BUT IT HAS TO START ON A FACT" ────────────
@@ -25820,12 +25862,52 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // given was the front page, which is the first of these.
   for (const url of ["https://www.ticketmaster.dk",
                      "https://www.ticketmaster.dk/search?q=tonder",
-                     "https://www.ticketmaster.dk/artist/some-band",
                      "https://www.tiqets.com/en/copenhagen-attractions-c113/",
                      "https://www.billetlugen.dk/event/1"]) {
     ok(`refused: ${url.replace("https://www.", "")}`, !bookable(url));
     is("and named as no agent", agentOf(url), "");
   }
+
+  // ── AND THE ARTIST PAGE MOVED SIDES, ON PURPOSE ─────────────────
+  //
+  // Oliver, 7 Sep 2026, pasting the Comic Con hub into the Studio field: "Got a
+  // problem.. so basically, it has to be a direct link for tickets."
+  //
+  // /artist/some-band sat in the refusal list above from 23 August, filed with
+  // the front page and the search on the reasoning that a listing "sells
+  // nothing and sends a reader back to a search". That was wrong about this
+  // page and inconsistent with the Tiqets half of the same file, which KEEPS a
+  // venue page in writing because "it shows every Tivoli ticket rather than
+  // picking one on the reader's behalf".
+  //
+  // The test was never "is it a listing", it is "is it ONE ENTITY". A city's
+  // attractions is a category and is still refused two lines up. One act's
+  // shows is one entity, and every row on it has its own Find tickets button.
+  ok("an artist hub is bookable", bookable("https://www.ticketmaster.dk/artist/comic-con-denmark-tickets/1425763"));
+  ok("and a venue hub is too", bookable("https://www.ticketmaster.dk/venue/vega-billetter/1234"));
+  is("and it names Ticketmaster", agentOf("https://www.ticketmaster.dk/artist/comic-con-denmark-tickets/1425763"), "ticketmaster");
+  // The reason it can be accepted at all is that the guest slots underneath it
+  // are refused separately, so a hub is never competing with the real thing.
+  ok("a hub loses to a real event page for the same entry",
+     /\/event\//.test(pick([
+       { url: "https://www.ticketmaster.dk/artist/comic-con-denmark-tickets/1425763", title: "Comic Con Denmark" },
+       { url: "https://www.ticketmaster.dk/event/comic-con-denmark-7-8-nov-2026-tickets/745558441", title: "Comic Con Denmark 7-8 Nov 2026" },
+     ], { name: "Comic Con Denmark", town: "Copenhagen" })));
+  // Order cannot decide this one. A hub arriving first would otherwise beat the
+  // admission ticket by luck, and which the reader wants is not a fact about
+  // the order a search returned things in.
+  ok("and that holds whichever order they arrive in",
+     /\/event\//.test(pick([
+       { url: "https://www.ticketmaster.dk/event/comic-con-denmark-7-8-nov-2026-tickets/745558441", title: "Comic Con Denmark 7-8 Nov 2026" },
+       { url: "https://www.ticketmaster.dk/artist/comic-con-denmark-tickets/1425763", title: "Comic Con Denmark" },
+     ], { name: "Comic Con Denmark", town: "Copenhagen" })));
+  // And when the only /event/ pages are guest slots, which is Comic Con exactly,
+  // the hub is the one honest link on the entry.
+  ok("but it wins when every event page under it is a guest slot",
+     /\/artist\//.test(pick([
+       { url: "https://www.ticketmaster.dk/event/giancarlo-esposito-%7C-comic-con-denmark-8-nov-2026-tickets/999", title: "Giancarlo Esposito | Comic Con Denmark" },
+       { url: "https://www.ticketmaster.dk/artist/comic-con-denmark-tickets/1425763", title: "Comic Con Denmark" },
+     ], { name: "Comic Con Denmark", town: "Copenhagen" })));
 
   // ── THE PUBLISH GATE ASKS THE WIDER QUESTION ────────────────────
   ok("shapeForLive stores either agent", /if \(isBookableTicketUrl\(t\?\.ticketUrl\) && !ticketUrlSaysElsewhere\(/.test(shape));
@@ -25853,7 +25935,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // else.
   ok("the unreadable-page fallback checks the country too",
      /unreadTicketUrls\.find\(u => !ticketUrlSaysElsewhere\(u, draftTown\)\)/.test(appT));
-  ok("the picker is finally called", /const picked = pickTicketUrl\(candidates, \{ name, town: draftTown \}\);/.test(appT));
+  ok("the picker is finally called", /const picked = pickTicketUrl\(candidates, \{ name, town: draftTown, where: /.test(appT));
   ok("over the pages this run already fetched",
      /Object\.keys\(pagesByUrl\)\.map\(u => \(\{ url: u, snippet:/.test(appT));
   ok("and it only runs when nothing better was found",
@@ -40614,9 +40696,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("a real event page is bookable without reading it", isBookableTicketUrl(REAL));
     ok("a front page is not", !isBookableTicketUrl("https://www.ticketmaster.dk/"));
     ok("a search is not", !isBookableTicketUrl("https://www.ticketmaster.dk/search?q=x"));
-    // The artist page is the one the Rungsted run actually read, and it sells
-    // nothing for a given date.
-    ok("and an artist page is not", !isBookableTicketUrl("https://www.ticketmaster.dk/artist/rungsted-festival-tickets/1355684"));
+    // The artist page moved sides on 7 Sep, see the block headed "AND THE ARTIST
+    // PAGE MOVED SIDES, ON PURPOSE". It sells nothing for a GIVEN DATE, which is
+    // why a real event page still outranks it, and it does sell: every row on it
+    // has its own Find tickets button.
+    ok("and an artist page is a hub rather than a refusal", isBookableTicketUrl("https://www.ticketmaster.dk/artist/rungsted-festival-tickets/1355684"));
     // ── AND THE AFFILIATE LINK HE ASKED FOR FALLS OUT OF IT ───────
     // Ticketmaster's is the one programme this app has a template configured
     // for, so a ticketUrl on that host becomes a tracked link with no second
@@ -44733,7 +44817,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and stops at the first query that answers", /if \(String\(t\.ticketUrl \|\| ""\)\.trim\(\)\) break;/.test(appT));
   // NEVER THE FIRST RESULT. A wrong ticket link is not a weak fact, it is a
   // reader who paid for something else.
-  ok("the result is vetted, not taken", /const found = pickTicketUrl\(results, \{ name, town: draftTown \}\);/.test(appT));
+  ok("the result is vetted, not taken", /const found = pickTicketUrl\(results, \{ name, town: draftTown, where: /.test(appT));
+  // The entry's own address rides along, so a "<venue> | <event>" listing is
+  // read as this entry's own rather than as something inside it.
+  ok("and the entry's address goes with it", /where: `\$\{t\.location \|\| ""\} \$\{t\.mapHint \|\| ""\}`/.test(appT));
   ok("and an empty answer is not read as unsellable",
      /It means this search found no page that is both a product page and this place/.test(appT));
   ok("the queries ask each agent separately", /site:tiqets\.com/.test(tickT) && /site:ticketmaster\.dk/.test(tickT));
@@ -49386,6 +49473,41 @@ SOURCE: https://www.tripadvisor.com/whatever`;
        !ticketUrlSaysElsewhere(`https://www.tiqets.com/en/${city}-attractions-c9999/tickets-for-x-p1`));
   }
 
+  // ── AND DENMARK IS NOT A TOWN ───────────────────────────────────
+  //
+  // Oliver, 7 Sep 2026, with a run log: "it invented LEGO for Aarhus
+  // nightlife." Step 31 of a nightTown draft for Aarhus asked tiqets.com and
+  // came back with LEGOLAND Billund, ninety kilometres away, reported as
+  // "bookable, and vetted as being about this place".
+  //
+  // The gate written for Chicago PASSED it, correctly by its own rule: Billund
+  // is a Danish kommune, so the page is not abroad. The rule was too small. The
+  // agent names the city in its own address and the only question asked of that
+  // name was whether it is in Denmark.
+  const LEGO = "https://www.tiqets.com/pt/atracoes-billund-c93558/bilhetes-para-legoland-r-billund-resort-bilhete-de-1-dia-acesso-a-toda";
+  ok("the Billund page is refused on an Aarhus entry", ticketUrlSaysElsewhere(LEGO, "Aarhus"));
+  ok("and the vetting will not take it either",
+     !ticketMatches({ url: LEGO, title: "LEGOLAND Billund Resort", snippet: "bilhetes Aarhus" }, { name: "Aarhus", town: "Aarhus" }));
+  // The same page on the entry it belongs to is the right link, so this cannot
+  // be a rule about Billund.
+  ok("and it is kept on a Billund entry", !ticketUrlSaysElsewhere(LEGO, "Billund"));
+  // ── IT IS A DISTANCE, NOT AN EQUALITY ───────────────────────────
+  // Tiqets files Kronborg, which is in Helsingør, under Copenhagen, because
+  // that is where its buyers start. Demanding the same town would refuse a real
+  // link on a real castle; demanding the same country refuses nothing. 45 km
+  // survives and 90 does not, on MAX_TOWN_KM, the number coordCheck already
+  // refuses a published pin at.
+  ok("a castle filed under the city an hour away survives",
+     !ticketUrlSaysElsewhere("https://www.tiqets.com/en/copenhagen-attractions-c113/tickets-for-kronborg-castle-p1", "Helsingør"));
+  is("and the distance is the one this codebase already agreed on", M.MAX_TICKET_TOWN_KM, 50);
+  // BOTH SIDES HAVE TO BE PLACEABLE OR NOTHING IS CONCLUDED. An unplaced draft
+  // has no town to measure from, and Ribe is a town rather than a kommune, so
+  // neither can be judged and neither is refused. Same one-sided discipline
+  // coordFitsTown states: it can only ever demote.
+  ok("an unplaced draft concludes nothing from distance", !ticketUrlSaysElsewhere(LEGO, ""));
+  ok("and a town the register does not name concludes nothing either",
+     !ticketUrlSaysElsewhere(LEGO, "Skagen"));
+
   // ── AND THE POSITIVE QUESTION IS A DIFFERENT QUESTION ───────────
   // Not the gate. It is what the Studio panel prints, so a link accepted
   // without the country ever being checked says so instead of implying it was.
@@ -49537,6 +49659,33 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // With no entry name there is nothing to be inside OF, and guessing would
   // refuse real links on a draft that has not been named yet.
   ok("and with no name to compare against, nothing is refused", !ticketUrlIsASubEvent(GUEST, ""));
+  // ── AND A VENUE IN FRONT IS NOT A SECOND ACT ────────────────────
+  //
+  // Found by putting realistic listings through the finished gate. Ticketmaster
+  // writes "<act> | <event>" AND "<venue> | <event>", identical on the string
+  // alone, so an entry called Fredagsrock was refused its own listing,
+  // "Tivoli | Fredagsrock", as something happening inside itself.
+  //
+  // The entry knows its own address and was never asked. A leading part naming
+  // only what is already in that address is a prefix, not another act.
+  const FR = "https://www.ticketmaster.dk/event/tivoli-%7C-fredagsrock-billetter/998877";
+  ok("a venue in front of the name is not a sub-event",
+     !M.ticketUrlIsASubEvent(FR, "Fredagsrock", "Tivoli, Vesterbrogade 3, 1630 Copenhagen"));
+  ok("and the entry takes its own listing", M.ticketMatches({ url: FR, title: "Tivoli | Fredagsrock" },
+     { name: "Fredagsrock", town: "Copenhagen", where: "Tivoli, Vesterbrogade 3, 1630 Copenhagen" }));
+  // A guest slot is still a guest slot with the address in hand: Bella Center's
+  // address says nothing about Giancarlo Esposito.
+  ok("a guest slot survives the address being known",
+     M.ticketUrlIsASubEvent(GUEST, "Comic Con Denmark", "Bella Center, Center Boulevard 5, 2300 Copenhagen"));
+  // With no address to check against it stays refused, which is the safe
+  // direction and is what every caller did before this existed.
+  ok("and with no address it stays refused", M.ticketUrlIsASubEvent(FR, "Fredagsrock", ""));
+  // The entry's OWN name counts as known too, which a mutation had to earn: an
+  // earlier part that is an abbreviation of the event is the event, not a second
+  // act, and "Comic Con | Comic Con Denmark 2026" is that shape exactly.
+  ok("an abbreviation of the event in front of it is still the event",
+     !isSubEventListing("Comic Con Denmark", "Comic Con | Comic Con Denmark 2026"));
+
   ok("pasting one by hand is refused too, in words",
      /INSIDE this event/.test(reviewPastedTicketUrl(GUEST, { name: "Comic Con Denmark" }).reason));
   // And a search that turns one up does not make it the link either. This is
@@ -49550,7 +49699,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 
   const shapeSrc = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
   ok("and the publish gate asks it of every link that reaches it",
-     /!ticketUrlIsASubEvent\(t\?\.ticketUrl, t\?\.name\)/.test(shapeSrc));
+     /!ticketUrlIsASubEvent\(t\?\.ticketUrl, t\?\.name, /.test(shapeSrc));
 }
 
 // ── THE ADDRESS IN THE BAR IS THE ADDRESS THAT EXISTS ───────────────
@@ -49965,6 +50114,64 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // mask, so twelve costs exactly what five cost.
   ok("the lookup may ask for more than five", /const want = Math\.min\(Math\.max\(Number\(limit\) \|\| 5, 1\), 12\);/.test(apiB));
   ok("and every existing caller still gets five", /maxResultCount: want/.test(apiB) && /\|\| 5, 1\)/.test(apiB));
+}
+
+// ── "2h 58m" IS A DURATION, NOT FIFTY-EIGHT METRES ─────────────────
+//
+// Oliver, 7 Sep 2026, screenshotting the audit: "fucking annoying.." It read:
+//
+//   Redraft now · fantasyfestival (festival)
+//     "Festival pass: adults 349 DKK, children 129 DKK; ... Sunday day ticket"
+//     time looks too long for the distance: 58 m by transit is about 1 minutes,
+//     not 120. One of the two numbers is wrong and a reader cannot tell which.
+//
+// Two separate bugs stacked into one sentence, and neither number in it is real.
+{
+  const { durationsIn, distancesIn, claimConflicts, checkable } = M;
+  const REAL = "2h 58m 🚄 (direct ICL train)";
+
+  // ── ONE: THE STRING WAS SPLIT DOWN THE MIDDLE ───────────────────
+  // DURATION has no bare `m` in its alternation, so it matched "2h" and stopped,
+  // calling it 120 minutes. DISTANCE ends in \b after a bare `m`, so it matched
+  // the "58m" the duration had just walked past and called it 58 metres. One
+  // field, read as a wrong time and a distance nobody wrote.
+  is("the whole thing is one duration", durationsIn(REAL).map(d => d.minutes), [178]);
+  is("and none of it is a distance", distancesIn(REAL), []);
+  is("the same in words", durationsIn("2 hours 58 min").map(d => d.minutes), [178]);
+
+  // A bare `m` is NOT minutes generally, which is the reason this is a shape
+  // rather than a new unit: reading "500 m walk" as five hundred minutes would
+  // be the same bug pointing the other way.
+  is("a bare m on its own is still metres", distancesIn("a 500 m walk from the station").map(d => d.km), [0.5]);
+  is("and it is not a duration", durationsIn("a 500 m walk from the station"), []);
+  is("plain hours still read as hours", durationsIn("roughly 2 hours by train").map(d => d.minutes), [120]);
+  is("plain minutes still read as minutes", durationsIn("about 45 minutes by bus").map(d => d.minutes), [45]);
+  // A real kilometre figure next to a real hours-and-minutes figure is the
+  // normal case and both have to survive.
+  is("both survive in one sentence", durationsIn("12 km in 1h 30m").map(d => d.minutes), [90]);
+  is("and the distance is the distance", distancesIn("12 km in 1h 30m").map(d => d.km), [12]);
+
+  // ── TWO: THE QUOTE CAME FROM A DIFFERENT FIELD ──────────────────
+  // entryAudit's textOf joined every field with a space, and almost no short
+  // field ends in a full stop, so the price string and the travelTime after it
+  // were one "sentence" to the splitter. The rule that a sentence's numbers
+  // belong to one journey was reading two fields.
+  // A distance in one field and a duration in the next, neither ending in a
+  // full stop. Merged they are one sentence with exactly one of each, which is
+  // the shape this rule fires on, and every number in it is correct.
+  const TWO_FIELDS = 'Entry is 200 m from the harbour\n2 hours by train from Copenhagen';
+  is("two fields are two sentences", claimConflicts(TWO_FIELDS), []);
+  ok("and merged they would have been a finding",
+     claimConflicts(TWO_FIELDS.replace("\n", " ")).length === 1);
+  ok("and the audit joins them so they can be", /return parts\.join\("\\n"\);/.test(readFileSync(join(root, "src/utils/entryAudit.js"), "utf8")));
+
+  // ── AND THE CHECK STILL CATCHES A REAL ONE ──────────────────────
+  // The whole point of the rule, untouched: one sentence, one journey, two
+  // numbers that cannot both be true.
+  const REALLY_WRONG = claimConflicts("It is a 30 km walk and takes 5 minutes.");
+  is("a genuine contradiction still fires", REALLY_WRONG.length, 1);
+  ok("and says which way round it is", /too short for the distance/.test(REALLY_WRONG[0].direction));
+  ok("an entry with a real pair is still checkable", checkable("It is a 30 km walk and takes 5 minutes."));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

@@ -70,7 +70,13 @@ const textOf = (payload) => {
     else if (v && typeof v === "object") Object.entries(v).forEach(([k, x]) => { if (k !== "photo" && k !== "src" && k !== "url" && k !== "sourceUrl" && k !== "mapHint") walk(x); });
   };
   walk(payload);
-  return parts.join(" ");
+  // A NEWLINE, NOT A SPACE. Joined with a space, a field that does not end in a
+  // full stop runs into the next one, and claimCheck's sentence splitter then
+  // reads a price and a travel time as one journey. That is the finding Oliver
+  // screenshotted on 7 Sep 2026: a quoted ticket price followed by "time looks
+  // too long for the distance". Nothing that counts words over this blob
+  // changes, because a newline is whitespace and not a word.
+  return parts.join("\n");
 };
 
 // ── ONE ENTRY, TWO CONTRADICTORY ANSWERS ────────────────────────────

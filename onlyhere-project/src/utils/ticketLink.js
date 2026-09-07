@@ -38,7 +38,8 @@
 //                               "Harbour" needs corroborating.
 import { isTiqetsUrl, isTicketmasterUrl, isWegotripUrl, affiliateHref } from "./affiliates";
 import { sourceIsAboutPlace } from "./sourcePolicy";
-import { containsName, PLACE_NAMES, SIGHT_NAMES } from "./danishNames";
+import { containsName, fold, PLACE_NAMES, SIGHT_NAMES } from "./danishNames";
+import { haversineKm } from "./helpers";
 import { isSubEventListing } from "./tickets";
 import { REGION_NAMES } from "./regions";
 import { KOMMUNER, K } from "../data/kommuner";
@@ -105,12 +106,47 @@ export const tiqetsPageKind = (url) => {
 // programme does, and its bookable page is /show/<id> rather than /event/<id>.
 const TICKET_EVENT_PATH = /\/(?:event|show)\/[^/?#]+/i;
 
+// ── AND THE HUB PAGE, WHICH THIS FILE HAD BACKWARDS ─────────────────
+//
+// Oliver, 7 Sep 2026, pasting ticketmaster.dk/artist/comic-con-denmark-tickets
+// into the Studio field and being refused: "Got a problem.. so basically, it has
+// to be a direct link for tickets."
+//
+// He is right and the refusal was inconsistent with this file's own rule. The
+// paragraph above lumps "an artist or venue page that lists shows" in with the
+// front page and the search page, and the reason given for refusing those is
+// that they "sell nothing and send a reader back to a search". A Ticketmaster
+// artist page does neither: his screenshot shows five listings for Comic Con
+// Denmark, each with its own Find tickets button, one click from paying.
+//
+// AND THE TIQETS SIDE OF THIS FILE ALREADY ACCEPTS EXACTLY THIS SHAPE, in
+// writing: "The venue page is kept deliberately, and for an entry about Tivoli
+// it is the better of the two: it shows every Tivoli ticket rather than picking
+// one on the reader's behalf." An artist page is that page for Ticketmaster.
+//
+// THE REAL TEST WAS NEVER "IS IT A LISTING", IT IS "IS IT ONE ENTITY". A city's
+// attractions is a category and stays refused; one artist's shows is one entity.
+// Comic Con Denmark is the case that makes the difference obvious: the event
+// pages under it are guest slots that isSubEventListing now refuses, so the hub
+// is not merely acceptable, it is the ONLY honest link on that entry.
+//
+// A venue page is here on the same argument, for a music venue entry whose whole
+// content is what is on there. Both are HUBS, kept as their own kind rather than
+// folded into the event test, so the picker and the panel can tell them apart.
+const TICKET_HUB_PATH = /\/(?:artist|venue|attraction)\/[^/?#]+/i;
+
 const pathOf = (url) => {
   try { return new URL(String(url || "").trim()).pathname || ""; } catch { return ""; }
 };
 
 export const isTicketmasterEventUrl = (url) =>
   isTicketmasterUrl(url) && TICKET_EVENT_PATH.test(pathOf(url));
+
+// Every ticket for one act, one venue or one attraction. Kept separate from the
+// event test above because they are different things to a reader and the picker
+// ranks them, exactly as tiqetsPageKind separates a product from a venue.
+export const isTicketmasterHubUrl = (url) =>
+  isTicketmasterUrl(url) && TICKET_HUB_PATH.test(pathOf(url)) && !TICKET_EVENT_PATH.test(pathOf(url));
 
 // ── AND THE THIRD AGENT, 6 SEP 2026 ─────────────────────────────────
 //
@@ -150,12 +186,12 @@ export const isWegotripTicketUrl = (url) => {
 // edit in the publish gate, the render and the picker, which is what this
 // comment promised on 15 August and what it cost on 6 September.
 export const isBookableTicketUrl = (url) =>
-  isTiqetsProductUrl(url) || isTicketmasterEventUrl(url) || isWegotripTicketUrl(url);
+  isTiqetsProductUrl(url) || isTicketmasterEventUrl(url) || isTicketmasterHubUrl(url) || isWegotripTicketUrl(url);
 
 // Which agent it is, for the render, which has to reach for the right template.
 export const ticketAgentOf = (url) =>
   isTiqetsProductUrl(url) ? "tiqets"
-  : isTicketmasterEventUrl(url) ? "ticketmaster"
+  : isTicketmasterEventUrl(url) || isTicketmasterHubUrl(url) ? "ticketmaster"
   : isWegotripTicketUrl(url) ? "wegotrip"
   : "";
 
@@ -301,6 +337,72 @@ const geoSegment = (url) => {
 // that treats it as evidence deletes the good links and keeps the bad ones that
 // happen to say nothing.
 //
+// ── AND DENMARK IS NOT A TOWN ───────────────────────────────────────
+//
+// Oliver, 7 Sep 2026, with a run log: "it invented LEGO for Aarhus nightlife."
+// Step 31 of a nightTown draft for Aarhus:
+//
+//   asked: site:tiqets.com "Aarhus" Aarhus tickets
+//   got:   tiqets.com/pt/atracoes-billund-c93558/bilhetes-para-legoland-r-
+//          billund-resort-... — bookable, and vetted as being about this place
+//
+// LEGOLAND Billund on an Aarhus nightlife entry, ninety kilometres away, and
+// the log says vetted. This is the Chicago link again in the same step, and the
+// gate written for Chicago PASSED it, correctly by its own rule: Billund is a
+// Danish kommune, so the page is not abroad.
+//
+// The rule was too small. The agent names the city in its own address, and the
+// only question asked of that name was whether it is in Denmark. The other
+// question was there to be asked the whole time: is it THIS town.
+//
+// ── AND IT IS A DISTANCE, NOT AN EQUALITY ───────────────────────────
+//
+// Tiqets files Kronborg, which is in Helsingør, under Copenhagen, because that
+// is where its buyers start. Demanding the same town would refuse a real link
+// on a real castle. Demanding the same COUNTRY refuses nothing. So it is the
+// distance between them, and the number is MAX_TOWN_KM, which this codebase
+// already agreed on for exactly this question: coordCheck refuses a published
+// pin more than 50 km from the town its entry names. Kronborg to Copenhagen is
+// 45 and survives. Billund to Aarhus is 90 and does not.
+//
+// BOTH SIDES HAVE TO BE PLACEABLE OR NOTHING IS CONCLUDED. Ribe and Skagen are
+// towns and not kommuner, so neither can be measured here, and a rule that
+// guessed at them would refuse real links for a place this list does not name.
+// Same one-sided discipline coordFitsTown states: it can only ever demote.
+const KOMMUNE_POINTS = new Map(KOMMUNER.map(k => [fold(k[K.name]), { lat: k[K.lat], lon: k[K.lon] }]));
+
+// containsName rather than a substring test, and a mutation SURVIVED swapping it
+// for `.includes`, so the reason is written down rather than left as a gap
+// somebody hunts for later. It is an equivalent mutant here, and only here:
+// saysDenmark has already accepted this phrase THROUGH containsName before this
+// function is ever reached, so a looser match cannot let in a phrase the strict
+// one refused. It could only pick a different Danish kommune out of a phrase
+// already known to name one, and no agent writes two cities into one segment.
+// The strict call stays because the day this is read from somewhere that has
+// not already been gated, the loose one is the bug this codebase has fixed four
+// times: "Als" inside "Falster", "Møn" inside "money".
+const kommunePoint = (phrase) => {
+  const hay = String(phrase || "");
+  if (!hay.trim()) return null;
+  for (const [name, at] of KOMMUNE_POINTS) {
+    if (containsName(hay, name)) return at;
+  }
+  return null;
+};
+
+// 50, the same number coordCheck refuses a published pin at. Named here rather
+// than imported because guideEnrichment pulls in every data file in the app and
+// this module is loaded by the publish gate.
+export const MAX_TICKET_TOWN_KM = 50;
+
+const farFromTown = (geoPhrase, town) => {
+  const there = kommunePoint(geoPhrase);
+  const here = kommunePoint(town);
+  if (!there || !here) return false;
+  const km = haversineKm(here, there);
+  return km != null && km > MAX_TICKET_TOWN_KM;
+};
+
 // What the agent's own catalogue wrote about where the product is. Only ever
 // answers true when the URL NAMES a place, and that place is not here.
 export const ticketUrlSaysElsewhere = (url, town = "") => {
@@ -308,7 +410,10 @@ export const ticketUrlSaysElsewhere = (url, town = "") => {
   if (!raw) return false;
   const geo = geoSegment(raw);
   if (!geo) return false;
-  return !saysDenmark(segmentPhrase(geo), town);
+  const where = segmentPhrase(geo);
+  if (!saysDenmark(where, town)) return true;
+  // In Denmark, and possibly ninety kilometres from the entry. See above.
+  return farFromTown(where, town);
 };
 
 // The positive question, for the callers that have text to read and for the
@@ -367,8 +472,8 @@ const slugPhrase = (url) => {
 // looks for all of them in a part of the listing, and an empty name has none, so
 // it returns false on its own first line. A guard nothing can exercise is a
 // guard that only makes the next reader wonder what it defends against.
-export const ticketUrlIsASubEvent = (url, name) =>
-  isSubEventListing(String(name || "").trim(), slugPhrase(url));
+export const ticketUrlIsASubEvent = (url, name, context = "") =>
+  isSubEventListing(String(name || "").trim(), slugPhrase(url), context);
 
 // ── AND IS IT ABOUT THE PLACE THIS ENTRY IS ABOUT ───────────────────
 // sourceIsAboutPlace, not a name comparison written here. It is the function
@@ -394,7 +499,12 @@ const slugWords = (url) => {
   return last.replace(/-[pl]\d+$/, "").replace(/-/g, " ");
 };
 
-export const ticketMatches = (result, { name, town } = {}) => {
+// `where` is whatever the caller knows about the entry's own address: its
+// location line, its map hint. It exists for one branch, isSubEventListing's
+// venue prefix, so a listing called "Tivoli | Fredagsrock" is recognised as
+// Fredagsrock's own rather than as something inside it. Optional, so a caller
+// that has none behaves exactly as this did.
+export const ticketMatches = (result, { name, town, where = "" } = {}) => {
   const url = String(result?.url || "").trim();
   if (!isBookableTicketUrl(url)) return false;
   const said = [result?.title, result?.snippet, slugWords(url)].filter(Boolean).join(" ");
@@ -405,7 +515,7 @@ export const ticketMatches = (result, { name, town } = {}) => {
   // And admission rather than a guest slot inside it. Same reason as the
   // country: it is a question about WHAT is being sold, which no amount of name
   // matching answers, and the name matching is what let both bugs through.
-  if (ticketUrlIsASubEvent(url, name)) return false;
+  if (ticketUrlIsASubEvent(url, name, `${town || ""} ${where}`)) return false;
   return sourceIsAboutPlace(said, { name, town, url });
 };
 
@@ -445,13 +555,13 @@ export const PASTED_TICKET_REFUSALS = {
   notAUrl: "That is not a web address. It has to start with http:// or https://.",
   notAnAgent: "That is not on Tiqets, Ticketmaster or WeGoTrip. Gemlyx only has affiliate programmes with those three, so a link anywhere else would earn nothing and would not be a ticket button.",
   category: "That is a Tiqets CATEGORY page, which lists a city's attractions and sells nothing. A reader pressing Book tickets would land back in a search. The address of one product ends in -p or -l followed by digits.",
-  notBookable: "That page is not a bookable one. Tiqets sells from a product page (-p...) or a venue page (-l...), Ticketmaster from /event/ or /show/, and WeGoTrip from a product page whose address says ticket. A front page, a search or a listing is not one.",
+  notBookable: "That page is not a bookable one. Tiqets sells from a product page (-p...) or a venue page (-l...), Ticketmaster from /event/, /show/, /artist/ or /venue/, and WeGoTrip from a product page whose address says ticket. A front page or a search is not one.",
   audioWalk: "That is a WeGoTrip AUDIO WALK rather than an admission ticket, and a Book tickets button over a walking tour says something that is not true. Audio walks have their own button and live in __audio.",
   abroad: "That page is not in Denmark. This is the check that was missing when a Danish bar got a Chicago tour link, so it refuses a hand-pasted one the same way.",
   inside: "That listing is for something happening INSIDE this event rather than admission to it: Ticketmaster writes a guest slot or a VIP add-on as \"the act | the event\", and this one names something before the event's own name. A reader pressing Book tickets would be buying ten minutes with one person. Use the event's own listing.",
 };
 
-export const reviewPastedTicketUrl = (raw, { name = "", town = "", wrap = affiliateHref } = {}) => {
+export const reviewPastedTicketUrl = (raw, { name = "", town = "", where = "", wrap = affiliateHref } = {}) => {
   const url = String(raw || "").trim();
   if (!url) return { ok: false, reason: PASTED_TICKET_REFUSALS.empty };
   if (!/^https?:\/\//i.test(url)) return { ok: false, reason: PASTED_TICKET_REFUSALS.notAUrl };
@@ -466,7 +576,7 @@ export const reviewPastedTicketUrl = (raw, { name = "", town = "", wrap = affili
     return { ok: false, reason: PASTED_TICKET_REFUSALS.notBookable };
   }
   if (ticketUrlSaysElsewhere(url, town)) return { ok: false, reason: PASTED_TICKET_REFUSALS.abroad };
-  if (ticketUrlIsASubEvent(url, name)) return { ok: false, reason: PASTED_TICKET_REFUSALS.inside };
+  if (ticketUrlIsASubEvent(url, name, `${town} ${where}`)) return { ok: false, reason: PASTED_TICKET_REFUSALS.inside };
   const agent = ticketAgentOf(url);
   let tracked = url;
   try { tracked = (typeof wrap === "function" ? wrap(url) : url) || url; } catch { tracked = url; }
@@ -511,15 +621,31 @@ const agentName = (agent) =>
 // Returns null rather than a best guess when nothing matches. A Tickets button
 // that is absent is a page with one fewer button. A Tickets button that is
 // wrong is a reader who paid for something else.
-export const pickTicketUrl = (results, { name, town } = {}) => {
+export const pickTicketUrl = (results, { name, town, where = "" } = {}) => {
   const list = (Array.isArray(results) ? results : []).filter(r => r?.url);
-  const ok = list.filter(r => ticketMatches(r, { name, town }));
+  const ok = list.filter(r => ticketMatches(r, { name, town, where }));
   if (!ok.length) return null;
-  // Unchanged for Tiqets. A Ticketmaster event page has no venue-versus-product
-  // distinction to break a tie with, so it simply keeps the order it came back
-  // in, which is what the paragraph above already says to do.
+  // Unchanged for Tiqets: a venue page wins a tie because it shows every ticket
+  // rather than choosing one for the reader.
+  //
+  // A Ticketmaster hub is the same page and wins the same tie, and on an
+  // umbrella event it is the only correct answer: Comic Con Denmark's own
+  // /event/ pages are one guest slot each. It cannot outrank a real event page
+  // for a single date, because isSubEventListing has already removed the ones
+  // that would have competed with it, so anything left under /event/ is the
+  // event itself and comes first in the order it arrived.
   const venue = ok.find(r => tiqetsPageKind(r.url) === "venue");
-  return (venue || ok[0]).url;
+  // A hub is the answer when it is the only one, and never when a real page for
+  // the thing itself is also on the table. It cannot be ranked by ORDER the way
+  // everything else here is: the order it arrives in says nothing about whether
+  // the reader wants every ticket for this act or the one on this date, and a
+  // hub arriving first would then beat the admission ticket by luck.
+  //
+  // isSubEventListing has already removed the guest slots, so anything left
+  // under /event/ is the event itself and deserves to win. On Comic Con nothing
+  // is left, and the hub is the only honest link on the entry.
+  const notHub = ok.find(r => !isTicketmasterHubUrl(r.url));
+  return (venue || notHub || ok[0]).url;
 };
 
 // ── WHY NOTHING WAS PICKED, IN WORDS ────────────────────────────────

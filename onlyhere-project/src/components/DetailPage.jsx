@@ -145,6 +145,25 @@ export const detailPoint = (item, kind) =>
 export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, hasBeen = false, onToggleBeen, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false, signedIn = false, onNeedAccount }) => {
   if (!item) return null;
   const color = item.color || C.accent;
+  // ── THE TICKET LINK, RESOLVED ONCE ────────────────────────────────
+  //
+  // Oliver, 7 Sep 2026: "is it possible to put the 'book tickets' on the 'at a
+  // glance'? So people won't miss it."
+  //
+  // It was computed inside the button's own block near the bottom of this file,
+  // so nothing above could reach it. Hoisted rather than copied: two readings
+  // of "which link does this entry have" is how the pin and the neighbour dots
+  // ended up disagreeing on this same page in August. Every refusal still
+  // belongs to utils/ticketLink.js, and affiliateHref is still the one door.
+  const ticketDest = String(item?.ticketUrl || "").trim()
+    || (isBookableTicketUrl(item?.__ticket?.url) ? String(item.__ticket.url).trim() : "");
+  const ticketAgent = ticketAgentOf(ticketDest);
+  const ticketHref = ticketAgent ? (affiliateHref(ticketDest) || ticketDest) : "";
+  const ticketNote = ticketAgent ? affiliateNote(ticketDest) : "";
+  // The row shape AtAGlanceCard takes, or null when there is nothing to link.
+  // Null rather than an empty object, because that card already drops nulls and
+  // a caller building this inline should not have to remember to.
+  const bookRow = ticketHref ? { href: ticketHref, label: "Book tickets", note: ticketNote } : null;
   // ── AND THE SAME COLOUR CANNOT BE BOTH FILL AND INK ─────────────
   //
   // Oliver, 3 Sep 2026: "the pink/purple writing is so uncomfortable for the
@@ -378,7 +397,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
         {kind === "event" && (
           <AtAGlanceCard rows={[
             arrivalRow(item.nearestStation),
-            { icon: "🎟️", label: "Tickets", value: item.ticketInfo },
+            { icon: "🎟️", label: "Tickets", value: item.ticketInfo, link: bookRow },
             // ── "MAKE PEOPLE AWARE" ──────────────────────────────────
             // Oliver, 15 Aug 2026, off a draft with Danish in a reader field:
             // "I wonder if we should make people aware that an event might have
@@ -618,7 +637,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
         )}
         {(kind === "free" || kind === "attraction") && (
           <AtAGlanceCard rows={[
-            { icon: "🎟️", label: "Tickets", value: item.ticketsGlance },
+            { icon: "🎟️", label: "Tickets", value: item.ticketsGlance, link: bookRow },
             /* ── AND NOW NOT ON ATTRACTIONS EITHER ────────────────────
                Oliver, 19 Aug 2026: "I think we should get rid of
                'time-needed'."
@@ -660,7 +679,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
         {kind === "food" && (
           <AtAGlanceCard rows={[
             { icon: "🍽️", label: "Serves", value: item.category },
-            { icon: "💰", label: "Price", value: item.price },
+            { icon: "💰", label: "Price", value: item.price, link: bookRow },
             { icon: "📍", label: "Neighbourhood", value: item.location },
           ]} />
         )}
@@ -676,7 +695,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           <AtAGlanceCard rows={[
             { icon: "👥", label: "Crowd", value: item.crowd },
             { icon: "🍺", label: "Type", value: item.category },
-            { icon: "💰", label: "What it costs", value: item.priceNote },
+            { icon: "💰", label: "What it costs", value: item.priceNote, link: bookRow },
             { icon: "📍", label: "Neighbourhood", value: item.location },
           ]} />
         )}
@@ -1075,17 +1094,15 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           // ticketUrl still wins, because that is the field a person can
           // correct by hand. This is the fallback under it, and it goes through
           // the same refusals: a front page or a search never becomes a button.
-          const dest = String(item.ticketUrl || "").trim()
-            || (isBookableTicketUrl(item?.__ticket?.url) ? String(item.__ticket.url).trim() : "");
+          const dest = ticketDest;
           // ── EITHER AGENT, EACH THROUGH ITS OWN TEMPLATE ──────────
           // This read isTiqetsProductUrl and tiqetsUrl only, so a stored
           // Ticketmaster event page would have rendered nothing at all. The
           // agent decides which template wraps it, and an unrecognised value
           // still renders no button rather than a bare link asking for money.
-          const agent = ticketAgentOf(dest);
-          if (!agent) return null;
-          const href = affiliateHref(dest) || dest;
-          const note = affiliateNote(dest);
+          if (!ticketAgent) return null;
+          const href = ticketHref;
+          const note = ticketNote;
           return (
             <div style={{ marginBottom: 10 }}>
               <a href={href} target="_blank" rel={note ? "noreferrer sponsored nofollow" : "noreferrer"}
