@@ -119,6 +119,30 @@ export const markMany = (list, items, today = new Date()) => {
   return out.slice(0, BEEN_CAP);
 };
 
+// ── A DAY OF A GUIDE, TURNED INTO RECORDS ───────────────────────────
+//
+// The stop-to-record mapping, in one place. It was written twice within an
+// hour, once in App.jsx and once in GuidePage, which is how two readers of the
+// same question start disagreeing about it — the fault this codebase has now
+// found six times over "where is this row".
+//
+// `resolve` is injected rather than imported, for the reason railPlaces gives:
+// what has a bug in it if anything does is the MAPPING, and injecting the
+// lookup makes this testable with no published rows at all.
+//
+// previewPools tags every row with the same strings this file uses for `kind`,
+// so `_src` IS the kind and there is nothing to translate. A stop with no
+// published page produces nothing: a record with no id is one the pool filter
+// cannot use, and a plan can name somewhere Gemlyx has no page for.
+export const dayVisitRows = (stops, resolve) => {
+  if (typeof resolve !== "function") return [];
+  return (Array.isArray(stops) ? stops : []).map(st => {
+    const real = resolve(st?.name);
+    if (!real || !canBeMarked(real._src) || real.id === undefined || real.id === null) return null;
+    return { kind: real._src, id: real.id, name: real.name, emoji: real.emoji, town: clean(st?.town || real.town || "") };
+  }).filter(Boolean);
+};
+
 // ── WHAT THE GUIDE MAY NOT PLAN ─────────────────────────────────────
 //
 // The excluded half only. A caller asking "what is off the table" gets places
@@ -142,8 +166,27 @@ export const knownBeen = (list) =>
 export const withoutBeen = (pool, list, kind) => {
   const gone = excludedBeen(list).filter(b => !kind || kindOf(b) === clean(kind));
   if (!gone.length) return Array.isArray(pool) ? pool : [];
-  return (Array.isArray(pool) ? pool : []).filter(p =>
-    p?.id === undefined || p?.id === null || !gone.some(b => String(b.id) === String(p.id)));
+  // ── KIND AND ID, WHICH IS WHAT THE COMMENT ALWAYS SAID ────────────
+  //
+  // Found by an adversarial review: this compared ids alone and filtered `gone`
+  // by kind only when the caller passed one. Ids are per-kind sequences here,
+  // so a cross-kind collision is the NORMAL case, not an edge: having eaten at
+  // food row 12 removed free-entry row 12, a completely different place.
+  //
+  // previewPools tags every row with the same `_src` strings the been list uses
+  // for `kind` (town, free, food, nightlife, craft, event), so the two sides
+  // already speak the same vocabulary and this just has to read it.
+  //
+  // A row with no id or no kind survives: it cannot be the one that was marked,
+  // and dropping it would silently thin the pool.
+  const key = (k, id) => `${clean(k)}:${id}`;
+  const goneKeys = new Set(gone.map(b => key(b.kind, b.id)));
+  return (Array.isArray(pool) ? pool : []).filter(p => {
+    if (p?.id === undefined || p?.id === null) return true;
+    const k = clean(p?._src || p?.kind);
+    if (!k) return true;
+    return !goneKeys.has(key(k, p.id));
+  });
 };
 
 // ── AND THE LINE THE PLANNER READS ──────────────────────────────────

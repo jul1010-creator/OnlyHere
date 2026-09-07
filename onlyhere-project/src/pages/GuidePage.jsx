@@ -11,6 +11,8 @@ import { ensureLiveContentLoaded } from "../utils/liveContent";
 import { previewPools } from "../utils/previewMatch";
 import { placedLibrary, nearbyPublished, describeLocation } from "../utils/nearbyPlaces";
 import { stopCard } from "../utils/mapStops";
+import { markMany, canBeMarked, dayVisitRows } from "../utils/beenThere";
+import { cleanBeen } from "../utils/beenSync";
 import { towns } from "../data/towns";
 import { freeEntrance } from "../data/freeEntrance";
 import { foodSpots } from "../data/food";
@@ -156,6 +158,42 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   // are somehow present. Per Oliver ("get rid of the popup"), this page is now
   // the ONLY place a guide is ever shown — there's no in-app modal anymore.
   const freshGuide = location.state?.guide || guideProp || null;
+  // ── "IF SOMEONE HAS FINISHED THAT DAY" ────────────────────────────
+  //
+  // Oliver, 6 Sep 2026, on the been feature: "if it has been in the guide
+  // before, and someone has finished that day, then it should automatically be
+  // put into the 'already been'."
+  //
+  // Nothing recorded that a day was finished, so the day gets a way to say so
+  // and marking it files that day's stops.
+  //
+  // ── WHY THIS TALKS TO LOCAL STORAGE DIRECTLY ──────────────────────
+  //
+  // The been list lives in GemlyxApp's state, and GuidePage is a SIBLING
+  // ROUTE: the two are never mounted together, so there is no prop to pass and
+  // no state to lift that either one could read. Local storage is the store
+  // they already share, and GemlyxApp seeds from it on mount.
+  //
+  // Through markMany and cleanBeen rather than a second shape written here, so
+  // the cap, the dedupe and the "never move an existing date" rule are the same
+  // ones the button on an entry page obeys.
+  //
+  // KNOWN LIMIT, worth saying rather than hiding: a mark made here reaches the
+  // ACCOUNT the next time the main app is opened, because the push effect lives
+  // there. It is never lost, it is just not instant on another device.
+  const readBeen = () => {
+    try { return cleanBeen(JSON.parse(localStorage.getItem("gemlyx_been") || "[]")); } catch { return []; }
+  };
+  const [daysMarked, setDaysMarked] = useState(() => new Set());
+  const markDayDone = (day, dayIdx) => {
+    const rows = dayVisitRows(day?.stops, lookupRealPlace);
+    const before = readBeen();
+    const after = markMany(before, rows);
+    try { localStorage.setItem("gemlyx_been", JSON.stringify(after)); } catch { /* private mode */ }
+    setDaysMarked(prev => new Set(prev).add(day?.day || dayIdx + 1));
+    return { added: after.length - before.length, of: rows.length };
+  };
+
   const [guide, setGuide] = useState(freshGuide || null);
   const [loading, setLoading] = useState(!freshGuide && !!guideId);
   const [loadError, setLoadError] = useState(null);
@@ -1631,6 +1669,23 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.6, textTransform: "uppercase", flexShrink: 0 }}>Day {day.day || dayIdx + 1}</span>
                 {day.title && <span style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.2 }}>{day.title}</span>}
+                {/* Quiet, and after the title, because this is bookkeeping
+                    somebody does on the day rather than a call to action while
+                    they are still reading the plan. It says what it will do
+                    before it does it, because "done" that silently changes
+                    future guides is a surprise nobody asked for. */}
+                {(day.stops || []).some(st => canBeMarked(lookupRealPlace(st?.name)?._src)) && (
+                  daysMarked.has(day.day || dayIdx + 1) ? (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 0.3 }}>
+                      ✓ Marked as done
+                    </span>
+                  ) : (
+                    <button onClick={() => markDayDone(day, dayIdx)}
+                      style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                      We did this day
+                    </button>
+                  )
+                )}
               </div>
               {/* ── "WEATHER ICONS NEED TO BE MORE PROMINENT" ────
                   Oliver, 9 Aug 2026. It was an 11px chip with a 5px gap, the

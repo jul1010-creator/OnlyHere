@@ -385,7 +385,24 @@ export const checkPlan = (days, coords = {}, opts = {}) => {
   // as a rule while deciding nothing is how a real rule gets deleted next to it
   // by somebody tidying. What is left is the one part that matters, which is
   // that calling an absent callback would throw and take a guide build with it.
-  if (typeof opts.hoursFor === "function") {
+  // ── AND NOT ON A DATE NOBODY GAVE ─────────────────────────────────
+  //
+  // Same review, and a worse bug than the one above it. When a traveller names
+  // only a month, App.jsx picks the 15th as a sample so the weather and the
+  // events have something to work with, and marks it datePrecision "month" —
+  // whose own comment says that flag "is what stops that arbitrary day ever
+  // being shown to anybody as the trip's date."
+  //
+  // It was not passed here, so both hours rules read a real WEEKDAY off a
+  // placeholder: "Moesgaard is on day 1, which is a Thursday, and it is closed
+  // on Thursdays" for a trip with no dates at all. That spends a retry, moves a
+  // stop for a weekday nobody chose, and writes the sentence into the saved
+  // guide as a fact.
+  //
+  // A month is not a weekday. Silence is the honest answer and it is the same
+  // one the event pinning and the forecast already give.
+  const datedToADay = !opts.datePrecision || opts.datePrecision === "day";
+  if (typeof opts.hoursFor === "function" && datedToADay) {
     list.forEach((d, i) => {
       const dayNo = d.day || i + 1;
       (d.stops || []).forEach(st => {

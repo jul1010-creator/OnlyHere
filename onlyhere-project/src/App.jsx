@@ -228,7 +228,7 @@ import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, 
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
 import { getSession, getStoredSession, captureRedirectSession, signOut as authSignOut, deleteMyData } from "./utils/auth";
 import { fetchCloudSaves, pushCloudSaves, mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink, syncFailureNote, SYNC } from "./utils/userSaves";
-import { toggleBeen, markMany, isBeen, canBeMarked, beenNote, withoutBeen, excludedBeen } from "./utils/beenThere";
+import { toggleBeen, isBeen, beenNote, withoutBeen, excludedBeen } from "./utils/beenThere";
 import { fetchBeen, pushBeen, mergeBeen, cleanBeen } from "./utils/beenSync";
 import { loadImageCredits, allImageCredits, licenseUrl, creditIsRequired } from "./utils/imageCredits";
 import { PhotoCredit } from "./components/PhotoCredit";
@@ -1401,6 +1401,14 @@ function GemlyxApp() {
   // point of the call. The alternative is what this project has now shipped four
   // separate times, where PostgREST answers 401 and the code in front of it
   // reports a missing table.
+  // ── THE LIVE SESSION, READABLE FROM A RUNNING LOOP ────────────────
+  // Declared here rather than beside supaFetch because refreshStudioSession
+  // WRITES it and is declared a hundred lines above it, and a const read before
+  // its declaration is the TDZ shape this codebase has already been bitten by
+  // twice. Assigned on every render, so it tracks state, and assigned again by
+  // the refresh, so it tracks a change React has not flushed yet.
+  const sessionRef = useRef(null);
+  const mirroredRef = useRef(undefined);
   const studioAuth = () => {
     const tok = studioSession?.access_token;
     if (!tok) throw new Error("Your Studio login has expired. Log out and back in.");
@@ -1456,6 +1464,10 @@ function GemlyxApp() {
       }
       const session = { access_token: data.access_token, refresh_token: data.refresh_token, email: studioSession.email };
       localStorage.setItem("gemlyx_studio_session", JSON.stringify(session));
+      // The ref FIRST, and this is the whole point of it: setStudioSession will
+      // not reach a loop that is already running, and the next row of that loop
+      // is 1.1 seconds away.
+      sessionRef.current = session;
       setStudioSession(session);
       return session;
     } catch { return null; }
@@ -1518,14 +1530,52 @@ function GemlyxApp() {
   // there is no session at all, which is what all 39 call sites already
   // relied on. Expired and absent stay different things: absent is a
   // programming error and fails loudly, expired quietly fixes itself.
+  // ── AND IT READS THE SESSION AT THE MOMENT OF USE ────────────────
+  //
+  // Found by an adversarial review hours after this shipped. supaFetch closed
+  // over `studioSession` from the render it was made in, and refreshStudioSession
+  // calls setStudioSession, which updates React state and NOT a closure a
+  // running loop is holding.
+  //
+  // backfillCoordinates sleeps 1.1 seconds per row and can run sixty of them.
+  // Once the token expired mid-sweep, every later row re-sent the same dead one
+  // and refreshed again with a refresh_token that had already been rotated. Past
+  // GoTrue's reuse window that answers "Invalid Refresh Token: Already Used",
+  // refreshIsDead recognises it correctly, and STUDIO SIGNS HIM OUT MID-SWEEP
+  // while the loop carries on writing "save failed (401)" for every remaining
+  // row. The fix for expiry became a way to be logged out.
+  //
+  // A ref, because that is what a long-running async caller can read. Written
+  // on every render AND by the refresh itself, so the value is current whether
+  // the change came from React or from inside a loop. This is the same lesson
+  // as userSaves' and profile's `live()` from earlier tonight: resolve at the
+  // moment of use. supaFetch is the one that kept the stale pattern.
   const supaFetch = async (url, opts = {}) => {
-    const send = (tok) => fetch(url, { ...opts, headers: { ...studioAuth(), ...(opts.headers || {}), Authorization: `Bearer ${tok}` } });
-    const res = await send(studioSession?.access_token);
+    const send = (tok) => fetch(url, { ...opts, headers: { apikey: SUPABASE_KEY, ...(opts.headers || {}), Authorization: `Bearer ${tok}` } });
+    const tok = sessionRef.current?.access_token;
+    // studioAuth's throw, kept: absent is a programming error and fails loudly,
+    // expired quietly fixes itself. Read from the ref for the same reason.
+    if (!tok) throw new Error("Your Studio login has expired. Log out and back in.");
+    const res = await send(tok);
     if (res.status !== 401) return res;
+    // Re-read after the await. Another call in the same loop may have refreshed
+    // already, and refreshing a second time is what rotates a token twice.
+    const now = sessionRef.current?.access_token;
+    if (now && now !== tok) return send(now);
     const fresh = await refreshStudioSession();
     if (!fresh) return res;
     return send(fresh.access_token);
   };
+  // ── AND A RENDER MAY NOT UNDO A REFRESH ──────────────────────────
+  // A plain `sessionRef.current = studioSession` on every render looks right
+  // and is not: refreshStudioSession writes the ref and calls setStudioSession,
+  // and any OTHER state change in between renders with the old studioSession
+  // and would put the dead token back. Only a change in the state itself
+  // overwrites the ref, so the two writers cannot fight.
+  if (studioSession !== mirroredRef.current) {
+    mirroredRef.current = studioSession;
+    sessionRef.current = studioSession;
+  }
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState(null);
@@ -11828,28 +11878,6 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       return updated;
     });
   };
-  // The automatic half: a day of a guide marked finished files its stops. Every
-  // stop, resolved through lookupRealPlace so a stop only counts when it IS a
-  // published entry — a plan can name somewhere Gemlyx has no page for, and a
-  // record with no id is a record the pool filter cannot use.
-  const markDayVisited = (stops) => {
-    const rows = (Array.isArray(stops) ? stops : []).map(st => {
-      const real = lookupRealPlace(st?.name);
-      const kind = real?._src === "free" ? "free" : real?._src;
-      return real && canBeMarked(kind)
-        ? { kind, id: real.id, name: real.name, emoji: real.emoji, town: st?.town || real.town || "" }
-        : null;
-    }).filter(Boolean);
-    if (!rows.length) return 0;
-    let added = 0;
-    setBeenList(prev => {
-      const updated = markMany(prev, rows);
-      added = updated.length - prev.length;
-      try { localStorage.setItem("gemlyx_been", JSON.stringify(updated)); } catch { /* ignore */ }
-      return updated;
-    });
-    return rows.length;
-  };
   const toggleSavePlace = (kind, item, townName) => {
     setSavedPlaces(prev => {
       const exists = prev.some(p => p.kind === kind && p.id === item.id);
@@ -12843,7 +12871,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
             const doneIds = new Set(excludedBeen(beenList).map(b => `${b.kind}:${b.id}`));
             const wasDone = (n) => {
               const real = lookupRealPlace(n);
-              return !!real && doneIds.has(`${real._src === "free" ? "free" : real._src}:${real.id}`);
+              return !!real && doneIds.has(`${real._src}:${real.id}`);
             };
             // ── THE MODE REACHES THE GATE ─────────────────────────
             // Until 19 Aug it did not, so every day was judged against a flat
@@ -12855,7 +12883,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
             // Their words only, for the reason written at the mode block below: the
       // assistant's own question names three modes and would answer the gate.
       const gateMode = travelModeKey(saidByTravellerForGuide);
-            let verdict = checkPlan(skeleton.days, gateCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate, wasDone });
+            let verdict = checkPlan(skeleton.days, gateCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate, datePrecision, wasDone });
             let planDays = skeleton.days;
 
             // ONE RETRY, NEVER A REFUSAL. Some trips genuinely are awkward, and
@@ -12886,7 +12914,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
                       const key = townKeyFor(st.town || "") || townKeyFor(st.name);
                       if (key) fixedCoords[st.name] = { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
                     }));
-                    const second = checkPlan(fixed.days, fixedCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate, wasDone });
+                    const second = checkPlan(fixed.days, fixedCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate, datePrecision, wasDone });
                     // Keep whichever is actually better. A "fix" that trades two
                     // problems for three is not a fix.
                     if (second.problems.length < verdict.problems.length) { verdict = second; planDays = fixed.days; }
@@ -16468,9 +16496,17 @@ ${languageBlock()}`;
                       // the same expression typed twice: the card and the pin
                       // must be looking at the same published rows, and two
                       // copies of a pool expression is how they stop.
-                      const pools = previewPools({
+                      // ── AND NOTHING THEY HAVE ALREADY DONE ────────
+                      //
+                      // withoutBeen here rather than only in the guide prompt,
+                      // because a card is a SUGGESTION and suggesting somewhere
+                      // he has ticked off is the feature not working, whatever
+                      // the guide does later. Excluded places only: a marked
+                      // town keeps its card, which is the rule the whole
+                      // feature turns on.
+                      const pools = withoutBeen(previewPools({
                         towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
-                      });
+                      }), beenList);
                       const convo = aiMessages.slice(1);
                       const clean = (text) => stripMarkdown(stripReadyMarker(text));
                       const theirWords = aiMessages.filter(x => x.role === "user" && !x.isError).map(x => x.text).join("\n");
@@ -20711,7 +20747,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <div style={{ marginBottom: 14 }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <input value={attractionQuery} onChange={e => setAttractionQuery(e.target.value)}
-                    placeholder="Search attractions"
+                    placeholder={uiT("search.attractions", uiLang)}
                     style={{ flex: "1 1 200px", minWidth: 0, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "11px 16px", fontSize: 14, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
                 </div>
 
@@ -20788,8 +20824,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               {filtered.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "48px 20px", color: C.muted, background: C.surface, borderRadius: 16, border: `1px dashed ${C.border}` }}>
                   <div style={{ fontSize: 26, marginBottom: 8 }}>🔍</div>
-                  <div style={{ fontSize: 14, color: C.light, fontWeight: 600, marginBottom: 4 }}>Nothing matches those filters</div>
-                  <div style={{ fontSize: 12 }}>Try clearing one. Denmark still has plenty to offer.</div>
+                  <div style={{ fontSize: 14, color: C.light, fontWeight: 600, marginBottom: 4 }}>{uiT("empty.filtersTitle", uiLang)}</div>
+                  <div style={{ fontSize: 12 }}>{uiT("empty.filtersDetail", uiLang)}</div>
                 </div>
               ) : (
                 <div>
@@ -20911,7 +20947,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 onSort={setEventSort}
               />
               {filteredEvents.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>No upcoming events. Try a different filter.</div>
+                <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>{uiT("empty.events", uiLang)}</div>
               ) : (
                 <div className="cards-grid">
                   {filteredEvents.map(e => <EventCard key={e.id} event={e} />)}
@@ -21010,8 +21046,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               {filteredFood.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "48px 20px", color: C.muted, background: C.surface, borderRadius: 16, border: `1px dashed ${C.border}` }}>
                   <div style={{ fontSize: 26, marginBottom: 8 }}>🔍</div>
-                  <div style={{ fontSize: 14, color: C.light, fontWeight: 600, marginBottom: 4 }}>Nothing matches those filters</div>
-                  <div style={{ fontSize: 12 }}>Try clearing one. Denmark still has plenty to offer.</div>
+                  <div style={{ fontSize: 14, color: C.light, fontWeight: 600, marginBottom: 4 }}>{uiT("empty.filtersTitle", uiLang)}</div>
+                  <div style={{ fontSize: 12 }}>{uiT("empty.filtersDetail", uiLang)}</div>
                 </div>
               ) : (
               <div className="cards-grid">
@@ -21503,7 +21539,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
                   <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: C.muted, pointerEvents: "none" }}>⌕</span>
                   <input value={townSearch} onChange={e => setTownSearch(e.target.value)}
-                    placeholder="Search a town, a region, anything…"
+                    placeholder={uiT("search.towns", uiLang)}
                     style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "9px 34px 9px 30px", fontSize: 12.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
                   {townSearch && (
                     <button onClick={() => setTownSearch("")} aria-label="Clear search"
@@ -21748,7 +21784,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   disagree with them. */}
               {!towns.some(t => (isArea(t) ? (!townSize || townSize === "area") && areaMatches(t) : townMatches(t))) && towns.length > 0 && (
                 <div style={{ textAlign: "center", padding: "38px 16px", color: C.muted }}>
-                  <div style={{ fontSize: 15, color: C.light, fontFamily: "'Fraunces', serif", marginBottom: 8 }}>Nothing published matches these filters yet.</div>
+                  <div style={{ fontSize: 15, color: C.light, fontFamily: "'Fraunces', serif", marginBottom: 8 }}>{uiT("empty.towns", uiLang)}</div>
                   <button onClick={clearTownFilters}
                     style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
                     Clear all filters
@@ -22300,7 +22336,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
               {/* FAQ */}
               <div id="ess-faq" style={{ marginBottom: 20, scrollMarginTop: 90 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>FAQ</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>{uiT("menu.faq", uiLang)}</div>
                 {[
                   { q: "Is Gemlyx free?", a: "Everything on the site today is free: browsing, saving, the map, the guides and the finds. If a paid plan is ever added it will be for extra things on top, the free part stays free, and we will say so here before anything changes rather than after." },
                   { q: "How do I save a find?", a: "Tap the ♡ heart on any business. It gets saved to your Saved tab instantly." },
@@ -23232,7 +23268,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <button onClick={() => { setShowMenu(false); readTripChanges(); goTab("home"); setTimeout(() => document.getElementById("gx-saved-trips")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); }}
                   style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "none", border: "none", color: C.text, padding: "10px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left", borderRadius: 10 }}>
                   <Ico name="book" size={15} color={C.gold} />
-                  <span style={{ flex: 1 }}>Saved trips</span>
+                  <span style={{ flex: 1 }}>{uiT("menu.saved", uiLang)}</span>
                   {unreadTripChanges > 0 && (
                     <span className="gx-pulse" style={{ minWidth: 18, height: 18, borderRadius: 100, background: "#E5484D", color: "#fff", fontSize: 10.5, fontWeight: 700, lineHeight: "18px", textAlign: "center", padding: "0 4px", animation: "gxPulse 1.6s ease-in-out infinite" }}>
                       {unreadTripChanges}
@@ -23272,7 +23308,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 along the top, so repeating them here would be two controls for
                 one thing. Everything BELOW this block stays at every width. */}
             <div className="gx-nav-in-menu">
-            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", padding: "8px 16px 6px" }}>Navigate</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", padding: "8px 16px 6px" }}>{uiT("menu.navigate", uiLang)}</div>
             {NAV_ITEMS.map((item, i) => item.id === "ai" ? (
               <button key={item.id} onClick={() => { setShowMenu(false); goTab("ai"); }}
                 style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#fff", border: "none", borderRadius: 10, padding: "12px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 6, marginBottom: 2, boxShadow: `0 2px 10px ${C.gold}33`, animation: `fadeSlideIn 0.2s ease ${i * 0.04}s both` }}>
@@ -23288,10 +23324,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             </div>
             <div style={{ borderTop: `1px solid ${C.border}`, margin: "6px 0" }} />
             {[
-              { id: "login", label: userSession ? "Account" : "Sign in", ico: "user", action: "login" },
-              { id: "faq", label: "FAQ", ico: "help", action: "faq" },
-              { id: "credits", label: "Photo credits", ico: "book", action: "credits" },
-              { id: "support", label: "Support", ico: "mail", action: "mail" },
+              // Sign in reuses row.needAccount.action rather than getting a
+              // second entry: one word, one row in the catalogue, which is the
+              // reason the catalogue is one module.
+              { id: "login", label: userSession ? uiT("menu.account", uiLang) : uiT("menu.signIn", uiLang), ico: "user", action: "login" },
+              { id: "faq", label: uiT("menu.faq", uiLang), ico: "help", action: "faq" },
+              { id: "credits", label: uiT("menu.credits", uiLang), ico: "book", action: "credits" },
+              { id: "support", label: uiT("menu.support", uiLang), ico: "mail", action: "mail" },
             ].map((item, i) => (
               <button key={item.id}
                 onClick={() => {
@@ -23984,7 +24023,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         <div onClick={() => setShowCredits(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.bg, borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 560, maxHeight: "85vh", overflowY: "auto", padding: "24px 22px 32px", border: `1px solid ${C.border}`, borderBottom: "none" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div style={{ fontSize: 24, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text }}>Photo credits</div>
+              <div style={{ fontSize: 24, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text }}>{uiT("menu.credits", uiLang)}</div>
               <button onClick={() => setShowCredits(false)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Close</button>
             </div>
             <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.65, marginBottom: 18 }}>

@@ -143,7 +143,7 @@ writeFileSync(entry, `
   export { isResearchVoice, researchVoiceSentences, stripResearchVoice, cleanReaderProse, researchVoiceIn } from ${JSON.stringify(join(root, "src/utils/researchVoice.js"))};
   export { repairBody, headingsOf, bodyProblems, priceProblems, priceWorklist, bookingProblems, bookingWorklist, voiceProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, TYPE_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
   export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, missingRequired, cleanLearned, OBSERVED_CAP, OBSERVED_FIELDS, cleanBornDate, birthYear, BORN_DATE_MIN, BORN_DATE_MAX, REQUIRED_PROFILE, REQUIRED_LABEL, AGE_BANDS, BORN_YEARS, bandForYear, ageFrom, underMinimumAge, MIN_ACCOUNT_AGE, TERMS_VERSION, holdProfile, takeHeldProfile, PENDING_PROFILE_KEY, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, homeCurrency, countryNamed, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
-  export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit, openAtVisit, windowsOn, describeClosedAt, HHMM } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
+  export { seasonalNotes, timesIn, clockTimes, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit, openAtVisit, windowsOn, describeClosedAt, HHMM } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, formatLogs, logChips, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { fieldProvenance, correctionProvenance, entrySources, untracedFields, describeProvenance, readerCorrection, readerCorrections, isCheckerVoice, readerUncertainty, readerUncertainties, READER_UNCERTAINTY_LIMIT } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
@@ -234,7 +234,7 @@ writeFileSync(entry, `
   export { coverageByPart, thinnestParts, coverageSummary, discoveryFraming, isAlreadyCovered, splitAlreadyCovered } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget, placeFromText, candidateFitsTarget, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { checkPlan, planProblemsForPrompt, titlePromises, MAX_DAY_KM, dayCeilingKm } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
-  export { toggleBeen, markMany, isBeen, canBeMarked, beenNote, withoutBeen, excludedBeen, knownBeen, beenRecord, sameEntry, isContextKind, BEEN_CAP, BEEN_KINDS } from ${JSON.stringify(join(root, "src/utils/beenThere.js"))};
+  export { toggleBeen, markMany, isBeen, canBeMarked, beenNote, withoutBeen, excludedBeen, knownBeen, beenRecord, sameEntry, isContextKind, dayVisitRows, BEEN_CAP, BEEN_KINDS } from ${JSON.stringify(join(root, "src/utils/beenThere.js"))};
   export { cleanBeen, mergeBeen, missingBeenColumn } from ${JSON.stringify(join(root, "src/utils/beenSync.js"))};
   export { isOwnSiteFor, urlNames, isKommuneHost, isTownWord, ownershipWords, subjectIsEvent, EVENT_SUBJECT_TYPES, isTourismHost, KOMMUNE_HOSTS } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { detectLegMode as detectLegModeX, isFerryText } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -2483,6 +2483,83 @@ is("missing licence does not require credit", creditIsRequired({}), false);
       is("an odd count of times reads as unparseable", windowsOn(["Thursday: from 10:00"], 4), null);
     }
 
+    // ── AND IT HAS TO READ THE FORMAT GOOGLE ACTUALLY SENDS ────────
+    //
+    // Found by an adversarial review of the same night's work, and it meant the
+    // whole rule was inert. api/places-hours.js sends NO languageCode, so
+    // Google answers in en-US and every stored hour is AM/PM. The old pattern
+    // read the digits and dropped the rest, so "11:00 PM – 5:00 AM" parsed as
+    // 11:00 to 05:00, and Hive at 20:30 — the case the rule was written for —
+    // came back OPEN. The check ran, found nothing, and reported nothing, which
+    // is the worst of the three outcomes because it looks like it worked.
+    {
+      const { clockTimes, timesIn } = M;
+      is("PM is not the same hour as AM", clockTimes("Monday: 10:00 AM – 6:00 PM"), ["10:00", "18:00"]);
+      // The one that catches people: 12 AM is midnight and 12 PM is noon, so
+      // the modulo has to come before the addition.
+      is("midnight and noon are the awkward two", clockTimes("12:00 AM – 12:00 PM"), ["00:00", "12:00"]);
+      is("a bare hour with a half counts", clockTimes("Thursday: 11 PM – 5 AM"), ["23:00", "05:00"]);
+      is("24-hour still reads as it always did", clockTimes("Thursday: 23:00 – 05:00"), ["23:00", "05:00"]);
+      // Danish opening hours use a full stop and no AM/PM at all, and this is
+      // run over site text as well as over Google's.
+      is("and a Danish page is untouched", clockTimes("Åbent 10.30 til 17.00"), ["10:30", "17:00"]);
+      // ── ORDERED, WITH ITS DUPLICATES ─────────────────────────────
+      // timesIn dedupes, which is right for reconcileHours and wrong for
+      // reading windows, where the times are pairs and position is the meaning.
+      is("split days keep all four times in order",
+         clockTimes("Monday: 11:00 AM – 2:00 PM, 5:00 PM – 10:00 PM"), ["11:00", "14:00", "17:00", "22:00"]);
+      is("and timesIn still answers its own question", timesIn("10:00 – 10:00"), ["10:00"]);
+      is("while clockTimes keeps the pair", clockTimes("10:00 – 10:00"), ["10:00", "10:00"]);
+
+      // HIS CASE, in the shape the database actually holds.
+      const hiveReal = { hours: ["Monday: Closed", "Tuesday: Closed", "Wednesday: Closed",
+        "Thursday: 11:00 PM – 5:00 AM", "Friday: 11:00 PM – 5:00 AM", "Saturday: 11:00 PM – 5:00 AM", "Sunday: Closed"],
+        fetchedAt: "2026-09-06" };
+      const thu = "2026-10-01";
+      is("the evening that started this is caught in Google's own format",
+         describeClosedAt(openAtVisit(hiveReal, thu, 1, "20:30"), "Hive"),
+         "Hive is planned for 20:30 on a Thursday and does not open until 23:00.");
+      is("and 01:00 on the Friday is still Thursday night", openAtVisit(hiveReal, thu, 2, "01:00"), null);
+      // ── AND THE ARRIVAL TIME IS AM/PM SOMETIMES TOO ──────────────
+      // The skeleton prompt asks for a "suggested clock time" and never says
+      // which format. Stripping every non-digit removed the "pm" that decides
+      // what the number means, so a 20:30 dinner read as 08:30 and the gate
+      // told the planner to move a perfectly good stop to the morning.
+      is("a 12-hour arrival time means what it says",
+         describeClosedAt(openAtVisit(hiveReal, thu, 1, "8:30 pm"), "Hive"),
+         "Hive is planned for 20:30 on a Thursday and does not open until 23:00.");
+      is("and one that is fine stays fine", openAtVisit(hiveReal, thu, 1, "11:30 PM"), null);
+    }
+
+    // ── AND NOT ON A DATE NOBODY GAVE ──────────────────────────────
+    //
+    // Worse than the format bug, and found in the same pass. When a traveller
+    // names only a month, App.jsx picks the 15th as a sample and marks it
+    // datePrecision "month", whose own comment says that flag is what stops the
+    // arbitrary day ever being shown to anybody as the trip's date. It was not
+    // passed to the gate, so both hours rules read a real WEEKDAY off a
+    // placeholder and produced "it is closed on Thursdays" for a trip with no
+    // dates at all — spending a retry and moving a stop for a weekday nobody
+    // chose.
+    {
+      const { checkPlan } = M;
+      const shutThu = { hours: ["Sunday: 10:00 – 17:00", "Monday: 10:00 – 17:00", "Tuesday: 10:00 – 17:00",
+        "Wednesday: 10:00 – 17:00", "Thursday: Closed", "Friday: 10:00 – 17:00", "Saturday: 10:00 – 17:00"],
+        fetchedAt: "2026-09-06" };
+      const days = [{ day: 1, stops: [{ name: "Moesgaard", town: "Aarhus", arrivalTime: "11:00" }] }];
+      const coords = { Moesgaard: { lat: 56.08, lon: 10.23 } };
+      const base = { isPublished: () => true, hoursFor: () => shutThu, arrivalDate: "2026-10-15" };
+      is("a real date is judged", checkPlan(days, coords, { ...base, datePrecision: "day" })
+        .problems.filter(p => /^SHUT/.test(p.code)).map(p => p.code), ["SHUT_THAT_DAY"]);
+      is("a month is not a weekday, so it says nothing",
+         checkPlan(days, coords, { ...base, datePrecision: "month" })
+           .problems.filter(p => /^SHUT/.test(p.code)).length, 0);
+      // No precision at all is the old callers' shape and stays judged, because
+      // an absent flag is not a claim that the date is a guess.
+      is("and no flag at all still judges", checkPlan(days, coords, base)
+        .problems.filter(p => /^SHUT/.test(p.code)).length, 1);
+    }
+
     // ── THE GATE, WHICH IS WHERE IT HAD TO GO ──────────────────────
     //
     // Not the render. A reader told their club opens later can do nothing
@@ -2595,14 +2672,27 @@ is("missing licence does not require credit", creditIsRequired({}), false);
       ok("and told to KEEP the town and change what happens in it",
          /Keep them in the route and keep sleeping there/.test(note) && /Copenhagen/.test(note));
       ok("and the two are not the same sentence", note.split("\n").length === 2);
-      // ── MATCHED ON ID, NEVER ON NAME ────────────────────────────
-      // Several Danish towns have their own Strøget and their own Torvet, which
-      // this pipeline has a whole file about. A been list keyed on names would
-      // take somebody's Aarhus street away because they had walked Copenhagen's.
-      const pool = [{ id: 55, name: "Tivoli" }, { id: 56, name: "Rundetaarn" }, { id: 63, name: "Geranium" }, { name: "no id" }];
+      // ── MATCHED ON KIND AND ID, NEVER ON NAME OR ID ALONE ───────
+      //
+      // On NAME, because several Danish towns have their own Strøget and their
+      // own Torvet and this pipeline has a whole file about that.
+      //
+      // And on ID ALONE, which an adversarial review caught the first version
+      // doing: ids are per-kind sequences here, so a cross-kind collision is
+      // the normal case rather than an edge, and having eaten at food row 12
+      // removed free-entry row 12, a completely different place.
+      //
+      // previewPools tags every row with the same `_src` strings the been list
+      // uses for `kind`, so both sides already speak one vocabulary.
+      const pool = [{ id: 55, _src: "free", name: "Tivoli" }, { id: 56, _src: "free", name: "Rundetaarn" },
+                    { id: 63, _src: "food", name: "Geranium" }, { name: "no id", _src: "free" }];
       is("the pool loses what they have done", withoutBeen(pool, list).map(p => p.name), ["Rundetaarn", "no id"]);
       is("and a row with no id survives, because it cannot be the marked one",
          withoutBeen(pool, list).some(p => p.name === "no id"), true);
+      is("the same id under another kind is a different place and stays",
+         withoutBeen([{ id: 63, _src: "free", name: "A free thing that happens to be row 63" }], list).length, 1);
+      is("and a row with no kind survives too, for the same reason as no id",
+         withoutBeen([{ id: 63, name: "kindless" }], list).length, 1);
       // Toggle, because a mistake has to be undoable.
       is("marking twice unmarks", isBeen(toggleBeen(list, "free", { id: 55, name: "Tivoli" }, "", day), "free", 55), false);
       // ── AN OBJECT IS NOT A PLACE ────────────────────────────────
@@ -2632,6 +2722,28 @@ is("missing licence does not require credit", creditIsRequired({}), false);
       is("finishing it twice files it once", twice.filter(b => String(b.id) === "99").length, 1);
       is("and does not move the date", twice.find(b => String(b.id) === "99")?.at, "2026-09-06");
       is("and it is additive, never a replacement", twice.length, after.length);
+      // ── ONE MAPPING FROM A STOP TO A RECORD ─────────────────────
+      //
+      // Written twice within an hour, once in App.jsx and once in GuidePage,
+      // which an adversarial review caught before either could drift. This is
+      // the shared one, and `resolve` is injected so it is testable with no
+      // published rows at all.
+      const { dayVisitRows } = M;
+      const library = {
+        Tivoli: { _src: "free", id: 55, name: "Tivoli", town: "Copenhagen" },
+        Geranium: { _src: "food", id: 63, name: "Geranium", town: "Copenhagen" },
+        "A herring": { _src: "craft", id: 9, name: "A herring" },
+        "No page": null,
+      };
+      const rows = dayVisitRows(
+        [{ name: "Tivoli" }, { name: "Geranium", town: "Copenhagen" }, { name: "A herring" }, { name: "No page" }],
+        (n) => library[n] || null);
+      is("a day's stops become records", rows.map(r => `${r.kind}:${r.id}`), ["free:55", "food:63"]);
+      // A plan can name somewhere Gemlyx has no page for, and a record with no
+      // id is one the pool filter cannot use.
+      is("a stop with no published page produces nothing", rows.length, 2);
+      is("and an object to buy is not a place you have been", rows.some(r => r.kind === "craft"), false);
+      is("no resolver, no rows", dayVisitRows([{ name: "Tivoli" }]), []);
       // ── WHAT COMES BACK OFF THE WIRE IS DATA ────────────────────
       // Our own row, through a jsonb column and a network, and rows do get
       // edited by hand in the console. A { id: null } reaching withoutBeen
@@ -8237,6 +8349,24 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     is("and keeps the fifteen he said", b.known.days?.askedFor, 15);
     is("and carries it where a screen can reach it", b.cappedDays, 15);
     ok("and the model is told to say so out loud", /THEY SAID 15 DAYS AND THE PLAN COVERS 14/.test(briefBlock(b)));
+    // ── AND ON THE PATH A PERSON ACTUALLY TAKES ──────────────────
+    //
+    // Found by an adversarial review the same night. The fix above worked for
+    // "No I mean 15 days" and not for the answer somebody gives to "how many
+    // days have you got?", which is "20": daysAnswer capped internally and
+    // returned a bare number, so the brief planned 14 and nothing held the 20.
+    // That is the exact failure the askedFor work exists to prevent, still live
+    // on the more common path.
+    const bare = readBrief({ travellerText: "Hi\n20", travellerTurns: ["Hi", "20"], answering: [[], ["days"]], today: new Date("2026-09-06T09:00:00Z") });
+    is("a bare number answering the question is capped and remembered", [bare.known.days?.value, bare.cappedDays], [14, 20]);
+    // Nights are a length too, counted inclusively the way the rest of the app
+    // counts a trip: twenty nights is twenty-one days.
+    const nights = readBrief({ travellerText: "Hi\n20 nights", travellerTurns: ["Hi", "20 nights"], answering: [[], ["days"]], today: new Date("2026-09-06T09:00:00Z") });
+    is("and so are nights", [nights.known.days?.value, nights.cappedDays], [14, 21]);
+    // One cap, and it is the one already written down. directAnswer had a
+    // second literal 14 under a comment saying exactly that.
+    ok("the two readers share one ceiling",
+       /import \{ MAX_TRIP_DAYS \} from "\.\/tripEvents"/.test(readFileSync(join(root, "src/utils/directAnswer.js"), "utf8")));
     // Nothing to say when nothing was cut. A line about a ceiling nobody hit is
     // noise, and noise in this block is what teaches a model to skim it.
     const under = readBrief({ travellerText: "we have 5 days", travellerTurns: ["we have 5 days"], today: new Date("2026-09-06T09:00:00Z") });
@@ -25150,17 +25280,42 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // gone dead in a new and more interesting way. Nothing was red, because
   // nothing asserted the inside of the helper. This is that assertion.
   ok("it sends the apikey and the token together",
-     /const send = \(tok\) => fetch\(url, \{ \.\.\.opts, headers: \{ \.\.\.studioAuth\(\), \.\.\.\(opts\.headers \|\| \{\}\), Authorization: `Bearer \$\{tok\}` \} \}\);/.test(app16));
+     /const send = \(tok\) => fetch\(url, \{ \.\.\.opts, headers: \{ apikey: SUPABASE_KEY, \.\.\.\(opts\.headers \|\| \{\}\), Authorization: `Bearer \$\{tok\}` \} \}\);/.test(app16));
+  // ── AND THE TOKEN IS READ AT THE MOMENT OF USE ──────────────────
+  //
+  // Found by an adversarial review hours after supaFetch shipped. It closed
+  // over `studioSession` from the render that made it, and refreshStudioSession
+  // updates React state, which does not reach a loop that is already running.
+  // backfillCoordinates runs sixty rows at 1.1 seconds each: once the token
+  // expired mid-sweep every later row re-sent the same dead one and refreshed
+  // again with an already-rotated refresh_token, which GoTrue eventually calls
+  // "Already Used" — and refreshIsDead, correctly, SIGNS HIM OUT. The fix for
+  // expiry had become a way to be logged out mid-sweep.
+  ok("the token comes from a ref, not a closure", /const tok = sessionRef\.current\?\.access_token;/.test(app16));
+  ok("and the refresh writes that ref before it writes state",
+     /sessionRef\.current = session;\s*\n\s*setStudioSession\(session\);/.test(app16));
+  // A render caused by anything else, between the refresh and React's flush,
+  // would otherwise put the dead token back.
+  ok("and an unrelated render cannot undo the refresh",
+     /if \(studioSession !== mirroredRef\.current\) \{/.test(app16));
+  // Two calls in one loop must not both refresh: the second rotation is what
+  // produces the Already Used answer in the first place.
+  ok("a second caller uses what the first one fetched",
+     /const now = sessionRef\.current\?\.access_token;\s*\n\s*if \(now && now !== tok\) return send\(now\);/.test(app16));
   // ORDER, NOT PRESENCE. Authorization has to come last or a call site that
   // passes a stale header of its own wins the retry, and the second attempt
   // goes out with the same dead token as the first.
   ok("and the retry's token beats anything a caller passed",
      app16.slice(app16.indexOf("const supaFetch")).indexOf("...(opts.headers || {})")
      < app16.slice(app16.indexOf("const supaFetch")).indexOf("Authorization: `Bearer ${tok}`"));
+  // Windows widened on 6 Sep when the ref and the second-caller check landed
+  // between these lines. Comments are blanked by stripComments and not removed,
+  // so a window measured in characters is partly measuring the prose.
+  const supaBody = stripComments(app16).slice(stripComments(app16).indexOf("const supaFetch = async"), stripComments(app16).indexOf("const supaFetch = async") + 1400);
   ok("a 401 is retried once with a fresh token",
-     /const supaFetch[\s\S]{0,400}?if \(res\.status !== 401\) return res;[\s\S]{0,200}?const fresh = await refreshStudioSession\(\);[\s\S]{0,120}?return send\(fresh\.access_token\);/.test(app16));
+     /if \(res\.status !== 401\) return res;[\s\S]*?const fresh = await refreshStudioSession\(\);[\s\S]*?return send\(fresh\.access_token\);/.test(supaBody));
   ok("and it gives up rather than looping when the refresh fails",
-     /const supaFetch[\s\S]{0,400}?if \(!fresh\) return res;/.test(app16));
+     /if \(!fresh\) return res;/.test(supaBody));
   // studioAuth THROWS on no session at all, and every one of the thirty-nine
   // call sites relied on that before the migration. Expired and absent stay
   // different things: absent is a bug and fails loudly, expired fixes itself.
@@ -35522,10 +35677,20 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // since its own redesign, so the assertion was reading a different page.
   // That is this codebase's oldest recurring shape, found here in a test
   // written to catch it.
-  ok("and an empty result says so", /filteredFood\.length === 0 \?[\s\S]{0,400}Nothing matches those filters/.test(app));
-  // Same treatment as Attractions, deliberately, because "the filters are
-  // different on everything" is the complaint this whole block answers.
-  is("in the same words on both pages", (app.match(/Nothing matches those filters/g) || []).length, 2);
+  // ── THROUGH THE CATALOGUE NOW, WHICH IS THE STRONGER CLAIM ───────
+  //
+  // 6 Sep 2026. These pinned the English literal in the JSX, which stopped
+  // being the right assertion the moment the string was translated: a test that
+  // fails when a sentence reaches Danish is testing the wrong thing.
+  //
+  // "Same words on both pages" is what the block is about, and one catalogue
+  // key used twice guarantees it in every language rather than in English only.
+  ok("and an empty result says so", /filteredFood\.length === 0 \?[\s\S]{0,400}uiT\("empty\.filtersTitle", uiLang\)/.test(app));
+  is("in the same words on both pages, in every language",
+     (app.match(/uiT\("empty\.filtersTitle", uiLang\)/g) || []).length, 2);
+  is("and the detail line under it too", (app.match(/uiT\("empty\.filtersDetail", uiLang\)/g) || []).length, 2);
+  ok("and the words themselves are in the catalogue, in all three",
+     ["en", "da", "de"].every(c => (M.UI_STRINGS["empty.filtersTitle"] || {})[c]));
 }
 
 // ── 23 AUGUST 2026: IT ATE THE DATE OFF A DANISH HOLIDAY ────────────
@@ -41950,6 +42115,20 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // to.
     is("a place turned down later is unpinned",
        names(run([{ role: "assistant", text: "Ribe and Aarhus." }, { role: "user", text: "not Ribe, we did that last year" }])), ["Aarhus"]);
+    // ── AND CHANGING YOUR MIND BACK IS NOT TWO PINS ──────────────
+    //
+    // Found by an adversarial review. `order` is what decides the pins and the
+    // rejection only deleted from `byKey`, so a later re-mention passed the
+    // !byKey.has guard and pushed the same key a SECOND time: two markers on
+    // one coordinate, a duplicate React key so only one card rendered, a
+    // markers map that could reach only one of them, and a cap that counted the
+    // copy and dropped a real place to make room for it.
+    is("changing your mind back gives one pin, not two",
+       names(run([
+         { role: "assistant", text: "Ribe and Aarhus." },
+         { role: "user", text: "not Ribe" },
+         { role: "assistant", text: "Fine, Aarhus then. Though Ribe deserves a second look." },
+       ])), ["Aarhus", "Ribe"]);
     is("an error is not a reply here either",
        names(run([{ role: "assistant", text: "Ribe." }, { role: "assistant", isError: true, text: "Hit a snag near Skagen" }])), ["Ribe"]);
     // The newest ones are drawn larger, and they are the ones the reply just
@@ -42032,7 +42211,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and the card's keeps it", /placesFor: \(text\) => placesNamedIn\(clean\(text\), pools, \{ alreadyKnown: theirWords \}\)/.test(appR));
   // ONE POOLS CALL FOR BOTH. The card and the pin have to be looking at the
   // same published rows, and two copies of a pool expression is how they stop.
-  is("the card and the map read one pool", (appR.match(/const pools = previewPools\(\{/g) || []).length, 1);
+  // withoutBeen wraps it now, so the assertion is that there is ONE pool
+  // expression, not that it is bare: the card and the pin have to be looking at
+  // the same published rows and the same exclusions.
+  is("the card and the map read one pool", (appR.match(/const pools = withoutBeen\(previewPools\(\{/g) || []).length, 1);
+  // ── AND A SUGGESTION IS FILTERED, NOT ONLY THE GUIDE ──────────────
+  // A card is a suggestion, and suggesting somewhere he has ticked off is the
+  // feature not working whatever the guide does about it later.
+  ok("what they have done is out of the suggestions too", /\}\), beenList\);/.test(appR));
 
   // ── AND THE CARD IN THE POPUP IS THE CARD ────────────────────────
   //
@@ -42085,6 +42271,24 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // place's card open, so you pointed at Skagen and read Aarhus, and the stale
   // card covered the pin so the click opened Aarhus too.
   ok("a pin with no card still takes the open one down", /marker\.on\("mouseover", \(\) => map\.closePopup\(\)\);/.test(chatCode));
+  // ── AND NO MAP AT ALL WHERE NOBODY CAN SEE ONE ─────────────────
+  //
+  // Found by the same review. `.chat-rail` is display:none below the
+  // breakpoint and this component sits inside it, but CSS does not stop an
+  // effect: every phone visitor with one resolvable place was building a
+  // Leaflet instance, a tile layer, a zoom control and a flight on a 0x0
+  // element, where getBoundsZoom returns Infinity and fitBounds lands at
+  // street scale. And flownRef was spent on the invisible map, so a tablet
+  // rotated past the breakpoint got the short pan instead of the establishing
+  // flight the design turns on.
+  ok("the map asks whether it is on screen at all", /min-width: \$\{RAIL_BREAKPOINT_PX\}px/.test(chatCode));
+  // The same constant the CSS uses, so the query and the rule cannot drift.
+  ok("and it uses the CSS's own breakpoint rather than a number",
+     chatCode.includes('import { POPUP_CLASS, RAIL_BREAKPOINT_PX } from "../utils/chatRail"'));
+  // Subscribed, because windows get resized and tablets get rotated.
+  ok("and it listens for the width changing", /mq\.addEventListener\("change", onChange\)/.test(chatCode));
+  ok("and stops listening when it goes", /mq\.removeEventListener\("change", onChange\)/.test(chatCode));
+  ok("nothing mounts while it is narrow", /const any = list\.length > 0 && wide;/.test(chatCode));
   // Clicking the map must not close it, or the click that lands on the card
   // closes the card first and the entry never opens.
   ok("and a click on the card is not swallowed by the map", /closeOnClick: false/.test(chatCode));
@@ -44989,6 +45193,37 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // And the exemption is not a hole: the word it names must still be the word
   // in the catalogue, so deleting the Danish column does not quietly pass here.
   is("the one exempt cognate is the word it says it is", UI_STRINGS["nav.tips"].da, "Tips");
+  // ── AND THE MENU IS NOT HALF TRANSLATED ──────────────────────────
+  //
+  // 6 Sep 2026. "Theme" and "Language" read the catalogue and every row above
+  // them did not, so a Danish reader opened the menu and met Saved trips,
+  // Navigate, FAQ and Support in English with Tema underneath. Half a
+  // translation reads worse than none, because it looks like the switch failed.
+  const MENU_KEYS = ["menu.navigate", "menu.saved", "menu.faq", "menu.credits", "menu.support", "menu.account", "menu.signIn"];
+  is("every menu row is in the catalogue", MENU_KEYS.filter(k => !UI_STRINGS[k]), []);
+  is("and every one of them is written in all three",
+     MENU_KEYS.filter(k => !["en", "da", "de"].every(c => String(UI_STRINGS[k]?.[c] || "").trim())), []);
+  // A column pasted from English is not a translation. Only the nav has an
+  // exemption list and none of these is on it.
+  is("and none of them is English wearing a Danish label",
+     MENU_KEYS.filter(k => UI_STRINGS[k].da === UI_STRINGS[k].en), []);
+  is("nor a German one", MENU_KEYS.filter(k => UI_STRINGS[k].de === UI_STRINGS[k].en), []);
+  const appMenu = readFileSync(join(root, "src/App.jsx"), "utf8");
+  is("and every one is actually rendered from it",
+     MENU_KEYS.filter(k => !appMenu.includes(`uiT("${k}", uiLang)`)), []);
+  // The empty states and the two search boxes, same rule. These are the screens
+  // where a reader is already unsure whether the site is working, which is the
+  // worst possible place for a sentence they cannot read.
+  const CHROME_KEYS = ["empty.filtersTitle", "empty.filtersDetail", "empty.events", "empty.towns", "search.attractions", "search.towns"];
+  is("the empty states and search boxes are in the catalogue too",
+     CHROME_KEYS.filter(k => !UI_STRINGS[k] || !["en", "da", "de"].every(c => String(UI_STRINGS[k]?.[c] || "").trim())), []);
+  is("and rendered from it", CHROME_KEYS.filter(k => !appMenu.includes(`uiT("${k}", uiLang)`)), []);
+  // ── TWO SEGMENTS, BECAUSE THE SUITE READS THEM THAT WAY ─────────
+  // usedKeys below pulls literal keys out of App.jsx with a two-segment
+  // pattern, so a three-segment key written as a literal is truncated and
+  // reported missing. Written down as a rule rather than left as a trap.
+  is("every key added today is two segments",
+     [...MENU_KEYS, ...CHROME_KEYS].filter(k => k.split(".").length !== 2), []);
   is("and German does translate it", UI_STRINGS["nav.tips"].de, "Tipps");
   // A product name is a proper noun. readerLanguage.js has the rule for
   // Nørreport and it is the same rule: a word somebody matches against a screen
@@ -45674,7 +45909,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the count is on the menu button itself",
        /\{unreadTripChanges > 0 && \([\s\S]{0,700}\{unreadTripChanges\}<\/span>/.test(appW));
     ok("and again on the Saved trips row, where it says what it is about",
-       /<span style=\{\{ flex: 1 \}\}>Saved trips<\/span>[\s\S]{0,400}\{unreadTripChanges\}/.test(appW));
+       /<span style=\{\{ flex: 1 \}\}>\{uiT\("menu\.saved", uiLang\)\}<\/span>[\s\S]{0,400}\{unreadTripChanges\}/.test(appW));
     ok("it pulses rather than sitting still", /animation: "gxPulse/.test(appW));
     ok("and a still badge is what somebody who asked for less motion gets",
        /prefers-reduced-motion: reduce\) \{ \.gx-pulse \{ animation: none/.test(appW));
@@ -45686,7 +45921,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // held is still there without one, or a phone would lose its navigation.
     // stripComments blanks rather than deletes, so this distance is measured in
     // the original source and the paragraphs explaining the change sit inside it.
-    ok("the account rows only exist when there is an account", /\{userSession && \([\s\S]{0,2600}Saved trips/.test(appW));
+    ok("the account rows only exist when there is an account", /\{userSession && \([\s\S]{0,2600}uiT\("menu\.saved", uiLang\)/.test(appW));
     // A count with no words beside it is a red dot. The button says what it is
     // counting, which is the one line alertCountLine has always been for.
     ok("and the button says what the count is about", /alertCountLine\(unreadTripChanges\)/.test(appW));

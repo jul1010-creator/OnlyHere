@@ -127,6 +127,51 @@ export const UI_STRINGS = {
   // beside it and was the only English word left in that panel's own chrome.
   "header.theme":        { en: "Theme",                  da: "Tema",                   de: "Design" },
   "header.chooseLanguage": { en: "Choose a language",    da: "Vælg sprog",             de: "Sprache wählen" },
+
+  // ── THE REST OF THE MENU, WHICH WAS HALF TRANSLATED ───────────────
+  //
+  // 6 Sep 2026. "Theme" and "Language" read the catalogue and every row above
+  // them did not, so a Danish reader opened the menu and met Saved trips,
+  // Navigate, FAQ and Support in English with Tema underneath. Half a
+  // translation reads worse than none: it looks like the language switch did
+  // not work.
+  "menu.navigate": { en: "Navigate",      da: "Gå til",              de: "Navigation" },
+  "menu.saved":    { en: "Saved trips",   da: "Gemte ture",          de: "Gespeicherte Reisen" },
+  // "Ofte stillede spørgsmål" is the full Danish and it is 24 characters in a
+  // 10px uppercase heading. This is the short form both languages use in
+  // ordinary writing.
+  "menu.faq":      { en: "FAQ",           da: "Spørgsmål og svar",   de: "Häufige Fragen" },
+  "menu.credits":  { en: "Photo credits", da: "Fotokreditering",     de: "Bildnachweise" },
+  // Danish borrows "support" for a paid helpdesk. This is a person answering
+  // his own email, which is "hjælp".
+  "menu.support":  { en: "Support",       da: "Hjælp",               de: "Hilfe" },
+  "menu.account":  { en: "Account",       da: "Konto",               de: "Konto" },
+  // Its own entry rather than reusing row.needAccount.action, which holds the
+  // same word today. Not duplication for its own sake: the suite reads literal
+  // keys out of App.jsx with a two-segment pattern, so a three-segment key
+  // cannot be written as a literal there at all, and a template literal with
+  // nothing to interpolate is worse than a row in a table.
+  "menu.signIn":   { en: "Sign in",       da: "Log ind",             de: "Anmelden" },
+
+  // ── THE EMPTY STATES ──────────────────────────────────────────────
+  //
+  // The one screen where a reader is already unsure whether the site is
+  // working, so an English sentence there is the worst place for one.
+  //
+  // TWO SEGMENTS PER KEY, not three. The suite reads every literal key out of
+  // App.jsx with /uiT\("([a-z]+\.[a-zA-Z]+)"/ and checks it exists, and a
+  // three-segment key gets truncated to its first two by that pattern and
+  // reported missing. The existing row.needAccount.title keys escape it only
+  // because they are built with a template literal.
+  "empty.filtersTitle":  { en: "Nothing matches those filters", da: "Ingen resultater med de filtre", de: "Nichts passt zu diesen Filtern" },
+  "empty.filtersDetail": { en: "Try clearing one. Denmark still has plenty to offer.", da: "Prøv at fjerne et af dem. Danmark har stadig masser at byde på.", de: "Nimm einen davon weg. Dänemark hat noch viel zu bieten." },
+  "empty.events":        { en: "No upcoming events. Try a different filter.", da: "Ingen kommende begivenheder. Prøv et andet filter.", de: "Keine anstehenden Veranstaltungen. Probier einen anderen Filter." },
+  "empty.towns":         { en: "Nothing published matches these filters yet.", da: "Der er endnu ikke udgivet noget, der passer til de filtre.", de: "Noch nichts veröffentlicht, das zu diesen Filtern passt." },
+
+  // The two search boxes that are not the header's. header.search covers that
+  // one already, and these say what they search rather than repeating "Søg".
+  "search.attractions": { en: "Search attractions", da: "Søg i attraktioner", de: "Attraktionen suchen" },
+  "search.towns":       { en: "Search a town, a region, anything…", da: "Søg efter en by, en landsdel, hvad som helst…", de: "Suche eine Stadt, eine Region, irgendetwas…" },
 };
 
 export const UI_KEYS = Object.keys(UI_STRINGS);

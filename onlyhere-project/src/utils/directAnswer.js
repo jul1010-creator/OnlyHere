@@ -62,6 +62,7 @@ import { SPELLED_NUMBERS, NUMBER_TOKEN, VEHICLE_WORDS, TRANSPORT_VERBS,
          PUBLIC_TRANSPORT, YES_WORDS, NO_WORDS, PARTNER_WORDS, WITH_WORDS, ME_WORDS,
          PARTY_POSSESSIVES, alt, LETTER } from "./travellerWords";
 import { travelModeKey, withoutNonModes } from "./routeOrder";
+import { MAX_TRIP_DAYS } from "./tripEvents";
 import { KOMMUNER, K } from "../data/kommuner";
 import { TOWN_COORDS } from "../data/towns";
 
@@ -218,22 +219,28 @@ const NIGHTS = new RegExp(`${NUM_EDGE}\\s+\\b(?:nights?|n(?:æ|ae)tter|n(?:ä|ae
 // existed. A second reader with a different ceiling means the same sentence
 // reads as 20 days or 14 depending on whether the question happened to have been
 // asked, which is not a difference anybody could explain.
-const MAX_DAYS = 14;
-const capped = (n) => Math.min(n, MAX_DAYS);
+// ── AND IT IS THE ONE IN tripEvents, NOT A COPY OF ITS VALUE ──────
+// The comment above says "one cap, and it is the one already written down" and
+// then wrote 14 down a second time. Imported now, so there is one number.
+const capped = (n) => Math.min(n, MAX_TRIP_DAYS);
 // A number with its unit, allowing one word between them ("5 full days"). Global
 // so a rejected candidate cannot hide a real answer later in the sentence.
 const DAYS_UNIT = new RegExp(`(?:^|[^${LETTER}\\d])(${NUMBER_TOKEN})\\s+(?:[a-zæøå]+\\s+)?(?:days?|dage|dagen|tage|dagar)\\b`, "i");
 const WHOLE_NUMBER = new RegExp(`^(?:${NUMBER_TOKEN})$`, "i");
 
-export const daysAnswer = (turn) => {
+export const daysAnswer = (turn, { cap = MAX_TRIP_DAYS } = {}) => {
+  // The parameter, not the module constant: a caller passing cap: Infinity is
+  // asking what the traveller SAID, and readBrief needs that to be able to say
+  // "you told me 20 and I plan 14" rather than silently planning 14.
+  const lid = (n) => Math.min(n, cap);
   const t = withoutCorrectionLead(String(turn ?? ""));
   if (isRefusal(t)) return null;
   if (WEEKENDISH.test(t)) return 4;
-  if (HALF_FIRST.test(t)) return capped(11);
+  if (HALF_FIRST.test(t)) return lid(11);
   const nights = NIGHTS.exec(t);
   if (nights) {
     const n = numOfWord(nights[1]);
-    return Number.isFinite(n) && n >= 1 ? capped(n + 1) : null;
+    return Number.isFinite(n) && n >= 1 ? lid(n + 1) : null;
   }
   const w = WEEKS.exec(t);
   if (w) {
@@ -245,7 +252,7 @@ export const daysAnswer = (turn) => {
     // "halvanden uge" in Danish, "two and a half weeks" in both orders.
     const half = (w[2] || /and\s+a\s+half/i.test(w[0])) ? 4 : 0;
     const total = (Number.isFinite(n) ? n : 0) * 7 + half;
-    return total > 0 ? capped(total) : null;
+    return total > 0 ? lid(total) : null;
   }
   // ── A NUMBER WITH ITS UNIT, OR A NUMBER AND NOTHING ELSE ──────────
   //
@@ -261,11 +268,11 @@ export const daysAnswer = (turn) => {
   const unit = DAYS_UNIT.exec(t);
   if (unit) {
     const n = numOfWord(unit[1]);
-    return Number.isFinite(n) && n >= 1 ? capped(n) : null;
+    return Number.isFinite(n) && n >= 1 ? lid(n) : null;
   }
   const bare = t.trim().replace(/[.!?,]+$/, "");
   const n = WHOLE_NUMBER.test(bare) ? numOfWord(bare) : null;
-  return Number.isFinite(n) && n >= 1 ? capped(n) : null;
+  return Number.isFinite(n) && n >= 1 ? lid(n) : null;
 };
 
 // ── HOW THEY GET AROUND, ANSWERED AS A LIST ─────────────────────────
@@ -437,7 +444,7 @@ const COUPLE = new RegExp(
   + `|(?:${alt(WITH_WORDS)})\\s+(?:${alt(PARTY_POSSESSIVES)})\\s+`
   + `(?:(?!(?:and|og|und|och|en|plus)(?:[^${LETTER}]|$))[${LETTER}'’-]+\\s+){0,2}`
   + `(?:${alt(PARTNER_WORDS)})`
-  + `|a couple|just the two of us|us two|os to|zu zweit|z'n twee(?:ë|e)n|vi to`
+  + `|a couple(?:\\s+of\\s+us)?(?!\\s+of\\s)|just the two of us|us two|os to|zu zweit|z'n twee(?:ë|e)n|vi to`
   + `)(?![${LETTER}])`, "i");
 
 export const partyAnswer = (turn) => {
@@ -550,8 +557,17 @@ export const directAnswers = (turns, answering) => {
         const v = only === "origin" ? looksLikePlaceAnswer(turn) : null;
         if (v) out.origin = { value: v, source: "said" };
       } else if (key === "days") {
+        // ── AND WHAT THEY SAID, NOT ONLY WHAT FITS ────────────────
+        //
+        // Found by an adversarial review the same night the cap was made
+        // askable. readDays keeps `askedFor` when it trims a length, and this
+        // path did not, so the fix worked for "No I mean 15 days" and not for
+        // the answer a person actually gives to "how many days have you got?",
+        // which is "20". The brief planned 14 and nothing anywhere held the 20,
+        // which is the exact failure the work was for.
         const v = only === "days" ? daysAnswer(turn) : null;
-        if (v) out.days = { value: v, source: "said" };
+        const rawDays = only === "days" ? daysAnswer(turn, { cap: Infinity }) : null;
+        if (v) out.days = rawDays && rawDays > v ? { value: v, source: "said", askedFor: rawDays } : { value: v, source: "said" };
       } else if (key === "transport") {
         const v = transportAnswer(turn);
         if (v) out.transport = { value: v.value, mode: v.mode, source: "said" };

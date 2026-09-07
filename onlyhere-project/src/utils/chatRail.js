@@ -170,6 +170,18 @@ export const mapPlaces = ({ messages = [], placesFor, rejectsFor, coordsFor, cap
       for (const key of (rejectsFor(text, m) || [])) {
         const k = String(key || "").trim().toLowerCase();
         if (!k) continue;
+        // ── AND OUT OF THE ORDER, NOT ONLY OUT OF THE MAP ─────────
+        //
+        // Found by an adversarial review. `order` is what decides the pins and
+        // it kept the key, so a later re-mention passed the !byKey.has guard
+        // and pushed the same key a SECOND time. "Ribe and Aarhus" / "not ribe"
+        // / "actually Ribe deserves a second look" produced pins
+        // [ribe, aarhus, ribe]: two markers on one coordinate, a duplicate
+        // React key on the portals so only one card rendered, a markersRef
+        // entry that could only reach one of them, and a cap that counted the
+        // copy and dropped a real place to make room for it.
+        const at = order.indexOf(k);
+        if (at >= 0) order.splice(at, 1);
         byKey.delete(k);
         here.delete(k);
       }

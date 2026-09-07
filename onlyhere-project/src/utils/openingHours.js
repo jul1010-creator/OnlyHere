@@ -112,16 +112,49 @@ export const seasonalNotes = (siteText) => {
 // closing time that appears nowhere in Google's week, the two are saying
 // different things and that is worth a human glance. It cannot say which is
 // right, and it does not try.
-const TIME_RE = /\b([01]?\d|2[0-3])[.:]([0-5]\d)\b/g;
+// ── AND IT HAS TO READ THE FORMAT GOOGLE ACTUALLY SENDS ─────────────
+//
+// 6 Sep 2026, found by an adversarial review of the same night's work that
+// added openAtVisit. This pattern read digits and ignored everything after
+// them, and api/places-hours.js sends NO languageCode, so Google answers in
+// en-US and every stored hour is AM/PM: "Monday: 10:00 AM – 6:00 PM".
+//
+// So "6:00 PM" was read as 06:00, and the Hive case the whole rule was written
+// for — a club open "11:00 PM – 5:00 AM" — parsed as 11:00 to 05:00 and made
+// 20:30 look OPEN. The check ran, found nothing, and reported nothing, which is
+// the worst of the three possible outcomes because it looks like it worked.
+//
+// TWELVE IS THE ONE THAT CATCHES PEOPLE: 12:00 AM is midnight and 12:00 PM is
+// noon, so the modulo has to come before the addition rather than after.
+const TIME_RE = /\b([01]?\d|2[0-3])(?:[.:]([0-5]\d))?\s*([ap])\.?m\.?\b|\b([01]?\d|2[0-3])[.:]([0-5]\d)\b/gi;
 
-export const timesIn = (text) => {
-  const out = new Set();
+// ── ORDERED AND WITH ITS DUPLICATES, WHICH windowsOn NEEDS ──────────
+//
+// timesIn dedupes through a Set, which is right for reconcileHours: it asks
+// whether the site states a time Google does not, and a time stated twice is
+// still one time. It is wrong for reading WINDOWS, where the times are pairs
+// and position is the whole meaning.
+//
+// One parser, two views, rather than a second regex that would drift.
+export const clockTimes = (text) => {
+  const out = [];
   const t = String(text || "");
+  const re = new RegExp(TIME_RE.source, "gi");   // fresh, because /gi is stateful
   let m;
-  const re = new RegExp(TIME_RE.source, "g");   // fresh, because /g is stateful
-  while ((m = re.exec(t)) !== null) out.add(`${String(m[1]).padStart(2, "0")}:${m[2]}`);
-  return [...out];
+  while ((m = re.exec(t)) !== null) {
+    if (m[3]) {
+      const half = m[3].toLowerCase() === "p";
+      // 12 AM is 00 and 12 PM is 12. %12 first, then add the twelve.
+      const h = (Number(m[1]) % 12) + (half ? 12 : 0);
+      out.push(`${String(h).padStart(2, "0")}:${m[2] || "00"}`);
+    } else {
+      out.push(`${String(m[4]).padStart(2, "0")}:${m[5]}`);
+    }
+  }
+  return out;
 };
+
+export const timesIn = (text) => [...new Set(clockTimes(text))];
 
 export const NO_HOURS_ON_PAGE = "no-hours-on-page";
 
@@ -306,9 +339,13 @@ export const windowsOn = (hours, day) => {
   const line = (Array.isArray(hours) ? hours : [])
     .find(l => new RegExp(`^\\s*${DAY_NAMES[day]}\\b`, "i").test(String(l || "")));
   if (!line) return null;
-  const times = timesIn(line).map(toMinutes).filter(n => n !== null);
-  // timesIn dedupes through a Set, so a genuine "09:00 – 09:00" collapses. That
-  // is unreadable rather than closed, same rule as an odd count.
+  // clockTimes, not timesIn: these are PAIRS and a Set would collapse
+  // "14:00 – 14:00" or a day whose two windows share a boundary into an odd
+  // count. Position is the meaning here.
+  const times = clockTimes(line).map(toMinutes).filter(n => n !== null);
+  // An odd count is half a window, and half a window is not an answer about
+  // anything. Unreadable rather than closed, which is the rule the whole file
+  // follows: say nothing rather than guess.
   if (!times.length || times.length % 2 !== 0) return null;
   const out = [];
   for (let i = 0; i < times.length; i += 2) {
@@ -343,7 +380,15 @@ export const openAtVisit = (storedHours, arrivalDate, dayNumber, arrivalTime) =>
   const day = dayOfVisit(arrivalDate, dayNumber);
   if (day === null) return null;
   if (closedDays(hours).includes(day)) return null;   // shutOnVisit's job
-  const at = toMinutes(String(arrivalTime || "").replace(/[^\d:.]/g, "").replace(".", ":"));
+  // ── AND THE ARRIVAL TIME IS AM/PM TOO, SOMETIMES ────────────────
+  // The same review: this stripped every non-digit, which is exactly the "pm"
+  // that decides what the number means, so "8:30 pm" read as 08:30 and a
+  // perfectly good dinner was reported as three hours before opening. The
+  // skeleton prompt asks only for a "suggested clock time" and never says which
+  // format, so both arrive. Through the same parser as the hours, so the two
+  // sides of the comparison cannot read the same string differently.
+  const at = toMinutes(clockTimes(String(arrivalTime || "").replace(/\./g, ":"))[0]
+    ?? String(arrivalTime || "").replace(/[^\d:]/g, ""));
   if (at === null) return null;
   const windows = windowsOn(hours, day);
   if (!windows || !windows.length) return null;

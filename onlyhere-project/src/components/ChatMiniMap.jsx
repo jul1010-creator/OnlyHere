@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import L from "leaflet";
 import { addTileLayer } from "../utils/mapTiles";
 import { ChatPlaceCards, showablePhoto } from "./ChatPlaceCards";
-import { POPUP_CLASS } from "../utils/chatRail";
+import { POPUP_CLASS, RAIL_BREAKPOINT_PX } from "../utils/chatRail";
 
 // ── THE MAP UNDER THE CHAT ──────────────────────────────────────────
 //
@@ -79,11 +79,46 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   const openRef = useRef(onOpen);
   openRef.current = onOpen;
 
+  // ── AND IT MUST NOT BUILD A MAP NOBODY CAN SEE ──────────────────
+  //
+  // Found by an adversarial review. `.chat-rail` is display:none below 900px
+  // and this component sits inside it, but CSS does not stop an effect: every
+  // phone visitor with one resolvable place was building a full Leaflet
+  // instance, a tile layer, a zoom control and a flyToBounds animation on a
+  // 0x0 element. Leaflet's getBoundsZoom on a zero-size container returns
+  // Infinity, clamped to maxZoom, so fitBounds(DENMARK) landed at street scale.
+  //
+  // Worse than the waste: flownRef was spent on the invisible map, so a tablet
+  // rotated past the breakpoint got the short pan instead of the establishing
+  // flight the whole design turns on.
+  //
+  // The same constant the CSS uses, so the query and the rule cannot drift.
+  // Subscribed rather than read once, because a window gets resized and a
+  // tablet gets rotated.
+  const [wide, setWide] = useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return true;
+    return window.matchMedia(`(min-width: ${RAIL_BREAKPOINT_PX}px)`).matches;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+    const mq = window.matchMedia(`(min-width: ${RAIL_BREAKPOINT_PX}px)`);
+    const onChange = (e) => setWide(e.matches);
+    // addListener is the old spelling, and Safari carried it long enough to be
+    // worth the fallback rather than a silently dead subscription.
+    if (mq.addEventListener) mq.addEventListener("change", onChange);
+    else mq.addListener(onChange);
+    setWide(mq.matches);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", onChange);
+      else mq.removeListener(onChange);
+    };
+  }, []);
+
   const list = Array.isArray(pins) ? pins : [];
   // DEPENDED ON BY VALUE. The same pins in the same places arriving as a new
   // array must not count as a change, or the redraw runs on every keystroke.
   const pinKey = list.map(p => `${p?.key}@${p?.lat},${p?.lon}${p?.latest ? "*" : ""}`).join("|");
-  const any = list.length > 0;
+  const any = list.length > 0 && wide;
 
   // ── MOUNT ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -309,7 +344,8 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
 
   useEffect(() => () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } }, []);
 
-  // A map of Denmark with nothing on it explains less than the space it takes.
+  // A map of Denmark with nothing on it explains less than the space it takes,
+  // and a map nobody can see explains nothing at all.
   if (!any) return null;
 
   return (
