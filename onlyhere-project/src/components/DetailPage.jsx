@@ -141,7 +141,7 @@ const eventsForTown = (townName) => {
 export const detailPoint = (item, kind) =>
   placeCoords(item) || (kind === "town" ? townPointFor(item?.name) : null);
 
-export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false, signedIn = false, onNeedAccount }) => {
+export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, hasBeen = false, onToggleBeen, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false, signedIn = false, onNeedAccount }) => {
   if (!item) return null;
   const color = item.color || C.accent;
   // ── AND THE SAME COLOUR CANNOT BE BOTH FILL AND INK ─────────────
@@ -247,6 +247,25 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                 style={{ background: isSaved ? `${C.gold}1e` : "none", border: `1px solid ${isSaved ? C.gold + "66" : C.border}`, color: isSaved ? C.gold : C.text, borderRadius: 100, padding: "9px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                 {saveLabel(isSaved)}
               </button>
+              {/* ── BEEN, BESIDE SAVE, ANSWERING A DIFFERENT QUESTION ──
+                  Oliver, 6 Sep 2026: "if someone has been somewhere, then it'll
+                  say on the different places, and it won't include them in a
+                  new guide."
+
+                  Save is "I want to go" and this is "I have gone", and
+                  somewhere can honestly be both: a bar you loved and want back
+                  at is saved AND been. So they are two independent toggles and
+                  neither one clears the other.
+
+                  Quieter than Save on purpose. Save is the thing the product is
+                  asking you to do; this is bookkeeping, and a second gold pill
+                  beside the first would read as two equal calls to action. */}
+              {onToggleBeen && (
+                <button onClick={onToggleBeen}
+                  style={{ background: hasBeen ? `${C.text}12` : "none", border: `1px solid ${hasBeen ? C.text + "44" : C.border}`, color: hasBeen ? C.text : C.muted, borderRadius: 100, padding: "9px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  {hasBeen ? "✓ Been here" : "Been here"}
+                </button>
+              )}
               {isSaved && onPlanFromSaved && planFromSavedLabel(savedCount) && (
                 <button onClick={onPlanFromSaved}
                   style={{ background: "none", border: "none", color: C.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: "9px 4px", fontFamily: "'Inter', sans-serif" }}>
@@ -255,7 +274,16 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               )}
             </div>
             <div style={{ fontSize: 11.5, color: C.muted, marginTop: 7, lineHeight: 1.5 }}>
-              {saveHint(isSaved, savedCount)}
+              {/* What being marked MEANS, because a tick with no consequence is
+                  a tick nobody presses twice. It says the thing that actually
+                  happens, and it says the town rule out loud rather than
+                  letting somebody find it by marking Copenhagen and watching
+                  their trip stay the same. */}
+              {hasBeen
+                ? (kind === "town"
+                    ? "Marked as somewhere you have been. Your guides will still route you here and still base you here, and will fill the days with things you have not done."
+                    : "Marked as somewhere you have been. Gemlyx will leave it out of new guides.")
+                : saveHint(isSaved, savedCount)}
             </div>
           </div>
         )}

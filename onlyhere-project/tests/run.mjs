@@ -234,6 +234,8 @@ writeFileSync(entry, `
   export { coverageByPart, thinnestParts, coverageSummary, discoveryFraming, isAlreadyCovered, splitAlreadyCovered } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget, placeFromText, candidateFitsTarget, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { checkPlan, planProblemsForPrompt, titlePromises, MAX_DAY_KM, dayCeilingKm } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
+  export { toggleBeen, markMany, isBeen, canBeMarked, beenNote, withoutBeen, excludedBeen, knownBeen, beenRecord, sameEntry, isContextKind, BEEN_CAP, BEEN_KINDS } from ${JSON.stringify(join(root, "src/utils/beenThere.js"))};
+  export { cleanBeen, mergeBeen, missingBeenColumn } from ${JSON.stringify(join(root, "src/utils/beenSync.js"))};
   export { isOwnSiteFor, urlNames, isKommuneHost, isTownWord, ownershipWords, subjectIsEvent, EVENT_SUBJECT_TYPES, isTourismHost, KOMMUNE_HOSTS } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { detectLegMode as detectLegModeX, isFerryText } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fold as foldName } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
@@ -2520,6 +2522,25 @@ is("missing licence does not require credit", creditIsRequired({}), false);
       // says nothing rather than guessing at it.
       is("no hours supplied, no opinion", checkPlan(his, coords, { isPublished: () => true, mode: "public transport" })
         .problems.filter(p => /^SHUT/.test(p.code)).length, 0);
+      // ── AND THIS IS THE PURE FUNCTIONS REFUSING, NOT THE GUARD ──
+      //
+      // Both halves of the gate's condition were mutation tested and both
+      // survived, for different reasons, and both are worth writing down.
+      //
+      // The arrivalDate half decided nothing: openAtVisit and shutOnVisit
+      // already return null without a date, so this assertion passes with or
+      // without it. It has been deleted from the code rather than left there
+      // reading as a rule, because a condition that decides nothing is how the
+      // real rule beside it gets removed by somebody tidying.
+      //
+      // The `typeof opts.hoursFor === "function"` half cannot be tested at all:
+      // deleting it calls undefined and THROWS, which stops the suite dead
+      // instead of failing a named assertion — the trap recorded twice already
+      // in this file. It stays, because a guide build must not die over a
+      // caller that passed one argument and not the other.
+      //
+      // So what this line actually asserts is the refusal inside the pure
+      // functions, which is where it belongs.
       is("no arrival date, no opinion", checkPlan(his, coords, { isPublished: () => true, hoursFor: (n) => HOURS[n] || null })
         .problems.filter(p => /^SHUT/.test(p.code)).length, 0);
     }
@@ -2527,9 +2548,17 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // two things it needs, and this whole finding is a check that existed and
     // was never called.
     const appHrs = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
-    ok("the gate is given the hours and the date", /checkPlan\(skeleton\.days, gateCoords, \{ isPublished, mode: gateMode, hoursFor, arrivalDate \}\)/.test(appHrs));
+    // ── NAMED OPTIONS, NOT AN EXACT OBJECT ──────────────────────
+    // Written first as the whole literal, and `wasDone` joining the gate on
+    // 6 Sep turned it red for a change that has nothing to do with opening
+    // hours. The claim is that BOTH calls carry both options, which is the
+    // half that was genuinely missing before, so that is what is asserted.
+    const gateCalls = appHrs.match(/checkPlan\((?:skeleton|fixed)\.days[^)]*\)/g) || [];
+    is("the gate is called twice, for the plan and for its retry", gateCalls.length, 2);
+    ok("the gate is given the hours and the date",
+       gateCalls.length === 2 && gateCalls.every(c => /\bhoursFor\b/.test(c) && /\barrivalDate\b/.test(c)));
     ok("and so is the retry, or a fixed plan is judged on less than the first one",
-       /checkPlan\(fixed\.days, fixedCoords, \{ isPublished, mode: gateMode, hoursFor, arrivalDate \}\)/.test(appHrs));
+       !!gateCalls[1] && /\bhoursFor\b/.test(gateCalls[1]) && /\barrivalDate\b/.test(gateCalls[1]));
     // lookupRealPlace, the same resolver the coordinates use. Two resolvers
     // answering "which published row is this" differently is the fault this
     // codebase has now found six times.
@@ -2537,6 +2566,125 @@ is("missing licence does not require credit", creditIsRequired({}), false);
        /const hoursFor = \(n\) => lookupRealPlace\(n\)\?\.__hours \|\| null;/.test(appHrs));
     ok("and the planner is told how to fix each of them",
        /A place planned for an hour it is shut/.test(appHrs) && /A place closed on the day it is planned for/.test(appHrs));
+
+    // ── "ALREADY BEEN" ────────────────────────────────────────────
+    //
+    // Oliver, 6 Sep 2026: "if someone has been somewhere, then it'll say on the
+    // different places, and it won't include them in a new guide."
+    //
+    // THE RULE HE CHOSE IS NOT ONE RULE, and everything below exists to keep
+    // the two halves apart. Marking Copenhagen cannot exclude Copenhagen: that
+    // is the airport, the hotel and a third of the published content. Marking
+    // Tivoli removes Tivoli.
+    {
+      const { toggleBeen, markMany, isBeen, canBeMarked, beenNote, withoutBeen,
+              excludedBeen, knownBeen, isContextKind, BEEN_CAP, BEEN_KINDS,
+              cleanBeen, mergeBeen, missingBeenColumn } = M;
+      const day = new Date(2026, 8, 6);
+      let list = [];
+      list = toggleBeen(list, "town", { id: 12, name: "Copenhagen" }, "Copenhagen", day);
+      list = toggleBeen(list, "free", { id: 55, name: "Tivoli" }, "Copenhagen", day);
+      list = toggleBeen(list, "food", { id: 63, name: "Geranium" }, "Copenhagen", day);
+      is("a place is off the table", excludedBeen(list).map(b => b.name).sort(), ["Geranium", "Tivoli"]);
+      is("and a town is not", knownBeen(list).map(b => b.name), ["Copenhagen"]);
+      // The sentence the planner reads. TWO sentences, never one list, because a
+      // planner handed one list applies one rule to it and the whole feature is
+      // that the halves differ.
+      const note = beenNote(list);
+      ok("the planner is told to skip the places", /Never put one on a day[\s\S]*Tivoli/.test(note));
+      ok("and told to KEEP the town and change what happens in it",
+         /Keep them in the route and keep sleeping there/.test(note) && /Copenhagen/.test(note));
+      ok("and the two are not the same sentence", note.split("\n").length === 2);
+      // ── MATCHED ON ID, NEVER ON NAME ────────────────────────────
+      // Several Danish towns have their own Strøget and their own Torvet, which
+      // this pipeline has a whole file about. A been list keyed on names would
+      // take somebody's Aarhus street away because they had walked Copenhagen's.
+      const pool = [{ id: 55, name: "Tivoli" }, { id: 56, name: "Rundetaarn" }, { id: 63, name: "Geranium" }, { name: "no id" }];
+      is("the pool loses what they have done", withoutBeen(pool, list).map(p => p.name), ["Rundetaarn", "no id"]);
+      is("and a row with no id survives, because it cannot be the marked one",
+         withoutBeen(pool, list).some(p => p.name === "no id"), true);
+      // Toggle, because a mistake has to be undoable.
+      is("marking twice unmarks", isBeen(toggleBeen(list, "free", { id: 55, name: "Tivoli" }, "", day), "free", 55), false);
+      // ── AN OBJECT IS NOT A PLACE ────────────────────────────────
+      // "I have been to a smoked herring" is not a fact about anybody's trip.
+      is("a craft item cannot be marked", canBeMarked("craft"), false);
+      is("nor a product", canBeMarked("product"), false);
+      is("and the button refuses it rather than storing a bad record",
+         toggleBeen(list, "craft", { id: 9, name: "A herring" }, "", day).length, list.length);
+      ok("every markable kind is a place", BEEN_KINDS.every(k => canBeMarked(k)));
+      // ── AN EVENT IS A DIFFERENT EVENT NEXT YEAR ─────────────────
+      // Deliberate, and flagged to him rather than decided in silence: somebody
+      // who went to a festival in 2025 has not been to the 2026 one, and
+      // excluding it forever because they ticked it once is a bug that takes a
+      // year to appear. Context, not exclusion.
+      ok("an event is context rather than an exclusion", isContextKind("event"));
+      ok("and a town is too", isContextKind("town"));
+      ok("while a restaurant is not", !isContextKind("food"));
+      // ── THE AUTOMATIC HALF ──────────────────────────────────────
+      // "if it has been in the guide before, and someone has finished that day,
+      // then it should automatically be put into the 'already been'."
+      const after = markMany(list, [{ kind: "food", id: 99, name: "Sankt Peders", town: "Copenhagen" }], day);
+      ok("finishing a day files its stops", isBeen(after, "food", 99));
+      // A day finished twice, or two days sharing a stop, must not write a
+      // second record or move the first one's date: that date is when they
+      // first said they had been, and rewriting it relabels an old trip as new.
+      const twice = markMany(after, [{ kind: "food", id: 99, name: "Sankt Peders", town: "Copenhagen" }], new Date(2027, 0, 1));
+      is("finishing it twice files it once", twice.filter(b => String(b.id) === "99").length, 1);
+      is("and does not move the date", twice.find(b => String(b.id) === "99")?.at, "2026-09-06");
+      is("and it is additive, never a replacement", twice.length, after.length);
+      // ── WHAT COMES BACK OFF THE WIRE IS DATA ────────────────────
+      // Our own row, through a jsonb column and a network, and rows do get
+      // edited by hand in the console. A { id: null } reaching withoutBeen
+      // would match every entry that has no id.
+      is("a record with no id is dropped", cleanBeen([{ kind: "food", id: null, name: "x" }]).length, 0);
+      is("and one with an unknown kind is too", cleanBeen([{ kind: "spaceship", id: 3, name: "x" }]).length, 0);
+      is("duplicates collapse", cleanBeen([{ kind: "food", id: 3, name: "a" }, { kind: "food", id: 3, name: "a" }]).length, 1);
+      is("and the same id under a different kind is a different place",
+         cleanBeen([{ kind: "food", id: 3, name: "a" }, { kind: "free", id: 3, name: "b" }]).length, 2);
+      ok("the cap is real and bigger than the saved list's forty", BEEN_CAP > 40 && BEEN_CAP <= 1000);
+      // Union on sign-in, same rule the saves take: neither list is more
+      // correct, and a been mark is cheap to add and annoying to lose.
+      is("two devices union rather than one winning",
+         mergeBeen([{ kind: "food", id: 1, name: "a" }], [{ kind: "food", id: 2, name: "b" }]).length, 2);
+      is("and the local copy wins a tie, because its date was written there",
+         mergeBeen([{ kind: "food", id: 1, name: "local", at: "2026-01-01" }], [{ kind: "food", id: 1, name: "cloud", at: "2020-01-01" }])[0].name, "local");
+      // The column does not exist until the migration runs, and that must cost
+      // the been list and nothing else. See the header of utils/beenSync.js.
+      ok("a missing column is recognised, in both spellings PostgREST uses",
+         missingBeenColumn({ code: "42703" }) && missingBeenColumn({ code: "PGRST204" }));
+      ok("and an ordinary failure is not", !missingBeenColumn({ code: "23505", message: "duplicate key" }));
+    }
+    // ── THE GATE, BECAUSE A PROMPT IS NOT A RULE ───────────────────
+    {
+      const { checkPlan } = M;
+      const days = [{ day: 1, stops: [{ name: "Tivoli", town: "Copenhagen" }, { name: "Rundetaarn", town: "Copenhagen" }] }];
+      const coords = { Tivoli: { lat: 55.67, lon: 12.57 }, Rundetaarn: { lat: 55.68, lon: 12.57 } };
+      const v = checkPlan(days, coords, { isPublished: () => true, wasDone: (n) => n === "Tivoli" });
+      is("a place they have done is refused", v.problems.filter(p => p.code === "ALREADY_DONE").map(p => p.stop), ["Tivoli"]);
+      ok("and the planner is told to swap rather than delete",
+         v.problems.some(p => /Replace it with somewhere in the same town/.test(p.detail)));
+      is("and without the callback it says nothing",
+         checkPlan(days, coords, { isPublished: () => true }).problems.filter(p => p.code === "ALREADY_DONE").length, 0);
+    }
+    // THE WIRING, which is the half that has been missing twice tonight.
+    ok("the guide prompt is given what they have done", /const beenBlock = beenNote\(beenList\)/.test(appHrs));
+    ok("and the skeleton prompt gets it too, not only the writing pass",
+       (appHrs.match(/\$\{beenBlock\}/g) || []).length === 2);
+    // excludedBeen, never the whole list. A gate refusing a plan for routing
+    // through Copenhagen is the exact failure the town rule exists to prevent.
+    ok("the gate is given the excluded half only",
+       /const doneIds = new Set\(excludedBeen\(beenList\)\.map/.test(appHrs));
+    // lookupRealPlace again, so the been list and the gate agree about which
+    // published row a name is rather than comparing two strings.
+    ok("and a name is resolved to a row before it counts",
+       /const wasDone = \(n\) => \{[\s\S]{0,220}?lookupRealPlace\(n\)/.test(appHrs));
+    const detail = stripComments(readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8"));
+    ok("the entry page carries the button", /onToggleBeen/.test(detail));
+    // Save is "I want to go" and been is "I have gone", and somewhere can
+    // honestly be both, so neither toggle may clear the other.
+    is("and it is a separate toggle from Save", (appHrs.match(/onToggleBeen=\{/g) || []).length, 5);
+    ok("and the town rule is said on the page rather than left to be discovered",
+       /still route you here and still base you here/.test(detail));
     const guideBuildSlice = readFileSync(join(root, "src/App.jsx"), "utf8");
     // Anchored on the FETCH, not the bare string: the second occurrence is a
   // comment mentioning the endpoint, which is the comment trap that has cost
@@ -23030,7 +23178,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   const appE2 = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the build picks them", /const essentialsPicked = essentialsForTrip\(essentials, \{ convoText, interests: intakeInterest \}\)/.test(appE2));
   ok("builds the block", /const essentialsFacts = essentialsBlock\(essentialsPicked\)/.test(appE2));
-  ok("and the guide prompt is given it", /\$\{chosenEventsBlock\}\$\{chosenExtrasBlock\}\$\{essentialsFacts\}/.test(appE2));
+  // beenBlock joined this run of blocks on 6 Sep. Asserted as "essentialsFacts is
+  // in the run" rather than as an exact neighbour, because the claim here is that
+  // the prompt gets it and the next block added would break this again for a
+  // reason that has nothing to do with essentials.
+  ok("and the guide prompt is given it", /\$\{chosenEventsBlock\}\$\{chosenExtrasBlock\}(?:\$\{\w+\})*\$\{essentialsFacts\}/.test(appE2));
 
   // ── "THE DOWNLOAD LIKE WITH THE DSB APP IS NOT THERE" ────────────
   // Not a missing field. `link` is asked for in the prompt as "the official URL"
@@ -45722,9 +45874,18 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // A couple is exactly one other adult. Everything below is somebody else.
     is("parents are not a couple", partyAnswer("I'm going with my parents"), null);
     is("nor a sibling", partyAnswer("with my brother"), null);
-    // The conjunction guard. "my sister and her husband" is two other people
-    // and reading it as a couple would undercount a party of three.
-    is("and not somebody else's husband", partyAnswer("with my sister and her husband"), null);
+    // ── THE CONJUNCTION GUARD, ASSERTED ON A CASE IT DECIDES ────
+    //
+    // Written first as "with my sister and her husband", which survived a
+    // mutation deleting the guard: that phrase has THREE words between the
+    // possessive and the relation and the two-word window already refuses it,
+    // so the assertion was measuring the window and calling it the guard.
+    //
+    // "with my mum and husband" is the one the guard decides. Two fillers,
+    // inside the window, and one of them is the conjunction. Without the guard
+    // it reads as a couple and a party of three is counted as two.
+    is("a conjunction is not an adjective", partyAnswer("with my mum and husband"), null);
+    is("and neither is somebody else's husband", partyAnswer("with my sister and her husband"), null);
     // Bare "man" and "mand" are husband in Dutch and Danish AND the impersonal
     // pronoun. The possessive is what tells them apart, in both readers.
     is("the impersonal pronoun is still not a party", partyAnswer("man kan tage toget til Ribe"), null);

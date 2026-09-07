@@ -377,7 +377,15 @@ export const checkPlan = (days, coords = {}, opts = {}) => {
   // Both callbacks are optional and the rule is silent without them, which is
   // the same shape as the coordinate rule above: a gate that cannot judge
   // something says nothing rather than guessing at it.
-  if (typeof opts.hoursFor === "function" && opts.arrivalDate) {
+  //
+  // THE GUARD IS ABOUT A CRASH, NOT ABOUT A DECISION, and it says so because
+  // mutation testing caught it pretending otherwise. `&& opts.arrivalDate` was
+  // in this condition and deleting it changed nothing: shutOnVisit and
+  // openAtVisit both refuse without a date already, and a condition that reads
+  // as a rule while deciding nothing is how a real rule gets deleted next to it
+  // by somebody tidying. What is left is the one part that matters, which is
+  // that calling an absent callback would throw and take a guide build with it.
+  if (typeof opts.hoursFor === "function") {
     list.forEach((d, i) => {
       const dayNo = d.day || i + 1;
       (d.stops || []).forEach(st => {
@@ -395,6 +403,31 @@ export const checkPlan = (days, coords = {}, opts = {}) => {
           problems.push({ code: "SHUT_AT_THAT_HOUR", day: dayNo, stop: st.name,
             detail: describeClosedAt(late, `${st.name} (day ${dayNo})`) });
         }
+      });
+    });
+  }
+
+  // ── 9. SOMEWHERE THEY HAVE ALREADY DONE ───────────────────────────
+  //
+  // Oliver, 6 Sep 2026: "it won't include them in a new guide."
+  //
+  // The prompt is told, and a rule enforced only in a prompt is not enforced,
+  // which is the finding this file exists because of. So it is checked here as
+  // well, on the same skeleton, with the same one retry.
+  //
+  // ONLY THE EXCLUDED HALF EVER REACHES THIS. A marked TOWN is not a problem
+  // and must never become one: he chose "a town keeps its place, its stops
+  // change", and a gate that refused a plan for routing through Copenhagen
+  // would be the exact failure the rule was written to prevent. beenThere.js
+  // owns that split and this asks it rather than deciding again.
+  if (typeof opts.wasDone === "function") {
+    list.forEach((d, i) => {
+      const dayNo = d.day || i + 1;
+      (d.stops || []).forEach(st => {
+        if (!st?.name) return;
+        if (!opts.wasDone(st.name)) return;
+        problems.push({ code: "ALREADY_DONE", day: dayNo, stop: st.name,
+          detail: `${st.name} is on day ${dayNo} and they have already been there. Replace it with somewhere in the same town they have not done.` });
       });
     });
   }

@@ -228,6 +228,8 @@ import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, 
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
 import { getSession, getStoredSession, captureRedirectSession, signOut as authSignOut, deleteMyData } from "./utils/auth";
 import { fetchCloudSaves, pushCloudSaves, mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink, syncFailureNote, SYNC } from "./utils/userSaves";
+import { toggleBeen, markMany, isBeen, canBeMarked, beenNote, withoutBeen, excludedBeen } from "./utils/beenThere";
+import { fetchBeen, pushBeen, mergeBeen, cleanBeen } from "./utils/beenSync";
 import { loadImageCredits, allImageCredits, licenseUrl, creditIsRequired } from "./utils/imageCredits";
 import { PhotoCredit } from "./components/PhotoCredit";
 import { placeKindOf, kindLabel, isArea, PLACE_KINDS, KIND_LABEL } from "./utils/placeKind";
@@ -11317,6 +11319,22 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     try { return JSON.parse(localStorage.getItem("gemlyx_saved_places") || "[]"); } catch { return []; }
   });
 
+  // ── "ALREADY BEEN" ────────────────────────────────────────────────
+  // Oliver, 6 Sep 2026: "if someone has been somewhere, then it'll say on the
+  // different places, and it won't include them in a new guide."
+  //
+  // A third list beside the saves, same record shape, same local-first sync.
+  // cleanBeen on the way out of local storage as well as out of the account:
+  // this key survives deploys and a shape written by an older build is exactly
+  // as untrusted as one edited by hand in the console.
+  const [beenList, setBeenList] = useState(() => {
+    try { return cleanBeen(JSON.parse(localStorage.getItem("gemlyx_been") || "[]")); } catch { return []; }
+  });
+  // The column does not exist until the migration is run. Recorded rather than
+  // announced, the same way cloudSyncOk is, because a traveller marking their
+  // first place must not be told about a schema.
+  const [beenColumnMissing, setBeenColumnMissing] = useState(false);
+
   // ── TRAVELER ACCOUNTS (optional, saves only) ──────────────────────
   // Oliver's decisions: Google OR email+password, fully optional, and this first
   // pass covers accounts and saves only. No traveler profile, nothing near the
@@ -11560,6 +11578,24 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
         localStorage.setItem("gemlyx_saved_places", JSON.stringify(finalPlaces));
         localStorage.setItem("gemlyx_saved_guides", JSON.stringify(finalGuides));
       } catch { /* private mode */ }
+      // ── AND THE BEEN LIST, ON ITS OWN REQUEST ──────────────────
+      //
+      // After the saves and never inside them. A SELECT naming a column that
+      // does not exist is an ERROR, fetchCloudSaves reads any non-array as
+      // "the table is not there", and folding `been` into that read would have
+      // cost every traveller their saves between this deploy and the migration
+      // being run. See the header of utils/beenSync.js.
+      //
+      // Same merge rule as the saves for the same reason: neither list is more
+      // correct, so both are kept.
+      const fromCloud = await fetchBeen(userSession);
+      if (fromCloud?.missingColumn) setBeenColumnMissing(true);
+      else if (fromCloud?.been) {
+        const localBeen = readLocal("gemlyx_been");
+        let finalBeen = mergeBeen(localBeen, fromCloud.been);
+        setBeenList(prev => { finalBeen = mergeBeen(prev, finalBeen); return finalBeen; });
+        try { localStorage.setItem("gemlyx_been", JSON.stringify(finalBeen)); } catch { /* private mode */ }
+      }
       // pushCloudSaves returns false on a refused write and both call sites used
       // to discard it, so a green "saves synced" could sit over a 403 and the
       // person found out weeks later on another device.
@@ -11599,10 +11635,17 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     clearTimeout(pushTimerRef.current);
     pushTimerRef.current = setTimeout(() => {
       pushCloudSaves(userSession, savedPlaces, savedGuides).then(setCloudSyncOk);
+      // Its own write, matching its own read. A missing column is recorded and
+      // never retried in a loop: it will not appear until somebody runs the
+      // migration, and asking again every twelve hundred milliseconds is how a
+      // schema gap becomes a bill.
+      if (!beenColumnMissing) {
+        pushBeen(userSession, beenList).then(r => { if (r?.missingColumn) setBeenColumnMissing(true); });
+      }
     }, 1200);
     return () => clearTimeout(pushTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedPlaces, savedGuides, userSession]);
+  }, [savedPlaces, savedGuides, beenList, beenColumnMissing, userSession]);
 
   const handleSignedIn = (session) => {
     syncedOnceRef.current = false;   // a new session must re-merge
@@ -11773,6 +11816,40 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   };
 
   const isPlaceSaved = (kind, id) => savedPlaces.some(p => p.kind === kind && p.id === id);
+  // ── THE BEEN BUTTON ───────────────────────────────────────────────
+  // Beside Save, and answering a different question: Save is "I want to go",
+  // been is "I have gone". Somewhere can honestly be both, so marking one never
+  // touches the other.
+  const isBeenHere = (kind, id) => isBeen(beenList, kind, id);
+  const toggleBeenHere = (kind, item, townName) => {
+    setBeenList(prev => {
+      const updated = toggleBeen(prev, kind, item, townName);
+      try { localStorage.setItem("gemlyx_been", JSON.stringify(updated)); } catch { /* ignore */ }
+      return updated;
+    });
+  };
+  // The automatic half: a day of a guide marked finished files its stops. Every
+  // stop, resolved through lookupRealPlace so a stop only counts when it IS a
+  // published entry — a plan can name somewhere Gemlyx has no page for, and a
+  // record with no id is a record the pool filter cannot use.
+  const markDayVisited = (stops) => {
+    const rows = (Array.isArray(stops) ? stops : []).map(st => {
+      const real = lookupRealPlace(st?.name);
+      const kind = real?._src === "free" ? "free" : real?._src;
+      return real && canBeMarked(kind)
+        ? { kind, id: real.id, name: real.name, emoji: real.emoji, town: st?.town || real.town || "" }
+        : null;
+    }).filter(Boolean);
+    if (!rows.length) return 0;
+    let added = 0;
+    setBeenList(prev => {
+      const updated = markMany(prev, rows);
+      added = updated.length - prev.length;
+      try { localStorage.setItem("gemlyx_been", JSON.stringify(updated)); } catch { /* ignore */ }
+      return updated;
+    });
+    return rows.length;
+  };
   const toggleSavePlace = (kind, item, townName) => {
     setSavedPlaces(prev => {
       const exists = prev.some(p => p.kind === kind && p.id === item.id);
@@ -12682,6 +12759,17 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       const chosenExtras = Array.isArray(pickedExtras) && pickedExtras.length
         ? [...freeEntrance, ...craftItemsFallback, ...foodSpots, ...nightlifeSpots].filter(p => pickedExtras.includes(p.name))
         : [];
+      // ── AND WHAT THEY HAVE ALREADY DONE ─────────────────────────
+      //
+      // Oliver, 6 Sep 2026: "it won't include them in a new guide."
+      //
+      // TWO SENTENCES, NOT ONE LIST, because the two halves are treated
+      // differently and a planner handed one list will apply one rule to it. A
+      // marked PLACE is off the table; a marked TOWN stays in the route and
+      // changes what happens in it. beenNote owns that split, and the reason it
+      // has to is that "exclude Copenhagen" would take the airport, the hotel
+      // and a third of the published content out of the trip.
+      const beenBlock = beenNote(beenList) ? `\n\n${beenNote(beenList)}` : "";
       const chosenExtrasBlock = chosenExtras.length
         ? `\n\nPLACES THE TRAVELER ADDED THEMSELVES, after being shown that these were left out of their brief. They asked for these specifically, so every one MUST appear as a stop:\n${chosenExtras.map(p => `- ${p.name}${p.city || p.town ? ` in ${p.city || p.town}` : ""}`).join("\n")}`
         : "";
@@ -12707,7 +12795,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       let planProblems = [];
       try {
         const plannerRes = await askOpenAI(
-          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name actually mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nUse only real place names actually mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a genuinely different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.${chosenEventsBlock}${chosenExtrasBlock}\n\nConversation:\n${convoText}`,
+          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name actually mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nUse only real place names actually mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.${beenBlock}\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a genuinely different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.${chosenEventsBlock}${chosenExtrasBlock}\n\nConversation:\n${convoText}`,
           1200
         );
         if (!plannerRes.error && plannerRes.text) {
@@ -12743,6 +12831,20 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
             // resolvers answering "which published place is this" differently
             // is the fault this codebase has now found six times.
             const hoursFor = (n) => lookupRealPlace(n)?.__hours || null;
+            // ── AND WHAT THEY HAVE ALREADY DONE ───────────────────
+            // Names, because a skeleton stop is a name. Resolved through
+            // lookupRealPlace so the gate and the been list agree about which
+            // published row a name is, rather than comparing two strings and
+            // taking a Strøget in one town for the one in another.
+            //
+            // excludedBeen, never the whole list: a marked TOWN is not a
+            // problem and refusing a plan for routing through Copenhagen is
+            // the failure the rule exists to prevent.
+            const doneIds = new Set(excludedBeen(beenList).map(b => `${b.kind}:${b.id}`));
+            const wasDone = (n) => {
+              const real = lookupRealPlace(n);
+              return !!real && doneIds.has(`${real._src === "free" ? "free" : real._src}:${real.id}`);
+            };
             // ── THE MODE REACHES THE GATE ─────────────────────────
             // Until 19 Aug it did not, so every day was judged against a flat
             // 120 km whatever the traveller said they travelled by: a 100 km day
@@ -12753,7 +12855,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
             // Their words only, for the reason written at the mode block below: the
       // assistant's own question names three modes and would answer the gate.
       const gateMode = travelModeKey(saidByTravellerForGuide);
-            let verdict = checkPlan(skeleton.days, gateCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate });
+            let verdict = checkPlan(skeleton.days, gateCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate, wasDone });
             let planDays = skeleton.days;
 
             // ONE RETRY, NEVER A REFUSAL. Some trips genuinely are awkward, and
@@ -12768,7 +12870,8 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
                 const fixRes = await askOpenAI(
                   `This itinerary skeleton has specific, checkable problems. Fix them and return the corrected skeleton.\n\nPROBLEMS:\n${planProblemsForPrompt(verdict.problems)}\n\nHOW TO FIX EACH KIND:\n- A day with too few stops: add real places in or near that day's town, from the conversation, never invented.\n- The same place on two days: that is where they are STAYING. Keep it once, and give the other day its own places in that town or nearby.\n- Too few different places overall: the trip is thinner than the number of days it claims. Add real ones from the conversation.\n- A day that covers too much ground: move a stop to a neighbouring day, or drop the one that forces the long haul. A day that is mostly transit is a day the trip did not have.\n- A crowded arrival day: they land, queue at passport control, collect bags, cross the city and check in before any of it. Keep the two best things and move the rest to a later day. Do not compensate by overfilling day two.
 - A place closed on the day it is planned for: move it to a day it is open, or drop it. Never leave it where it is with a note.
-- A place planned for an hour it is shut: change its arrivalTime to one inside its opening hours. A club that opens at 23:00 belongs at 23:00 or later, and the bar you were going to visit afterwards goes BEFORE it, not after. Do not compress the rest of the day to make room; move or drop something instead.\n\nSame JSON shape, nothing else: {"days": [{"day": 1, "stops": [{"name": "...", "town": "...", "arrivalTime": "..."}]}]}. Only real place names from the conversation.\n\nCurrent skeleton:\n${JSON.stringify(skeleton)}\n\nConversation:\n${convoText}`,
+- A place planned for an hour it is shut: change its arrivalTime to one inside its opening hours. A club that opens at 23:00 belongs at 23:00 or later, and the bar you were going to visit afterwards goes BEFORE it, not after. Do not compress the rest of the day to make room; move or drop something instead.
+- A place they have already been to: swap it for a different real place in the same town, from the conversation. Do not simply delete it and leave the day one stop shorter, and do not move it to another day.\n\nSame JSON shape, nothing else: {"days": [{"day": 1, "stops": [{"name": "...", "town": "...", "arrivalTime": "..."}]}]}. Only real place names from the conversation.\n\nCurrent skeleton:\n${JSON.stringify(skeleton)}\n\nConversation:\n${convoText}`,
                   1200
                 );
                 if (!fixRes.error && fixRes.text) {
@@ -12783,7 +12886,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
                       const key = townKeyFor(st.town || "") || townKeyFor(st.name);
                       if (key) fixedCoords[st.name] = { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
                     }));
-                    const second = checkPlan(fixed.days, fixedCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate });
+                    const second = checkPlan(fixed.days, fixedCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate, wasDone });
                     // Keep whichever is actually better. A "fix" that trades two
                     // problems for three is not a fix.
                     if (second.problems.length < verdict.problems.length) { verdict = second; planDays = fixed.days; }
@@ -12949,7 +13052,7 @@ CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stop
 CRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE ROUTE, NOT JUST EACH DAY INTERNALLY: this applies across the whole trip, not just within one day — Copenhagen/Zealand and Jutland are genuinely different regions connected only by a long bridge/ferry crossing or a flight, never a short hop. Don't send the trip deeper into one region for several days and then jump straight to the other with no bridging day (e.g. Day 1-2 further into Jutland, Day 3 suddenly Copenhagen). If a planning skeleton is provided below, its day-to-day order already accounts for this — follow it. If you're structuring the trip yourself (no skeleton, or it's missing this), order the days to move in one general direction across the country and minimize total region-crossings over the whole trip.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a genuine buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a genuine buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, genuinely adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything genuinely inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${chosenEventsBlock}${chosenExtrasBlock}${essentialsFacts}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's genuinely missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${chosenEventsBlock}${chosenExtrasBlock}${beenBlock}${essentialsFacts}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's genuinely missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
       // Guide-building is genuine multi-step reasoning (timing, geography, avoiding
       // duplicates, family-mode adjustments) — this is the one call in Detour worth
       // Opus's extra reasoning depth, and it already has a loading screen the person
@@ -23262,14 +23365,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           live control it held, bookableOnly, already has its own pill on the
           Attractions page and is untouched. */}
 
-      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} hasBeen={!!eventDetail && isBeenHere("event", eventDetail.id)} onToggleBeen={eventDetail ? () => toggleBeenHere("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       {/* onOpenEvent powers the new "What's on in <town>" section: tapping a
           festival closes the town page and opens that event's real entry, so the
           traveler lands on the full page with dates, tickets and directions
           rather than a dead-end list item. */}
-      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} hasBeen={!!townDetail && isBeenHere("town", townDetail.id)} onToggleBeen={townDetail ? () => toggleBeenHere("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} hasBeen={!!nightlifeDetail && isBeenHere("nightlife", nightlifeDetail.id)} onToggleBeen={nightlifeDetail ? () => toggleBeenHere("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} hasBeen={!!freeDetail && isBeenHere("free", freeDetail.id)} onToggleBeen={freeDetail ? () => toggleBeenHere("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       {/* ── The assistant that follows him (Oliver, 6 Aug: "some sort of
           assistant for the admin /#studio guy? That will always be with me?
           Even when I'm on the blogs")  ────────────────────────────────
@@ -23407,7 +23510,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           onSaved={() => refreshLiveContent()} />;
       })()}
 
-      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} hasBeen={!!foodDetail && isBeenHere("food", foodDetail.id)} onToggleBeen={foodDetail ? () => toggleBeenHere("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
 
       {/* Per Oliver ("get rid of the popup"): once a guide finishes building, we
           navigate straight to the full-page GuidePage instead of showing a
