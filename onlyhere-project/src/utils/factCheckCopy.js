@@ -231,9 +231,50 @@ export const factCheckCopy = (draft, { type = "", now = "" } = {}) => {
     out.push(`Read while drafting: ${hosts.join(", ")}.`);
   }
 
+  // ── AND EVERY FINDING HAS TO COME WITH THE PAGE ─────────────────
+  //
+  // Oliver, 7 Sep 2026: "I'd also like the fact-check copy for Gemini to ask
+  // for sources, and the draft fact-checker to check any sources linked."
+  //
+  // The old closing line asked for "the page you read the correct version on"
+  // in passing, at the end of a sentence about three other things, and a model
+  // reads that as optional. Most findings came back with no URL at all.
+  //
+  // THIS IS NOT POLITENESS, IT IS THE ONLY THING THAT MAKES THE OTHER HALF
+  // WORK. utils/correction.js now OPENS the page a finding cites and asks
+  // whether it says what the finding says it says — which catches the failure
+  // mode that started this, a confident correction resting on a page that
+  // never said it. A finding with no URL cannot be checked that way, so it
+  // falls back to a general search and is far more likely to end up applied on
+  // his word or not applied at all.
+  //
+  // SO THE CONSEQUENCE IS STATED. A model told what happens to an answer in the
+  // wrong shape produces the right shape far more often than one merely asked
+  // nicely, and it is also simply true: the pipeline behind this paste really
+  // does refuse a sourceless confirmation.
+  //
+  // ONE URL PER FINDING, ON ITS OWN LINE, WITH A FIXED PREFIX. The splitter
+  // downstream has to attach a URL to the claim it belongs to, and a bibliography
+  // at the bottom of the answer cannot be attached to anything.
   out.push("");
-  out.push("WHAT A USEFUL ANSWER LOOKS LIKE: name the claim, say what is wrong with it,");
-  out.push("and give the page you read the correct version on. Say nothing about the");
-  out.push("claims that are right, and do not rewrite the prose.");
+  out.push("WHAT A USEFUL ANSWER LOOKS LIKE. One block per finding, in this shape:");
+  out.push("");
+  out.push("  Claim: the line above that is wrong, quoted");
+  out.push("  Wrong because: what the source actually says");
+  out.push("  Should be: the corrected value");
+  out.push("  Source: one URL, the page you read it on");
+  out.push("");
+  out.push("EVERY FINDING NEEDS ITS OWN Source LINE, with a real URL you have opened.");
+  out.push("That page will be fetched and read, and it will be checked against what you");
+  out.push("said it says. A finding whose page turns out not to mention the claim is");
+  out.push("thrown out, and so is a finding with no URL at all: without one there is");
+  out.push("nothing to open, and nothing gets changed on an unsourced opinion.");
+  out.push("Prefer the place's own website over an aggregator, a review site or a maps");
+  out.push("listing. If the only thing you can find is an aggregator, say so on the");
+  out.push("Source line rather than dressing it up as official.");
+  out.push("");
+  out.push("Say nothing about the claims that are right, and do not rewrite the prose.");
+  out.push("If you cannot source a suspicion, leave it out rather than guessing: an");
+  out.push("unsourced correction costs more to disprove than it was worth raising.");
   return out.join("\n");
 };

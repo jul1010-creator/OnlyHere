@@ -97,7 +97,7 @@ export const rowIdForItem = (item) => {
 // talked him through. App.jsx owns the refresh, because App.jsx owns the
 // session state; a second copy of the retry living down here is exactly the
 // duplication that let this survive the first fix.
-export const StudioAssistant = ({ session, supaFetch, item, kind, draft, draftKind, onDraftPatched, onSaved, onSweepRequested, inline }) => {
+export const StudioAssistant = ({ session, supaFetch, readPage, item, kind, draft, draftKind, onDraftPatched, onSaved, onSweepRequested, inline }) => {
   const [open, setOpen] = useState(!!inline);
   const [input, setInput] = useState("");
   const [log, setLog] = useState([]);
@@ -180,7 +180,12 @@ export const StudioAssistant = ({ session, supaFetch, item, kind, draft, draftKi
     const result = await correctEntry({
       entry,
       criticism: message,
-      deps: { askClaude, askPerplexity, parseJSON: parseClaudeJSON, directions, onStage: setStage },
+      // readPage comes in as a prop for the same reason supaFetch does: App.jsx
+      // owns the session the /api/ route needs, and a second copy of the fetch
+      // helper down here is exactly the duplication that let the Studio expiry
+      // survive its first fix. Without it the citation tier simply does not run
+      // and this behaves as it did before.
+      deps: { askClaude, askPerplexity, parseJSON: parseClaudeJSON, directions, readPage, onStage: setStage },
     });
     setStage(null);
 

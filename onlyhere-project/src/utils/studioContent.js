@@ -7,7 +7,7 @@
 // hardcoded data array (towns/events/freeEntrance/foodSpots/etc.) expects.
 import { normaliseTicketStatus } from "./tickets";
 import { cleanKind } from "./essentialKind";
-import { isBookableTicketUrl } from "./ticketLink";
+import { isBookableTicketUrl, ticketUrlSaysElsewhere, ticketUrlIsASubEvent } from "./ticketLink";
 import { isWegotripUrl } from "./affiliates";
 import { cleanOffer, offerProblems } from "./offer";
 import { placeCoords } from "./guideEnrichment";
@@ -547,7 +547,26 @@ export const shapeForLive = (type, t) => {
   // the affiliate had nowhere to live. isBookableTicketUrl asks the one question
   // this line is actually asking, and it still refuses a front page, a search
   // and a category listing, which is the whole reason the check exists.
-  if (isBookableTicketUrl(t?.ticketUrl)) out = { ...out, ticketUrl: String(t.ticketUrl).trim() };
+  // ── AND IT HAS TO BE IN DENMARK ───────────────────────────────────
+  // 7 Sep 2026. A published nightlife entry carried a Tiqets link to a Chicago
+  // prohibition tour, because "Skjulte Perler" is Danish for "hidden gems" and
+  // matched the marketing copy on a Danish-locale page for an American product.
+  // Every gate above passed it: it IS a product page, and the name WAS on the
+  // page. Nothing had ever asked the one question that settles it.
+  //
+  // It is asked HERE as well as in the search, and deliberately: this line is
+  // the last thing between a link and the database, it is the line the comment
+  // above already promises cannot be got round "by being pasted into the JSON
+  // by hand at one in the morning", and a row hand-edited in the Supabase
+  // console reaches the reader through here too.
+  // ── AND ADMISSION, NOT A GUEST SLOT INSIDE IT ─────────────────────
+  // Same evening, same shape. Comic Con Denmark's Book tickets button was one
+  // guest's meet-and-greet. utils/tickets.js refuses that when it matches a
+  // listing, which stops the next one; a ticketUrl already on the row survives
+  // a redraft and a hand-pasted one never meets the matcher, so it is asked
+  // here as well. Both questions are about WHAT is being sold, which is the
+  // thing no amount of name matching answers.
+  if (isBookableTicketUrl(t?.ticketUrl) && !ticketUrlSaysElsewhere(t?.ticketUrl, t?.town || t?.city || "") && !ticketUrlIsASubEvent(t?.ticketUrl, t?.name)) out = { ...out, ticketUrl: String(t.ticketUrl).trim() };
   // ── AND WHEN AN AGENT WAS LAST ASKED ABOUT THIS ROW ───────────────
   //
   // utils/affiliateSweep.js, 6 Sep 2026. sweeps.js's fifth rule is that a sweep

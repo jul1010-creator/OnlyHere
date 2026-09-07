@@ -53,7 +53,7 @@ import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGat
 import { stayProblems, travellerBudget, budgetTierMismatch } from "./utils/accommodation";
 import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from "./utils/discovery";
 import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
-import { placeSlug, townPath, findBySlug, COUNTRY, kindForSeg, entryUrlPath, isEntryUrl } from "./utils/placeUrl";
+import { placeSlug, townPath, findBySlug, COUNTRY, kindForSeg, entryUrlPath, isEntryUrl, entryPathForKind, parseEntryUrl } from "./utils/placeUrl";
 import { startRun, endRun, summarise, averageFor, describe, describeAverage, recentRuns, installFetchMeter } from "./utils/apiCost";
 import { cleanOffer, offerProblems, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "./utils/offer";
 import { aiDisclosureFor } from "./utils/aiDisclosure";
@@ -129,7 +129,7 @@ import { isRecording, startRecording, stopRecording, record, recordedEvents, rec
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
 import { journeyParts, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, closedButPlanned, arrivalStop, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
-import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS } from "./utils/correction";
+import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS, urlsIn } from "./utils/correction";
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance, staleUncertainties, describeStale } from "./utils/glanceExtract";
 import { showsJourney, journeyOriginFor, journeyOriginPoint, IS_THE_CENTRE_KM } from "./utils/journeyScope";
 import { readableOn } from "./utils/readableColor";
@@ -147,7 +147,7 @@ import { townClashes, clashNote } from "./utils/chatGeography";
 import { readExclusions, withoutExcluded, excludedNote } from "./utils/exclusions";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
-import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries } from "./utils/ticketLink";
+import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl } from "./utils/ticketLink";
 import { currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLanguage";
 import { LanguageChoice } from "./components/LanguagePicker";
 import { NavStrip } from "./components/NavStrip";
@@ -1504,6 +1504,30 @@ function GemlyxApp() {
     return withToken(fresh.access_token);
   };
 
+  // ── AND THE ONE PAGE READER THE FACT-CHECKER NEEDED ───────────────
+  //
+  // Oliver, 7 Sep 2026: "the draft fact-checker to check any sources linked."
+  //
+  // /api/scan-source is the one door every external page in this app comes
+  // through, and correctEntry had no way to reach it: its deps were
+  // { askClaude, askPerplexity, parseJSON, directions, onStage, rules } and not
+  // one of them can open a URL, so a source a checker handed over was only ever
+  // read as TEXT. See the citation tier in utils/correction.js.
+  //
+  // fresh=1 deliberately. A cached copy of the page is the wrong thing here:
+  // the whole question is what that page says right now, and the checker read it
+  // minutes ago. One fetch per cited claim is the price.
+  //
+  // Defined ONCE, here, and passed to both callers rather than written twice.
+  // Two copies of a fetch helper is how the Studio session expiry survived its
+  // first fix, thirty-five call sites deep.
+  const readSourcePage = async (url) => {
+    try {
+      const res = await studioFetch(`/api/scan-source?fresh=1&url=${encodeURIComponent(url)}`);
+      return await res.json();
+    } catch (e) { return { text: "", error: String(e?.message || e) }; }
+  };
+
   // ── AND THEN THE SAME BUG, ONE LAYER DOWN, THIRTY-FIVE TIMES ──────
   //
   // 6 Sep 2026. Oliver, with a Studio recording: every button 401. Then:
@@ -2412,6 +2436,14 @@ function GemlyxApp() {
   const [rephraseSuggestions, setRephraseSuggestions] = useState({}); // flag index -> { original, suggestion }
   const [rephraseLoadingIdx, setRephraseLoadingIdx] = useState(null);
   const [draftEditError, setDraftEditError] = useState(null);
+  // ── THE AFFILIATE LINK, BY HAND ─────────────────────────────────
+  // Oliver, 7 Sep 2026: "you can make a safety, and input a 'edit affiliate
+  // link'. Where I give the exact reference if it fails." The verdict is held
+  // rather than shown as a toast because the whole point of it is the tracked
+  // address, and an address you have to read and click cannot be a thing that
+  // disappears after three seconds.
+  const [ticketPaste, setTicketPaste] = useState("");
+  const [ticketPasteResult, setTicketPasteResult] = useState(null);
   // ── THE GATE'S SECOND EXIT ────────────────────────────────────────
   // Oliver, 5 Sep 2026: "No, but it should be in a memory." Set by the date
   // gate when a refused festival is one that can honestly wait, holding the
@@ -2735,6 +2767,10 @@ function GemlyxApp() {
           // twelve spellings of five places. regionOf reads the coordinate
           // instead, so this prompt gets the same answer the draft pipeline got.
           rules: researchRules(studioType, { ...entry, region: regionOf(entry), kommune: kommuneNameAt(entry?.__lat, entry?.__lon) }),
+          // The page reader, so a URL the checker cited is opened and read back
+          // to it rather than thrown away. This is the pass that receives a
+          // whole Gemini answer at once, so it is the one that most needs it.
+          readPage: readSourcePage,
           onStage: (st) => setFactCheckFixStage(st?.label || null),
         },
       });
@@ -6882,7 +6918,21 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             // it could not open. The shape of the URL is the whole warrant here
             // and the note says so plainly, because a link this app cannot
             // corroborate from a page is a weaker thing than one it can.
-            const fallback = unreadTicketUrls[0];
+            // ── AND IT STILL HAS TO BE IN DENMARK ──────────────
+            // This is the one branch with NO page text to vet against, which
+            // is the exact position the Chicago link was accepted from. The
+            // URL is all there is, so the URL has to answer for the country.
+            const fallback = unreadTicketUrls.find(u => !ticketUrlSaysElsewhere(u, draftTown)) || "";
+            if (!fallback) {
+              note("No ticket link", {
+                provider: "fetch",
+                detail: unreadTicketUrls[0].slice(0, 120),
+                outcome: "empty",
+                used: false,
+                got: `${unreadTicketUrls.length} bookable address${unreadTicketUrls.length === 1 ? "" : "es"} were named by pages this run could not open, and none of them is in Denmark.`,
+                why: "A page that will not open cannot be read, so its address is the only evidence there is, and an address that says another country is evidence against it.",
+              });
+            } else {
             t.ticketUrl = fallback;
             note("The ticket link, from a page that would not open", {
               provider: "fetch",
@@ -6892,6 +6942,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
               why: "A scraper failing on Ticketmaster says nothing about whether the link works. Withholding it left a reader with no way to buy at all.",
               used: true,
             });
+            }
           } else if (candidates.length) {
             note("No ticket link", {
               provider: "fetch",
@@ -7418,7 +7469,11 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // gets stored, and the tracking is added at render from config.js, which
         // is the rule the Tiqets field already follows and the reason his
         // Ticketmaster approval needed no database migration.
-        if (!String(t.ticketUrl || "").trim() && isBookableTicketUrl(t?.__ticket?.url)) {
+        // The country gate applies here too, and it costs nothing: this listing
+        // was matched on name, date AND city, so a Danish event's page passes on
+        // the .dk host alone. It is here so that no path in this pipeline can
+        // write a ticketUrl without having answered the question once.
+        if (!String(t.ticketUrl || "").trim() && isBookableTicketUrl(t?.__ticket?.url) && !ticketUrlSaysElsewhere(t?.__ticket?.url, t.town || t.city || draftTown)) {
           t.ticketUrl = String(t.__ticket.url).trim();
           note("The ticket link, off the confirmed listing", {
             provider: "ticketmaster",
@@ -9081,6 +9136,45 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     setStudioDraft(draft);
     setStudioDraftText(JSON.stringify(draft, null, 2));
     setDraftEditError(null);
+  };
+
+  // ── AND THE AFFILIATE LINK HE PASTES ──────────────────────────────
+  //
+  // Through studioDraftText for the reason resolveUncertainty gives above: it
+  // is what Publish reads, and writing to studioDraft alone would show the link
+  // on screen and publish the draft without it.
+  //
+  // Every refusal in utils/ticketLink.js still applies. A pasted link is more
+  // trustworthy than a searched one and it is still a link typed at one in the
+  // morning, and the foreign product page that started this is exactly as wrong
+  // pasted as found.
+  const applyTicketPaste = () => {
+    let draft;
+    try { draft = JSON.parse(studioDraftText); }
+    catch { setTicketPasteResult({ ok: false, reason: "The draft JSON above is not parseable right now, so nothing was written. Fix the JSON first." }); return; }
+    const verdict = reviewPastedTicketUrl(ticketPaste, { name: draft?.name || "", town: draft?.town || draft?.city || "" });
+    if (!verdict.ok) { setTicketPasteResult(verdict); return; }
+    draft.ticketUrl = verdict.url;
+    setStudioDraft(draft);
+    setStudioDraftText(JSON.stringify(draft, null, 2));
+    setDraftEditError(null);
+    setTicketPaste("");
+    setTicketPasteResult(verdict);
+  };
+
+  // Removing one is half of editing one, and it is the action the Chicago link
+  // needed. It clears the field rather than writing an empty string, because a
+  // key holding "" is a key shapeForLive still has to reason about.
+  const clearTicketLink = () => {
+    let draft;
+    try { draft = JSON.parse(studioDraftText); }
+    catch { setTicketPasteResult({ ok: false, reason: "The draft JSON above is not parseable right now, so nothing was changed. Fix the JSON first." }); return; }
+    const had = String(draft?.ticketUrl || "").trim();
+    delete draft.ticketUrl;
+    setStudioDraft(draft);
+    setStudioDraftText(JSON.stringify(draft, null, 2));
+    setDraftEditError(null);
+    setTicketPasteResult({ ok: false, removed: true, reason: had ? `Removed. The draft no longer carries a ticket link, so no Book tickets button will render on it.` : "There was no ticket link on this draft to remove." });
   };
 
   const loadSources = async () => {
@@ -12358,7 +12452,20 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   // real path like /town/ribe would 404 on a hard refresh. A hash cannot.
   const ENTRY_SETTERS = { town: setTownDetail, event: setEventDetail, food: setFoodDetail, nightlife: setNightlifeDetail, free: setFreeDetail, craft: setCraftDetail };
   const closeAllEntries = () => Object.values(ENTRY_SETTERS).forEach(set => set(null));
-  const entryPath = (item, kind) => `#/${kind}/${slugify(item?.name || "")}`;
+  // ── THE REAL ADDRESS FIRST, THE HASH AS A FALLBACK ────────────
+  //
+  // Oliver, 7 Sep 2026, on a link he had copied out of the app:
+  // "https://www.gemlyxtravel.com/#/event/comiccondenmark this one".
+  //
+  // Every published entry has had a real, crawlable, share-cardable address
+  // since 16 August, and this function was still handing out the old hash. See
+  // entryPathForKind in utils/placeUrl.js for what that cost.
+  //
+  // The hash stays as the fallback rather than being deleted, because it is
+  // what a name that slugs to nothing still has, and losing the address bar
+  // entirely would be worse than an ugly one.
+  const entryHash = (item, kind) => `#/${kind}/${slugify(item?.name || "")}`;
+  const entryPath = (item, kind) => entryPathForKind(kind, item?.name) || entryHash(item, kind);
 
   const openEntryNow = eventDetail || townDetail || nightlifeDetail || freeDetail || foodDetail || craftDetail || null;
   const openEntryKind = eventDetail ? "event" : townDetail ? "town" : nightlifeDetail ? "nightlife" : freeDetail ? "free" : foodDetail ? "food" : craftDetail ? "craft" : null;
@@ -12375,16 +12482,37 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     // result ended up at /denmark/ribe#/town/ribe: the same page wearing two
     // addresses. Now that every type has a real path, the hash is for entries
     // opened by tapping inside the app and nothing else.
-    if (isEntryUrl(window.location.pathname)) return;
     const path = entryPath(openEntryNow, openEntryKind);
-    if (window.location.hash !== path) window.history.pushState({ gxEntry: true }, "", path);
+    // The old guard was `isEntryUrl(pathname)`, which asked "am I on ANY entry
+    // page" because the pushed address was always a hash and could only ever
+    // land on top of one. Now that the pushed address IS the entry page, the
+    // question it was always trying to ask is the right one: does the address
+    // already name THIS entry. Parsed rather than string-compared, so a cold
+    // arrival at /denmark/Ribe is recognised as Ribe instead of being
+    // re-pushed as /denmark/ribe.
+    const already = (() => {
+      if (path.startsWith("#")) return window.location.hash === path;
+      const here = parseEntryUrl(window.location.pathname);
+      const want = parseEntryUrl(path);
+      return !!here && !!want && here.seg === want.seg && here.slug === want.slug;
+    })();
+    if (already) return;
+    window.history.pushState({ gxEntry: true }, "", path);
   }, [openEntryNow, openEntryKind]);
 
   // Back closes whatever is open. Registered once, and deliberately closes
   // everything rather than trying to work out which one was on top.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const onPop = () => { if (!window.location.hash.startsWith("#/")) closeAllEntries(); };
+    // An entry PATH counts exactly as an entry hash did: the address still
+    // names an entry, so back has not left one. Without this, back out of an
+    // entry opened on a real path would close it and leave its address in the
+    // bar, which is the two-addresses-one-page bug in reverse.
+    const onPop = () => {
+      if (window.location.hash.startsWith("#/")) return;
+      if (isEntryUrl(window.location.pathname)) return;
+      closeAllEntries();
+    };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
@@ -12397,12 +12525,19 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     // INSIDE the app, not back out to whatever they were looking at before it.
     // history.back() from a cold arrival leaves the site entirely, which turns
     // every organic visitor into a bounce.
+    // ── OUR OWN PUSH IS CHECKED FIRST NOW ──────────────────────
+    // These two were the other way round, and they had to be: an entry opened
+    // by tapping inside the app pushed a HASH, so its pathname was never
+    // /denmark/… and the cold-arrival branch could not fire on it. Now that
+    // tapping pushes the real path, both branches match the same address and
+    // only gxEntry can tell them apart — it is set by our pushState and by
+    // nothing else, so it means "there is somewhere to go back to".
+    if (typeof window !== "undefined" && window.history.state?.gxEntry) { window.history.back(); return; }
     if (typeof window !== "undefined" && window.location.pathname.startsWith(`/${COUNTRY}/`)) {
       closeAllEntries();
       navigate("/");
       return;
     }
-    if (typeof window !== "undefined" && window.history.state?.gxEntry) { window.history.back(); return; }
     closeAllEntries();
     if (typeof window !== "undefined" && window.location.hash.startsWith("#/")) {
       window.history.replaceState({}, "", window.location.pathname + window.location.search);
@@ -19287,6 +19422,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             inline
                             session={studioSession}
                             supaFetch={supaFetch}
+                            readPage={readSourcePage}
                             draft={(() => { try { return JSON.parse(studioDraftText); } catch { return studioDraft; } })()}
                             draftKind={srcForType(studioType)}
                             onDraftPatched={(next) => { setStudioDraft(next); setStudioDraftText(JSON.stringify(next, null, 2)); setDraftEditError(null); }}
@@ -19432,6 +19568,92 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           );
                         })()}
                         {draftPhotoError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 8 }}>{draftPhotoError}</div>}
+                        {/* ── THE AFFILIATE LINK, BY HAND ──────────────
+                            Oliver, 7 Sep 2026, after a Danish nightlife entry
+                            published with a Tiqets link to a CHICAGO tour:
+                            "you can make a safety, and input a 'edit affiliate
+                            link'. Where I give the exact reference if it
+                            fails... just make sure that it explicitly tells me
+                            that it has inputted an affiliate link, so I can
+                            test if it got it right."
+
+                            THE SECOND HALF IS THE FEATURE. Storing a link is
+                            three lines; the thing that was missing when Chicago
+                            shipped is anybody being told what had been stored
+                            and what a reader would open. So this prints BOTH
+                            addresses: the plain agent URL that goes in the
+                            database, and the tracked one the Book tickets
+                            button actually opens, as a link to press.
+
+                            Every refusal in utils/ticketLink.js still applies
+                            here, including the country. A pasted link is more
+                            trustworthy than a searched one and it is still a
+                            link typed at one in the morning. */}
+                        {(() => {
+                          const held = (() => { try { return String(JSON.parse(studioDraftText)?.ticketUrl || "").trim(); } catch { return ""; } })();
+                          const heldAgent = ticketAgentOf(held);
+                          return (
+                            <div style={{ background: C.bg, border: `1px dashed ${C.border}`, borderRadius: 10, padding: "11px 12px", marginBottom: 10 }}>
+                              <div style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, marginBottom: 4 }}>🎫 Affiliate link</div>
+                              {/* What it holds right now, before anything is
+                                  typed. A field you cannot see the current
+                                  value of is a field you edit twice. */}
+                              <div style={{ fontSize: 10.8, color: C.muted, lineHeight: 1.55, marginBottom: 8, wordBreak: "break-all" }}>
+                                {held
+                                  ? <>Currently on this draft{heldAgent ? ` (${heldAgent})` : ""}: <span style={{ color: C.light }}>{held}</span></>
+                                  : "No ticket link on this draft. Paste one if the research missed it, or leave it empty: plenty of Danish places sell only through their own site, and no link is the right answer for those."}
+                              </div>
+                              <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+                                <input value={ticketPaste} onChange={e => { setTicketPaste(e.target.value); setTicketPasteResult(null); }}
+                                  placeholder="https://www.tiqets.com/... or ticketmaster.dk/event/..."
+                                  style={{ flex: "1 1 220px", minWidth: 0, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 11, color: C.light, fontFamily: "monospace", boxSizing: "border-box" }} />
+                                <button onClick={applyTicketPaste} disabled={!ticketPaste.trim()}
+                                  style={{ background: ticketPaste.trim() ? C.gold : "none", border: `1px solid ${C.gold}`, color: ticketPaste.trim() ? C.onGold : C.muted, borderRadius: 8, padding: "8px 13px", fontSize: 11.5, fontWeight: 700, cursor: ticketPaste.trim() ? "pointer" : "default", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                                  Use this link
+                                </button>
+                                {held && (
+                                  <button onClick={clearTicketLink}
+                                    style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 8, padding: "8px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                                    Remove
+                                  </button>
+                                )}
+                              </div>
+                              {/* ── WHAT IT DID, IN WORDS AND IN ADDRESSES ──
+                                  "so I can test if it got it right" is the
+                                  requirement, so the tracked address is a real
+                                  anchor rather than text to copy. */}
+                              {ticketPasteResult && (
+                                <div style={{ marginTop: 9, background: C.surface, border: `1px solid ${ticketPasteResult.ok ? `${C.gold}66` : "#FFB34755"}`, borderRadius: 8, padding: "9px 10px" }}>
+                                  <div style={{ fontSize: 11.5, fontWeight: 700, color: ticketPasteResult.ok ? C.gold : "#FFB347", marginBottom: 4 }}>
+                                    {ticketPasteResult.ok
+                                      ? `✓ Affiliate link written into the draft${ticketPasteResult.earning ? "" : " — but it is not earning"}`
+                                      : ticketPasteResult.removed ? "Ticket link removed" : "✕ Not used"}
+                                  </div>
+                                  <div style={{ fontSize: 10.8, color: C.light, lineHeight: 1.6 }}>{ticketPasteResult.reason}</div>
+                                  {ticketPasteResult.checked && (
+                                    <div style={{ fontSize: 10.5, color: ticketPasteResult.confirmedDanish ? C.muted : "#FFB347", lineHeight: 1.55, marginTop: 5 }}>{ticketPasteResult.checked}</div>
+                                  )}
+                                  {ticketPasteResult.ok && (
+                                    <>
+                                      <div style={{ fontSize: 10.5, color: C.muted, marginTop: 7, wordBreak: "break-all" }}>
+                                        Stored in the row: <span style={{ color: C.light }}>{ticketPasteResult.url}</span>
+                                      </div>
+                                      <div style={{ fontSize: 10.5, color: C.muted, marginTop: 4, wordBreak: "break-all" }}>
+                                        The reader opens:{" "}
+                                        <a href={ticketPasteResult.tracked} target="_blank" rel="noreferrer" style={{ color: C.gold, textDecoration: "underline" }}>
+                                          {ticketPasteResult.tracked}
+                                        </a>
+                                      </div>
+                                      <div style={{ fontSize: 10.3, color: C.muted, marginTop: 6, lineHeight: 1.55 }}>
+                                        Press it. If it lands on the right page, the link is right and the tracking is live. Nothing is saved to the database until you publish.
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                         <textarea value={studioDraftText} onChange={e => { setStudioDraftText(e.target.value); setDraftEditError(null); setWaitingOffer(null); }}
                           rows={12}
                           style={{ width: "100%", background: C.bg, border: `1px solid ${draftEditError ? "#E23B4E" : C.border}`, borderRadius: 10, padding: "12px", fontSize: 11, color: C.light, lineHeight: 1.6, fontFamily: "monospace", marginBottom: 8, boxSizing: "border-box", resize: "vertical" }} />
@@ -19797,6 +20019,35 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 nothing having happened. */}
                             {Array.isArray(factCheckClaims) && factCheckClaims.length > 0 && (
                               <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                                {/* ── DID IT SHOW ITS WORKING ────────────────
+                                    Oliver, 7 Sep 2026, asking for both halves at
+                                    once: the paste now demands a Source line per
+                                    finding, and the checker now opens the page a
+                                    finding cites. This line is how he can tell
+                                    whether the first half is being obeyed, which
+                                    is the only way to know the second half ever
+                                    gets to run.
+
+                                    Counted from the CLAIMS, not from the paste,
+                                    because a link in a bibliography at the
+                                    bottom belongs to no finding and cannot be
+                                    read against one. The paste's own total is
+                                    shown beside it when the two differ, since
+                                    that gap IS the finding: links were given and
+                                    none of them was attached to anything. */}
+                                {(() => {
+                                  const withSource = factCheckClaims.filter(c => String(c.citedSource || "").trim()).length;
+                                  const read = factCheckClaims.filter(c => c.readTheirSource).length;
+                                  const inPaste = urlsIn(googleCheckResult?.text).length;
+                                  const n = factCheckClaims.length;
+                                  return (
+                                    <div style={{ fontSize: 10.5, color: withSource ? C.muted : "#FFB347", lineHeight: 1.55, borderBottom: `1px solid ${C.border}`, paddingBottom: 7 }}>
+                                      {withSource === 0
+                                        ? `None of the ${n} finding${n === 1 ? "" : "s"} came with a page to check.${inPaste ? ` There ${inPaste === 1 ? "is 1 link" : `are ${inPaste} links`} in the answer, but none sat with a particular finding, so none could be read against one.` : ""} Each one had to be checked by searching instead.`
+                                        : `${withSource} of ${n} finding${n === 1 ? "" : "s"} cited a page${read ? `, and ${read === withSource ? (read === 1 ? "it was opened and read" : "all of them were opened and read") : `${read} of them ${read === 1 ? "was" : "were"} opened and read`}` : ", and none of them could be opened"}.${inPaste > withSource ? ` The answer carries ${inPaste} link${inPaste === 1 ? "" : "s"} in total; the rest sat with no particular finding.` : ""}`}
+                                    </div>
+                                  );
+                                })()}
                                 {factCheckClaims.map((c, i) => {
                                   const mark = c.verdict === "confirmed" ? "✅" : c.verdict === "rejected" ? "❌" : c.verdict === "asserted" ? "✍️" : "❓";
                                   const colour = c.verdict === "confirmed" ? "#8BC34A" : c.verdict === "rejected" ? "#E57373" : C.muted;
@@ -23540,6 +23791,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           key={`assistant-floating-${openKind || "draft"}-${openDetail?.name || liveDraft?.name || ""}`}
           session={studioSession}
           supaFetch={supaFetch}
+          readPage={readSourcePage}
           item={openDetail}
           kind={openKind}
           draft={liveDraft}

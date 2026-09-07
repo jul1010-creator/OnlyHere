@@ -145,6 +145,39 @@ export const entryUrlPath = (type, name) => {
   return seg ? `/${COUNTRY}/${seg}/${slug}` : `/${COUNTRY}/${slug}`;
 };
 
+// ── AND THE SAME ADDRESS, ASKED FOR BY THE APP'S OWN WORD ───────────
+//
+// Oliver, 7 Sep 2026: "some of the events of ticketmaster make akward reference
+// links. Like https://www.gemlyxtravel.com/#/event/comiccondenmark this one."
+//
+// He is right, and it is not the event's fault. Tapping ANY entry inside the
+// app pushed "#/kind/slugify(name)" into the address bar, so the address a
+// person copies out of Gemlyx is never the address Gemlyx publishes:
+//
+//   what you copy      /#/event/comiccondenmark
+//   what exists        /denmark/event/comic-con-denmark
+//
+// Two different slug functions, two different shapes, and only the second one
+// is in the sitemap, is served an OG card by middleware.js, or can be crawled.
+// So every link he had ever shared out of the app was the one address of the
+// two that search engines and share cards know nothing about.
+//
+// entryUrlPath already builds the right one and takes a STUDIO TYPE. What the
+// app has at that moment is its own kind — the key in ENTRY_SETTERS — so this
+// is the same table read from the other side, rather than a mapping written out
+// again somewhere in App.jsx where it would drift.
+//
+// Null when there is no address, which is what makes the caller keep its hash
+// fallback rather than inventing a path to a page that does not exist.
+export const entryPathForKind = (kind, name) => {
+  const k = String(kind || "").trim();
+  const slug = placeSlug(name);
+  if (!slug) return null;
+  if (k === "town") return `/${COUNTRY}/${slug}`;
+  const seg = ENTRY_KINDS.find(e => e.kind === k)?.seg;
+  return seg ? `/${COUNTRY}/${seg}/${slug}` : null;
+};
+
 // Reading one back. Returns the segment, the app's kind and the slug, or null for
 // anything that is not an entry address. A town comes back with seg "" and kind
 // "town", so one caller handles both shapes without a special case.

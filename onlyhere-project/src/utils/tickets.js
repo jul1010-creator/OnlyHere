@@ -265,7 +265,12 @@ const STOPWORDS = new Set(["the", "festival", "festivalen", "de", "den", "det", 
 // fire: nameTokens folds æ to ae and splits on the hyphen, so what actually
 // arrives is "vip" and then "tillaeg". A pattern written for the raw string and
 // applied to the tokenised one is a rule that reads correctly and never runs.
-const ANCILLARY = /^(?:shuttlebus|natbus|bus|busser|transport|parkering|parking|camping|campingvogn|garderobe|cloakroom|merch|merchandise|tillaeg|opgradering|upgrade|afhentning|billetforsikring|insurance)$/i;
+// ── AND THE SAME LIST GREW A SECOND KIND OF ADD-ON ──────────────────
+// 7 Sep 2026. A guest appearance sold inside a convention is the same shape as
+// a shuttle bus: same name, same days, same town, and not admission. These are
+// the words those listings carry when they carry any. The structural case, a
+// listing that names the guest and not the product, is isSubEventListing below.
+const ANCILLARY = /^(?:shuttlebus|natbus|bus|busser|transport|parkering|parking|camping|campingvogn|garderobe|cloakroom|merch|merchandise|tillaeg|opgradering|upgrade|afhentning|billetforsikring|insurance|autograf|autograph|signering|fotosession|photoop)$/i;
 
 // True when a Ticketmaster listing is a product sold FOR an event rather than
 // admission TO it. Checked against the part of the name the on-file name does
@@ -275,6 +280,71 @@ export const isAncillaryListing = (onFileName, candidateName) => {
   const own = new Set(nameTokens(onFileName));
   const extra = nameTokens(candidateName).filter(w => !own.has(w));
   return extra.some(w => ANCILLARY.test(w));
+};
+
+// ── AND ONE ACT INSIDE AN EVENT IS NOT THE EVENT ────────────────────
+//
+// Oliver, 7 Sep 2026: "some of the events of ticketmaster make akward reference
+// links. Like https://www.gemlyxtravel.com/#/event/comiccondenmark this one."
+//
+// The Comic Con Denmark entry published with this as its Book tickets button:
+//
+//   ticketmaster.dk/event/aliona-baranova-|-comic-con-denmark-7-nov-2026-tickets
+//
+// One guest's meet-and-greet slot. Somebody pressing Book tickets on Denmark's
+// largest pop-culture convention was being sold ten minutes with one person,
+// and the entry's own text says "Tickets are sold exclusively online via
+// Ticketmaster", so the button looked like the answer to its own sentence.
+//
+// Every existing guard passed it. isAncillaryListing looks for a shuttle-bus
+// word and there is none; the extra tokens are a person's name. nameOverlap
+// asks whether every carrying word of "Comic Con Denmark" is present, and all
+// three are — that is exactly WHY the listing carries the convention's name.
+// The date matched, the city matched. A strong match, on a Meet & Greet.
+//
+// ── THE SEPARATOR IS THE FACT, NOT THE WORDS ────────────────────────
+//
+// Ticketmaster writes a listing that belongs INSIDE a larger event as
+//
+//   <the act>  |  <the event it is inside>
+//
+// and a listing that IS the event with its ticket type the other way round:
+//
+//   <the event>  |  <weekend pass, lørdagsbillet, partout>
+//
+// So the position settles it, and no vocabulary of performer names or ticket
+// types has to be invented or kept up to date. The on-file name sitting wholly
+// in a part that is NOT the first, while an earlier part contributes words the
+// event's own name does not have, is a listing for something inside the event.
+//
+// Conservative on purpose: no separator, no refusal. A listing that simply has
+// a long name is judged by nameOverlap as before.
+export const isSubEventListing = (onFileName, candidateName) => {
+  const parts = String(candidateName || "").split("|").map(v => v.trim()).filter(Boolean);
+  if (parts.length < 2) return false;
+  const own = nameTokens(onFileName);
+  if (!own.length) return false;
+  // Which parts contain the whole event name. Index matters: only a LATER one
+  // is evidence, because the first position is where the event's own name goes.
+  const holders = parts
+    .map((part, i) => ({ i, has: (() => { const t = new Set(nameTokens(part)); return own.every(w => t.has(w)); })() }))
+    .filter(x => x.has);
+  if (!holders.length) return false;
+  // ── AND THE POSITION RULE IS THE SLICE, NOT A SEPARATE GUARD ──────
+  //
+  // This read `if (!holders.length || holders[0].i === 0) return false;` and a
+  // mutation survived: deleting the second half changed no answer anywhere.
+  // It cannot. When the event's own name is in the first part, the slice below
+  // is parts.slice(0, 0), which is empty, and .some() on an empty array is
+  // false — so the same refusal already comes out of the line underneath.
+  //
+  // Written down rather than left as a guard nothing can exercise. The rule is
+  // unchanged and still the whole point: something BEFORE the event's name has
+  // to be a name of its own. An earlier part contributing nothing the event
+  // does not already say is punctuation, not a second act, and no earlier part
+  // at all means the listing IS the event.
+  const ownSet = new Set(own);
+  return parts.slice(0, holders[0].i).some(part => nameTokens(part).some(w => !ownSet.has(w)));
 };
 
 // The words that carry the identity. "Roskilde Festival 2026" and "Roskilde
@@ -455,10 +525,20 @@ export const matchEvent = (onFile, candidates) => {
   // bus is the ONLY listing carrying the name, the honest answer is that the
   // event was not found, and ranking would have handed back the bus.
   const buses = list.filter(e => isAncillaryListing(onFile?.name, e.name));
+  // Refused on the same terms and for the same reason: when a guest slot is the
+  // ONLY listing carrying the name, "no listing was found" is the honest answer
+  // and ranking would have handed back the guest slot. See isSubEventListing.
+  const inside = list.filter(e => !buses.includes(e) && isSubEventListing(onFile?.name, e.name));
   const named = list
-    .filter(e => !buses.includes(e))
+    .filter(e => !buses.includes(e) && !inside.includes(e))
     .map(e => ({ e, overlap: nameOverlap(onFile?.name, e.name) }))
     .filter(x => x.overlap >= MIN_NAME_OVERLAP);
+  if (!named.length && inside.length) {
+    return {
+      event: null, confidence: "none",
+      why: `Ticketmaster has ${inside.length} listing${inside.length === 1 ? "" : "s"} under this name and ${inside.length === 1 ? "it is" : "they are"} for something happening INSIDE the event rather than admission to it (${inside.slice(0, 2).map(e => e.name).join(", ")}). A guest slot sells out while the event has tickets left, and its link would take money for ten minutes with one person, so nothing was read from ${inside.length === 1 ? "it" : "them"}.`,
+    };
+  }
   if (!named.length && buses.length) {
     return {
       event: null, confidence: "none",

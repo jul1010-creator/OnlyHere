@@ -298,8 +298,9 @@ For each claim give:
 - "says": what the criticism asserts is wrong, in one plain sentence.
 - "proposed": the corrected value or wording the criticism proposes, or an empty string if it only says something is wrong without saying what is right.
 - "checkable": "yes" if this is a factual assertion (a name, number, date, route, URL, status), "no" if it is a matter of style, tone or opinion.
+- "sourceUrl": the ONE web address the criticism gives as its evidence FOR THIS CLAIM, copied exactly, or an empty string. Take it only from the part of the text that makes this claim: a "Source:" line under it, or a URL in the same sentence or bullet. If the criticism ends with a list of links belonging to no particular claim, leave this empty for every claim rather than guessing which is which. Never invent, complete or correct a URL, and never carry one claim's source over to another.
 
-Respond with ONLY strict JSON: {"claims": [{"field": "...", "says": "...", "proposed": "...", "checkable": "yes"}]}
+Respond with ONLY strict JSON: {"claims": [{"field": "...", "says": "...", "proposed": "...", "checkable": "yes", "sourceUrl": ""}]}
 
 Entry:
 ${entryJson}
@@ -448,6 +449,123 @@ export const settleOwnSite = ({ parsed, host } = {}) => {
     evidence: `${clean}, their own site, ${said === "rejected" ? "contradicts this" : "states this"}. ${parsed?.evidence || ""}`.trim(),
     sourceUrl: src,
   };
+};
+
+// ── AND THE PAGE THE CRITICISM ITSELF POINTED AT ────────────────────
+//
+// Oliver, 7 Sep 2026: "I'd also like the fact-check copy for Gemini to ask for
+// sources, and the draft fact-checker to check any sources linked."
+//
+// Everything above verifies a claim by going and LOOKING FOR a source. Nothing
+// has ever opened the source the criticism handed over. When Gemini says "the
+// bar is 23+, see mapquest.com/...", the pipeline throws that URL away, runs a
+// general search, finds nothing, and lands on unresolved — which is how a
+// correction resting on a listings site ends up applied on his word, and how a
+// correct one with a real page behind it ends up refused.
+//
+// ── THE MOST USEFUL ANSWER IS THAT THE PAGE DOES NOT SAY IT ─────────
+//
+// This is not a shortcut to trusting the checker. It is the opposite: the one
+// question a cited URL can settle better than any search is whether the source
+// says what it was claimed to say. A model that has invented a citation, or read
+// one page and cited another, or generalised a sentence into something stronger,
+// fails here and fails loudly, with the page quoted back.
+//
+// ── AND WHO OWNS THE PAGE DECIDES HOW FAR IT GETS ───────────────────
+//
+// The same hierarchy the rest of this file uses. The operator's own site is a
+// primary source and settles a claim on its own; an aggregator is supporting
+// evidence and never the deciding one, so a supported claim on a listings site
+// still goes through the ordinary verification and only gains the right to say
+// that a real page, opened by us, does back it.
+//
+// Three answers, and only two of them stop anything:
+//
+//   contradicts  the page they cited says otherwise. Rejected, quoted, done.
+//                Cheapest resolver that can answer, answers: no search is run.
+//   supports     a real page we opened does say it. On the operator's own site
+//                that confirms; anywhere else it is carried forward as evidence.
+//   silent       the page does not mention it. Recorded in the evidence, and
+//                the ordinary verification runs as it always did.
+//
+// A page that will not open changes nothing at all, which is the only safe
+// answer: a bot wall is not a fact about the claim.
+
+// Only a real http(s) address, and only one. A claim citing three pages is a
+// claim whose splitter did not split, and reading all of them would spend three
+// fetches to answer one question.
+export const claimCitation = (claim) => {
+  const raw = String(claim?.sourceUrl || "").trim().replace(/[).,;\]]+$/, "");
+  return /^https?:\/\/\S+$/i.test(raw) ? raw : "";
+};
+
+// Every http(s) address in the pasted text, in order, for the panel line that
+// tells him how many the checker actually gave. Deliberately not used to attach
+// URLs to claims: a bibliography at the bottom of an answer belongs to no single
+// finding, and guessing which one would be worse than having none.
+export const urlsIn = (text) =>
+  [...new Set((String(text || "").match(/https?:\/\/[^\s<>"')\]]+/gi) || [])
+    .map(u => u.replace(/[).,;\]]+$/, "")))];
+
+export const CITATION_PROMPT = (name, claim, host, pageText) => `A fact-check of a Danish travel entry about "${name}" made this claim and cited ONE page as its evidence. Below is the actual text of that page, fetched just now.
+
+Your only job is to answer whether that page says what the claim says it says. You are not deciding whether the claim is true in the world, and you must not reason from anything except the text below.
+
+The claim: ${claim?.says || ""}${claim?.proposed ? `\nThe correction proposed: ${claim.proposed}` : ""}
+
+The page cited: ${host}
+
+Answer with ONLY strict JSON:
+{"says":"supports"|"contradicts"|"silent","quote":"the exact sentence from the page, or an empty string","correctValue":"the value the page actually gives, or an empty string"}
+
+"supports"    the page states this, or states something that plainly entails it.
+"contradicts" the page states something incompatible with it. This is the most
+              useful answer you can give, so look for it before settling on the
+              others, and put the incompatible sentence in "quote".
+"silent"      the page does not address it. Say this rather than reasoning your
+              way to a conclusion the page does not state, and say it when the
+              page is about something else entirely.
+
+An almost-match is "silent", not "supports". A page saying a place is popular
+does not support a claim about its opening hours, and a page giving one price
+does not support a claim about a different ticket.
+
+THE PAGE:
+${String(pageText || "").slice(0, 12000)}`;
+
+// The settler, pure and separate, for the reason settleVerdict and settleOwnSite
+// are: a rule that lives inside a network call cannot be tested, and this one
+// decides whether a fact-check's own evidence gets to reject it.
+export const settleCitation = ({ parsed, url = "", isOwnSite = false } = {}) => {
+  const said = String(parsed?.says || "");
+  const quote = String(parsed?.quote || "").trim();
+  let host = "";
+  try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { host = ""; }
+  const who = host || "the page it cited";
+  if (said === "contradicts") {
+    return {
+      verdict: "rejected", read: true, supported: false, sourceUrl: url,
+      evidence: `Not applied. ${who} is the page the fact-check itself gave as its source, and it says the opposite.${quote ? ` It reads: "${quote}"` : ""}`,
+    };
+  }
+  if (said === "supports") {
+    return {
+      verdict: isOwnSite ? "confirmed" : "", read: true, supported: true, sourceUrl: url,
+      correctValue: String(parsed?.correctValue || "").trim(),
+      evidence: isOwnSite
+        ? `${who}, the operator's own site and the page the fact-check cited, states this.${quote ? ` It reads: "${quote}"` : ""}`
+        : `${who}, the page the fact-check cited, does say this${quote ? `: "${quote}"` : ""}. It is not the operator's own site, so it is supporting evidence rather than the deciding source, and the check below still ran.`,
+    };
+  }
+  if (said === "silent") {
+    return {
+      verdict: "", read: true, supported: false, sourceUrl: "",
+      evidence: `${who}, the page the fact-check cited as its source, does not mention this at all.`,
+    };
+  }
+  // Anything else is a reply we could not read, which tells us nothing about
+  // the claim and must not be allowed to look like it did.
+  return { verdict: "", read: false, supported: false, sourceUrl: "", evidence: "" };
 };
 
 export const VERIFY_PROMPT = (name, claim, rules) => `Check ONE factual claim about "${name}" in Denmark using real, current web search.
@@ -899,7 +1017,7 @@ Be short and concrete: the answer, and nothing else. Prefer the venue's own site
 // The whole pass. `deps` is injected so this file stays testable and has no
 // knowledge of App.jsx's component state.
 export const correctEntry = async ({ entry, criticism, deps }) => {
-  const { askClaude, askPerplexity, parseJSON, directions, onStage, rules } = deps || {};
+  const { askClaude, askPerplexity, parseJSON, directions, onStage, rules, readPage } = deps || {};
   const stage = (label, percent) => { try { onStage?.({ label, percent }); } catch { /* UI only */ } };
   const name = entry?.name || "this entry";
   const entryJson = JSON.stringify(entry, null, 2);
@@ -937,22 +1055,66 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
       continue;
     }
 
+    // ── FIRST, THE PAGE THE CRITICISM ITSELF CITED ────────────────
+    //
+    // Before any search, because it is one fetch against a search and it is the
+    // only instrument that can answer the question a search cannot: does the
+    // source they gave say what they said it says. See settleCitation above.
+    //
+    // Gated on `readPage` being injected, so a caller without a page reader
+    // behaves exactly as this did before and the tier is testable with no
+    // network at all.
+    let cited = null;
+    const citedUrl = claimCitation(c);
+    if (typeof readPage === "function" && citedUrl) {
+      try {
+        const page = await readPage(citedUrl);
+        const pageText = String(page?.text || "").trim();
+        if (pageText) {
+          let citeHost = "";
+          try { citeHost = new URL(citedUrl).hostname.replace(/^www\./, ""); } catch { citeHost = ""; }
+          const cRes = await askPerplexity(CITATION_PROMPT(name, c, citeHost || citedUrl, pageText));
+          const cParsed = cRes?.error || !cRes?.text ? null : await parseJSON(cRes.text, 2048).catch(() => null);
+          // The operator's own site is the primary source everywhere else in
+          // this file, so it is the primary source here too. ownSite is already
+          // resolved and already refuses an aggregator sitting in `website`.
+          const isOwn = !!ownSite && !!citeHost && citeHost.toLowerCase().endsWith(ownSite.toLowerCase());
+          cited = settleCitation({ parsed: cParsed, url: citedUrl, isOwnSite: isOwn });
+        } else {
+          // A bot wall is not a fact about the claim, so nothing is concluded
+          // from it. It is said out loud anyway: "their source could not be
+          // opened" is a different thing for him than "their source said
+          // nothing", and only one of them is worth going to look at himself.
+          cited = { verdict: "", read: false, supported: false, sourceUrl: "",
+                    evidence: `The page the fact-check cited (${citedUrl}) could not be read${page?.error ? `: ${String(page.error).slice(0, 140)}` : ""}, so nothing was concluded from it.` };
+        }
+      } catch { cited = null; /* a failed fetch is not a reason to lose the claim */ }
+    }
+    if (cited && (cited.verdict === "rejected" || cited.verdict === "confirmed")) {
+      verified.push({ ...c, kind, verdict: cited.verdict, correctValue: cited.verdict === "confirmed" ? (cited.correctValue || c.proposed || "") : "", evidence: cited.evidence, sourceUrl: cited.sourceUrl, citedSource: citedUrl, readTheirSource: true });
+      continue;
+    }
+
     const res = await askPerplexity(VERIFY_PROMPT(name, c, rules));
     if (res?.error || !res?.text) {
-      verified.push({ ...c, kind, verdict: "unresolved", evidence: "The verification search could not run.", sourceUrl: "" });
+      verified.push({ ...c, kind, verdict: "unresolved", evidence: `The verification search could not run. ${cited?.evidence || ""}`.trim(), sourceUrl: cited?.supported ? cited.sourceUrl : "", citedSource: citedUrl, readTheirSource: !!cited?.read });
       continue;
     }
     let parsed = null;
     try { parsed = await parseJSON(res.text, 2048); } catch { parsed = null; }
     if (!parsed || !parsed.verdict) {
-      verified.push({ ...c, kind, verdict: "unresolved", evidence: (res.text || "").slice(0, 300), sourceUrl: "" });
+      verified.push({ ...c, kind, verdict: "unresolved", evidence: `${(res.text || "").slice(0, 300)} ${cited?.evidence || ""}`.trim(), sourceUrl: cited?.supported ? cited.sourceUrl : "", citedSource: citedUrl, readTheirSource: !!cited?.read });
       continue;
     }
     // A "confirmed" with no source is not confirmed. This is the whole
     // difference between a lead and a fact, and it is enforced here rather
     // than hoped for in the prompt. Website claims are exempt only when the
     // domain is literally the name, which is checked below.
-    const hasSource = !!String(parsed.sourceUrl || "").trim();
+    // A page WE opened that backs the claim counts as a source here, which is
+    // the whole reason the tier above carries `supported` forward: the rule
+    // being enforced is "a confirmed with no source is not confirmed", and a
+    // cited page we read and checked ourselves is exactly a source.
+    const hasSource = !!String(parsed.sourceUrl || "").trim() || !!cited?.supported;
     const selfEvidentUrl = kind === "website" && hostMatchesName(parsed.correctValue || c.proposed, name);
     // One implementation, in settleVerdict above, so the rule and the test
     // cannot drift apart the way two copies of a function in this repo have
@@ -970,13 +1132,13 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
         const ownParsed = own?.error || !own?.text ? null : await parseJSON(own.text, 2048).catch(() => null);
         const fromThem = settleOwnSite({ parsed: ownParsed, host: ownSite });
         if (fromThem.verdict === "confirmed" || fromThem.verdict === "rejected") {
-          verified.push({ ...c, kind, verdict: fromThem.verdict, correctValue: fromThem.correctValue || parsed.correctValue || "", evidence: fromThem.evidence, sourceUrl: fromThem.sourceUrl, askedOwnSite: true });
+          verified.push({ ...c, kind, verdict: fromThem.verdict, correctValue: fromThem.correctValue || parsed.correctValue || "", evidence: `${fromThem.evidence} ${cited?.evidence || ""}`.trim(), sourceUrl: fromThem.sourceUrl, citedSource: citedUrl, readTheirSource: !!cited?.read, askedOwnSite: true });
           continue;
         }
         // Asked and unanswered is still worth recording, because it is what the
         // asserted sentence below now gets to say instead of implying nobody
         // could have known.
-        verified.push({ ...c, kind, verdict: "unresolved", correctValue: parsed.correctValue || "", evidence: `${settled.evidence} ${fromThem.evidence}`.trim(), sourceUrl: "", askedOwnSite: true });
+        verified.push({ ...c, kind, verdict: "unresolved", correctValue: parsed.correctValue || "", evidence: `${settled.evidence} ${fromThem.evidence} ${cited?.evidence || ""}`.trim(), sourceUrl: cited?.supported ? cited.sourceUrl : "", citedSource: citedUrl, readTheirSource: !!cited?.read, askedOwnSite: true });
         continue;
       } catch { /* their site failing is not a reason to lose the claim */ }
     }
@@ -984,8 +1146,13 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
       ...c, kind,
       verdict: settled.verdict,
       correctValue: parsed.correctValue || "",
-      evidence: settled.evidence,
-      sourceUrl: parsed.sourceUrl || (selfEvidentUrl ? (parsed.correctValue || c.proposed) : ""),
+      // The citation's sentence goes last, after the search's, because it is
+      // context for the verdict rather than the verdict's reason. It is the
+      // line that tells him a finding was resting on a page that never said it.
+      evidence: `${settled.evidence} ${cited?.evidence || ""}`.trim(),
+      sourceUrl: parsed.sourceUrl || (cited?.supported ? cited.sourceUrl : "") || (selfEvidentUrl ? (parsed.correctValue || c.proposed) : ""),
+      citedSource: citedUrl,
+      readTheirSource: !!cited?.read,
       askedOwnSite: false,
     });
   }

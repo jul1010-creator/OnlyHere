@@ -69,7 +69,7 @@ writeFileSync(entry, `
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
   export { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
   export { venueCore, venueMentions, venueQuote, venueVerdict, venueVia, describeVenue, VENUE_MIN_MENTIONS, VENUE_MIN_MENTIONS_NO_TOWN, VENUE_MAX_KM, NO_NAME as V_NO_NAME, NOT_NAMED as V_NOT_NAMED, TOO_FAR as V_TOO_FAR, IS_AN_EVENT as V_IS_AN_EVENT, OK as V_OK } from ${JSON.stringify(join(root, "src/utils/venueMatch.js"))};
-  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isWegotripTicketUrl } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
+  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
@@ -106,7 +106,7 @@ writeFileSync(entry, `
   export { PAID_PLANS_LIVE } from ${JSON.stringify(join(root, "src/config.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
-  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS, claimCitation, urlsIn, CITATION_PROMPT, settleCitation, SPLIT_PROMPT, correctEntry } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS, feedbackProblem, feedbackRow } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { previewReportRow, travellerTurns, PREVIEW_SAID_CAP, PREVIEW_SCREEN_CAP } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { trimFillerRuns, trimFillerAgainst } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -175,7 +175,7 @@ writeFileSync(entry, `
   export { isSameSpot, SAME_SPOT_KM, cityFromLocation, stopTown } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { travellerBudget, budgetTierMismatch, dayTripClaim, dayTripHonest, dayTripRadiusKm, withoutDayTripClaim, describeDayTripClaim, DAY_TRIP_FRACTION } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { placedLibrary, nearbyPublished, describeLocation, distanceWords, walkMinutes, nearbyLabel, NEAR_KM, WALK_KMH, SAME_VISIT_KM, SAME_VISIT_LIMIT } from ${JSON.stringify(join(root, "src/utils/nearbyPlaces.js"))};
-  export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, appearances, otherDatesHere, alsoPlayingLine, describeAppearances, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP, stampTicketSource, ticketProvenance, isMeasured, TICKET_SOURCES, TICKET_SOURCE_LABEL, isAncillaryListing } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
+  export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, appearances, otherDatesHere, alsoPlayingLine, describeAppearances, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP, stampTicketSource, ticketProvenance, isMeasured, TICKET_SOURCES, TICKET_SOURCE_LABEL, isAncillaryListing, isSubEventListing } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, readNudge, EMPTY_NUDGE, MIN_SAVES, COOLDOWN_DAYS, MAX_ASKS, NUDGE_KEY, PROFILE_NUDGE_KEY } from ${JSON.stringify(join(root, "src/utils/accountNudge.js"))};
   export { groupRows, groupLabel, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
   export { filterRows, rowMatchesQuery, rowHaystack } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
@@ -190,7 +190,7 @@ writeFileSync(entry, `
   export { estimateMinutes, estimateDurationText, walkEstimateTooFar, ROUTE_FACTOR, WALK_MAX_MINUTES, WALK_MAX_KM, AVG_SPEED_KMH, GOOGLE_MODE, straightLineHours } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { shuffledOrder, identityOrder, advancePos, factAt, seededRandom, orderFor, nextSeed } from ${JSON.stringify(join(root, "src/utils/factRotation.js"))};
   export { claimConflicts, implausibleWalks, checkable, durationsIn, distancesIn, TOLERANCE, MIN_GAP_MINUTES } from ${JSON.stringify(join(root, "src/utils/claimCheck.js"))};
-  export { placeSlug, townPath, findBySlug, slugCollisions, sitemapXml, COUNTRY, ENTRY_KINDS, segForType, kindForSeg, typesForSeg, entryUrlPath, parseEntryUrl, isEntryUrl } from ${JSON.stringify(join(root, "src/utils/placeUrl.js"))};
+  export { placeSlug, townPath, findBySlug, slugCollisions, sitemapXml, COUNTRY, ENTRY_KINDS, segForType, kindForSeg, typesForSeg, entryUrlPath, parseEntryUrl, isEntryUrl, entryPathForKind } from ${JSON.stringify(join(root, "src/utils/placeUrl.js"))};
   export { towns as TOWNS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/towns.js"))};
   export { nightlifeStreets as STREETS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/nightlifeStreets.js"))};
   export { PRICES, startRun, endRun, recordModelCall, recordRequestCall, summarise, averageFor, describe, describeAverage, recentRuns, currentRun, __reset } from ${JSON.stringify(join(root, "src/utils/apiCost.js"))};
@@ -25815,18 +25815,31 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   }
 
   // ── THE PUBLISH GATE ASKS THE WIDER QUESTION ────────────────────
-  ok("shapeForLive stores either agent", /if \(isBookableTicketUrl\(t\?\.ticketUrl\)\)/.test(shape));
+  ok("shapeForLive stores either agent", /if \(isBookableTicketUrl\(t\?\.ticketUrl\) && !ticketUrlSaysElsewhere\(/.test(shape));
+  // ── AND THE PUBLISH GATE ASKS THE COUNTRY TOO ───────────────────
+  // 7 Sep 2026. This line is the last thing between a ticket link and the
+  // database, including a link hand-edited into the JSON or into the Supabase
+  // console, and until tonight it had never asked where the product was.
+  ok("and refuses a page whose address names another country",
+     /!ticketUrlSaysElsewhere\(t\?\.ticketUrl, t\?\.town \|\| t\?\.city \|\| ""\)/.test(shape));
   ok("and no longer only Tiqets", !/if \(isTiqetsProductUrl\(t\?\.ticketUrl\)\)/.test(shape));
 
   // ── PRODUCER ONE: THE CONFIRMED LISTING ─────────────────────────
   ok("a confirmed Ticketmaster listing becomes the ticket link",
-     /if \(!String\(t\.ticketUrl \|\| ""\)\.trim\(\) && isBookableTicketUrl\(t\?\.__ticket\?\.url\)\)/.test(appT));
+     /if \(!String\(t\.ticketUrl \|\| ""\)\.trim\(\) && isBookableTicketUrl\(t\?\.__ticket\?\.url\) && !ticketUrlSaysElsewhere\(/.test(appT));
   // __ticket.url is only set on a strong match, which is the guard that keeps a
   // Tickets button off the wrong edition of a festival.
   ok("and __ticket.url is only written on a strong match",
      /url: rec\?\.confidence === "strong"/.test(readFileSync(join(root, "src/utils/tickets.js"), "utf8")));
 
   // ── PRODUCER TWO: THE PAGES ALREADY READ ────────────────────────
+  // ── AND THE BRANCH WITH NO PAGE TO VET AGAINST ─────────────────
+  // The "a hunt named a bookable URL it could not open" fallback bypasses
+  // pickTicketUrl entirely, so it had no country check of any kind. That is the
+  // exact position the Chicago link was accepted from: an address and nothing
+  // else.
+  ok("the unreadable-page fallback checks the country too",
+     /unreadTicketUrls\.find\(u => !ticketUrlSaysElsewhere\(u, draftTown\)\)/.test(appT));
   ok("the picker is finally called", /const picked = pickTicketUrl\(candidates, \{ name, town: draftTown \}\);/.test(appT));
   ok("over the pages this run already fetched",
      /Object\.keys\(pagesByUrl\)\.map\(u => \(\{ url: u, snippet:/.test(appT));
@@ -49256,6 +49269,494 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // The older instrument is untouched and still imported by this suite.
     ok("the server-render harness is still there", /export const renderSurface/.test(readFileSync(join(root, "tests/render.mjs"), "utf8")));
   }
+}
+
+// ── THE CHICAGO LINK ────────────────────────────────────────────────
+//
+// Oliver, 7 Sep 2026: "Massive problem.. look at the affiliate that one of the
+// nightlife refered to. I think it's called something with 'perler'. But the
+// nightlife one is very bad, because it referenced to Chicago."
+//
+// A published nightlife entry called Skjulte Perler carried a paid Book tickets
+// button pointing at a Chicago prohibition tour. The run log's own words under
+// it were "bookable, and vetted as being about this place".
+//
+// Every guard in ticketLink.js passed it, and each one for a correct reason:
+//   isBookableTicketUrl   it IS a Tiqets product page
+//   sourceIsAboutPlace    "Skjulte Perler" is Danish for "hidden gems", so it
+//                         appears in the marketing copy of a Danish-locale page
+//                         for an American product, and the name read as
+//                         distinctive enough to need no second signal
+//   the town              nothing placed the draft, so there was no town to
+//                         corroborate against
+//
+// Nothing had ever asked the one question the whole app answers by existing.
+{
+  const { ticketUrlSaysElsewhere, ticketMatches, pickTicketUrl, describeTicketSearch,
+          ticketQueries, ticketIsInDenmark } = M;
+
+  const CHICAGO = "https://www.tiqets.com/da/aktiviteter-i-chicago-c80816/tickets-for-hidden-in-plain-sight-chicago-prohibition-tour-p1066021";
+
+  // ── THE EXACT LINK THAT SHIPPED ─────────────────────────────────
+  ok("the Chicago page is refused as somewhere else", ticketUrlSaysElsewhere(CHICAGO));
+  ok("and ticketMatches will not take it, name or no name",
+     !ticketMatches({ url: CHICAGO, title: "Hidden in Plain Sight: Chicago Prohibition Tour",
+                snippet: "Oplev Chicagos skjulte perler" }, { name: "Skjulte Perler", town: "" }));
+  is("and the picker returns nothing rather than it",
+     pickTicketUrl([{ url: CHICAGO, snippet: "skjulte perler" }], { name: "Skjulte Perler", town: "" }), null);
+
+  // ── AND THE LINKS THAT ARE RIGHT SURVIVE ────────────────────────
+  //
+  // This half is the reason the rule is the NEGATIVE one. The first version
+  // demanded positive proof of Denmark and this suite refused Tivoli and
+  // Amalienborg, two of the handful of links on the site that earn anything: a
+  // Tiqets VENUE page carries no city segment at all, so the correct answer
+  // cannot meet a "prove it" test. Every one of these is live today.
+  for (const url of [
+    "https://www.tiqets.com/en/tivoli-gardens-tickets-l145543/",
+    "https://www.tiqets.com/en/amalienborg-palace-tickets-l259028",
+    "https://www.tiqets.com/en/legoland-billund-resort-tickets-l181747",
+    "https://www.tiqets.com/en/copenhagen-attractions-c113/tickets-for-rosenborg-castle-p974091/",
+    "https://www.ticketmaster.dk/event/heartland-2027--3-days-partout-thurs-fri-sat-tickets/571118320",
+    "https://wegotrip.com/billund-d2618499/legoland-billund-ticket-p20636/",
+  ]) ok(`kept: ${url.split("/").slice(3).join("/").slice(0, 46)}`, !ticketUrlSaysElsewhere(url));
+
+  // A city segment in Danish and in English both read as here, because the
+  // vocabulary is the state's own kommune register folded the way the rest of
+  // this codebase folds Danish, not a list of English spellings.
+  ok("a Danish-locale Copenhagen category is here",
+     !ticketUrlSaysElsewhere("https://www.tiqets.com/da/aktiviteter-i-kobenhavn-c113/billetter-til-tivoli-p1"));
+  // The English spelling separately, and it is the one Tiqets writes on the
+  // pages this app most often finds. The register only knows "København", so
+  // without the language pairs in danishNames.js every /en/copenhagen- page on
+  // Tiqets would read as foreign. A mutation survived until this was here.
+  ok("the English spelling of the capital is here too",
+     !ticketUrlSaysElsewhere("https://www.tiqets.com/en/copenhagen-attractions-c113/tickets-for-x-p1"));
+  ok("and so is the English name of the country", !ticketUrlSaysElsewhere("https://wegotrip.com/denmark-s2623032/x-ticket-p1"));
+  // ── AND A SHARED WORD IS NOT A SHARED COUNTRY ───────────────────
+  // The vocabulary held WORDS before a mutation caught it, and "The Old Town"
+  // put "town" in it. This segment is Krakow's, it shares one ordinary word
+  // with a Danish sight name, and the whole gate turned on it.
+  ok("a foreign city that shares a word with a Danish sight is still foreign",
+     ticketUrlSaysElsewhere("https://www.tiqets.com/en/old-town-krakow-c1/tickets-for-x-p1"));
+  ok("and a foreign one that shares a category word is too",
+     ticketUrlSaysElsewhere("https://www.tiqets.com/en/edinburgh-castle-attractions-c2/tickets-for-x-p1"));
+  ok("and a foreign one is not, in either language",
+     ticketUrlSaysElsewhere("https://www.tiqets.com/en/rome-attractions-c72/tickets-for-colosseum-p1"));
+  // ── AND THE REGISTER IS CARRYING ITS OWN WEIGHT ─────────────────
+  // A mutation survived until this went in: dropping the 98 kommuner entirely
+  // still passed, because Copenhagen and Aalborg are ALSO in the language pairs
+  // and Billund is inside a sight name. These four are in the register and
+  // nowhere else, so a Tiqets city page for any of them would have been read as
+  // foreign and refused. Odense is Denmark's third city.
+  // ── AND THE DRAFT'S OWN TOWN, WHICH THE REGISTER DOES NOT NAME ──
+  // Ribe is a town in its own right and sits inside Esbjerg kommune, so the
+  // register has no entry for it and neither does anything else here. When the
+  // draft is placed, its town is the strongest signal available, and it is the
+  // only thing that separates these two lines.
+  const RIBE = "https://www.tiqets.com/en/ribe-attractions-c500/tickets-for-x-p1";
+  ok("a placed draft's own town counts as here", !ticketUrlSaysElsewhere(RIBE, "Ribe"));
+  ok("and the same page with no town to go on does not", ticketUrlSaysElsewhere(RIBE, ""));
+  ok("and it is that town, not any town", ticketUrlSaysElsewhere(RIBE, "Skagen"));
+  // Ry is in Skanderborg kommune and is two letters long. A length guard on the
+  // town would refuse it, and containsName already handles the short-name
+  // accident that a guard like that is usually written for.
+  ok("a two-letter Danish town still counts",
+     !ticketUrlSaysElsewhere("https://www.tiqets.com/en/ry-attractions-c501/tickets-for-x-p1", "Ry"));
+  ok("and it is still a whole word, not a fragment",
+     ticketUrlSaysElsewhere("https://www.tiqets.com/en/rye-attractions-c502/tickets-for-x-p1", "Ry"));
+  ok("an empty town confirms nothing at all",
+     ticketUrlSaysElsewhere("https://www.tiqets.com/en/somewhere-attractions-c503/tickets-for-x-p1", ""));
+
+  for (const city of ["odense", "esbjerg", "randers", "silkeborg"]) {
+    ok(`${city} is a Danish city because the register says so`,
+       !ticketUrlSaysElsewhere(`https://www.tiqets.com/en/${city}-attractions-c9999/tickets-for-x-p1`));
+  }
+
+  // ── AND THE POSITIVE QUESTION IS A DIFFERENT QUESTION ───────────
+  // Not the gate. It is what the Studio panel prints, so a link accepted
+  // without the country ever being checked says so instead of implying it was.
+  ok("a .dk storefront states its country", ticketIsInDenmark("https://www.ticketmaster.dk/event/x/1"));
+  // A venue page has no city segment, so all it can offer is its own slug. That
+  // is enough when the slug names a sight this codebase already knows in both
+  // languages, and nothing at all when it does not — which is exactly why the
+  // GATE above is the negative rule and this is only a sentence on a panel.
+  // A region only ever turns up in the TEXT branch: no agent writes a category
+  // segment called Sønderjylland, but a search snippet says it, and that is the
+  // whole reason the regions are in the vocabulary at all.
+  // Djursland, not Sønderjylland: the language pairs carry the six regions that
+  // have an English name too, so a test on one of those proves nothing about
+  // REGION_NAMES. A mutation dropping the regions entirely survived until this
+  // used a region only that list knows.
+  ok("a snippet naming a Danish region confirms the country",
+     ticketIsInDenmark("https://www.tiqets.com/en/tickets-for-x-p1", { text: "A manor on Djursland, open all year" }));
+  ok("and a snippet naming nothing does not",
+     !ticketIsInDenmark("https://www.tiqets.com/en/tickets-for-x-p1", { text: "Skip the line and enjoy the show" }));
+  ok("a venue page naming a known Danish sight is confirmed",
+     ticketIsInDenmark("https://www.tiqets.com/en/tivoli-gardens-tickets-l145543/"));
+  ok("and one naming nothing this codebase knows is not",
+     !ticketIsInDenmark("https://www.tiqets.com/en/tickets-for-some-small-venue-l999999"));
+
+  // ── THE SEARCH THAT FOUND IT HAD NO GEOGRAPHY IN IT ─────────────
+  is("an unplaced draft now searches Denmark rather than the world",
+     ticketQueries("Skjulte Perler", "")[0], 'site:tiqets.com "Skjulte Perler" Denmark tickets');
+  ok("and a placed one still uses its town",
+     ticketQueries("Tivoli", "Copenhagen")[0].includes('"Tivoli" Copenhagen'));
+
+  // Abroad is its own answer, because "no page was about this place" would send
+  // him looking for a page that exists and is simply in Illinois.
+  ok("and the refusal says abroad rather than no match",
+     /outside Denmark/.test(describeTicketSearch([{ url: CHICAGO, snippet: "skjulte perler" }], { name: "Skjulte Perler" })));
+}
+
+// ── AND THE ONE HE PASTES HIMSELF ───────────────────────────────────
+//
+// Oliver, 7 Sep 2026, an hour later: "you can make a safety, and input a 'edit
+// affiliate link'. Where I give the exact reference if it fails... just make
+// sure that it explicitly tells me that it has inputted an affiliate link, so I
+// can test if it got it right."
+{
+  const { reviewPastedTicketUrl } = M;
+  const appT = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  const good = reviewPastedTicketUrl("https://www.ticketmaster.dk/event/comic-con-denmark-billetter/1929346988");
+  ok("a Danish Ticketmaster event is accepted", good.ok);
+  is("and stored plain", good.url, "https://www.ticketmaster.dk/event/comic-con-denmark-billetter/1929346988");
+  ok("while what the reader opens is the tracked address", good.tracked !== good.url);
+  ok("and the verdict says the tracking is live", good.earning);
+
+  // ── EVERY REFUSAL STILL APPLIES TO A PASTED LINK ────────────────
+  // A link somebody types at one in the morning is not better evidence than a
+  // search result, and the foreign product page is exactly as wrong pasted.
+  for (const [url, why] of [
+    ["", /Nothing pasted/],
+    ["tiqets.com/en/x", /http/],
+    ["https://www.visitdenmark.com/x", /Tiqets, Ticketmaster or WeGoTrip/],
+    ["https://www.tiqets.com/en/copenhagen-attractions-c113/", /CATEGORY/],
+    ["https://www.tiqets.com/da/aktiviteter-i-chicago-c80816/tickets-for-x-p1", /not in Denmark/],
+    ["https://wegotrip.com/copenhagen-d2618425/best-of-copenhagen-p20000/", /AUDIO WALK/],
+  ]) {
+    const v = reviewPastedTicketUrl(url);
+    ok(`pasted and refused: ${(url || "(empty)").slice(0, 44)}`, !v.ok);
+    ok("and told why in words", why.test(v.reason));
+  }
+
+  // ── AND IT SAYS WHEN A LINK EARNS NOTHING ───────────────────────
+  // WEGOTRIP_AFFILIATE_TEMPLATE is empty until he pastes the long-form
+  // Travelpayouts link, so a WeGoTrip admission works for the reader and pays
+  // nothing, and a panel that said "affiliate link added" over it would be
+  // making a claim about money that is not true.
+  const wego = reviewPastedTicketUrl("https://wegotrip.com/billund-d2618499/legoland-billund-ticket-p20636/");
+  ok("a WeGoTrip admission is accepted", wego.ok);
+  ok("and reported as not earning", !wego.earning && /NOT earning/.test(wego.reason));
+
+  // ── AND THE PANEL EXISTS AND PRINTS BOTH ADDRESSES ──────────────
+  // The whole ask was "so I can test if it got it right", which means the
+  // tracked address has to be on screen as something to press.
+  ok("Studio has the paste field", /const applyTicketPaste = \(\) => \{/.test(appT));
+  ok("and it writes through studioDraftText, which is what Publish reads",
+     /applyTicketPaste[\s\S]{0,900}setStudioDraftText\(JSON\.stringify\(draft, null, 2\)\)/.test(appT));
+  ok("and a wrong one can be removed", /const clearTicketLink = \(\) => \{/.test(appT));
+  ok("and the tracked address is a link, not text to copy",
+     /href=\{ticketPasteResult\.tracked\}/.test(appT));
+  ok("and the stored address is shown beside it", /Stored in the row:/.test(appT));
+}
+
+// ── ONE ACT INSIDE AN EVENT IS NOT THE EVENT ────────────────────────
+//
+// Oliver, 7 Sep 2026: "some of the events of ticketmaster make akward reference
+// links. Like https://www.gemlyxtravel.com/#/event/comiccondenmark this one."
+//
+// Comic Con Denmark published with this as its Book tickets button:
+// ticketmaster.dk/event/aliona-baranova-|-comic-con-denmark-7-nov-2026-tickets,
+// one guest's meet-and-greet slot. Every guard passed: no shuttle-bus word, and
+// all three carrying words of "Comic Con Denmark" present, which is precisely
+// WHY the listing carries them.
+{
+  const { isSubEventListing, matchEvent } = M;
+
+  ok("a guest slot inside a convention is not the convention",
+     isSubEventListing("Comic Con Denmark", "Aliona Baranova | Comic Con Denmark 7 Nov 2026"));
+  ok("and neither is a VIP experience inside it",
+     isSubEventListing("Comic Con Denmark", "VIP Experience | Comic Con Denmark"));
+  // The position is the fact. Ticketmaster writes <act> | <event> for something
+  // inside, and <event> | <ticket type> for the event itself, so a rule reading
+  // the separator needs no vocabulary of performer names to keep up to date.
+  ok("but the event's own ticket type is the event",
+     !isSubEventListing("Comic Con Denmark", "Comic Con Denmark | Lørdagsbillet"));
+  ok("and so is a partout", !isSubEventListing("Roskilde Festival", "Roskilde Festival | 8-dags billet"));
+  ok("and a listing with no separator is judged as before",
+     !isSubEventListing("Heartland Festival", "Heartland 2027 - 3 Days Partout Thurs Fri Sat"));
+  // An earlier part that contributes nothing the event does not already say is
+  // punctuation, not a second act. Without this the year in front of a bar
+  // would refuse the event's own listing.
+  ok("and a bare year in front of the name is not another act",
+     !isSubEventListing("Comic Con Denmark", "2026 | Comic Con Denmark"));
+
+  // ── AND WHEN THE GUEST SLOT IS ALL THERE IS ─────────────────────
+  // The same answer isAncillaryListing gives for a shuttle bus, and for the
+  // same reason: ranking would have handed back the guest slot, and "no listing
+  // was found" is the honest answer.
+  const only = matchEvent({ name: "Comic Con Denmark", date: "2026-11-07", city: "Copenhagen" }, [
+    { name: "Aliona Baranova | Comic Con Denmark 7 Nov 2026",
+      dates: { start: { localDate: "2026-11-07" } },
+      _embedded: { venues: [{ city: { name: "Copenhagen" } }] } },
+  ]);
+  is("no event is matched from a guest slot alone", only.event, null);
+  ok("and the reason says what it found", /INSIDE the event/.test(only.why));
+
+  // ── AND THE ROW THAT IS ALREADY PUBLISHED ───────────────────────
+  //
+  // Fixing the matcher stops the NEXT one. It does not touch the ticketUrl
+  // sitting on Comic Con Denmark tonight: a stored link survives a redraft, and
+  // a hand-pasted one never meets the matcher at all. Ticketmaster puts the
+  // whole listing title in the address, pipe and all, so the same question can
+  // be asked of a bare URL — and it is asked at the publish gate, where every
+  // link passes whatever produced it.
+  const { ticketUrlIsASubEvent, reviewPastedTicketUrl } = M;
+  const GUEST = "https://www.ticketmaster.dk/event/aliona-baranova-%7C-comic-con-denmark-7-nov-2026-tickets/1929346988";
+  ok("the published guest-slot link is recognised from its address alone",
+     ticketUrlIsASubEvent(GUEST, "Comic Con Denmark"));
+  ok("and the event's own partout is not",
+     !ticketUrlIsASubEvent("https://www.ticketmaster.dk/event/heartland-2027--3-days-partout-thurs-fri-sat-tickets/571118320", "Heartland Festival"));
+  ok("and a Tiqets venue page is not",
+     !ticketUrlIsASubEvent("https://www.tiqets.com/en/tivoli-gardens-tickets-l145543/", "Tivoli"));
+  // With no entry name there is nothing to be inside OF, and guessing would
+  // refuse real links on a draft that has not been named yet.
+  ok("and with no name to compare against, nothing is refused", !ticketUrlIsASubEvent(GUEST, ""));
+  ok("pasting one by hand is refused too, in words",
+     /INSIDE this event/.test(reviewPastedTicketUrl(GUEST, { name: "Comic Con Denmark" }).reason));
+  // And a search that turns one up does not make it the link either. This is
+  // the path the Chicago link came down, with the other question.
+  ok("a search result for a guest slot is not the event's ticket link",
+     !M.ticketMatches({ url: GUEST, title: "Aliona Baranova | Comic Con Denmark", snippet: "Meet Aliona at Comic Con Denmark in Copenhagen" },
+                      { name: "Comic Con Denmark", town: "Copenhagen" }));
+  ok("while the event's own listing still is",
+     M.ticketMatches({ url: "https://www.ticketmaster.dk/event/comic-con-denmark-2026-billetter/1929346989", title: "Comic Con Denmark 2026" },
+                     { name: "Comic Con Denmark", town: "Copenhagen" }));
+
+  const shapeSrc = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  ok("and the publish gate asks it of every link that reaches it",
+     /!ticketUrlIsASubEvent\(t\?\.ticketUrl, t\?\.name\)/.test(shapeSrc));
+}
+
+// ── THE ADDRESS IN THE BAR IS THE ADDRESS THAT EXISTS ───────────────
+//
+// The other half of the same message. Tapping any entry inside the app pushed
+// "#/kind/slugify(name)", so the address a person copies out of Gemlyx was
+// never the address Gemlyx publishes:
+//
+//   what he copied     /#/event/comiccondenmark
+//   what exists        /denmark/event/comic-con-denmark
+//
+// Two slug functions, two shapes, and only the second is in the sitemap, gets
+// an OG card from middleware.js, or can be crawled at all.
+{
+  const { entryPathForKind } = M;
+  const appT = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  is("an event gets its real address", entryPathForKind("event", "Comic Con Denmark"), "/denmark/event/comic-con-denmark");
+  is("a town keeps its bare one", entryPathForKind("town", "Ribe"), "/denmark/ribe");
+  is("an attraction uses the public word", entryPathForKind("free", "Koldinghus"), "/denmark/attraction/koldinghus");
+  is("a workshop too", entryPathForKind("craft", "Some Studio"), "/denmark/workshop/some-studio");
+  is("food and nightlife keep theirs", entryPathForKind("nightlife", "Jomfru Ane Gade"), "/denmark/nightlife/jomfru-ane-gade");
+  // Danish letters fold the same way everywhere in this codebase, so a shared
+  // link and the sitemap entry are the same string.
+  is("and Danish letters fold", entryPathForKind("town", "Ærø"), "/denmark/aero");
+  // Null is the whole reason the caller keeps a hash fallback: a kind with no
+  // page must not be given a path to a page that does not exist.
+  is("a kind with no page has no address", entryPathForKind("nightTown", "Aalborg"), null);
+  is("and a name that slugs to nothing has none either", entryPathForKind("event", "!!!"), null);
+
+  ok("the app pushes the real path", /const entryPath = \(item, kind\) => entryPathForKind\(kind, item\?\.name\) \|\| entryHash\(item, kind\)/.test(appT));
+  ok("and the hash survives only as the fallback", /const entryHash = \(item, kind\) => `#\/\$\{kind\}\/\$\{slugify/.test(appT));
+  // The old guard asked "am I on any entry page", which was right when the
+  // pushed address was always a hash. Now the pushed address IS the entry page,
+  // so the question has to be whether it names THIS one.
+  ok("and it only skips the push when the address already names this entry",
+     /const here = parseEntryUrl\(window\.location\.pathname\);[\s\S]{0,200}here\.slug === want\.slug/.test(appT));
+  ok("closing checks our own push first", /if \(typeof window !== "undefined" && window\.history\.state\?\.gxEntry\) \{ window\.history\.back\(\); return; \}\n    if \(typeof window !== "undefined" && window\.location\.pathname\.startsWith/.test(appT));
+  ok("and back out of an entry path does not close it", /if \(isEntryUrl\(window\.location\.pathname\)\) return;\n      closeAllEntries\(\);/.test(appT));
+}
+
+// ── THE SOURCE THE CHECKER ITSELF HANDED OVER ───────────────────────
+//
+// Oliver, 7 Sep 2026: "I'd also like the fact-check copy for Gemini to ask for
+// sources, and the draft fact-checker to check any sources linked."
+//
+// Two halves of one thing. The paste now demands a Source line per finding, and
+// correctEntry now OPENS that page and asks whether it says what the finding
+// says it says. Until tonight the URL was thrown away: deps were
+// { askClaude, askPerplexity, parseJSON, directions, onStage, rules } and not
+// one of them can open a page, so a cited source was only ever read as text.
+{
+  const { claimCitation, urlsIn, CITATION_PROMPT, settleCitation, SPLIT_PROMPT, correctEntry } = M;
+  const copySrc = readFileSync(join(root, "src/utils/factCheckCopy.js"), "utf8");
+  const appC = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // ── HALF ONE: THE PASTE ASKS, AND SAYS WHY ──────────────────────
+  const paste = M.factCheckCopy({ name: "Ribe", tag: "Denmark's oldest town", price: "80 kr" }, { type: "town" });
+  ok("the paste asks for a source line per finding", /Source: one URL/.test(paste));
+  ok("and says every finding needs its own", /EVERY FINDING NEEDS ITS OWN Source LINE/.test(paste));
+  // The consequence is stated because a model told what happens to a badly
+  // shaped answer produces the right shape far more often than one asked
+  // nicely, and because it is true: the pipeline really does refuse it.
+  ok("and says what happens without one", /thrown out|nothing gets changed/.test(paste));
+  ok("and prefers the operator's own site to an aggregator", /own website over an aggregator/.test(paste));
+  // The old line asked for a page in passing at the end of a sentence about
+  // three other things, which is why most findings came back with none.
+  ok("the old passing mention is gone", !/give the page you read the correct version on/.test(copySrc));
+
+  // ── HALF TWO: THE SPLITTER CARRIES THE URL TO ITS CLAIM ─────────
+  const sp = SPLIT_PROMPT("{}", "x", ["price"]);
+  // The bullet AND the shape, separately. A mutation renaming the bullet
+  // survived a test for the bare word, because the JSON example underneath
+  // carries it too and one of the two is enough to make /"sourceUrl"/ true.
+  ok("the splitter is asked for the source of each claim", /- "sourceUrl": the ONE web address/.test(sp));
+  ok("and the shape it must return carries the field", /"checkable": "yes", "sourceUrl": ""\}\]\}/.test(sp));
+  // A bibliography at the bottom belongs to no finding, and attaching it to one
+  // by guessing would be worse than having none.
+  ok("and told to leave it empty rather than guess", /leave this empty for every claim rather than guessing/.test(sp));
+  ok("and never to invent one", /Never invent, complete or correct a URL/.test(sp));
+
+  // ── WHAT COUNTS AS A CITATION ───────────────────────────────────
+  is("a plain http url is a citation", claimCitation({ sourceUrl: "https://ribekatedral.dk/priser" }), "https://ribekatedral.dk/priser");
+  is("trailing punctuation from prose is trimmed", claimCitation({ sourceUrl: "https://ribekatedral.dk/priser)." }), "https://ribekatedral.dk/priser");
+  is("a bare host is not one", claimCitation({ sourceUrl: "ribekatedral.dk" }), "");
+  is("and neither is a sentence", claimCitation({ sourceUrl: "see their website" }), "");
+  is("nor an absent field", claimCitation({}), "");
+  is("every link in the paste, deduplicated", urlsIn("see https://a.dk/x and https://a.dk/x, also https://b.dk/y."),
+     ["https://a.dk/x", "https://b.dk/y"]);
+
+  // ── AND WHAT THE PAGE'S ANSWER SETTLES ──────────────────────────
+  //
+  // The most useful answer is that the page does not say it. A model that has
+  // invented a citation, or read one page and cited another, or generalised a
+  // sentence into something stronger, fails here and fails loudly.
+  const against = settleCitation({ parsed: { says: "contradicts", quote: "Doors open at 18." }, url: "https://www.mapquest.com/dk/x" });
+  is("a citation that says the opposite rejects the finding", against.verdict, "rejected");
+  ok("and names the page it was their own source", /mapquest\.com/.test(against.evidence) && /its source/.test(against.evidence));
+  ok("and quotes the sentence", /Doors open at 18/.test(against.evidence));
+
+  // The operator's own site is the primary source here exactly as it is
+  // everywhere else in this file.
+  const own = settleCitation({ parsed: { says: "supports", quote: "18+", correctValue: "18+" }, url: "https://davincibar.dk/info", isOwnSite: true });
+  is("their own site supporting it confirms it", own.verdict, "confirmed");
+  is("and carries the value the page gives", own.correctValue, "18+");
+
+  // An aggregator is supporting evidence and never the deciding one, so it
+  // settles nothing on its own and the ordinary verification still runs.
+  const agg = settleCitation({ parsed: { says: "supports", quote: "23+" }, url: "https://www.mapquest.com/dk/x" });
+  is("an aggregator supporting it settles nothing on its own", agg.verdict, "");
+  ok("but it counts as a source we opened ourselves", agg.supported === true);
+  ok("and says plainly that it is not the operator's site", /not the operator's own site/.test(agg.evidence));
+
+  const quiet = settleCitation({ parsed: { says: "silent" }, url: "https://www.mapquest.com/dk/x" });
+  is("a page that does not mention it settles nothing", quiet.verdict, "");
+  ok("and it is recorded, because that is the finding", /does not mention this at all/.test(quiet.evidence));
+  ok("and it is not treated as a source", quiet.supported === false);
+
+  // A reply we could not read must not look like one we could.
+  const nothing = settleCitation({ parsed: null, url: "https://x.dk/y" });
+  is("an unreadable answer concludes nothing", nothing.verdict, "");
+  is("and says nothing", nothing.evidence, "");
+  ok("and does not claim the page was read", nothing.read === false);
+
+  ok("the prompt asks only what the page says, not what is true",
+     /not deciding whether the claim is true in the world/.test(CITATION_PROMPT("Ribe", { says: "x" }, "a.dk", "text")));
+  ok("and an almost-match is silent, not support",
+     /An almost-match is "silent"/.test(CITATION_PROMPT("Ribe", { says: "x" }, "a.dk", "text")));
+
+  // ── AND THE TIER RUNS, WITH NO NETWORK ──────────────────────────
+  //
+  // deps are injected for exactly this: the whole pass is exercised here with
+  // four stubs and no key, which is how a rule that decides whether a wrong
+  // fact reaches a published page gets a behavioural test at all.
+  const runWith = async (citeSays, url) => {
+    const opened = [];
+    return {
+      opened,
+      result: await correctEntry({
+        entry: { name: "Da Vinci Bar", crowd: "Everyone welcome", website: "https://davincibar.dk" },
+        criticism: "The crowd line is wrong, it is a 23+ venue. Source: " + url,
+        deps: {
+          askClaude: async () => ({ text: JSON.stringify({ claims: [{ field: "crowd", says: "it is 23+", proposed: "23+ only", checkable: "yes", sourceUrl: url }] }) }),
+          askPerplexity: async (prompt) => ({ text: /Your only job is to answer whether that page says/.test(prompt)
+            ? JSON.stringify({ says: citeSays, quote: "Aldersgrænse 18 ar", correctValue: "18+" })
+            : JSON.stringify({ verdict: "unresolved", entryIsAlreadyCorrect: null, correctValue: "", evidence: "", sourceUrl: "" }) }),
+          parseJSON: async (t) => JSON.parse(t),
+          directions: async () => ({}),
+          readPage: async (u) => { opened.push(u); return { text: "Aldersgrænse 18 ar. Vi abner kl 22." }; },
+        },
+      }),
+    };
+  };
+
+  const theirs = await runWith("contradicts", "https://davincibar.dk/info");
+  is("the cited page is opened", theirs.opened, ["https://davincibar.dk/info"]);
+  is("and a finding its own source contradicts is rejected", theirs.result.claims[0].verdict, "rejected");
+  ok("and it is recorded that their source was read", theirs.result.claims[0].readTheirSource === true);
+
+  const backed = await runWith("supports", "https://davincibar.dk/info");
+  is("their own site backing it confirms it", backed.result.claims[0].verdict, "confirmed");
+
+  // Same answer from an aggregator does NOT confirm: it is supporting evidence,
+  // the search still ran and settled nothing, so the entry is left alone.
+  const listing = await runWith("supports", "https://www.mapquest.com/dk/x");
+  is("an aggregator backing it does not confirm", listing.result.claims[0].verdict, "unresolved");
+  ok("but the page it cited is named in the evidence", /mapquest\.com/.test(listing.result.claims[0].evidence));
+
+  // ── AND A PAGE WE OPENED IS A SOURCE ────────────────────────────
+  //
+  // settleVerdict's rule is that a "confirmed" with no source is not confirmed,
+  // which is the whole difference between a lead and a fact. A search that
+  // agrees but names no page used to be downgraded even when the finding's own
+  // citation had been fetched, read and checked by us. That page IS a source.
+  const sourceless = await correctEntry({
+    entry: { name: "Da Vinci Bar", crowd: "Everyone welcome" },
+    criticism: "The crowd line is wrong. Source: https://www.mapquest.com/dk/x",
+    deps: {
+      askClaude: async () => ({ text: JSON.stringify({ claims: [{ field: "crowd", says: "it is 23+", proposed: "23+ only", checkable: "yes", sourceUrl: "https://www.mapquest.com/dk/x" }] }) }),
+      askPerplexity: async (prompt) => ({ text: /Your only job is to answer whether that page says/.test(prompt)
+        ? JSON.stringify({ says: "supports", quote: "23+", correctValue: "23+ only" })
+        : JSON.stringify({ verdict: "confirmed", entryIsAlreadyCorrect: false, correctValue: "23+ only", evidence: "It agrees.", sourceUrl: "" }) }),
+      parseJSON: async (t) => JSON.parse(t),
+      directions: async () => ({}),
+      readPage: async () => ({ text: "Aldersgrænse 23 ar." }),
+    },
+  });
+  is("a page we opened ourselves counts as the source a confirmation needs",
+     sourceless.claims[0].verdict, "confirmed");
+  is("and it is the source that gets recorded", sourceless.claims[0].sourceUrl, "https://www.mapquest.com/dk/x");
+
+  // And with no page reader injected, this behaves exactly as it did before.
+  const blind = await correctEntry({
+    entry: { name: "Da Vinci Bar", crowd: "Everyone welcome" },
+    criticism: "The crowd line is wrong, it is a 23+ venue. Source: https://www.mapquest.com/dk/x",
+    deps: {
+      askClaude: async () => ({ text: JSON.stringify({ claims: [{ field: "crowd", says: "it is 23+", proposed: "23+ only", checkable: "yes", sourceUrl: "https://www.mapquest.com/dk/x" }] }) }),
+      askPerplexity: async () => ({ text: JSON.stringify({ verdict: "unresolved", entryIsAlreadyCorrect: null, correctValue: "", evidence: "", sourceUrl: "" }) }),
+      parseJSON: async (t) => JSON.parse(t),
+      directions: async () => ({}),
+    },
+  });
+  is("with no page reader the pass still runs", blind.claims[0].verdict, "unresolved");
+  ok("and does not claim to have read anything", !blind.claims[0].readTheirSource);
+
+  // ── AND BOTH CALLERS ACTUALLY PASS ONE ──────────────────────────
+  // Every helper this codebase has found written and wired to nothing was
+  // written correctly and called from nowhere. Ten of them.
+  ok("App.jsx has one page reader", /const readSourcePage = async \(url\) => \{/.test(appC));
+  ok("and it asks for a fresh copy, not a cached one", /scan-source\?fresh=1&url=/.test(appC));
+  ok("the whole-answer pass uses it", /readPage: readSourcePage,/.test(appC));
+  ok("and the assistant is given it", (appC.match(/readPage=\{readSourcePage\}/g) || []).length === 2);
+  ok("and the assistant passes it through",
+     /deps: \{ askClaude, askPerplexity, parseJSON: parseClaudeJSON, directions, readPage, onStage: setStage \}/
+       .test(readFileSync(join(root, "src/components/StudioAssistant.jsx"), "utf8")));
+  // The line that tells him whether the paste's demand is being obeyed. Without
+  // it he cannot tell a checker that stopped citing from a tier that stopped
+  // running.
+  ok("and the panel says how many findings came with a page", /finding\$\{n === 1 \? "" : "s"\} cited a page/.test(appC));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
