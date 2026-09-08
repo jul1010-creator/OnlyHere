@@ -1,7 +1,8 @@
 import { C } from "../utils/theme";
 import { auditRows, auditSummary, auditNote, programmeState } from "../utils/affiliateAudit";
 import { isBookableTicketUrl, ticketAgentOf } from "../utils/ticketLink";
-import { affiliateHref, wegotripBrowseUrl } from "../utils/affiliates";
+import { affiliateHref, wegotripBrowseUrl, tripcomActive } from "../utils/affiliates";
+import { TRIPCOM_CITIES } from "../data/tripcom";
 import { BOOKING_AFFILIATE_ID, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, TICKETMASTER_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_AFFILIATE_TEMPLATE } from "../config";
 
 // ── WHAT DO MY AFFILIATES ACTUALLY CONNECT TO ───────────────────────
@@ -32,6 +33,10 @@ export const AffiliatePanel = ({ rows }) => {
     // renders the browse button can never disagree about whether one exists.
     wegotrip: wegotripBrowseUrl(),
     wegotripTemplate: WEGOTRIP_AFFILIATE_TEMPLATE,
+    // Through the builder, the same way wegotrip is above: this panel and the
+    // links a reader sees must never disagree about whether a programme is on.
+    tripcom: tripcomActive() ? "on" : "",
+    tripcomCities: TRIPCOM_CITIES.length,
   });
   // The work queue, which is the useful half. A count of failures nobody can act
   // on is a count; a list of near misses is a to-do list.

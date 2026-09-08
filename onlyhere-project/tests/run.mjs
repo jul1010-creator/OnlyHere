@@ -43047,9 +43047,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // THE ANCHOR IS THE TIP, which is the half a dot could never get right: a
   // circle centred on its coordinate covers the thing it marks.
   ok("the point sits on the coordinate", /iconAnchor: \[w \/ 2, h\]/.test(chatCode));
-  // The newest place is still the gold one, so the reading that survived four
-  // versions of this map survives the new shape too.
-  ok("the newest pin is still the gold one", /const fill = p\.latest \? gold : "#EFE9D6";/.test(chatCode));
+  // RED, which he asked for in one word after being shown the site's gold.
+  // Gold is the accent on every heading and badge here, so a gold pin reads as
+  // furniture; red is the one colour nothing else in this app uses.
+  ok("the pin is red", /const PIN_RED = "#E8232A";/.test(chatCode) && /const fill = PIN_RED;/.test(chatCode));
+  // The newest place keeps the reading the dots carried in colour, in SIZE and
+  // weight instead: bigger, full strength, and a halo. Two reds would have been
+  // a second thing to learn.
+  ok("and the newest one is still the one you notice",
+     /const w = p\.latest \? 23 : 17;/.test(chatCode) && /opacity:\.72;/.test(chatCode));
   // And the name on a photo-less pin clears the pin rather than sitting on it.
   ok("a nameplate is lifted clear of the head", /offset: \[0, -h \+ 6\]/.test(chatCode));
   ok("at the layout built for it", /layout="pin"/.test(chatCode));

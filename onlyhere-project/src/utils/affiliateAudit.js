@@ -116,7 +116,7 @@ export const auditNote = (s) => {
 // switched on at all. An empty template is not a bug and is not a mistake, and
 // there is no way to tell an empty one from a filled one without opening
 // config.js, which is exactly the state this panel exists to end.
-export const programmeState = ({ tiqetsTemplate, tiqetsBrowse, ticketmasterTemplate, bookingId, carRental, wegotrip, wegotripTemplate } = {}) => [
+export const programmeState = ({ tiqetsTemplate, tiqetsBrowse, ticketmasterTemplate, bookingId, carRental, wegotrip, wegotripTemplate, tripcom, tripcomCities = 0 } = {}) => [
   { name: "Tiqets", what: "attraction tickets, deep link", on: !!clean(tiqetsTemplate),
     note: clean(tiqetsTemplate) ? "live on every row with a Tiqets product page" : "no template, so Tiqets product pages render a button that earns nothing" },
   { name: "Tiqets browse", what: "one generic button per guide", on: !!clean(tiqetsBrowse),
@@ -125,6 +125,17 @@ export const programmeState = ({ tiqetsTemplate, tiqetsBrowse, ticketmasterTempl
     note: clean(ticketmasterTemplate) ? "live on every row with a Ticketmaster event page" : "no template configured" },
   { name: "Booking.com", what: "stays", on: !!clean(bookingId),
     note: clean(bookingId) ? "aid appended to every stay link" : "no id, so every stay link is a plain search and the disclosure says so" },
+  // ── AND THE ONE THAT COVERS PART OF A COUNTRY ────────────────────
+  // 7 Sep 2026. Trip.com's ids ride on their own domain, so unlike every other
+  // programme here a link can be BUILT for a town rather than found. The catch
+  // is the city id: their own Denmark page lists twenty Danish cities and none
+  // of the hidden gems, so this row says how many towns it can actually reach
+  // rather than only whether it is switched on. A dot that reads "live" over a
+  // programme covering a fifth of the site is the WeGoTrip row's fault again.
+  { name: "Trip.com", what: `stays, deep link, ${tripcomCities} Danish cities`, on: !!clean(tripcom),
+    note: clean(tripcom)
+      ? `live on the ${tripcomCities} towns Trip.com has a city id for. Every other town shows no Trip.com link at all, which is deliberate: a fallback would land a reader somewhere they were not promised`
+      : "no alliance id configured" },
   { name: "Airbnb", what: "stays", on: false,
     note: "Associates closed in March 2021 and has not reopened. There is nothing to attach and adding a ref would earn nothing while reading as a tracking tag." },
   // ── TWO ROWS, LIKE TIQETS, AND FOR THE SAME REASON ────────────────

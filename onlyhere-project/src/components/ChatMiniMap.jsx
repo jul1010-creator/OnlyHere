@@ -36,6 +36,12 @@ import { POPUP_CLASS, RAIL_BREAKPOINT_PX } from "../utils/chatRail";
 // one both get the country instead of one of them getting Jutland.
 const DENMARK = [[54.5, 8.0], [57.8, 15.3]];
 
+// The pin's own colour, named once. Oliver, 8 Sep 2026, asked for the shape
+// everyone knows and then, shown it in the site's gold, said "red". Gold is
+// this app's accent and is already on every heading and badge, so a gold pin
+// reads as furniture; red is the one colour nothing else here uses.
+const PIN_RED = "#E8232A";
+
 export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, height = 220 }) => {
   const holderRef = useRef(null);
   const mapRef = useRef(null);
@@ -172,7 +178,6 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     const made = [];
     markersRef.current = new Map();
     ordered.forEach(p => {
-      const gold = C?.gold || "#E5B769";
       // ── A PROPER POINTER, NOT A DOT ───────────────────────────
       //
       // Oliver, 8 Sep 2026: "It needs to work like it does now with the
@@ -185,15 +190,22 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       // A circle centred on its coordinate covers the thing it marks; the
       // pin's point sits on the coordinate and the body stands above it.
       //
-      // The colours are this app's, not the picture's: gold for the newest
-      // place and the pale ink for the rest, exactly as the dots were, so the
-      // "this one is what was just said" reading survives the new shape.
-      const w = p.latest ? 22 : 17;
+      // ── AND RED, WHICH HE ASKED FOR IN ONE WORD ───────────────
+      // I offered this app's gold and he said "red". He is right: gold is the
+      // site's accent and it is on every heading, every badge and the Detour
+      // button itself, so a gold pin reads as more of the furniture. Red on a
+      // dark map is the one colour nothing else here uses, and a pin's whole
+      // job is to be found before it is read.
+      //
+      // The newest place keeps its own reading, which the dots carried in the
+      // colour and now carry in SIZE and weight: bigger, full strength, and a
+      // faint halo. Two reds would have been a second thing to learn.
+      const w = p.latest ? 23 : 17;
       const h = Math.round(w * 4 / 3);
-      const fill = p.latest ? gold : "#EFE9D6";
+      const fill = PIN_RED;
       const icon = L.divIcon({
         className: "gemlyx-chat-pin",
-        html: `<svg width="${w}" height="${h}" viewBox="0 0 24 32" style="display:block;filter:drop-shadow(0 1px 3px rgba(0,0,0,.6));${p.latest ? "" : "opacity:.9;"}">`
+        html: `<svg width="${w}" height="${h}" viewBox="0 0 24 32" style="display:block;filter:drop-shadow(0 1px 3px rgba(0,0,0,.6))${p.latest ? ` drop-shadow(0 0 6px ${PIN_RED}88)` : ""};${p.latest ? "" : "opacity:.72;"}">`
           + `<path d="M12 1.2C6.1 1.2 1.3 6 1.3 11.9c0 7.6 10.7 18.9 10.7 18.9s10.7-11.3 10.7-18.9C22.7 6 17.9 1.2 12 1.2z" fill="${fill}" stroke="#0A0F1E" stroke-width="2"/>`
           + `<circle cx="12" cy="11.9" r="4.3" fill="#0A0F1E"/>`
           + `</svg>`,
