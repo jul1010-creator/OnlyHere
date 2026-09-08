@@ -69,7 +69,7 @@ writeFileSync(entry, `
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
   export { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
   export { venueCore, venueMentions, venueQuote, venueVerdict, venueVia, describeVenue, VENUE_MIN_MENTIONS, VENUE_MIN_MENTIONS_NO_TOWN, VENUE_MAX_KM, NO_NAME as V_NO_NAME, NOT_NAMED as V_NOT_NAMED, TOO_FAR as V_TOO_FAR, IS_AN_EVENT as V_IS_AN_EVENT, OK as V_OK } from ${JSON.stringify(join(root, "src/utils/venueMatch.js"))};
-  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
+  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
@@ -78,7 +78,7 @@ writeFileSync(entry, `
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { tierBadge, TIER_TONE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { withoutNonModes, travelModeKey as travelModeKeyForTest } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
-  export { travelLabel, isAtTravelOrigin, ORIGIN_TAIL, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, stripMarkdown, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { travelLabel, isAtTravelOrigin, ORIGIN_TAIL, TRAVEL_ORIGIN as TRAVEL_ORIGIN_NAME, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, stripMarkdown, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, HOUR_OF, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -106,7 +106,7 @@ writeFileSync(entry, `
   export { PAID_PLANS_LIVE } from ${JSON.stringify(join(root, "src/config.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
-  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS, claimCitation, urlsIn, CITATION_PROMPT, settleCitation, SPLIT_PROMPT, correctEntry } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS, claimCitation, urlsIn, CITATION_PROMPT, settleCitation, SPLIT_PROMPT, correctEntry, dropAppliedClaims, CLAIMS_APPLIED, namesField } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS, feedbackProblem, feedbackRow } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { previewReportRow, travellerTurns, PREVIEW_SAID_CAP, PREVIEW_SCREEN_CAP } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { trimFillerRuns, trimFillerAgainst } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -128,7 +128,7 @@ writeFileSync(entry, `
   export { readableOn, contrastRatio, overlay, parseHex, luminance, READABLE_MIN, MAX_INK_SATURATION, PILL_ALPHA } from ${JSON.stringify(join(root, "src/utils/readableColor.js"))};
   export { journeyOriginFor, showsJourney, journeyOriginForKind, showsJourneyForKind, TYPES_WITH_A_JOURNEY, TYPES_WITHOUT_A_JOURNEY, TYPES_MEASURED_FROM_THE_ORIGIN, TYPES_MEASURED_FROM_THEIR_TOWN, journeyOriginPoint, IS_THE_CENTRE_KM, TRAVEL_ORIGIN } from ${JSON.stringify(join(root, "src/utils/journeyScope.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
-  export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType, geocodePostcode, geocodeIsASettlement } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
+  export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType, geocodePostcode, geocodeIsASettlement, LONG_WALK_MINUTES } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
   export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor, resolveLegMode, coordFitsTown, townPointFor, townFallbackFor } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
@@ -240,7 +240,7 @@ writeFileSync(entry, `
   export { isOwnSiteFor, urlNames, isKommuneHost, isTownWord, ownershipWords, subjectIsEvent, EVENT_SUBJECT_TYPES, isTourismHost, KOMMUNE_HOSTS } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { detectLegMode as detectLegModeX, isFerryText } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fold as foldName } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
-  export { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
+  export { stopKind, namesAPlace, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { stripDashes, stripDashesDeep } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { routeTowns, countStops, orderedStops, shareSummary, shareMessage, shareTitle, metaDescription, hasMeasuredTravel, escapeHtml } from ${JSON.stringify(join(root, "src/utils/share.js"))};
   export { buildPreviewHtml, injectMeta, isCrawler, guideIdFromPath, articleBlocks, articleHtml, worthServing, structuredData, injectArticle } from ${JSON.stringify(join(root, "src/utils/linkPreview.js"))};
@@ -268,6 +268,7 @@ writeFileSync(entry, `
   export { preferenceRowState, PREF_NO_ACCOUNT, PREF_NO_INTERESTS, PREF_READY } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { savableThread, restorableThread, saveThread, loadThread, clearThread, CHAT_KEY, MAX_SAVED_MESSAGES } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { UI_LANGUAGES, UI_CODES, UI_STRINGS, UI_KEYS, UI_LANGUAGE_KEY, DEFAULT_UI_LANGUAGE, t, resolveUiLanguage, isUiLanguage, uiLanguageMeta, storedUiLanguage, setStoredUiLanguage, currentUiLanguage } from ${JSON.stringify(join(root, "src/utils/uiLanguage.js"))};
+  export { ENTRY_WORDS, ENTRY_HEADINGS, ARRIVAL_LABELS, GLANCE_LABELS, KIND_LABELS, entryWord } from ${JSON.stringify(join(root, "src/utils/entryWords.js"))};
   export { datesFromListings, cityRankOf, cityWanted, CITY_MATCH, CITY_UNKNOWN, CITY_DIFFERENT } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, PRICE_NOT_PUBLISHED, PRICE_UNKNOWN } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { sourceFit, describeSourceFit, LIVING_TYPES } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -514,6 +515,60 @@ ok("a church bus stop survives", M.looksLikeTransit("Sønderho Kirke busstop"));
   r = await M.findRealNearestStop(55.46, 8.45);
   is("the walk time stays out of the name", r.name, "Esbjerg Station");
   is("the walk time is its own field", r.walk, "8 mins");
+
+  // ── 8. THE FERRY TERMINAL THAT IS A FREIGHT CONSULTANCY ─────────
+  // Oliver, 8 Sep 2026, of the published WOW PARK Billund entry, whose Nearest
+  // Stop read "Logistik-Optimering v/Bo Trygve Mortensen". Google files that
+  // company as a ferry terminal, primaryType and all, so hasTransitType passes
+  // it: includedTypes=ferry_terminal means the gate reads back the answer it
+  // asked for. The numbers below are the real ones, measured from the park.
+  const bogus = { name: "Logistik-Optimering v/Bo Trygve Mortensen", lat: 55.73, lon: 9.11,
+    primaryType: "ferry_terminal", types: ["ferry_terminal", "transit_station"] };
+  const kornmarken = { name: "Kornmarken v Havremarken (Billund)", lat: 55.716, lon: 9.148,
+    primaryType: "bus_stop", types: ["bus_stop", "transit_station"] };
+  ok("google's own types cannot refuse it", M.hasTransitType(bogus) === true);
+  stub({ ferry_terminal: bogus, transit_station: kornmarken },
+    { "55.73,9.11": { durationText: "28 mins", durationMinutes: 28 },
+      "55.716,9.148": { durationText: "13 mins", durationMinutes: 13 } });
+  r = await M.findRealNearestStop(55.714476, 9.145223);
+  is("a 28 minute ferry loses to a 13 minute stop below it", r?.name, "Kornmarken v Havremarken (Billund)");
+  is("and the walk that won is the short one", r?.walkMinutes, 13);
+
+  // 9. AND THE ISLAND IS UNTOUCHED. The rule is "a long walk does not END the
+  // search", not "a long walk loses". Where nothing closer exists, the berth is
+  // still the answer, which is the case the ferry tier was written for.
+  stub({ ferry_terminal: berth }, { "55.446,8.409": { durationText: "25 mins", durationMinutes: 25 } });
+  r = await M.findRealNearestStop(55.44, 8.41);
+  is("a far ferry berth still wins when nothing closer exists", [r?.name, r?.kind], ["Nordby Færgehavn", "ferry"]);
+
+  // 10. When EVERY tier is a long walk, the closest wins rather than the
+  // highest. Once everything is a hike the tier's promise is already broken.
+  stub({ [RAIL]: station, transit_station: shelter },
+    { "55.466,8.459": { durationText: "30 mins", durationMinutes: 30 },
+      "55.35,8.42": { durationText: "22 mins", durationMinutes: 22 } });
+  r = await M.findRealNearestStop(55.4, 8.44);
+  is("when every stop is a long walk the closest one wins", r?.name, "Sønderho busstop");
+  // AND THE SAME RULE WITH THE ORDER REVERSED. Above, the closest far stop is
+  // also the last one seen, so "closest wins" and "whichever came last wins"
+  // give the same answer and a mutation swapping them survived. Here the ferry
+  // berth is both earlier and closer, so only one of the two can be right.
+  stub({ ferry_terminal: berth, transit_station: shelter },
+    { "55.446,8.409": { durationText: "22 mins", durationMinutes: 22 },
+      "55.35,8.42": { durationText: "30 mins", durationMinutes: 30 } });
+  r = await M.findRealNearestStop(55.44, 8.41);
+  is("the closest long walk wins even when it came first", r?.name, "Nordby Færgehavn");
+
+  // 11. A walk we could not MEASURE is not a long walk. Rail keeps the answer,
+  // exactly as it does when the walk is short, because a failed lookup is not
+  // evidence of distance any more than it is evidence of no path.
+  stub({ [RAIL]: station, transit_station: shelter }, { "55.466,8.459": { error: "REQUEST_DENIED" } });
+  r = await M.findRealNearestStop(55.46, 8.45);
+  is("an unmeasured walk is not a long walk", r?.name, "Esbjerg Station");
+
+  // 12. And the threshold sits above the case the tier order exists for: the
+  // 7 Aug complaint was a station 900 m off losing to a shelter at 200 m, and
+  // 900 m is an eleven minute walk.
+  ok("the long walk mark is above a 900 m station walk", M.LONG_WALK_MINUTES > 11);
 
   globalThis.fetch = realFetch;
 }
@@ -820,6 +875,41 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // A pasted fact-check with no covering sentence is still a correction.
   const paste = "Inaccuracies to correct. ".repeat(20) + " the nearestStation field should be Aarhus H";
   is("a long paste with no instruction still corrects", M.routeMessage(paste), "correct");
+
+  // ── AND THE REPORT'S OWN SIGN-OFF IS NOT AN INSTRUCTION ─────────
+  // Oliver, 7 Sep 2026: "This is annoying.. can't argue with the draft because
+  // of this." A Kronborg fact-check came back as a site-wide audit of 185
+  // entries, because Gemini closes every report by offering to audit the next
+  // draft entry and the router read that word as his. Two shapes of the same
+  // fault: a word inside the report's prose, and the report's closing question.
+  const kronborg = [
+    "Fact-check of the Kronborg Slot draft.",
+    "",
+    "Claim: the entry gives the entry price as 95 kr.",
+    "Verdict: incorrect. Adult admission is 155 kr in high season.",
+    "Source: https://www.kongeligeslotte.dk/en/practical-information.html",
+    "",
+    "Claim: the entry says the castle is open all year.",
+    "Verdict: confirmed.",
+    "",
+    "That is the full list for this entry. The worst of the two is the price, which a visitor would notice at the gate.",
+  ].join("\n");
+  const signOff = " Tell me the next draft entry you would like me to audit.";
+  const asksBack = " Would you like me to check the next entry?";
+  ok("the paste is long enough to be somebody's report", M.whoseWord(kronborg + signOff) === "pasted");
+  is("a report offering to audit the next entry still corrects",
+    M.routeMessage(kronborg + signOff), "correct");
+  is("a report's closing question is not his question",
+    M.routeMessage(kronborg + asksBack), "correct");
+  // The gate reads HIS sentence, so his own short asks are untouched, and a
+  // question he types above a paste is still a question.
+  is("his own scan request still audits", M.routeMessage("which ones are worst?"), "audit");
+  is("a question he leads with over a paste still answers",
+    M.routeMessage("is this right?\n\n" + kronborg + signOff), "ask");
+  // A trailing question mark on his own sentence still answers, even when the
+  // sentence says something is wrong. Without that half he would be running a
+  // verification pass every time he wondered aloud.
+  is("wondering aloud is not a correction", M.routeMessage("the price is wrong?"), "ask");
 }
 
 // ── the prompts survived being moved out of App.jsx (PASS 63) ──────
@@ -1330,6 +1420,37 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("a matched town falls back to Town", k("Ærøskøbing", { _src: "town" }), "Town");
   is("a matched restaurant says Restaurant", k("Geranium", { _src: "food" }), "Restaurant");
   is("no name and no match is honestly nothing", k("Christiania", null), null);
+
+  // ── AND A PLACE NAME IS NOT A DESCRIPTION OF A THING ────────────
+  // Found 8 Sep 2026 auditing this list. The compound rule is right for nearly
+  // everything and wrong for the Danish PLACE names that END in one of these
+  // nouns without being one. A gold pill under København reading "Harbour" is
+  // this function telling a first-time visitor something false, which is the
+  // opposite of the job it exists for.
+  is("the capital is not a harbour", k("København"), null);
+  is("and says Town when a row says so", k("København", { _src: "town" }), "Town");
+  is("Holstebro is a town, not a bridge", k("Holstebro", { _src: "town" }), "Town");
+  is("Frederikshavn is a town, not a harbour", k("Frederikshavn", { _src: "town" }), "Town");
+  is("Nørrebro is a district, not a bridge", k("Nørrebro"), null);
+  is("Vesterbro too", k("Vesterbro", { _src: "town" }), "Town");
+  is("and Christianshavn is not a harbour", k("Christianshavn"), null);
+  // THE COMPOUND RULE IS UNTOUCHED FOR EVERYTHING ELSE, which is the half that
+  // makes this safe: only a name the country's own tables call a PLACE is
+  // exempt, and Nyhavn, Dragør Havn and Storebæltsbroen are none of them.
+  is("Nyhavn is still a harbour", k("Nyhavn"), "Harbour");
+  is("Dragør Havn is still a harbour", k("Dragør Havn"), "Harbour");
+  is("the great belt bridge is still a bridge", k("Storebæltsbroen"), "Bridge");
+  is("and a museum is still a museum", k("Vikingeskibsmuseet"), "Viking ship museum");
+  // A row's own kind never outranks a real compound, because "Cathedral" tells
+  // a visitor more than "Free to enter" does.
+  is("a cathedral beats its row's category", k("Roskilde Domkirke", { _src: "free" }), "Cathedral");
+  ok("the place test reads the kommune table", M.namesAPlace("Holstebro") && M.namesAPlace("Aarhus"));
+  // Folded, so the ø and the case do not decide it. "koebenhavn" is NOT among
+  // them: fold turns ø into o, not into oe, so that spelling is a different
+  // string and this test says so rather than pretending otherwise.
+  ok("case does not decide it", M.namesAPlace("KØBENHAVN"));
+  ok("nor does the slashed o", M.namesAPlace("Kobenhavn"));
+  ok("a name nobody calls a place is not one", !M.namesAPlace("Nyhavn"));
 
   // ── SCALE, the thing a visitor has no way to judge ────────
   ok("a short trip is told Denmark is small",
@@ -4795,8 +4916,42 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // The detail page has its OWN render, and it was live on Dragør's page today
   // as a line reading nothing but "from CPH".
   const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
-  ok("the detail page hands over the whole entry too", /travelLabel\(userCoords, item, item\.travelTime\)/.test(detail));
-  ok("and renders no row at all when there is no journey", /\{travelLabel\(userCoords, item, item\.travelTime\) && \(/.test(detail));
+  ok("the detail page hands over the whole entry too", /travelLabel\(userCoords, item, item\.travelTime, journeyOrigin\)/.test(detail));
+  ok("and renders no row at all when there is no journey", /\{travelLabel\(userCoords, item, item\.travelTime, journeyOrigin\) && \(/.test(detail));
+
+  // ── AND THE ORIGIN IS THE ROW'S, NOT THIS LINE'S ────────────────
+  // journeyScope settled on 3 Sep that only a TOWN is measured from Copenhagen:
+  // "Actually, only make it towns. Nighttown shouldn't have any. The rest
+  // should be calculated from city center." The measurement moved that day and
+  // this label did not, so every festival, workshop and attraction card has
+  // been printing "from CPH" over a figure measured from its own town centre,
+  // while the JourneyCard on the same page said "from Aalborg".
+  // TRAVEL_ORIGIN_NAME, not journeyScope's TRAVEL_ORIGIN: that one is the
+  // COORDINATE. Two exports of one name meaning two things, and this test read
+  // the wrong one first.
+  const { travelLabel: TL, TRAVEL_ORIGIN_NAME } = M;
+  is("a town still reads from CPH", TL(null, { name: "Asaa" }, "5h 59min 🚂", TRAVEL_ORIGIN_NAME), "5h 59min 🚂 from CPH");
+  is("and that is the default a town call site relies on", TL(null, { name: "Asaa" }, "5h 59min 🚂"), "5h 59min 🚂 from CPH");
+  is("a festival names the town it was measured from",
+     TL(null, { name: "Aalborg Karneval" }, "14min 🚌", "Aalborg"), "14min 🚌 from Aalborg");
+  // A ROW THAT DOES NOT KNOW NAMES NOTHING. Every entry published before the
+  // journey recorded its origin lands here, and the figure alone is true.
+  is("an unknown origin prints the figure alone", TL(null, { name: "X" }, "14min 🚌", ""), "14min 🚌");
+  is("and so does a missing one", TL(null, { name: "X" }, "14min 🚌", null), "14min 🚌");
+  // The doubling guard works for the measured origin too, not only Copenhagen.
+  is("the town's own name is not said twice",
+     TL(null, { name: "X" }, "14 mins by car (8.0 km) from Aalborg.", "Aalborg"), "14 mins by car (8.0 km) from Aalborg");
+  is("and a Copenhagen tail still comes off a town-measured figure",
+     TL(null, { name: "X" }, "14min 🚌 from Copenhagen", "Aalborg"), "14min 🚌 from Aalborg");
+  // Wired: only the town call sites keep the default, and every other one hands
+  // over what the row measured. A default that means Copenhagen is what shipped
+  // this bug, so the sites that are NOT towns have to say so out loud.
+  ok("the event card passes the measured origin",
+     /travelLabel\(userCoords, event\.town, event\.travelTime, event\.__journey\?\.from \|\| ""\)/.test(app));
+  ok("the craft row passes it too",
+     /travelLabel\(userCoords, item\.location, item\.travelTime, item\.__journey\?\.from \|\| ""\)/.test(app));
+  ok("and the detail page reads it off journeyScope rather than assuming",
+     /journeyOriginForKind\(kind\) === "origin"[\s\S]{0,120}__journey\?\.from/.test(detail));
 }
 
 // ── "THE FILTERS GOTTA CHANGE. THIS IS JUST A LONG MESS" ───────────
@@ -10016,7 +10171,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the middleware reads any entry address through the shared reader", /const entryRoute = parseEntryUrl\(url\.pathname\);/.test(mw));
   ok("a town still goes through the town lookup", /entryRoute\.kind === "town"\s*\n?\s*\? await findTown\(entryRoute\.slug\)/.test(mw));
   ok("and every other kind through the typed one", /: await findEntry\(entryRoute\.seg, entryRoute\.slug\);/.test(mw));
-  ok("built from the entry's own words", /town\.desc \|\| town\.highlight/.test(mw));
+  ok("built from the entry's own words", /words\.desc \|\| words\.highlight/.test(mw));
   ok("with an absolute image, since a crawler fetches it", /\$\{SITE_ORIGIN\}\$\{town\.photo \|\| "\/og-default\.jpg"\}/.test(mw));
   ok("a town it cannot find falls through to the site card", /if \(!town\) return next\(\);/.test(mw));
   // The sitemap must be served BEFORE the crawler gate, or a user-agent
@@ -14773,6 +14928,46 @@ rmSync(dir, { recursive: true, force: true });
      /t\.nearestStation !== restoreStop\) \{[\s\S]{0,600}t\.nearestStation = restoreStop;/.test(appG));
   ok("and the drift is journalled rather than silently undone",
      /note\("A measured field was rewritten"/.test(appG));
+
+  // ── AND THE SENTENCE THAT SAID IT WAS FIXED GOES WITH IT ────────
+  // The published WOW PARK Billund entry, 8 Sep 2026, carried this in its
+  // uncertainties, where a reader can open it:
+  //   "The nearestStation field previously showed an unrelated business name
+  //    from the source data. It has been corrected to note that WOW PARK offers
+  //    a free seasonal shuttle bus for transit travelers, per wowpark.dk."
+  // and a Nearest Stop reading "Logistik-Optimering v/Bo Trygve Mortensen". The
+  // correction pass wrote the shuttle sentence, the restore above put the
+  // measurement back, and the sentence claiming the fix outlived the fix.
+  // Of everything wrong with that page this is the worst: a wrong value is a
+  // wrong value, and a page telling a reader it corrected something it did not
+  // is the app breaking its own promise on the same screen.
+  ok("a claimed correction is dropped when the value is put back",
+     /dropAppliedClaims\(t\.uncertainties, \["nearestStation", "nearest station", "nearest stop"\]\)/.test(appG));
+  ok("and that removal is journalled too", /note\("A claimed correction went with it"/.test(appG));
+  {
+    const { dropAppliedClaims, CLAIMS_APPLIED, namesField } = M;
+    const real = "The nearestStation field previously showed an unrelated business name from the source data. It has been corrected to note that WOW PARK offers a free seasonal shuttle bus for transit travelers, per wowpark.dk.";
+    is("the real line is dropped", dropAppliedClaims([real], ["nearestStation", "nearest station", "nearest stop"]), []);
+    // NARROW ON PURPOSE, BOTH WAYS. A line has to name the field AND say the
+    // change was made. Either half alone is a line that is still true after the
+    // restore, and this field is where the honest doubts live.
+    const other = "Whether an annual pass (499 DKK) is required was not specified in the sources.";
+    is("a line about something else survives", dropAppliedClaims([other], ["nearest stop"]), [other]);
+    const mentions = "The nearest stop could not be confirmed from the operator's own pages.";
+    is("naming the field is not enough", dropAppliedClaims([mentions], ["nearest stop"]), [mentions]);
+    const elsewhere = "The opening hours have been corrected against the operator's own page.";
+    is("claiming a fix elsewhere is not enough", dropAppliedClaims([elsewhere], ["nearest stop"]), [elsewhere]);
+    // The correction pass's OWN honest shape, the one that says it changed
+    // nothing, has to survive: it is true before and after the restore.
+    const notChanged = "Raised in a correction pass and NOT changed, because no primary source settled it: the nearest stop may be served by a seasonal shuttle.";
+    is("a raised-and-not-changed line survives", dropAppliedClaims([notChanged], ["nearest stop"]), [notChanged]);
+    is("a missing list is an empty one", dropAppliedClaims(undefined, ["nearest stop"]), []);
+    is("no names means nothing to match", dropAppliedClaims([real], []), [real]);
+    ok("the applied test reads the plain past tense", CLAIMS_APPLIED.test("the value was corrected"));
+    ok("and the present one", CLAIMS_APPLIED.test("this is now updated"));
+    ok("a field name with a space matches the camel one's row", namesField("the nearest station is wrong", ["nearest station"]));
+    ok("and a word inside another word does not", !namesField("stopgap wording", ["stop"]));
+  }
   ok("and the log names the page", /note\("Where the price came from"/.test(appG));
   ok("with per-URL text kept rather than one blob", /pagesByUrl\[url\] = scanData\.text;/.test(appG));
 
@@ -21717,7 +21912,38 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Null rather than an empty object when there is nothing to link, because the
   // card already drops nulls and a caller building rows inline should not have
   // to remember to.
-  ok("and it is null when there is no link", /const bookRow = ticketHref \? \{ href: ticketHref, label: "Book tickets", note: ticketNote \} : null;/.test(detail));
+  ok("and it is null when there is no link",
+     /const bookRow = ticketHref && sameShop\(ticketDest, item\?\.__priceSource\)/.test(detail));
+
+  // ── "199.. YOU CLICK LINK, AND IT SAYS 289" ─────────────────────
+  // Oliver, 8 Sep 2026, of the WOW PARK Billund entry. Both numbers were true
+  // and they were different tickets: wowpark.dk sells a DATED day ticket from
+  // 199 and an undated season one at 299, and the Tiqets page the row linked
+  // sells a flexible one from 289. Every row above carries a price, so a link
+  // to a shop that did not state that price puts two tickets on one line.
+  ok("the price row only links the shop that stated the price",
+     /sameShop\(ticketDest, item\?\.__priceSource\)/.test(detail));
+  // The standalone button lower down quotes nothing, so it keeps its link.
+  ok("the button below is not gated on the price source",
+     !/sameShop/.test(detail.slice(detail.indexOf("const dest = ticketDest;"))));
+  is("the wow park pairing is refused",
+    M.sameShop("https://www.tiqets.com/en/billund-attractions-c93558/tickets-for-visit-wow-park-billund-p1026717/",
+      { host: "wowpark.dk", url: "https://wowpark.dk/", price: "199-199" }), false);
+  is("the same shop is fine",
+    M.sameShop("https://www.tiqets.com/en/x-p1/", { host: "tiqets.com" }), true);
+  is("and www is not a different shop",
+    M.sameShop("https://www.tiqets.com/en/x-p1/", { host: "www.tiqets.com" }), true);
+  // PERMISSIVE WHEN IT DOES NOT KNOW. Every entry written before __priceSource
+  // existed keeps its link: a missing record is not evidence of a mismatch,
+  // which is the rule this project applies to every lookup that comes back
+  // empty. Getting this backwards would strip the link off most of the site.
+  is("no price source keeps the link", M.sameShop("https://www.tiqets.com/en/x-p1/", null), true);
+  is("an empty price source keeps it too", M.sameShop("https://www.tiqets.com/en/x-p1/", {}), true);
+  is("and no link is nothing to refuse", M.sameShop("", { host: "wowpark.dk" }), true);
+  // The host can arrive as a URL rather than a bare host, and it is the same
+  // question either way.
+  is("a url in place of a host is read the same",
+    M.sameShop("https://www.tiqets.com/en/x-p1/", { url: "https://wowpark.dk/products/x" }), false);
 }
 
 // ── "IT HAS TO BE RANDOMS, BUT IT HAS TO START ON A FACT" ────────────
@@ -24539,11 +24765,57 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // ── THE WIRING ───────────────────────────────────────────────────
   const mw = readFileSync(join(root, "middleware.js"), "utf8");
-  ok("the town response carries the article", /article: articleHtml\(town\),/.test(mw));
-  ok("and the structured data", /jsonLd: structuredData\(town, \{ url: townUrl, image: townImage, origin: SITE_ORIGIN, region: town\.region \}\)/.test(mw));
+  ok("the town response carries the article", /article: articleHtml\(words\),/.test(mw));
+  ok("and the structured data", /jsonLd: structuredData\(words, \{ url: townUrl, image: townImage, origin: SITE_ORIGIN, region: words\.region \}\)/.test(mw));
   ok("built from the payload the card already fetched, so it costs no request",
-     mw.indexOf("const town = await findTown(") < mw.indexOf("article: articleHtml(town)"));
+     mw.indexOf("const town = await findTown(") < mw.indexOf("article: articleHtml(words)"));
   ok("and the meta tags still go out with it", /const withMeta = injectMeta\(shell, \{/.test(mw));
+
+  // ── AND THEY ARE THE READER'S WORDS ─────────────────────────────
+  // The comment ten lines above this in middleware.js promises "the same words
+  // DetailPage renders for a person out of this same payload. If these two ever
+  // diverge, one of them is a bug." They diverged: liveContent cleans on READ
+  // and the middleware fetches the row itself, so every share card, every AI
+  // answer engine and the injected <article> got the raw payload, em dashes and
+  // all, on a site whose own rule is that a reader never sees one.
+  ok("the crawler payload has its dashes taken out", /const words = stripDashesDeep\(town\);/.test(mw));
+  ok("and its research voice", /const desc = stripResearchVoice\(/.test(mw));
+  ok("the title comes off the cleaned payload too", /\$\{words\.name\}, Denmark/.test(mw));
+  // THE URL DOES NOT. A slug that moved with the punctuation rules would move
+  // every indexed page the first time one of them was touched.
+  ok("but the url still comes off the raw name",
+     /entryUrlPath\(entryRoute\.kind === "town" \? "town" : \(typesForSeg\(entryRoute\.seg\)\[0\] \|\| ""\), town\.name\)/.test(mw));
+  // The edge bundle is why researchWords.js exists: cleanReaderProse needs
+  // entryAudit, and entryAudit needs a third of the utils graph.
+  ok("the edge imports the small module, not the big one",
+     /from "\.\/src\/utils\/researchWords\.js"/.test(mw) && !/researchVoice\.js"/.test(mw));
+  {
+    const { articleBlocks, articleHtml } = M;
+    const ours = "Ribe is the oldest town in Denmark. The claim is not confirmed by the checked sources. Its cathedral dates from 1150.";
+    const blocks = articleBlocks({ name: "Ribe", desc: ours, blogBody: [
+      { type: "paragraph", content: ours },
+      { type: "bullets", items: ["Founded in the 700s.", "This could not be verified from our sources."] },
+    ] });
+    ok("the description loses our own voice", !/checked sources/.test(blocks[1].text));
+    ok("and keeps the sentences about the place", /oldest town/.test(blocks[1].text) && /1150/.test(blocks[1].text));
+    ok("a body paragraph is cleaned too", !blocks.some(b => /checked sources/.test(b.text || "")));
+    // A BULLET THAT IS NOTHING BUT OUR VOICE IS DROPPED, not kept whole.
+    // stripResearchVoice deliberately never empties a FIELD, because a blank
+    // description renders as a place with nothing to say. A bullet is not a
+    // field: the list around it survives losing one, and a list that loses
+    // every bullet is skipped by the block builder anyway.
+    ok("and a bullet that is only our voice is dropped", !blocks.some(b => (b.items || []).some(i => /could not be verified/.test(i))));
+    ok("the bullet that says something survives", blocks.some(b => (b.items || []).some(i => /Founded in the 700s/.test(i))));
+    // THE NAME IS NOT PROSE. A cleaner that can rewrite an entry's name is a
+    // cleaner that can move its URL.
+    is("the name is left exactly as it is", blocks[0].text, "Ribe");
+    // articleHtml refuses a thin page, so the fixture has to be a real one: the
+    // 60-word floor is worthServing's, not this cleaner's.
+    const long = `${ours} ${"The old town runs down to the river and the market square is the middle of it. ".repeat(4)}`;
+    const html = articleHtml({ name: "Ribe", desc: long, blogBody: [{ type: "paragraph", content: long }] });
+    ok("and the html is built from the same blocks", /oldest town/.test(html));
+    ok("with our own voice gone from it too", !/checked sources/.test(html));
+  }
 }
 
 // ── AN ADDRESS FOR EVERYTHING THAT IS NOT A TOWN ────────────────────
@@ -26551,8 +26823,39 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // ── AND IT HAS TO REACH ALL FOUR PLACES THAT WRITE READER PROSE ──
   is("the guide build and its retry both get it", (appL.match(/\$\{guideLangBlock\}/g) || []).length, 2);
-  ok("and it is computed once, from the traveller's own words", /const guideLangBlock = writeInLanguage\(guideLanguage\(\{[\s\S]{0,120}said: saidByTravellerForGuide/.test(appL));
-  ok("with the ruled-out-language note appended", /\}\)\) \+ languageBarNote\(saidByTravellerForGuide\)/.test(appL));
+  ok("and it is computed once, from the traveller's own words", /const guideLang = guideLanguage\(\{[\s\S]{0,80}said: saidByTravellerForGuide/.test(appL));
+  ok("with the ruled-out-language note appended", /writeInLanguage\(guideLang\) \+ languageBarNote\(saidByTravellerForGuide\)/.test(appL));
+
+  // ── AND THE DECISION IS KEPT, NOT ONLY SPENT ────────────────────
+  //
+  // Oliver, 7 Sep 2026: "try to fix the mixing of language in the guide that
+  // tends to happen." travellerLanguage.js opens on the half it did not fix:
+  // the 26 August guide came back Danish "with the leg lines and the weather
+  // still in English so the document changes language twice a page."
+  //
+  // That half could not be fixed at all while this decision was made here,
+  // spent on one prompt string and thrown away. Nothing downstream knew what
+  // language the finished guide was in.
+  ok("the guide records the language it was written in", /parsed\.__lang = guideLangTag;/.test(appL));
+  ok("as a base tag, because a region is not a language",
+     /const guideLangTag = String\(guideLang\?\.tag \|\| "en"\)\.split\("-"\)\[0\]\.toLowerCase\(\);/.test(appL));
+  {
+    // AND THE PAGE READS THE GUIDE, NOT THE PICKER. The picker says what
+    // language the SITE is in. A guide was written in whatever language the
+    // traveller wrote their brief in, and furniture inside the document has to
+    // follow the document or it is the same mixing one level down.
+    const guideSrc = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+    ok("the guide page reads the guide's own language",
+       /const guideLang = isUiLanguage\(guide\?\.__lang\) \? guide\.__lang : uiLang;/.test(guideSrc));
+    ok("and the stop pill is written in it", /entryWord\(stopKind\(stop\.name, real\), guideLang\)/.test(guideSrc));
+    // A guide built before __lang existed keeps working: the picker is the
+    // fallback, and an unknown tag never becomes the document's language.
+    ok("an unknown tag cannot become the document's language", /isUiLanguage\(guide\?\.__lang\)/.test(guideSrc));
+    // The entry pages a guide opens are a DIFFERENT document and keep
+    // following the picker, which is why they take uiLang rather than this.
+    ok("but an entry page opened from it still follows the picker",
+       /<DetailPage lang=\{uiLang\}/.test(guideSrc) && !/<DetailPage lang=\{guideLang\}/.test(guideSrc));
+  }
   // The enrichment call is the one that writes "Where to stay" and every leg,
   // which are two of the most-read lines on the page, and it has its own prompt
   // that never sees the writer's.
@@ -36281,9 +36584,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // on one page and nowhere else.
     const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
     const sites = app.match(/<DetailPage\b/g) || [];
-    const withPaid = app.match(/<DetailPage\s+paid=\{/g) || [];
+    const withPaid = app.match(/<DetailPage\s+lang=\{uiLang\}\s+paid=\{/g) || [];
     ok("there are DetailPage call sites to check", sites.length >= 4);
     is("and every one of them passes paid", withPaid.length, sites.length);
+    // The reader's language rides in the same shared prefix, for the reason the
+    // comment above gives about one list copied five times.
+    is("and the language with it", (app.match(/<DetailPage\s+lang=\{uiLang\}/g) || []).length, sites.length);
     ok("the Studio writes the offer on edit as well as create", /shaped\.__offer\s*=\s*offerFromFields/.test(app));
     ok("and refuses to publish one that would not render", /offerProblems\(offerFromFields\)/.test(app));
   }
@@ -43205,7 +43511,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // list copied four times." So the props go on in a single shared prefix.
   const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
   is("every detail page gets the buttons",
-     (appF.match(/<DetailPage paid=\{hasPaidPlan\(userProfile\)\} signedIn=\{!!userSession\} onNeedAccount=/g) || []).length, 5);
+     (appF.match(/<DetailPage lang=\{uiLang\} paid=\{hasPaidPlan\(userProfile\)\} signedIn=\{!!userSession\} onNeedAccount=/g) || []).length, 5);
   is("and none is left without them",
      (appF.match(/<DetailPage /g) || []).length, 5);
 
@@ -45344,6 +45650,129 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("but the product name is the same in all three",
      UI_STRINGS["nav.ai"].en === UI_STRINGS["nav.ai"].da && UI_STRINGS["nav.ai"].da === UI_STRINGS["nav.ai"].de);
   ok("and it still says Gemlyx Detour", /Gemlyx Detour/.test(UI_STRINGS["nav.ai"].en));
+
+  // ── AND THE WORDS INSIDE AN ENTRY, WHICH WERE ENGLISH IN ALL THREE ─
+  //
+  // Oliver, 7 Sep 2026: "work on translating more of the website from English
+  // to Danish and German, rather than just the interface." This file's own
+  // comment named the gap and stopped at it: the blogBody headings "are the
+  // reason a Danish interface still shows English inside an entry", because
+  // they are stored in the 148 published rows rather than written at a render
+  // site. utils/entryWords.js translates them on the way to the screen, so no
+  // row changed and every row is fixed.
+  //
+  // KEYED BY THE ENGLISH, which is fragile in exactly one way: change the
+  // English and the translation silently stops matching. These three assertions
+  // are what close that, and they read the SOURCE the phrases come from rather
+  // than a list somebody kept in step by hand.
+  {
+    const { ENTRY_WORDS, ENTRY_HEADINGS, ARRIVAL_LABELS, GLANCE_LABELS, entryWord } = M;
+    const holes = Object.entries(ENTRY_WORDS)
+      .filter(([, v]) => !["da", "de"].every(c => String(v?.[c] || "").trim()))
+      .map(([k]) => k);
+    is("every entry word is written in Danish and German", holes.join(", "), "");
+    ok("...and there is something to check", Object.keys(ENTRY_WORDS).length > 30);
+
+    // THE HEADINGS THE PIPELINE ACTUALLY WRITES. studioContent's bb() takes
+    // ["Heading", value] pairs and bbBullets() takes the heading alone, and
+    // both are called from App.jsx with literal strings. This reads them back.
+    const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+    const written = new Set([
+      ...[...appSrc.matchAll(/\["([A-Z][^"]{2,40})", t\.[a-zA-Z]+\]/g)].map(m => m[1]),
+      ...[...appSrc.matchAll(/bbBullets\("([A-Z][^"]{2,40})"/g)].map(m => m[1]),
+    ]);
+    ok("the pipeline writes headings this test can see", written.size >= 10);
+    is("and every one of them is translated",
+       [...written].filter(h => !ENTRY_HEADINGS.includes(h)).join(", "), "");
+
+    // THE ARRIVAL LABELS helpers.arrivalRow can return. Read out of that file
+    // rather than listed here, because a seventh kind of stop added there would
+    // otherwise render its English label under a Danish nav and nothing would
+    // say so.
+    const helpSrc = readFileSync(join(root, "src/utils/helpers.js"), "utf8");
+    const arrival = [...helpSrc.matchAll(/label: "((?:Nearest|Ferry)[^"]*)"/g)].map(m => m[1]);
+    ok("helpers declares arrival labels", arrival.length >= 5);
+    is("and every one of them is translated",
+       [...new Set(arrival)].filter(l => !ARRIVAL_LABELS.includes(l)).join(", "), "");
+
+    // AND THE GLANCE ROWS DetailPage BUILDS. Same rule, same reason: a row
+    // added there is a row a Danish reader meets in English.
+    const detailSrc = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+    const glance = [...new Set([...detailSrc.matchAll(/label: "([^"]+)"/g)].map(m => m[1]))];
+    ok("the detail page builds glance rows", glance.length >= 15);
+
+    // ── AND THE ONE WORD ON EVERY STOP IN A GUIDE ────────────────
+    // stopKind's whole reason for existing is a reader who cannot tell a
+    // museum from a quarry from a town, which makes it the worst word on the
+    // page to leave in English. Read from guideReading's own two lists so a
+    // kind added there cannot ship untranslated.
+    const readingSrc = readFileSync(join(root, "src/utils/guideReading.js"), "utf8");
+    const kinds = new Set([
+      ...[...readingSrc.matchAll(/\["[^"]+", "([^"]+)"\]/g)].map(m => m[1]),
+      ...[...readingSrc.matchAll(/(?:town|free|food|nightlife|nightlifeStreet|event|craft): "([^"]+)"/g)].map(m => m[1]),
+    ]);
+    ok("guideReading declares stop kinds this test can see", kinds.size >= 30);
+    is("and every one of them is translated",
+       [...kinds].filter(k => !Object.keys(ENTRY_WORDS).includes(k)).join(", "), "");
+    is("a Danish guide calls a castle a slot", entryWord("Castle", "da"), "Slot");
+    is("and a German one a Schloss", entryWord("Castle", "de"), "Schloss");
+    ok("the kind group is the size of the list it mirrors", M.KIND_LABELS.length >= 30);
+    // Against the WHOLE table rather than the glance group: four of these are
+    // popularity tags, which sit in their own group because they are a verdict
+    // rather than a row label. The question this asks is whether a reader meets
+    // an English word, and the group it lives in does not change the answer.
+    is("and every label on them is translated",
+       glance.filter(l => !Object.keys(ENTRY_WORDS).includes(l)).join(", "), "");
+    ok("the glance group is the bulk of them", GLANCE_LABELS.length >= 15);
+
+    // ── READING ONE, AND THE SAFE DIRECTION ────────────────────────
+    is("a Danish reader gets the Danish heading", entryWord("The Reality Check", "da"), "Virkeligheden");
+    is("a German reader gets the German one", entryWord("The Reality Check", "de"), "Realitätscheck");
+    is("English is returned untouched", entryWord("The Reality Check", "en"), "The Reality Check");
+    is("and so is the default", entryWord("The Reality Check"), "The Reality Check");
+    // A heading nobody has translated shows in English rather than blank. An
+    // entry drafted next month with a new heading loses nothing it had.
+    is("an unknown phrase comes back as it went in", entryWord("Getting There Sideways", "da"), "Getting There Sideways");
+    is("an unknown language does too", entryWord("The Reality Check", "fr"), "The Reality Check");
+    is("and an empty one is still empty", entryWord("", "da"), "");
+    // The apostrophe is the trap: the pipeline writes an ASCII quote and
+    // anything that has been through a text editor writes a curly one, and
+    // those are two different object keys.
+    is("a curly apostrophe still matches", entryWord("Who It\u2019s For", "da"), "Hvem er det for");
+    is("so does extra whitespace", entryWord("  Things to Know  ", "da"), "Godt at vide");
+    // A VALUE IS NEVER TOUCHED. The stop's name, the price and the duration are
+    // facts and stay identical in all three languages, which is the whole
+    // reason this table holds only labels.
+    is("a Danish place name is not a phrase to translate", entryWord("Ribe Station", "da"), "Ribe Station");
+    is("nor is a measured figure", entryWord("14min 🚌 from Aalborg", "da"), "14min 🚌 from Aalborg");
+
+    // ── WIRED, AT THE ONE PLACE THAT RENDERS THEM ALL ──────────────
+    const glanceSrc = readFileSync(join(root, "src/components/AtAGlanceCard.jsx"), "utf8");
+    ok("the glance card translates its labels", /entryWord\(r\.label, lang\)/.test(glanceSrc));
+    ok("and its own title", /uiT\("glance.title", lang\)/.test(glanceSrc));
+    ok("but never a value", !/entryWord\(r\.value/.test(glanceSrc));
+    ok("the article heading is translated where it renders", /entryWord\(block\.content, lang\)/.test(detailSrc));
+    ok("but the paragraph under it is not", !/entryWord\(block\.content, lang\)[\s\S]{0,200}entryWord\(block\.content, lang\)/.test(detailSrc));
+    const ENTRY_KEYS = ["entry.find", "entry.branches", "entry.liveInfo", "entry.checking", "entry.website", "entry.tickets", "entry.directions", "entry.been", "entry.beenDone", "glance.title"];
+    is("every entry-page key is in the catalogue in all three",
+       ENTRY_KEYS.filter(k => !UI_STRINGS[k] || !["en", "da", "de"].every(c => String(UI_STRINGS[k]?.[c] || "").trim())), []);
+    // Gemlyx Find is the product's own badge and is deliberately the same in
+    // all three, exactly as nav.ai is. Every other one has to differ.
+    is("and none of the rest is English wearing a Danish label",
+       ENTRY_KEYS.filter(k => k !== "entry.find" && UI_STRINGS[k].da === UI_STRINGS[k].en), []);
+    is("nor a German one",
+       ENTRY_KEYS.filter(k => k !== "entry.find" && UI_STRINGS[k].de === UI_STRINGS[k].en), []);
+    is("and every one is rendered from the catalogue",
+       ENTRY_KEYS.filter(k => k !== "glance.title" && !detailSrc.includes(`uiT("${k}", lang)`)), []);
+    // The guide opens the same component, and a guide is where the mixed
+    // language complaint lives. It is routed rather than rendered by App, so it
+    // reads the stored choice itself.
+    const guideSrc = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+    is("every detail page a guide opens gets the language too",
+       (guideSrc.match(/<DetailPage lang=\{uiLang\}/g) || []).length,
+       (guideSrc.match(/<DetailPage /g) || []).length);
+    ok("and it reads the stored choice", /const uiLang = currentUiLanguage\(\);/.test(guideSrc));
+  }
 
   // ── READING ONE ───────────────────────────────────────────────────
   is("a Danish reader gets the Danish word", t("nav.food", "da"), "Mad");

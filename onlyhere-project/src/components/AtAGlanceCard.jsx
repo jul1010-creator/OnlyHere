@@ -1,6 +1,19 @@
 import { C } from "../utils/theme";
+// ── AND THE WORDS ON IT, IN THE READER'S LANGUAGE ───────────────────
+// Oliver, 7 Sep 2026: "translating more of the website from English to Danish
+// and German, rather than just the interface." Every row on this card was
+// English in all three languages, under a Danish nav, and this is the first
+// block a reader meets on an entry.
+//
+// ONE PLACE, because this component renders every glance row in the app: the
+// labels DetailPage builds inline, the arrival label helpers.arrivalRow works
+// out from the stop's name, and the price bands. The VALUES pass through
+// untouched, which is what keeps a Danish page and an English page saying the
+// same thing about Denmark.
+import { entryWord } from "../utils/entryWords";
+import { t as uiT, DEFAULT_UI_LANGUAGE } from "../utils/uiLanguage";
 
-export const AtAGlanceCard = ({ rows }) => {
+export const AtAGlanceCard = ({ rows, lang = DEFAULT_UI_LANGUAGE }) => {
   // NULL ROWS ARE ALLOWED, and they have to be. Every caller builds this list
   // inline, so the natural way to express "this row only sometimes applies" is a
   // conditional that evaluates to null — which is exactly what the town card's
@@ -23,17 +36,17 @@ export const AtAGlanceCard = ({ rows }) => {
   if (present.length === 0) return null;
   return (
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", marginBottom: 22 }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>At a Glance</div>
+      <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>{uiT("glance.title", lang)}</div>
       {present.map((r, i) => (
         <div key={i} style={{ display: "flex", gap: 10, marginBottom: i < present.length - 1 ? 10 : 0 }}>
           <span style={{ flexShrink: 0, width: 20 }}>{r.icon}</span>
           <div>
-            <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{r.label}: </span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{entryWord(r.label, lang)}: </span>
             {r.value && <span style={{ fontSize: 12, color: C.light }}>{r.value}</span>}
             {r.link?.href && (
               <a href={r.link.href} target="_blank" rel={r.link.note ? "noreferrer sponsored nofollow" : "noreferrer"}
                 style={{ fontSize: 12, fontWeight: 700, color: C.gold, textDecoration: "none", whiteSpace: "nowrap", marginLeft: r.value ? 8 : 0 }}>
-                {r.link.label || "Book tickets"} ↗
+                {entryWord(r.link.label || "Book tickets", lang)} ↗
               </a>
             )}
             {/* ── AND THE SENTENCE TRAVELS WITH THE LINK ─────────────

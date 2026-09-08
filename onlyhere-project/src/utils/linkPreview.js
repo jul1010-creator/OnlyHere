@@ -33,6 +33,9 @@
 // middleware does that and hands the results in.
 
 import { shareTitle, metaDescription, escapeHtml } from "./share.js";
+// The sentence-level cleaner only, from the module with no imports: this file is
+// bundled into edge middleware and researchVoice.js carries entryAudit's graph.
+import { stripResearchVoice, isResearchVoice } from "./researchWords.js";
 
 // ── WHO GETS THE TAGS ────────────────────────────────────────────────
 // BOT TOKENS ONLY, and that distinction is load-bearing. The first version of
@@ -186,18 +189,33 @@ const BODY_CAP = 24000;      // an entry is a few thousand characters; this is a
 
 // The blocks a page is made of, in order, in the shape a renderer wants. Kept
 // separate from the HTML so the ordering can be tested without parsing tags.
+// ── THE SAME WORDS A PERSON GETS, WHICH MEANS CLEANED ───────────────
+// stripResearchVoice on every block, because this is what a crawler reads and
+// liveContent runs the same pass before DetailPage renders a word of it. A
+// sentence about our own checking is not about the place, and it was reaching
+// the one audience that cannot tell the difference. The name is left alone: it
+// is not prose, and a cleaner that can rewrite an entry's NAME is a cleaner
+// that can move its URL.
+const prose = (text) => stripResearchVoice(String(text || "").trim()).trim();
+
 export const articleBlocks = (payload) => {
   const out = [];
   const name = String(payload?.name || "").trim();
   if (name) out.push({ tag: "h1", text: name });
-  const desc = String(payload?.desc || "").trim();
+  const desc = prose(payload?.desc);
   if (desc) out.push({ tag: "p", text: desc });
   (Array.isArray(payload?.blogBody) ? payload.blogBody : []).forEach(b => {
     if (!b || typeof b !== "object") return;
     if (b.type === "heading" && String(b.content || "").trim()) out.push({ tag: "h2", text: String(b.content).trim() });
-    else if (b.type === "paragraph" && String(b.content || "").trim()) out.push({ tag: "p", text: String(b.content).trim() });
+    else if (b.type === "paragraph" && prose(b.content)) out.push({ tag: "p", text: prose(b.content) });
     else if (b.type === "bullets" && Array.isArray(b.items)) {
-      const items = b.items.map(i => String(i || "").trim()).filter(Boolean);
+      // A bullet that is ENTIRELY our own voice is dropped rather than cleaned.
+      // stripResearchVoice never empties a FIELD, on the rule that a blank
+      // description renders as a place with nothing to say, so it hands back
+      // the original when every sentence would go. A bullet is not a field: the
+      // list survives losing one, and a list that loses all of them is skipped
+      // below by the same length check that was already there.
+      const items = b.items.filter(i => !isResearchVoice(String(i || "").trim())).map(i => prose(i)).filter(Boolean);
       if (items.length) out.push({ tag: "ul", items });
     }
     // An image block carries a caption a person sees, and the picture itself

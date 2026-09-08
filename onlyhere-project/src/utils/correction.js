@@ -711,7 +711,12 @@ export const RIGHT_HALF = /\b(should (be|say|read|actually)|shouldn'?t (be|say)|
 // A question is answered, never acted on, even when it is about something being
 // wrong. Guessing "correct" on "is the ferry thing right?" would run a whole
 // verification pass because he wondered aloud.
-export const QUESTION = /^\s*(why|what|how|is|are|does|do|did|can|could|should|would|which|who|when|where|was|were|any|anything)\b|\?\s*$/i;
+// A question has two shapes: one he opens with, and one that is nothing but a
+// trailing question mark. They are kept apart because a pasted report ends with
+// its own question and that one is not his. QUESTION is built from the opener
+// rather than restating the word list, so the two can never drift.
+export const QUESTION_OPENS = /^\s*(why|what|how|is|are|does|do|did|can|could|should|would|which|who|when|where|was|were|any|anything)\b/i;
+export const QUESTION = new RegExp(`${QUESTION_OPENS.source}|\\?\\s*$`, "i");
 
 // ── "I would like to have Claude rewriting itself" ──────────────────
 // Oliver, 7 Aug 2026: "I like that I can finally talk to an AI about the draft.
@@ -933,10 +938,32 @@ export const whoseWord = (criticism) => {
   return REPORTED.test(t) || CITES.test(t) ? "pasted" : "founder";
 };
 
+// ── A PASTED REPORT CANNOT GIVE AN INSTRUCTION ─────────────────────
+// Oliver, 7 Sep 2026: "This is annoying.. can't argue with the draft because of
+// this." He had pasted a Kronborg fact-check into the box and got back a
+// site-wide audit of 185 entries. He found it himself: "it's because Gemini
+// ends up asking about entry lol". Gemini signs off by offering to audit the
+// next draft entry, and the router read that word as HIS request.
+//
+// The rule that was missing: the routes meaning "he is telling me to do
+// something ELSE" are read out of his sentence, never out of the report he
+// pasted. A report describes its own work. When it says "audit" it is naming
+// what it just did, and when it ends "shall I do the next one?" that is
+// Gemini's question, not his. Two routes are gated, and only two:
+//   audit  a word like "audit" or "worst" anywhere in the prose
+//   ask    a trailing "?" belonging to the report's last line
+// A question he leads with still answers, because that one he typed above the
+// paste. Every other route reads content rather than intent, and a paste is
+// exactly what those routes are for.
+//
+// whoseWord is reused rather than restated: it is already this file's one
+// answer to "is this his sentence or somebody's report", and a second copy is
+// how the two would come to disagree.
 export const routeMessage = (text) => {
   const t = String(text || "").trim();
   if (!t) return "ask";
-  if (AUDIT_INTENT.test(t) && !CORRECT_INTENT.test(t)) return "audit";
+  const pasted = whoseWord(t) === "pasted";
+  if (!pasted && AUDIT_INTENT.test(t) && !CORRECT_INTENT.test(t)) return "audit";
   // Before edit and correct: a sentence naming a SET is not a claim about the
   // open entry, however much it reads like one.
   if (SWEEP_INTENT.test(t)) return "sweep";
@@ -947,7 +974,7 @@ export const routeMessage = (text) => {
   // separates them. isEditRequest already refuses anything that asserts a fact.
   if (isEditRequest(t) && !WRONG_HALF.test(t)) return "edit";
   if (CORRECT_INTENT.test(t)) return "correct";
-  if (QUESTION.test(t)) return "ask";
+  if (pasted ? QUESTION_OPENS.test(t) : QUESTION.test(t)) return "ask";
   if (WRONG_HALF.test(t) || RIGHT_HALF.test(t)) return "correct";
   // A long paste with no instruction is a fact-check dropped in whole. That is
   // still a correction request, it just did not come with a covering sentence.
@@ -1478,4 +1505,44 @@ export const keepProse = (before, corrected) => {
     restored: bad,
     why: `The correction answered in ${bad.join(" and ")} with a statement about the checking rather than with prose, so ${bad.length === 1 ? "that field was" : "those fields were"} put back. A reader is not the audience for "the claim is not confirmed by the checked sources": if a claim genuinely cannot stand, it comes out of the sentence and goes into uncertainties.`,
   };
+};
+
+// ── A CORRECTION THAT WAS PUT BACK IS NOT A CORRECTION ──────────────
+// The WOW PARK Billund entry, 8 Sep 2026, carried this in its uncertainties:
+//   "The nearestStation field previously showed an unrelated business name from
+//    the source data. It has been corrected to note that WOW PARK offers a free
+//    seasonal shuttle bus for transit travelers, per wowpark.dk."
+// and, on the page, a Nearest Stop reading "Logistik-Optimering v/Bo Trygve
+// Mortensen". The correction pass wrote the shuttle sentence, the guard that
+// protects a MEASURED value from a rewrite put the measurement back, and the
+// sentence claiming the fix survived the fix being undone. (The shuttle is real
+// and runs in July and August only, so it was the wrong value regardless.)
+//
+// Of the three things that could be wrong here, this is the worst: a wrong
+// value is a wrong value, and a page that tells a reader it corrected something
+// it did not is the app breaking its own promise on the same screen.
+//
+// So the restore drops the claim it just falsified. Deliberately narrow: only a
+// line that BOTH names the field and says the change was made. A line that
+// merely mentions the field, or one that says a correction was raised and NOT
+// applied, is left alone, because both of those are still true afterwards.
+export const CLAIMS_APPLIED = /\b(?:has been|have been|was|were|is now|are now|now)\s+(?:corrected|changed|updated|fixed|replaced|set)\b|\bcorrected to\b|\bupdated to\b|\bchanged to\b|\breplaced with\b/i;
+
+const rxSafe = (a) => String(a).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export const namesField = (line, names = []) => {
+  const t = String(line || "");
+  return (Array.isArray(names) ? names : [names]).some(n => {
+    const word = String(n || "").trim();
+    if (!word) return false;
+    try { return new RegExp(`\\b${rxSafe(word).replace(/\s+/g, "\\s+")}\\b`, "i").test(t); }
+    catch { return false; }
+  });
+};
+
+export const dropAppliedClaims = (lines, names = []) => {
+  const list = Array.isArray(lines) ? lines : [];
+  const words = (Array.isArray(names) ? names : [names]).filter(Boolean);
+  if (!words.length) return list;
+  return list.filter(line => !(CLAIMS_APPLIED.test(String(line || "")) && namesField(line, words)));
 };

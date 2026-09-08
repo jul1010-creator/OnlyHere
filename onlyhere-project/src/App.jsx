@@ -129,7 +129,7 @@ import { isRecording, startRecording, stopRecording, record, recordedEvents, rec
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
 import { journeyParts, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, closedButPlanned, arrivalStop, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
-import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS, urlsIn } from "./utils/correction";
+import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS, urlsIn, dropAppliedClaims } from "./utils/correction";
 import { branchesOf, branchCandidates, branchFromCandidate, mergeBranches, branchLabel, branchLine, coordForTown, MAX_BRANCHES } from "./utils/branches";
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance, staleUncertainties, describeStale } from "./utils/glanceExtract";
 import { showsJourney, journeyOriginFor, journeyOriginPoint, IS_THE_CENTRE_KM } from "./utils/journeyScope";
@@ -7968,6 +7968,19 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
                       why: `the rewrite made it "${String(t.nearestStation).slice(0, 80)}"; the measurement says "${restoreStop}", and that is what it is set back to`,
                     });
                     t.nearestStation = restoreStop;
+                    // ── AND THE SENTENCE THAT SAID IT WAS FIXED ────
+                    // See dropAppliedClaims. The line above undoes a correction
+                    // the pass already wrote up as done, and the write-up
+                    // reaches a reader. It goes with the value it described.
+                    const kept = dropAppliedClaims(t.uncertainties, ["nearestStation", "nearest station", "nearest stop"]);
+                    if (Array.isArray(t.uncertainties) && kept.length !== t.uncertainties.length) {
+                      note("A claimed correction went with it", {
+                        provider: "claude", detail: "uncertainties, after the measured field was put back",
+                        outcome: "ok", used: true,
+                        why: `${t.uncertainties.length - kept.length} line(s) said the arrival point had been corrected, and it has not`,
+                      });
+                      t.uncertainties = kept;
+                    }
                   }
                   if (frozenGeo && typeof t.lat !== "undefined") t.lat = frozenGeo.lat;
                   if (frozenGeo && typeof t.lon !== "undefined") t.lon = frozenGeo.lon;
@@ -12799,10 +12812,26 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     // enrichment all used to call the navigator separately. That is how the
     // Limfjord guide ended up Danish prose with English leg lines: three calls,
     // three answers, one page. Computed once here and passed down.
-    const guideLangBlock = writeInLanguage(guideLanguage({
+    // ── AND THE DECISION IS KEPT, NOT ONLY SPENT ─────────────────
+    // Oliver, 7 Sep 2026: "try to fix the mixing of language in the guide that
+    // tends to happen." travellerLanguage.js was written for the other half of
+    // this in August and its own opening paragraph names the half left over:
+    // the guide came back Danish "with the leg lines and the weather still in
+    // English so the document changes language twice a page."
+    //
+    // The prose half was fixed by moving the decision out of the prompt. The
+    // FURNITURE half could not be fixed at all, because the decision was made
+    // here, spent on one prompt string and thrown away: nothing downstream knew
+    // what language the finished guide was in. It is written onto the guide now
+    // (__lang, one base tag), so the page can render its own words to match.
+    const guideLang = guideLanguage({
       said: saidByTravellerForGuide,
       lang: readerLanguage(),
-    })) + languageBarNote(saidByTravellerForGuide);
+    });
+    // null is this function's word for English, which is the language every
+    // piece of furniture on that page is already written in.
+    const guideLangTag = String(guideLang?.tag || "en").split("-")[0].toLowerCase();
+    const guideLangBlock = writeInLanguage(guideLang) + languageBarNote(saidByTravellerForGuide);
     if (!convoText.trim()) return;
     const mode = modeOverride === "plain" ? "plain" : "map";
     // Reopen instantly if this exact conversation already built a guide — avoids
@@ -13706,6 +13735,10 @@ If the conversation only covers a single day or a few stops with no explicit day
       // starting with _ because those carry machinery rather than prose.
       parsed.days = stripDashesDeep(parsed.days);
       parsed.title = stripDashes(parsed.title);
+      // The language this guide was written in, for the page that renders it.
+      // A machinery key, so stripDashesDeep leaves it alone and no prose gate
+      // reads it as something a traveller sees.
+      parsed.__lang = guideLangTag;
 
       // ── A TITLE IS THE FIRST FACTUAL CLAIM A READER MEETS ──────
       // "Cobbled Streets and Chalk Cliffs" led a guide with no cliff in it:
@@ -16362,7 +16395,7 @@ ${languageBlock()}`;
             {tierOf(event)?.id === "must" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: C.onGold, background: C.gold }}>★ Can't miss out</span>}
             {event.tier === "Highly Recommended" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: "#6ECF97", background: "rgba(110,207,151,0.12)" }}>Highly Recommended</span>}
             {event.tier === "Best If You're Already Nearby" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: "#FFB347", background: "#FFB34722" }}>Best if already nearby</span>}
-            <span style={{ fontSize: 11.5, color: C.muted }}>{travelLabel(userCoords, event.town, event.travelTime)}</span>
+            <span style={{ fontSize: 11.5, color: C.muted }}>{travelLabel(userCoords, event.town, event.travelTime, event.__journey?.from || "")}</span>
             {/* ── FOUR HARDCODED COMPARISONS, TWO OF THEM UNREACHABLE ───
                 Was sold_out, selling_fast, available, free. The festival
                 prompt has only ever asked for free / on_sale / limited /
@@ -21298,7 +21331,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
                         <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}><EntryLink type={item._kind === "free" ? "free" : "booking"} name={item.name}>{item.name}</EntryLink></div>
                         <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>
-                          {dotJoin(item._kind === "craft" ? item.location : item.city, item._kind === "craft" ? travelLabel(userCoords, item.location, item.travelTime) : "", item.priceNote)}
+                          {dotJoin(item._kind === "craft" ? item.location : item.city, item._kind === "craft" ? travelLabel(userCoords, item.location, item.travelTime, item.__journey?.from || "") : "", item.priceNote)}
                           {craftSort === "near" && isInDenmark(userCoords) ? (() => { const km = townKmFromUser(item._kind === "craft" ? item.location : item.city); return km != null ? ` · 📍 ${km < 10 ? km.toFixed(1) : Math.round(km)} km away` : ""; })() : ""}
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7 }}>
@@ -23836,14 +23869,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           live control it held, bookableOnly, already has its own pill on the
           Attractions page and is untouched. */}
 
-      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} hasBeen={!!eventDetail && isBeenHere("event", eventDetail.id)} onToggleBeen={eventDetail ? () => toggleBeenHere("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} hasBeen={!!eventDetail && isBeenHere("event", eventDetail.id)} onToggleBeen={eventDetail ? () => toggleBeenHere("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       {/* onOpenEvent powers the new "What's on in <town>" section: tapping a
           festival closes the town page and opens that event's real entry, so the
           traveler lands on the full page with dates, tickets and directions
           rather than a dead-end list item. */}
-      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} hasBeen={!!townDetail && isBeenHere("town", townDetail.id)} onToggleBeen={townDetail ? () => toggleBeenHere("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} hasBeen={!!nightlifeDetail && isBeenHere("nightlife", nightlifeDetail.id)} onToggleBeen={nightlifeDetail ? () => toggleBeenHere("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} hasBeen={!!freeDetail && isBeenHere("free", freeDetail.id)} onToggleBeen={freeDetail ? () => toggleBeenHere("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} hasBeen={!!townDetail && isBeenHere("town", townDetail.id)} onToggleBeen={townDetail ? () => toggleBeenHere("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} hasBeen={!!nightlifeDetail && isBeenHere("nightlife", nightlifeDetail.id)} onToggleBeen={nightlifeDetail ? () => toggleBeenHere("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} hasBeen={!!freeDetail && isBeenHere("free", freeDetail.id)} onToggleBeen={freeDetail ? () => toggleBeenHere("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       {/* ── The assistant that follows him (Oliver, 6 Aug: "some sort of
           assistant for the admin /#studio guy? That will always be with me?
           Even when I'm on the blogs")  ────────────────────────────────
@@ -23982,7 +24015,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           onSaved={() => refreshLiveContent()} />;
       })()}
 
-      <DetailPage paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} hasBeen={!!foodDetail && isBeenHere("food", foodDetail.id)} onToggleBeen={foodDetail ? () => toggleBeenHere("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} hasBeen={!!foodDetail && isBeenHere("food", foodDetail.id)} onToggleBeen={foodDetail ? () => toggleBeenHere("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
 
       {/* Per Oliver ("get rid of the popup"): once a guide finishes building, we
           navigate straight to the full-page GuidePage instead of showing a
@@ -24621,7 +24654,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
           <div style={{ padding: "20px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
             <div style={{ fontSize: 30, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: 6 }}>{craftDetail.name}</div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{dotJoin(craftDetail.location, travelLabel(userCoords, craftDetail.location, craftDetail.travelTime))}</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{dotJoin(craftDetail.location, travelLabel(userCoords, craftDetail.location, craftDetail.travelTime, craftDetail.__journey?.from || ""))}</div>
             {craftDetail.popularityTag && (
               <span style={{ display: "inline-block", fontSize: 10, fontWeight: 700, color: craftDetail.popularityTag === "Hidden Gem" ? C.gold : C.muted, background: craftDetail.popularityTag === "Hidden Gem" ? `${C.gold}22` : C.surface, border: `1px solid ${craftDetail.popularityTag === "Hidden Gem" ? C.gold : C.border}`, padding: "4px 11px", borderRadius: 100, marginBottom: 18 }}>
                 {craftDetail.popularityTag === "Hidden Gem" ? "◆ Hidden Gem" : "○ Common Attraction"}
@@ -24773,7 +24806,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             {craftStatus !== "sent" ? (
               <>
                 <div style={{ fontSize: 22, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 2 }}>{craftModal.emoji} {craftModal.name}</div>
-                <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>{dotJoin(craftModal.location, travelLabel(userCoords, craftModal.location, craftModal.travelTime))}</div>
+                <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>{dotJoin(craftModal.location, travelLabel(userCoords, craftModal.location, craftModal.travelTime, craftModal.__journey?.from || ""))}</div>
                 <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 18 }}>Tell us what you'd like to book. We'll confirm availability and price with the workshop and reply personally.</div>
 
                 {[

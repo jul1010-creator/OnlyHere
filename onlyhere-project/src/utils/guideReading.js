@@ -1,6 +1,8 @@
 import { isFerryText, getEventDate } from "./helpers";
 import { normaliseTicketStatus } from "./tickets";
 import { dayStart, dayPlus, dayWithin } from "./calendarDay";
+import { fold, PLACE_NAMES } from "./danishNames";
+import { KOMMUNER, K } from "../data/kommuner";
 // ── READING A GUIDE WHEN YOU HAVE NEVER BEEN TO DENMARK ─────────────
 // Oliver, 7 Aug 2026, asking whether the guide would still be overwhelming to
 // someone who has never been. It would, and not for the reason I had been
@@ -94,12 +96,47 @@ export const STOP_KINDS = [
 // nothing they did not already assume.
 const BY_SOURCE = { town: "Town", free: "Free to enter", food: "Restaurant", nightlife: "Bar", nightlifeStreet: "Bar street", event: "Event", craft: "Workshop" };
 
+// ── AND A PLACE NAME IS NOT A DESCRIPTION OF A THING ────────────────
+//
+// Found 8 Sep 2026, auditing this list. The compound rule above is right for
+// nearly everything and wrong for the handful of Danish PLACE names that end in
+// one of these nouns without being one:
+//
+//   København     →  Harbour   the capital, whose own name ends in -havn
+//   Holstebro     →  Bridge    a town in Jutland, and a kommune
+//   Frederikshavn →  Harbour   a town, and a kommune
+//   Nørrebro, Vesterbro, Østerbro, Christianshavn  →  Bridge, Harbour
+//
+// A gold pill on a guide's stop reading "Harbour" under København is this
+// function telling a first-time visitor something false, which is the exact
+// opposite of the job it was written for.
+//
+// THE TEST IS NOT A LONGER BLOCKLIST of things that are not harbours: that list
+// is infinite, which is the lesson geo.js paid for twice. It is the question
+// the data already answers — IS THIS NAME ITSELF A PLACE? The kommune table
+// holds all 98, PLACE_NAMES holds the country's own names in both languages,
+// and the six Copenhagen districts are named here because they are proper names
+// that no table in this app has a reason to carry. A name that matches is
+// described by what its ROW says it is, or by nothing at all, and every other
+// name keeps the compound rule that makes Vikingeskibsmuseet a museum.
+const DISTRICTS = ["Nørrebro", "Vesterbro", "Østerbro", "Amagerbro", "Christianshavn", "Sydhavn", "Nordhavn"];
+const IS_A_PLACE = new Set([
+  ...KOMMUNER.map(k => k[K.name]),
+  ...PLACE_NAMES.flat(),
+  ...DISTRICTS,
+].map(fold).filter(Boolean));
+
+export const namesAPlace = (name) => IS_A_PLACE.has(fold(name));
+
 export const stopKind = (name, real) => {
+  const own = (real && BY_SOURCE[real._src]) || null;
+  // A name that IS a place gets what the row says, or nothing. Nothing is the
+  // right answer for a name nobody published: no pill beats a wrong pill.
+  if (namesAPlace(name)) return own;
   for (const [token, label] of STOP_KINDS) {
     if (hasToken(name, token)) return label;
   }
-  const src = real && real._src;
-  return (src && BY_SOURCE[src]) || null;
+  return own;
 };
 
 // ── WHICH CALENDAR DAY IS DAY N OF THE TRIP ─────────────────────────

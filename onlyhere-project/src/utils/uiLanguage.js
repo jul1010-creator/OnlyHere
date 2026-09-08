@@ -67,11 +67,18 @@ export const uiLanguageMeta = (code) => UI_LANGUAGES.find(l => l.code === String
 // its ✦ and its English words in all three languages on purpose.
 //
 // The blogBody headings ("The Reality Check", "Who It's For", "Things to Know")
-// are NOT here either, and they are the reason a Danish interface still shows
-// English inside an entry. They are stored inside the 148 published rows rather
-// than rendered from a constant, so they are job C wearing a job A costume, as
-// MULTILINGUAL_25AUG.md puts it. Translating them is a content migration and it
-// does not belong in this file.
+// are not here, and they were the reason a Danish interface still showed English
+// inside an entry. They are stored inside the 148 published rows rather than
+// rendered from a constant, so they are job C wearing a job A costume, as
+// MULTILINGUAL_25AUG.md puts it.
+//
+// They are translated now, in utils/entryWords.js, and the costume is why they
+// are there rather than here: a UI string is WRITTEN at its render site and can
+// have a key, while a heading ARRIVES from a database row and the English text
+// is the only key it has. Nothing was migrated. The rows keep their English and
+// the render looks the phrase up on the way to the screen, which is the move
+// this codebase has settled on three times: "suppressing it at RENDER so all 71
+// published entries were fixed at once rather than needing 71 redrafts."
 export const UI_STRINGS = {
   // The pages, along the top. NAV_ITEMS in App.jsx maps its labels through t().
   "nav.home":        { en: "Explore",         da: "Udforsk",        de: "Entdecken" },
@@ -167,6 +174,32 @@ export const UI_STRINGS = {
   "empty.filtersDetail": { en: "Try clearing one. Denmark still has plenty to offer.", da: "Prøv at fjerne et af dem. Danmark har stadig masser at byde på.", de: "Nimm einen davon weg. Dänemark hat noch viel zu bieten." },
   "empty.events":        { en: "No upcoming events. Try a different filter.", da: "Ingen kommende begivenheder. Prøv et andet filter.", de: "Keine anstehenden Veranstaltungen. Probier einen anderen Filter." },
   "empty.towns":         { en: "Nothing published matches these filters yet.", da: "Der er endnu ikke udgivet noget, der passer til de filtre.", de: "Noch nichts veröffentlicht, das zu diesen Filtern passt." },
+
+  // ── THE ENTRY PAGE, WHICH A DANISH READER REACHED IN ENGLISH ──────
+  //
+  // Oliver, 7 Sep 2026: "work on translating more of the website from English
+  // to Danish and German, rather than just the interface." The nav was Danish
+  // and every word inside an entry was not, which is the half-translation this
+  // file's own menu note calls worse than none.
+  //
+  // The row LABELS on the glance card and the section headings inside the
+  // article are in utils/entryWords.js instead, keyed by their English, because
+  // those arrive from a published row rather than being written here. These are
+  // the ones this component writes itself.
+  "glance.title":     { en: "At a Glance",     da: "Kort fortalt",        de: "Auf einen Blick" },
+  // The product's own name stays, exactly as nav.ai does. "Gemlyx Find" is what
+  // the badge is called in all three languages.
+  "entry.find":       { en: "Gemlyx Find",     da: "Gemlyx Find",         de: "Gemlyx Find" },
+  "entry.branches":   { en: "Where you can go", da: "Hvor du kan tage hen", de: "Wo du hingehen kannst" },
+  "entry.liveInfo":   { en: "Check live info", da: "Tjek aktuel info",    de: "Aktuelle Infos prüfen" },
+  "entry.checking":   { en: "Checking...",     da: "Tjekker...",          de: "Wird geprüft..." },
+  "entry.website":    { en: "Visit website",   da: "Besøg hjemmesiden",   de: "Zur Website" },
+  "entry.tickets":    { en: "Book tickets",    da: "Køb billetter",       de: "Tickets buchen" },
+  "entry.directions": { en: "Get Directions",  da: "Find vej",            de: "Route anzeigen" },
+  // Two states of one button, so both are declared. Danish has no comfortable
+  // one-word past tense here: "Har været her" is what a Dane would write.
+  "entry.been":       { en: "Been here",       da: "Har været her",       de: "Schon hier gewesen" },
+  "entry.beenDone":   { en: "✓ Been here",     da: "✓ Har været her",     de: "✓ Schon hier gewesen" },
 
   // The two search boxes that are not the header's. header.search covers that
   // one already, and these say what they search rather than repeating "Søg".

@@ -695,3 +695,38 @@ export const ticketQueries = (name, town) => [
   ticketQuery(name, town),
   `site:ticketmaster.dk "${String(name || "").trim()}"${scopeFor(town)} billetter`,
 ];
+
+// ── THE PRICE AND THE LINK MUST BE THE SAME SHOP ────────────────────
+// Oliver, 8 Sep 2026, of the WOW PARK Billund entry: "199.. you click link, and
+// it says 289."
+//
+// Both numbers are true and they are different tickets. wowpark.dk sells a
+// DATED day ticket from 199 DKK and an undated season ticket at 299; the Tiqets
+// page the entry links sells a flexible one from 289. The row put the
+// operator's cheapest dated price and a link to somebody else's product side by
+// side and let a reader read them as one thing.
+//
+// Nothing has to be looked up to catch it. The pipeline already records which
+// host stated the price it kept, in __priceSource, and the ticket link carries
+// its own host. When those differ, the number on the row is not the number
+// behind the link, and the link comes off THAT row. The standalone Book tickets
+// button lower down the page is untouched: a reader who taps a button marked
+// "book" has not been quoted a price by it.
+//
+// Permissive when it does not know. An entry with no __priceSource, and every
+// older entry written before the field existed, keeps its link: a missing
+// record is not evidence of a mismatch, which is the rule this project applies
+// to every other lookup that comes back empty.
+const bareHost = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const withHost = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try { return new URL(withHost).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; }
+};
+
+export const sameShop = (ticketUrl, priceSource) => {
+  const seller = bareHost(ticketUrl);
+  const stated = bareHost(priceSource?.host || priceSource?.url || "");
+  if (!seller || !stated) return true;
+  return seller === stated;
+};

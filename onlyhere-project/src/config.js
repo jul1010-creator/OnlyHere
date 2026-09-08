@@ -73,6 +73,39 @@ export const SITE_ORIGIN = "https://www.gemlyxtravel.com";
 // the app's planned revenue path, per Oliver directly (Aug 5 2026).
 export const BOOKING_AFFILIATE_ID = "";
 
+// ── TRIP.COM, DIRECT ────────────────────────────────────────────────
+//
+// Oliver, 7 Sep 2026: "Got another affiliate!"
+//
+// The one programme so far whose inventory overlaps the field Gemlyx has been
+// unable to monetise at all. BOOKING_AFFILIATE_ID above has been empty since 5
+// August with the wiring finished behind it, he applied weeks ago and has had
+// no answer, and every stay link in the app is unpaid meanwhile.
+//
+// ── TWO IDS AND A SUB-ID, NOT A REDIRECT SERVICE ────────────────────
+//
+// Unlike Travelpayouts, these are plain query parameters on trip.com's own
+// domain, so they can ride on ANY Trip.com URL rather than only on a short link
+// with one fixed destination. That is what makes a per-town hotel list possible
+// and is the whole reason this is not another browse-link constant.
+//
+// trip_sub1 is his own sub-id slot, empty in the link he was given. The town
+// goes in it, so his dashboard says which pages earn rather than only how much.
+export const TRIPCOM_ALLIANCE_ID = "10471700";
+export const TRIPCOM_SID = "330558586";
+
+// ── AND THE BROWSE LINKS, FOR WHERE NOTHING WAS PROMISED ────────────
+//
+// Same rule TIQETS_BROWSE_LINK states: a short link resolves to ONE fixed
+// destination, so it belongs only where the reader was not promised a
+// particular place. Put one on a card about Asaa and a reader who asked for
+// Asaa lands on a front page.
+//
+// The things-to-do URL he sent carried locale and currency and NO alliance id
+// at all, so as pasted it earned nothing. The ids are added here.
+export const TRIPCOM_HOTEL_BROWSE = "https://www.trip.com/t/6CdiKJ66GW2";
+export const TRIPCOM_THINGS_BROWSE = "https://www.trip.com/things-to-do/?locale=en-XX&curr=DKK";
+
 // ── TICKETMASTER, THROUGH IMPACT ────────────────────────────────────
 //
 // Oliver, 13 Aug 2026, halfway through Ticketmaster's application: "let's

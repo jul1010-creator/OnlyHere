@@ -2,6 +2,22 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { C } from "../utils/theme";
 import { languageBlock } from "../utils/readerLanguage";
+// ── AND THE ENTRY PAGES OPENED FROM A GUIDE ─────────────────────────
+// The five DetailPages at the bottom of this file are the same component the
+// front of the site opens, and a guide is exactly where Oliver's mixed-language
+// complaint lives: "Danish prose with English weather blocks, English ticket
+// blocks and English leg lines." This page is ROUTED rather than rendered by
+// App.jsx, so it reads the stored choice itself instead of being handed it.
+import { currentUiLanguage, isUiLanguage } from "../utils/uiLanguage";
+// ── AND THE GUIDE'S OWN WORDS FOLLOW THE GUIDE'S OWN LANGUAGE ───────
+// Not the picker. The picker says what language the SITE is in; a guide was
+// written in whatever language the traveller wrote their brief in, and it now
+// records that on itself as __lang. Furniture inside the document follows the
+// document, which is the whole of Oliver's "mixing of language in the guide":
+// "Danish prose with English weather blocks, English ticket blocks and English
+// leg lines." An entry page opened FROM a guide is a different document and
+// keeps following the picker.
+import { entryWord } from "../utils/entryWords";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 import { GemlyxLoader, GemlyxMark } from "../components/GemlyxLogo";
 import { TypewriterText } from "../components/TypewriterText";
@@ -30,7 +46,7 @@ import { testTravelerLine, isFerryText, daysUntil } from "../utils/helpers";
 import { aiDisclosureFor } from "../utils/aiDisclosure";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen, clampNote } from "../utils/guideReading";
 import { BOOKING_AFFILIATE_ID } from "../config";
-import { tiqetsBrowseUrl, partnerDisclosure, supportNote, partnerLinkCount, isPartnerLink, carRentalFits, bookingUrl, STAY_DISCLOSURE } from "../utils/affiliates";
+import { tiqetsBrowseUrl, partnerDisclosure, supportNote, partnerLinkCount, isPartnerLink, carRentalFits, bookingUrl, tripcomStayUrl, stayDisclosure, STAY_DISCLOSURE } from "../utils/affiliates";
 import { CostsBlock } from "../components/CostsBlock";
 import { dayStart, dayKey, dayPlus } from "../utils/calendarDay";
 import { TripCalendarCard } from "../components/TripCalendarCard";
@@ -149,6 +165,7 @@ export const humanMinutes = (m) => {
 // an event that does not run on the traveller's dates, and that refusal cannot
 // be checked at all by an instrument that can only ever ask about today.
 export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date() }) => {
+  const uiLang = currentUiLanguage();
   const { guideId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -195,6 +212,11 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   };
 
   const [guide, setGuide] = useState(freshGuide || null);
+  // The language THIS GUIDE was written in, read off the guide itself rather
+  // than off the picker, and after the state that may still be loading it. A
+  // guide built before __lang existed, or one whose tag nobody has a
+  // translation for, falls back to the picker.
+  const guideLang = isUiLanguage(guide?.__lang) ? guide.__lang : uiLang;
   const [loading, setLoading] = useState(!freshGuide && !!guideId);
   const [loadError, setLoadError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -1823,7 +1845,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 // whether one is a museum, a church or a hole in the ground.
                 // Danish compound names already carry the answer, so this costs
                 // one small tag and no research at all.
-                const kind = stopKind(stop.name, real);
+                const kind = entryWord(stopKind(stop.name, real), guideLang);
                 // ── AND WHEN IT RUNS, IF IT IS AN EVENT ──────────────
                 // Null for everything that is not one, so a restaurant is
                 // untouched. See stopEventWhen in utils/guideReading.js: this
@@ -2098,6 +2120,18 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 checkout: fmt(dayDate) ? fmt(nextDate) : undefined,
                 adults,
               });
+              // ── AND TRIP.COM, WHERE IT HAS A CITY ────────────────
+              // Oliver, 7 Sep 2026: "Got another affiliate!" Booking has been
+              // approved-pending since 5 August and earns nothing meanwhile,
+              // and this is the surface that link exists for.
+              //
+              // BESIDE, NOT INSTEAD. bookingUrl takes free text and works for
+              // every town he publishes; Trip.com needs a city id and has one
+              // for twenty Danish cities, none of them the hidden gems. A town
+              // with no id gets null here and no second link, which is the
+              // right answer rather than a fallback that lands somebody 300 km
+              // from where the sentence above promised. See data/tripcom.js.
+              const stayTripUrl = tripcomStayUrl(day.glance.stayArea || stayTown || searchTerm);
               return (
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 12, padding: "12px 14px", marginTop: 16 }}>
                   <span style={{ fontSize: 14, flexShrink: 0 }}>🏡</span>
@@ -2122,8 +2156,13 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                         first run, which is the argument for shared doors in one
                         sentence. First day only: the sentence is the same on
                         all seven and a reader learns to scroll past a repeat. */}
-                    {stayBookingUrl && dayIdx === 0 && (
-                      <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4 }}>{STAY_DISCLOSURE}</div>
+                    {stayTripUrl && (
+                      <a href={stayTripUrl} target="_blank" rel="noreferrer sponsored nofollow" style={{ display: "block", marginTop: 4, color: C.gold, fontWeight: 700, textDecoration: "none" }}>
+                        🏨 Compare hotels on Trip.com ↗
+                      </a>
+                    )}
+                    {(stayBookingUrl || stayTripUrl) && dayIdx === 0 && (
+                      <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4 }}>{stayDisclosure({ tripcom: !!stayTripUrl })}</div>
                     )}
                   </div>
                 </div>
@@ -2437,11 +2476,11 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
       {/* Same DetailPage overlay every other page in the app uses to show a real
           Gemlyx entry — self-contained, fixed full-screen, no route change, so
           closing it is always instant and lands you right back on this guide. */}
-      <DetailPage item={eventDetail} onClose={() => setEventDetail(null)} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} />
-      <DetailPage item={townDetail} onClose={() => setTownDetail(null)} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} />
-      <DetailPage item={nightlifeDetail} onClose={() => setNightlifeDetail(null)} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} />
-      <DetailPage item={freeDetail} onClose={() => setFreeDetail(null)} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} />
-      <DetailPage item={foodDetail} onClose={() => setFoodDetail(null)} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} />
+      <DetailPage lang={uiLang} item={eventDetail} onClose={() => setEventDetail(null)} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} />
+      <DetailPage lang={uiLang} item={townDetail} onClose={() => setTownDetail(null)} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} />
+      <DetailPage lang={uiLang} item={nightlifeDetail} onClose={() => setNightlifeDetail(null)} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} />
+      <DetailPage lang={uiLang} item={freeDetail} onClose={() => setFreeDetail(null)} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} />
+      <DetailPage lang={uiLang} item={foodDetail} onClose={() => setFoodDetail(null)} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} />
     </div>
   );
 };

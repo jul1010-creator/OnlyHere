@@ -1,5 +1,5 @@
 import { C } from "../utils/theme";
-import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow, externalHref, hasFinished } from "../utils/helpers";
+import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow, externalHref, hasFinished, TRAVEL_ORIGIN } from "../utils/helpers";
 import { byEventDate } from "../utils/eventDates";
 import { relationLine, kindLabel, areasInside } from "../utils/placeKind";
 import { ticketBadge } from "../utils/tickets";
@@ -18,14 +18,21 @@ import { ReviewsSection } from "./ReviewsSection";
 import { ArticleFeedback } from "./ArticleFeedback";
 import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
-import { bookingUrl, airbnbUrl, STAY_DISCLOSURE, ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote, isWegotripUrl } from "../utils/affiliates";
-import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl } from "../utils/ticketLink";
+import { bookingUrl, airbnbUrl, tripcomStayUrl, stayDisclosure, STAY_DISCLOSURE, ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote, isWegotripUrl } from "../utils/affiliates";
+import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl, sameShop } from "../utils/ticketLink";
 import { branchPoints, branchesOf, hasBranches, branchLine, branchLabel } from "../utils/branches";
 import { offerView, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
 import { saveLabel, saveHint, planFromSavedLabel } from "../utils/savedTrip";
 import { HowWeKnow } from "./HowWeKnow";
 import { JourneyCard } from "./JourneyCard";
-import { showsJourneyForKind } from "../utils/journeyScope";
+import { showsJourneyForKind, journeyOriginForKind } from "../utils/journeyScope";
+// ── AND THE WORDS ON THIS PAGE, IN THE READER'S LANGUAGE ────────────
+// Oliver, 7 Sep 2026: "translating more of the website from English to Danish
+// and German, rather than just the interface." A Danish nav over an entry whose
+// every word is English is the half-translation uiLanguage.js already calls
+// worse than none. `lang` arrives as a prop from App.jsx, which holds it.
+import { t as uiT, DEFAULT_UI_LANGUAGE } from "../utils/uiLanguage";
+import { entryWord } from "../utils/entryWords";
 import { readableOn } from "../utils/readableColor";
 import { events, majorEvents, vikingEvents } from "../data/events";
 import { freeEntrance } from "../data/freeEntrance";
@@ -142,7 +149,7 @@ const eventsForTown = (townName) => {
 export const detailPoint = (item, kind) =>
   placeCoords(item) || (kind === "town" ? townPointFor(item?.name) : null);
 
-export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, hasBeen = false, onToggleBeen, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false, signedIn = false, onNeedAccount }) => {
+export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, hasBeen = false, onToggleBeen, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false, signedIn = false, onNeedAccount, lang = DEFAULT_UI_LANGUAGE }) => {
   if (!item) return null;
   const color = item.color || C.accent;
   // ── THE TICKET LINK, RESOLVED ONCE ────────────────────────────────
@@ -155,6 +162,13 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
   // of "which link does this entry have" is how the pin and the neighbour dots
   // ended up disagreeing on this same page in August. Every refusal still
   // belongs to utils/ticketLink.js, and affiliateHref is still the one door.
+  // Where the journey on this page was measured FROM, taken from the one file
+  // that owns the rule rather than assumed by the line that prints it. A town
+  // is measured from Copenhagen; everything else from its own town centre, and
+  // the row wrote that name down when the measurement ran.
+  const journeyOrigin = journeyOriginForKind(kind) === "origin"
+    ? TRAVEL_ORIGIN
+    : String(item?.__journey?.from || "").trim();
   const ticketDest = String(item?.ticketUrl || "").trim()
     || (isBookableTicketUrl(item?.__ticket?.url) ? String(item.__ticket.url).trim() : "");
   const ticketAgent = ticketAgentOf(ticketDest);
@@ -163,7 +177,16 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
   // The row shape AtAGlanceCard takes, or null when there is nothing to link.
   // Null rather than an empty object, because that card already drops nulls and
   // a caller building this inline should not have to remember to.
-  const bookRow = ticketHref ? { href: ticketHref, label: "Book tickets", note: ticketNote } : null;
+  //
+  // ── AND NOT ON A ROW WHOSE PRICE CAME FROM SOMEBODY ELSE ────────
+  // Oliver, 8 Sep 2026: "199.. you click link, and it says 289." Every row this
+  // decorates carries a PRICE, so a link to a shop that did not state that
+  // price puts two different tickets on one line. sameShop reads the hosts the
+  // payload already recorded. The standalone Book tickets button further down
+  // the page quotes nothing and keeps its link either way.
+  const bookRow = ticketHref && sameShop(ticketDest, item?.__priceSource)
+    ? { href: ticketHref, label: "Book tickets", note: ticketNote }
+    : null;
   // ── AND THE SAME COLOUR CANNOT BE BOTH FILL AND INK ─────────────
   //
   // Oliver, 3 Sep 2026: "the pink/purple writing is so uncomfortable for the
@@ -283,7 +306,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               {onToggleBeen && (
                 <button onClick={onToggleBeen}
                   style={{ background: hasBeen ? `${C.text}12` : "none", border: `1px solid ${hasBeen ? C.text + "44" : C.border}`, color: hasBeen ? C.text : C.muted, borderRadius: 100, padding: "9px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                  {hasBeen ? "✓ Been here" : "Been here"}
+                  {hasBeen ? uiT("entry.beenDone", lang) : uiT("entry.been", lang)}
                 </button>
               )}
               {isSaved && onPlanFromSaved && planFromSavedLabel(savedCount) && (
@@ -390,12 +413,12 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                   no new row invents one. If real ratings are wanted later they
                   come from the FieldMask, and then this can come back with
                   something behind it. */}
-              <span style={{ fontSize: 12, color: C.muted }}>{travelLabel(userCoords, item.town, item.travelTime)}</span>
+              <span style={{ fontSize: 12, color: C.muted }}>{travelLabel(userCoords, item.town, item.travelTime, journeyOrigin)}</span>
             </div>
           </div>
         )}
         {kind === "event" && (
-          <AtAGlanceCard rows={[
+          <AtAGlanceCard lang={lang} rows={[
             arrivalRow(item.nearestStation),
             { icon: "🎟️", label: "Tickets", value: item.ticketInfo, link: bookRow },
             // ── "MAKE PEOPLE AWARE" ──────────────────────────────────
@@ -437,7 +460,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                 together is how somebody ends up looking for a hotel in a canal.
                 relationLine picks whichever applies and says nothing when
                 neither does, which is almost every town. */}
-            <AtAGlanceCard rows={[
+            <AtAGlanceCard lang={lang} rows={[
               (() => { const r = relationLine(item); return r ? { icon: r.label === "Inside" ? "◇" : "🧭", label: r.label, value: r.value } : null; })(),
               { icon: "🛏️", label: "Recommended Stay", value: item.recommendedStayGlance },
               { icon: "☀️", label: "Best Time", value: item.bestTimeGlance },
@@ -536,15 +559,22 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               const area = (item.accommodationGlance || "").trim() || item.name;
               const b = bookingUrl({ area: `${area}${area === item.name ? "" : `, ${item.name}`}` });
               const a = airbnbUrl({ area: `${area}${area === item.name ? "" : `, ${item.name}`}` });
-              if (!b && !a) return null;
+              // ── AND TRIP.COM, ON THE TOWN ITSELF ─────────────────
+              // The TOWN, not the neighbourhood: Trip.com's hotel list is keyed
+              // to a city id and there is no id for Vesterbro. Null on a town
+              // it has no city for, which is most of the hidden gems, and then
+              // this card is exactly what it was. See data/tripcom.js.
+              const t = tripcomStayUrl(item.name);
+              if (!b && !a && !t) return null;
               const link = { flex: 1, textAlign: "center", display: "block", borderRadius: 100, padding: "10px 12px", fontSize: 12.5, fontWeight: 700, textDecoration: "none", border: `1px solid ${C.border}` };
               return (
                 <div style={{ marginBottom: 14 }}>
                   <div style={{ display: "flex", gap: 8 }}>
                     <a href={b} target="_blank" rel="noreferrer sponsored" style={{ ...link, background: `${C.gold}1f`, borderColor: `${C.gold}66`, color: C.gold }}>🏨 Stays on Booking.com ↗</a>
                     <a href={a} target="_blank" rel="noreferrer" style={{ ...link, background: C.surface, color: C.light }}>🏡 Homes on Airbnb ↗</a>
+                    {t && <a href={t} target="_blank" rel="noreferrer sponsored nofollow" style={{ ...link, background: `${C.gold}1f`, borderColor: `${C.gold}66`, color: C.gold }}>🏨 Trip.com ↗</a>}
                   </div>
-                  <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>{STAY_DISCLOSURE}</div>
+                  <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>{stayDisclosure({ tripcom: !!t })}</div>
                 </div>
               );
             })()}
@@ -552,8 +582,13 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                 anywhere inside Copenhagen is not a journey from Copenhagen, and
                 renders nothing at all when there is no figure. Dragør's page
                 carried a line reading only "from CPH" until this changed. */}
-            {travelLabel(userCoords, item, item.travelTime) && (
-              <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>{travelLabel(userCoords, item, item.travelTime)}</div>
+            {/* THE ORIGIN COMES OFF THE ROW, not off this line's assumption.
+                Only a town is measured from Copenhagen; everything else is
+                measured from its own town centre, and __journey.from is what
+                the measurement wrote down. A row with no journey names no
+                origin and prints the figure alone. */}
+            {travelLabel(userCoords, item, item.travelTime, journeyOrigin) && (
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>{travelLabel(userCoords, item, item.travelTime, journeyOrigin)}</div>
             )}
 
             {/* WHAT'S ON IN THIS TOWN (Oliver's ask, Aug 5 2026: "is it possible to
@@ -636,7 +671,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           </>
         )}
         {(kind === "free" || kind === "attraction") && (
-          <AtAGlanceCard rows={[
+          <AtAGlanceCard lang={lang} rows={[
             { icon: "🎟️", label: "Tickets", value: item.ticketsGlance, link: bookRow },
             /* ── AND NOW NOT ON ATTRACTIONS EITHER ────────────────────
                Oliver, 19 Aug 2026: "I think we should get rid of
@@ -677,7 +712,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             Restaurants and markets both, since for a market the figure was a
             single nationwide constant and said even less than the guess. */}
         {kind === "food" && (
-          <AtAGlanceCard rows={[
+          <AtAGlanceCard lang={lang} rows={[
             { icon: "🍽️", label: "Serves", value: item.category },
             { icon: "💰", label: "Price", value: item.price, link: bookRow },
             { icon: "📍", label: "Neighbourhood", value: item.location },
@@ -692,7 +727,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             venue whose research genuinely had no figure looks exactly as it
             did before, and the ones that did stop hiding it. */}
         {kind === "nightlife" && (
-          <AtAGlanceCard rows={[
+          <AtAGlanceCard lang={lang} rows={[
             { icon: "👥", label: "Crowd", value: item.crowd },
             { icon: "🍺", label: "Type", value: item.category },
             { icon: "💰", label: "What it costs", value: item.priceNote, link: bookRow },
@@ -850,7 +885,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                   <PhotoCredit photo={block.src} credit={block.credit} style={{ marginTop: 4 }} />
                 </div>
               ) : block.type === "heading" ? (
-                <div key={i} style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 20, marginBottom: 10 }}>{block.content}</div>
+                <div key={i} style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 20, marginBottom: 10 }}>{entryWord(block.content, lang)}</div>
               ) : (
                 <div key={i} style={{ fontSize: 14, color: C.light, lineHeight: 1.8, marginBottom: 14 }}>{block.content}</div>
               )
@@ -923,7 +958,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             in the app is a sentence that says nothing. */}
         {hasBranches(item) && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", marginBottom: 22 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>📍 Where you can go</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>📍 {uiT("entry.branches", lang)}</div>
             <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6, marginBottom: 10 }}>{branchLine(item)}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
               {branchesOf(item).map((b, i) => (
@@ -950,7 +985,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
 
         {kind === "town" && item.highlight && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", marginBottom: 22 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>◆ Gemlyx Find</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>◆ {uiT("entry.find", lang)}</div>
             <div style={{ fontSize: 13, color: C.text, lineHeight: 1.65 }}>{item.highlight}</div>
           </div>
         )}
@@ -967,7 +1002,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
 
         <button onClick={() => checkLiveInfo(item)} disabled={liveInfoLoading === item.name}
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", fontSize: 13, fontWeight: 700, color: C.text, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: liveInfo?.[item.name] ? 12 : 14 }}>
-          {liveInfoLoading === item.name ? "Checking..." : "🔍 Check live info"}
+          {liveInfoLoading === item.name ? uiT("entry.checking", lang) : `🔍 ${uiT("entry.liveInfo", lang)}`}
         </button>
         {liveInfo?.[item.name] && (
           <div style={{ background: `${color}18`, border: `1px solid ${color}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
@@ -1048,7 +1083,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             <div style={{ marginBottom: 10 }}>
               <a href={href} target="_blank" rel={paid ? "noreferrer sponsored nofollow" : "noreferrer"}
                 style={{ display: "block", textAlign: "center", background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "13px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
-                🌐 Visit website
+                🌐 {uiT("entry.website", lang)}
               </a>
               {note && (
                 <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 5, textAlign: "center" }}>{note}</div>
@@ -1107,7 +1142,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             <div style={{ marginBottom: 10 }}>
               <a href={href} target="_blank" rel={note ? "noreferrer sponsored nofollow" : "noreferrer"}
                 style={{ display: "block", textAlign: "center", background: C.surface, border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 12, padding: "13px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
-                🎫 Book tickets
+                🎫 {uiT("entry.tickets", lang)}
               </a>
               {note && (
                 <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 5, textAlign: "center" }}>{note}</div>
@@ -1163,7 +1198,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
 
         <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.mapHint || `${item.name} ${item.city || item.location || ""} Denmark`)}`} target="_blank" rel="noreferrer"
           style={{ display: "block", textAlign: "center", background: color, color: "#fff", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 700, textDecoration: "none" }}>
-          ↗ Get Directions
+          ↗ {uiT("entry.directions", lang)}
         </a>
 
         {/* ── REPORTING AND REVIEWING, ABOVE THE PUBLIC COMMENTS ────

@@ -444,7 +444,24 @@ export const isAtTravelOrigin = (place) => {
   return sameName(place.name, TRAVEL_ORIGIN) || sameName(place.partOf, TRAVEL_ORIGIN);
 };
 
-export const travelLabel = (userCoords, place, fallbackTravelTime) => {
+// ── AND THE ORIGIN IS AN ARGUMENT, NOT AN ASSUMPTION ────────────────
+//
+// Found 8 Sep 2026. journeyScope settled on 3 Sep that ONLY a town measures its
+// journey from Copenhagen: "Actually, only make it towns. Nighttown shouldn't
+// have any. The rest should be calculated from city center." The measurement
+// followed him the same day. This line did not, and has been appending
+// "from CPH" to every festival, workshop and attraction card since, over a
+// figure measured from the entry's own town centre:
+//
+//   Event card   14min 🚌 from CPH     measured Aalborg centre to venue
+//   JourneyCard  14min from Aalborg, centre to centre     same page, same row
+//
+// So the origin is passed in. A caller that measured from Copenhagen says so
+// and keeps the short form the cards were designed around; a caller that
+// measured from somewhere else names it; and a caller that does not KNOW where
+// the figure came from prints the figure alone, which is the honest shape and
+// the one every older row lands on. Defaulting to Copenhagen is what this was.
+export const travelLabel = (userCoords, place, fallbackTravelTime, measuredFrom = TRAVEL_ORIGIN) => {
   const townName = typeof place === "string" ? place : place?.name;
   // Distance from where the reader is standing is honest even in Copenhagen:
   // "~2 km from you" is a real answer to a real question.
@@ -478,9 +495,18 @@ export const travelLabel = (userCoords, place, fallbackTravelTime) => {
   // ends up in ONE shape instead of two — which is the other half of what was
   // wrong on that page. Anchored at the end, so a value that says "from
   // Copenhagen it is a long drive" keeps its sentence.
-  const trimmed = t.replace(ORIGIN_TAIL, "").replace(/[\s.,;·]+$/, "").trim();
+  // The Copenhagen tail comes off whatever the origin is, because a model that
+  // wrote "from Copenhagen" into a figure measured from Aalborg was wrong twice
+  // and the figure is the half worth keeping. The measured origin's own name
+  // comes off too, for the same doubling reason one line down.
+  const from = String(measuredFrom ?? "").trim();
+  const trimmed = t
+    .replace(ORIGIN_TAIL, "")
+    .replace(from ? new RegExp(`[\\s.,;·]*\\bfrom\\s+${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b[\\s.,;·]*$`, "i") : /(?!)/, "")
+    .replace(/[\s.,;·]+$/, "").trim();
   if (!trimmed) return "";
-  return `${trimmed} from CPH`;
+  if (!from) return trimmed;
+  return sameName(from, TRAVEL_ORIGIN) ? `${trimmed} from CPH` : `${trimmed} from ${from}`;
 };
 
 // A card subtitle is a list of things that may each be absent. Joining with a

@@ -46,6 +46,21 @@ import { SUPABASE_URL, SUPABASE_KEY, SITE_ORIGIN } from "./src/config.js";
 import { isCrawler, guideIdFromPath, injectMeta, articleHtml, structuredData, injectArticle, worthServing } from "./src/utils/linkPreview.js";
 import { placeSlug, findBySlug, sitemapXml, COUNTRY, parseEntryUrl, entryUrlPath, typesForSeg } from "./src/utils/placeUrl.js";
 import { towns as hardcodedTowns } from "./src/data/towns.js";
+// ── AND THE WORDS A CRAWLER GETS ARE THE READER'S ───────────────────
+// The comment further down promises "the same words DetailPage renders for a
+// person out of this same payload. If these two ever diverge, one of them is a
+// bug." They diverged. liveContent cleans on READ, and this file fetches the
+// row itself, so a share card, an AI answer engine and the injected <article>
+// have been served the raw payload: every em dash the site strips for a reader,
+// and any sentence about our own checking that stripResearchVoice removes.
+//
+// Two imports, not the one that would be natural. cleanReaderProse needs
+// entryAudit for its field list, which drags a third of the utils graph onto
+// the edge, so researchWords.js holds the sentence-level half with no imports
+// at all. The filler-word pass ("actually") is the third thing liveContent does
+// and is NOT here for the same reason: it lives behind that same graph.
+import { stripDashesDeep } from "./src/utils/helpers.js";
+import { stripResearchVoice } from "./src/utils/researchWords.js";
 
 // Guide URLs, town pages, and the sitemap. Everything else on the site keeps
 // index.html's own card and never pays for this to run.
@@ -221,7 +236,13 @@ export default async function middleware(request) {
       const where = [town.region, "Denmark"].filter(Boolean).join(", ");
       // The entry's own words, never a template. With nothing to say we say the
       // plain true thing rather than inventing a description for it.
-      const desc = String(town.desc || town.highlight || `${town.name} in ${where}, on Gemlyx.`).replace(/\s+/g, " ").trim();
+      // Cleaned for the words only. The URL below still comes off the raw name,
+      // because a slug that changed with the punctuation rules would move every
+      // indexed page the first time one of them was touched.
+      const words = stripDashesDeep(town);
+      const desc = stripResearchVoice(
+        String(words.desc || words.highlight || `${words.name} in ${where}, on Gemlyx.`).replace(/\s+/g, " ").trim(),
+      );
       const townUrl = `${SITE_ORIGIN}${entryUrlPath(entryRoute.kind === "town" ? "town" : (typesForSeg(entryRoute.seg)[0] || ""), town.name) || `/${COUNTRY}/${placeSlug(town.name)}`}`;
       // A relative photo path has to become absolute: a crawler fetches the
       // image from wherever the tag says, and a bare /towns/x.jpg is nowhere.
@@ -230,9 +251,9 @@ export default async function middleware(request) {
       // everything else the locality earns its place: "Jomfru Ane Gade, Aalborg"
       // answers where before a reader has to open anything, and a bar name on its
       // own followed by "Denmark" answers nothing.
-      const locality = entryRoute.kind === "town" ? "" : String(town.town || town.city || "").trim();
+      const locality = entryRoute.kind === "town" ? "" : String(words.town || words.city || "").trim();
       const withMeta = injectMeta(shell, {
-        title: locality && locality !== town.name ? `${town.name}, ${locality}` : `${town.name}, Denmark`,
+        title: locality && locality !== words.name ? `${words.name}, ${locality}` : `${words.name}, Denmark`,
         description: desc.length > 200 ? `${desc.slice(0, 197)}...` : desc,
         url: townUrl,
         image: townImage,
@@ -257,8 +278,8 @@ export default async function middleware(request) {
       //
       // It costs nothing: findTown already fetched this payload for the card.
       return cardResponse(injectArticle(withMeta, {
-        article: articleHtml(town),
-        jsonLd: structuredData(town, { url: townUrl, image: townImage, origin: SITE_ORIGIN, region: town.region }),
+        article: articleHtml(words),
+        jsonLd: structuredData(words, { url: townUrl, image: townImage, origin: SITE_ORIGIN, region: words.region }),
       }));
     }
 

@@ -278,7 +278,41 @@ const walkTo = async (lat, lon, place) => {
   }
 };
 
+// ── A LONG WALK DOES NOT END THE SEARCH ─────────────────────────────
+// Oliver, 8 Sep 2026, of a published WOW PARK Billund entry: the Nearest Stop
+// row read "Logistik-Optimering v/Bo Trygve Mortensen". Same freight
+// consultancy as 8 Aug, and the gate written that day for this exact company
+// cannot fire. hasTransitType asks Google "is one of your types transit?" about
+// a result Google returned BECAUSE it has that type: includedTypes guarantees
+// the answer. Google files this company as a ferry terminal, primaryType and
+// all, so no amount of asking Google harder gets anywhere.
+//
+// The real fault was the ORDER. Asked from the park's coordinate:
+//   rail   within 3 km  nothing
+//   ferry  within 6 km  Logistik-Optimering, 28 minutes on foot
+//   any    within 1.5 km  Kornmarken v Havremarken (Billund), 13 minutes
+// The right answer was there the whole time, on the park's own street. It lost
+// because the first tier that answers wins, and the ferry tier casts a net four
+// times wider than the one below it. Billund is the middle of Jutland.
+//
+// So a tier still outranks the ones below it, and a candidate that is a LONG
+// WALK no longer ends the search. 20 minutes, because the 7 Aug case this order
+// exists for is a station 900 m away beating a bus shelter at 200 m, and 900 m
+// is an eleven minute walk: rail still wins that one on the first pass.
+//
+// If every tier comes back far, the CLOSEST of them is the answer, not the
+// highest tier. Once everything is a long walk the tier's whole promise ("rail
+// is what you plan around") is already broken, and the nearest real stop is the
+// honest answer. An island keeps its ferry berth either way: nothing closer
+// turns up there, so the berth is both the first answer and the closest one.
+//
+// A walk time we could not measure is NOT treated as long. The lookup failing
+// says nothing about the path, which is the same rule the tiers already apply
+// to a Places call that errors.
+export const LONG_WALK_MINUTES = 20;
+
 export const findRealNearestStop = async (lat, lon) => {
+  let far = null;                  // the closest of the long walks seen so far
   for (const tier of TIERS) {
     let place = null;
     try {
@@ -300,14 +334,26 @@ export const findRealNearestStop = async (lat, lon) => {
     // The walk time is deliberately NOT folded into the name. The At a Glance
     // row renders this value after a label, so appending it produced
     // "Nearest Station: X (9 mins walk)", which reads as part of the name.
-    return {
+    const found = {
       name: place.name,
       walk: reach.walk,
       walkMinutes: reach.minutes ?? null,
       kind: tier.kind === "any" ? kindFromName(place.name) : tier.kind,
     };
+    // No null guard: an unmeasured walk is walkMinutes null, and null is not
+    // greater than 20, so a stop whose walk we could not measure is never
+    // treated as a long one. Writing the check out longhand added a branch no
+    // mutation could kill, which in this repo means a branch that is not there.
+    if (found.walkMinutes > LONG_WALK_MINUTES) {
+      if (!far || found.walkMinutes < far.walkMinutes) far = found;
+      continue;                    // a closer stop below this tier beats it
+    }
+    return found;
   }
-  return null;   // "we do not know" is a true statement; naming a castle is not
+  // far is null when every tier was empty or refused, and null is the right
+  // answer then: "we do not know" is a true statement, and naming a castle is
+  // not. When far is set, nothing closer turned up and the long walk is real.
+  return far;
 };
 
 // The old name, kept because App.jsx and the Detour code both call it and a

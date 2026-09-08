@@ -1,4 +1,4 @@
-import { BOOKING_AFFILIATE_ID, TICKETMASTER_AFFILIATE_TEMPLATE, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_LINK, WEGOTRIP_AFFILIATE_TEMPLATE } from "../config";
+import { BOOKING_AFFILIATE_ID, TICKETMASTER_AFFILIATE_TEMPLATE, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_LINK, WEGOTRIP_AFFILIATE_TEMPLATE , TRIPCOM_ALLIANCE_ID, TRIPCOM_SID } from "../config";
 // hostOf, not a fourth copy of it. See pageScan.js, and see the four other
 // functions this codebase has already found existing twice.
 import { hostOf } from "./pageScan";
@@ -141,6 +141,27 @@ export const STAY_DISCLOSURE = BOOKING_AFFILIATE_ID
   // what we intend to monetise later, only whether the link in front of them is
   // paid. It is not, and that is the whole sentence.
   : "Plain search links. Gemlyx earns no commission on these.";
+
+// ── AND THE SENTENCE HAS TO KNOW WHICH LINKS ARE ON SCREEN ──────────
+//
+// 7 Sep 2026. STAY_DISCLOSURE is a CONSTANT, decided by Booking alone, and it
+// was true while Booking was the only paid stay link there could be. Trip.com
+// changes that: on a town Trip.com has a city id for, the card now shows a link
+// that DOES earn beside two that do not, and a constant cannot say so.
+//
+// The rule is the one this file already states about every disclosure: name
+// which one pays, because a blanket "these are affiliate links" is inaccurate
+// and so is silence over a paid one. Four true sentences for four states rather
+// than one sentence that is right in some of them.
+//
+// The constant stays exported and unchanged, because a caller with no Trip.com
+// link to show is still asking the question it answers.
+export const stayDisclosure = ({ tripcom = false, booking = !!BOOKING_AFFILIATE_ID } = {}) => {
+  if (booking && tripcom) return "The Booking.com and Trip.com links may earn Gemlyx a small commission at no cost to you. The Airbnb link earns nothing.";
+  if (booking) return STAY_DISCLOSURE;
+  if (tripcom) return "The Trip.com link may earn Gemlyx a small commission at no cost to you. The Booking.com and Airbnb links earn nothing.";
+  return STAY_DISCLOSURE;
+};
 
 export const affiliateActive = () => !!BOOKING_AFFILIATE_ID;
 
@@ -626,3 +647,73 @@ export const partnerLinkCount = (hrefs, { isPaid } = {}) =>
   (Array.isArray(hrefs) ? hrefs : []).filter(h => {
     try { return typeof isPaid === "function" ? !!isPaid(h) : false; } catch { return false; }
   }).length;
+
+// ── TRIP.COM, AND THE FIRST DEEP LINK THIS FILE CAN BUILD ITSELF ─────
+//
+// Oliver, 7 Sep 2026: "Got another affiliate!" And, on why it matters here:
+// "they have hotels. So I guess if we can't get booking.com.."
+//
+// Every other programme in this file either takes a URL somebody else found
+// (Tiqets, Ticketmaster, WeGoTrip) or builds a text search (Booking). This one
+// is different in a way worth naming: Trip.com's ids are ordinary query
+// parameters on their own domain, so a link can be ASSEMBLED for a town from a
+// city id and nothing else. No lookup, no search, no page to vet.
+//
+// ── WHICH IS ALSO WHY IT COVERS LESS ────────────────────────────────
+//
+// The city id is the price of that. bookingUrl takes free text and works for
+// every town Gemlyx publishes; this works for the twenty cities Trip.com's own
+// country page lists, and the hidden gems are not among them. A town with no id
+// gets NULL and no button, deliberately: see data/tripcom.js for why a fallback
+// to Copenhagen would be worse than nothing.
+import { TRIPCOM_CITIES } from "../data/tripcom";
+import { fold as foldName, variantsOf } from "./danishNames";
+
+// Matched on the folded name, so Århus reaches Aarhus and København reaches
+// Copenhagen the way they do everywhere else in this codebase. Exact rather
+// than contains: "Aarhus C" is a different Trip.com city from "Aarhus" and a
+// containment test would let the district win on a page about the city.
+const CITY_BY_NAME = new Map(TRIPCOM_CITIES.map(c => [foldName(c.name), c]));
+
+// ── AND KØBENHAVN HAS TO REACH COPENHAGEN ─────────────────────────
+// Trip.com's list is in English and a Gemlyx row is in whichever spelling was
+// drafted. Folding alone is not enough: Århus reaches Aarhus by luck, because å
+// folds to aa, and København reaches nothing at all. variantsOf is the function
+// this codebase already uses to turn one name into every spelling of itself,
+// and PLACE_NAMES already pairs the two capitals.
+export const tripcomCity = (town) => {
+  const said = String(town || "").trim();
+  if (!said) return null;
+  for (const v of variantsOf(said)) {
+    const hit = CITY_BY_NAME.get(foldName(v));
+    if (hit) return hit;
+  }
+  return null;
+};
+
+// The tracked hotel list for one town, or null when Trip.com has no city for
+// it. `sub` is the sub-id: the town goes in, so his dashboard reports which
+// pages earn rather than only how much.
+//
+// THE IDS ARE PARAMETERS, so a caller passing empty ones gets an untracked but
+// working link rather than a broken one, and the live state stays testable the
+// way ticketmasterUrl's template already is.
+export const tripcomStayUrl = (town, { alliance = TRIPCOM_ALLIANCE_ID, sid = TRIPCOM_SID } = {}) => {
+  const city = tripcomCity(town);
+  if (!city) return null;
+  const q = new URLSearchParams();
+  if (alliance) q.set("Allianceid", alliance);
+  if (sid) q.set("SID", sid);
+  // Currency and locale, because his own guide rule is that every price a
+  // Danish trip quotes is in kroner, and an international reader lands on a
+  // dollar figure otherwise.
+  q.set("curr", "DKK");
+  q.set("locale", "en-XX");
+  if (alliance) q.set("trip_sub1", String(town || "").trim());
+  return `https://www.trip.com/hotels/${city.slug}-hotels-list-${city.id}/?${q.toString()}`;
+};
+
+// True when the programme is actually configured, on the same terms
+// tiqetsActive states: the thing that makes a link PAY is what this answers
+// about, not the presence of a browse link somewhere in config.
+export const tripcomActive = (alliance = TRIPCOM_ALLIANCE_ID) => !!alliance;
