@@ -145,10 +145,35 @@ export const dayLabel = (v) => {
 // already states in its own words: a date helper that reads the clock cannot be
 // tested against a fixed calendar, and this whole bug is one that only appears
 // on one specific day of the year.
+// ── A RANGE THAT RUNS BACKWARDS IS NOT A RANGE ──────────────────────
+//
+// Row 62, TinderBox, is stored with date 2027-06-24 and dateEnd 2026-06-26:
+// somebody bumped the start to the next edition and left the end on the last
+// one. helpers.getEventDate has refused to print that as a range since 12 Aug
+// and tripEvents.eventWindow has refused to overlap a trip with it since, both
+// on the same rule: one date is better than a confident wrong two, so the end
+// is dropped and the start speaks for itself.
+//
+// Two more readers were making the same decision differently. helpers.hasFinished
+// took `dateEnd || date` and read TinderBox as finished off a 2026 end while
+// its start is in 2027, so a festival not yet announced wore the badge "This
+// edition has finished" beside a 2027 date. dayWithin, which feeds
+// isCurrentlyLive and stopEventWhen, compared start to end and got a window
+// nothing can fall inside, so the same row is never live on any day at all.
+//
+// Four readers of one rule, two of them agreeing with it. This is the rule,
+// written once, in the file with no imports so every one of them can reach it.
+export const eventLastDay = (start, end) => {
+  const s = dayStart(start);
+  if (!s) return null;
+  const e = dayStart(end);
+  return e && e.getTime() >= s.getTime() ? e : s;
+};
+
 export const dayWithin = (start, end, today = new Date()) => {
   const s = dayStart(start);
   if (!s) return false;
-  const e = dayEnd(end) || dayEnd(start);
+  const e = dayEnd(eventLastDay(start, end));
   if (!e) return false;
   const now = today instanceof Date ? today : new Date(today);
   if (!Number.isFinite(now.getTime())) return false;

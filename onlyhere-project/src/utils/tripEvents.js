@@ -70,7 +70,7 @@ const MS_DAY = 86400000;
 // which is what the two lines above were reaching for. Date instances still
 // work, and they matter here: arrivalDateIn returns one and tripWindow is
 // handed them.
-import { dayStart } from "./calendarDay";
+import { dayStart, eventLastDay } from "./calendarDay";
 
 export const daysBetween = (start, end) => {
   const a = dayStart(start), b = dayStart(end);
@@ -469,8 +469,9 @@ export const eventPickLimit = (days) => {
 export const eventWindow = (e) => {
   const start = dayStart(e?.date);
   if (!start) return null;
-  const end = dayStart(e?.dateEnd);
-  return { start, end: end && end.getTime() >= start.getTime() ? end : start };
+  // Through eventLastDay rather than an inline comparison, because this was one
+  // of four readers making the same call and two of them were making it wrong.
+  return { start, end: eventLastDay(e?.date, e?.dateEnd) || start };
 };
 
 // true, false, or null for "this cannot be decided". Null is not a soft yes:

@@ -496,6 +496,107 @@ export const isRejectedPlace = (convoText, name) => {
   return found > 0 && rejected === found;
 };
 
+// ── AND A NAME INSIDE A QUESTION IS NOT A SUGGESTION ────────────────
+//
+// Oliver, 7 Sep 2026, twice in one evening. He typed "Hi!" and got a Copenhagen
+// card and a pin on the map: "a little early lol". He typed "Billund" and got a
+// LEGOLAND card: "it's odd that whenever it just mentions something, it pops
+// up."
+//
+// Both replies were doing the right thing. Gemlyx opens by ASKING, and the way
+// to ask a useful question is to name the obvious options: "Copenhagen, or
+// somewhere further out?" and "are you here for LEGOLAND, or something else?"
+// Every one of those names is an option being put TO him, and a 210 pixel
+// photograph under a question answers it on his behalf.
+//
+// chatPlaces.placesNamedIn already refuses to card a place the TRAVELLER named,
+// on the rule Oliver gave on 26 August: a card is for something Gemlyx
+// INTRODUCED. A place Gemlyx has only asked about is not introduced either. It
+// is offered, and the answer is his.
+//
+// EVERY mention, not any, which is the same shape isRejectedPlace uses and for
+// the same reason: a reply that recommends Ribe in a sentence and then asks
+// whether he wants the coast has introduced Ribe, and one mention inside the
+// question does not undo the other.
+//
+// The test is the next sentence-ending mark AFTER the name. A question mark
+// means the name sits inside a question; a full stop or an exclamation mark
+// means it sits in a statement; nothing at all means the text ran out, which is
+// not a question either.
+const ENDS_THE_SENTENCE = /^[^.!?]*\?/;
+
+export const onlyAskedAbout = (convoText, name) => {
+  const text = String(convoText || "");
+  let found = 0, asked = 0;
+  for (const v of matchVariantsOf(name)) {
+    const { hay, at, len } = foundAt(text, v);
+    for (const i of at) {
+      found++;
+      if (ENDS_THE_SENTENCE.test(hay.slice(i + len))) asked++;
+    }
+  }
+  return found > 0 && asked === found;
+};
+
+// ── AND A PLACE YOU ARE DRIVING PAST IS NOT A SUGGESTION ────────────
+//
+// Oliver, 8 Sep 2026, on a reply that reads:
+//
+//   "If you come up that road you'll pass close to Kliplev, tiny place but its
+//    church tower has these old pilgrim engravings on the bells that most
+//    people driving straight to Copenhagen never stop for."
+//
+// Kliplev is the find. Copenhagen is the FOIL, the place everyone else is
+// hurrying to, and it got the same photograph, the same pin and a card that
+// opened itself. His rule: "ONLY IF IT WANTS TO TALK ABOUT IT. Not just by
+// mentioning it."
+//
+// This is the third shape of the same question, and the three are deliberately
+// separate because each is a different thing to look for:
+//   isRejectedPlace   they turned it down          "ikke København denne gang"
+//   onlyAskedAbout    Gemlyx offered it as an option   "Copenhagen, or further out?"
+//   here              it is being passed, not visited  "straight to Copenhagen"
+//
+// A PREPOSITIONAL FRAME, not a vocabulary of adjectives. Every phrase below
+// says the place is on the far side of the journey being described: you go
+// past it, through it, towards it, or you are being told to pick something
+// else instead of it. That is a closed grammatical shape, which is what makes
+// it safe where a list of words about places would not be.
+//
+// The window is small and anchored, exactly as REJECT_BEFORE is: the phrase
+// has to sit immediately in front of the name, so "Copenhagen is worth two
+// days, and most people start there" keeps its card.
+const PASSING_BEFORE = /\b(?:straight (?:to|for|towards?|through)|on (?:the|your) way (?:to|through)|en route to|driving (?:to|towards?|through)|heading (?:straight )?(?:to|for|towards?)|past|through|beyond|bypass(?:ing)?|instead of|rather than|unlike|compared (?:to|with))\s+(?:the\s+)?$/i;
+// ── AND THE WINDOW IS NOT THE BOUND, THE ANCHOR IS ──────────────────
+// Mutation tested 8 Sep 2026: widening this to 400 SURVIVES the suite, and it
+// is an equivalent mutant rather than a hole. PASSING_BEFORE ends in `$`, so
+// the frame has to finish immediately against the name whatever the slice
+// contains, and the longest phrase in it is "heading straight towards the " at
+// 29 characters, so 34 already fits every one. The number is here to keep the
+// regex cheap over a long conversation and for nothing else.
+//
+// REJECT_BEFORE further down says the same thing about its own window, in its
+// own words, and this is the second instance of that shape rather than a new
+// discovery: "widening either one changes nothing, which is worth knowing
+// before somebody tunes them expecting it to."
+const PASSING_WINDOW = 34;
+
+export const isPassedThrough = (convoText, name) => {
+  const text = String(convoText || "");
+  let found = 0, passed = 0;
+  for (const v of matchVariantsOf(name)) {
+    const { hay, at, len } = foundAt(text, v);
+    for (const i of at) {
+      found++;
+      if (PASSING_BEFORE.test(hay.slice(Math.max(0, i - PASSING_WINDOW), i))) passed++;
+    }
+  }
+  // EVERY mention, not any, which is the rule both siblings above already keep.
+  // A reply that recommends Ribe and later says you drive past it has still
+  // recommended it.
+  return found > 0 && passed === found;
+};
+
 // Every part of the country and every named region, as one list to test the
 // conversation against. REGION_NAMES is the specific tier ("Sønderjylland"),
 // PARTS_OF_COUNTRY the wide one ("Jutland"); both are things a traveller says.

@@ -10527,6 +10527,35 @@ ${researchRules("festival", ev)}`
   // of them. It runs only on a draft that has ALREADY been through every gate
   // and been refused by exactly one, and it writes the shaped object that gate
   // was looking at rather than re-reading the editor. See utils/undatedEvents.js.
+  // ── THE HANDOVER, WHICH ONLY ONE OF THE TWO DOORS HAD ─────────────
+  //
+  // Oliver, 6 Aug 2026: "when I have drafted one of them, the other that has
+  // been researched will pop up." publishDraft has done that since: it pulls
+  // the next unopened finished draft straight into the editor, because the
+  // queue researches continuously and finished drafts were piling up in a list
+  // waiting to be found and clicked.
+  //
+  // Oliver, 8 Sep 2026, of the Keep button: "it does get published.. it just
+  // doesn't go onto the next edit automatically." Keeping a draft under "No
+  // confirmed date yet" is the other way of being FINISHED WITH IT: the
+  // research is safe, the row is in the database, and there is nothing left to
+  // do on that screen. It just never handed over, so the queue ran ahead while
+  // he sat on a draft he had already dealt with, which is the exact complaint
+  // the handover was built for.
+  //
+  // One function, called from both, rather than a second copy of the walk. It
+  // returns whether it fired, so each caller can say its own thing when there
+  // is nothing next.
+  const handOverNextDraft = (did) => {
+    const next = queueResults.find(r => r.ok && r.draft && !r.opened);
+    if (!next) return false;
+    setTimeout(() => {
+      loadQueueResult(next);
+      showToast(`${did} · next up: ${next.name}`, 2800);
+    }, 700);
+    return true;
+  };
+
   const publishAsWaiting = async () => {
     if (!waitingOffer?.shaped || !studioSession) return;
     // ── AND IT ONLY GOES IN ONCE ──────────────────────────────────
@@ -10583,7 +10612,11 @@ ${researchRules("festival", ev)}`
       // waiting for the next full page load. Same pair the publish path uses.
       refreshLiveContent();
       bumpLiveContent(v => v + 1);
-      showToast(`📌 Kept in "No confirmed date yet" — the date sweep will keep looking`, 3200);
+      // The handover's own toast names both things, so the kept message is not
+      // overwritten 700ms later by the one announcing the next draft.
+      if (!handOverNextDraft(`📌 Kept in "No confirmed date yet"`)) {
+        showToast(`📌 Kept in "No confirmed date yet" — the date sweep will keep looking`, 3200);
+      }
     } catch (err) {
       setWaitingSaveState(String(err?.message || err).slice(0, 200));
     }
@@ -11195,16 +11228,10 @@ ${researchRules("festival", ev)}`
         // Now publishing pulls the next unopened finished draft straight into
         // the editor. Deliberately only for a fresh publish, never after editing
         // an existing row, since that path reloads the page anyway.
-        if (!isEditing) {
-          const next = queueResults.find(r => r.ok && r.draft && !r.opened);
-          if (next) {
-            setTimeout(() => {
-              loadQueueResult(next);
-              showToast(`Published · next up: ${next.name}`, 2800);
-              
-            }, 700);
-          }
-        }
+        // Through the shared handover, so the Keep button cannot drift from
+        // this one. Still only on a fresh publish, never after editing an
+        // existing row, since that path reloads the page anyway.
+        if (!isEditing) handOverNextDraft("Published");
         if (isEditing) {
           // ── SAVING NO LONGER THROWS THE PAGE AWAY ─────────────────
           // Oliver, 15 Aug 2026: "clicking 'save' just to be put all the way
@@ -16764,10 +16791,22 @@ ${languageBlock()}`;
                       // because a pin is not a picture. cap 6 rather than the
                       // card's 3, since a reply naming five towns should pin
                       // five. chatRail.mapPlaces has the reasoning.
+                      // ── AND TOWNS ONLY ─────────────────────────────
+                      // Oliver, 8 Sep 2026: "we only need to have the towns
+                      // popping up on the map. No need to have it popping up
+                      // two places." A town is the unit a person plans a trip
+                      // in and the one thing a map of the country can usefully
+                      // say something about; a bar or a bakery pinned at
+                      // country scale is a dot on a town it is already inside.
+                      //
+                      // Filtered on the POOL rather than on the answer, so the
+                      // cap counts towns rather than being spent on rows that
+                      // are about to be dropped.
+                      const townPool = pools.filter(p => p?._src === "town");
                       const onMap = mapPlaces({
                         messages: convo,
-                        placesFor: (text) => placesNamedIn(clean(text), pools, { needsPhoto: false, cap: 6 }),
-                        rejectsFor: (text) => rejectedIn(clean(text), pools),
+                        placesFor: (text) => placesNamedIn(clean(text), townPool, { needsPhoto: false, cap: 6 }),
+                        rejectsFor: (text) => rejectedIn(clean(text), townPool),
                         coordsFor: placeCoords,
                       });
                       return (

@@ -2386,8 +2386,34 @@ export const selfContradictions = (payload) => {
 // nothing. An empty __priceSource means "we could not show you where this came
 // from", which is true; a wrong one means "here is where this came from", which
 // is not.
+// ── AND A PRICE A READER CAN READ ───────────────────────────────────
+//
+// Found 8 Sep 2026. priceKey turns a price into "lo-hi" for COMPARING two of
+// them, and this function was storing that key as the price itself. The guide's
+// costs block prints __priceSource.price verbatim, so a stop whose ticket costs
+// 199 kr appeared under "What you pay" as
+//
+//     WOW PARK Billund   199-199
+//
+// with no currency, and a tiered one as "15-135". A key is a comparison tool
+// and a price is a sentence to a reader, and this stored one where the other
+// was wanted. The currency was in hand the whole time: pricesIn returns it and
+// priceKey drops it.
+//
+// "to" rather than a dash, which is the house rule everywhere else in this
+// codebase and is enforced on published prose by stripDashes.
+export const priceLabel = (p) => {
+  if (!p || p.lo == null) return "";
+  const unit = p.currency === "eur" ? "EUR" : p.currency === "dkk" ? "kr" : "";
+  const figure = p.hi != null && p.hi !== p.lo ? `${p.lo} to ${p.hi}` : `${p.lo}`;
+  return unit ? `${figure} ${unit}` : figure;
+};
+
 export const priceSource = (priceText, pagesByUrl, order = [], { isAbout = null } = {}) => {
-  const wanted = pricesIn(priceText).filter(p => p.currency).map(priceKey);
+  // The whole objects, not just their keys: the key is what MATCHES a figure on
+  // a page and the object is what a reader is shown.
+  const byKey = new Map(pricesIn(priceText).filter(p => p.currency).map(p => [priceKey(p), p]));
+  const wanted = [...byKey.keys()];
   if (!wanted.length) return null;
   const hostOf = (u) => { try { return new URL(String(u)).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; } };
   const rankOf = (u) => {
@@ -2401,7 +2427,7 @@ export const priceSource = (priceText, pagesByUrl, order = [], { isAbout = null 
     const here = new Set(pricesIn(pagesByUrl[url]).map(priceKey));
     const hit = wanted.find(k => here.has(k));
     if (!hit) continue;
-    const found = { url, price: hit, host: hostOf(url), ranked: rankOf(url) !== Number.MAX_SAFE_INTEGER };
+    const found = { url, price: priceLabel(byKey.get(hit)), key: hit, host: hostOf(url), ranked: rankOf(url) !== Number.MAX_SAFE_INTEGER };
     if (typeof isAbout !== "function") return found;
     let about = false;
     // A thrown matcher must not become "this page is fine". Same rule the

@@ -62,11 +62,17 @@
 // and never from anywhere else. A price band ("mid", "cheap") is NOT a price and
 // is never printed as one.
 import { normaliseTicketStatus } from "./tickets";
-import { isBookableTicketUrl } from "./ticketLink";
+import { isBookableTicketUrl, sameShop } from "./ticketLink";
 import { stopEventWhen } from "./guideReading";
 import { affiliateHref, isPartnerLink, carRentalFits, carRentalUrl, bookingUrl, isWegotripUrl } from "./affiliates";
 import { OPERATORS } from "./operators";
 import { isFerryText } from "./helpers";
+// One definition of each, read twice. priceLabel and pricesIn are how the price
+// was written down in the first place, and stampDay is how the provenance panel
+// already prints this same stamp.
+import { pricesIn, priceLabel } from "./entryAudit";
+import { PRICE_FIELDS } from "./entryPrice";
+import { stampDay } from "./provenance";
 
 export const COST_KIND = {
   ENTRY: "entry",
@@ -99,14 +105,49 @@ export const REFUSAL = {
 // The measured price, or "". __priceSource is the only field trusted here: it
 // carries the URL it was read from and the date it was read, which is what makes
 // a printed figure falsifiable instead of merely confident.
+// ── AND A KEY IS NOT A PRICE ────────────────────────────────────────
+//
+// Found 8 Sep 2026. entryAudit.priceKey turns a price into "lo-hi" so two of
+// them can be COMPARED, and priceSource was storing that key as the price. This
+// function handed it straight to the render, so a stop whose ticket costs 199
+// kr appeared under "What you pay" as "199-199", and a tiered one as "15-135".
+//
+// Fixed at the source, so every new draft stores a sentence. Fixed HERE for the
+// rows already published, and not by guessing: the key was made from the
+// entry's own price text, so the entry's own price text is where the figure and
+// its currency are recovered from. A key that no longer matches anything the
+// row says is a price we can no longer read, and no price on the line beats a
+// wrong one.
+const KEY_SHAPE = /^\d+(?:\.\d+)?-\d+(?:\.\d+)?$/;
+const HAS_CURRENCY = /\b(?:kr|kroner|dkk|eur|euro|€|\$|usd)\b|€|\$/i;
+
+export const readableFigure = (stored, row) => {
+  const text = String(stored ?? "").trim();
+  if (!text) return "";
+  // Already a sentence: the Studio's own price repair writes "199 DKK", and so
+  // does every draft written after the fix above.
+  if (!KEY_SHAPE.test(text)) return HAS_CURRENCY.test(text) || /\d/.test(text) ? text : "";
+  const said = PRICE_FIELDS.map(k => String(row?.[k] ?? "")).filter(Boolean).join(" ");
+  const hit = pricesIn(said).find(p => `${p.lo}-${p.hi}` === text && p.currency);
+  return hit ? priceLabel(hit) : "";
+};
+
+// The measured price, or "". __priceSource is the only field trusted here: it
+// carries the URL it was read from and the date it was read, which is what makes
+// a printed figure falsifiable instead of merely confident.
 export const readPrice = (row) => {
   const ps = row?.__priceSource;
-  const text = String(ps?.price ?? "").trim();
-  if (!text) return null;
+  const stored = String(ps?.price ?? "").trim();
+  if (!stored) return null;
   // A band id is not a price. PRICE_BANDS exists for a different question and a
   // row storing "mid" must never render as though it were a figure in kroner.
-  if (!/\d/.test(text)) return null;
-  return { text, host: String(ps.host || "").trim(), at: String(ps.at || "").trim() };
+  if (!/\d/.test(stored)) return null;
+  const text = readableFigure(stored, row);
+  if (!text) return null;
+  // The DAY, not the timestamp. This printed "checked 2026-09-07T20:38:31.535Z"
+  // under a figure, while the provenance panel formatted the same stamp
+  // properly. Two readers of one value, one of them formatting it.
+  return { text, host: String(ps.host || "").trim(), at: stampDay(ps.at) };
 };
 
 // ── THE GATE ────────────────────────────────────────────────────────
@@ -142,6 +183,13 @@ export const refuseTicket = ({ row, when = null, shutToday = false } = {}) => {
 const buyLink = (row) => {
   const url = String(row?.ticketUrl || "").trim();
   if (!isBookableTicketUrl(url)) return null;
+  // ── AND THE PRICE ON THIS LINE HAS TO BE THIS SHOP'S ──────────────
+  // Oliver, 8 Sep 2026, of the WOW PARK entry: "199.. you click link, and it
+  // says 289." Both true and different tickets: the operator sells a dated day
+  // ticket from 199 and the Tiqets page sells a flexible one from 289. The
+  // entry page lost its link on that row the same night, and this block is the
+  // same row one page over, headed "What you pay". It kept its checkout.
+  if (!sameShop(url, row?.__priceSource)) return null;
   const href = affiliateHref(url);
   return { href, partner: isPartnerLink(href) };
 };

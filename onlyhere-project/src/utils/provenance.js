@@ -36,7 +36,12 @@
 import { hostOf } from "./pageScan";
 
 const clean = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
-const day = (v) => clean(v).slice(0, 10);
+// The day off a stamp, without the time. Exported because costLedger prints the
+// same stamp under a price in a guide and was printing it whole: "checked
+// 2026-09-07T20:38:31.535Z" under a figure. Two readers of one value, and only
+// one of them was formatting it.
+export const stampDay = (v) => clean(v).slice(0, 10);
+const day = stampDay;
 
 // ── THE FIELDS THAT CARRY THEIR OWN ORIGIN ──────────────────────────
 // Every one of these is written by a step that actually went and looked, and

@@ -119,10 +119,18 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   // array must not count as a change, or the redraw runs on every keystroke.
   const pinKey = list.map(p => `${p?.key}@${p?.lat},${p?.lon}${p?.latest ? "*" : ""}`).join("|");
   const any = list.length > 0 && wide;
+  // ── THE MAP IS THERE BEFORE THERE IS ANYTHING ON IT ───────────────
+  // Oliver, 8 Sep 2026: "I think map should already be shown from start."
+  // It was gated on having a pin, so the panel was empty until Gemlyx happened
+  // to name somewhere and then a map appeared out of nowhere mid-conversation.
+  // A map of Denmark with nothing on it is not an empty state, it is the
+  // context every pin is about to be placed in, and it is the thing that says
+  // what this column is for without a sentence explaining it.
+  const shown = wide;
 
   // ── MOUNT ────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!any || !holderRef.current || mapRef.current) return;
+    if (!shown || !holderRef.current || mapRef.current) return;
     const map = L.map(holderRef.current, {
       zoomControl: false,
       // The chat panel scrolls, and a map that eats the wheel traps somebody
@@ -165,11 +173,31 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     markersRef.current = new Map();
     ordered.forEach(p => {
       const gold = C?.gold || "#E5B769";
-      const size = p.latest ? 15 : 11;
+      // ── A PROPER POINTER, NOT A DOT ───────────────────────────
+      //
+      // Oliver, 8 Sep 2026: "It needs to work like it does now with the
+      // pointer. We just need a proper pointer", with a picture of the shape
+      // everyone has seen on a map since paper ones: a teardrop with a hole
+      // through it. A circle is a dot ON the map; a pin POINTS AT a spot, and
+      // the difference is the whole reason the shape exists.
+      //
+      // THE ANCHOR IS THE TIP, which is the half a dot could never get right.
+      // A circle centred on its coordinate covers the thing it marks; the
+      // pin's point sits on the coordinate and the body stands above it.
+      //
+      // The colours are this app's, not the picture's: gold for the newest
+      // place and the pale ink for the rest, exactly as the dots were, so the
+      // "this one is what was just said" reading survives the new shape.
+      const w = p.latest ? 22 : 17;
+      const h = Math.round(w * 4 / 3);
+      const fill = p.latest ? gold : "#EFE9D6";
       const icon = L.divIcon({
         className: "gemlyx-chat-pin",
-        html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${p.latest ? gold : "#EFE9D6"};border:2px solid #0A0F1E;box-shadow:${p.latest ? `0 0 0 3px ${gold}55, ` : ""}0 1px 5px rgba(0,0,0,.55);${p.latest ? "" : "opacity:.9;"}"></div>`,
-        iconSize: [size, size], iconAnchor: [size / 2, size / 2],
+        html: `<svg width="${w}" height="${h}" viewBox="0 0 24 32" style="display:block;filter:drop-shadow(0 1px 3px rgba(0,0,0,.6));${p.latest ? "" : "opacity:.9;"}">`
+          + `<path d="M12 1.2C6.1 1.2 1.3 6 1.3 11.9c0 7.6 10.7 18.9 10.7 18.9s10.7-11.3 10.7-18.9C22.7 6 17.9 1.2 12 1.2z" fill="${fill}" stroke="#0A0F1E" stroke-width="2"/>`
+          + `<circle cx="12" cy="11.9" r="4.3" fill="#0A0F1E"/>`
+          + `</svg>`,
+        iconSize: [w, h], iconAnchor: [w / 2, h],
       });
       const marker = L.marker([p.lat, p.lon], {
         icon,
@@ -184,7 +212,9 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       // button, so those pins get a real tooltip and open on a click.
       const shot = showablePhoto(p.place);
       if (!shot) {
-        marker.bindTooltip(String(p.place?.name || ""), { direction: "top", offset: [0, -6], opacity: 0.95 });
+        // Lifted clear of the pin's head. The anchor is the tip now, so a
+        // six-pixel offset would put the name over the pin it names.
+        marker.bindTooltip(String(p.place?.name || ""), { direction: "top", offset: [0, -h + 6], opacity: 0.95 });
         // ── AND IT MUST TAKE THE OTHER CARD DOWN ──────────────────
         // Found in the browser, not by reading: hovering this pin left the
         // PREVIOUS place's card open, so you pointed at Skagen and read
@@ -344,9 +374,9 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
 
   useEffect(() => () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } }, []);
 
-  // A map of Denmark with nothing on it explains less than the space it takes,
-  // and a map nobody can see explains nothing at all.
-  if (!any) return null;
+  // A map nobody can see explains nothing at all. Narrow screens get the
+  // inline cards instead and no map at all, which is what `wide` is.
+  if (!shown) return null;
 
   return (
     <div>
@@ -365,8 +395,11 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
         h.host,
         h.key,
       ))}
+      {/* No line under an empty map. There is nothing to tap yet, and a
+          sentence explaining a control nobody can use is the clutter Oliver
+          objects to on every form in this app. */}
       <div style={{ fontSize: 10, color: C?.muted || "#9AA3BC", marginTop: 6, lineHeight: 1.5 }}>
-        {list.length > 1 ? "Where these are. Tap a pin to see it." : "Tap the pin to see it."}
+        {list.length === 0 ? "" : list.length > 1 ? "Where these are. Tap a pin to see it." : "Tap the pin to see it."}
         {/* Named rather than swallowed. A map quietly showing part of the
             conversation is a map of a different trip. */}
         {dropped > 0 && ` ${dropped} earlier ${dropped === 1 ? "place is" : "places are"} off this map.`}

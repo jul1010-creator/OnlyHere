@@ -70,7 +70,7 @@ writeFileSync(entry, `
   export { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
   export { venueCore, venueMentions, venueQuote, venueVerdict, venueVia, describeVenue, VENUE_MIN_MENTIONS, VENUE_MIN_MENTIONS_NO_TOWN, VENUE_MAX_KM, NO_NAME as V_NO_NAME, NOT_NAMED as V_NOT_NAMED, TOO_FAR as V_TOO_FAR, IS_AN_EVENT as V_IS_AN_EVENT, OK as V_OK } from ${JSON.stringify(join(root, "src/utils/venueMatch.js"))};
   export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
-  export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
+  export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel, eventLastDay } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
   export { scopeTier, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
@@ -81,7 +81,7 @@ writeFileSync(entry, `
   export { travelLabel, isAtTravelOrigin, ORIGIN_TAIL, TRAVEL_ORIGIN as TRAVEL_ORIGIN_NAME, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, stripMarkdown, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, HOUR_OF, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
-  export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { auditEntry, auditAll, priceLabel } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { icsEscape, icsFold, icsStamp, stayMinutes, DEFAULT_STAY_MINUTES, icsUid, stopEvent, guideEvents, buildIcs, icsFilename } from ${JSON.stringify(join(root, "src/utils/calendarExport.js"))};
   export { isAbsolutePhoto, heroNeedsReplacing, heroPatch, heroStatusLine } from ${JSON.stringify(join(root, "src/utils/heroPhoto.js"))};
   export { saveLabel, saveHint, savedLine, planFromSavedLabel } from ${JSON.stringify(join(root, "src/utils/savedTrip.js"))};
@@ -106,7 +106,7 @@ writeFileSync(entry, `
   export { PAID_PLANS_LIVE } from ${JSON.stringify(join(root, "src/config.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
-  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS, claimCitation, urlsIn, CITATION_PROMPT, settleCitation, SPLIT_PROMPT, correctEntry, dropAppliedClaims, CLAIMS_APPLIED, namesField } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS, claimCitation, urlsIn, CITATION_PROMPT, settleCitation, SPLIT_PROMPT, correctEntry, dropAppliedClaims, CLAIMS_APPLIED, namesField, verifyTransportClaim } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS, feedbackProblem, feedbackRow } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { previewReportRow, travellerTurns, PREVIEW_SAID_CAP, PREVIEW_SCREEN_CAP } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { trimFillerRuns, trimFillerAgainst } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -153,13 +153,14 @@ writeFileSync(entry, `
   export { layoutBody, trimCaption } from ${JSON.stringify(join(root, "src/utils/articleLayout.js"))};
   export { instagramTarget, isEmbeddablePost } from ${JSON.stringify(join(root, "src/components/InstagramEmbed.jsx"))};
   export { EXAMPLE_GUIDE, EXAMPLE_GUIDE_PATH, EXAMPLE_GUIDE_NOTE, exampleGuideProblems, hasExampleGuide } from ${JSON.stringify(join(root, "src/data/exampleGuide.js"))};
+  export { decodePastedText, looksPercentEncoded } from ${JSON.stringify(join(root, "src/utils/pastedText.js"))};
   export { placesNamedIn, rejectedIn, CHAT_PLACE_CAP } from ${JSON.stringify(join(root, "src/utils/chatPlaces.js"))};
   export { isOwnRoute, RETURN_PARAM, captureRedirectSession, startGoogleSignIn } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
   export { GOOGLE_SIGN_IN } from ${JSON.stringify(join(root, "src/config.js"))};
   export { writeInLanguage } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { guideLanguage, languageOfProse, ruledOutLanguages, briefSentences, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS, MARKER_FLOOR, MARKER_MARGIN } from ${JSON.stringify(join(root, "src/utils/travellerLanguage.js"))};
   export { railPlaces, mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
-  export { costLines, byUrgency, linkGaps, readPrice, refuseTicket, REFUSAL, COST_KIND } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
+  export { costLines, byUrgency, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, briefBlock, buildBlockedNote, MAX_ASKS_AT_ONCE } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
@@ -201,7 +202,7 @@ writeFileSync(entry, `
   export { SRC_FOR_TYPE, PLACE_SOURCES, srcForType, ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES, QUERY_WORDS, DISCOVER_WORDS, sourceIsAboutPlace, nameIsDistinctive, nameCore, isNeverOwnSite, isNeverASource, SOURCE_RULES_NEST } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { ARRIVAL_TYPES, hasArrivalField } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK, CHARACTERISATION_FIELDS, REPORT_FIELDS } from ${JSON.stringify(join(root, "src/utils/checkScope.js"))};
-  export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
+  export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { cardLine, cardLineSource, sentencesOf, isOriginSentence, CARD_LINE_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
@@ -870,6 +871,146 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("an explicit instruction corrects", M.routeMessage("Google AI says this is wrong. Correct it."), "correct");
   is("a question answers", M.routeMessage("why does this say the ferry is required?"), "ask");
   is("a scan request audits", M.routeMessage("which ones need work?"), "audit");
+}
+
+// ── "CONFIRMED" HAS TO MEAN SOMETHING WAS COMPARED ──────────────────
+//
+// Found 8 Sep 2026. verifyTransportClaim's duration branch returned verdict
+// "confirmed" for EVERY claim that reached it, with a car time from Copenhagen,
+// without reading the claim at all. So a founder typing "the travel time is
+// wrong, by train it is 2h 15min not 3h" got back a CONFIRMED verdict and a
+// patch reading "1h 50 mins by car (135 km) from Copenhagen", into a field the
+// pipeline fills with a transit time. Confirmed means THE CRITICISM IS RIGHT,
+// and nothing had compared anything to anything.
+//
+// It also measured from Copenhagen for every content type, four days after
+// journeyScope settled that only a TOWN is measured from there.
+{
+  const { verifyTransportClaim } = M;
+  const CAR = { durationText: "1h 50 mins", distanceText: "135 km", durationMinutes: 110, hasFerry: false };
+  const drive = async () => CAR;
+  const AT = { __lat: 56.15, __lon: 10.2 };
+  // A non-town carries the journey the draft was written from: measured from
+  // its OWN town centre, on public transport, by the same pipeline.
+  const WITH_JOURNEY = { ...AT, __journey: { from: "Aarhus", total: 31, drivingMins: 4 } };
+
+  const said = (says, proposed = "") => ({ says, proposed, field: "travelTime" });
+
+  // ── THE ONE THAT SHIPPED ──────────────────────────────────────────
+  {
+    const r = await verifyTransportClaim(said("the travel time is wrong, by train it is 2h 15min not 3h"), AT, { directions: drive });
+    is("a train claim is not settled by a driving time", r.verdict, "unresolved");
+    ok("and it says which figure it had", /1h 50 mins/.test(r.evidence));
+    ok("and why that does not answer it", /different way of travelling/.test(r.evidence));
+    ok("with nothing to apply", !r.correctValue);
+  }
+
+  // ── THE ENTRY'S OWN JOURNEY IS THE FIGURE TO COMPARE WITH ─────────
+  // Not a fresh drive from Copenhagen. It is what the draft was written from,
+  // measured from the right origin for its type and in the mode the pipeline
+  // used, so a correction can never disagree with a fresh draft of the row.
+  {
+    const r = await verifyTransportClaim(said("this is wrong, it is about 30 minutes"), WITH_JOURNEY, { directions: drive });
+    is("a figure that matches the measured journey confirms", r.verdict, "confirmed");
+    ok("and the value names the origin the journey used", /from Aarhus/.test(r.correctValue));
+    ok("never Copenhagen", !/Copenhagen/.test(r.correctValue));
+    ok("and it is a transit time, not a drive", /public transport/.test(r.correctValue));
+  }
+  {
+    const r = await verifyTransportClaim(said("this is wrong, it takes 3 hours"), WITH_JOURNEY, { directions: drive });
+    is("a figure that does not match is rejected", r.verdict, "rejected");
+    ok("and the entry's own figure is said to stand", /stands/.test(r.evidence));
+    ok("with nothing to apply", !r.correctValue);
+  }
+  // FIFTEEN PER CENT, FLOORED AT FIVE MINUTES. A journey is not a constant and
+  // two sources four minutes apart are reporting the same trip.
+  {
+    const near = await verifyTransportClaim(said("it is 35 minutes"), WITH_JOURNEY, { directions: drive });
+    is("four minutes out is the same journey", near.verdict, "confirmed");
+    const far = await verifyTransportClaim(said("it is 55 minutes"), WITH_JOURNEY, { directions: drive });
+    is("twenty-four out is not", far.verdict, "rejected");
+  }
+  // NOTHING TO COMPARE IS NOT AGREEMENT.
+  {
+    const r = await verifyTransportClaim(said("the travel time looks wrong to me"), WITH_JOURNEY, { directions: drive });
+    is("a criticism with no figure settles nothing", r.verdict, "unresolved");
+    ok("and says so in those words", /no figure to compare/.test(r.evidence));
+  }
+  // A car claim IS answerable by a drive, on a row with no journey of its own.
+  {
+    const r = await verifyTransportClaim(said("driving it is nearer 1h 50min than three hours"), AT, { directions: drive });
+    is("a driving claim the drive agrees with confirms", r.verdict, "confirmed");
+    ok("and names the drive as what was measured", /by car from Copenhagen/.test(r.correctValue));
+  }
+  // Unchanged: no coordinates, and a routing failure, both settle nothing.
+  {
+    const r = await verifyTransportClaim(said("it is 30 minutes"), {}, { directions: drive });
+    is("no coordinates settles nothing", r.verdict, "unresolved");
+    const dead = await verifyTransportClaim(said("it is 30 minutes"), AT, { directions: async () => ({ error: "REQUEST_DENIED" }) });
+    is("and neither does a routing failure", dead.verdict, "unresolved");
+  }
+  // The ferry branch is untouched and still measures rather than compares,
+  // because "is there a road" is a question a second query answers outright.
+  {
+    const ferry = async (o, d, mode, extra = {}) => (extra.avoid === "ferries"
+      ? { error: "ZERO_RESULTS" }
+      : { durationText: "3h 16 mins", distanceText: "196 km", durationMinutes: 196, hasFerry: true });
+    const r = await verifyTransportClaim(said("there is no ferry needed, you can drive"), AT, { directions: ferry });
+    is("a road that does not exist rejects the claim that it does", r.verdict, "rejected");
+    ok("and says the crossing is real", /ferry crossing is required/.test(r.correctValue));
+  }
+}
+
+// ── "IT WILL DO IT IN CODE LIKE %20%20%20%" ─────────────────────────
+//
+// Oliver, 8 Sep 2026: "when I copy directly from Gemini, at least on phone, it
+// will do it in code like %20%20%20%". Percent-encoded text: every space is
+// %20 and every newline %0A, so the fact-check box receives a wall of escapes
+// instead of sentences and nothing downstream can read a word of it. The app
+// cannot fix a clipboard; it can notice.
+{
+  const { decodePastedText, looksPercentEncoded } = M;
+  const encoded = "Claim%3A%20the%20entry%20gives%20the%20price%20as%2095%20kr.%0AVerdict%3A%20incorrect.";
+  is("an encoded paste comes back as sentences", decodePastedText(encoded),
+     "Claim: the entry gives the price as 95 kr.\nVerdict: incorrect.");
+  ok("and it is recognised as encoded", looksPercentEncoded(encoded));
+
+  // ── WHAT MUST SURVIVE UNTOUCHED ─────────────────────────────────
+  // The signal is an escape standing for WHITESPACE, twice. Not "contains a
+  // percent sign": prices, discounts and humidity all carry one.
+  is("a discount is not an escape", decodePastedText("50% off before 10am, 100% full after"),
+     "50% off before 10am, 100% full after");
+  is("ordinary prose is untouched", decodePastedText("The ticket is 199 kr."), "The ticket is 199 kr.");
+  ok("and neither reads as encoded", !looksPercentEncoded("50% off") && !looksPercentEncoded("The ticket is 199 kr."));
+  // ONE encoded space is not the signal. A sentence about a URL can carry one.
+  is("a single escape is left alone", decodePastedText("The link has %20 in it"), "The link has %20 in it");
+  // A URL legitimately carries %20 in a query string and decoding one breaks
+  // the address. This is the ticket-link paste box's own case.
+  const url = "https://www.tiqets.com/en/search?q=wow%20park%20billund%20tickets";
+  is("a pasted url is never decoded", decodePastedText(url), url);
+  ok("and is not treated as encoded prose", !looksPercentEncoded(url));
+
+  // ── TOLERANT, BECAUSE HIS OWN EXAMPLE ENDS BROKEN ───────────────
+  // decodeURIComponent throws on a malformed sequence and returns NOTHING, so
+  // one stray "%" at the end would discard the whole fact-check. Runs are
+  // decoded one at a time and a broken one stays visible.
+  is("a broken tail keeps the readable part",
+     decodePastedText("the%20price%20is%20wrong%20%"), "the price is wrong %");
+  is("and a malformed pair in the middle survives",
+     decodePastedText("the%20price%20is%2Gwrong%20here"), "the price is%2Gwrong here");
+  // Multi-byte characters decode as one run or they decode as nonsense: ø is
+  // %C3%B8 and half of it is not a letter.
+  is("a Danish letter comes back whole",
+     decodePastedText("K%C3%B8benhavn%20er%20dyrt%20i%20juli"), "København er dyrt i juli");
+  is("nothing in, nothing out", decodePastedText(""), "");
+  is("and a missing value is a string", decodePastedText(null), "");
+
+  // ── WIRED WHERE THE PASTE LANDS ─────────────────────────────────
+  // The box under "Paste what Gemini said", decoded on the way IN so he reads
+  // what will be checked rather than a wall of escapes.
+  const sa = readFileSync(join(root, "src/components/StudioAssistant.jsx"), "utf8");
+  ok("the fact-check box decodes what it is given",
+     /onChange=\{e => setInput\(decodePastedText\(e\.target\.value\)\)\}/.test(sa));
   is("an empty message answers", M.routeMessage("   "), "ask");
   is("a bare observation answers rather than edits", M.routeMessage("this looks off to me"), "ask");
   // A pasted fact-check with no covering sentence is still a correction.
@@ -14891,6 +15032,37 @@ rmSync(dir, { recursive: true, force: true });
   is("a date is not traced to a page that happens to charge that much",
      priceSource("open from 19 August", { "https://x.dk/": "entry 19 kr" }), null);
   is("and a price on no page read is null", priceSource("Entry is 275 kr", { "https://x.dk/": "400 kr" }), null);
+
+  // ── AND WHAT IT STORES IS A PRICE, NOT A COMPARISON KEY ──────────
+  //
+  // Found 8 Sep 2026. priceKey turns a price into "lo-hi" so two of them can be
+  // compared, and this stored that key AS the price. The guide's costs block
+  // prints it verbatim, so a 199 kr ticket appeared under "What you pay" as
+  //
+  //     WOW PARK Billund   199-199
+  //
+  // with no currency, and a tiered one as "15-135". The currency was in hand
+  // the whole time: pricesIn returns it and priceKey drops it.
+  is("a single price is stored as a price",
+     priceSource("Entry is 400 kr", { "https://x.dk/": "Billet 400 kr" })?.price, "400 kr");
+  is("a range says to, never a dash",
+     priceSource("Tickets 145 to 260 kr", { "https://x.dk/": "entry 145 to 260 kr" })?.price, "145 to 260 kr");
+  is("and euros are euros", priceSource("Entry 12 EUR", { "https://x.dk/": "12 EUR" })?.price, "12 EUR");
+  // The key is still there under its own name, because matching is what it is
+  // for and this changed which of the two gets stored, not whether it exists.
+  is("the comparison key is kept beside it",
+     priceSource("Entry is 400 kr", { "https://x.dk/": "Billet 400 kr" })?.key, "400-400");
+  {
+    const { priceLabel } = M;
+    is("one figure needs no range", priceLabel({ lo: 199, hi: 199, currency: "dkk" }), "199 kr");
+    is("two figures read as a range", priceLabel({ lo: 15, hi: 135, currency: "dkk" }), "15 to 135 kr");
+    is("euros keep their own unit", priceLabel({ lo: 12, hi: 12, currency: "eur" }), "12 EUR");
+    // A price with no currency is a bare figure rather than an invented one. It
+    // cannot arrive from priceSource, which filters for a currency, and
+    // inventing kroner for one that did would be the whole fault repeated.
+    is("and nothing invents a currency", priceLabel({ lo: 40, hi: 40, currency: null }), "40");
+    is("an empty one is empty", priceLabel(null), "");
+  }
   // ── AND IT ASKS THE BEST PAGE FIRST, NOT THE FIRST PAGE ─────────
   // Oliver, 12 Aug 2026, on a draft whose __sources listed oplev.esbjerg.dk,
   // Esbjerg Kommune's own page for its own festival, and whose __priceSource
@@ -16168,6 +16340,42 @@ rmSync(dir, { recursive: true, force: true });
      getEventDate("not a date", "", AUG_12), "Dates not confirmed");
   is("and an unreadable END falls back to the start alone",
      getEventDate("2026-06-23", "banana", AUG_12), "Tue 23 Jun");
+
+  // ── AND FOUR READERS OF THAT RULE, TWO OF THEM WRONG ──────────────
+  //
+  // getEventDate refused to PRINT the backwards range on 12 Aug and
+  // tripEvents.eventWindow refused to OVERLAP a trip with it. The other two
+  // readers were making the same call on their own and getting it wrong:
+  //
+  //   hasFinished took `dateEnd || date`, so row 62 read as finished off a
+  //   2026 end while its start is in 2027, and a festival whose edition has
+  //   not happened wore the badge "This edition has finished" beside a 2027
+  //   date on the card, in search results, and in a guide.
+  //
+  //   dayWithin compared 2027-06-24 to 2026-06-26 and got a window nothing can
+  //   fall inside, so isCurrentlyLive and stopEventWhen said no on every day
+  //   there is, including the start day the other two readers name.
+  //
+  // One rule now, in calendarDay.js, which has no imports so all four can
+  // reach it.
+  const { eventLastDay, dayWithin } = M;
+  const ROW62 = { date: "2027-06-24", dateEnd: "2026-06-26" };
+  is("a backwards end is dropped and the start is the last day",
+     eventLastDay(ROW62.date, ROW62.dateEnd).getTime(), new Date(2027, 5, 24).getTime());
+  is("a real range keeps its end",
+     eventLastDay("2026-08-10", "2026-08-16").getTime(), new Date(2026, 7, 16).getTime());
+  is("no end at all is the start", eventLastDay("2026-08-10", "").getTime(), new Date(2026, 7, 10).getTime());
+  is("and an unreadable start is nothing", eventLastDay("banana", "2026-08-16"), null);
+  ok("row 62 has not finished, because its edition is next year",
+     !hasFinished(ROW62, AUG_12));
+  ok("and the same row IS live on its own start day",
+     dayWithin(ROW62.date, ROW62.dateEnd, new Date(2027, 5, 24, 12)));
+  ok("but not eleven months earlier", !dayWithin(ROW62.date, ROW62.dateEnd, new Date(2026, 5, 25, 12)));
+  // The ordinary case is untouched, or the four assertions above are satisfied
+  // by a rule that says yes to everything.
+  ok("a real range is still over when its end is behind us",
+     hasFinished({ date: "2026-08-01", dateEnd: "2026-08-03" }, AUG_12));
+  ok("and still live inside itself", dayWithin("2026-08-10", "2026-08-16", AUG_12));
 
   // ── FINISHED, WHICH IS NOT THE OPPOSITE OF UPCOMING ───────────────
   // The distinction the whole block turns on: a festival that opened yesterday
@@ -35628,7 +35836,18 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // to the prompt. Found by an adversarial review on 22 Aug.
   {
     const { bandForYear } = M;
-    const AUG22 = new Date("2026-08-22T12:00:00Z");
+    // ── AND THE FIXTURE HAS TO NAME THE SAME DAY EVERYWHERE ────────
+    // This was `new Date("2026-08-22T12:00:00Z")`, a UTC INSTANT, and ageFrom
+    // reads getFullYear, getMonth and getDate, which are LOCAL and correctly
+    // so: a person's age is measured against the calendar day where they are
+    // standing. In Pacific/Kiritimati, UTC+14, that instant is already the
+    // 23rd, so "the day before the birthday" had genuinely passed and the
+    // suite failed there and nowhere else.
+    //
+    // The function was right and the fixture was not, which is the same lesson
+    // calendarDay.js was written for: only a value that NAMES a day is
+    // invariant. Built local, so it is noon on 22 August in every timezone.
+    const AUG22 = new Date(2026, 7, 22, 12);
     // Born 31 December 2001: 24 on this date, and calendar-year subtraction says
     // 25. Wrong for roughly a third of the year, and only ever at a boundary,
     // which is exactly where the band changes what the model is told.
@@ -40082,7 +40301,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       __priceSource: { url: "https://cphdistortion.dk/billetter", host: "cphdistortion.dk", price: "450 DKK", at: "2026-08-20" } },
     "Rosenborg Slot": { _src: "free",
       ticketUrl: "https://www.tiqets.com/en/copenhagen-attractions/rosenborg-castle-tickets-p123456", ticketStatus: "on_sale",
-      __priceSource: { url: "https://kongernessamling.dk", host: "kongernessamling.dk", price: "145 DKK", at: "2026-08-19" } },
+      __priceSource: { url: "https://www.tiqets.com/en/copenhagen-attractions/rosenborg-castle-tickets-p123456", host: "tiqets.com", price: "145 DKK", at: "2026-08-19T09:12:44.000Z" } },
     "Nationalmuseet": { _src: "free", ticketStatus: "free" },
     "Louisiana": { _src: "free", ticketUrl: "https://www.tiqets.com/en/x-p9999", ticketStatus: "sold_out",
       __priceSource: { url: "https://louisiana.dk", host: "louisiana.dk", price: "160 DKK", at: "2026-08-01" } },
@@ -40125,8 +40344,63 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("a museum on sale keeps its link", !!by("Rosenborg Slot").href);
   is("and is not refused", by("Rosenborg Slot").refused, "");
   is("with the price that was actually read", by("Rosenborg Slot").price, "145 DKK");
-  is("and where it was read from", by("Rosenborg Slot").priceFrom.host, "kongernessamling.dk");
-  is("and when", by("Rosenborg Slot").priceFrom.at, "2026-08-19");
+  is("and where it was read from", by("Rosenborg Slot").priceFrom.host, "tiqets.com");
+  // THE DAY, NOT THE STAMP. The fixture carries a full ISO timestamp because
+  // that is what App.jsx writes, and this printed it whole under a figure:
+  // "checked 2026-08-19T09:12:44.000Z". The provenance panel formatted the same
+  // value properly, which is two readers of one value and one of them working.
+  is("and when, as a day rather than a timestamp", by("Rosenborg Slot").priceFrom.at, "2026-08-19");
+
+  // ── A KEY THAT SHIPPED AS A PRICE, REPAIRED ON READ ──────────────
+  //
+  // Every row published before priceSource stored a sentence carries "lo-hi",
+  // and a redraft each is not the fix: the key was MADE from the entry's own
+  // price text, so the entry's own price text is where the figure and its
+  // currency are recovered from. Nothing is guessed.
+  {
+    const { readableFigure } = M;
+    is("a legacy key is read back off the entry's own words",
+       readableFigure("199-199", { ticketsGlance: "Day ticket from DKK 199 online for ages 3+" }), "199 kr");
+    is("and a range with it",
+       readableFigure("15-135", { priceNote: "Tastings run 15 to 135 kr depending on the flight" }), "15 to 135 kr");
+    // A key the row can no longer account for is a price we can no longer read.
+    // No price on the line beats a wrong one, and beats "199-199" outright.
+    is("a key nothing in the row explains shows no price",
+       readableFigure("400-400", { ticketsGlance: "Entry is 199 kr" }), "");
+    // The Studio's own price repair already writes a sentence, and so does
+    // every draft written since. Those pass straight through.
+    is("a price that is already a sentence is left alone",
+       readableFigure("199 DKK", { ticketsGlance: "whatever" }), "199 DKK");
+    is("and an empty one stays empty", readableFigure("", {}), "");
+  }
+
+  // ── AND THE CHECKOUT HAS TO BE THE SHOP THAT SET THE PRICE ───────
+  //
+  // Oliver, 8 Sep 2026, of the WOW PARK entry: "199.. you click link, and it
+  // says 289." The operator sells a dated day ticket from 199 and the Tiqets
+  // page sells a flexible one from 289: both true, different tickets. The entry
+  // page lost the link on that row the same night and this block, headed "What
+  // you pay", kept its checkout.
+  {
+    const rows = {
+      "Wow Park": { _src: "free", ticketStatus: "on_sale",
+        ticketUrl: "https://www.tiqets.com/en/billund-attractions/wow-park-p1026717",
+        ticketsGlance: "Day ticket from DKK 199 online for ages 3+",
+        __priceSource: { url: "https://wowpark.dk/", host: "wowpark.dk", price: "199-199", at: "2026-09-07T20:38:31.535Z" } },
+    };
+    const line = costLines({
+      guide: { days: [{ day: 1, stops: [{ name: "Wow Park" }] }] },
+      rowFor: (n) => rows[n] || null,
+      today: new Date("2026-09-08T09:00:00Z"),
+    }).find(l => l.name === "Wow Park");
+    ok("the line is still listed", !!line);
+    is("with the operator's price, repaired", line.price, "199 kr");
+    is("and the day it was read", line.priceFrom.at, "2026-09-07");
+    is("and no checkout to a shop that did not set it", line.href, "");
+    // Not a refusal: nothing is sold out, cancelled or off their dates. The
+    // line simply carries no link, and saying "sold out" here would be false.
+    is("and it is not dressed up as a refusal", line.refused, "");
+  }
   // Free is a real answer and the one line that makes the others believable.
   is("free entry says free", by("Nationalmuseet").price, "Free");
   is("and offers nothing to buy", by("Nationalmuseet").href, "");
@@ -41947,7 +42221,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       __priceSource: { url: "https://cphdistortion.dk/billetter", host: "cphdistortion.dk", price: "450 DKK", at: "2026-08-20" } },
     "Rosenborg Slot": { _src: "free",
       ticketUrl: "https://www.tiqets.com/en/copenhagen-attractions/rosenborg-castle-tickets-p123456", ticketStatus: "on_sale",
-      __priceSource: { url: "https://kongernessamling.dk", host: "kongernessamling.dk", price: "145 DKK", at: "2026-08-19" } },
+      __priceSource: { url: "https://www.tiqets.com/en/copenhagen-attractions/rosenborg-castle-tickets-p123456", host: "tiqets.com", price: "145 DKK", at: "2026-08-19T09:12:44.000Z" } },
     "Nationalmuseet": { _src: "free", ticketStatus: "free" },
     "Møns Klint": { _src: "free",
       __priceSource: { url: "https://moensklint.dk", host: "moensklint.dk", price: "110 DKK", at: "2026-08-20" } },
@@ -41971,7 +42245,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // ── WHAT IT IS FOR, WHICH IS THE FIELD HE ASKED FOR ────────────
     ok("a stop is named", r.says("Rosenborg Slot"));
     ok("with the price that was read", r.says("145 DKK"));
-    ok("and where the price came from", r.says("kongernessamling.dk"));
+    ok("and where the price came from", r.says("tiqets.com"));
     ok("and when it was read", r.says("checked 2026-08-19"));
     ok("and what the charge is for", r.says("Day 1"));
 
@@ -42581,6 +42855,93 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // mentions is how a stray "no" in an unrelated clause unpins somewhere.
     is("a refusal names the place it refuses", rejectedIn("not Ribe this time, Skagen instead", [withShot, without]), ["ribe"]);
     is("and a sentence with no refusal in it names nothing", rejectedIn("Ribe and Skagen are both good", [withShot, without]), []);
+
+    // ── AND A PLACE IT ONLY ASKED ABOUT ─────────────────────────────
+    //
+    // Oliver, 7 Sep 2026, twice in one evening. He typed "Hi!" and got a
+    // Copenhagen card and a pin: "a little early lol". He typed "Billund" and
+    // got a LEGOLAND card: "it's odd that whenever it just mentions something,
+    // it pops up."
+    //
+    // Both replies were doing the right thing. Gemlyx opens by ASKING, and
+    // asking well means naming the obvious options. A 210 pixel photograph
+    // under a question answers it on the traveller's behalf, which is the same
+    // fault as carding a place they named themselves, from the other side.
+    const { onlyAskedAbout } = M;
+    ok("a name inside the question it belongs to is only asked about",
+       onlyAskedAbout("Where are you thinking? Ribe, or somewhere further out?", "Ribe"));
+    ok("and one in a statement is not",
+       !onlyAskedAbout("Ribe is the oldest town in Denmark.", "Ribe"));
+    // EVERY MENTION, NOT ANY. A reply that recommends somewhere and then asks
+    // about it has still introduced it, and one mention inside a question does
+    // not undo the other.
+    ok("a recommendation followed by a question is still a recommendation",
+       !onlyAskedAbout("Ribe is worth the detour. Would Ribe fit your dates?", "Ribe"));
+    ok("a name nobody mentioned is not asked about", !onlyAskedAbout("Skagen is lovely", "Ribe"));
+    ok("and neither is one in an empty reply", !onlyAskedAbout("", "Ribe"));
+    // The text simply running out is not a question.
+    ok("a name at the very end with no mark is a statement", !onlyAskedAbout("The one I would pick is Ribe", "Ribe"));
+    // ── WIRED, ON THE CARD AND THE PIN BOTH ─────────────────────────
+    // He complained about both at once: the "Hi!" screenshot shows a card AND
+    // a map pin, so this is not one of the two rules that stay on the card.
+    is("a card is not made for a place it only asked about",
+       placesNamedIn("Where are you thinking? Ribe, or somewhere further out?", [withShot]).length, 0);
+    is("and neither is a pin",
+       placesNamedIn("Where are you thinking? Ribe, or somewhere further out?", [withShot, without], { needsPhoto: false }).length, 0);
+    is("while a place it actually suggested still gets one",
+       placesNamedIn("Ribe is the one I would go out of my way for. When are you travelling?", [withShot]).map(p => p.name), ["Ribe"]);
+
+    // ── AND A PLACE IT IS DRIVING PAST ──────────────────────────────
+    //
+    // Oliver, 8 Sep 2026, on this reply, which is his and is quoted whole
+    // because the whole sentence is the point:
+    //
+    //   "Good, that puts you crossing right past South Jutland then. If you
+    //    come up that road you'll pass close to Kliplev, tiny place but its
+    //    church tower has these old pilgrim engravings on the bells that most
+    //    people driving straight to Copenhagen never stop for."
+    //
+    // Kliplev is the find. Copenhagen is the FOIL, the place everyone else is
+    // hurrying to, and it got the same photograph and a card that opened
+    // itself on the map. "ONLY IF IT WANTS TO TALK ABOUT IT. Not just by
+    // mentioning it."
+    const { isPassedThrough } = M;
+    const REPLY = "Good, that puts you crossing right past South Jutland then. If you come up that road you'll pass close to Kliplev, tiny place but its church tower has these old pilgrim engravings on the bells that most people driving straight to Copenhagen never stop for.";
+    const kliplev = { name: "Kliplev", photo: "https://x/kliplev.jpg" };
+    const cph = { name: "Copenhagen", photo: "https://x/cph.jpg" };
+    ok("the foil is recognised as somewhere being driven past", isPassedThrough(REPLY, "Copenhagen"));
+    ok("and the find is not", !isPassedThrough(REPLY, "Kliplev"));
+    is("so the reply cards the find and not the foil",
+       placesNamedIn(REPLY, [kliplev, cph]).map(p => p.name), ["Kliplev"]);
+
+    // A PREPOSITIONAL FRAME, not a vocabulary. Every one of these says the
+    // place is on the far side of the journey being described.
+    for (const frame of ["on the way to", "en route to", "straight through", "past", "beyond", "instead of", "rather than", "unlike"]) {
+      ok(`"${frame}" is a place being passed`, isPassedThrough(`We would send you ${frame} Copenhagen for this one`, "Copenhagen"));
+    }
+    // AND WHAT MUST SURVIVE. The frame has to sit immediately in front of the
+    // name, so a sentence that merely contains one of those words elsewhere
+    // keeps its card.
+    ok("a recommendation with 'most people' in it is not a foil",
+       !isPassedThrough("Copenhagen is worth two days, and most people start there", "Copenhagen"));
+    ok("nor is a place simply named", !isPassedThrough("Copenhagen has the better museums", "Copenhagen"));
+    ok("nor one at the start of a sentence", !isPassedThrough("Copenhagen, then Ribe.", "Copenhagen"));
+    // THE ANCHOR IS THE BOUND, NOT THE WINDOW. The frame has to finish
+    // immediately against the name, so a reply that drives past one place and
+    // recommends another keeps the second one's card however close together
+    // the two sentences are. Widening PASSING_WINDOW is an equivalent mutant
+    // for this reason and is written up in the file.
+    ok("a frame belonging to another place does not reach this one",
+       !isPassedThrough("You drive past Aabenraa on the way up, and Copenhagen is worth two days after that.", "Copenhagen"));
+    ok("while the place it does belong to is passed",
+       isPassedThrough("You drive past Aabenraa on the way up, and Copenhagen is worth two days after that.", "Aabenraa"));
+    // EVERY mention, not any, which is the rule both siblings keep. A reply
+    // that recommends somewhere and later says you drive past it has still
+    // recommended it.
+    ok("recommended once and passed once is still recommended",
+       !isPassedThrough("Ribe is worth the detour. You will also drive past Ribe on the way back.", "Ribe"));
+    is("and it still gets its card",
+       placesNamedIn("Ribe is worth the detour. You will also drive past Ribe on the way back.", [withShot]).map(p => p.name), ["Ribe"]);
   }
 
   // ── AND THE ROOM IT NEEDED, WHICH WAS MEASURED ───────────────────
@@ -42623,7 +42984,24 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // have been found in this codebase and five of them were wrong.
   is("and nothing in the map component resolves a coordinate itself",
      (chatCode.match(/__lat|__lon/g) || []).length, 0);
-  ok("the map's pins drop the card's photo rule", /placesFor: \(text\) => placesNamedIn\(clean\(text\), pools, \{ needsPhoto: false/.test(appR));
+  ok("the map's pins drop the card's photo rule", /placesFor: \(text\) => placesNamedIn\(clean\(text\), townPool, \{ needsPhoto: false/.test(appR));
+  // ── AND THE MAP PINS TOWNS ONLY ─────────────────────────────────
+  // Oliver, 8 Sep 2026: "we only need to have the towns popping up on the map.
+  // No need to have it popping up two places." A town is the unit a person
+  // plans a trip in; a bar pinned at country scale is a dot on a town it is
+  // already inside.
+  //
+  // Filtered on the POOL, so the cap counts towns rather than being spent on
+  // rows that are about to be dropped, and so the unpin reader is asked about
+  // the same set the pin reader is.
+  ok("the map is fed towns and nothing else",
+     /const townPool = pools\.filter\(p => p\?\._src === "town"\);/.test(appR));
+  ok("and the unpin reader is asked about the same set",
+     /rejectsFor: \(text\) => rejectedIn\(clean\(text\), townPool\)/.test(appR));
+  // The CARD still sees everything: a restaurant or a bar is exactly what a
+  // card is for, and it is the map that cannot say anything useful about one.
+  ok("while the card still sees every kind",
+     /placesFor: \(text\) => placesNamedIn\(clean\(text\), pools, \{ alreadyKnown: theirWords \}\)/.test(appR));
   ok("and the card's keeps it", /placesFor: \(text\) => placesNamedIn\(clean\(text\), pools, \{ alreadyKnown: theirWords \}\)/.test(appR));
   // ONE POOLS CALL FOR BOTH. The card and the pin have to be looking at the
   // same published rows, and two copies of a pool expression is how they stop.
@@ -42643,6 +43021,37 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // CHECK in it. So Leaflet gets an empty div and React renders the real
   // ChatPlaceCards into it.
   ok("the popup is a portalled ChatPlaceCards", /createPortal\(\s*<ChatPlaceCards/.test(chatCode));
+
+  // ── THE MAP IS THERE BEFORE THERE IS ANYTHING ON IT ──────────────
+  // Oliver, 8 Sep 2026: "I think map should already be shown from start." It
+  // was gated on having a pin, so the column was empty until Gemlyx happened
+  // to name somewhere and a map appeared out of nowhere mid-conversation. A
+  // map of Denmark with nothing on it is the context every pin is about to be
+  // placed in, and it says what the column is for without a sentence.
+  ok("the map renders on width alone, not on having a pin", /const shown = wide;/.test(chatCode));
+  ok("and it mounts on the same condition", /if \(!shown \|\| !holderRef\.current \|\| mapRef\.current\) return;/.test(chatCode));
+  ok("a narrow screen still gets no map", /if \(!shown\) return null;/.test(chatCode));
+  // No line under an empty map: there is nothing to tap yet, and a sentence
+  // explaining a control nobody can use is the clutter he objects to on every
+  // form in this app.
+  ok("and nothing is explained under an empty one", /list\.length === 0 \? "" :/.test(chatCode));
+
+  // ── A PROPER POINTER, NOT A DOT ──────────────────────────────────
+  // Oliver, 8 Sep 2026: "It needs to work like it does now with the pointer.
+  // We just need a proper pointer", with a picture of the shape everyone has
+  // seen on a map since paper ones. A circle is a dot ON the map; a pin POINTS
+  // AT a spot, and the difference is the whole reason the shape exists.
+  ok("the pin is a teardrop", /<path d="M12 1\.2C6\.1 1\.2/.test(chatCode));
+  ok("with a hole through it", /<circle cx="12" cy="11\.9" r="4\.3"/.test(chatCode));
+  ok("and no round dot is left", !/border-radius:50%/.test(chatCode));
+  // THE ANCHOR IS THE TIP, which is the half a dot could never get right: a
+  // circle centred on its coordinate covers the thing it marks.
+  ok("the point sits on the coordinate", /iconAnchor: \[w \/ 2, h\]/.test(chatCode));
+  // The newest place is still the gold one, so the reading that survived four
+  // versions of this map survives the new shape too.
+  ok("the newest pin is still the gold one", /const fill = p\.latest \? gold : "#EFE9D6";/.test(chatCode));
+  // And the name on a photo-less pin clears the pin rather than sitting on it.
+  ok("a nameplate is lifted clear of the head", /offset: \[0, -h \+ 6\]/.test(chatCode));
   ok("at the layout built for it", /layout="pin"/.test(chatCode));
   is("and the map writes no <img> of its own", (chatCode.match(/<img|innerHTML/g) || []).length, 0);
   ok("a pin with no showable photograph gets no card", /const shot = showablePhoto\(p\.place\);\s*if \(!shot\) \{/.test(chatCode));

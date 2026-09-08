@@ -1,7 +1,7 @@
 import { TOWN_COORDS } from "../data/towns";
 // Its own file, not inlined here and not imported from eventDates.js, which
 // already imports daCompare from this one. See utils/calendarDay.js.
-import { dayStart, dayWithin } from "./calendarDay";
+import { dayStart, dayWithin, eventLastDay } from "./calendarDay";
 // The six-language month vocabulary, so a numbered-list marker and a European
 // date can be told apart. See utils/travellerWords.js.
 import { MONTH_PATTERN } from "./travellerWords";
@@ -148,10 +148,14 @@ export const getEventDate = (dateStr, dateEnd, today = new Date()) => {
 //
 // dayStart reads the value as the local calendar day it names, so both sides of
 // the comparison are now the same kind of thing.
+// ── AND THE BACKWARDS RANGE, WHICH THIS ONE MISSED ──────────────────
+// `dateEnd || date` read row 62 as finished off a 2026 end while its start is
+// in 2027, so a festival whose edition has not happened wore "This edition has
+// finished" beside a 2027 date. getEventDate ten lines up already refused to
+// print that pair as a range. eventLastDay is that same rule, in the one file
+// every reader of it can import.
 export const hasFinished = (e, today = new Date()) => {
-  const last = e?.dateEnd || e?.date || e;
-  if (!last) return false;
-  const d = dayStart(last);
+  const d = eventLastDay(e?.date ?? e, e?.dateEnd);
   if (!d) return false;
   return d.getTime() < new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
 };

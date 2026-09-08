@@ -28,7 +28,7 @@
 // `__photoCredit` off a published row for the guide's hero image and skips
 // craft for the reason repeated below. A second copy of either would be how the
 // chat and the preview come to disagree about which places were named.
-import { mentionsPlace, isRejectedPlace } from "./previewMatch";
+import { mentionsPlace, isRejectedPlace, onlyAskedAbout, isPassedThrough } from "./previewMatch";
 
 // Three. A reply that names six places and shows six photographs is a gallery
 // with a sentence attached, and the sentence is the product.
@@ -116,6 +116,19 @@ export const placesNamedIn = (text, pools, { cap = CHAT_PLACE_CAP, alreadyKnown 
     // preview screen was shipped for two days showing a list of the one city a
     // traveller had asked to leave, and this reader exists because of it.
     if (isRejectedPlace(said, name)) continue;
+    // ── AND A PLACE IT ONLY ASKED ABOUT ───────────────────────────
+    // "a little early lol", on a Copenhagen card under a reply to "Hi!". Gemlyx
+    // opens by asking, and asking well means naming the obvious options. A
+    // photograph under a question answers it for the traveller. Same rule as
+    // the line above, pointed at the other half of a mention: named by them is
+    // no card, and named by Gemlyx only inside a question is no card either.
+    if (onlyAskedAbout(said, name)) continue;
+    // ── AND A PLACE IT IS DRIVING PAST ────────────────────────────
+    // Oliver, 8 Sep 2026, on "most people driving straight to Copenhagen never
+    // stop for": Copenhagen is the foil in that sentence and Kliplev is the
+    // find, and both got a photograph. "ONLY IF IT WANTS TO TALK ABOUT IT. Not
+    // just by mentioning it."
+    if (isPassedThrough(said, name)) continue;
     seen.add(key);
     const at = hay.indexOf(key);
     found.push({ place: p, at: at < 0 ? Number.MAX_SAFE_INTEGER : at });

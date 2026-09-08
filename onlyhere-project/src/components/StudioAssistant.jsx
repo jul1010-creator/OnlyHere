@@ -8,6 +8,10 @@ import { SWEEPS, sweepById } from "../utils/sweeps";
 import { STUDIO_VOICE } from "../utils/studioContent";
 import { departureParam } from "../utils/helpers";
 import { describeProvenance } from "../utils/provenance";
+// ── AND WHAT THE PHONE'S CLIPBOARD DID TO IT ────────────────────────
+// Oliver, 8 Sep 2026: "when I copy directly from Gemini, at least on phone, it
+// will do it in code like %20%20%20%". This is the box that receives it.
+import { decodePastedText } from "../utils/pastedText";
 
 // ── The founder's assistant, on every page ──────────────────────────
 // Oliver, 6 Aug 2026: "Is it possible to install some sort of assistant for the
@@ -574,7 +578,11 @@ export const StudioAssistant = ({ session, supaFetch, readPage, item, kind, draf
               3. No minWidth on a flex child, so a long unbroken paste could push
                  the Send button off the edge of a narrow screen. */}
           <div style={{ borderTop: `1px solid ${C.border}`, padding: "10px 12px", display: "flex", gap: 8, alignItems: "flex-end" }}>
-            <textarea value={input} onChange={e => setInput(e.target.value)}
+            {/* Decoded on the way IN rather than on the way out, so he reads what
+                will be checked rather than a wall of escapes. It only fires on
+                text carrying an encoded SPACE twice over, so "50% off" and a
+                pasted ticket URL are untouched. */}
+            <textarea value={input} onChange={e => setInput(decodePastedText(e.target.value))}
               onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } }}
               placeholder={!target ? "Ask which entries need work" : studioMode ? `Paste a fact-check, ask for a rewrite, or just ask` : `Ask anything about ${target.name || "this page"}`}
               rows={Math.min(10, Math.max(2, input.split("\n").length, Math.ceil(input.length / 46)))}

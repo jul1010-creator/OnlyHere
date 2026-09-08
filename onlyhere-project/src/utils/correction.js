@@ -101,6 +101,10 @@ export const resolveField = (entry, hint) => {
 // published body, and intro/body are the older shapes some rows still carry.
 // They are listed here because they belong to this question and not to that one.
 import { PROSE_FIELDS as NARRATIVE_FIELDS } from "./entryAudit";
+// The duration reader the draft gates already use. A second parser here is how
+// this project has been bitten six times, most recently on 7 Sep when journey.js
+// and claimCheck.js disagreed about "2h 58m".
+import { durationsIn } from "./claimCheck";
 export const PROSE_FIELDS = [...NARRATIVE_FIELDS, "blogBody", "intro", "body"];
 
 // A claim reaches the patch step under one of two verdicts. "confirmed" means a
@@ -652,13 +656,72 @@ export const verifyTransportClaim = async (claim, entry, { directions, origin = 
     return { verdict: "unresolved", evidence: `The ferry check could not run (${verdict.probeError || "probe unavailable"}), so nothing is claimed either way.`, sourceUrl: "" };
   }
 
-  // A duration claim. Google's own figure decides it, the same figure the
-  // drafting pipeline uses, so a correction can never disagree with a fresh
-  // draft of the same entry.
+  // ── A DURATION CLAIM, AND WHAT THE MEASUREMENT CAN SETTLE ─────────
+  //
+  // Found 8 Sep 2026. This branch returned verdict "confirmed" for EVERY claim
+  // that reached it, with a car time from Copenhagen, without reading the claim
+  // at all. So "the travel time is wrong, by train it is 2h 15 not 3h" came
+  // back marked CONFIRMED with a patch reading "1h 50 mins by car (135 km) from
+  // Copenhagen", into a field the pipeline fills with a transit time. Confirmed
+  // means THE CRITICISM IS RIGHT, and nothing had compared anything.
+  //
+  // Three things were wrong and they are separable:
+  //
+  //   1. It answered a question nobody asked. A drive from Copenhagen cannot
+  //      settle a claim about a train, a bus or a walk.
+  //   2. It measured from Copenhagen for every content type, four days after
+  //      journeyScope settled that only a TOWN is measured from there.
+  //   3. It confirmed without comparing.
+  //
+  // All three are fixed by using the journey the entry already carries. That is
+  // the figure the draft was written from, measured from the right origin for
+  // its type, in the mode the pipeline used, and comparing against it is the
+  // only comparison that can agree with a fresh draft of the same entry. The
+  // live drive stays as the fallback for a row that has no journey, and it says
+  // out loud what it is when it is used.
+  const said = `${claim?.says || ""} ${claim?.proposed || ""}`;
+  const j = entry?.__journey;
+  const measured = Number.isFinite(j?.total) ? { minutes: j.total, how: "on public transport", from: String(j.from || "").trim() }
+    : Number.isFinite(base.durationMinutes) ? { minutes: base.durationMinutes, how: "by car", from: "Copenhagen" }
+    : null;
+  const fromWhere = measured?.from ? ` from ${measured.from}` : "";
+  const drive = `${base.durationText}, ${base.distanceText} by car from Copenhagen`;
+
+  // A MODE THIS CANNOT MEASURE IS NOT SETTLED BY THIS. Naming a different mode
+  // is the traveller being specific, and answering with a different one is the
+  // fault above wearing a number.
+  const OTHER_MODE = /\b(train|rail|tog|bus|coach|metro|letbane|s-tog|walk|walking|on foot|cycle|cycling|bike)\b/i;
+  const SAYS_CAR = /\b(car|drive|driving|by road|bil|k(ø|oe)r)/i;
+  if (!measured || (OTHER_MODE.test(said) && !SAYS_CAR.test(said) && measured.how === "by car")) {
+    return {
+      verdict: "unresolved",
+      evidence: `The only figure available here is the drive: ${drive}. The criticism is about a different way of travelling, and a driving time cannot settle it.`,
+      sourceUrl: "",
+    };
+  }
+
+  // NOTHING TO COMPARE IS NOT AGREEMENT. A criticism that says the time is
+  // wrong without saying what it should be leaves the measurement standing and
+  // the question open.
+  const claimed = durationsIn(said).map(d => d.minutes).filter(Number.isFinite);
+  if (!claimed.length) {
+    return {
+      verdict: "unresolved",
+      evidence: `Measured: ${measured.minutes} minutes ${measured.how}${fromWhere}. The criticism names no figure to compare that with, so nothing here settles it.`,
+      sourceUrl: "",
+    };
+  }
+
+  // Fifteen per cent, floored at five minutes, because a journey is not a
+  // constant: a figure that close is the same journey reported by two sources
+  // rather than a disagreement worth rewriting a field over.
+  const near = claimed.some(m => Math.abs(m - measured.minutes) <= Math.max(5, measured.minutes * 0.15));
   return {
-    verdict: "confirmed",
-    correctValue: `${base.durationText} by car (${base.distanceText}) from Copenhagen`,
-    evidence: `Measured live via the Directions API: ${base.durationText}, ${base.distanceText} by car from Copenhagen.`,
+    verdict: near ? "confirmed" : "rejected",
+    correctValue: near ? `${measured.minutes} minutes ${measured.how}${fromWhere}` : "",
+    evidence: near
+      ? `Measured: ${measured.minutes} minutes ${measured.how}${fromWhere}, which agrees with the ${claimed.join(" or ")} minutes the criticism gives.`
+      : `Measured: ${measured.minutes} minutes ${measured.how}${fromWhere}. The criticism says ${claimed.join(" or ")} minutes, which is not the same journey, so the entry's own figure stands.`,
     sourceUrl: "",
   };
 };
