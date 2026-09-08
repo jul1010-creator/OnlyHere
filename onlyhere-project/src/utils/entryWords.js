@@ -110,6 +110,14 @@ const GLANCE = {
   "Serves":           { da: "Køkken",               de: "Küche" },
   "Type":             { da: "Type",                 de: "Art" },
   "Book tickets":     { da: "Køb billetter",        de: "Tickets buchen" },
+  // The self-guided walk, on the town card since 8 Sep. "Selvguidet" is the
+  // Danish term the tour trade itself uses, so it is a translation rather than
+  // a calque that happens to look like one.
+  "Self-guided tour": { da: "Selvguidet tur",       de: "Selbstgeführte Tour" },
+  // The merchant, named on the link because a link to a site nobody has heard
+  // of has to say whose it is. Only the preposition is translated: WeGoTrip is
+  // a name, and readerLanguage's rule for Nørreport covers it.
+  "On WeGoTrip":      { da: "På WeGoTrip",          de: "Auf WeGoTrip" },
 };
 
 // ── AND THE POPULARITY TAGS, WHICH ARE A VERDICT NOT A FACT ─────────

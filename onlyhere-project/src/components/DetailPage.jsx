@@ -26,6 +26,7 @@ import { saveLabel, saveHint, planFromSavedLabel } from "../utils/savedTrip";
 import { HowWeKnow } from "./HowWeKnow";
 import { JourneyCard } from "./JourneyCard";
 import { showsJourneyForKind, journeyOriginForKind } from "../utils/journeyScope";
+import { audioLine } from "../utils/wegotripMatch";
 // ── AND THE WORDS ON THIS PAGE, IN THE READER'S LANGUAGE ────────────
 // Oliver, 7 Sep 2026: "translating more of the website from English to Danish
 // and German, rather than just the interface." A Danish nav over an entry whose
@@ -184,6 +185,47 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
   // price puts two different tickets on one line. sameShop reads the hosts the
   // payload already recorded. The standalone Book tickets button further down
   // the page quotes nothing and keeps its link either way.
+  // ── AND THE SELF-GUIDED WALK, RESOLVED ONCE ─────────────────────
+  //
+  // Oliver, 8 Sep 2026: "I'd like the cities with 'self-guided tour' to have
+  // that on the 'at a glance' if possible. Then it will be exposed earlier.
+  // Also with an affiliate hyperlink."
+  //
+  // It was a button near the bottom of a town page, under the article, the
+  // photographs and the journey. At a Glance is the first block under the
+  // title, which is the same argument that put the ticket link there on 7 Sep:
+  // "So people won't miss it."
+  //
+  // Hoisted rather than computed twice. The button below reads these too, so
+  // the row and the button cannot disagree about which walk this is or where
+  // it goes, which is the fault the ticket destination was hoisted to fix on
+  // this same page in August.
+  //
+  // isWegotripUrl rather than a hand-written host test: this file had its own,
+  // studioContent had none and costLedger had a bare scheme test, which is
+  // three answers to one question. The scheme is still asked, because
+  // isWegotripUrl accepts http and an anchor on a public page should not.
+  const audioDest = String(item?.__audio?.url || "").trim();
+  const audioOk = /^https:\/\//i.test(audioDest) && isWegotripUrl(audioDest);
+  const audioHref = audioOk ? (affiliateHref(audioDest) || audioDest) : "";
+  const audioNote = audioOk ? affiliateNote(audioDest) : "";
+  const audioCount = Number(item?.__audio?.count) || 1;
+  const audioTown = String(item?.__audio?.town || "").trim() || String(item?.name || "").trim();
+  const audioTitle = String(item?.__audio?.title || "").trim();
+  // What the walk IS, as a sentence a reader can read before deciding to press
+  // anything. The merchant is named on the LINK rather than in here, which is
+  // the rule the button below already keeps: "a button pointing at a site
+  // nobody has heard of has to say whose it is."
+  //
+  // THROUGH audioLine, which the Studio proposal already uses to show him what
+  // the card will say. A sentence composed here would be the third copy of one
+  // on this page, and this codebase has been bitten six times by exactly that.
+  // `kind: false` because the row's LABEL says "Self-guided tour" and the
+  // value would otherwise say it twice.
+  const audioSaid = { url: audioDest, count: audioCount, title: audioTitle, town: audioTown };
+  const audioSays = audioOk ? audioLine(audioSaid, { kind: false }) : "";
+  const audioRow = audioHref ? { href: audioHref, label: "On WeGoTrip", note: audioNote } : null;
+
   const bookRow = ticketHref && sameShop(ticketDest, item?.__priceSource)
     ? { href: ticketHref, label: "Book tickets", note: ticketNote }
     : null;
@@ -464,6 +506,10 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               (() => { const r = relationLine(item); return r ? { icon: r.label === "Inside" ? "◇" : "🧭", label: r.label, value: r.value } : null; })(),
               { icon: "🛏️", label: "Recommended Stay", value: item.recommendedStayGlance },
               { icon: "☀️", label: "Best Time", value: item.bestTimeGlance },
+              // Only a TOWN can carry one: wegotripMatch's TOWN_TYPES is
+              // ["town"] and says at length why a nightTown row must not, so
+              // this is the one card that needs the row.
+              audioRow ? { icon: "🎧", label: "Self-guided tour", value: audioSays, link: audioRow } : null,
               { icon: "🏡", label: "Accommodation", value: item.accommodationGlance },
               { icon: "💰", label: "Typical Costs", value: item.typicalCosts },
             ]} />
@@ -1168,23 +1214,16 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             long-form Travelpayouts link is pasted in. affiliateNote returns ""
             in that state, so nothing claims a commission that is not earned. */}
         {(() => {
-          const dest = String(item?.__audio?.url || "").trim();
-          // isWegotripUrl rather than a fourth hand-written host regex. This
-          // file had its own, studioContent had none and costLedger had a bare
-          // scheme test, which is three answers to one question. The scheme is
-          // still asked here, because isWegotripUrl accepts http and an anchor
-          // on a public page should not.
-          if (!/^https:\/\//i.test(dest) || !isWegotripUrl(dest)) return null;
-          const count = Number(item.__audio.count) || 1;
-          const title = String(item.__audio.title || "").trim();
-          const town = String(item.__audio.town || "").trim() || item.name;
-          const href = affiliateHref(dest) || dest;
-          const note = affiliateNote(dest);
+          // Resolved at the top of the component, beside the ticket, so this
+          // button and the At a Glance row cannot disagree about which walk it
+          // is or where it goes.
+          if (!audioHref) return null;
+          const href = audioHref, note = audioNote;
           return (
             <div style={{ marginBottom: 10 }}>
               <a href={href} target="_blank" rel={note ? "noreferrer sponsored nofollow" : "noreferrer"}
                 style={{ display: "block", textAlign: "center", background: C.surface, border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 12, padding: "13px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
-                🎧 {count > 1 ? `${count} self-guided audio walks in ${town}` : (title || `Self-guided audio walk in ${town}`)}
+                🎧 {audioLine(audioSaid)}
               </a>
               {/* NAMED, always. The Essentials row taught this one: a button
                   pointing at a site nobody has heard of has to say whose it is,

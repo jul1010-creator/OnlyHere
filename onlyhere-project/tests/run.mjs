@@ -49358,6 +49358,26 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     const alb = audioFor(row(11, "town", { name: "Aalborg" }));
     is("Aalborg has one, so it links straight to it", alb?.count, 1);
     ok("and the card names it", /Fjord and Time/.test(audioLine(alb)));
+
+    // ── AND THE PAGE READS THE SAME SENTENCE ────────────────────
+    //
+    // Oliver, 8 Sep 2026, asking for the walk on At a Glance. The row's LABEL
+    // says "Self-guided tour", so a value that also says "self-guided" says it
+    // twice. DetailPage was about to compute its own sentence for that, which
+    // would have been the third copy of this one on the page: the Studio
+    // proposal, the button, and the row. One function with a switch on the
+    // half the frame already carries.
+    is("the glance row drops the words its label already holds",
+       audioLine(cph, { kind: false }), "8 audio walks in Copenhagen");
+    is("and a single walk is just its name",
+       audioLine(alb, { kind: false }), "Aalborg: Self-Guided Audio Tour Through Fjord and Time");
+    // A SINGLE WALK WITH NO TITLE NOW SAYS SOMETHING. The old line printed
+    // "Self-guided audio walk: " with nothing after the colon, and every
+    // reader of it had quietly worked around that.
+    const untitled = { url: "https://wegotrip.com/x-p1/", count: 1, title: "", town: "Ribe" };
+    is("a nameless walk still says what it is", audioLine(untitled), "Self-guided audio walk in Ribe");
+    is("and says it short too", audioLine(untitled, { kind: false }), "Audio walk in Ribe");
+    is("nothing to offer is an empty line", audioLine({ count: 2, town: "Ribe" }), "");
     ok("the deep link is the product page, not the town page", /-p\d+\/$/.test(alb?.url || ""));
     // Rule three: a field that cannot be answered stays empty. A town with
     // several walks and no page to send them to is offered nothing rather than
@@ -49507,8 +49527,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // ── AND IT IS ON SCREEN, IN BOTH PLACES HE CHOSE ────────────────
   {
     const detail = stripComments(readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8"));
-    ok("the town page offers the walk", /🎧 \{count > 1/.test(detail));
-    ok("tracked at render rather than at publish", /affiliateHref\(dest\) \|\| dest/.test(detail));
+    ok("the town page offers the walk", /🎧 \{audioLine\(audioSaid\)\}/.test(detail));
+    ok("tracked at render rather than at publish", /affiliateHref\(audioDest\) \|\| audioDest/.test(detail));
     // A stored value that is not a WeGoTrip address renders nothing at all,
     // rather than a bare link asking a reader for money.
     // isWegotripUrl, not a fourth hand-written host regex. This file had its
@@ -49516,7 +49536,45 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // test: three answers to one question, and the loosest of them would have
     // printed "on WeGoTrip" over somebody else's site.
     ok("and anything that is not WeGoTrip renders nothing",
-       /!isWegotripUrl\(dest\)/.test(detail) && /return null;/.test(detail));
+       /isWegotripUrl\(audioDest\)/.test(detail) && /if \(!audioHref\) return null;/.test(detail));
+
+    // ── AND IT IS EXPOSED EARLIER, WHICH IS WHY IT MOVED ────────
+    //
+    // Oliver, 8 Sep 2026: "I'd like the cities with 'self-guided tour' to have
+    // that on the 'at a glance' if possible. Then it will be exposed earlier.
+    // Also with an affiliate hyperlink." It was a button near the bottom of a
+    // town page, under the article, the photographs and the journey. At a
+    // Glance is the first block under the title, which is the same argument
+    // that moved the ticket link there on 7 Sep: "So people won't miss it."
+    ok("the walk is on the glance card",
+       /audioRow \? \{ icon: "🎧", label: "Self-guided tour", value: audioSays, link: audioRow \} : null/.test(detail));
+    // AND THE ROW SAYS IT SHORT, because its own label already says it long.
+    // "Self-guided tour: 8 self-guided audio walks in Copenhagen" is the value
+    // repeating the label, which is what kind:false exists to stop.
+    ok("the row drops the words its label is holding",
+       /const audioSays = audioOk \? audioLine\(audioSaid, \{ kind: false \}\) : "";/.test(detail));
+    // While the BUTTON, which has no label above it, says the whole thing.
+    ok("and the button, which has no label, says all of it",
+       /🎧 \{audioLine\(audioSaid\)\}/.test(detail));
+    // RESOLVED ONCE. The row and the button read the same values, so they
+    // cannot disagree about which walk it is or where it goes, which is the
+    // fault the ticket destination was hoisted to fix on this same page.
+    is("the walk's address is resolved once", (detail.match(/const audioDest = /g) || []).length, 1);
+    ok("and the button reads the hoisted one", /const href = audioHref, note = audioNote;/.test(detail));
+    // The link is TRACKED and says whose site it is, which is the whole of what
+    // he asked for after "Also with an affiliate hyperlink".
+    ok("the row's link is the tracked one",
+       /const audioRow = audioHref \? \{ href: audioHref, label: "On WeGoTrip", note: audioNote \} : null;/.test(detail));
+    // AND THE DISCLOSURE TRAVELS WITH IT. AtAGlanceCard prints note under any
+    // row that has one, for the reason it already states: this card sits ABOVE
+    // the button, so a reader taking this link would otherwise pass no
+    // sentence at all.
+    ok("and the glance card discloses a paid link where it renders one",
+       /r\.link\?\.href && r\.link\?\.note/.test(readFileSync(join(root, "src/components/AtAGlanceCard.jsx"), "utf8")));
+    // Only a town can carry one. wegotripMatch's TOWN_TYPES is ["town"] and
+    // says at length why a nightTown row must not, so one card needs the row
+    // and adding it to the other four would be four copies of a rule.
+    is("the row is on the town card only", (detail.match(/label: "Self-guided tour"/g) || []).length, 1);
     ok("the same gate guards what is stored",
        /isWegotripUrl\(t\?\.__audio\?\.url\)/.test(stripComments(readFileSync(join(root, "src/utils/studioContent.js"), "utf8"))));
     ok("and what a guide prints",

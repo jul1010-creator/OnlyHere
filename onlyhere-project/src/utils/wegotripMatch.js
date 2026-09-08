@@ -116,11 +116,31 @@ export const audioFor = (row, catalogue = WEGOTRIP_DK, townPages = WEGOTRIP_TOWN
 
 // What the card would read, shown in the proposal rather than described,
 // because what you review is what you publish.
-export const audioLine = (audio) => {
+//
+// ── AND THE PAGE READS IT TOO, WHICH IS WHY IT TAKES AN OPTION ──────
+//
+// Oliver, 8 Sep 2026, asking for the walk on the At a Glance card: the row's
+// LABEL already says "Self-guided tour", so a value reading "8 self-guided
+// audio walks in Copenhagen" says it twice. DetailPage was about to compute
+// its own sentence for that, which would have been the third copy of this one
+// on the page: the Studio proposal, the button, and the row.
+//
+// This codebase has been bitten six times by a second copy of one instrument,
+// so it is one function with a switch on the half the frame already carries.
+// `kind: false` drops the words the label is holding and nothing else.
+//
+// AND A SINGLE WALK WITH NO TITLE NOW SAYS SOMETHING. The old line printed
+// "Self-guided audio walk: " with nothing after the colon for a stored row
+// that had no title, which every reader of it had quietly worked around.
+export const audioLine = (audio, { kind = true } = {}) => {
   if (!audio?.url) return "";
-  return audio.count > 1
-    ? `${audio.count} self-guided audio walks in ${audio.town}`
-    : `Self-guided audio walk: ${audio.title}`;
+  const town = clean(audio.town);
+  const title = clean(audio.title);
+  if (Number(audio.count) > 1) {
+    return `${audio.count} ${kind ? "self-guided audio walks" : "audio walks"} in ${town}`;
+  }
+  if (title) return kind ? `Self-guided audio walk: ${title}` : title;
+  return `${kind ? "Self-guided audio walk" : "Audio walk"} in ${town}`;
 };
 
 // ── THE TICKET HALF ─────────────────────────────────────────────────
