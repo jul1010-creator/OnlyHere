@@ -19,7 +19,7 @@ import { ArticleFeedback } from "./ArticleFeedback";
 import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
 import { bookingUrl, airbnbUrl, tripcomStayUrl, stayDisclosure, STAY_DISCLOSURE, ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote, isWegotripUrl } from "../utils/affiliates";
-import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl, sameShop } from "../utils/ticketLink";
+import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl, sameShop, priceSourceHost } from "../utils/ticketLink";
 import { branchPoints, branchesOf, hasBranches, branchLine, branchLabel } from "../utils/branches";
 import { offerView, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
 import { saveLabel, saveHint, planFromSavedLabel } from "../utils/savedTrip";
@@ -33,7 +33,7 @@ import { audioLine } from "../utils/wegotripMatch";
 // every word is English is the half-translation uiLanguage.js already calls
 // worse than none. `lang` arrives as a prop from App.jsx, which holds it.
 import { t as uiT, DEFAULT_UI_LANGUAGE } from "../utils/uiLanguage";
-import { entryWord } from "../utils/entryWords";
+import { entryWord, bookLabel } from "../utils/entryWords";
 import { readableOn } from "../utils/readableColor";
 import { events, majorEvents, vikingEvents } from "../data/events";
 import { freeEntrance } from "../data/freeEntrance";
@@ -179,12 +179,6 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
   // Null rather than an empty object, because that card already drops nulls and
   // a caller building this inline should not have to remember to.
   //
-  // ── AND NOT ON A ROW WHOSE PRICE CAME FROM SOMEBODY ELSE ────────
-  // Oliver, 8 Sep 2026: "199.. you click link, and it says 289." Every row this
-  // decorates carries a PRICE, so a link to a shop that did not state that
-  // price puts two different tickets on one line. sameShop reads the hosts the
-  // payload already recorded. The standalone Book tickets button further down
-  // the page quotes nothing and keeps its link either way.
   // ── AND THE SELF-GUIDED WALK, RESOLVED ONCE ─────────────────────
   //
   // Oliver, 8 Sep 2026: "I'd like the cities with 'self-guided tour' to have
@@ -226,8 +220,35 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
   const audioSays = audioOk ? audioLine(audioSaid, { kind: false }) : "";
   const audioRow = audioHref ? { href: audioHref, label: "On WeGoTrip", note: audioNote } : null;
 
-  const bookRow = ticketHref && sameShop(ticketDest, item?.__priceSource)
-    ? { href: ticketHref, label: "Book tickets", note: ticketNote }
+  // ── AND WHOSE PRICE THE ROW IS QUOTING ──────────────────────────
+  //
+  // Oliver, 8 Sep 2026: "199.. you click link, and it says 289." Every row the
+  // link decorates carries a PRICE, and wowpark.dk's dated 199 sat beside a
+  // Tiqets link selling a flexible ticket at 289.
+  //
+  // The first answer took the link off those rows, and it was wrong. Of the 192
+  // published rows, 11 carry a ticket link and NOT ONE had its price read from
+  // the shop selling it, so the rule fired on all 11 and Amalienborg Slot ended
+  // up with a price, a guard change and no way to buy anything. He picked the
+  // other answer: "many people might not scroll to the bottom and see 'order
+  // tickets'. It's a good idea to have it early as well in the 'at a glance'."
+  //
+  // So the link comes back on every row and the row says where the number came
+  // from, which is the thing a reader needed in the first place. The clause is
+  // printed only when the two hosts DIFFER, because "125 DKK, stated by
+  // tiqets.com, buy on Tiqets" is noise, and only when there is a link, because
+  // an unlinked figure surprises nobody.
+  //
+  // sameShop still answers it. What changed is what the answer is for.
+  const priceHost = priceSourceHost(item?.__priceSource);
+  const bookSource = ticketHref && !sameShop(ticketDest, item?.__priceSource) ? priceHost : "";
+  // THE MERCHANT ON THE LABEL, for the reason the WeGoTrip row above carries
+  // its own: a link to a site nobody has heard of has to say whose it is, and
+  // here it is also half of the answer, since the two hosts only read as
+  // different if the reader is told both. bookLabel keeps the three phrases in
+  // entryWords beside their translations rather than loose in this file.
+  const bookRow = ticketHref
+    ? { href: ticketHref, label: bookLabel(ticketAgent), note: ticketNote, source: bookSource }
     : null;
   // ── AND THE SAME COLOUR CANNOT BE BOTH FILL AND INK ─────────────
   //

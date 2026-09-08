@@ -126,7 +126,7 @@ export const markMany = (list, items, today = new Date()) => {
 // same question start disagreeing about it — the fault this codebase has now
 // found six times over "where is this row".
 //
-// `resolve` is injected rather than imported, for the reason railPlaces gives:
+// `resolve` is injected rather than imported, for the reason chatRail.mapPlaces gives:
 // what has a bug in it if anything does is the MAPPING, and injecting the
 // lookup makes this testable with no published rows at all.
 //

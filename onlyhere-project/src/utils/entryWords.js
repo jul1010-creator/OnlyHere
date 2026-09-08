@@ -118,7 +118,38 @@ const GLANCE = {
   // of has to say whose it is. Only the preposition is translated: WeGoTrip is
   // a name, and readerLanguage's rule for Nørreport covers it.
   "On WeGoTrip":      { da: "På WeGoTrip",          de: "Auf WeGoTrip" },
+  // ── AND THE TICKET AGENT, NAMED FOR THE SAME REASON ─────────────
+  //
+  // "Book tickets" told a reader nothing about where the tap was going to take
+  // them, which mattered once the row stopped hiding a link whose price came
+  // from somewhere else: the whole point of leaving it up is that the two hosts
+  // are visibly different. Only the verb and the preposition are translated,
+  // because the three agents are names.
+  "Book on Tiqets":       { da: "Køb på Tiqets",       de: "Auf Tiqets buchen" },
+  "Book on Ticketmaster": { da: "Køb på Ticketmaster", de: "Auf Ticketmaster buchen" },
+  "Book on WeGoTrip":     { da: "Køb på WeGoTrip",     de: "Auf WeGoTrip buchen" },
 };
+
+// ── WHICH OF THEM A LINK WEARS ──────────────────────────────────────
+//
+// Keyed by the agent code ticketAgentOf returns. HERE rather than in the page
+// that renders it, because a phrase a reader meets has to have a row in the
+// table above, and a label written at the render site is a phrase nobody
+// translated. The test reads this map against GLANCE_LABELS, so the two cannot
+// drift apart without something saying so.
+//
+// The old label is the fallback and stays true: an agent this does not know
+// still sells tickets, and "Book tickets" is what the button below the fold
+// has always said.
+const BOOK_ON = {
+  tiqets: "Book on Tiqets",
+  ticketmaster: "Book on Ticketmaster",
+  wegotrip: "Book on WeGoTrip",
+};
+
+export const BOOK_LABELS = Object.values(BOOK_ON);
+
+export const bookLabel = (agent) => BOOK_ON[String(agent || "").trim().toLowerCase()] || "Book tickets";
 
 // ── AND THE POPULARITY TAGS, WHICH ARE A VERDICT NOT A FACT ─────────
 // They rank an entry against the others rather than stating anything about

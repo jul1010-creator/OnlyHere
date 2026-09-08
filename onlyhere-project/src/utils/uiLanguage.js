@@ -200,6 +200,16 @@ export const UI_STRINGS = {
   // one-word past tense here: "Har været her" is what a Dane would write.
   "entry.been":       { en: "Been here",       da: "Har været her",       de: "Schon hier gewesen" },
   "entry.beenDone":   { en: "✓ Been here",     da: "✓ Har været her",     de: "✓ Schon hier gewesen" },
+  // ── WHOSE PRICE THE NUMBER ON THE ROW IS ──────────────────────────
+  //
+  // Rendered by the glance card rather than by DetailPage, so it is not in the
+  // ENTRY_KEYS list the entry page is scanned against. The host is appended
+  // rather than interpolated: this catalogue holds no placeholders, and a
+  // hostname is the same string in all three languages anyway.
+  //
+  // "Pris fra" would read as "from 199 kr" in Danish, which is the exact
+  // confusion this line exists to end. "Oplyst af" is who said it.
+  "entry.priceFrom":  { en: "Price stated by", da: "Pris oplyst af",      de: "Preis laut" },
 
   // The two search boxes that are not the header's. header.search covers that
   // one already, and these say what they search rather than repeating "Søg".

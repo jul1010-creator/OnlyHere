@@ -36,6 +36,23 @@ import { POPUP_CLASS, RAIL_BREAKPOINT_PX } from "../utils/chatRail";
 // one both get the country instead of one of them getting Jutland.
 const DENMARK = [[54.5, 8.0], [57.8, 15.3]];
 
+// ── AND WHERE DENMARK IS, WHICH IS THE OUTER VERSION OF THE SAME ────
+//
+// Oliver, 8 Sep 2026: "it still makes people question 'Where is Billund
+// located?'" A single pin now lands on the country rather than on a field, and
+// that took the descent out of the opening move: flying from Denmark to Denmark
+// is not a flight.
+//
+// So the map opens one step further out, on southern Norway, southern Sweden
+// and the top of Germany, and the first pin flies from there down to Denmark.
+// The animation he asked for is intact and it now carries a second answer for a
+// reader who has never had reason to know where Denmark is either.
+//
+// Not the whole of Europe: at that scale Denmark is a smudge and the flight is
+// a title sequence. This is the smallest frame with a recognisable neighbour in
+// every direction.
+const NORTHERN_EUROPE = [[52.4, 2.5], [60.8, 21.0]];
+
 // The pin's own colour, named once. Oliver, 8 Sep 2026, asked for the shape
 // everyone knows and then, shown it in the site's gold, said "red". Gold is
 // this app's accent and is already on every heading and badge, so a gold pin
@@ -61,10 +78,16 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   // Copenhagen image/description, popping up. And then the rest should come up
   // too afterwards."
   //
-  // So it opens on the whole country and flies down to the place, and the card
-  // opens itself when it lands. The country is the context and the flight is
-  // what hands it over: you see Denmark, then you see which part of Denmark
-  // this is. A jump cut to a crop gives you the second half only.
+  // So it opens above the country and flies down, and the card opens itself
+  // when it lands. The flight is what hands the context over: you see where
+  // Denmark is, then you see which part of Denmark this is. A jump cut to a
+  // crop gives you the second half only.
+  //
+  // WHERE IT LANDS moved on 8 Sep. It used to land on the pin, and Oliver, on
+  // Billund: "it still makes people question 'Where is Billund located?'" One
+  // pin lands on the country now and the opening moved out a step to keep the
+  // descent. Two or more still land on the pins, because by then the question
+  // is how far apart they are.
   const flownRef = useRef(false);
   const markersRef = useRef(new Map());
   // ── THE POPUP IS A REAL CARD, PORTALLED IN ──────────────────────
@@ -145,10 +168,10 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       scrollWheelZoom: false,
       dragging: true,
       attributionControl: false,
-    // The whole country, which is where every one of these starts. Bounds
-    // rather than a fixed zoom, so it frames Denmark at 300 pixels wide and at
-    // 210, instead of being right at one of them.
-    }).fitBounds(DENMARK, { padding: [6, 6] });
+    // One step out from the country, which is where every one of these starts.
+    // Bounds rather than a fixed zoom, so it frames the same thing at 240
+    // pixels wide and at 380, instead of being right at one of them.
+    }).fitBounds(NORTHERN_EUROPE, { padding: [6, 6] });
     addTileLayer(L, map);
     L.control.zoom({ position: "bottomright" }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);
@@ -338,7 +361,29 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // the move that says where in Denmark this is. Every set after it is a
     // shorter eased pan: the country has been established by then, and
     // re-flying from altitude on every reply is a title sequence, not a map.
-    const bounds = L.latLngBounds(list.map(p => [p.lat, p.lon])).pad(0.35);
+    // ── ONE PIN IS A QUESTION, NOT AN ANSWER ─────────────────────
+    //
+    // Oliver, 8 Sep 2026: "this map demonstration also shows a poor
+    // presentation of Billund. Great, we got it animated, but it still makes
+    // people question 'Where is Billund located?'"
+    //
+    // He is right and the cause is arithmetic. One pin makes a bounds of zero
+    // size, pad() multiplies zero by 0.35 and gets zero, and fitBounds on a
+    // point goes as close as it is allowed. maxZoom 10 was the only thing
+    // stopping it, so a lone town landed on fifteen kilometres of farmland with
+    // Grindsted in the corner: a picture that answers "what is near Billund"
+    // to somebody who asked "where IS Billund".
+    //
+    // A map of one place is a map of where that place is. So a single pin gets
+    // the country, which is the frame the map already opens on, and the flight
+    // becomes a pin arriving on Denmark rather than a dive into a field.
+    //
+    // TWO OR MORE FIT TO THE PINS, unchanged. By then the question has changed:
+    // the reader knows where Denmark is and wants to know how far Ribe is from
+    // Aarhus, and that answer is the one this map was built for.
+    const bounds = list.length > 1
+      ? L.latLngBounds(list.map(p => [p.lat, p.lon])).pad(0.35)
+      : L.latLngBounds(DENMARK);
     const first = !flownRef.current;
     flownRef.current = true;
     // Somebody who has asked their system for less movement gets none. The map
@@ -391,10 +436,25 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   if (!shown) return null;
 
   return (
-    <div>
+    // ── AS TALL AS THE CONVERSATION BESIDE IT ────────────────────────
+    //
+    // Oliver, 8 Sep 2026: "look the chatbar travels to the South Pole because
+    // of all the pictures that pop up in the sidepanel", and "the map is not
+    // given enough space."
+    //
+    // Those are one fault. A fixed 220px box under two photo cards made the
+    // rail 640px tall in a row whose other column was capped, so the rail set
+    // the height of everything under it AND the map was the smallest thing in
+    // the column it was pushing down.
+    //
+    // So the box grows into whatever the rail has, with a floor in chatRail's
+    // CSS for the first turn, and the rail takes its height from the message
+    // list. `height` stays a prop and stays the floor, because a caller with no
+    // flex parent (the suite renders one) still needs a box with a size.
+    <div style={{ display: "flex", flexDirection: "column", minHeight: 0, height: "100%" }}>
       <div
         ref={holderRef}
-        style={{ height, borderRadius: 12, overflow: "hidden", border: `1px solid ${C?.border || "#2A3350"}` }}
+        style={{ flex: "1 1 auto", minHeight: height, borderRadius: 12, overflow: "hidden", border: `1px solid ${C?.border || "#2A3350"}` }}
       />
       {hosts.map(h => createPortal(
         <ChatPlaceCards

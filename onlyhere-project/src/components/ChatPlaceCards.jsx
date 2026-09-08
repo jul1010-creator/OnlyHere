@@ -99,11 +99,15 @@ export const showablePhoto = (place) => {
 // width. A second component would be a second place for the licence credit rule
 // to be got wrong, and that rule is the one with a legal edge on it.
 //
-// Both layouts now have room for a name to wrap. "row" used to be a sideways
-// strip of 124-pixel cards where it could not, and the ellipsis went with the
-// strip when the row became a shared picture on 5 Sep. The names are kept
-// because they are what the two call sites pass and what the CSS in chatRail.js
-// switches between; "row" means "under the reply" and "rail" means "beside it".
+// "rail" is gone as a call site. Oliver, 8 Sep 2026: "The sidepanel is
+// primarily for the map. If you want pictures there, have them minimized. But I
+// prefer having them put under the text instead." So the side column carries
+// the map alone and every card is under the reply, which is the layout this was
+// written for in the first place.
+//
+// The narrow column layout itself did not go anywhere: it is what a pin popup
+// is, and "pin" is that shape one size smaller. What follows keeps the two
+// names it still has, "row" and "pin".
 // ── AND A THIRD LAYOUT, INSIDE A MAP PIN ────────────────────────────
 //
 // Oliver, 6 Sep 2026, having seen the pins: "coordinate the map with these..
@@ -116,13 +120,17 @@ export const showablePhoto = (place) => {
 // has ever had to fit in, which makes it exactly the place somebody would be
 // tempted to hand-write a bit of HTML with an <img> in it and no credit.
 //
-// So "pin" is "rail", narrower and with a shorter photograph. Everything that
-// matters — showablePhoto's licence check, the OUR PAGE mark, the wording and
-// its five translations, the credit that wraps rather than truncating — is the
-// same code running in a smaller box.
+// So "pin" is the column card, narrower and with a shorter photograph.
+// Everything that matters, showablePhoto's licence check, the OUR PAGE mark,
+// the wording and its five translations, the credit that wraps rather than
+// truncating, is the same code running in a smaller box.
 export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "row", className = "" }) => {
+  // One name for the two, because they were two until the side column stopped
+  // carrying cards. Kept as a separate word rather than folded into `pin`
+  // everywhere below, so the difference between "this is the column shape" and
+  // "this is the smaller one inside a marker" stays readable.
   const pin = layout === "pin";
-  const rail = layout === "rail" || pin;
+  const rail = pin;
   const rows = (Array.isArray(places) ? places : [])
     .map(p => ({ place: p, shot: showablePhoto(p) }))
     .filter(x => x.shot);

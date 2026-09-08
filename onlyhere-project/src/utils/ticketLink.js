@@ -696,7 +696,8 @@ export const ticketQueries = (name, town) => [
   `site:ticketmaster.dk "${String(name || "").trim()}"${scopeFor(town)} billetter`,
 ];
 
-// ── THE PRICE AND THE LINK MUST BE THE SAME SHOP ────────────────────
+// ── IS THE PRICE ON THE ROW THIS SHOP'S PRICE ───────────────────────
+//
 // Oliver, 8 Sep 2026, of the WOW PARK Billund entry: "199.. you click link, and
 // it says 289."
 //
@@ -706,17 +707,29 @@ export const ticketQueries = (name, town) => [
 // operator's cheapest dated price and a link to somebody else's product side by
 // side and let a reader read them as one thing.
 //
-// Nothing has to be looked up to catch it. The pipeline already records which
+// Nothing has to be looked up to answer it. The pipeline already records which
 // host stated the price it kept, in __priceSource, and the ticket link carries
-// its own host. When those differ, the number on the row is not the number
-// behind the link, and the link comes off THAT row. The standalone Book tickets
-// button lower down the page is untouched: a reader who taps a button marked
-// "book" has not been quoted a price by it.
+// its own host.
 //
-// Permissive when it does not know. An entry with no __priceSource, and every
-// older entry written before the field existed, keeps its link: a missing
-// record is not evidence of a mismatch, which is the rule this project applies
-// to every other lookup that comes back empty.
+// ── AND WHAT THE ANSWER IS FOR, WHICH CHANGED ───────────────────────
+//
+// The first version of this took the LINK OFF the row. Then Oliver found an
+// Amalienborg page with no way to buy anything, and the measurement I should
+// have run before shipping it says why: of the 192 published rows, 11 carry a
+// ticketUrl and NOT ONE of them was read from the shop that sells it. Prices
+// come off visitcopenhagen.dk, visitdenmark.dk and the museum's own site;
+// tickets come from Tiqets. A rule that fires on every row it can see is not a
+// safety rule, it is the feature switched off.
+//
+// So the link stays and the row says whose price it is instead. He picked that
+// over the alternatives: "many people might not scroll to the bottom and see
+// 'order tickets'. It's a good idea to have it early as well in the 'at a
+// glance'." A reader told the 125 is visitcopenhagen.dk's, following a link
+// marked Tiqets, is not ambushed by a different number. A reader shown nothing
+// has been protected from a surprise by being denied the ticket.
+//
+// PERMISSIVE WHEN IT DOES NOT KNOW, and now that costs nothing: a missing
+// record means no clause rather than no link.
 const bareHost = (value) => {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -724,9 +737,15 @@ const bareHost = (value) => {
   try { return new URL(withHost).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; }
 };
 
+// The host a price was read from, normalised, or "". The field arrives as a
+// bare host on some rows and as the full URL on others, and the two are the
+// same answer, so the reading of it lives here rather than at each caller.
+export const priceSourceHost = (priceSource) =>
+  bareHost(priceSource?.host || priceSource?.url || "");
+
 export const sameShop = (ticketUrl, priceSource) => {
   const seller = bareHost(ticketUrl);
-  const stated = bareHost(priceSource?.host || priceSource?.url || "");
+  const stated = priceSourceHost(priceSource);
   if (!seller || !stated) return true;
   return seller === stated;
 };

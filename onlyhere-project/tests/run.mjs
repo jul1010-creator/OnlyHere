@@ -69,7 +69,7 @@ writeFileSync(entry, `
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
   export { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
   export { venueCore, venueMentions, venueQuote, venueVerdict, venueVia, describeVenue, VENUE_MIN_MENTIONS, VENUE_MIN_MENTIONS_NO_TOWN, VENUE_MAX_KM, NO_NAME as V_NO_NAME, NOT_NAMED as V_NOT_NAMED, TOO_FAR as V_TOO_FAR, IS_AN_EVENT as V_IS_AN_EVENT, OK as V_OK } from ${JSON.stringify(join(root, "src/utils/venueMatch.js"))};
-  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
+  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop, priceSourceHost } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel, eventLastDay } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
@@ -159,7 +159,7 @@ writeFileSync(entry, `
   export { GOOGLE_SIGN_IN } from ${JSON.stringify(join(root, "src/config.js"))};
   export { writeInLanguage } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { guideLanguage, languageOfProse, ruledOutLanguages, briefSentences, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS, MARKER_FLOOR, MARKER_MARGIN } from ${JSON.stringify(join(root, "src/utils/travellerLanguage.js"))};
-  export { railPlaces, mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
+  export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
   export { costLines, byUrgency, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
@@ -269,7 +269,7 @@ writeFileSync(entry, `
   export { preferenceRowState, PREF_NO_ACCOUNT, PREF_NO_INTERESTS, PREF_READY } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { savableThread, restorableThread, saveThread, loadThread, clearThread, CHAT_KEY, MAX_SAVED_MESSAGES } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { UI_LANGUAGES, UI_CODES, UI_STRINGS, UI_KEYS, UI_LANGUAGE_KEY, DEFAULT_UI_LANGUAGE, t, resolveUiLanguage, isUiLanguage, uiLanguageMeta, storedUiLanguage, setStoredUiLanguage, currentUiLanguage } from ${JSON.stringify(join(root, "src/utils/uiLanguage.js"))};
-  export { ENTRY_WORDS, ENTRY_HEADINGS, ARRIVAL_LABELS, GLANCE_LABELS, KIND_LABELS, entryWord } from ${JSON.stringify(join(root, "src/utils/entryWords.js"))};
+  export { ENTRY_WORDS, ENTRY_HEADINGS, ARRIVAL_LABELS, GLANCE_LABELS, KIND_LABELS, entryWord, BOOK_LABELS, bookLabel } from ${JSON.stringify(join(root, "src/utils/entryWords.js"))};
   export { datesFromListings, cityRankOf, cityWanted, CITY_MATCH, CITY_UNKNOWN, CITY_DIFFERENT } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, PRICE_NOT_PUBLISHED, PRICE_UNKNOWN } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { sourceFit, describeSourceFit, LIVING_TYPES } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -8892,6 +8892,61 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the system prompt was found", sysStart > 0);
   const sysPrompt = appSrc.slice(sysStart, appSrc.indexOf("MERCHANDISE:", sysStart));
   ok("and it is the real thing, not an empty slice", sysPrompt.length > 4000);
+
+  // ── AND IT PRACTISES WHAT IT PREACHES ────────────────────────────
+  //
+  // The prompt has banned the em dash since August, in a sentence that used one
+  // to do it, inside a prompt that carried 75 of them. A model reads its
+  // instructions as a sample of the writing it is being asked for, so the
+  // strongest instruction in this file was the style of the file, and the
+  // dashes came out the other end. Oliver has raised them more times than any
+  // other single thing.
+  //
+  // ONE IS ALLOWED, and it is the character being named by the rule itself:
+  // "NEVER use the em dash (—)". Naming it is the one place it has to appear.
+  is("the prompt uses no em dash except the one the rule names",
+     (sysPrompt.match(/—/g) || []).length, 1);
+  ok("and that one is the rule naming the character", /NEVER use the em dash \(—\)/.test(sysPrompt));
+  is("nor an en dash", (sysPrompt.match(/–/g) || []).length, 0);
+  // The other half of the same rule, and the one nothing was checking.
+  ok("the ban is still stated", /or a double hyphen \(--\) to join two clauses/.test(sysPrompt));
+
+  // ── "IT'S ALSO QUITE POOR AT SUGGESTING" ─────────────────────────
+  //
+  // Oliver, 8 Sep 2026, of a reply that answered "I'm coming with 4 kids and
+  // me" by asking "history, nature, something more low-key, or a mix suited to
+  // the kids?": "It should be allowed to ask questions or give suggestions if
+  // the person seems uncertain with decisions."
+  //
+  // Those four are labels, not options. A traveller who knew which one they
+  // wanted would have said so, and being handed the category list is being
+  // handed back the job they came here to have done.
+  ok("a question is allowed to carry a recommendation",
+     /A QUESTION MAY CARRY A RECOMMENDATION, AND WHEN THEY SOUND UNSURE IT HAS TO/.test(sysPrompt));
+  ok("and categories are replaced by named places",
+     /offer NAMED PLACES instead, two or three at most/.test(sysPrompt));
+  // The stronger half: somebody who says they do not know is asking to be told.
+  ok("plain uncertainty is answered with a decision, not another question",
+     /AND WHEN SOMEBODY IS PLAINLY UNSURE, DECIDE FOR THEM/.test(sysPrompt));
+  ok("and it replaces a question rather than adding one",
+     /It REPLACES a question rather than adding one, and the cap above still holds/.test(sysPrompt));
+  // Placed AFTER the cap it defers to, or "the cap above" points at nothing.
+  ok("the cap it defers to is above it",
+     sysPrompt.indexOf("Cap this at one extra round") < sysPrompt.indexOf("A QUESTION MAY CARRY A RECOMMENDATION"));
+
+  // ── THE DEFAULT THE PROMPT QUOTES IS THE ONE THE APP SENDS ───────
+  //
+  // The prompt tells the model what to do when the message says "Starting
+  // point: not specified, assume Copenhagen Airport", and App.jsx builds that
+  // sentence itself somewhere else entirely. Two copies of one string, and the
+  // rule silently stops firing if either is retyped. Both carried an em dash
+  // until 8 Sep, which is exactly the kind of edit that splits them.
+  {
+    const built = appSrc.match(/`Starting point: ([^`$]+)`/);
+    ok("the app builds a starting-point default", !!built);
+    ok("and the prompt quotes the same words back",
+       !!built && sysPrompt.includes(`"Starting point: ${built[1]}"`));
+  }
 
   // 1. The question is gone, in every phrasing it was written in.
   ok("the mandated final question is gone", !/hour-by-hour schedule/.test(sysPrompt));
@@ -22121,37 +22176,127 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // card already drops nulls and a caller building rows inline should not have
   // to remember to.
   ok("and it is null when there is no link",
-     /const bookRow = ticketHref && sameShop\(ticketDest, item\?\.__priceSource\)/.test(detail));
+     /const bookRow = ticketHref\s*\n?\s*\? \{ href: ticketHref/.test(detail));
+  ok("the link is on the row whenever there is one to give",
+     /const bookRow = ticketHref\b(?![^\n]*sameShop)/.test(detail));
 
   // ── "199.. YOU CLICK LINK, AND IT SAYS 289" ─────────────────────
+  //
   // Oliver, 8 Sep 2026, of the WOW PARK Billund entry. Both numbers were true
   // and they were different tickets: wowpark.dk sells a DATED day ticket from
   // 199 and an undated season one at 299, and the Tiqets page the row linked
   // sells a flexible one from 289. Every row above carries a price, so a link
   // to a shop that did not state that price puts two tickets on one line.
-  ok("the price row only links the shop that stated the price",
-     /sameShop\(ticketDest, item\?\.__priceSource\)/.test(detail));
-  // The standalone button lower down quotes nothing, so it keeps its link.
+  //
+  // ── AND THE FIRST ANSWER WAS THE WRONG ONE ──────────────────────
+  //
+  // It dropped the link from those rows. Then Amalienborg Slot turned up with a
+  // price, a guard change and nothing to press, and the measurement says why: of
+  // the 192 published rows, 11 carry a ticket link and NOT ONE was priced from
+  // the shop that sells it. Prices come off the tourist boards and the museums,
+  // tickets come from Tiqets, so the rule fired on all 11.
+  //
+  // The link stays and the row names the source instead, which he chose over
+  // hiding it: "many people might not scroll to the bottom and see 'order
+  // tickets'. It's a good idea to have it early as well in the 'at a glance'."
+  ok("the row says whose price it is",
+     /const bookSource = ticketHref && !sameShop\(ticketDest, item\?\.__priceSource\)/.test(detail));
+  ok("and hands it to the card to print",
+     /source: bookSource/.test(detail));
+  ok("read through the one function that knows how that field is stored",
+     /const priceHost = priceSourceHost\(item\?\.__priceSource\)/.test(detail));
+  // The merchant on the label, for the reason the WeGoTrip row carries its own:
+  // the two hosts only read as different if the reader is told both.
+  ok("the link names the shop it goes to", /label: bookLabel\(ticketAgent\)/.test(detail));
+  // The standalone button lower down quotes nothing and never needed either.
   ok("the button below is not gated on the price source",
      !/sameShop/.test(detail.slice(detail.indexOf("const dest = ticketDest;"))));
-  is("the wow park pairing is refused",
+
+  // ── THE QUESTION ITSELF, WHICH DID NOT CHANGE ───────────────────
+  is("the wow park pairing is two shops",
     M.sameShop("https://www.tiqets.com/en/billund-attractions-c93558/tickets-for-visit-wow-park-billund-p1026717/",
       { host: "wowpark.dk", url: "https://wowpark.dk/", price: "199-199" }), false);
-  is("the same shop is fine",
+  is("the same shop is one",
     M.sameShop("https://www.tiqets.com/en/x-p1/", { host: "tiqets.com" }), true);
   is("and www is not a different shop",
     M.sameShop("https://www.tiqets.com/en/x-p1/", { host: "www.tiqets.com" }), true);
-  // PERMISSIVE WHEN IT DOES NOT KNOW. Every entry written before __priceSource
-  // existed keeps its link: a missing record is not evidence of a mismatch,
-  // which is the rule this project applies to every lookup that comes back
-  // empty. Getting this backwards would strip the link off most of the site.
-  is("no price source keeps the link", M.sameShop("https://www.tiqets.com/en/x-p1/", null), true);
-  is("an empty price source keeps it too", M.sameShop("https://www.tiqets.com/en/x-p1/", {}), true);
-  is("and no link is nothing to refuse", M.sameShop("", { host: "wowpark.dk" }), true);
+  // PERMISSIVE WHEN IT DOES NOT KNOW, and it costs nothing now: a missing
+  // record means no clause rather than no link. Every entry written before
+  // __priceSource existed simply says nothing about where its price came from.
+  is("no price source is not a mismatch", M.sameShop("https://www.tiqets.com/en/x-p1/", null), true);
+  is("an empty price source is not either", M.sameShop("https://www.tiqets.com/en/x-p1/", {}), true);
+  is("and no link is nothing to compare", M.sameShop("", { host: "wowpark.dk" }), true);
   // The host can arrive as a URL rather than a bare host, and it is the same
   // question either way.
   is("a url in place of a host is read the same",
     M.sameShop("https://www.tiqets.com/en/x-p1/", { url: "https://wowpark.dk/products/x" }), false);
+
+  // ── AND THE HOST THE CLAUSE PRINTS ──────────────────────────────
+  // Both spellings of the field, because published rows carry both, and www
+  // stripped because "www.visitcopenhagen.dk" under a price is furniture.
+  is("a bare host reads back as itself",
+    M.priceSourceHost({ host: "visitcopenhagen.dk" }), "visitcopenhagen.dk");
+  is("a url is read down to its host",
+    M.priceSourceHost({ url: "https://www.visitcopenhagen.dk/copenhagen/x" }), "visitcopenhagen.dk");
+  is("the bare host wins when a row carries both",
+    M.priceSourceHost({ host: "wowpark.dk", url: "https://tiqets.com/x" }), "wowpark.dk");
+  is("nothing stored is nothing to print", M.priceSourceHost(null), "");
+  is("and neither is an empty record", M.priceSourceHost({}), "");
+  // Not a URL and not a host either. "" rather than the string itself, because
+  // a clause reading "Price stated by mid" would be worse than no clause.
+  is("and junk in the field prints nothing", M.priceSourceHost({ host: "not a host" }), "");
+
+  // ── WIRED, AT THE CARD THAT PRINTS IT ───────────────────────────
+  {
+    const glanceSrc = readFileSync(join(root, "src/components/AtAGlanceCard.jsx"), "utf8");
+    ok("the card prints the price source", /r\.link\?\.source/.test(glanceSrc));
+    ok("in the reader's language", /uiT\("entry\.priceFrom", lang\)/.test(glanceSrc));
+    // NOT folded into the note. rel="sponsored nofollow" is set from the
+    // presence of that note, so a link earning nothing must not acquire one by
+    // carrying a price source.
+    ok("and separately from the disclosure, which sets rel",
+       /rel=\{r\.link\.note \? "noreferrer sponsored nofollow"/.test(glanceSrc));
+    ok("so the source line does not travel inside the note",
+       !/note[^\n]*link\.source|source[^\n]*link\.note/.test(glanceSrc));
+  }
+
+  // ── AND THE LABEL THE LINK WEARS ────────────────────────────────
+  // Read out of entryWords against its own dictionary, so a fourth agent added
+  // there cannot ship a phrase nobody translated.
+  is("every book label has a row in the table",
+    M.BOOK_LABELS.filter(l => !M.GLANCE_LABELS.includes(l)).join(", "), "");
+  ok("and there are some, so that filter is not vacuous", M.BOOK_LABELS.length >= 3);
+  {
+    const ticketSrc = readFileSync(join(root, "src/utils/ticketLink.js"), "utf8");
+    const block = ticketSrc.slice(ticketSrc.indexOf("export const ticketAgentOf"));
+    const agents = [...block.slice(0, 300).matchAll(/\? "([a-z]+)"/g)].map(m => m[1]);
+    ok("ticketAgentOf names agents this test can see", agents.length >= 3);
+    is("and every one of them has a label",
+       agents.filter(a => M.bookLabel(a) === "Book tickets").join(", "), "");
+  }
+  is("tiqets is named on the link", M.bookLabel("tiqets"), "Book on Tiqets");
+  is("and so is ticketmaster", M.bookLabel("ticketmaster"), "Book on Ticketmaster");
+  is("and wegotrip", M.bookLabel("wegotrip"), "Book on WeGoTrip");
+  // An agent nobody has a name for still sells tickets, so the old label is the
+  // fallback rather than a blank or a key.
+  is("an agent this does not know keeps the old words", M.bookLabel("gotogate"), "Book tickets");
+  is("and so does no agent at all", M.bookLabel(""), "Book tickets");
+  // Read off a payload rather than out of ticketAgentOf, the field arrives
+  // however the row that stored it was written.
+  is("a shouted or padded agent code still finds its label",
+    M.bookLabel("  Tiqets  "), "Book on Tiqets");
+  is("a Danish reader is told to buy on Tiqets", M.entryWord("Book on Tiqets", "da"), "Køb på Tiqets");
+  is("and a German one to book there", M.entryWord("Book on Tiqets", "de"), "Auf Tiqets buchen");
+  // The clause itself, in all three, and none of them English wearing a label.
+  is("the price source line is written everywhere",
+    ["en", "da", "de"].filter(c => !String(M.UI_STRINGS["entry.priceFrom"]?.[c] || "").trim()).join(", "), "");
+  ok("and the Danish is not the English",
+     M.UI_STRINGS["entry.priceFrom"].da !== M.UI_STRINGS["entry.priceFrom"].en);
+  ok("nor the German", M.UI_STRINGS["entry.priceFrom"].de !== M.UI_STRINGS["entry.priceFrom"].en);
+  // "Pris fra 199" is what a Dane reads as a starting price, which is the exact
+  // confusion this line exists to end.
+  ok("and the Danish does not read as a starting price",
+     !/^pris fra\b/i.test(M.UI_STRINGS["entry.priceFrom"].da));
 }
 
 // ── "IT HAS TO BE RANDOMS, BUT IT HAS TO START ON A FACT" ────────────
@@ -26770,8 +26915,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the chat renders the cards", /<ChatPlaceCards/.test(appC));
     ok("only under an assistant message",
        /m\.role === "assistant" && !streaming && \([\s\S]{0,120}<ChatPlaceCards/.test(appC));
-    ok("built from the same pools the preview screen uses",
-       /placesNamedIn\(assistantText, previewPools\(\{/.test(appC));
+    // ONE POOL READING, hoisted above the message loop on 8 Sep. It used to
+    // call previewPools inside the loop, once per assistant turn, and the pin
+    // beside it called it again.
+    ok("built from the same pool the pin beside it reads",
+       /places=\{placesNamedIn\(assistantText, pools, \{ alreadyKnown: theirWords \}\)\}/.test(appC));
     ok("and tapping one opens the entry behind it", /onOpen=\{openStopDetail\}/.test(appC));
   }
 }
@@ -40374,13 +40522,18 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is("and an empty one stays empty", readableFigure("", {}), "");
   }
 
-  // ── AND THE CHECKOUT HAS TO BE THE SHOP THAT SET THE PRICE ───────
+  // ── AND THE CHECKOUT SITS UNDER THE HOST THAT SET THE PRICE ──────
   //
   // Oliver, 8 Sep 2026, of the WOW PARK entry: "199.. you click link, and it
   // says 289." The operator sells a dated day ticket from 199 and the Tiqets
-  // page sells a flexible one from 289: both true, different tickets. The entry
-  // page lost the link on that row the same night and this block, headed "What
-  // you pay", kept its checkout.
+  // page sells a flexible one from 289: both true, different tickets.
+  //
+  // This block briefly dropped the link too, and the measurement killed that:
+  // of the 192 published rows, the 11 with a ticket link have none whose price
+  // came from the shop selling it, so the gate removed every checkout the list
+  // can offer. It is also the one place that never needed a gate. The line
+  // carries priceFrom and CostsBlock prints the host and the day it was read
+  // directly under the figure, so the two shops are already named.
   {
     const rows = {
       "Wow Park": { _src: "free", ticketStatus: "on_sale",
@@ -40396,9 +40549,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the line is still listed", !!line);
     is("with the operator's price, repaired", line.price, "199 kr");
     is("and the day it was read", line.priceFrom.at, "2026-09-07");
-    is("and no checkout to a shop that did not set it", line.href, "");
-    // Not a refusal: nothing is sold out, cancelled or off their dates. The
-    // line simply carries no link, and saying "sold out" here would be false.
+    is("and the host that read it, named on the line", line.priceFrom.host, "wowpark.dk");
+    // The link is there. A reader looking at "199 kr / wowpark.dk / checked
+    // 2026-09-07" above a Tiqets checkout has been told both shops, which is
+    // the whole of what the vanished link was protecting them from.
+    ok("and a checkout to press", /tiqets\.com/.test(line.href));
+    // Nothing is sold out, cancelled or off their dates, so nothing is refused
+    // either: saying "sold out" over a live ticket would be false.
     is("and it is not dressed up as a refusal", line.refused, "");
   }
   // Free is a real answer and the one line that makes the others believable.
@@ -42703,54 +42860,91 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // Oliver, 26 Aug 2026: "With such a small chat panel, it is more convenient
 // that people can read while seeing the picture."
 //
-// Two things can go wrong here and neither is visible in a screenshot taken at
-// one width: the rail could show the wrong reply's places, and the rail and the
-// inline row could both be displayed at once, which is the same photograph
-// twice on a 300-pixel panel.
+// ── "THE CHATBAR TRAVELS TO THE SOUTH POLE" ─────────────────────────
+//
+// Oliver, 8 Sep 2026, of his own Detour screen: "look the chatbar travels to
+// the South Pole because of all the pictures that pop up in the sidepanel. The
+// sidepanel is primarily for the map. If you want pictures there, have them
+// minimized. But I prefer having them put under the text instead."
+//
+// The panel is a flex row with a capped message list and a rail that was
+// whatever its contents added up to, so two photo cards and a map made the RAIL
+// the tallest thing in the row and everything under it moved down.
+//
+// None of that is visible in a screenshot taken at one width, or in a
+// screenshot of a short conversation, which is why it is asserted here.
 {
   const { renderSurface: rsr } = await import(pathToFileURL(join(root, "tests/render.mjs")).href);
-  const { railPlaces, mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, placesNamedIn, rejectedIn } = M;
+  const { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, placesNamedIn, rejectedIn } = M;
   const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
 
-  // ── WHICH REPLY THE RAIL IS SHOWING ──────────────────────────────
-  const finder = (text) =>
-    /Ribe/.test(text) ? [{ name: "Ribe" }] : /Gudhjem/.test(text) ? [{ name: "Gudhjem" }] : [];
-  const convo = [
-    { role: "assistant", text: "Hi! Tell me where you are heading." },
-    { role: "user", text: "Somewhere that feels like a proper Danish winter." },
-    { role: "assistant", text: "Ribe is the oldest town in Denmark and it is quiet in February." },
-  ];
-  is("the rail carries the reply that introduced somewhere",
-    railPlaces({ messages: convo, placesFor: finder }), [{ name: "Ribe" }]);
-  // The case that decides whether this is usable: Gemlyx asks a follow-up, which
-  // is most turns, and the picture must not vanish while they answer it.
-  is("a follow-up question leaves the last real one standing",
-    railPlaces({ messages: [...convo, { role: "user", text: "Ten days." }, { role: "assistant", text: "How are you getting around?" }], placesFor: finder }),
-    [{ name: "Ribe" }]);
-  is("and a newer introduction replaces it",
-    railPlaces({ messages: [...convo, { role: "assistant", text: "Gudhjem, then, for the harbour." }], placesFor: finder }),
-    [{ name: "Gudhjem" }]);
-  is("an error is not a reply", railPlaces({ messages: [...convo, { role: "assistant", isError: true, text: "Hit a snag near Gudhjem" }], placesFor: finder }), [{ name: "Ribe" }]);
-  is("and the traveller naming it themselves is not either",
-    railPlaces({ messages: [...convo, { role: "user", text: "What about Gudhjem?" }], placesFor: finder }), [{ name: "Ribe" }]);
-  is("no finder, no rail", railPlaces({ messages: convo }), []);
-
-  // ── EXACTLY ONE OF THE TWO IS DISPLAYED, AT EVERY WIDTH ──────────
-  //
-  // Both are rendered, because which one fits is a question about the viewport
-  // and a media query answers it for free on every resize. That is only safe
-  // while the CSS really does hide the other one, so the CSS is generated from
-  // the same constants the JSX uses and read back here.
+  // ── THE CARDS ARE UNDER THE TEXT, AT EVERY WIDTH ─────────────────
   const css = railCss();
   ok("the rail is hidden by default, which is the phone", new RegExp(`\\.${RAIL_CLASS}\\s*\\{[^}]*display:\\s*none`).test(css));
-  ok("and shown above the breakpoint", new RegExp(`min-width:\\s*${RAIL_BREAKPOINT_PX}px[\\s\\S]*\\.${RAIL_CLASS}\\s*\\{[^}]*display:\\s*block`).test(css));
-  ok("where the inline row is hidden instead", new RegExp(`min-width:\\s*${RAIL_BREAKPOINT_PX}px[\\s\\S]*\\.${INLINE_CARDS_CLASS}\\s*\\{[^}]*display:\\s*none`).test(css));
+  ok("and shown above the breakpoint", new RegExp(`min-width:\\s*${RAIL_BREAKPOINT_PX}px[\\s\\S]*\\.${RAIL_CLASS}\\s*\\{[^}]*display:\\s*flex`).test(css));
+  // THE ASSERTION THAT CHANGED SIDES. The inline cards used to be hidden above
+  // the breakpoint because the rail carried them instead. Nothing hides them
+  // now, at any width, and a rule that brought that back would put the same
+  // photograph on the screen once and the reply out of reach.
+  is("nothing hides the inline cards any more",
+     (css.match(new RegExp(`\\.${INLINE_CARDS_CLASS}[^}]*display:\\s*none`, "g")) || []), []);
   ok("the stylesheet actually carries it", /\$\{railCss\(\)\}/.test(appR));
-  ok("the inline cards are marked so it can hide them", appR.includes("className={INLINE_CARDS_CLASS}"));
-  ok("and the rail is marked so it can show them", appR.includes("className={RAIL_CLASS}"));
+  ok("the inline cards are still marked, which is how this file finds them", appR.includes("className={INLINE_CARDS_CLASS}"));
+  ok("and the rail is marked so it can be shown", appR.includes("className={RAIL_CLASS}"));
   // The rail is inside the flex row, not floating after it.
-  ok("the messages and the rail share one flex row", /<div className="chat-with-rail">[\s\S]{0,400}<div className="ai-msgs"/.test(appR));
+  ok("the messages and the rail share one flex row", /<div className="chat-with-rail">[\s\S]{0,1600}<div className="ai-msgs"/.test(appR));
   ok("and the message list can shrink so the rail has room", /className="ai-msgs" style=\{\{ flex: "1 1 auto", minWidth: 0/.test(appR));
+
+  // ── AND THE RAIL CAN NO LONGER SET THE HEIGHT OF THE ROW ─────────
+  //
+  // Three things together are the fix, and any one of them alone leaves the
+  // gap: the columns stretch rather than hugging their contents, the map takes
+  // what is left rather than declaring a size, and both columns are capped by
+  // one shared number.
+  ok("the columns stretch to the row rather than hugging their contents",
+     /\.chat-with-rail \{[^}]*align-items:\s*stretch/.test(css));
+  ok("the rail is a column the map can grow inside",
+     new RegExp(`\\.${RAIL_CLASS} \\{[^}]*flex-direction:\\s*column`).test(css));
+  ok("the map takes what the rail has rather than deciding what it is",
+     new RegExp(`\\.${MAP_CLASS} \\{[^}]*flex:\\s*1 1 auto`).test(railMapCss({})));
+  // The floor, for the first turn: two messages beside a stretched map is a
+  // letterbox of the North Sea.
+  ok("with a floor under it", new RegExp(`\\.${MAP_CLASS} \\{[^}]*min-height:\\s*\\d+px`).test(railMapCss({})));
+  // ONE NUMBER FOR BOTH COLUMNS. Two would drift the moment either was tuned,
+  // and the drift is invisible until the row grows a gap again.
+  ok("the panel height is a clamp, not a number", /^clamp\([^)]+\)$/.test(String(CHAT_PANEL_HEIGHT)));
+  ok("the message list is capped by it", appR.includes("maxHeight: CHAT_PANEL_HEIGHT"));
+  ok("and nothing in the panel caps itself with a number instead",
+     !/className="ai-msgs" style=\{\{[^}]*maxHeight:\s*\d/.test(appR));
+
+  // ── THE RAIL CARRIES THE MAP AND NOTHING ELSE ────────────────────
+  //
+  // "The sidepanel is primarily for the map." A card in there is what made the
+  // row 640 pixels tall, so the absence is the fix and is asserted as such.
+  {
+    const railBlock = appR.slice(appR.indexOf("<div className={RAIL_CLASS}>"));
+    const railEnds = railBlock.indexOf("</div>\n                )}");
+    ok("the rail block is found", railEnds > 0);
+    ok("and there is no card in it", !/layout="rail"/.test(railBlock.slice(0, railEnds > 0 ? railEnds : 4000)));
+  }
+  ok("no call site asks for a rail layout", !/layout="rail"/.test(appR));
+  {
+    const cardsSrc = readFileSync(join(root, "src/components/ChatPlaceCards.jsx"), "utf8");
+    ok("and the component no longer answers to that name",
+       !/layout === "rail"/.test(stripComments(cardsSrc)));
+  }
+
+  // ── ONE POOL READING FOR BOTH THE CARD AND THE PIN ───────────────
+  //
+  // It was two calls, one of them inside the message loop, so previewPools ran
+  // once per assistant turn and the card and the pin were kept looking at the
+  // same rows by hand. The inline path also skipped withoutBeen, which was
+  // survivable while it was the phone layout and is not now that it is the
+  // only card layout there is.
+  is("previewPools is read once for the whole panel",
+     (appR.match(/const pools = withoutBeen\(previewPools\(\{/g) || []).length, 1);
+  ok("and the card reads that pool", /places=\{placesNamedIn\(assistantText, pools, \{ alreadyKnown: theirWords \}\)\}/.test(appR));
+  ok("so a place they have been is not suggested to them again", /\}\), beenList\);/.test(appR));
 
   // ── THE MAP UNDER THE CHAT ───────────────────────────────────────
   //
@@ -42758,11 +42952,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ... right now there is not much else than just chatting." He chose "the
   // trip taking shape" over three narrower readings of that.
   //
-  // THE WALK IS THE OPPOSITE OF railPlaces AND THAT IS THE POINT. The rail
-  // carries one reply because an accumulating gallery is what chatPlaces
+  // THE WALK IS THE OPPOSITE OF THE CARDS' AND THAT IS THE POINT. A card
+  // belongs to one reply because an accumulating gallery is what chatPlaces
   // exists to prevent. A map with one pin says nothing: the thing a map is for
-  // is places in relation to each other. Same file, two rules, and this block
-  // asserts they stay different.
+  // is places in relation to each other. Two rules, and this block asserts they
+  // stay different.
   {
     const P = (name, lat, lon) => ({ name, lat, lon });
     const pools = [P("Ribe", 55.33, 8.77), P("Skagen", 57.72, 10.58), P("Aarhus", 56.15, 10.21), P("Nowhere")];
@@ -42959,11 +43153,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the map is hidden below the breakpoint, where there is no column for it",
      new RegExp(`\\.${MAP_CLASS}\\s*\\{[^}]*display:\\s*none`).test(mapCss));
   ok("and shown above it",
-     new RegExp(`min-width:\\s*${RAIL_BREAKPOINT_PX}px[\\s\\S]*\\.${MAP_CLASS}\\s*\\{[^}]*display:\\s*block`).test(mapCss));
+     new RegExp(`min-width:\\s*${RAIL_BREAKPOINT_PX}px[\\s\\S]*\\.${MAP_CLASS}\\s*\\{[^}]*display:\\s*flex`).test(mapCss));
   const basis = railCss().match(/flex:\s*0\s*0\s*clamp\((\d+)px,\s*\d+%,\s*(\d+)px\)/);
   ok("the rail is a clamped proportion rather than one number", !!basis);
   ok("and never narrow enough for a card to be the whole of it", !!basis && Number(basis[1]) >= 200);
-  ok("nor wide enough to be taking room the map has stopped using", !!basis && Number(basis[2]) <= 340);
+  // The ceiling was 300 while the cards above the map were paying for width
+  // they did not use. Oliver, 8 Sep 2026: "The map is not given enough space."
+  // Every pixel in this column is map now, so it goes up. Still bounded: past
+  // about 400 the conversation is paying for room in the other direction.
+  ok("nor wide enough to be taking room from the conversation", !!basis && Number(basis[2]) <= 400);
+  ok("and wider than it was when it was sharing with the cards", !!basis && Number(basis[2]) >= 340);
   // SCOPED. These restyle Leaflet's own popup chrome, and the place page's map
   // and the guide's route map are Leaflet too. Written bare they would restyle
   // both from a file neither imports.
@@ -42979,7 +43178,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // be measuring the prose.
   const chatCode = stripComments(chatMap);
   ok("the map is rendered under the rail", /<ChatMiniMap pins=\{onMap\.pins\}/.test(appR));
-  ok("fed by mapPlaces and not by railPlaces", /const onMap = mapPlaces\(\{[\s\S]{0,400}?coordsFor: placeCoords,/.test(appR));
+  ok("fed by mapPlaces and not by the card's reading", /const onMap = mapPlaces\(\{[\s\S]{0,400}?coordsFor: placeCoords,/.test(appR));
   // placeCoords, not a fresh `__lat ?? lat` read. Six copies of that question
   // have been found in this codebase and five of them were wrong.
   is("and nothing in the map component resolves a coordinate itself",
@@ -43000,9 +43199,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      /rejectsFor: \(text\) => rejectedIn\(clean\(text\), townPool\)/.test(appR));
   // The CARD still sees everything: a restaurant or a bar is exactly what a
   // card is for, and it is the map that cannot say anything useful about one.
+  // Two assertions here were the same string twice, which is a test that can
+  // only fail twice for one reason. This is the card's pool and the one below
+  // is the map's.
   ok("while the card still sees every kind",
-     /placesFor: \(text\) => placesNamedIn\(clean\(text\), pools, \{ alreadyKnown: theirWords \}\)/.test(appR));
-  ok("and the card's keeps it", /placesFor: \(text\) => placesNamedIn\(clean\(text\), pools, \{ alreadyKnown: theirWords \}\)/.test(appR));
+     /places=\{placesNamedIn\(assistantText, pools, \{ alreadyKnown: theirWords \}\)\}/.test(appR));
+  ok("and the map's narrower one is a filter of it, not a second reading",
+     /const townPool = pools\.filter\(/.test(appR));
   // ONE POOLS CALL FOR BOTH. The card and the pin have to be looking at the
   // same published rows, and two copies of a pool expression is how they stop.
   // withoutBeen wraps it now, so the assertion is that there is ONE pool
@@ -43064,7 +43267,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── THE PIN LAYOUT IS THE SAME COMPONENT ───────────────────────
   // A second component would be a second place for the credit to be got wrong.
   const cards = readFileSync(join(root, "src/components/ChatPlaceCards.jsx"), "utf8");
-  ok("pin is a narrower rail rather than a new card", /const pin = layout === "pin";\s*\n\s*const rail = layout === "rail" \|\| pin;/.test(cards));
+  // "rail" as a call site went on 8 Sep with the cards in the side column. The
+  // narrow COLUMN shape did not: it is what a pin popup is.
+  ok("pin is a narrower column card rather than a new card", /const pin = layout === "pin";\s*\n\s*const rail = pin;/.test(cards));
   is("so there is still exactly one credit line in the app",
      (cards.match(/creditLine\(shot\.credit\)/g) || []).length, 2);   // the test and the render
 
@@ -43134,10 +43339,60 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // "The map should start from up, and then zoom down to Copenhagen with a
   // Copenhagen image/description, popping up. And then the rest should come up
   // too afterwards."
-  ok("the map opens on the whole country, not on a pin", /\.fitBounds\(DENMARK, \{ padding: \[6, 6\] \}\)/.test(chatCode));
+  // ── AND WHERE IT OPENS MOVED OUT A STEP ──────────────────────────
+  //
+  // Oliver, 8 Sep 2026, on a lone Billund pin: "it still makes people question
+  // 'Where is Billund located?'" One pin lands on the country now, so opening
+  // ON the country would be a flight from Denmark to Denmark. It opens one
+  // frame further out and the descent survives.
+  ok("the map opens above the country, not on a pin", /\.fitBounds\(NORTHERN_EUROPE, \{ padding: \[6, 6\] \}\)/.test(chatCode));
+  ok("and that frame is bounds rather than a zoom number", /const NORTHERN_EUROPE = \[\[52\.4, 2\.5\], \[60\.8, 21\.0\]\];/.test(chatCode));
+  // It has to CONTAIN the country, or the first flight starts off the map.
+  {
+    // A LONGITUDE CAN BE NEGATIVE, and the first version of this pattern could
+    // not match one. A frame reaching west of Greenwich made the match null and
+    // the whole suite died on the next line, which reports as a mutation
+    // surviving: a crashed run has no failures in it to count.
+    const box3 = /const NORTHERN_EUROPE = \[\[(-?[\d.]+), (-?[\d.]+)\], \[(-?[\d.]+), (-?[\d.]+)\]\];/;
+    const dk3 = /const DENMARK = \[\[(-?[\d.]+), (-?[\d.]+)\], \[(-?[\d.]+), (-?[\d.]+)\]\];/;
+    const boxM = chatCode.match(box3);
+    const dkM = chatCode.match(dk3);
+    ok("both frames are readable as four numbers", !!boxM && !!dkM);
+    const box = (boxM || []).slice(1).map(Number);
+    const dk = (dkM || []).slice(1).map(Number);
+    ok("the opening frame contains Denmark",
+       box.length === 4 && dk.length === 4 && box[0] < dk[0] && box[1] < dk[1] && box[2] > dk[2] && box[3] > dk[3]);
+    // And not so far out that Denmark is a smudge and the flight is a title
+    // sequence. Under about four times the country's span either way.
+    ok("and is not so far out that Denmark is a smudge",
+       box.length === 4 && dk.length === 4
+       && (box[2] - box[0]) < (dk[2] - dk[0]) * 4 && (box[3] - box[1]) < (dk[3] - dk[1]) * 4);
+  }
   // Bounds rather than a hand-picked zoom, because the column is a clamped
-  // proportion now and a number right at 300px is wrong at 210.
+  // proportion and a number right at 380px is wrong at 240.
   ok("and the country is bounds rather than a zoom number", /const DENMARK = \[\[54\.5, 8\.0\], \[57\.8, 15\.3\]\];/.test(chatCode));
+  // ── AND A LONE PIN LANDS ON THE COUNTRY ──────────────────────────
+  //
+  // One pin makes a bounds of zero size, pad() multiplies zero and gets zero,
+  // and fitBounds on a point goes as close as maxZoom allows. That put Billund
+  // on fifteen kilometres of farmland: an answer to "what is near Billund" for
+  // a reader who asked where it is.
+  // ── AND THE BOX IT DRAWS IN GROWS WITH THE COLUMN ────────────────
+  //
+  // The CSS makes the rail elastic and the map take what is left. None of that
+  // reaches Leaflet unless the div it measures grows too: a fixed height here
+  // puts the old 220px box back inside a 460px column, which is the "the map is
+  // not given enough space" half of the complaint on its own.
+  ok("the map's own box grows with its column",
+     /style=\{\{ flex: "1 1 auto", minHeight: height,/.test(chatCode));
+  // The prop stays as the FLOOR rather than the size, because a caller with no
+  // flex parent still needs a box that has one.
+  ok("and the prop it used to be sized by is the floor now", /height = 220/.test(chatCode));
+  ok("the wrapper is a column so the caption sits under the map",
+     /flexDirection: "column", minHeight: 0, height: "100%"/.test(chatCode));
+
+  ok("a single pin is framed by the country rather than by itself",
+     /list\.length > 1\s*\n?\s*\? L\.latLngBounds\(list\.map\(p => \[p\.lat, p\.lon\]\)\)\.pad\(0\.35\)\s*\n?\s*: L\.latLngBounds\(DENMARK\)/.test(chatCode));
   ok("the first set flies and the rest pan",
      /const first = !flownRef\.current;[\s\S]{0,520}?flyToBounds\(bounds, \{ maxZoom: 10, duration: first \? 1\.9 : 0\.9 \}\)/.test(chatCode));
   // A title sequence on every reply is not a map. The flag has to be set, or

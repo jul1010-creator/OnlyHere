@@ -55,6 +55,22 @@ export const AtAGlanceCard = ({ rows, lang = DEFAULT_UI_LANGUAGE }) => {
                 it, so a reader who takes this link would otherwise click a paid
                 link having never passed the sentence. Whichever one they reach
                 first is disclosed where they reach it. */}
+            {/* ── AND WHOSE PRICE THE NUMBER IS ──────────────────────
+                Oliver, 8 Sep 2026: "199.. you click link, and it says 289."
+                Every row this decorates carries a price, and on 11 of the 11
+                published rows that have a ticket link, the price was read
+                somewhere other than the shop that sells it. Naming the source
+                is what keeps those two numbers from reading as one.
+
+                SEPARATE FROM THE NOTE, not appended to it, because `note` is
+                the paid-link disclosure and this line is not: rel="sponsored"
+                is set from the presence of that note, and a link earning
+                nothing must not acquire one by carrying a price source. */}
+            {r.link?.href && r.link?.source && (
+              <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 3 }}>
+                {uiT("entry.priceFrom", lang)} {r.link.source}
+              </div>
+            )}
             {r.link?.href && r.link?.note && (
               <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 3 }}>{r.link.note}</div>
             )}

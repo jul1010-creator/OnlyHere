@@ -62,7 +62,7 @@
 // and never from anywhere else. A price band ("mid", "cheap") is NOT a price and
 // is never printed as one.
 import { normaliseTicketStatus } from "./tickets";
-import { isBookableTicketUrl, sameShop } from "./ticketLink";
+import { isBookableTicketUrl } from "./ticketLink";
 import { stopEventWhen } from "./guideReading";
 import { affiliateHref, isPartnerLink, carRentalFits, carRentalUrl, bookingUrl, isWegotripUrl } from "./affiliates";
 import { OPERATORS } from "./operators";
@@ -183,13 +183,22 @@ export const refuseTicket = ({ row, when = null, shutToday = false } = {}) => {
 const buyLink = (row) => {
   const url = String(row?.ticketUrl || "").trim();
   if (!isBookableTicketUrl(url)) return null;
-  // ── AND THE PRICE ON THIS LINE HAS TO BE THIS SHOP'S ──────────────
+  // ── AND THE PRICE ON THIS LINE IS ALREADY ATTRIBUTED ──────────────
+  //
   // Oliver, 8 Sep 2026, of the WOW PARK entry: "199.. you click link, and it
   // says 289." Both true and different tickets: the operator sells a dated day
-  // ticket from 199 and the Tiqets page sells a flexible one from 289. The
-  // entry page lost its link on that row the same night, and this block is the
-  // same row one page over, headed "What you pay". It kept its checkout.
-  if (!sameShop(url, row?.__priceSource)) return null;
+  // ticket from 199 and the Tiqets page sells a flexible one from 289.
+  //
+  // This block briefly answered that by dropping the link, which measured badly
+  // on the entry page and measures no better here: of the 192 published rows,
+  // the 11 with a ticket link have NONE whose price was read from the shop
+  // selling it, so the gate removed every checkout this list can offer.
+  //
+  // It is also the one place that never needed the gate. The line already
+  // carries priceFrom, and CostsBlock prints the host and the day it was read
+  // directly under the figure, so "199 kr / wowpark.dk / checked 2026-09-07"
+  // stands beside a link marked Tiqets and says on its face that they are two
+  // shops. The entry page had to LEARN to say that; this one already did.
   const href = affiliateHref(url);
   return { href, partner: isPartnerLink(href) };
 };
