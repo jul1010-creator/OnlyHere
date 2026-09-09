@@ -9435,6 +9435,16 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   const [sweepId, setSweepId] = useState(SWEEPS[0]?.id || "");
   const [sweepState, setSweepState] = useState(null);        // null | {phase, done, total, name, skipped, error}
   const [sweepProposals, setSweepProposals] = useState(null);
+  // ── FILL, OR LOOK AGAIN AT WHAT IS ALREADY THERE ──────────────────
+  //
+  // Oliver, 9 Sep 2026, after the chat map labelled Aalborg and Aarhus
+  // identically: "we need to do a sweep of 'nightlife' for towns that has great
+  // nightlife." The fill pass cannot reach them, because `missing` treats a row
+  // with three themes as finished however wrong those three are.
+  //
+  // Off by default, and it resets with the sweep choice: a mode that survived a
+  // switch between sweeps would run the wrong pass over the wrong rows.
+  const [sweepRevise, setSweepRevise] = useState(false);
   // ── THE FOURTEEN ENTRIES NOBODY CAN SEE ───────────────────────────
   // Oliver, 5 Sep 2026, on 52 events of which 28 are visible: "build whatever
   // you want to build". `chosen` is a set of row ids rather than a flag on each
@@ -9511,12 +9521,12 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
       // parent can be checked against places that really exist and written in
       // their own spelling.
       const knownPlaces = knownPlacesFor(rows, sweep);
-      const { batch, skipped } = applyCap(selectRows(rows, sweep), sweep.cap);
+      const { batch, skipped } = applyCap(selectRows(rows, sweep, { revise: sweepRevise }), sweep.cap);
       if (!batch.length) { setSweepState({ phase: "done", done: 0, total: 0, skipped, error: null, sweep: id }); setSweepProposals([]); return; }
 
       setSweepState({ phase: "proposing", done: 0, total: batch.length, skipped, error: null, sweep: id });
       const proposals = await proposeSweep({
-        sweep, rows: batch, knownPlaces,
+        sweep, rows: batch, knownPlaces, revise: sweepRevise,
         deps: {
           askClaude, askPerplexity, parseJSON: parseClaudeJSON,
           isCancelled: () => sweepCancelRef.current,
@@ -19754,11 +19764,37 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
                           {SWEEPS.map(sw => (
                             <button key={sw.id} disabled={sweepBusy || sweepWriteState?.running}
-                              onClick={() => { setSweepId(sw.id); setSweepProposals(null); setSweepState(null); setSweepWriteState(null); setSweepSnapshot(null); }}
+                              onClick={() => { setSweepId(sw.id); setSweepProposals(null); setSweepState(null); setSweepWriteState(null); setSweepSnapshot(null); setSweepRevise(false); }}
                               style={{ background: sweepId === sw.id ? `${C.gold}22` : "none", border: `1px solid ${sweepId === sw.id ? C.gold : C.border}`, color: sweepId === sw.id ? C.gold : C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                               {sw.label}
                             </button>
                           ))}
+                        </div>
+                      )}
+
+                      {/* ── AND WHICH ROWS IT LOOKS AT ────────────────────
+                          Only for a sweep that says it can be revised. The two
+                          modes are disjoint by design in selectRows, so this is
+                          a real choice between two sets of rows rather than a
+                          filter on one, and the count under it says which. */}
+                      {sweepById(sweepId)?.revisable && (
+                        <div style={{ display: "flex", gap: 6, marginBottom: 10, alignItems: "center" }}>
+                          {[[false, "Fill the empty ones"], [true, "Look again at the filled ones"]].map(([mode, label]) => (
+                            <button key={String(mode)} disabled={sweepBusy || sweepWriteState?.running}
+                              onClick={() => { setSweepRevise(mode); setSweepProposals(null); setSweepState(null); }}
+                              style={{ background: sweepRevise === mode ? `${C.gold}22` : "none", border: `1px solid ${sweepRevise === mode ? C.gold : C.border}`, color: sweepRevise === mode ? C.gold : C.muted, borderRadius: 100, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {/* Said before he spends the run rather than after. The
+                          quote check is what makes this pass trustworthy and it
+                          is also its limit, and the limit is not obvious from
+                          the button. */}
+                      {sweepRevise && (
+                        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>
+                          This reads each entry's own words again and proposes a change only where they point somewhere else. A town whose writing never mentions its nightlife will not gain it here, however true it is. That needs the writing changed, not the tags.
                         </div>
                       )}
 

@@ -61,30 +61,6 @@ export const THEME_EMOJI = {
 // chips on it is unreadable at the size these render.
 export const MAX_THEMES = 3;
 
-// ── AND THE SAME THREE WORDS AS A LINE ──────────────────────────────
-//
-// Oliver, 9 Sep 2026, looking at the map beside a reply that had offered him
-// Aalborg, Copenhagen and Aarhus: "is it possible to include what the city is
-// best for? When given options like that".
-//
-// It is, and without asking the model or writing anything new: every published
-// row already carries up to three of these. The line is built from the row's
-// OWN themes, so it cannot say something the entry does not claim.
-//
-// EMPTY FOR A ROW WITH NO THEMES, deliberately, and that is not a rarity: the
-// hardcoded fallback towns carry none at all. A label reading "Aarhus ·" with
-// nothing after it is worse than a label reading "Aarhus", so the caller gets
-// "" and prints the name alone.
-//
-// The separator is a middle dot rather than a comma, because at this size a
-// comma reads as part of the word before it.
-export const themeLine = (entry, translate) => {
-  const words = themesOf(entry).map(t => THEME_LABEL[t]).filter(Boolean);
-  if (!words.length) return "";
-  const say = typeof translate === "function" ? translate : (w) => w;
-  return words.map(w => say(w)).join(" · ");
-};
-
 const clean = (v) => String(v == null ? "" : v).trim().toLowerCase();
 
 // Accepts what a model actually returns: an array, or a comma-separated string,
@@ -273,4 +249,65 @@ export const tierBadge = (entry) => {
   if (!t) return null;
   const tone = TIER_TONE[t.id] || TIER_TONE.worth;
   return { id: t.id, label: `${t.mark ? `${t.mark} ` : ""}${t.label}`, ...tone };
+};
+
+// ── ONE THEME EACH, AND THEY HAVE TO DIFFER ─────────────────────────
+//
+// Oliver, 9 Sep 2026, looking at three cities on the map labelled
+// "History · Art · Family", "History · Food · Art" and "History · Art · Family":
+// "I find that the categories doesn't paint a great 'difference'. You wanna
+// paint a proper difference." Then his own design: "The themes should change as
+// much as possible" and a short "Best if you want history".
+//
+// He is right, and the first version was mine to get wrong. themes is a FILTER
+// vocabulary: nine values, three per row, and the comment above it in
+// studioContent says out loud why it is closed, that two entries about the same
+// kind of place always say it the same way. That property is what makes it work
+// for "show me somewhere with nature" and what makes it useless for telling
+// Aalborg from Aarhus, which genuinely both have history and art.
+//
+// ── SO PICK, RATHER THAN PRINT ──────────────────────────────────────
+//
+// One theme per place, chosen so the picks differ. His Aalborg and Aarhus carry
+// the IDENTICAL three, and even then this separates them: one takes art, the
+// other family, and Copenhagen takes the food neither of the others has.
+//
+// Exhaustive rather than greedy, because greedy gets this wrong in the case
+// that matters. Six pins of three themes is 729 arrangements, which is nothing,
+// and a greedy pass that hands Copenhagen "history" first leaves the other two
+// fighting over what is left.
+//
+// TIES GO TO THE ROW'S OWN ORDER. The three themes on an entry are in the order
+// the founder wrote them, so index 0 is what he thinks the place is mostly
+// about. Where two arrangements are equally distinct, the one that honours more
+// first choices wins.
+export const distinctThemes = (entries) => {
+  const rows = (Array.isArray(entries) ? entries : [])
+    .filter(e => e && e.key != null)
+    .map(e => ({ key: e.key, opts: themesOf(e.themes ? e : { themes: e.themes }) }));
+  const out = {};
+  if (!rows.length) return out;
+  // A row with no themes takes no part in the search and gets nothing, which is
+  // the honest answer: the fallback towns carry none at all.
+  const live = rows.filter(r => r.opts.length);
+  if (!live.length) return out;
+  let best = null, bestScore = null;
+  const walk = (i, taken, picks) => {
+    if (i === live.length) {
+      const distinct = new Set(picks.filter(Boolean)).size;
+      const firsts = picks.reduce((n, p, j) => n + (live[j].opts.indexOf(p) === 0 ? 1 : 0), 0);
+      const order = picks.reduce((n, p, j) => n + live[j].opts.indexOf(p), 0);
+      const score = [distinct, firsts, -order];
+      if (!bestScore || score[0] > bestScore[0]
+        || (score[0] === bestScore[0] && score[1] > bestScore[1])
+        || (score[0] === bestScore[0] && score[1] === bestScore[1] && score[2] > bestScore[2])) {
+        bestScore = score; best = picks.slice();
+      }
+      return;
+    }
+    for (const opt of live[i].opts) walk(i + 1, taken, picks.concat(opt));
+  };
+  walk(0, new Set(), []);
+  live.forEach((r, i) => { if (best[i]) out[r.key] = best[i]; });
+  return out;
 };

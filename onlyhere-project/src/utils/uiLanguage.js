@@ -430,6 +430,19 @@ export const UI_STRINGS = {
   "auth.storeLead":     { en: "We store your email, what you fill in here, and your saved list. Gemlyx also notices which kinds of trip you build, so the next guide lands closer. No tracking, no marketing email, nothing sold. You can delete your account and everything in it from this menu at any time, and the", da: "Vi gemmer din mail, det du udfylder her, og din liste over gemte steder. Gemlyx lægger også mærke til, hvilke slags ture du bygger, så den næste guide rammer tættere på. Ingen sporing, ingen reklamemails, intet bliver solgt. Du kan slette din konto og alt i den fra denne menu når som helst, og", de: "Wir speichern deine E-Mail, was du hier ausfüllst, und deine gespeicherte Liste. Gemlyx merkt sich auch, welche Art von Reisen du planst, damit der nächste Reiseführer näher trifft. Kein Tracking, keine Werbemails, nichts wird verkauft. Du kannst dein Konto und alles darin jederzeit aus diesem Menü löschen, und die" },
   "auth.storeTail":     { en: "is the long version.", da: "er den lange udgave.", de: "ist die lange Fassung." },
 
+  // ── WHAT A PIN ON THE MAP IS BEST FOR ─────────────────────────────
+  //
+  // Oliver's own wording, 9 Sep 2026: "a short 'Best if you want history'
+  // 'Best if you want nightlife' 'Best if you want Art'".
+  //
+  // GERMAN TAKES A DIFFERENT SHAPE ON PURPOSE. "Best if you want art" is a
+  // prefix plus a noun in English and in Danish, and in German the verb goes to
+  // the end ("Am besten, wenn du Kunst willst"), so a prefix cannot work. The
+  // German column says "best for" instead, which is the same thing said the way
+  // the language says it. Each column is its own sentence; that is the point of
+  // having three of them.
+  "map.bestFor":     { en: "Best if you want", da: "Bedst hvis du vil have", de: "Am besten für" },
+
   // The two search boxes that are not the header's. header.search covers that
   // one already, and these say what they search rather than repeating "Søg".
   "search.attractions": { en: "Search attractions", da: "Søg i attraktioner", de: "Attraktionen suchen" },

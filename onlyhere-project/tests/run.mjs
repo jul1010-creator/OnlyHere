@@ -75,7 +75,7 @@ writeFileSync(entry, `
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
   export { scopeTier, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM, islandOf, ISLAND_BY_KOMMUNE, ISLAND_LABEL } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
-  export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
+  export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES, distinctThemes } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { tierBadge, TIER_TONE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { withoutNonModes, travelModeKey as travelModeKeyForTest } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { travelLabel, isAtTravelOrigin, ORIGIN_TAIL, TRAVEL_ORIGIN as TRAVEL_ORIGIN_NAME, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, stripMarkdown, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -159,7 +159,7 @@ writeFileSync(entry, `
   export { GOOGLE_SIGN_IN } from ${JSON.stringify(join(root, "src/config.js"))};
   export { writeInLanguage } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { guideLanguage, languageOfProse, ruledOutLanguages, briefSentences, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS, MARKER_FLOOR, MARKER_MARGIN } from ${JSON.stringify(join(root, "src/utils/travellerLanguage.js"))};
-  export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, BESIDE_ROW_CLASS } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
+  export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, BESIDE_ROW_CLASS, LABEL_CLASS, LABEL_SIDES, LABEL_GAP, labelBox, labelSides } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
   export { costLines, byUrgency, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
@@ -253,7 +253,7 @@ writeFileSync(entry, `
   export { NOTICED_LABEL, ME_SECTIONS, meSectionFor, DEFAULT_ME_SECTION } from ${JSON.stringify(join(root, "src/components/AboutMePage.jsx"))};
   export { placeKindOf, kindLabel, KIND_LABEL, isArea, baseTownFor, relationLine, collapseToParent, areasInside, dayTripsFrom, PLACE_KINDS } from ${JSON.stringify(join(root, "src/utils/placeKind.js"))};
   export { SWEEP_INTENT, SWEEP_PROMPT } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
-  export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
+  export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields, changedOnly, FROM_ENTRY_PROMPT } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT, correctionLanded, claimLanded, describeCorrection, hasAnchor } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { shapeForLive, madeHeading, isPublisherNote, PUBLISHER_NOTE, cleanCredit } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { longestEcho, echoWords, isNameEcho, echoInDraft, describeEcho, ECHO_RUN } from ${JSON.stringify(join(root, "src/utils/echoCheck.js"))};
@@ -4238,6 +4238,126 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const tax = sweepById("taxonomy");
   is("only the right type is selected", selectRows(rows, tax).map(r => r.id), [1, 2, 6, 7]);
   is("a row that already has the field is left alone", selectRows(rows, tax).some(r => r.id === 3), false);
+
+  // ── AND THE PASS THAT LOOKS AGAIN AT WHAT IS THERE ───────────────
+  //
+  // Oliver, 9 Sep 2026, after the chat map labelled Aalborg and Aarhus
+  // identically: "we need to do a sweep of 'nightlife' for towns that has great
+  // nightlife." The fill pass cannot reach either of them. `missing` treats a
+  // row with three themes as finished, however wrong those three are, so a
+  // first draft's guess was permanent unless somebody edited it by hand.
+  {
+    const themes = sweepById("themes");
+    const towns = [
+      { id: 11, type: "town", payload: { name: "Aalborg", themes: ["history", "art", "family"] } },
+      { id: 12, type: "town", payload: { name: "Nowhere", themes: [] } },
+      { id: 13, type: "food", payload: { name: "A restaurant", themes: [] } },
+    ];
+    // THE TWO MODES ARE DISJOINT, which is what makes the counts mean
+    // anything: "one to fill, one to look at again" is two honest numbers.
+    is("fill takes the empty one", selectRows(towns, themes).map(r => r.id), [12]);
+    is("and revise takes the filled one", selectRows(towns, themes, { revise: true }).map(r => r.id), [11]);
+    is("with nothing in both", selectRows(towns, themes).filter(r =>
+       selectRows(towns, themes, { revise: true }).some(o => o.id === r.id)), []);
+    // A sweep that has not declared itself revisable returns nothing rather
+    // than quietly running the fill pass under another name.
+    const filledRow = [{ id: 14, type: "town", payload: { name: "Ribe", placeKind: "village" } }];
+    is("a sweep that has not said it can be revised offers nothing",
+       selectRows(filledRow, tax, { revise: true }), []);
+    is("and the same row comes back the moment it has",
+       selectRows(filledRow, { ...tax, revisable: true }, { revise: true }).map(r => r.id), [14]);
+    ok("and the themes sweep says it can be", sweepById("themes").revisable === true);
+
+    // A filled field is the one to ask about when revising, and only then.
+    is("a filled field is closed when filling", M.openFields(themes, { themes: ["history"] }, {}), []);
+    is("and open when revising", M.openFields(themes, { themes: ["history"] }, {}, { revise: true }), ["themes"]);
+    // But not one this run just derived, or it is asked about twice.
+    is("and not one this run already answered",
+       M.openFields(themes, { themes: ["history"] }, { themes: ["food"] }, { revise: true }), []);
+
+    // ── AND A PROPOSAL THAT CHANGES NOTHING IS NOT ONE ─────────────
+    // Revising, "these three were right" is the common answer and a correct
+    // one. Nobody should have to tick it, and the count he is shown has to be
+    // the number of rows that would actually change.
+    is("the same set written in another order is not a change",
+       M.changedOnly({ themes: ["art", "history"] }, { themes: ["history", "art"] }, ["themes"]), {});
+    is("a real change survives",
+       M.changedOnly({ themes: ["nightlife", "art"] }, { themes: ["history", "art"] }, ["themes"]).themes,
+       ["nightlife", "art"]);
+    is("and case is not a change either",
+       M.changedOnly({ placeKind: "City" }, { placeKind: "city" }, ["placeKind"]), {});
+
+    // ── THE PROMPT SAYS WHAT IS ALREADY THERE ──────────────────────
+    // Revising without showing the current value asks the model to re-derive
+    // from nothing, and then a considered confirmation and a coin flip look
+    // identical from outside.
+    const rev = M.FROM_ENTRY_PROMPT({ name: "Aalborg", themes: ["history"] }, "Q?", ["themes"], null, { revise: true });
+    const fill = M.FROM_ENTRY_PROMPT({ name: "Aalborg", themes: ["history"] }, "Q?", ["themes"], null);
+    ok("the revise prompt shows it", /THIS IS A REVIEW, NOT A BLANK FORM/.test(rev) && /history/.test(rev));
+    ok("and the fill prompt does not", !/THIS IS A REVIEW/.test(fill));
+    // The rule the whole file rests on is not weakened by revising: the model
+    // still may not use what it knows, and its quote is still checked.
+    ok("and revising keeps the quote rule",
+       /you may not use anything you know about Denmark/.test(rev)
+       && /checked automatically against the entry text/.test(rev));
+
+    // ── AND THE RUN ITSELF STRIPS WHAT DID NOT CHANGE ──────────────
+    //
+    // changedOnly above is the rule; this is the rule actually reaching a run.
+    // The mutant that deleted the call died on the unwired-export scan rather
+    // than on anything about sweeps, which is a kill by accident: nothing was
+    // asserting the behaviour, only that the function was referenced somewhere.
+    {
+      const written = { name: "Aalborg", themes: ["history", "art"],
+        desc: "The old town keeps its half-timbered houses and the art museum is the reason most people come." };
+      const says = (t) => async () => ({ text: JSON.stringify({
+        themes: t, quote: "the art museum is the reason most people come", evidence: "the description" }) });
+      const go = (rows, revise, t) => proposeSweep({
+        sweep: themes, rows, knownPlaces: new Map(), revise,
+        deps: { askClaude: says(t), parseJSON: (x) => JSON.parse(x) } });
+      const confirmed = await go([{ id: 21, type: "town", payload: written }], true, ["art", "history"]);
+      is("a revise run that confirms the current answer proposes nothing", confirmed[0].patch, {});
+      is("and nothing is pre-ticked for him to un-tick", confirmed[0].accepted, false);
+      const moved = await go([{ id: 22, type: "town", payload: written }], true, ["nightlife", "art"]);
+      is("while a real change comes through", moved[0].patch, { themes: ["nightlife", "art"] });
+      // Filling is not revising: the same answer over an empty field IS the
+      // change, because empty to something is what filling means.
+      const filledIn = await go([{ id: 23, type: "town", payload: { ...written, themes: [] } }], false, ["art", "history"]);
+      is("and filling still proposes what it found", filledIn[0].patch, { themes: ["art", "history"] });
+    }
+
+    // ── AND THE PANEL AND THE RUN AGREE ON WHICH MODE IT IS ────────
+    // Three lines, and any one of them left behind runs the fill pass under the
+    // revise button's label: a count he cannot reconcile and a run that reads
+    // the wrong rows.
+    const appSweeps = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the choice is offered only where there are two modes",
+       /\{sweepById\(sweepId\)\?\.revisable && \(/.test(appSweeps));
+    ok("the rows it picks follow the mode",
+       /selectRows\(rows, sweep, \{ revise: sweepRevise \}\)/.test(appSweeps));
+    ok("and so does what it asks about them",
+       /sweep, rows: batch, knownPlaces, revise: sweepRevise,/.test(appSweeps));
+  }
+
+  // ── AND THE PROMPT AND THE CONSTANT ARE ONE LIST ─────────────────
+  //
+  // PLACE_THEMES has held nine words since design and market were added, and
+  // the town draft prompt typed out seven of them, so those two could not be
+  // drafted onto a town at all while the sweep offered them, the filter chips
+  // showed them and the cards rendered them. Nothing could tell an oversight
+  // from a decision, because the shorter list was never written down as a rule.
+  {
+    const townPrompt = String(M.studioPrompts("Aalborg").town || "");
+    const offered = townPrompt.match(/1 to (\d+) of EXACTLY these words and no others: ([^.]*)\./);
+    ok("the town prompt still asks for themes", !!offered);
+    is("and offers exactly the constant's list", offered?.[2], M.PLACE_THEMES.join(", "));
+    is("and the constant's cap", Number(offered?.[1]), M.MAX_THEMES);
+    // Read from the source rather than the rendered string, so the words cannot
+    // be typed back in and left to drift a second time.
+    const promptSrc = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
+    ok("built from the constant rather than typed out",
+       /\$\{PLACE_THEMES\.join\(", "\)\}/.test(promptSrc));
+  }
   is("a payload with no name is not a row we can work on", selectRows(rows, tax).some(r => r.id === 5), false);
   is("no sweep means no rows", selectRows(rows, null), []);
 
@@ -5193,6 +5313,88 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and refuses what is not there", !hasTheme({ themes: ["history"] }, "nightlife"));
   ok("no filter matches everything", hasTheme({ themes: [] }, null));
   is("only themes something carries get a chip", themesPresent([{ themes: ["food"] }, { themes: ["food", "art"] }]), ["food", "art"]);
+
+  // ── AND ONE OF THEM, CHOSEN SO THE SET READS DIFFERENTLY ─────────
+  //
+  // Oliver, 9 Sep 2026, on three cities the chat map had labelled
+  // History·Art·Family, History·Food·Art and History·Art·Family: "I find that
+  // the categories doesn't paint a great 'difference'. You wanna paint a proper
+  // difference."
+  //
+  // He was right, and the cause is a property of this vocabulary rather than a
+  // bug in the map. `themes` is CLOSED on purpose, so two entries about the
+  // same kind of place always say it the same way, and that is exactly the
+  // property that stops it telling Aalborg from Aarhus. Asked per row, every
+  // honest answer is the same answer.
+  //
+  // So the pick is made ACROSS the set instead: one theme each, chosen so the
+  // picks differ. Asserted on his own three rows, two of which carry identical
+  // themes and are still separated.
+  is("one theme each, chosen so the set reads differently",
+     M.distinctThemes([
+       { key: "aalborg",    themes: ["history", "art", "family"] },
+       { key: "copenhagen", themes: ["history", "food", "art"] },
+       { key: "aarhus",     themes: ["history", "art", "family"] },
+     ]),
+     { aalborg: "history", copenhagen: "food", aarhus: "art" });
+  // Written as the COUNT as well, because that is the claim: three rows sharing
+  // a first choice still come out as three different words. A rewrite that
+  // orders them differently is not a failure; one that gives two rows the same
+  // word is the bug he reported.
+  is("three rows that share a first choice still get three words",
+     new Set(Object.values(M.distinctThemes([
+       { key: "a", themes: ["history", "art", "family"] },
+       { key: "b", themes: ["history", "food", "art"] },
+       { key: "c", themes: ["history", "art", "family"] },
+     ]))).size, 3);
+
+  // ── AND A ROW KEEPS ITS OWN STRONGEST THEME WHERE IT CAN ─────────
+  //
+  // Distinctness alone does not settle these three: Copenhagen taking art and
+  // Aarhus keeping food, or Copenhagen taking food and Aarhus pushed to art,
+  // are both three distinct words at the same total cost. The tie goes to the
+  // arrangement where more places keep the theme their own entry put first,
+  // which is the difference between a label that is merely different and one
+  // that is also true of the place wearing it.
+  is("a tie goes to the row that would keep its own first choice",
+     M.distinctThemes([
+       { key: "ribe",       themes: ["history"] },
+       { key: "copenhagen", themes: ["history", "food", "art"] },
+       { key: "aarhus",     themes: ["food", "art"] },
+     ]),
+     { ribe: "history", copenhagen: "art", aarhus: "food" });
+  // The common case, where the rows already differ: everything shows its own
+  // first choice and nothing is moved to make a point.
+  is("and where nothing competes, every row shows its first",
+     M.distinctThemes([{ key: "a", themes: ["food", "art"] }, { key: "b", themes: ["history"] }]),
+     { a: "food", b: "history" });
+
+  // ── AND IT NEVER INVENTS ONE ─────────────────────────────────────
+  // The fallback towns carry no themes at all. A row with none takes no part in
+  // the search and gets nothing, which is the honest answer and is what lets
+  // the map render the name on its own rather than a dangling separator.
+  is("a row with no themes gets nothing rather than a guess",
+     M.distinctThemes([{ key: "a", themes: [] }, { key: "b", themes: ["food"] }]), { b: "food" });
+  is("and a set carrying none at all comes back empty", M.distinctThemes([{ key: "a", themes: [] }]), {});
+  is("as does no set", M.distinctThemes([]), {});
+  is("and rubbish", M.distinctThemes(null), {});
+  // Two rows whose ONLY theme is the same word both keep it. A distinct label
+  // is worth having and a wrong one is not, so it stops rather than reaching
+  // for a second word neither row carries.
+  is("it never reaches for a word a row does not have",
+     M.distinctThemes([{ key: "a", themes: ["history"] }, { key: "b", themes: ["history"] }]),
+     { a: "history", b: "history" });
+  // Whatever it hands back is a real theme of that row's own, which is the
+  // check that would have caught a scoring rewrite handing back an index.
+  ok("and every word it hands back belongs to the row it names", (() => {
+    const rows = [
+      { key: "a", themes: ["nature", "coast"] },
+      { key: "b", themes: ["coast", "food"] },
+      { key: "c", themes: ["food", "art", "design"] },
+    ];
+    const out = M.distinctThemes(rows);
+    return rows.every(r => !(r.key in out) || r.themes.includes(out[r.key]));
+  })());
 
   // ── THE TIER WAS STORED AND INVISIBLE ────────────────────────────
   // It only ever surfaced as a Top Pick badge on the very highest tier, so
@@ -42494,6 +42696,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // The fine warning is pinned to the top of Essentials and must not follow
     // the reader onto Tips.
     ok("the fine warning stays on the tab it belongs to", /onTips \? \[\] : essentials\.filter\(e => e\.id === 7\)/.test(app));
+    // ── AND THE WEATHER IS NOT ON THIS TAB EITHER ──────────────────
+    // Oliver, 9 Sep 2026: "remove weather forecast from tips." Tips is the tab
+    // for things worth knowing, and a live seven-day forecast is neither a tip
+    // nor something that stays true, so it belongs with the rest of the
+    // before-you-go list on Essentials.
+    ok("the forecast is on Essentials and not on Tips",
+       /\{!onTips && \(\s*<div id="ess-weather"/.test(app));
+    // And the chip that jumps to it, or Tips keeps a button pointing at an
+    // anchor that is no longer on the page.
+    ok("and neither is the chip that jumps to it",
+       /\.\.\.\(onTips \? \[\] : \[\{ id: "ess-weather"/.test(app));
     // AND THE MERGED OPERATORS ARE DRAWN, or Kombardo and Rejsekort are in the
     // data and invisible — which is this project's signature failure.
     ok("a merged card draws its operators", /\{isMerged\(item\) && \(/.test(app));
@@ -44464,6 +44677,85 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // at three pins on a 330px map they touch.
   ok("and a label never takes a tap meant for a pin",
      /interactive: false/.test(chatCode) && /pointer-events: none/.test(M.railMapCss({})));
+
+  // ── AND WHICH SIDE EACH LABEL GOES ON IS COUNTED, NOT ASSUMED ────
+  //
+  // "have all of them shown (without overlapping oneanother)". Three permanent
+  // labels on a 330px map is the case that forced this: at one fixed side they
+  // touch, and a label lying over a pin makes that pin impossible to hover or
+  // tap, which is a worse version of the card he was already clicking off.
+  //
+  // Pure, and kept out of the component on purpose: this is the part with a bug
+  // in it if anything has, and it is answerable with numbers rather than by
+  // opening a browser and squinting at it.
+  {
+    const size = { x: 330, y: 300 };
+    const at = (key, x, y) => ({ key, x, y, w: 80, h: 26, ph: 24 });
+    is("a label with nothing near it goes above its pin",
+       M.labelSides({ pins: [at("a", 160, 150)], size }), { a: "top" });
+    // ── A LABEL MUST MISS THE PINS ─────────────────────────────────
+    // The lower of two close pins cannot label upward: the box lands on the pin
+    // above, and that pin can then be neither hovered nor tapped at all.
+    is("and it moves when above would cover another pin",
+       M.labelSides({ pins: [at("up", 160, 80), at("low", 160, 110)], size }),
+       { up: "top", low: "bottom" });
+    // ── AND THE LABELS ALREADY PLACED ──────────────────────────────
+    // Isolated deliberately: these two pins are far enough apart that neither
+    // box touches the other PIN, so the only thing that can move the second one
+    // is the first one's LABEL. Without that half of the count they overlap and
+    // one of the two answers is unreadable, which is the same failure as
+    // covering a pin, one step later.
+    is("and when it would cover a label already placed",
+       M.labelSides({ pins: [at("a", 120, 150), at("b", 170, 150)], size }),
+       { a: "top", b: "bottom" });
+    // ── SPILLING OFF AN EDGE COSTS SOMETHING, AND COSTS LESS ───────
+    // A pin near the top has nothing above it to cover, so only the edge can
+    // move it. Off the edge Leaflet pans and everything stays reachable, which
+    // is why the cost is real and is smaller than covering a pin.
+    is("a label that would fall off the top goes under instead",
+       M.labelSides({ pins: [at("t", 160, 30)], size }), { t: "bottom" });
+    is("and with no size given there is no edge to fall off",
+       M.labelSides({ pins: [at("t", 160, 30)] }), { t: "top" });
+    // Greedy in the order given, and the component passes the newest place
+    // first, so the place a reply has just added gets the pick of the sides.
+    is("the order given is the order served",
+       M.labelSides({ pins: [at("low", 160, 110), at("up", 160, 80)], size }),
+       { low: "bottom", up: "top" });
+    is("nothing to place is not an error", M.labelSides({}), {});
+    is("and a pin with no key takes no part", M.labelSides({ pins: [{ x: 1, y: 1 }] }), {});
+
+    // ── THE BOX A LABEL OCCUPIES CLEARS THE WHOLE PIN ──────────────
+    // The anchor is the TIP and the body stands above it, so a box measured
+    // from the tip alone sits across the pin it is naming. `ph` is what buys
+    // that clearance, and it is the half a version without it gets wrong while
+    // looking correct in the source.
+    const above = M.labelBox({ x: 100, y: 100, w: 80, h: 30, ph: 24 }, "top");
+    ok("a label above ends above the pin's head", above.b <= 100 - 24);
+    is("and it is centred on the pin", [above.l, above.r], [60, 140]);
+    // Beside, it sits on the BODY rather than the tip, or it hangs off the
+    // bottom of the pin it is supposed to be labelling.
+    const beside = M.labelBox({ x: 100, y: 100, w: 80, h: 30, ph: 24 }, "right");
+    ok("a label beside sits across the pin's body", beside.t < 88 && beside.b > 88);
+    ok("and clear of it, by the gap", beside.l >= 100 + M.LABEL_GAP);
+    is("and the four sides are four different boxes",
+       new Set(M.LABEL_SIDES.map(s =>
+         JSON.stringify(M.labelBox({ x: 100, y: 100, w: 80, h: 30, ph: 24 }, s)))).size,
+       M.LABEL_SIDES.length);
+  }
+
+  // ── AND THE CLASS THE MAP BINDS IS THE CLASS THE CSS STYLES ──────
+  // Against the constant rather than the string it holds, because the two
+  // drifting apart leaves an unstyled Leaflet tooltip: a white box with a white
+  // arrow, on a dark map, which is exactly what this replaced.
+  {
+    const labelCss = M.railMapCss({ border: "#333", text: "#fff", gold: "#C9A227" });
+    ok("the label's styling targets the class the map binds",
+       labelCss.includes(`.${M.LABEL_CLASS} {`));
+    ok("its arrow is off, because it points at a pin it is often not above",
+       labelCss.includes(`.${M.LABEL_CLASS}::before { display: none; }`));
+    ok("and the name and the line under it are separate rows",
+       labelCss.includes(`.${M.LABEL_CLASS} .pin-name`) && labelCss.includes(`.${M.LABEL_CLASS} .pin-best`));
+  }
   // The place name goes in as HTML, so it is escaped. A row is content.
   ok("and a place name is escaped on the way in",
      /const esc = \(v\) => String\(v \?\? ""\)\.replace\(\/\[&<>"\]\/g/.test(chatCode)
@@ -44471,9 +44763,47 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // The words come from the row's own themes, in the reader's language, and
   // through the CODE rather than the object: entryWord given readerLanguage()'s
   // object would not recognise it and would hand back the English in silence.
-  ok("the label says what the place is for, in the reader's language",
-     /themeLine\(p\.place, \(word\) => entryWord\(word, code\)\)/.test(chatCode)
+  // ── AND IT PAINTS A DIFFERENCE, WHICH THE FIRST VERSION DID NOT ──
+  //
+  // Oliver, 9 Sep 2026, on three cities labelled History·Art·Family,
+  // History·Food·Art and History·Art·Family: "I find that the categories
+  // doesn't paint a great 'difference'." He was right and it was my mistake:
+  // themes is a FILTER vocabulary, closed on purpose so two entries about the
+  // same kind of place always say it the same way, which is exactly the
+  // property that stops it telling Aalborg from Aarhus.
+  //
+  // His fix, and it works on his own data: one theme each, chosen ACROSS the
+  // set so the picks differ. Two of his three rows carry identical themes and
+  // it still separates them.
+  ok("one theme each, chosen across the whole set rather than per pin",
+     /const picked = distinctThemes\(list\.map\(p => \(\{ key: p\.key, themes: p\.place\?\.themes \}\)\)\);/.test(chatCode));
+  ok("and the sentence is his, in the reader's language",
+     /uiT\("map\.bestFor", code\)/.test(chatCode)
      && /const code = String\(lang\?\.tag \|\| ""\)\.split\("-"\)\[0\]\.toLowerCase\(\);/.test(chatCode));
+  // A row with no themes gets the name alone rather than a dangling separator:
+  // the fallback towns carry none, and "Aarhus · " with nothing after it is
+  // worse than "Aarhus". Written as the whole ternary, because `: ""` on its
+  // own matches most of this file.
+  ok("and a row with no themes gets no line at all",
+     /const theme = picked\[p\.key\];\s*const best = theme\s*\?[\s\S]{0,160}?\s*: "";/.test(chatCode));
+  // ── AND THE LINE THAT SAYS WHAT IT IS FOR IS IN THE LABEL ────────
+  // Not beside it, and not back in the hover card. The whole point of the
+  // change was that all of them are readable at once without clicking anything,
+  // so a version keeping the name and dropping the line has undone it while
+  // every other assertion here stays green.
+  ok("the label carries the name and the line under it",
+     /`<span class="pin-name">\$\{esc\(p\.place\?\.name \|\| ""\)\}<\/span>`\s*\+ \(best \? `<span class="pin-best">\$\{esc\(best\)\}<\/span>` : ""\)/
+       .test(chatCode));
+  // His words, and read from the catalogue rather than typed into the
+  // component, because it is chrome and the rest of the chrome is read from
+  // there. The German column takes a different SHAPE rather than a translation
+  // of the English one, since the verb would go to the end of it.
+  ok("the sentence is written in all three languages",
+     ["en", "da", "de"].every(c => String(M.UI_STRINGS["map.bestFor"]?.[c] || "").trim()));
+  ok("and neither column is English wearing another label",
+     M.UI_STRINGS["map.bestFor"].da !== M.UI_STRINGS["map.bestFor"].en
+     && M.UI_STRINGS["map.bestFor"].de !== M.UI_STRINGS["map.bestFor"].en);
+  ok("and the Danish one is Danish", /hvis du/i.test(M.UI_STRINGS["map.bestFor"].da));
   ok("at the layout built for it", /layout="pin"/.test(chatCode));
   is("and the map writes no <img> of its own", (chatCode.match(/<img|innerHTML/g) || []).length, 0);
   ok("a pin with no showable photograph gets no card", /const shot = showablePhoto\(p\.place\);\s*if \(!shot\) \{/.test(chatCode));
@@ -47589,7 +47919,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // them did not, so a Danish reader opened the menu and met Saved trips,
   // Navigate, FAQ and Support in English with Tema underneath. Half a
   // translation reads worse than none, because it looks like the switch failed.
-  const MENU_KEYS = ["menu.navigate", "menu.saved", "menu.faq", "menu.credits", "menu.support", "menu.account", "menu.signIn"];
+  const MENU_KEYS = ["menu.navigate", "menu.saved", "menu.faq", "menu.credits", "menu.support", "menu.account", "menu.signIn", "menu.paid"];
   is("every menu row is in the catalogue", MENU_KEYS.filter(k => !UI_STRINGS[k]), []);
   is("and every one of them is written in all three",
      MENU_KEYS.filter(k => !["en", "da", "de"].every(c => String(UI_STRINGS[k]?.[c] || "").trim())), []);
@@ -47601,6 +47931,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   const appMenu = readFileSync(join(root, "src/App.jsx"), "utf8");
   is("and every one is actually rendered from it",
      MENU_KEYS.filter(k => !appMenu.includes(`uiT("${k}", uiLang)`)), []);
+    // ── AND WHERE HE ASKED FOR IT ──────────────────────────────────
+    // Oliver, 9 Sep 2026: "I prefer having 'how we're paid' in the burgermenu
+    // or under FAQ". It was a footer link, which is where a reader looks for it
+    // only after already wondering, and the point of saying it is that they do
+    // not have to wonder.
+    ok("how we are paid is a row in the menu",
+       /\{ id: "paid", label: uiT\("menu\.paid", uiLang\), ico: "book", action: "paid" \}/.test(appMenu));
+    // A row wired to nothing is worse than no row: it looks like the page is
+    // broken rather than like the link is missing.
+    ok("and pressing it opens the page that says it",
+       /else if \(item\.action === "paid"\) navigate\(AFFILIATES_PATH\);/.test(appMenu));
   // The empty states and the two search boxes, same rule. These are the screens
   // where a reader is already unsure whether the site is working, which is the
   // worst possible place for a sentence they cannot read.

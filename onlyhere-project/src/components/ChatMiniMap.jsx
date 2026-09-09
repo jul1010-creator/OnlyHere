@@ -4,8 +4,9 @@ import L from "leaflet";
 import { addTileLayer } from "../utils/mapTiles";
 import { ChatPlaceCards, showablePhoto } from "./ChatPlaceCards";
 import { POPUP_CLASS, RAIL_BREAKPOINT_PX, LABEL_CLASS, labelSides } from "../utils/chatRail";
-import { themeLine } from "../utils/placeThemes";
+import { distinctThemes, THEME_LABEL } from "../utils/placeThemes";
 import { entryWord } from "../utils/entryWords";
+import { t as uiT } from "../utils/uiLanguage";
 
 // ── THE MAP UNDER THE CHAT ──────────────────────────────────────────
 //
@@ -203,6 +204,17 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // language it knows, so it would return the English and say nothing about
     // it. ChatPlaceCards reads the same field the same way one file over.
     const code = String(lang?.tag || "").split("-")[0].toLowerCase();
+    // ── ONE THEME EACH, CHOSEN SO THEY DIFFER ────────────────────
+    //
+    // Across the whole set rather than per pin, which is the entire idea: the
+    // answer for Aarhus depends on what Aalborg took. See distinctThemes.
+    const picked = distinctThemes(list.map(p => ({ key: p.key, themes: p.place?.themes })));
+    // ── AND LOWERCASE, EXCEPT IN GERMAN ──────────────────────────
+    // THEME_LABEL holds capitalised nouns because they are labels on a chip.
+    // Inside a sentence English and Danish want them lowercase, and German
+    // capitalises every noun, so it keeps the label as it is. A fact about the
+    // language rather than a special case.
+    const inSentence = (word) => (code === "de" ? word : word.toLowerCase());
     const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => (
       { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     // The newest ones last, so they are drawn on top of anything they overlap.
@@ -267,7 +279,13 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       // worse than "Aarhus".
       //
       // Escaped, because this goes in as HTML and a place name is content.
-      const best = themeLine(p.place, (word) => entryWord(word, code));
+      // Empty when the row carries no themes, and the label is then the name
+      // alone: the fallback towns have none, and "Aarhus · " with nothing after
+      // it is worse than "Aarhus".
+      const theme = picked[p.key];
+      const best = theme
+        ? `${uiT("map.bestFor", code)} ${inSentence(entryWord(THEME_LABEL[theme] || "", code))}`
+        : "";
       marker.bindTooltip(
         `<span class="pin-name">${esc(p.place?.name || "")}</span>`
         + (best ? `<span class="pin-best">${esc(best)}</span>` : ""),

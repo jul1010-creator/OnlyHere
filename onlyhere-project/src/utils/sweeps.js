@@ -91,6 +91,21 @@ export const SWEEPS = [
     fields: ["themes"],
     missing: ["themes"],
     cap: 40,
+    // ── AND IT CAN BE RUN OVER ROWS THAT ALREADY HAVE THEMES ──────
+    //
+    // Oliver, 9 Sep 2026, looking at Aalborg and Aarhus labelled identically on
+    // the chat map: "we need to do a sweep of 'nightlife' for towns that has
+    // great nightlife." The fill pass cannot reach them. `missing` means a row
+    // with three themes is finished, however wrong those three are, so the
+    // first draft's guess is permanent unless somebody edits it by hand.
+    //
+    // WHAT THIS CANNOT DO, said here rather than discovered later: the tier 2
+    // prompt forbids the model from using anything it knows about Denmark and
+    // checks its quote against the entry's own text. So a revise pass adds
+    // nightlife to a town whose WRITING describes it and never to one whose
+    // writing does not, however true it is. That is the rule this whole file
+    // rests on and revising is not a reason to weaken it.
+    revisable: true,
     // No research tier: what a place is FOR is a judgement about writing that
     // already exists, not a fact to look up. If the entry does not say it, a web
     // search saying "Ribe is historic" is the model's opinion with a citation
@@ -110,18 +125,59 @@ export const sweepById = (id) => SWEEPS.find(s => s.id === id) || null;
 // dead "Inside X" line and a route count that silently loses a town.
 export const RELATION_FIELDS = ["partOf", "dayTripFrom"];
 
+// ── A PROPOSAL THAT CHANGES NOTHING IS NOT A PROPOSAL ───────────────
+//
+// Revising, the common answer is "these three were right". That is a good
+// answer and it is not one anybody should have to tick. Stripped here rather
+// than in the panel, so the count he is shown is the number of rows that would
+// actually change.
+//
+// Arrays compared as SETS, because themes is a set: ["food","art"] and
+// ["art","food"] are the same answer written two ways, and reporting that as a
+// change would fill the panel with noise on the first run.
+export const changedOnly = (patch, payload, fields) => {
+  const out = {};
+  const same = (a, b) => {
+    if (Array.isArray(a) || Array.isArray(b)) {
+      const A = (Array.isArray(a) ? a : []).map(x => clean(x).toLowerCase()).sort();
+      const B = (Array.isArray(b) ? b : []).map(x => clean(x).toLowerCase()).sort();
+      return A.length === B.length && A.every((x, i) => x === B[i]);
+    }
+    return clean(a).toLowerCase() === clean(b).toLowerCase();
+  };
+  for (const f of (Array.isArray(fields) ? fields : Object.keys(patch || {}))) {
+    if (!(f in (patch || {}))) continue;
+    if (same(patch[f], (payload || {})[f])) continue;
+    out[f] = patch[f];
+  }
+  return out;
+};
+
 // ── selection ───────────────────────────────────────────────────────
 // Pure. `rows` are Supabase rows ({id, type, payload}), not merged live items,
 // because a live item carries id = 100000 + the row id and PATCHing that number
 // would write to a row that does not exist or, worse, to the wrong one.
-export const selectRows = (rows, sweep) => {
+// ── THE TWO MODES ARE DISJOINT ON PURPOSE ──────────────────────────
+//
+// Fill takes the rows with NOTHING in the field. Revise takes the rows that
+// already have something. A row cannot be in both, so the counts stay
+// meaningful: "18 to fill, 54 to revise" is two honest numbers, and a revise
+// pass that also filled empties would report a total nobody could reconcile.
+//
+// A sweep that has not declared itself revisable returns nothing in that mode
+// rather than quietly falling back to fill, which would be the same run under a
+// different name.
+export const selectRows = (rows, sweep, { revise = false } = {}) => {
   if (!sweep) return [];
+  if (revise && !sweep.revisable) return [];
   const types = new Set(sweep.types || []);
   return (Array.isArray(rows) ? rows : []).filter(r => {
     if (!r || !r.payload || !clean(r.payload.name)) return false;
     if (types.size && !types.has(r.type)) return false;
     const need = sweep.missing || sweep.fields;
-    return need.some(f => !clean(r.payload[f]));
+    return revise
+      ? need.every(f => clean(r.payload[f]))
+      : need.some(f => !clean(r.payload[f]));
   });
 };
 
@@ -215,11 +271,14 @@ export const deterministicTaxonomy = (payload, knownPlaces) => {
 // An area's dayTripFrom is closed only once partOf is ACTUALLY THERE. The first
 // version closed it on the kind alone, so an entry that came back "area" with
 // no parent was never asked where to sleep and ended up with neither.
-export const openFields = (sweep, payload, patch) => {
+export const openFields = (sweep, payload, patch, { revise = false } = {}) => {
   const merged = { ...(payload || {}), ...(patch || {}) };
   const kind = lower(merged.placeKind);
   return (sweep?.fields || []).filter(f => {
-    if (clean(merged[f])) return false;
+    // Revising, a field that HAS a value is exactly the one to ask about. The
+    // patch is still consulted, so a value tier 1 just derived is not asked
+    // about a second time in the same run.
+    if (clean(merged[f]) && !(revise && !clean((patch || {})[f]))) return false;
     if (sweep.id === "taxonomy") {
       if (kind === "city" && (f === "partOf" || f === "dayTripFrom")) return false;
       if (kind === "area" && f === "dayTripFrom" && clean(merged.partOf)) return false;
@@ -234,13 +293,31 @@ export const openFields = (sweep, payload, patch) => {
 // and there is no way to tell the two apart from the outside. So it must return
 // the words it read, verbatim, and code checks they are actually in the payload
 // before the answer counts.
-export const FROM_ENTRY_PROMPT = (payload, question, fields, hint) => `You are reading ONE published Gemlyx entry and answering a question about it USING ONLY WHAT THE ENTRY ITSELF SAYS.
+// ── AND WHEN IT IS ALREADY ANSWERED, SAY SO ─────────────────────────
+//
+// Revising without showing the current value asks the model to re-derive from
+// scratch, and then nothing can tell a considered confirmation from a coin
+// flip. Shown, and with the burden pointed the right way: the existing answer
+// stands unless the entry's own words say otherwise, which is the same burden
+// every other tier in this file carries.
+const CURRENT_BLOCK = (payload, fields) => {
+  const now = fields
+    .map(f => [f, (payload || {})[f]])
+    .filter(([, v]) => (Array.isArray(v) ? v.length : clean(v)));
+  if (!now.length) return "";
+  return `\nWHAT THE ENTRY ALREADY SAYS FOR THESE FIELDS:\n${
+    now.map(([f, v]) => `  ${f}: ${JSON.stringify(v)}`).join("\n")}\n
+THIS IS A REVIEW, NOT A BLANK FORM. Those values are already published. Change one only where the entry's own words point somewhere else, and return the SAME value when they were right, which will be the common answer. A different answer with no quote behind it is the one thing this pass must never produce.\n`;
+};
+
+export const FROM_ENTRY_PROMPT = (payload, question, fields, hint, { revise = false } = {}) => `You are reading ONE published Gemlyx entry and answering a question about it USING ONLY WHAT THE ENTRY ITSELF SAYS.
 
 THE ENTRY:
 ${JSON.stringify(readableEntry(payload), null, 2)}
 
 THE QUESTION:
 ${question}
+${revise ? CURRENT_BLOCK(payload, fields) : ""}
 ${hint ? `\nSOMETHING TO CHECK, NOT TO ASSUME: this entry's name carries "(${hint.parent})" in brackets. That says the two places are related. It does NOT say one is inside the other: a district of a city and a village on an island are written the same way. Only answer partOf if the entry's own words say it is INSIDE ${hint.parent}. A place ON an island, or a short drive away, is not inside anything, and that answer belongs in dayTripFrom instead.\n` : ""}
 Fill in only these fields: ${fields.join(", ")}.
 
@@ -349,7 +426,10 @@ export const cleanPatch = (raw, fields, knownPlaces) => {
     const val = raw?.[f];
     // Checked BEFORE the string guard below, because this one is legitimately an
     // array. cleanThemes takes an array, a comma-separated string or a single
-    // word, keeps only the seven real values, dedupes, and caps the list.
+    // word, keeps only the values PLACE_THEMES lists, dedupes, and caps the
+    // list. It said "the seven real values" until 9 Sep 2026 and there have
+    // been nine since design and market were added, which is the same drift
+    // that had the town draft prompt typing seven of them out by hand.
     if (f === "themes") {
       const kept = cleanThemes(val);
       if (kept.length) out[f] = kept;
@@ -471,7 +551,7 @@ export const readSnapshot = (text) => {
 // keeping them apart is what makes rule 1 structural rather than a habit.
 //
 // deps: { askClaude, askPerplexity, parseJSON, onProgress, allowResearch, isCancelled }
-export const proposeSweep = async ({ sweep, rows, knownPlaces, deps = {} }) => {
+export const proposeSweep = async ({ sweep, rows, knownPlaces, revise = false, deps = {} }) => {
   const { askClaude, askPerplexity, parseJSON, onProgress, allowResearch = true, isCancelled } = deps;
   const proposals = [];
   const places = knownPlaces instanceof Map ? knownPlaces : new Map();
@@ -503,9 +583,9 @@ export const proposeSweep = async ({ sweep, rows, knownPlaces, deps = {} }) => {
     // Tier 2. Cheap, and the quote is checked before it counts. Recomputed
     // rather than filtered, because tier 1 may have closed a field instead of
     // filling it.
-    const stillNeed = openFields(sweep, p, patch);
+    const stillNeed = openFields(sweep, p, patch, { revise });
     if (stillNeed.length && askClaude) {
-      const res = await askClaude(FROM_ENTRY_PROMPT(p, sweep.question, stillNeed, hint), 700, "claude-sonnet-5", true);
+      const res = await askClaude(FROM_ENTRY_PROMPT(p, sweep.question, stillNeed, hint, { revise }), 700, "claude-sonnet-5", true);
       if (!res.error && res.text) {
         let parsed = null;
         try { parsed = parseJSON ? await parseJSON(res.text) : JSON.parse(res.text); } catch { parsed = null; }
@@ -539,6 +619,10 @@ export const proposeSweep = async ({ sweep, rows, knownPlaces, deps = {} }) => {
     }
 
     patch = dropSelfReferences(cleanPatch(patch, sweep.fields, places), p.name);
+    // Revising, "these were already right" is the common answer and a correct
+    // one. Dropped here so the panel counts rows that would actually change,
+    // and so ticking everything cannot write a row back over itself.
+    if (revise) patch = changedOnly(patch, p, sweep.fields);
     for (const f of Object.keys(marks)) { if (!(f in patch)) { delete marks[f]; delete evidence[f]; delete sources[f]; } }
 
     const fieldList = Object.keys(patch);
