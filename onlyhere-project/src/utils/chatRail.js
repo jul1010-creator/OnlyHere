@@ -235,6 +235,9 @@ export const MAP_CLASS = "chat-rail-map";
 // there is no column to put a map in, and a map stacked into a phone panel
 // pushes the reply off the top.
 export const POPUP_CLASS = "gemlyx-chat-popup";
+// Every pin carries one of these, always. labelSides at the foot of this file
+// decides where each one goes and says why it is a label rather than the card.
+export const LABEL_CLASS = "gemlyx-pin-label";
 
 // ── THE POPUP IS THE CARD, SO LEAFLET'S CHROME HAS TO GET OUT ───────
 //
@@ -259,6 +262,27 @@ export const railMapCss = (C = {}) => `
              a stretched map would be a 90px letterbox of the North Sea. */
           .${MAP_CLASS} { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 260px; }
         }
+        /* ── THE LABEL ON EVERY PIN ───────────────────────────────
+           Flat, dark and arrowless. Leaflet's own tooltip is a white box with
+           a pointer on it, which over a dark map reads as a system alert
+           rather than as part of the place. The pin is already the pointer.
+
+           pointer-events: none, because a label must never take a tap meant
+           for the pin it names, and at three pins on a small map they touch. */
+        .${LABEL_CLASS} {
+          background: rgba(10,15,30,.86); border: 1px solid ${C.border};
+          color: ${C.text}; border-radius: 8px; padding: 3px 7px;
+          font-family: 'Inter', sans-serif; font-size: 10.5px; line-height: 1.25;
+          box-shadow: 0 2px 8px rgba(0,0,0,.5); white-space: nowrap;
+          pointer-events: none;
+        }
+        .${LABEL_CLASS}::before { display: none; }
+        .${LABEL_CLASS} .pin-name { display: block; font-weight: 700; }
+        /* The themes ARE the answer to "what is it for", so they are readable
+           rather than a whisper, and gold because that is the colour this app
+           uses for the thing it is telling you. */
+        .${LABEL_CLASS} .pin-best { display: block; font-size: 9.5px; color: ${C.gold}; font-weight: 600; }
+
         .${POPUP_CLASS} .leaflet-popup-content-wrapper {
           background: transparent; box-shadow: none; padding: 0; border-radius: 12px;
         }
@@ -270,3 +294,83 @@ export const railMapCss = (C = {}) => `
           color: ${C.muted || "#9AA3BC"}; padding: 6px 7px 0 0; font-size: 18px;
         }
         .${POPUP_CLASS} .leaflet-popup-close-button:hover { color: ${C.text || "#EFE9D6"}; }`;
+
+// ── EVERY PIN SAYS WHAT IT IS, AND NONE OF THEM SITS ON ANOTHER ─────
+//
+// Oliver, 9 Sep 2026, looking at a reply that had offered him Aalborg,
+// Copenhagen and Aarhus with one card open over Aarhus: "is it possible to
+// include what the city is best for? When given options like that". Then:
+// "On the map icons. And not just having a default one shown. But have all of
+// them shown (without overlapping oneanother)".
+//
+// THE CARD CANNOT BE THE THING THAT IS ALWAYS SHOWN, and this is arithmetic
+// rather than taste. The card is a fixed 132 wide and the rail is 240 to 380,
+// so three of them side by side is 396 pixels of a map that is 380 at its
+// widest. Stacked, three is 324 of a map that is 260 to 400 tall. The card is
+// the right size for one place at a time and the wrong unit for all of them.
+//
+// A LABEL IS THE UNIT THAT FITS: the name, and the two or three words the row
+// already carries about what it is for. Around 110 by 30, so six of them cost
+// less than two cards.
+//
+// ── WHICH LEAVES WHERE TO PUT THEM ──────────────────────────────────
+//
+// Pure, and separated from Leaflet on purpose: this is the part with a bug in
+// it if anything has, and it is answerable with numbers rather than by opening
+// a browser and squinting. The component measures and applies; this decides.
+//
+// The scoring is the one sideFor already argued for in ChatMiniMap, extended
+// from two sides to four and from pins alone to pins AND the labels already
+// placed:
+//
+//   covering a pin    1.0   that pin cannot be hovered or tapped at all
+//   covering a label  1.0   one of the answers is unreadable
+//   spilling an edge  0.4   Leaflet pans to fit, so everything stays reachable
+//
+// Greedy in the order given rather than an exhaustive search. Six pins over
+// four sides is 4096 arrangements and a perfect answer is not worth a frame of
+// jank; the caller passes the newest place first, so the one a reply just added
+// gets the pick of the sides.
+export const LABEL_SIDES = ["top", "bottom", "right", "left"];
+export const LABEL_GAP = 6;
+
+// The box a label would occupy, given where the pin's TIP is. `ph` is the pin's
+// own height, because the body stands above the tip and a label centred on the
+// tip would sit across the pin it names.
+export const labelBox = (pin, side, gap = LABEL_GAP) => {
+  const x = Number(pin?.x) || 0, y = Number(pin?.y) || 0;
+  const w = Number(pin?.w) || 0, h = Number(pin?.h) || 0;
+  const ph = Number(pin?.ph) || 0;
+  const mid = y - ph / 2;
+  if (side === "bottom") return { l: x - w / 2, r: x + w / 2, t: y + gap, b: y + gap + h };
+  if (side === "right") return { l: x + gap, r: x + gap + w, t: mid - h / 2, b: mid + h / 2 };
+  if (side === "left") return { l: x - gap - w, r: x - gap, t: mid - h / 2, b: mid + h / 2 };
+  return { l: x - w / 2, r: x + w / 2, t: y - ph - gap - h, b: y - ph - gap };
+};
+
+const hits = (a, b) => a.l < b.r && a.r > b.l && a.t < b.b && a.b > b.t;
+
+export const labelSides = ({ pins = [], size = null, gap = LABEL_GAP } = {}) => {
+  const list = Array.isArray(pins) ? pins.filter(p => p && p.key != null) : [];
+  const out = {};
+  const placed = [];
+  for (const pin of list) {
+    let best = LABEL_SIDES[0];
+    let bestScore = Infinity;
+    for (const side of LABEL_SIDES) {
+      const box = labelBox(pin, side, gap);
+      // A pin's tip is the point that has to stay tappable, and the body
+      // stands above it, so the whole pin is what a label must miss.
+      let score = list.filter(o => o.key !== pin.key)
+        .filter(o => hits(box, { l: o.x - 2, r: o.x + 2, t: o.y - (Number(o.ph) || 0), b: o.y }))
+        .length;
+      score += placed.filter(b => hits(box, b)).length;
+      if (size && (box.l < 0 || box.t < 0 || box.r > size.x || box.b > size.y)) score += 0.4;
+      if (score < bestScore) { bestScore = score; best = side; }
+      if (score === 0) break;
+    }
+    out[pin.key] = best;
+    placed.push(labelBox(pin, best, gap));
+  }
+  return out;
+};

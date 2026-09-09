@@ -44445,8 +44445,35 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // a second thing to learn.
   ok("and the newest one is still the one you notice",
      /const w = p\.latest \? 23 : 17;/.test(chatCode) && /opacity:\.72;/.test(chatCode));
-  // And the name on a photo-less pin clears the pin rather than sitting on it.
-  ok("a nameplate is lifted clear of the head", /offset: \[0, -h \+ 6\]/.test(chatCode));
+  // ── AND EVERY PIN SAYS WHAT IT IS ────────────────────────────────
+  //
+  // This used to read "a nameplate is lifted clear of the head" and pin the
+  // hover tooltip a photo-less pin got. On 9 Sep every pin got a PERMANENT
+  // label instead, name and what the place is for, so the hover version went:
+  // Oliver asked to see all of them at once rather than one at a time.
+  //
+  // The clearance it was protecting is still the point. The anchor is the tip
+  // and the body stands above it, so a label above has to clear the whole pin.
+  ok("every pin carries a permanent label",
+     /permanent: true, direction: "top", className: LABEL_CLASS/.test(chatCode));
+  ok("and one above the pin clears its whole head",
+     /side === "top" \? L\.point\(0, -x\.ph\)/.test(chatCode));
+  ok("and one beside it sits on the body rather than the tip",
+     /L\.point\(0, -Math\.round\(x\.ph \/ 2\)\)/.test(chatCode));
+  // A label that could swallow a tap would make the pin under it unusable, and
+  // at three pins on a 330px map they touch.
+  ok("and a label never takes a tap meant for a pin",
+     /interactive: false/.test(chatCode) && /pointer-events: none/.test(M.railMapCss({})));
+  // The place name goes in as HTML, so it is escaped. A row is content.
+  ok("and a place name is escaped on the way in",
+     /const esc = \(v\) => String\(v \?\? ""\)\.replace\(\/\[&<>"\]\/g/.test(chatCode)
+     && /\$\{esc\(p\.place\?\.name \|\| ""\)\}/.test(chatCode));
+  // The words come from the row's own themes, in the reader's language, and
+  // through the CODE rather than the object: entryWord given readerLanguage()'s
+  // object would not recognise it and would hand back the English in silence.
+  ok("the label says what the place is for, in the reader's language",
+     /themeLine\(p\.place, \(word\) => entryWord\(word, code\)\)/.test(chatCode)
+     && /const code = String\(lang\?\.tag \|\| ""\)\.split\("-"\)\[0\]\.toLowerCase\(\);/.test(chatCode));
   ok("at the layout built for it", /layout="pin"/.test(chatCode));
   is("and the map writes no <img> of its own", (chatCode.match(/<img|innerHTML/g) || []).length, 0);
   ok("a pin with no showable photograph gets no card", /const shot = showablePhoto\(p\.place\);\s*if \(!shot\) \{/.test(chatCode));
@@ -44506,7 +44533,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the map asks whether it is on screen at all", /min-width: \$\{RAIL_BREAKPOINT_PX\}px/.test(chatCode));
   // The same constant the CSS uses, so the query and the rule cannot drift.
   ok("and it uses the CSS's own breakpoint rather than a number",
-     chatCode.includes('import { POPUP_CLASS, RAIL_BREAKPOINT_PX } from "../utils/chatRail"'));
+     chatCode.includes('import { POPUP_CLASS, RAIL_BREAKPOINT_PX, LABEL_CLASS, labelSides } from "../utils/chatRail"'));
   // Subscribed, because windows get resized and tablets get rotated.
   ok("and it listens for the width changing", /mq\.addEventListener\("change", onChange\)/.test(chatCode));
   ok("and stops listening when it goes", /mq\.removeEventListener\("change", onChange\)/.test(chatCode));

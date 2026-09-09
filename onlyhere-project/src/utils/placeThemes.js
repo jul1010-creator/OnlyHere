@@ -61,6 +61,30 @@ export const THEME_EMOJI = {
 // chips on it is unreadable at the size these render.
 export const MAX_THEMES = 3;
 
+// ── AND THE SAME THREE WORDS AS A LINE ──────────────────────────────
+//
+// Oliver, 9 Sep 2026, looking at the map beside a reply that had offered him
+// Aalborg, Copenhagen and Aarhus: "is it possible to include what the city is
+// best for? When given options like that".
+//
+// It is, and without asking the model or writing anything new: every published
+// row already carries up to three of these. The line is built from the row's
+// OWN themes, so it cannot say something the entry does not claim.
+//
+// EMPTY FOR A ROW WITH NO THEMES, deliberately, and that is not a rarity: the
+// hardcoded fallback towns carry none at all. A label reading "Aarhus ·" with
+// nothing after it is worse than a label reading "Aarhus", so the caller gets
+// "" and prints the name alone.
+//
+// The separator is a middle dot rather than a comma, because at this size a
+// comma reads as part of the word before it.
+export const themeLine = (entry, translate) => {
+  const words = themesOf(entry).map(t => THEME_LABEL[t]).filter(Boolean);
+  if (!words.length) return "";
+  const say = typeof translate === "function" ? translate : (w) => w;
+  return words.map(w => say(w)).join(" · ");
+};
+
 const clean = (v) => String(v == null ? "" : v).trim().toLowerCase();
 
 // Accepts what a model actually returns: an array, or a comma-separated string,

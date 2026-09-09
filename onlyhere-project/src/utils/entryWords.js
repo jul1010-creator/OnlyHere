@@ -262,7 +262,31 @@ const KINDS = {
   "Workshop":           { da: "Værksted",            de: "Werkstatt" },
 };
 
-export const ENTRY_WORDS = { ...HEADINGS, ...ARRIVAL, ...BANDS, ...GLANCE, ...TOURS, ...TAGS, ...KINDS };
+// ── WHAT A PLACE IS FOR, IN ONE WORD ────────────────────────────────
+//
+// The nine themes from placeThemes.js, which every published row carries up to
+// three of. They were on the screen in two places already, the chips on a card
+// and the theme filter, and both printed the English straight at a Danish
+// reader. Adding a third render site without these would have been the same
+// mistake a third time, so the table comes first and the three sites read it.
+//
+// Keyed by the LABEL rather than the id, like everything else in this file, so
+// a render site passes what it was going to print anyway.
+const THEMES = {
+  "Nature":             { da: "Natur",               de: "Natur" },
+  "Coast":              { da: "Kyst",                de: "Küste" },
+  "History":            { da: "Historie",            de: "Geschichte" },
+  "Food":               { da: "Mad",                 de: "Essen" },
+  "Nightlife":          { da: "Natteliv",            de: "Nachtleben" },
+  "Art":                { da: "Kunst",               de: "Kunst" },
+  // Design is the same word in all three, which is a fact about the word and
+  // not a hole in the table. Asserted as such in the suite.
+  "Design":             { da: "Design",              de: "Design" },
+  "Markets":            { da: "Markeder",            de: "Märkte" },
+  "Family":             { da: "Familie",             de: "Familie" },
+};
+
+export const ENTRY_WORDS = { ...HEADINGS, ...ARRIVAL, ...BANDS, ...GLANCE, ...TOURS, ...TAGS, ...KINDS, ...THEMES };
 
 // The four groups are exported so the suite can check each against the list it
 // actually comes from, rather than against one flat bag where a missing heading
@@ -274,6 +298,9 @@ export const GLANCE_LABELS = Object.keys(GLANCE);
 // cannot ship untranslated the way a heading added to the pipeline once could.
 export const TOUR_PHRASE_WORDS = Object.keys(TOURS);
 export const KIND_LABELS = Object.keys(KINDS);
+// Read by the suite against placeThemes' own THEME_LABEL, so a tenth theme
+// added there cannot reach a Danish screen in English.
+export const THEME_WORDS = Object.keys(THEMES);
 
 // ── LOOKING ONE UP ──────────────────────────────────────────────────
 //

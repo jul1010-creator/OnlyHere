@@ -23175,7 +23175,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     happened: no Culture & Etiquette chip existed at all, and
                     the Solo Travel chip pointed at prose. */}
                 {[
-                  { id: "ess-weather", icon: "🌤", label: "Weather", color: "#1565C0" },
+                  // Essentials keeps it. Tips is advice worth reading before a
+                  // trip and a five day forecast is neither advice nor worth
+                  // reading in advance, so the chip goes with the block below.
+                  ...(onTips ? [] : [{ id: "ess-weather", icon: "🌤", label: "Weather", color: "#1565C0" }]),
                   ...cats.map(c => ({ id: c.anchor, icon: c.icon, label: c.cat, color: c.color })),
                   { id: "ess-faq", icon: "❓", label: "FAQ", color: "#455A64" },
                 ].map(s => (
@@ -23187,12 +23190,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 ))}
               </div>
 
-              {/* Weather */}
-              <div id="ess-weather" style={{ scrollMarginTop: 90 }}>
-                {WEATHER_CITIES.map(c => (
-                  <WeatherStrip key={c.key} label={`🌤 ${c.label}`} weatherKey={c.key} lat={c.lat} lon={c.lon} weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
-                ))}
-              </div>
+              {/* Weather, on Essentials and not on Tips. See the chip above. */}
+              {!onTips && (
+                <div id="ess-weather" style={{ scrollMarginTop: 90 }}>
+                  {WEATHER_CITIES.map(c => (
+                    <WeatherStrip key={c.key} label={`🌤 ${c.label}`} weatherKey={c.key} lat={c.lat} lon={c.lon} weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
+                  ))}
+                </div>
+              )}
 
               {/* ── FIVE OF THE SEVEN CATEGORIES USED TO BE HERE ──────
                   The draft prompt demands one of seven and this loop listed
@@ -24358,6 +24363,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               // reason the catalogue is one module.
               { id: "login", label: userSession ? uiT("menu.account", uiLang) : uiT("menu.signIn", uiLang), ico: "user", action: "login" },
               { id: "faq", label: uiT("menu.faq", uiLang), ico: "help", action: "faq" },
+              { id: "paid", label: uiT("menu.paid", uiLang), ico: "book", action: "paid" },
               { id: "credits", label: uiT("menu.credits", uiLang), ico: "book", action: "credits" },
               { id: "support", label: uiT("menu.support", uiLang), ico: "mail", action: "mail" },
             ].map((item, i) => (
@@ -24365,6 +24371,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 onClick={() => {
                   setShowMenu(false);
                   if (item.action === "faq") setActive("essentials");
+                  else if (item.action === "paid") navigate(AFFILIATES_PATH);
                   else if (item.action === "credits") setShowCredits(true);
                   else if (item.action === "mail") window.open("mailto:hello@gemlyxtravel.com");
                   // authMode is shared state, so opening the sheet without

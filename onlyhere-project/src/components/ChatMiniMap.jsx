@@ -3,7 +3,9 @@ import { createPortal } from "react-dom";
 import L from "leaflet";
 import { addTileLayer } from "../utils/mapTiles";
 import { ChatPlaceCards, showablePhoto } from "./ChatPlaceCards";
-import { POPUP_CLASS, RAIL_BREAKPOINT_PX } from "../utils/chatRail";
+import { POPUP_CLASS, RAIL_BREAKPOINT_PX, LABEL_CLASS, labelSides } from "../utils/chatRail";
+import { themeLine } from "../utils/placeThemes";
+import { entryWord } from "../utils/entryWords";
 
 // ── THE MAP UNDER THE CHAT ──────────────────────────────────────────
 //
@@ -194,10 +196,22 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // The hosts go with the markers. Leaving them would keep React rendering
     // cards into divs that are no longer attached to anything.
     if (!list.length) { setHosts([]); return; }
+    // ── AND THE CODE, NOT THE OBJECT ─────────────────────────────
+    //
+    // `lang` here is readerLanguage()'s object, not a two letter code, so
+    // handing it to entryWord would give it "[object Object]", which is not a
+    // language it knows, so it would return the English and say nothing about
+    // it. ChatPlaceCards reads the same field the same way one file over.
+    const code = String(lang?.tag || "").split("-")[0].toLowerCase();
+    const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     // The newest ones last, so they are drawn on top of anything they overlap.
     // Not numbered: mention order is not itinerary order, and a numbered pin
     // asserts a route nobody has agreed to. mapPlaces says why at length.
     const ordered = [...list].sort((a, b) => Number(!!a.latest) - Number(!!b.latest));
+    // Collected as the markers are made and laid out once at the end: a side
+    // chosen while the map is still flying is the wrong side when it lands.
+    const labelled = [];
     const made = [];
     markersRef.current = new Map();
     ordered.forEach(p => {
@@ -240,6 +254,27 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
         keyboard: false,
         zIndexOffset: p.latest ? 1000 : 0,
       }).addTo(layer);
+      // ── AND WHAT IT IS FOR, WITHOUT ANYBODY HAVING TO TAP ───────
+      //
+      // Oliver, 9 Sep 2026, on a reply that had offered him three cities with
+      // one card open over Aarhus: "is it possible to include what the city is
+      // best for? When given options like that", then "have all of them shown
+      // (without overlapping oneanother)".
+      //
+      // From the row's OWN themes, so a label cannot claim something the entry
+      // does not, and empty for a row carrying none: the hardcoded fallback
+      // towns have no themes at all, and "Aarhus ·" with nothing after it is
+      // worse than "Aarhus".
+      //
+      // Escaped, because this goes in as HTML and a place name is content.
+      const best = themeLine(p.place, (word) => entryWord(word, code));
+      marker.bindTooltip(
+        `<span class="pin-name">${esc(p.place?.name || "")}</span>`
+        + (best ? `<span class="pin-best">${esc(best)}</span>` : ""),
+        { permanent: true, direction: "top", className: LABEL_CLASS,
+          opacity: 1, interactive: false, offset: [0, -h] });
+      labelled.push({ key: p.key, ph: h, marker });
+
       // ── A POPUP ONLY WHERE THERE IS A PICTURE TO PUT IN IT ──────
       // showablePhoto is the same check the cards make, licence rule and all,
       // and it says no for a place with no photograph and for one whose credit
@@ -247,9 +282,6 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       // button, so those pins get a real tooltip and open on a click.
       const shot = showablePhoto(p.place);
       if (!shot) {
-        // Lifted clear of the pin's head. The anchor is the tip now, so a
-        // six-pixel offset would put the name over the pin it names.
-        marker.bindTooltip(String(p.place?.name || ""), { direction: "top", offset: [0, -h + 6], opacity: 0.95 });
         // ── AND IT MUST TAKE THE OTHER CARD DOWN ──────────────────
         // Found in the browser, not by reading: hovering this pin left the
         // PREVIOUS place's card open, so you pointed at Skagen and read
@@ -419,11 +451,53 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       // and the card you point at are chosen the same way. A second path here
       // is how the two would start disagreeing about which side to open on.
       if (marker?.getPopup()) marker.fire("mouseover");
+      layOut();
     };
     if (still) landed(); else map.once("moveend", landed);
+    // ── WHERE EACH LABEL GOES, MEASURED RATHER THAN GUESSED ──────
+    //
+    // The sizes are read off the rendered elements: a name wraps differently in
+    // Danish, and a guessed width is a guessed answer. The rule itself is pure
+    // and lives in chatRail.labelSides, which is where its reasoning is too.
+    //
+    // Newest first, so the place the reply just added gets the pick of the four
+    // sides and the older ones fit around it.
+    const layOut = () => {
+      const seen = labelled.filter(x => x.marker.getTooltip()?.getElement());
+      if (!seen.length) return;
+      const order = [...seen].sort((a, b) => {
+        const la = list.find(p => p.key === a.key)?.latest ? 0 : 1;
+        const lb = list.find(p => p.key === b.key)?.latest ? 0 : 1;
+        return la - lb;
+      });
+      const pins = order.map(x => {
+        const el = x.marker.getTooltip().getElement();
+        const at = map.latLngToContainerPoint(x.marker.getLatLng());
+        return { key: x.key, x: at.x, y: at.y, w: el.offsetWidth, h: el.offsetHeight, ph: x.ph };
+      });
+      const sides = labelSides({ pins, size: map.getSize() });
+      for (const x of order) {
+        const tip = x.marker.getTooltip();
+        const side = sides[x.key] || "top";
+        tip.options.direction = side;
+        // The anchor is the pin's TIP and the body stands above it, so a label
+        // above has to clear the whole pin and one beside it sits on the body.
+        tip.options.offset = side === "top" ? L.point(0, -x.ph)
+          : side === "bottom" ? L.point(0, 0)
+          : L.point(0, -Math.round(x.ph / 2));
+        tip.update();
+      }
+    };
+    // Once when the flight ends, and again whenever the view moves, because
+    // every side above was chosen from container pixels and a pan moves them.
+    map.on("moveend zoomend", layOut);
+
     const shut = () => map.closePopup();
     map.getContainer().addEventListener("mouseleave", shut);
-    cleanRef.current = () => map.getContainer().removeEventListener("mouseleave", shut);
+    cleanRef.current = () => {
+      map.getContainer().removeEventListener("mouseleave", shut);
+      map.off("moveend zoomend", layOut);
+    };
     requestAnimationFrame(() => map.invalidateSize());
     // pinKey, not `pins`: by value, for the reason above.
     // eslint-disable-next-line react-hooks/exhaustive-deps

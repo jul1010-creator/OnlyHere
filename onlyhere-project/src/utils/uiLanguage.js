@@ -151,6 +151,12 @@ export const UI_STRINGS = {
   "menu.credits":  { en: "Photo credits", da: "Fotokreditering",     de: "Bildnachweise" },
   // Danish borrows "support" for a paid helpdesk. This is a person answering
   // his own email, which is "hjælp".
+  // ── AND HOW THE MONEY WORKS, WHERE SOMEBODY WOULD LOOK ────────────
+  //
+  // Oliver, 9 Sep 2026. It was a footer link and a row on the account page,
+  // both of which are places a reader reaches after deciding to trust the site.
+  // Somebody wondering why a booking link is there looks in the menu.
+  "menu.paid":       { en: "How we are paid", da: "Sådan tjener vi penge", de: "Womit wir Geld verdienen" },
   "menu.support":  { en: "Support",       da: "Hjælp",               de: "Hilfe" },
   "menu.account":  { en: "Account",       da: "Konto",               de: "Konto" },
   // Its own entry rather than reusing row.needAccount.action, which holds the
