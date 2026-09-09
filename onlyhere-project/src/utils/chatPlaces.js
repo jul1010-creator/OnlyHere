@@ -29,6 +29,7 @@
 // craft for the reason repeated below. A second copy of either would be how the
 // chat and the preview come to disagree about which places were named.
 import { mentionsPlace, isRejectedPlace, onlyAskedAbout, isPassedThrough } from "./previewMatch";
+import { readExclusions, isExcluded } from "./exclusions";
 
 // Three. A reply that names six places and shows six photographs is a gallery
 // with a sentence attached, and the sentence is the product.
@@ -154,11 +155,35 @@ export const placesNamedIn = (text, pools, { cap = CHAT_PLACE_CAP, alreadyKnown 
 // Same two readers, asked the opposite way round: which of these pools does
 // this sentence NAME and TURN DOWN. Names are returned folded, because the
 // caller keys its pins the same way.
-export const rejectedIn = (text, pools) => {
+// ── AND THE SECOND READER IS THE ONE THE GUIDE USES ─────────────────
+//
+// Oliver, 9 Sep 2026, on the map beside a reply that had understood him:
+// "Copenhagn shouldn't be on the map at all in this case." He had written "I've
+// been to Copenhagen already, so I don't want to go there", and the map pinned
+// it anyway.
+//
+// The reason was two readers for one question. isRejectedPlace looks for a
+// refusal NEAR A NAME, so a refusal pointing back with a pronoun is invisible to
+// it. utils/exclusions.js answers the same question for the guide builder, where
+// `_constraints.excluded` decides what may be planned. Two answers to "did they
+// rule this out" is how a map contradicts the sentence printed beside it, which
+// is exactly what he was looking at.
+//
+// So the map asks the guide's reader too, and a fix to either surface is now a
+// fix to both. The POOLS go in as the gazetteer, which is the list of places
+// Gemlyx publishes and the thing that separates "Ribe with Anna and Peter" from
+// a sentence nobody can resolve. This call site has it for free.
+//
+// `own` because readExclusions reads the TRAVELLER's words. Gemlyx writing "you
+// said you did not want to go there" is a report of a refusal, not one, and
+// running it over the assistant's turns would unpin a town on the strength of
+// the app quoting the traveller back to itself.
+export const rejectedIn = (text, pools, { own = false } = {}) => {
   const said = String(text || "");
   if (!said.trim()) return [];
+  const rows = Array.isArray(pools) ? pools : [];
   const out = [];
-  for (const p of (Array.isArray(pools) ? pools : [])) {
+  for (const p of rows) {
     const name = String(p?.name || "").trim();
     if (!name) continue;
     // BOTH, and in this order. isRejectedPlace looks for a refusal near a name;
@@ -167,6 +192,16 @@ export const rejectedIn = (text, pools) => {
     if (!mentionsPlace(said, name)) continue;
     if (!isRejectedPlace(said, name)) continue;
     out.push(name.toLowerCase());
+  }
+  if (!own) return out;
+  const ruledOut = readExclusions(said, { known: rows.map(p => p?.name).filter(Boolean) });
+  if (!ruledOut.length) return out;
+  for (const p of rows) {
+    const name = String(p?.name || "").trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (out.includes(key)) continue;
+    if (isExcluded(p, ruledOut)) out.push(key);
   }
   return out;
 };

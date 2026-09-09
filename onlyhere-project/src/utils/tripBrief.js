@@ -886,3 +886,39 @@ export const briefSignature = (brief) => {
 // something the plan is built from has actually moved.
 export const briefMovedOn = (declinedAt, brief) =>
   !!declinedAt && briefSignature(brief) !== declinedAt;
+
+// ── ENOUGH TO SAY WHAT A PLACE IS FOR ───────────────────────────────
+//
+// Oliver, 10 Sep 2026, on a map that had labelled five towns by theme on a turn
+// where the traveller had written only "I can't pick between Aalborg, Aarhus,
+// Odense, and Ribe": "I didn't even mention my interests.. and now it just
+// mentioned nightlife.." And then the rule itself:
+//
+//   "If you know enough about a person, then you can help the user make a
+//    decision."
+//
+// Which is the whole of it. "Best if you want history" answers a question they
+// asked, once they have said what they want, and invents the question before
+// that. Six of the seven blocking slots were empty on that turn and the app made
+// its strongest steer anyway.
+//
+// TWO FACTS OPEN IT, and neither of them is everything. What kind of trip, or
+// who is coming: a family that has said nothing about interests can still be
+// matched, because "with my kids" is a real thing to match on, and it is the
+// fact with the most riding on it when the theme is nightlife.
+//
+// ── AND THE PLACEHOLDER DOES NOT COUNT ──────────────────────────────
+//
+// Which is why this is here rather than written as `!!brief.known.party` at the
+// call site. readParty fills the slot from a sentence with ACKNOWLEDGED_VALUE,
+// meaning "they said something about who is coming", carrying no count and no
+// ages. That is enough to stop the brief asking again and it is nowhere near
+// enough to recommend a town on. Eight children once reached the guide builder
+// as a sentence about a conversation through exactly this value.
+export const enoughToRecommend = (brief) => {
+  const said = (key) => {
+    const v = clean((brief?.known || {})[key]?.value);
+    return !!v && v !== ACKNOWLEDGED_VALUE;
+  };
+  return said("interests") || said("party");
+};

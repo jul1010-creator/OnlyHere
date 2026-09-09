@@ -163,7 +163,7 @@ writeFileSync(entry, `
   export { costLines, byUrgency, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
-  export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, briefBlock, buildBlockedNote, MAX_ASKS_AT_ONCE } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
+  export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, briefBlock, buildBlockedNote, MAX_ASKS_AT_ONCE, enoughToRecommend, ACKNOWLEDGED_VALUE } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { GREETING, openingThread, withTestBrief, withoutTestBrief, threadIsSound, TEST_BRIEF } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { CHAT_REPORT_KIND, CHAT_REPORT_VERSION, buildChatReport, chatReportFilename, turnReport, briefTimeline, intakeReport } from ${JSON.stringify(join(root, "src/utils/chatReport.js"))};
   export { RIGHTS_HOLDER, copyrightLine, GUIDE_RIGHTS_SHORT, GUIDE_RIGHTS_FULL, TDM_RESERVATION } from ${JSON.stringify(join(root, "src/utils/rights.js"))};
@@ -41423,6 +41423,186 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("nothing said rules nothing out", readExclusions(""), []);
   is("and neither does something that is not text", readExclusions(null), []);
 
+  // ── AND A REFUSAL THAT POINTS BACK AT THE NAME ───────────────────
+  //
+  // Oliver, 9 Sep 2026, on his own Detour map with Copenhagen pinned on a brief
+  // that had ruled it out: "Copenhagn shouldn't be on the map at all in this
+  // case." The sentence Gemlyx's own reply had understood perfectly:
+  //
+  //   "I've been to Copenhagen already, so I don't want to go there."
+  //
+  // Every pattern above wants the name to FOLLOW the refusal. Here it comes
+  // first and the refusal points back with a pronoun, and it read as nothing at
+  // all. Not only on the map: this feeds `_constraints.excluded` on the build,
+  // so the guide could have planned the city he said he was done with.
+  const SCREENSHOT = "Hi! So I'm going to Denmark, but I'm struggling trying to figure out where to go. I've been to Copenhagen already, so I don't want to go there. But I can't pick between Aalborg, Aarhus, Odense, and Ribe..";
+  is("THE BUG: the sentence off his own screen", readExclusions(SCREENSHOT), ["Copenhagen"]);
+  // And the three towns he is choosing BETWEEN are not ruled out by it, which
+  // is the half a greedy pronoun rule gets wrong.
+  is("and it rules out nothing else in that message",
+     ["Aalborg", "Aarhus", "Odense", "Ribe"].filter(n => isExcluded({ name: n }, readExclusions(SCREENSHOT))), []);
+  is("the name can sit in the sentence before",
+     readExclusions("I've been to Copenhagen. I don't want to go there."), ["Copenhagen"]);
+  // Two sentences back, because the reason usually sits between the name and
+  // the refusal: it stops at the first sentence that names something.
+  is("or two sentences before",
+     readExclusions("Aarhus was our base last time. It rained all week and the kids got ill. We don't want to go there again."), ["Aarhus"]);
+  is("and the shapes people use", [
+     readExclusions("We did Helsingør last summer and don't want to go back.")[0],
+     readExclusions("Skagen is too far north for us this trip. Not going there.")[0],
+     readExclusions("Ribe we saw properly in 2019, so please leave it out.")[0],
+  ], ["Helsingør", "Skagen", "Ribe"]);
+  is("and in Danish", [
+     readExclusions("Helsingør? Nej, der vil vi ikke hen.")[0],
+     readExclusions("Odense var vi i sidste år, og vi vil helst ikke derhen igen.")[0],
+  ], ["Helsingør", "Odense"]);
+  // "I've" and "Peter's" are one token to the name pattern and neither is in a
+  // stoplist spelled without the contraction, so the first version read "I've
+  // been to Copenhagen" as two candidates and resolved to neither.
+  is("a contraction is not a second candidate",
+     readExclusions("I've been to Ribe already, so I don't want to go there."), ["Ribe"]);
+  // The Danish stoplist, which did not exist: a Danish sentence opens with a
+  // capitalised pronoun as often as an English one and every one of them clears
+  // the three-letter minimum.
+  is("nor is a Danish sentence opener a place",
+     readExclusions("Der vil vi ikke hen."), []);
+
+  // ── AND IT RESOLVES ONLY WHERE THERE IS NOTHING TO GUESS ─────────
+  //
+  // The rule this file opens with, tested at the point it is hardest: a pronoun
+  // pointing at a list points at nothing in particular. Each of these was a
+  // sentence that broke an earlier version of the rule.
+  is("a pronoun pointing at a list rules nothing out",
+     readExclusions("We've already done Aarhus, Odense and Ribe, so we don't want to go there again."), []);
+  is("nor one pointing at a hotel in a town",
+     readExclusions("We stayed at Ruths Hotel in Skagen last time and don't want to go back there."), []);
+  // The venue is BEFORE the town here, so a rule that only looked between the
+  // town and the refusal let this through and dropped Aalborg.
+  is("nor at a restaurant in one",
+     readExclusions("There is a fish restaurant on the harbour in Aalborg where we got food poisoning, and we don't want to go back there."), []);
+  // Going is refused. Eating, staying and driving are things you can refuse in
+  // a place you still want to visit.
+  is("refusing to eat there is not refusing to go",
+     readExclusions("The cafe at ARoS in Aarhus was awful; we don't want to eat there again."), []);
+  is("nor refusing to drive there",
+     readExclusions("Skagen is lovely but I don't want to drive there, is there a train?"), []);
+  is("nor refusing to sleep there",
+     readExclusions("Aarhus is worth seeing, but we don't want to stay there overnight; a day trip is fine."), []);
+  // A refusal with a condition on it is a preference about WHEN or HOW, and the
+  // place is still wanted.
+  is("a refusal with a condition on it is not an exclusion", [
+     readExclusions("Møn is on the list, but we don't want to go there in winter."),
+     readExclusions("Odense: we don't want to go there on the Monday because of the market."),
+     readExclusions("Legoland gets very busy; I don't want to go there without booking first."),
+  ], [[], [], []]);
+  // The idioms invert: "skip it" rules a place out and "don't want to skip it"
+  // is the opposite sentence.
+  // "skip it" is how a person rules a place out in three words, and its negated
+  // form is what NEGATED_BEFORE exists for. Both, because with only the negated
+  // one the guard had nothing to guard: the idiom was not in the list at all and
+  // the assertion passed because no pattern fired.
+  is("an idiom rules a place out", readExclusions("Tivoli? Skip it, we did it last time."), ["Tivoli"]);
+  is("and a negative in front of it turns it inside out",
+     readExclusions("Tivoli is a must for us. Obviously we don't want to skip it."), []);
+  is("as does a condition on it",
+     readExclusions("Odense is on the list. We'll skip it if it rains."), []);
+  // ── AND IT DOES NOT REACH ACROSS A WHOLE MESSAGE ─────────────────
+  // Three sentences, and it stops at the first that names something. Reaching
+  // further finds a name eventually in any long message, and the further it
+  // reaches the less "there" has to do with it.
+  is("a name five sentences back is out of reach",
+     readExclusions("We loved Skagen back in 2019. The kids are older now. We want somewhere with more to do. It has to be reachable by train. We do not want to go there again."), []);
+  // An article is capitalised at the front of a sentence and clears the
+  // three-letter minimum, so a sentence carrying no name has to read as
+  // carrying none rather than as naming "The", which stops the search one
+  // sentence short of the town.
+  is("and a sentence whose only capital is an article does not stop the search",
+     readExclusions("We went to Ribe. The weather was awful. We don't want to go there again."), ["Ribe"]);
+
+  // ── ENOUGH TO SAY WHAT A PLACE IS FOR ────────────────────────────
+  //
+  // Oliver, 10 Sep 2026, looking at a map that had labelled five towns by theme
+  // on a turn where the traveller had written only "I can't pick between
+  // Aalborg, Aarhus, Odense, and Ribe": "I didn't even mention my interests..
+  // and now it just mentioned nightlife.." Then the rule:
+  //
+  //   "If you know enough about a person, then you can help the user make a
+  //    decision."
+  //
+  // Six of seven blocking slots were empty on that turn and the app made its
+  // strongest steer anyway, on the criterion with the most riding on it if the
+  // party has children in it.
+  {
+    const brief = (known) => ({ known });
+    is("nothing said says nothing about what a place is for", M.enoughToRecommend(brief({})), false);
+    is("and neither does an empty brief", M.enoughToRecommend(null), false);
+    // Either fact opens it. A family that has said nothing about interests can
+    // still be matched, because "with my kids" is a real thing to match on.
+    is("what kind of trip opens it", M.enoughToRecommend(brief({ interests: { value: "history and food" } })), true);
+    is("and so does who is coming", M.enoughToRecommend(brief({ party: { value: "two adults and a 6 year old" } })), true);
+    // The slots that decide logistics say nothing about what somebody wants.
+    is("but where they start does not",
+       M.enoughToRecommend(brief({ origin: { value: "Billund" }, days: { value: "5" }, when: { value: "October" } })), false);
+
+    // ── AND THE PLACEHOLDER IS NOT KNOWING ─────────────────────────
+    //
+    // readParty fills the slot from a sentence with ACKNOWLEDGED_VALUE: "they
+    // said something about who is coming", with no count and no ages in it.
+    // Enough to stop the brief asking again, nowhere near enough to recommend a
+    // town on. Eight children once reached the guide builder through this exact
+    // value, as a sentence about a conversation.
+    is("a slot filled with the placeholder is not enough",
+       M.enoughToRecommend(brief({ party: { value: M.ACKNOWLEDGED_VALUE } })), false);
+    is("nor is interests filled with it",
+       M.enoughToRecommend(brief({ interests: { value: M.ACKNOWLEDGED_VALUE } })), false);
+    // And a real value alongside it still counts, or one vague answer would
+    // silence a map that has what it needs.
+    is("a real value beside it still counts",
+       M.enoughToRecommend(brief({ party: { value: M.ACKNOWLEDGED_VALUE }, interests: { value: "art" } })), true);
+
+    // ── AND THE MAP ASKS BEFORE IT SAYS ANYTHING ───────────────────
+    // Shut, every pin is a name. That is also what stops five labels fighting
+    // over a 380px map on the turn that names the most places and knows least.
+    const chatMap = readFileSync(join(root, "src/components/ChatMiniMap.jsx"), "utf8");
+    ok("the map takes the gate rather than deciding for itself",
+       /sayWhatFor = false \}\) => \{/.test(chatMap));
+    ok("and says nothing about what a place is for until it opens",
+       /const picked = sayWhatFor \? distinctThemes\(/.test(chatMap) && /\)\) : \{\};/.test(chatMap));
+    ok("and the app opens it from the brief rather than from the pins",
+       /sayWhatFor=\{enoughToRecommend\(liveIntakeBrief\)\}/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+  }
+  // ── AND A NAMED REFUSAL IS NOT A PRONOUN ─────────────────────────
+  // "We don't want to go back" matches on its own, and the sentence goes on to
+  // say where. Read as a pronoun it reaches backwards past the name it was
+  // given and rules out the wrong town.
+  is("a refusal that names its own place does not reach backwards",
+     readExclusions("We loved Ribe. We don't want to go back to Aarhus."), []);
+  // Somebody who is not on the trip rules nothing out of it, and the sentence
+  // says so in as many words.
+  is("somebody who is not coming rules nothing out",
+     readExclusions("My mother-in-law hated Skagen and never wants to go back there, but she isn't coming with us."), []);
+  is("and in Danish", readExclusions("Min svigermor hader Legoland og vil aldrig derhen igen, men hun skal ikke med."), []);
+  is("the country itself is still never what they meant",
+     readExclusions("Denmark we've done twice already, so we don't want to go there again."), []);
+
+  // ── AND A GAZETTEER SETTLES WHAT GRAMMAR CANNOT ──────────────────
+  //
+  // "We went to Ribe with Anna and Peter last year. We don't want to go back
+  // there." Three capitalised words, one of them a town, and no amount of
+  // sentence structure can tell you which. The caller has the list of places
+  // Gemlyx publishes, so where it is passed, a single known place among several
+  // candidates is the answer and anything else is still ambiguous.
+  const KNOWN = ["Aalborg", "Aarhus", "Odense", "Ribe", "Skagen", "Billund", "Copenhagen"];
+  is("without the list, three names is ambiguous",
+     readExclusions("We went to Ribe with Anna and Peter last year. We don't want to go back there."), []);
+  is("with it, the one that is a place is the answer",
+     readExclusions("We went to Ribe with Anna and Peter last year. We don't want to go back there.", { known: KNOWN }), ["Ribe"]);
+  is("and two real places in scope stay ambiguous even with it",
+     readExclusions("We stayed in Ribe and did a day trip to Skagen; we don't want to go back there.", { known: KNOWN }), []);
+  // The list only ever narrows. A caller that has none behaves as before, which
+  // is what every existing call site does.
+  is("no list given is the old behaviour", readExclusions("Avoid Tivoli please.", { known: [] }), ["Tivoli"]);
+
   // ── THE FILTER ───────────────────────────────────────────────────
   ok("the named place is out", isExcluded({ name: "Legoland", town: "Billund" }, ["Legoland"]));
   // "Legoland" has to rule out "Legoland Billund Resort", or the exclusion is
@@ -44449,6 +44629,68 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is("a refusal names the place it refuses", rejectedIn("not Ribe this time, Skagen instead", [withShot, without]), ["ribe"]);
     is("and a sentence with no refusal in it names nothing", rejectedIn("Ribe and Skagen are both good", [withShot, without]), []);
 
+    // ── AND THE READER THE GUIDE USES, ON THE SAME QUESTION ─────────
+    //
+    // Oliver, 9 Sep 2026, on the map beside a reply that had understood him
+    // perfectly: "Copenhagn shouldn't be on the map at all in this case."
+    //
+    // He had written "I've been to Copenhagen already, so I don't want to go
+    // there". The reply said "the only one of the four". The map drew five.
+    //
+    // The cause was two readers for one question. isRejectedPlace looks for a
+    // refusal NEAR A NAME, so a refusal pointing back with a pronoun is
+    // invisible to it, while utils/exclusions.js answers the same question for
+    // the guide builder. Two answers to "did they rule this out" is how a map
+    // contradicts the sentence printed beside it.
+    {
+      const towns = [
+        { name: "Copenhagen", _src: "town", lat: 55.68, lon: 12.57 },
+        { name: "Aalborg", _src: "town", lat: 57.05, lon: 9.92 },
+        { name: "Aarhus", _src: "town", lat: 56.16, lon: 10.20 },
+        { name: "Odense", _src: "town", lat: 55.40, lon: 10.39 },
+        { name: "Ribe", _src: "town", lat: 55.33, lon: 8.77 },
+      ];
+      const HIS = "Hi! So I'm going to Denmark, but I'm struggling trying to figure out where to go. I've been to Copenhagen already, so I don't want to go there. But I can't pick between Aalborg, Aarhus, Odense, and Ribe..";
+      // The old reader alone still finds nothing here, which is the whole point:
+      // the sentence is only visible to the other one.
+      is("the refusal-near-a-name reader cannot see this sentence", rejectedIn(HIS, towns), []);
+      is("and the guide's reader can", rejectedIn(HIS, towns, { own: true }), ["copenhagen"]);
+      // THE BUG, end to end: five towns named, four pinned.
+      const drawn = M.mapPlaces({
+        messages: [{ role: "user", text: HIS }],
+        placesFor: (t) => placesNamedIn(t, towns, { needsPhoto: false, cap: 6 }),
+        rejectsFor: (t, m) => rejectedIn(t, towns, { own: m?.role === "user" }),
+        coordsFor: (p) => (Number.isFinite(p?.lat) ? { lat: p.lat, lon: p.lon } : null),
+      });
+      is("so the map draws the four he is choosing between", drawn.pins.map(p => p.place.name),
+         ["Aalborg", "Aarhus", "Odense", "Ribe"]);
+      // ── AND ONLY THE TRAVELLER'S OWN WORDS ────────────────────────
+      // readExclusions reads what the TRAVELLER ruled out. Gemlyx writing "you
+      // said you did not want to go there" is a report of a refusal rather than
+      // one, and reading it would unpin a town on the strength of the app
+      // quoting the traveller back to itself.
+      is("the assistant repeating it back rules nothing out",
+         rejectedIn("You said you have been to Copenhagen already and do not want to go there.", towns), []);
+      // Default off, so every caller written before this keeps exactly what it had.
+      is("and the old behaviour is what you get by default",
+         rejectedIn(HIS, towns, {}), []);
+      // ── AND IT UNPINS WHAT SITS INSIDE WHAT THEY RULED OUT ────────
+      // isExcluded matches a row's town as well as its name, so ruling out
+      // Copenhagen takes Nyhavn off the map with it. Matching the ruled-out
+      // word against the row's NAME alone leaves the district pinned on a trip
+      // that skips the city it is in.
+      is("ruling out a city unpins what is inside it",
+         rejectedIn("I've been to Copenhagen already, so I don't want to go there.",
+                    [...towns, { name: "Nyhavn", town: "Copenhagen", _src: "town", lat: 55.68, lon: 12.59 }],
+                    { own: true }).sort(),
+         ["copenhagen", "nyhavn"]);
+      // The pools ARE the gazetteer, which is what this call site has for free
+      // and what separates a town from the people in the sentence beside it.
+      is("the pool settles a name a sentence cannot",
+         rejectedIn("We went to Ribe with Anna and Peter last year. We don't want to go back there.", towns, { own: true }),
+         ["ribe"]);
+    }
+
     // ── AND A PLACE IT ONLY ASKED ABOUT ─────────────────────────────
     //
     // Oliver, 7 Sep 2026, twice in one evening. He typed "Hi!" and got a
@@ -44595,7 +44837,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the map is fed towns and nothing else",
      /const townPool = pools\.filter\(p => p\?\._src === "town"\);/.test(appR));
   ok("and the unpin reader is asked about the same set",
-     /rejectsFor: \(text\) => rejectedIn\(clean\(text\), townPool\)/.test(appR));
+     /rejectsFor: \(text, m\) => rejectedIn\(clean\(text\), townPool, \{ own: m\?\.role === "user" \}\)/.test(appR));
   // The CARD still sees everything: a restaurant or a bar is exactly what a
   // card is for, and it is the map that cannot say anything useful about one.
   // Two assertions here were the same string twice, which is a test that can
@@ -44776,7 +45018,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // set so the picks differ. Two of his three rows carry identical themes and
   // it still separates them.
   ok("one theme each, chosen across the whole set rather than per pin",
-     /const picked = distinctThemes\(list\.map\(p => \(\{ key: p\.key, themes: p\.place\?\.themes \}\)\)\);/.test(chatCode));
+     /distinctThemes\(list\.map\(p => \(\{ key: p\.key, themes: p\.place\?\.themes \}\)\)\)/.test(chatCode));
   ok("and the sentence is his, in the reader's language",
      /uiT\("map\.bestFor", code\)/.test(chatCode)
      && /const code = String\(lang\?\.tag \|\| ""\)\.split\("-"\)\[0\]\.toLowerCase\(\);/.test(chatCode));

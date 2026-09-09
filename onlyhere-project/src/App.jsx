@@ -151,7 +151,7 @@ import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoi
 import { hashForTab, tabForHash, ownsTheAddress } from "./utils/tabUrl";
 import { venueVerdict, venueVia, describeVenue, VENUE_MAX_KM } from "./utils/venueMatch";
 import { cityFromLocation } from "./utils/guideEnrichment";
-import { readBrief, briefBlock, nextAsks, buildBlockedNote } from "./utils/tripBrief";
+import { readBrief, briefBlock, nextAsks, buildBlockedNote, enoughToRecommend } from "./utils/tripBrief";
 import { askedBeforeTurns, lastAskedOnScreen } from "./utils/directAnswer";
 import { briefConflicts } from "./utils/briefConflicts";
 import { townClashes, clashNote } from "./utils/chatGeography";
@@ -17154,12 +17154,12 @@ ${languageBlock()}`;
                       const onMap = mapPlaces({
                         messages: convo,
                         placesFor: (text) => placesNamedIn(clean(text), townPool, { needsPhoto: false, cap: 6 }),
-                        rejectsFor: (text) => rejectedIn(clean(text), townPool),
+                        rejectsFor: (text, m) => rejectedIn(clean(text), townPool, { own: m?.role === "user" }),
                         coordsFor: placeCoords,
                       });
                       return (
                         <div className={MAP_CLASS}>
-                          <ChatMiniMap pins={onMap.pins} dropped={onMap.dropped} C={C} onOpen={(p) => openStopDetail(p, { windowed: true })} lang={readerLanguage()} />
+                          <ChatMiniMap pins={onMap.pins} dropped={onMap.dropped} C={C} onOpen={(p) => openStopDetail(p, { windowed: true })} lang={readerLanguage()} sayWhatFor={enoughToRecommend(liveIntakeBrief)} />
                         </div>
                       );
                     })()}

@@ -62,7 +62,7 @@ const NORTHERN_EUROPE = [[52.4, 2.5], [60.8, 21.0]];
 // reads as furniture; red is the one colour nothing else here uses.
 const PIN_RED = "#E8232A";
 
-export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, height = 220 }) => {
+export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, height = 220, sayWhatFor = false }) => {
   const holderRef = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);
@@ -208,7 +208,13 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     //
     // Across the whole set rather than per pin, which is the entire idea: the
     // answer for Aarhus depends on what Aalborg took. See distinctThemes.
-    const picked = distinctThemes(list.map(p => ({ key: p.key, themes: p.place?.themes })));
+    // ── AND ONLY ONCE THERE IS SOMETHING TO MATCH AGAINST ──────
+    // Oliver, 10 Sep 2026: "If you know enough about a person, then you can help
+    // the user make a decision." Before that the app is picking the criterion
+    // and ranking on it, which is the app choosing the trip. Shut, every pin is
+    // a name, which is also what stops five labels fighting over a 380px map on
+    // the turn that names the most places and knows the least.
+    const picked = sayWhatFor ? distinctThemes(list.map(p => ({ key: p.key, themes: p.place?.themes }))) : {};
     // ── AND LOWERCASE, EXCEPT IN GERMAN ──────────────────────────
     // THEME_LABEL holds capitalised nouns because they are labels on a chip.
     // Inside a sentence English and Danish want them lowercase, and German
