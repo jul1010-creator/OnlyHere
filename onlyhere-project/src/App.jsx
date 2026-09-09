@@ -58,6 +58,15 @@ import { startRun, endRun, summarise, averageFor, describe, describeAverage, rec
 import { cleanOffer, offerProblems, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "./utils/offer";
 import { aiDisclosureFor } from "./utils/aiDisclosure";
 import { SupportPage } from "./components/SupportPage";
+// ── THE PAGE THAT SAYS HOW THIS IS PAID FOR ─────────────────────────
+// Oliver, 9 Sep 2026: "make an 'affiliate' in the burgermenu where we list all
+// our affiliates and why we use them." A route rather than a file in public/,
+// because the page reads the live programme state and a static one would be a
+// public claim about money that nobody remembers to change. The path is in
+// utils/affiliateRoster.js with the roster, not here, because AboutMePage links
+// to it too and App.jsx imports AboutMePage.
+import { AffiliatesPage } from "./components/AffiliatesPage";
+import { AFFILIATES_PATH } from "./utils/affiliateRoster";
 import { safetyClaimNote } from "./utils/safetyClaims";
 import { literalRenderings, literalNote, FALSE_FRIEND_RULE } from "./utils/literalDanish";
 // ── "THE AI ENDS UP WRITING ABOUT THE HOSTEL" ───────────────────────
@@ -149,6 +158,7 @@ import { readExclusions, withoutExcluded, excludedNote } from "./utils/exclusion
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
 import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl } from "./utils/ticketLink";
+import { tourQuery, tourKindFor, pickTourUrl, tourPhrase } from "./utils/tourSweep";
 import { currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLanguage";
 import { LanguageChoice } from "./components/LanguagePicker";
 import { NavStrip } from "./components/NavStrip";
@@ -1042,6 +1052,9 @@ function GemlyxApp() {
   });
   const [craftDetail, setCraftDetail] = useState(null);
   const [eventDetail, setEventDetail] = useState(null);
+  // Whether the entry currently open was opened from the chat. See
+  // openStopDetail for why it is one flag rather than a second state per type.
+  const [entryWindowed, setEntryWindowed] = useState(false);
   const [townDetail, setTownDetail] = useState(null);
   const [nightlifeDetail, setNightlifeDetail] = useState(null);
   const [freeDetail, setFreeDetail] = useState(null);
@@ -7336,6 +7349,59 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             noteToFounder(`No ticket link: the pages this run read had none, and asking Tiqets and Ticketmaster directly found none either. Plenty of Danish places sell only through their own site, and no ticket link is the right answer for those.`);
           }
         }
+
+        // ── AND THE THING TO DO, WHICH IS NOT THE TICKET ─────────────
+        //
+        // Oliver, 9 Sep 2026: "Can we put activities into the different blogs?
+        // Like pub crawl wouldn't need to go all the way into a blog, but rather
+        // stay in the nightlife town tab of Aarhus if it was pubcrawl in
+        // Aarhus", and on paying for the search: "I'm willing to spent those
+        // tokens."
+        //
+        // ONE SEARCH, HERE, AT DRAFT TIME. Not at render, where it would cost a
+        // search every time a reader opened the page, for something that
+        // changes twice a year. Not a separate sweep either, because this is
+        // already the moment the row is being written and the town is already
+        // known.
+        //
+        // ONLY FOR THE TYPES tourKindFor NAMES, which is towns and the two
+        // street types and nothing else. An attraction asking GetYourGuide for a
+        // guided tour of one museum is the overlap this design exists to avoid:
+        // Tiqets sells that door, and a second seller of the same door is how a
+        // 125 kr admission ends up beside a 400 kr link.
+        //
+        // AND NOT IF A TOUR IS ALREADY ON THE ROW, so a redraft of a town he has
+        // already checked pays nothing.
+        {
+          const tourKind = tourKindFor(sType);
+          const tq = tourKind && !String(t.tourUrl || "").trim() ? tourQuery(name, tourKind) : "";
+          if (tq) {
+            try {
+              const gRes = await fetch(`/api/search?q=${encodeURIComponent(tq)}`);
+              const gData = await gRes.json();
+              if (gRes.ok && !gData.error) {
+                const results = (gData.results || []).map(r => ({ url: r.url }));
+                // pickTourUrl, never the first result: it refuses anything that
+                // is not an activity page and anything whose own address names a
+                // different town. A search for an Aarhus bar crawl returns
+                // Copenhagen products, and a Copenhagen crawl on the Aarhus page
+                // is the same fault ticketUrlSaysElsewhere catches one country up.
+                const gotTour = pickTourUrl(results, { town: name });
+                note("Ask GetYourGuide directly", {
+                  provider: "tavily",
+                  detail: tq.slice(0, 110),
+                  outcome: gotTour ? "ok" : "empty",
+                  used: !!gotTour,
+                  got: gotTour
+                    ? `${gotTour.slice(0, 120)} — an activity page whose own address names this town, reading as ${tourPhrase(gotTour, tourKind)}`
+                    : `${results.length} result${results.length === 1 ? "" : "s"}, none an activity page for this town`,
+                  why: gotTour ? "" : "Their Danish coverage is thick in the big towns and thin everywhere else, and no activity is the right answer for most of this country.",
+                });
+                if (gotTour) t.tourUrl = gotTour;
+              }
+            } catch { /* one query failing is not a reason to lose the draft */ }
+          }
+        }
         if (dc?.confirmed) {
           decide("dates", {
             winner: "the festival's own site", loser: "",
@@ -9174,7 +9240,12 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     catch { setTicketPasteResult({ ok: false, reason: "The draft JSON above is not parseable right now, so nothing was written. Fix the JSON first." }); return; }
     const verdict = reviewPastedTicketUrl(ticketPaste, { name: draft?.name || "", town: draft?.town || draft?.city || "", where: `${draft?.location || ""} ${draft?.mapHint || ""}` });
     if (!verdict.ok) { setTicketPasteResult(verdict); return; }
-    draft.ticketUrl = verdict.url;
+    // ── THE VERDICT SAYS WHICH FIELD, NOT THIS LINE ─────────────────
+    // 9 Sep 2026. One paste box, two destinations: a GetYourGuide activity is a
+    // TOUR and lands on tourUrl, everything else is a ticket. Decided by what
+    // the link is rather than by which box he picked, and decided in ticketLink
+    // where the question of what a link IS already lives.
+    draft[verdict.field] = verdict.url;
     setStudioDraft(draft);
     setStudioDraftText(JSON.stringify(draft, null, 2));
     setDraftEditError(null);
@@ -12640,6 +12711,10 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   // of step with what is on screen. If the entry was opened cold from a shared
   // link there is nothing to go back to, so it just closes and tidies the URL.
   const closeEntry = () => {
+    // Cleared on the way out, or the NEXT entry opened from a list inherits the
+    // window from the last one opened from the chat, and a browse screen ends up
+    // floating over nothing.
+    setEntryWindowed(false);
     // Closing a town somebody landed on from a search result must put them
     // INSIDE the app, not back out to whatever they were looking at before it.
     // history.back() from a cold arrival leaves the site entirely, which turns
@@ -12789,8 +12864,24 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     craft: setCraftDetail,
   };
   const canOpenStop = (real) => !!real && !!STOP_OPENS_AS[real._src];
-  const openStopDetail = (real) => {
+  // ── OPENED FROM THE CHAT, OR OPENED FROM A LIST ──────────────────
+  //
+  // Oliver, 9 Sep 2026: "when you click it, you get a new window popping up.
+  // Not a new tab or redirect to the page. But a window that when you click off
+  // it, it disappears as if you 'alt-f4' on it."
+  //
+  // Same page either way, one prop apart. From the chat it floats over the
+  // conversation and the surround closes it, so a reader who opened Ribe out of
+  // curiosity still has the sentence that made them curious. From a browse
+  // screen it fills the window, because there is nothing behind it worth
+  // keeping in view.
+  //
+  // ONE FLAG RATHER THAN A SECOND SETTER PER TYPE. There are six opener
+  // functions and five render sites, and adding a windowed twin of each is how
+  // the two halves start disagreeing about which one is open.
+  const openStopDetail = (real, { windowed = false } = {}) => {
     if (!canOpenStop(real)) return;
+    setEntryWindowed(!!windowed);
     STOP_OPENS_AS[real._src](real);
   };
 
@@ -16757,7 +16848,7 @@ ${languageBlock()}`;
                             // lands. Two cards, one of them useful.
                             places={placesNamedIn(assistantText, pools, { alreadyKnown: theirWords })}
                             C={C}
-                            onOpen={openStopDetail}
+                            onOpen={(p) => openStopDetail(p, { windowed: true })}
                             lang={readerLanguage()}
                           />
                         )}
@@ -16819,7 +16910,7 @@ ${languageBlock()}`;
                       });
                       return (
                         <div className={MAP_CLASS}>
-                          <ChatMiniMap pins={onMap.pins} dropped={onMap.dropped} C={C} onOpen={openStopDetail} lang={readerLanguage()} />
+                          <ChatMiniMap pins={onMap.pins} dropped={onMap.dropped} C={C} onOpen={(p) => openStopDetail(p, { windowed: true })} lang={readerLanguage()} />
                         </div>
                       );
                     })()}
@@ -21088,6 +21179,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <a href="/terms.html" style={{ color: C.muted, textDecoration: "underline" }}>Terms of Service</a>
                   <span style={{ opacity: 0.5 }}>·</span>
                   <a href={SUPPORT_PATH} style={{ color: C.muted, textDecoration: "underline" }}>Contact &amp; report</a>
+                  <span style={{ opacity: 0.5 }}>·</span>
+                  <a href={AFFILIATES_PATH} style={{ color: C.muted, textDecoration: "underline" }}>How we are paid</a>
                 </div>
                 <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.87 · Aug 2026</div>
               </div>
@@ -23907,14 +24000,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           live control it held, bookableOnly, already has its own pill on the
           Attractions page and is untouched. */}
 
-      <DetailPage lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} hasBeen={!!eventDetail && isBeenHere("event", eventDetail.id)} onToggleBeen={eventDetail ? () => toggleBeenHere("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} hasBeen={!!eventDetail && isBeenHere("event", eventDetail.id)} onToggleBeen={eventDetail ? () => toggleBeenHere("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       {/* onOpenEvent powers the new "What's on in <town>" section: tapping a
           festival closes the town page and opens that event's real entry, so the
           traveler lands on the full page with dates, tickets and directions
           rather than a dead-end list item. */}
-      <DetailPage lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} hasBeen={!!townDetail && isBeenHere("town", townDetail.id)} onToggleBeen={townDetail ? () => toggleBeenHere("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} hasBeen={!!nightlifeDetail && isBeenHere("nightlife", nightlifeDetail.id)} onToggleBeen={nightlifeDetail ? () => toggleBeenHere("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} hasBeen={!!freeDetail && isBeenHere("free", freeDetail.id)} onToggleBeen={freeDetail ? () => toggleBeenHere("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} hasBeen={!!townDetail && isBeenHere("town", townDetail.id)} onToggleBeen={townDetail ? () => toggleBeenHere("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} hasBeen={!!nightlifeDetail && isBeenHere("nightlife", nightlifeDetail.id)} onToggleBeen={nightlifeDetail ? () => toggleBeenHere("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} hasBeen={!!freeDetail && isBeenHere("free", freeDetail.id)} onToggleBeen={freeDetail ? () => toggleBeenHere("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       {/* ── The assistant that follows him (Oliver, 6 Aug: "some sort of
           assistant for the admin /#studio guy? That will always be with me?
           Even when I'm on the blogs")  ────────────────────────────────
@@ -24053,7 +24146,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           onSaved={() => refreshLiveContent()} />;
       })()}
 
-      <DetailPage lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} hasBeen={!!foodDetail && isBeenHere("food", foodDetail.id)} onToggleBeen={foodDetail ? () => toggleBeenHere("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} hasBeen={!!foodDetail && isBeenHere("food", foodDetail.id)} onToggleBeen={foodDetail ? () => toggleBeenHere("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
 
       {/* Per Oliver ("get rid of the popup"): once a guide finishes building, we
           navigate straight to the full-page GuidePage instead of showing a
@@ -25037,6 +25130,7 @@ export default function Gemlyx() {
         <Route path={EXAMPLE_GUIDE_PATH} element={<GuidePage guide={EXAMPLE_GUIDE} />} />
       )}
       <Route path={SUPPORT_PATH} element={<SupportPage />} />
+      <Route path={AFFILIATES_PATH} element={<AffiliatesPage />} />
       <Route path="/guide/new" element={<GuidePage />} />
       <Route path="/guide/:guideId" element={<GuidePage />} />
     </Routes>

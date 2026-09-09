@@ -1,4 +1,4 @@
-import { BOOKING_AFFILIATE_ID, TICKETMASTER_AFFILIATE_TEMPLATE, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_LINK, WEGOTRIP_AFFILIATE_TEMPLATE , TRIPCOM_ALLIANCE_ID, TRIPCOM_SID } from "../config";
+import { BOOKING_AFFILIATE_ID, TICKETMASTER_AFFILIATE_TEMPLATE, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_LINK, WEGOTRIP_AFFILIATE_TEMPLATE , TRIPCOM_ALLIANCE_ID, TRIPCOM_SID, GETYOURGUIDE_PARTNER_ID, GETYOURGUIDE_CAMPAIGN } from "../config";
 // hostOf, not a fourth copy of it. See pageScan.js, and see the four other
 // functions this codebase has already found existing twice.
 import { hostOf } from "./pageScan";
@@ -355,7 +355,67 @@ export const wegotripDisclosure = (url, template = WEGOTRIP_AFFILIATE_TEMPLATE) 
     ? "Booking through this link may earn Gemlyx a small commission. It costs you nothing and does not change the price."
     : "";
 
-// ── CAR HIRE, AND WHY THERE IS NO LINK HERE YET ─────────────────────
+// ── GETYOURGUIDE, WHICH TRACKS ON ITS OWN DOMAIN ────────────────────
+//
+// Oliver, 9 Sep 2026: "I got affiliate link from getyourguide.dk".
+//
+// TWO HOSTS, ONE PROGRAMME. getyourguide.dk redirects to
+// getyourguide.com/da-dk, so a link stored from their Danish site and a link
+// stored from a search both have to be recognised or half of them go untracked.
+// Verified by following one on 9 Sep 2026.
+const GETYOURGUIDE_HOSTS = ["getyourguide.com", "getyourguide.dk"];
+
+export const isGetyourguideUrl = (url) => {
+  const h = hostOf(url);
+  return !!h && GETYOURGUIDE_HOSTS.some(d => h === d || h.endsWith(`.${d}`));
+};
+
+// ── AND A PRODUCT IS THE ONE WITH AN ACTIVITY ID ────────────────────
+//
+// Their product URLs end in the activity id: /da-dk/kobenhavn-l12/<slug>-t37848/
+// where l12 is the city and t37848 is the thing you can actually book. The same
+// distinction isTiqetsProductUrl draws with -p<id>, and for the same reason: a
+// city page or a search result is a browse link wearing a product's clothes, and
+// a reader sent to one has been given a search box rather than the thing the
+// entry was talking about.
+const GETYOURGUIDE_PRODUCT = /\/[a-z0-9-]*-t\d+\/?(?:[?#]|$)/i;
+
+export const isGetyourguideProductUrl = (url) =>
+  isGetyourguideUrl(url) && GETYOURGUIDE_PRODUCT.test(String(url || ""));
+
+// The tracked address, or the URL unchanged when there is no partner id, or null
+// when it is not a link at all. Same three-way contract every wrapper above
+// keeps, so affiliateHref can treat them all alike.
+//
+// APPENDED RATHER THAN TEMPLATED, because GetYourGuide tracks on its own domain.
+// Their product URLs already carry query strings (ranking_uuid, q) and those have
+// to survive, so this reads the URL and sets two parameters on it rather than
+// pasting a string together. A hand-built `${url}?partner_id=` would have thrown
+// away the query on every link copied out of a search result.
+export const getyourguideUrl = (url, { partner = GETYOURGUIDE_PARTNER_ID, cmp = GETYOURGUIDE_CAMPAIGN } = {}) => {
+  const raw = String(url || "").trim();
+  if (!/^https?:\/\//i.test(raw)) return null;
+  if (!partner || !isGetyourguideUrl(raw)) return raw;
+  try {
+    const u = new URL(raw);
+    u.searchParams.set("partner_id", partner);
+    if (cmp) u.searchParams.set("cmp", cmp);
+    return u.toString();
+  } catch { return raw; }
+};
+
+// THE PARTNER ID, not the link he was given, for the reason tiqetsActive spells
+// out about templates: the id is what makes a named link pay, and a version of
+// this reading the sample link would report the programme live while every
+// GetYourGuide link on the site was untracked.
+export const getyourguideActive = (partner = GETYOURGUIDE_PARTNER_ID) => !!partner;
+
+export const getyourguideDisclosure = (url, partner = GETYOURGUIDE_PARTNER_ID) =>
+  !!partner && isGetyourguideUrl(url)
+    ? "Booking through this link may earn Gemlyx a small commission. It costs you nothing and does not change the price."
+    : "";
+
+// ── CAR HIRE, ONE LINK, CHOSEN ON INVENTORY ─────────────────────────
 //
 // Oliver, 15 Aug 2026, sending a GetRentacar link: "I guess multiple car ones
 // are fine."
@@ -364,20 +424,19 @@ export const wegotripDisclosure = (url, template = WEGOTRIP_AFFILIATE_TEMPLATE) 
 // rather than a list on purpose. A page offering a reader two rental buttons
 // has not given them more choice, it has given them a decision they did not
 // come here to make, and the second button halves the clicks on the first.
-// Several programmes, one link: pick per page by which has the cars.
+// Several programmes, one link: pick by which has the cars.
 //
-// AND THAT IS THE PART THAT IS NOT SETTLED. GetRentacar is a marketplace of
-// cars from local owners, and its own front page lists Turkey, the UAE, Spain,
-// Greece and the United States. Denmark is not on it, its /country/denmark page
-// is a 404, and no search turns up Danish inventory. A rental link that opens
-// on an empty result is worse than no link at all: the reader learns that
-// Gemlyx sends them to things that are not there, which costs more than the
-// commission was ever going to pay.
+// WHICH IS HOW IT WAS PICKED. GetRentacar pays 10% on a 90-day cookie, the best
+// pair on his Travelpayouts page, and its /country/denmark page is a 404: 10%
+// of an inventory that is not here. AutoEurope pays 4.4 to 8% and has Kastrup,
+// Billund, Aarhus, Aalborg, Esbjerg, Rønne, Sønderborg, Karup and Odense. A
+// worse rate on real cars beats a better one on none, because a rental link
+// that opens on an empty result teaches a reader that Gemlyx sends them to
+// things that are not there, and that costs more than any commission pays.
 //
-// So this ships empty and the check is one search on their own site for
-// Copenhagen. If the cars are there, paste the link. If they are not, the
-// programmes with real Danish coverage are DiscoverCars and Rentalcars, both
-// reachable through Travelpayouts.
+// Settled 26 Aug 2026 and closed on 8 Sep, Oliver: "Shall we cut out the
+// getrentacar?" The name came out of PARTNER_MERCHANTS with it. See config.js
+// for the link itself and for why it is a browse link rather than a deep one.
 export const carRentalUrl = (link = CAR_RENTAL_LINK) => {
   const raw = String(link || "").trim();
   return /^https?:\/\//i.test(raw) ? raw : null;
@@ -418,7 +477,14 @@ export const isPartnerLink = (url) => {
   const h = hostOf(raw);
   if (!h) return false;
   if (PARTNER_HOSTS.some(d => h === d || h.endsWith(`.${d}`))) return true;
-  // The one that is decided by a parameter rather than a host.
+  // ── THE TWO THAT ARE DECIDED BY A PARAMETER RATHER THAN A HOST ────
+  //
+  // Booking.com and GetYourGuide both track on their own domain, so the host
+  // says nothing: getyourguide.com is a partner link with partner_id on it and
+  // an ordinary link without. Asked of the PARAMETER, which is the part a
+  // tracking link cannot hide, and which is also what keeps a plain
+  // GetYourGuide reference in prose from being labelled as paid.
+  if (/(?:[?&])partner_id=[^&]/.test(raw) && isGetyourguideUrl(raw)) return true;
   return /(?:[?&])aid=\d/.test(raw) && (h === "booking.com" || h.endsWith(".booking.com"));
 };
 
@@ -461,9 +527,23 @@ const PARTNER_MERCHANTS = {
   tiqets: "Tiqets",
   booking: "Booking.com",
   ticketmaster: "Ticketmaster",
+  // ── THE CAR PROGRAMMES ───────────────────────────────────────────
+  // autoeurope is the one CAR_RENTAL_LINK actually points at, and it was
+  // missing from this list until 8 Sep 2026, so the only car link on the site
+  // rendered as "Partner site" rather than "Book on AutoEurope". A merchant
+  // nobody has written down gets the generic label, which is the right rule and
+  // was the wrong answer here.
+  //
+  // DiscoverCars and Rentalcars stay: both have real Danish coverage and are on
+  // Travelpayouts, so either could be the link tomorrow. GetRentacar came off
+  // the same day. Oliver: "Shall we cut out the getrentacar?", and "according
+  // to Google, that affiliate is not as great as autoeurope". It had already
+  // lost the decision on 26 August, on inventory rather than rate: 10% and a
+  // 90-day cookie, the best pair on his page, of cars that are not in Denmark.
+  getyourguide: "GetYourGuide",
+  autoeurope: "AutoEurope",
   discovercars: "DiscoverCars",
   rentalcars: "Rentalcars",
-  getrentacar: "GetRentacar",
   kiwi: "Kiwi.com",
   aviasales: "Aviasales",
   wegotrip: "WeGoTrip",
@@ -495,7 +575,7 @@ export const affiliateHref = (url) => {
   // The same refusal both wrappers make, kept here so a caller gets one
   // contract: null means "this is not a link", never "this is not a partner".
   if (!/^https?:\/\//i.test(raw)) return null;
-  for (const wrap of [ticketmasterUrl, tiqetsUrl, wegotripUrl]) {
+  for (const wrap of [ticketmasterUrl, tiqetsUrl, wegotripUrl, getyourguideUrl]) {
     const out = wrap(raw);
     if (out && out !== raw) return out;
   }
@@ -509,7 +589,7 @@ export const affiliateHref = (url) => {
 //
 // Empty for a link that earns nothing, because "this may earn us a commission"
 // printed over a link that earns nothing is a false statement about money.
-export const affiliateNote = (url) => ticketDisclosure(url) || tiqetsDisclosure(url) || wegotripDisclosure(url) || "";
+export const affiliateNote = (url) => ticketDisclosure(url) || tiqetsDisclosure(url) || wegotripDisclosure(url) || getyourguideDisclosure(url) || "";
 
 // True when the link is going through a programme, for a caller that has to set
 // rel="sponsored nofollow", which is what Google asks of a paid link.

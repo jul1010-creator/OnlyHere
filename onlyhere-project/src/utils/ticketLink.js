@@ -36,7 +36,7 @@
 //                               solves exactly this for research sources and
 //                               already knows that an ordinary name like
 //                               "Harbour" needs corroborating.
-import { isTiqetsUrl, isTicketmasterUrl, isWegotripUrl, affiliateHref } from "./affiliates";
+import { isTiqetsUrl, isTicketmasterUrl, isWegotripUrl, isGetyourguideProductUrl, affiliateHref } from "./affiliates";
 import { sourceIsAboutPlace } from "./sourcePolicy";
 import { containsName, fold, PLACE_NAMES, SIGHT_NAMES } from "./danishNames";
 import { haversineKm } from "./helpers";
@@ -186,7 +186,8 @@ export const isWegotripTicketUrl = (url) => {
 // edit in the publish gate, the render and the picker, which is what this
 // comment promised on 15 August and what it cost on 6 September.
 export const isBookableTicketUrl = (url) =>
-  isTiqetsProductUrl(url) || isTicketmasterEventUrl(url) || isTicketmasterHubUrl(url) || isWegotripTicketUrl(url);
+  isTiqetsProductUrl(url) || isTicketmasterEventUrl(url) || isTicketmasterHubUrl(url)
+  || isWegotripTicketUrl(url);
 
 // Which agent it is, for the render, which has to reach for the right template.
 export const ticketAgentOf = (url) =>
@@ -194,6 +195,38 @@ export const ticketAgentOf = (url) =>
   : isTicketmasterEventUrl(url) || isTicketmasterHubUrl(url) ? "ticketmaster"
   : isWegotripTicketUrl(url) ? "wegotrip"
   : "";
+
+// ── AND GETYOURGUIDE IS NOT ONE OF THEM ─────────────────────────────
+//
+// It was, for about an hour on 9 Sep 2026, and taking it back out is the answer
+// to the question Oliver asked next: "What do we do about the overlap with
+// Tiqets and GetYourGuide.com?"
+//
+// THE OVERLAP IS SMALLER THAN IT LOOKS, and that is a measurement rather than a
+// hope. Checked the same evening: GetYourGuide sells no ARoS admission, only
+// Aarhus tours. Trip.com sells nothing at all for Rosenborg or Tivoli. Across
+// three resellers the Danish inventory is guided experiences and the museum
+// doors are thin, because a Danish museum sells its own admission and does not
+// wholesale it.
+//
+// So the two are not competing for one slot, they are answering two questions.
+// Tiqets has the ticket that gets you in. GetYourGuide has the canal tour, the
+// food walk, the day trip to Malmö. An entry can want both and a reader reading
+// "Tickets" and "Tours" on two lines has been told more, not asked to choose.
+//
+// He picked that over the alternatives, including the one where the higher
+// commission wins, which is the only version of this where a reader's link is
+// chosen for our benefit rather than theirs.
+//
+// A TOUR IS THEREFORE NOT A TICKET, anywhere: not in isBookableTicketUrl, not in
+// ticketAgentOf, not in the Book tickets button. It has its own field and its
+// own row, and this function is what keeps one out of the other's slot.
+export const isTourUrl = (url) => isGetyourguideProductUrl(url);
+
+// The two fields a pasted link can land in, named here so the Studio and the
+// render cannot disagree about the spelling of either.
+export const TICKET_FIELD = "ticketUrl";
+export const TOUR_FIELD = "tourUrl";
 
 // ── AND IS IT EVEN IN DENMARK ───────────────────────────────────────
 //
@@ -565,6 +598,32 @@ export const reviewPastedTicketUrl = (raw, { name = "", town = "", where = "", w
   const url = String(raw || "").trim();
   if (!url) return { ok: false, reason: PASTED_TICKET_REFUSALS.empty };
   if (!/^https?:\/\//i.test(url)) return { ok: false, reason: PASTED_TICKET_REFUSALS.notAUrl };
+  // ── A TOUR IS ACCEPTED AND FILED SOMEWHERE ELSE ──────────────────
+  //
+  // One paste box, two destinations, decided by what the link actually is rather
+  // than by which box he chose. A GetYourGuide activity is a real thing to add
+  // to an entry and it is not a ticket, so it goes to the Tours row instead of
+  // being refused as "not an agent" and leaving him nowhere to put it.
+  //
+  // BEFORE the ticket checks below, because every one of them is about a ticket:
+  // a tour has no venue page to be a category of and no sub-event to be inside.
+  if (isTourUrl(url)) {
+    let tourTracked = url;
+    try { tourTracked = (typeof wrap === "function" ? wrap(url) : url) || url; } catch { tourTracked = url; }
+    const tourEarning = tourTracked !== url;
+    return {
+      ok: true,
+      url,
+      field: TOUR_FIELD,
+      agent: "getyourguide",
+      tracked: tourTracked,
+      earning: tourEarning,
+      confirmedDanish: false,
+      reason: tourEarning
+        ? "Filed as a TOUR rather than a ticket, on the Tours row. Stored as the plain GetYourGuide address; the reader's link opens it with the partner id on it, which is the address below."
+        : "Filed as a TOUR rather than a ticket, on the Tours row, and it is NOT earning: no GetYourGuide partner id is configured in config.js, so the link works and Gemlyx is paid nothing.",
+    };
+  }
   const onAnAgent = isTiqetsUrl(url) || isTicketmasterUrl(url) || isWegotripUrl(url);
   if (!onAnAgent) return { ok: false, reason: PASTED_TICKET_REFUSALS.notAnAgent };
   if (!isBookableTicketUrl(url)) {
@@ -592,6 +651,9 @@ export const reviewPastedTicketUrl = (raw, { name = "", town = "", where = "", w
   return {
     ok: true,
     url,
+    // Where the Studio writes it. Named rather than assumed, because there are
+    // two fields now and the caller must not be the one deciding which.
+    field: TICKET_FIELD,
     agent,
     tracked,
     earning,

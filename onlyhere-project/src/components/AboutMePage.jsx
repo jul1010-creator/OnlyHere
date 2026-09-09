@@ -5,6 +5,7 @@ import { settledObservations, learnedIsEmpty, OBSERVED_MIN } from "../utils/prof
 import { accountProviders, hasPassword, updatePassword } from "../utils/auth";
 import { currentTrip, tripStatusLine } from "../utils/tripStatus";
 import { ProfileQuestions } from "./ProfileQuestions";
+import { AFFILIATES_PATH } from "../utils/affiliateRoster";
 
 // ── INFO ABOUT ME ────────────────────────────────────────────────────
 //
@@ -545,8 +546,17 @@ export const AboutMePage = ({
       <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: 18 }}>
         The agreement between you and Gemlyx, and what is done with your data.
       </div>
-      {[["Terms of Service", "/terms.html"], ["Privacy Policy", "/privacy.html"]].map(([label, href]) => (
-        <a key={href} href={href} target="_blank" rel="noopener noreferrer"
+      {/* ── AND HOW THE SITE IS PAID FOR ────────────────────────────
+          Oliver, 9 Sep 2026, asked for the affiliates page in the menu. It sits
+          under Legal rather than in a section of its own because it answers the
+          same kind of question the other two do: what the arrangement between
+          you and Gemlyx actually is. It opens in this tab rather than a new one,
+          because unlike the other two it is a page of this app.
+          "How we are paid" rather than "Affiliates": a reader asking the
+          question is not asking about our commercial arrangements, they are
+          asking whether the recommendation was bought. */}
+      {[["How we are paid", AFFILIATES_PATH, false], ["Terms of Service", "/terms.html", true], ["Privacy Policy", "/privacy.html", true]].map(([label, href, away]) => (
+        <a key={href} href={href} {...(away ? { target: "_blank", rel: "noopener noreferrer" } : {})}
           style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, textDecoration: "none", border: `1px solid ${C.border}`, borderRadius: 10, padding: "13px 15px", marginBottom: 10 }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{label}</span>
           <span style={{ fontSize: 15, color: C.gold, flexShrink: 0 }}>↗</span>

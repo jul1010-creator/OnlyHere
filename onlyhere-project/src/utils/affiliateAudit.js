@@ -116,7 +116,7 @@ export const auditNote = (s) => {
 // switched on at all. An empty template is not a bug and is not a mistake, and
 // there is no way to tell an empty one from a filled one without opening
 // config.js, which is exactly the state this panel exists to end.
-export const programmeState = ({ tiqetsTemplate, tiqetsBrowse, ticketmasterTemplate, bookingId, carRental, wegotrip, wegotripTemplate, tripcom, tripcomCities = 0 } = {}) => [
+export const programmeState = ({ tiqetsTemplate, tiqetsBrowse, ticketmasterTemplate, bookingId, carRental, wegotrip, wegotripTemplate, tripcom, tripcomCities = 0, getyourguide } = {}) => [
   { name: "Tiqets", what: "attraction tickets, deep link", on: !!clean(tiqetsTemplate),
     note: clean(tiqetsTemplate) ? "live on every row with a Tiqets product page" : "no template, so Tiqets product pages render a button that earns nothing" },
   { name: "Tiqets browse", what: "one generic button per guide", on: !!clean(tiqetsBrowse),
@@ -160,6 +160,15 @@ export const programmeState = ({ tiqetsTemplate, tiqetsBrowse, ticketmasterTempl
     note: `${clean(wegotripTemplate)
       ? "live on every row the sweep matched to their Danish catalogue"
       : "no template, so their Danish products render real links that earn nothing. Travelpayouts, WeGoTrip campaign, link generator"}. Sells Legoland Billund entry, so anything that OFFERS it rather than answering for a row already on screen has to go through the exclusion gate` },
+  // ── THE ONE THAT NEEDS NO TEMPLATE ───────────────────────────────
+  // 9 Sep 2026. GetYourGuide tracks on its own domain with two query
+  // parameters, so unlike Tiqets and WeGoTrip there is no second thing to
+  // configure: the partner id IS the programme, and every product page found is
+  // payable the day it is found. One row rather than two, for once.
+  { name: "GetYourGuide", what: "tours and experiences, deep link", on: !!clean(getyourguide),
+    note: clean(getyourguide)
+      ? "live on every row with a GetYourGuide activity page. Tours and experiences only: their Danish catalogue has canal tours, walks and day trips and no museum admissions, which is the reason to point at it and the limit on where"
+      : "no partner id configured" },
   { name: "Car hire", what: "rentals", on: !!clean(carRental),
     note: clean(carRental) ? "AutoEurope, real Danish inventory at 9 airports. Only renders on a trip the traveller said is a driving one" : "empty: the link on hand had no Danish inventory, and a button that opens on an empty result costs more than the commission pays" },
 ];

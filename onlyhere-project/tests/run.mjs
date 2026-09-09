@@ -63,13 +63,13 @@ writeFileSync(entry, `
   export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
   export { TICKET_HUNT_PROMPT, ticketHuntUrls } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
-  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, partnerMerchant, linkLabel, affiliateHref, affiliateNote, isAffiliateHref } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
-  export { isWegotripUrl, wegotripUrl, wegotripBrowseUrl, wegotripActive, wegotripDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
+  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, partnerMerchant, linkLabel, affiliateHref, affiliateNote, isAffiliateHref, isGetyourguideUrl, isGetyourguideProductUrl, getyourguideUrl, getyourguideActive, getyourguideDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
+  export { isWegotripUrl, wegotripUrl, wegotripBrowseUrl, wegotripActive, wegotripDisclosure, tripcomActive } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { TOWN_TYPES, townNameOf, audioFor, audioLine, ticketFor, unmatchedProducts, wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO, TICKET as WEGO_TICKET } from ${JSON.stringify(join(root, "src/utils/wegotripMatch.js"))};
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
   export { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
   export { venueCore, venueMentions, venueQuote, venueVerdict, venueVia, describeVenue, VENUE_MIN_MENTIONS, VENUE_MIN_MENTIONS_NO_TOWN, VENUE_MAX_KM, NO_NAME as V_NO_NAME, NOT_NAMED as V_NOT_NAMED, TOO_FAR as V_TOO_FAR, IS_AN_EVENT as V_IS_AN_EVENT, OK as V_OK } from ${JSON.stringify(join(root, "src/utils/venueMatch.js"))};
-  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop, priceSourceHost } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
+  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop, priceSourceHost, isTourUrl, TICKET_FIELD, TOUR_FIELD } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel, eventLastDay } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
@@ -268,8 +268,10 @@ writeFileSync(entry, `
   export { alertKey, describeWeatherChange, unseenAlerts, usableSeen, seenAlerts, markAlertSeen, alertCountLine, SEEN_KEY, MAX_SEEN } from ${JSON.stringify(join(root, "src/utils/weatherAlerts.js"))};
   export { preferenceRowState, PREF_NO_ACCOUNT, PREF_NO_INTERESTS, PREF_READY } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { savableThread, restorableThread, saveThread, loadThread, clearThread, CHAT_KEY, MAX_SAVED_MESSAGES } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
+  export { affiliateRoster, payingCount, AFFILIATES_PATH } from ${JSON.stringify(join(root, "src/utils/affiliateRoster.js"))};
   export { UI_LANGUAGES, UI_CODES, UI_STRINGS, UI_KEYS, UI_LANGUAGE_KEY, DEFAULT_UI_LANGUAGE, t, resolveUiLanguage, isUiLanguage, uiLanguageMeta, storedUiLanguage, setStoredUiLanguage, currentUiLanguage } from ${JSON.stringify(join(root, "src/utils/uiLanguage.js"))};
-  export { ENTRY_WORDS, ENTRY_HEADINGS, ARRIVAL_LABELS, GLANCE_LABELS, KIND_LABELS, entryWord, BOOK_LABELS, bookLabel } from ${JSON.stringify(join(root, "src/utils/entryWords.js"))};
+  export { ENTRY_WORDS, ENTRY_HEADINGS, ARRIVAL_LABELS, GLANCE_LABELS, KIND_LABELS, entryWord, BOOK_LABELS, bookLabel, TOUR_PHRASE_WORDS } from ${JSON.stringify(join(root, "src/utils/entryWords.js"))};
+  export { tourQuery, tourUrlIsAboutTown, pickTourUrl, tourPhrase, tourKindFor } from ${JSON.stringify(join(root, "src/utils/tourSweep.js"))};
   export { datesFromListings, cityRankOf, cityWanted, CITY_MATCH, CITY_UNKNOWN, CITY_DIFFERENT } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, PRICE_NOT_PUBLISHED, PRICE_UNKNOWN } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { sourceFit, describeSourceFit, LIVING_TYPES } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -13850,9 +13852,19 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 
   // ── LEGAL IS LAST, AND IT LINKS RATHER THAN COPIES ──────────────
   // Built from an array rather than written twice, so there is no literal href
-  // to match: the RULE is that both documents are reachable from the section.
-  ok("the terms are reachable", /\["Terms of Service", "\/terms\.html"\]/.test(page));
-  ok("and the privacy policy", /\["Privacy Policy", "\/privacy\.html"\]/.test(page));
+  // to match: the RULE is that each document is reachable from the section.
+  //
+  // A THIRD ROW SINCE 9 SEP 2026, and it is not a legal document: "How we are
+  // paid" is a page of this app rather than a file in public/, so the rows carry
+  // a flag for whether they open away. Matched on the href alone, so a row
+  // gaining a fourth field does not break this again.
+  ok("the terms are reachable", /"Terms of Service", "\/terms\.html"/.test(page));
+  ok("and the privacy policy", /"Privacy Policy", "\/privacy\.html"/.test(page));
+  ok("and how the site is paid for", /"How we are paid", AFFILIATES_PATH/.test(page));
+  // The two documents live outside the app and open in their own tab; the third
+  // is a route in it and must not.
+  ok("the two documents open away and the app page does not",
+     /\["How we are paid", AFFILIATES_PATH, false\][\s\S]{0,200}"\/terms\.html", true[\s\S]{0,80}"\/privacy\.html", true/.test(page));
   ok("from the Legal section itself", /const legalSection[\s\S]{0,1500}terms\.html/.test(page));
   // Reproducing either would be a second copy to keep in step with the first.
   ok("neither is reproduced on the page", page.length < 40000);
@@ -21770,6 +21782,49 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("and a junk browse link renders nothing rather than a broken button", tiqetsBrowseUrl("not a url"), null);
   is("an empty one too", tiqetsBrowseUrl(""), null);
 
+  // ── AND THE WEGOTRIP ONE, THE SAME WAY ──────────────────────────
+  //
+  // Oliver pasted it on 8 Sep 2026, from the Travelpayouts link generator
+  // rather than the "get link" button, which is what the config comment asked
+  // for. Same assertions as Tiqets above and for the same reason: a typo in
+  // config.js is the one failure a fixture cannot see, because every test using
+  // a fixture template stays green while every WeGoTrip link on the site pays
+  // nobody.
+  //
+  // These run against whatever is configured, so they hold on the day it is
+  // empty too: an empty template hands the plain URL back, and the shape
+  // assertions only apply once there is a wrapped link to look at.
+  {
+    const WALK = "https://wegotrip.com/copenhagen-d2618487/copenhagen-self-guided-walk-p20601/";
+    const w = M.wegotripUrl(WALK);
+    is("the programme is live exactly when a template is configured", M.wegotripActive(), w !== WALK);
+    if (w !== WALK) {
+      ok("the live template produces a tp.media link", /^https:\/\/tp\.media\/r\?/.test(w));
+      // The same two values the Tiqets template carries. They identify the
+      // ACCOUNT, so a template copied from somewhere else fails here.
+      ok("carrying his marker", /[?&]marker=765061(?:&|$)/.test(w));
+      ok("and his account", /[?&]trs=562709(?:&|$)/.test(w));
+      // And the programme's own two, which must NOT be the Tiqets ones or the
+      // link is pointing at the wrong campaign.
+      ok("with a campaign of its own", /[?&]campaign_id=(\d+)/.test(w) && !/campaign_id=89(?:&|$)/.test(w));
+      ok("and a partner of its own", /[?&]p=(\d+)/.test(w) && !/[?&]p=2074(?:&|$)/.test(w));
+      ok("and it points at the page it was asked for", w.includes(encodeURIComponent(WALK)));
+      // A template pasted without {url} silently sends every walk to whatever
+      // the template's own destination was, which for this one is
+      // wegotrip.com's front page.
+      ok("no placeholder survives into a live link", !/\{url\}/.test(w));
+      ok("and the example destination is not still in it", !/wegotrip\.com(?:%2F)?["'\s]*$/.test(w.replace(encodeURIComponent(WALK), "")));
+      is("and the destination is not doubled", (w.match(/[?&]u=/g) || []).length, 1);
+      // u LAST, or Travelpayouts reads the tail of the encoded URL as its own
+      // parameter and the destination is lost.
+      ok("and u is the last parameter", /[?&]u=[^&]*$/.test(w));
+      // A second walk must produce a different link, or the template is a fixed
+      // redirect wearing a deep link's clothes.
+      ok("a different walk gets a different link",
+         M.wegotripUrl("https://wegotrip.com/aarhus-d2624652/aarhus-old-town-walk-p20610/") !== w);
+    }
+  }
+
   // ── CAR HIRE ────────────────────────────────────────────────────
   //
   // This read `is("no car link is configured yet", carRentalActive(), false)`,
@@ -21860,7 +21915,266 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("nothing counts to nothing", partnerLinkCount([], { isPaid: isPartnerLink }), 0);
   is("and a counter that throws counts nothing rather than everything",
      partnerLinkCount(["https://a"], { isPaid: () => { throw new Error("x"); } }), 0);
-  is("but the link works the moment it is pasted", carRentalUrl("https://getrentacar.tpx.li/KyhVj8Bg"), "https://getrentacar.tpx.li/KyhVj8Bg");
+  is("but the link works the moment it is pasted", carRentalUrl("https://discovercars.tpx.li/xxxxxxxx"), "https://discovercars.tpx.li/xxxxxxxx");
+
+  // ── AND WHATEVER IS CONFIGURED HAS TO BE NAMEABLE ────────────────
+  //
+  // Found 8 Sep 2026 while cutting GetRentacar out. PARTNER_MERCHANTS named
+  // five car programmes and not the one CAR_RENTAL_LINK points at, so the only
+  // car link on the site came out of linkLabel as "Partner site". The generic
+  // label is the right answer for a merchant nobody has written down, and the
+  // wrong one for the merchant we chose on purpose.
+  //
+  // Asked of the LIVE link rather than a fixture, because that is the half a
+  // fixture cannot see, and shaped as a rule so it holds for whichever
+  // programme is configured next.
+  {
+    const car = carRentalUrl();
+    if (car) {
+      ok("the configured car link is a partner link", M.isPartnerLink(car));
+      ok("and the merchant behind it has a name", !!M.partnerMerchant(car));
+      ok("so the button says whose site it is", /^Book on /.test(M.linkLabel(car)));
+      ok("rather than the label for a merchant nobody wrote down", M.linkLabel(car) !== "Partner site");
+    }
+  }
+  // The one that was cut. A link nobody holds any more gets the honest generic
+  // label, which is what the allow-list is for.
+  is("a programme we do not hold is not named", M.partnerMerchant("https://getrentacar.tpx.li/KyhVj8Bg"), "");
+
+  // ── GETYOURGUIDE, WHICH TRACKS ON ITS OWN DOMAIN ─────────────────
+  //
+  // Oliver, 9 Sep 2026: "I got affiliate link from getyourguide.dk". The link he
+  // was given is a bare domain with two query parameters on it, which is the
+  // whole mechanism: there is no template and no redirect, so any GetYourGuide
+  // URL becomes a tracked one by appending to it. Trip.com's Allianceid works
+  // the same way and Tiqets' does not.
+  {
+    const GYG = "https://www.getyourguide.com/da-dk/kobenhavn-l12/kobenhavn-kanal-badtur-fra-gammel-strand-t37848/";
+    is("their own domain is theirs", M.isGetyourguideUrl(GYG), true);
+    // TWO HOSTS, ONE PROGRAMME. getyourguide.dk redirects to
+    // getyourguide.com/da-dk, verified by following one on 9 Sep 2026, so a
+    // link stored from either has to be recognised or half of them go untracked.
+    is("and so is the Danish one", M.isGetyourguideUrl("https://www.getyourguide.dk/kobenhavn-l12/x-t1/"), true);
+    is("somebody else's is not", M.isGetyourguideUrl("https://www.tiqets.com/en/x-p1/"), false);
+    // A domain that merely ENDS in theirs is not theirs. The rule every host
+    // list in this codebase keeps.
+    is("nor a lookalike", M.isGetyourguideUrl("https://notgetyourguide.com/x-t1/"), false);
+
+    // ── A PRODUCT IS THE ONE WITH AN ACTIVITY ID ───────────────────
+    // Their URLs end -t<id> for the thing you can book, the same distinction
+    // isTiqetsProductUrl draws with -p<id>. A city page or a search result is a
+    // browse link, and a reader sent to one got a search box rather than the
+    // thing the entry was talking about.
+    is("an activity page is bookable", M.isGetyourguideProductUrl(GYG), true);
+    is("a city page is not", M.isGetyourguideProductUrl("https://www.getyourguide.com/da-dk/kobenhavn-l12/"), false);
+    is("nor is a search", M.isGetyourguideProductUrl("https://www.getyourguide.com/da-dk/s/?q=Copenhagen"), false);
+    is("and somebody else's product is not theirs", M.isGetyourguideProductUrl("https://www.tiqets.com/en/x-p1/"), false);
+    // ── AND A TOUR IS NOT A TICKET ─────────────────────────────────
+    //
+    // Oliver, 9 Sep 2026: "What do we do about the overlap with Tiqets and
+    // GetYourGuide.com?" It was a ticket agent for about an hour, and taking it
+    // back out is the answer he picked.
+    //
+    // THE OVERLAP IS SMALLER THAN IT LOOKS, measured the same evening:
+    // GetYourGuide sells no ARoS admission, only Aarhus tours, and Trip.com
+    // sells nothing at all for Rosenborg or Tivoli. Across three resellers the
+    // Danish inventory is guided experiences, because a Danish museum sells its
+    // own door and does not wholesale it. So they answer two questions and get
+    // two rows, and nobody has to arbitrate which link a reader deserves.
+    is("an activity page is a tour", M.isTourUrl(GYG), true);
+    is("and a ticket page is not", M.isTourUrl("https://www.tiqets.com/en/x-p1/"), false);
+    is("so it may not be stored as a ticket link", M.isBookableTicketUrl(GYG), false);
+    is("and the ticket render does not claim it", M.ticketAgentOf(GYG), "");
+    is("nor does it wear a Book tickets label of its own", M.bookLabel("getyourguide"), "Book tickets");
+    // The row it does get, named the way the self-guided walk above it is: two
+    // adjacent rows naming a merchant two different ways reads as an accident.
+    is("the tours row is translated", M.entryWord("Tours", "da"), "Ture");
+    is("and so is the merchant on its link", M.entryWord("On GetYourGuide", "da"), "På GetYourGuide");
+    is("and in German", M.entryWord("On GetYourGuide", "de"), "Auf GetYourGuide");
+
+    // ── ONE PASTE BOX, TWO DESTINATIONS ────────────────────────────
+    //
+    // Decided by what the link is rather than by which box he picked. A
+    // GetYourGuide activity used to come back "not an agent", which left him
+    // holding a real thing to add and nowhere to put it.
+    {
+      const tour = M.reviewPastedTicketUrl(GYG);
+      ok("a pasted tour is accepted", tour.ok);
+      is("and filed as a tour", tour.field, "tourUrl");
+      ok("and said to be one in words", /TOUR rather than a ticket/.test(tour.reason));
+      const ticket = M.reviewPastedTicketUrl("https://www.tiqets.com/en/copenhagen-attractions-c113/tickets-for-tivoli-p974094/");
+      ok("a pasted ticket is still accepted", ticket.ok);
+      is("and filed as a ticket", ticket.field, "ticketUrl");
+      // The two names are written once, or the Studio and the render disagree
+      // about the spelling of a field and nothing renders.
+      is("the ticket field is named where both sides read it", M.TICKET_FIELD, "ticketUrl");
+      is("and so is the tour field", M.TOUR_FIELD, "tourUrl");
+    }
+
+    // ── APPENDED, NOT TEMPLATED ────────────────────────────────────
+    const paid = M.getyourguideUrl(GYG, { partner: "WKOYNZB", cmp: "share_to_earn" });
+    ok("the partner id is on it", /[?&]partner_id=WKOYNZB(?:&|$)/.test(paid));
+    ok("and the campaign", /[?&]cmp=share_to_earn(?:&|$)/.test(paid));
+    ok("on their own domain rather than a redirect", /^https:\/\/www\.getyourguide\.com\//.test(paid));
+    // THE QUERY SURVIVES. Their product URLs already carry ranking_uuid and q
+    // when copied out of a search, and a hand-built `${url}?partner_id=` would
+    // have thrown those away on every link pasted from a result page.
+    {
+      const withQuery = M.getyourguideUrl(`${GYG}?ranking_uuid=abc&q=Copenhagen`, { partner: "WKOYNZB", cmp: "" });
+      // READ BACK RATHER THAN MATCHED. A first version of this searched for the
+      // substrings, and `${url}?partner_id=` passed it: the old query is still
+      // in there, after a second question mark, in an address no browser reads
+      // the way it looks. Parsing is the only test that can tell the two apart.
+      const back = new URL(withQuery);
+      is("an existing query is kept", back.searchParams.get("ranking_uuid"), "abc");
+      is("and all of it", back.searchParams.get("q"), "Copenhagen");
+      is("and the id is added beside it", back.searchParams.get("partner_id"), "WKOYNZB");
+      is("in one query rather than two", (withQuery.match(/\?/g) || []).length, 1);
+      is("and it is not doubled", (withQuery.match(/partner_id=/g) || []).length, 1);
+    }
+    // A link that already carries somebody else's id is OURS after wrapping, or
+    // a pasted link would pay a stranger.
+    ok("another partner's id is replaced rather than joined",
+       (M.getyourguideUrl(`${GYG}?partner_id=SOMEONE`, { partner: "WKOYNZB" }).match(/partner_id=/g) || []).length === 1
+       && /partner_id=WKOYNZB/.test(M.getyourguideUrl(`${GYG}?partner_id=SOMEONE`, { partner: "WKOYNZB" })));
+    // The three-way contract every wrapper in this file keeps.
+    is("no partner id hands back the plain link", M.getyourguideUrl(GYG, { partner: "" }), GYG);
+    is("and it never wraps a destination that is not theirs",
+       M.getyourguideUrl("https://www.tiqets.com/en/x-p1/", { partner: "WKOYNZB" }), "https://www.tiqets.com/en/x-p1/");
+    is("and junk is not a link at all", M.getyourguideUrl("not a url"), null);
+
+    // ── PAID BY THE PARAMETER, NOT BY THE HOST ─────────────────────
+    // getyourguide.com is a partner link with partner_id on it and an ordinary
+    // link without, exactly as booking.com is with aid. Asked of the parameter,
+    // which is the part a tracking link cannot hide, and which keeps a plain
+    // GetYourGuide reference in prose from being labelled as paid.
+    is("a tracked one is a partner link", M.isPartnerLink(paid), true);
+    is("an untracked one is not", M.isPartnerLink(GYG), false);
+    is("and the merchant is named on it", M.partnerMerchant(paid), "GetYourGuide");
+    is("so the button says whose site it is", M.linkLabel(paid), "Book on GetYourGuide");
+    // The disclosure travels with the money, as everywhere else in this file.
+    ok("a tracked link says it is paid", !!M.getyourguideDisclosure(GYG, "WKOYNZB"));
+    is("and an untracked programme says nothing", M.getyourguideDisclosure(GYG, ""), "");
+    is("nor over somebody else's link", M.getyourguideDisclosure("https://www.tiqets.com/en/x-p1/", "WKOYNZB"), "");
+    // Through the ONE DOOR, which is what makes every render site pay without
+    // remembering to.
+    ok("and the one door wraps it", /partner_id=/.test(String(M.affiliateHref(GYG))));
+    ok("with the sentence that has to go under it", !!M.affiliateNote(GYG));
+  }
+
+  // ── "LIST ALL OUR AFFILIATES AND WHY WE USE THEM" ────────────────
+  //
+  // Oliver, 9 Sep 2026. A public page about money, which makes it the page in
+  // this app most able to say something untrue and least likely to be corrected.
+  {
+    const roster = M.affiliateRoster();
+    ok("there is a roster", roster.length >= 6);
+    is("every programme says what it sells", roster.filter(p => !p.sells).map(p => p.key), []);
+    is("and why it was chosen", roster.filter(p => !p.why || p.why.length < 40).map(p => p.key), []);
+    is("and each has its own key", new Set(roster.map(p => p.key)).size, roster.length);
+    // COUNTED, NEVER TYPED. "Some of the links here are paid" over a site where
+    // none of them are is the sentence this file exists to prevent.
+    is("the count is counted off the roster", M.payingCount(), roster.filter(p => p.earning).length);
+    // ── AND A COMPANY THAT PAYS NOTHING IS NOT ON IT ──────────────
+    //
+    // Airbnb was, for one evening, under a heading saying it earns nothing.
+    // Oliver, 9 Sep 2026: "Airbnb stopped being an affiliate in 2021. So remove
+    // that." The page answers how Gemlyx is paid, and a company that pays
+    // nothing is not an answer to it.
+    is("nothing on the roster earns nothing",
+       M.affiliateRoster().filter(p => p.earning === false && !p.why).map(p => p.key), []);
+    {
+      const rosterSrc = readFileSync(join(root, "src/utils/affiliateRoster.js"), "utf8");
+      const pageSrc = readFileSync(join(root, "src/components/AffiliatesPage.jsx"), "utf8");
+      ok("Airbnb is not listed as a programme", !/name: "Airbnb"/.test(rosterSrc));
+      ok("nor rendered as one", !/Airbnb/.test(stripComments(pageSrc)));
+      // THE HONESTY DID NOT GO ANYWHERE. It moved to the row where a reader is
+      // deciding whether to press the button, which is where every disclosure
+      // rule in this codebase insists it belongs.
+      const affSrc = readFileSync(join(root, "src/utils/affiliates.js"), "utf8");
+      const stay = affSrc.slice(affSrc.indexOf("export const stayDisclosure"));
+      ok("and the Airbnb button still says it earns nothing",
+         /Airbnb link earns nothing|Airbnb links earn nothing/.test(stay.slice(0, 900)));
+      // The page must not describe a section it no longer has.
+      ok("and the page does not promise a list it no longer prints",
+         !/listed here too/.test(pageSrc));
+    }
+
+    // ── AND THE PUBLIC PAGE MAY NOT DISAGREE WITH THE PRIVATE ONE ──
+    //
+    // affiliateAudit.programmeState is the founder-facing version of this list.
+    // Two lists of the same programmes, read from the same config, and a public
+    // page and a private dashboard disagreeing about which ones pay is the worst
+    // thing either of them could do.
+    {
+      const panel = M.programmeState({
+        tiqetsTemplate: M.tiqetsActive() ? "on" : "",
+        ticketmasterTemplate: M.ticketmasterActive() ? "on" : "",
+        bookingId: M.affiliateActive() ? "on" : "",
+        carRental: M.carRentalActive() ? "on" : "",
+        wegotripTemplate: M.wegotripActive() ? "on" : "",
+        tripcom: M.tripcomActive() ? "on" : "",
+        getyourguide: M.getyourguideActive() ? "on" : "",
+      });
+      const byName = { tiqets: "Tiqets", getyourguide: "GetYourGuide", ticketmaster: "Ticketmaster",
+        wegotrip: "WeGoTrip", booking: "Booking.com", tripcom: "Trip.com", carhire: "Car hire" };
+      const disagreed = roster.filter(p => {
+        const row = panel.find(r => r.name === byName[p.key]);
+        return !row || row.on !== p.earning;
+      }).map(p => p.key);
+      is("the public page and the studio panel agree about what pays", disagreed, []);
+    }
+
+    // ── AND EACH ROW READS ITS OWN PROGRAMME ───────────────────────
+    //
+    // The agreement above cannot see this. Both sides ask the same functions, so
+    // pointing GetYourGuide's row at tiqetsActive keeps them agreeing while both
+    // happen to be configured, and the page starts lying the day one template is
+    // emptied. Found by a mutation that survived on 9 Sep 2026.
+    //
+    // Read off the source, because the pairing is what is wrong if anything is,
+    // and a closure cannot be asked which function it closed over.
+    {
+      const rosterSrc = readFileSync(join(root, "src/utils/affiliateRoster.js"), "utf8");
+      const pairs = [...rosterSrc.matchAll(/key: "([a-z]+)",[\s\S]{0,1200}?live: (\w+),/g)].map(m => [m[1], m[2]]);
+      const OWN = {
+        tiqets: "tiqetsActive", getyourguide: "getyourguideActive", ticketmaster: "ticketmasterActive",
+        wegotrip: "wegotripActive", booking: "affiliateActive", tripcom: "tripcomActive",
+        carhire: "carRentalActive",
+      };
+      is("every programme in the roster is one this test knows", pairs.map(([k]) => k).filter(k => !OWN[k]), []);
+      is("and every one this test knows is in the roster",
+         Object.keys(OWN).filter(k => !pairs.some(([p]) => p === k)), []);
+      is("and each reads its own live state, not a neighbour's",
+         pairs.filter(([k, fn]) => OWN[k] !== fn).map(([k, fn]) => `${k}:${fn}`), []);
+    }
+  }
+
+  // ── AND IT IS REACHABLE, WHICH IS HALF OF WHAT HE ASKED FOR ──────
+  {
+    const appA = readFileSync(join(root, "src/App.jsx"), "utf8");
+    const meA = readFileSync(join(root, "src/components/AboutMePage.jsx"), "utf8");
+    const pageA = readFileSync(join(root, "src/components/AffiliatesPage.jsx"), "utf8");
+    ok("the page has a route", /<Route path=\{AFFILIATES_PATH\} element=\{<AffiliatesPage \/>\} \/>/.test(appA));
+    ok("linked from the footer", /href=\{AFFILIATES_PATH\}/.test(appA));
+    ok("and from the menu's Legal card", /AFFILIATES_PATH/.test(meA));
+    // The address lives with the roster rather than in App.jsx, or App and
+    // AboutMePage import each other in a circle.
+    ok("the path is not exported from App", !/export const AFFILIATES_PATH/.test(appA));
+    is("it is a path rather than a file", M.AFFILIATES_PATH, "/affiliates");
+    // ── THE PAGE PRINTS THE ROSTER, IT DOES NOT RESTATE IT ─────────
+    // A page with the programme names typed into it is a page that keeps
+    // claiming a partnership after the programme ends.
+    ok("the page reads the roster", /affiliateRoster\(\)/.test(pageA));
+    ok("and the count", /payingCount\(\)/.test(pageA));
+    ok("and prints one row per programme", /roster\.map\(p => <Row/.test(pageA));
+    is("with no programme name typed into it",
+       ["Tiqets", "Ticketmaster", "WeGoTrip", "Booking.com", "Trip.com", "AutoEurope", "Airbnb"]
+         .filter(n => pageA.includes(`"${n}"`)), []);
+    // It says the honest thing on the day nothing is switched on, rather than
+    // promising a commission it cannot earn.
+    ok("and it has a sentence for the day none of them pay", /paying === 0/.test(pageA));
+  }
 
   // ── A PAID LINK SAYS SO WHEREVER IT IS PRINTED ───────────────────
   // The other disclosures ask "is this a Tiqets link". The Essentials list
@@ -22137,11 +22451,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      && /const ticketAgent = ticketAgentOf\(ticketDest\);/.test(stripComments(detail)));
   // Each agent still gets its own template; the branch just moved into
   // affiliateHref so every render site gets it rather than this one.
-  // THREE AGENTS SINCE 6 SEP 2026. Asserted as the loop AND as behaviour: the
+  // FOUR AGENTS SINCE 9 SEP 2026. Asserted as the loop AND as behaviour: the
   // source check catches a wrapper dropped from the door, and the call catches
   // one that is in the door and does not wrap.
-  ok("each agent has its own template behind the door",
-     /for \(const wrap of \[ticketmasterUrl, tiqetsUrl, wegotripUrl\]\)/.test(readFileSync(join(root, "src/utils/affiliates.js"), "utf8")));
+  //
+  // The fourth needs no template, which is why it is worth naming here. Tiqets,
+  // Ticketmaster and WeGoTrip redirect through a network so a tracked link is a
+  // different address; GetYourGuide tracks on its own domain with two query
+  // parameters, so the wrapper appends rather than substitutes. Same door, same
+  // three-way contract, different mechanism.
+  ok("each agent goes through the one door",
+     /for \(const wrap of \[ticketmasterUrl, tiqetsUrl, wegotripUrl, getyourguideUrl\]\)/.test(readFileSync(join(root, "src/utils/affiliates.js"), "utf8")));
   {
     const wego = "https://wegotrip.com/billund-d2624144/legoland-billund-entry-ticket-p20636/";
     ok("and the third one wraps when it has a template",
@@ -22211,6 +22531,151 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // The standalone button lower down quotes nothing and never needed either.
   ok("the button below is not gated on the price source",
      !/sameShop/.test(detail.slice(detail.indexOf("const dest = ticketDest;"))));
+
+  // ── AND THE TOURS ROW, WHICH IS NOT THE TICKETS ROW ─────────────
+  //
+  // Oliver, 9 Sep 2026, on Tiqets and GetYourGuide covering the same place. Two
+  // rows rather than two candidates for one, so a reader sees the door and the
+  // walk instead of whichever we picked for them.
+  ok("a tour is read from its own field", /const tourDest = String\(item\?\.tourUrl \|\| ""\)\.trim\(\);/.test(detail));
+  ok("and validated by the one file that owns what a link is", /const tourOk = isTourUrl\(tourDest\);/.test(detail));
+  ok("it goes through the same door every paid link does", /const tourHref = tourOk \? \(affiliateHref\(tourDest\)/.test(detail));
+  ok("and carries the sentence that has to go under it", /note: affiliateNote\(tourDest\)/.test(detail));
+  is("the row is on the entry card and the town card",
+     (detail.match(/label: "Tours", value: "", link: tourRow/g) || []).length, 2);
+  // THE TWO NEVER SHARE A LINK. A tour landing in the ticket row is the overlap
+  // this design exists to end, and it would put a 400 kr guided walk beside a
+  // 125 kr admission on one line.
+  ok("a tour never fills the ticket row", !/link: tourRow[^\n]*bookRow|bookRow[^\n]*tourRow/.test(detail));
+  ok("and the ticket row never carries a tour", !/const ticketDest[\s\S]{0,200}tourUrl/.test(detail));
+  // No value, deliberately: nothing has drafted a sentence about somebody
+  // else's product and composing one here would be inventing a description.
+  ok("the row states no price it was not given", /label: "Tours", value: ""/.test(detail));
+
+  // ── AND THE PAGE OPENS AS A WINDOW WHEN THE CHAT OPENS IT ───────
+  //
+  // Oliver, 9 Sep 2026: "when you click it, you get a new window popping up.
+  // Not a new tab or redirect to the page. But a window that when you click off
+  // it, it disappears as if you 'alt-f4' on it."
+  //
+  // It was never a redirect. It was full screen, which is worse in one specific
+  // way: it covered the sentence that made somebody curious, so coming back
+  // meant finding the close button, and there was nothing to click OFF onto.
+  {
+    const code = stripComments(detail);
+    ok("the page takes a windowed prop", /windowed = false \}\) =>/.test(code));
+    // THE CLOSE IS ON THE BACKDROP AND NOT ON THE PANEL. onClick fires for
+    // clicks on children too, so without the target check every press inside
+    // the page would close the page.
+    ok("clicking the surround closes it",
+       /onClick=\{windowed \? \(e\) => \{ if \(e\.target === e\.currentTarget/.test(code));
+    ok("and clicking the page itself does not",
+       /onClick=\{windowed \? \(e\) => e\.stopPropagation\(\) : undefined\}/.test(code));
+    // A keyboard has the same expectation, and it is the only one a person
+    // without a mouse has.
+    ok("escape closes it too", /e\.key === "Escape"/.test(code));
+    ok("and the listener is removed again", /removeEventListener\("keydown", onKey\)/.test(code));
+    // A hook may not run conditionally, so it sits above the early return and
+    // does nothing when there is no window.
+    ok("the hook runs before the early return",
+       code.indexOf("useEffect(() => {") < code.indexOf("if (!item) return null;"));
+    ok("and does nothing unless a window is open", /if \(!windowed \|\| !item/.test(code));
+    // A browse screen has nothing behind it worth keeping in view.
+    ok("and it is still full screen otherwise",
+       /: \{ position: "fixed", inset: 0, background: C\.bg, zIndex: 970, overflowY: "auto" \}/.test(code));
+    ok("with a backdrop only in the windowed case", /background: "rgba\(6,9,18,\.72\)"/.test(code));
+  }
+
+  // ── THE TOUR SEARCH, WHICH RUNS ONCE AND NOT AT RENDER ──────────
+  //
+  // Oliver, 9 Sep 2026: "Yes it will cost a little extra to do a websearch
+  // through get your guide... But I'm willing to spent those tokens."
+  //
+  // Worth paying for, and what makes it affordable is WHEN. A live version
+  // costs a search every time a reader opens the page; this runs once, at draft
+  // time, on the row being written.
+  {
+    const AAR = "https://www.getyourguide.com/da-dk/aarhus-l32302/aarhus-craft-beerwalk-t693822/";
+    const CPH = "https://www.getyourguide.com/da-dk/kobenhavn-l12/kobenhavn-kanal-badtur-fra-gammel-strand-t37848/";
+    ok("a query names the town and the site", /^site:getyourguide\.com "Aarhus" /.test(M.tourQuery("Aarhus", "nightlife")));
+    ok("and the words that separate a bar crawl from a food tour",
+       /crawl/.test(M.tourQuery("Aarhus", "nightlife")) && /food/.test(M.tourQuery("Aarhus", "food")));
+    // "" rather than a query with a hole in it: a caller with nothing to ask
+    // must not spend a search learning that.
+    is("no town is nothing to ask", M.tourQuery("", "nightlife"), "");
+    is("and nor is a kind nobody searches for", M.tourQuery("Aarhus", "museum"), "");
+
+    // ── AND THE ANSWER HAS TO BE ABOUT THIS TOWN ──────────────────
+    // A search for an Aarhus bar crawl returns Copenhagen products. Their city
+    // is in the path, so it is checkable off the address rather than off a
+    // title, and a title is the part a marketplace writes to be found.
+    is("their address names the town", M.tourUrlIsAboutTown(AAR, "Aarhus"), true);
+    is("and a product for somewhere else is refused", M.tourUrlIsAboutTown(CPH, "Aarhus"), false);
+    is("a Danish name folds to their slug", M.tourUrlIsAboutTown(CPH, "København"), true);
+    is("and a non-product is not an answer at all",
+       M.tourUrlIsAboutTown("https://www.getyourguide.com/da-dk/aarhus-l32302/", "Aarhus"), false);
+
+    is("the pick takes the first that survives", M.pickTourUrl([{ url: CPH }, { url: AAR }], { town: "Aarhus" }), AAR);
+    is("and none surviving is null", M.pickTourUrl([{ url: CPH }], { town: "Aarhus" }), null);
+    is("somebody else's site is never picked",
+       M.pickTourUrl([{ url: "https://www.tiqets.com/en/x-p1/" }], { town: "Aarhus" }), null);
+    is("and nothing searched is null", M.pickTourUrl([], { town: "Aarhus" }), null);
+
+    // ── WHAT THE SENTENCE CALLS IT ────────────────────────────────
+    // From the SLUG, never the title. "Aarhus: Craft Beerwalk with 5 Beers &
+    // Snacks Included" read aloud in Gemlyx's voice quotes an advert as a
+    // recommendation, and it is English on a site that promised Danish.
+    is("a beerwalk is a beer walk", M.tourPhrase(AAR, "nightlife"), "a beer walk");
+    // ── AND THE SLUG IS OFTEN DANISH ──────────────────────────────
+    // Caught here on the first canal tour: on da-dk the address reads
+    // kobenhavn-kanal-badtur-..., and a vocabulary written against English
+    // slugs called a boat "a guided walk".
+    is("and a Danish kanal-badtur is a canal tour", M.tourPhrase(CPH, "town"), "a canal tour");
+    is("and the English spelling still is too",
+       M.tourPhrase("https://www.getyourguide.com/en/x-l1/copenhagen-canal-cruise-t2/", "town"), "a canal tour");
+    // A beer walk is also a walk, so the specific pattern has to win.
+    is("a beer walk is not merely a walk",
+       M.tourPhrase("https://www.getyourguide.com/da-dk/aarhus-l1/aarhus-ol-vandring-t3/", "town"), "a beer walk");
+    // A slug nobody has a word for falls back to the kind, which is vaguer and
+    // still true.
+    is("an unknown activity falls back to its kind",
+       M.tourPhrase("https://www.getyourguide.com/da-dk/aarhus-l32302/mystery-t1/", "nightlife"), "a night out");
+    // ── AND EVERY PHRASE IT CAN RETURN IS TRANSLATED ──────────────
+    // Read off tourSweep's own vocabulary against entryWords' table, so a phrase
+    // added there cannot ship in English under a Danish nav.
+    {
+      const sweepSrc = readFileSync(join(root, "src/utils/tourSweep.js"), "utf8");
+      const phrases = [...new Set([...sweepSrc.matchAll(/, "(a [^"]+)"\]/g)].map(m => m[1])
+        .concat([...sweepSrc.matchAll(/: "(a [^"]+)",/g)].map(m => m[1])))];
+      ok("the vocabulary is readable from its own file", phrases.length >= 8);
+      is("and every phrase in it is written in Danish and German",
+         phrases.filter(p => !M.TOUR_PHRASE_WORDS.includes(p)), []);
+      is("with nothing in the table that nothing can return",
+         M.TOUR_PHRASE_WORDS.filter(p => !phrases.includes(p)), []);
+    }
+
+    // ── AND ONLY THE TYPES WHOSE PAGE IT BELONGS ON ───────────────
+    // An attraction asking GetYourGuide for a guided tour of one museum is the
+    // overlap this whole design exists to avoid: Tiqets sells that door.
+    is("a town asks", M.tourKindFor("town"), "town");
+    is("a nightlife town asks about bar crawls", M.tourKindFor("nightTown"), "nightlife");
+    is("a food street asks about food", M.tourKindFor("foodStreet"), "food");
+    is("and an attraction asks nothing", M.tourKindFor("free"), "");
+    is("nor does an event", M.tourKindFor("event"), "");
+  }
+
+  // ── WIRED AT DRAFT TIME, AND ONLY WHEN THERE IS NOTHING THERE ───
+  {
+    const appT2 = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the draft asks GetYourGuide", /const tq = tourKind && !String\(t\.tourUrl \|\| ""\)\.trim\(\) \? tourQuery\(name, tourKind\) : "";/.test(appT2));
+    ok("only for the types whose page it belongs on", /const tourKind = tourKindFor\(sType\);/.test(appT2));
+    ok("and never takes the first result", /const gotTour = pickTourUrl\(results, \{ town: name \}\);/.test(appT2));
+    ok("the run log records the ask either way", /Ask GetYourGuide directly/.test(appT2));
+    // shapeForLive is an allow-list. A field the pipeline writes and this file
+    // does not name works perfectly until the row is published.
+    const shape = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+    ok("and the field survives being published", /if \(isTourUrl\(t\?\.tourUrl\)\) out = \{ \.\.\.out, tourUrl: String\(t\.tourUrl\)\.trim\(\) \};/.test(shape));
+  }
 
   // ── THE QUESTION ITSELF, WHICH DID NOT CHANGE ───────────────────
   is("the wow park pairing is two shops",
@@ -26888,25 +27353,30 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       ok("and it wraps rather than truncating",
          !/ellipsis/.test(el) && /wordBreak: "break-word"/.test(el));
     }
-    // ── "'CHECKED', WHAT DOES THAT MEAN?" ─────────────────────────
+    // ── "'CHECKED', WHAT DOES THAT MEAN?" AND THEN "DO WE NEED IT?" ─
     //
-    // Oliver, 5 Sep 2026, looking at his own chat. The badge said CHECKED and
-    // could not answer him: checked by whom, against what, and why is it on a
-    // photograph. What it meant is far more specific — a picture appears ONLY
-    // when Gemlyx holds its own written page for the place — so that is what it
-    // says now, and the line under the name says what tapping does.
-    ok("the badge says what it means rather than asserting a check",
-       /da: "VORES SIDE"/.test(cards) && /\|\| "OUR PAGE"/.test(cards));
-    // Comments stripped: the paragraph explaining this change quotes the word it
-    // removed, and a source scan that could not tell those apart would forbid
-    // the codebase from saying why it changed.
-    ok("and the old unexplained word is gone from the code",
-       !/"CHECKED"|TJEKKET/.test(stripComments(cards)));
-    // The badge is copy a person reads, so it follows the conversation.
-    ok("it still follows the language the conversation is in",
-       /de: "UNSERE SEITE"/.test(cards) && /sv: "VÅR SIDA"/.test(cards));
-    ok("and so does the line saying what tapping does",
-       /da: "Tryk for at læse den"/.test(cards) && /\|\| "Tap to read it"/.test(cards));
+    // Oliver asked the first on 5 Sep 2026 and the badge could not answer him:
+    // checked by whom, against what. It was rewritten to say the specific thing
+    // it meant, that Gemlyx holds its own page for the place. Then, 9 Sep: "Do
+    // you really think we need the 'our page' badge?" and "the badge gotta go."
+    //
+    // No, and his own argument against "CHECKED" is what settles it: a badge
+    // that distinguishes our page from the other things that can appear in that
+    // slot, where nothing else can appear in that slot, is a label on a set with
+    // one member. Comments stripped, because the paragraph explaining the
+    // removal names the words it removed.
+    {
+      const code = stripComments(cards);
+      ok("no badge awards our own card a mark of our own",
+         !/"OUR PAGE"|VORES SIDE|UNSERE SEITE|"CHECKED"|TJEKKET/.test(code));
+      ok("and the vocabulary behind it went with it", !/oursLabel/.test(code));
+    }
+    // What survives is the line saying what pressing it gets you, which is what
+    // the badge was reaching for. "Read more" since 9 Sep, in his words.
+    ok("the line under the name says what pressing it gets you",
+       /da: "Læs mere"/.test(cards) && /\|\| "Read more"/.test(cards));
+    ok("and it follows the language the conversation is in",
+       /de: "Mehr lesen"/.test(cards) && /sv: "Läs mer"/.test(cards));
   }
 
   // ── AND IT IS ACTUALLY WIRED, UNDER ASSISTANT MESSAGES ONLY ─────
@@ -26920,7 +27390,39 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // beside it called it again.
     ok("built from the same pool the pin beside it reads",
        /places=\{placesNamedIn\(assistantText, pools, \{ alreadyKnown: theirWords \}\)\}/.test(appC));
-    ok("and tapping one opens the entry behind it", /onOpen=\{openStopDetail\}/.test(appC));
+    // ── AND IT OPENS A WINDOW, NOT A REDIRECT ─────────────────────
+    //
+    // Oliver, 9 Sep 2026: "when you click it, you get a new window popping up.
+    // Not a new tab or redirect to the page. But a window that when you click
+    // off it, it disappears as if you 'alt-f4' on it."
+    //
+    // It was never a redirect, but it was full screen, which covered the
+    // sentence that made somebody curious in the first place. From the chat it
+    // is now a window over the conversation.
+    // COUNTED, because there are two ways into an entry from the chat and a
+    // regex that merely finds one of them passes while the other silently goes
+    // back to full screen. Found by a mutation that survived on 9 Sep 2026.
+    is("both ways in from the chat open it over the conversation",
+       (appC.match(/openStopDetail\(p, \{ windowed: true \}\)/g) || []).length, 2);
+    ok("the card is one of them",
+       /className=\{INLINE_CARDS_CLASS\}[\s\S]{0,700}onOpen=\{\(p\) => openStopDetail\(p, \{ windowed: true \}\)\}/.test(appC));
+    ok("and the map's pin card is the other",
+       /<ChatMiniMap[^>]*onOpen=\{\(p\) => openStopDetail\(p, \{ windowed: true \}\)\}/.test(appC));
+    // A list is not a conversation: opening from a browse screen fills the
+    // window, because there is nothing behind it worth keeping in view.
+    ok("while a browse screen still opens it full screen",
+       /onOpenNearby=\{openStopDetail\}/.test(appC));
+    // ── AND THE WINDOW IS CLEARED ON THE WAY OUT ──────────────────
+    //
+    // Every open goes through openStopDetail and sets the flag either way, so
+    // this looks redundant and is not: several places set a detail DIRECTLY,
+    // including drilling from a town into its event, and without this the next
+    // entry opened after a chat window would float over nothing. Found by a
+    // mutation that survived on 9 Sep 2026.
+    ok("the flag is cleared when the entry closes",
+       /const closeEntry = \(\) => \{\s*\n[\s\S]{0,400}?setEntryWindowed\(false\);/.test(appC));
+    ok("and every open sets it either way",
+       /const openStopDetail = \(real, \{ windowed = false \} = \{\} \) =>|setEntryWindowed\(!!windowed\);/.test(appC));
   }
 }
 
@@ -36951,12 +37453,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // on one page and nowhere else.
     const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
     const sites = app.match(/<DetailPage\b/g) || [];
-    const withPaid = app.match(/<DetailPage\s+lang=\{uiLang\}\s+paid=\{/g) || [];
+    // The shared prefix grew a `windowed` on 9 Sep, so the pattern matches the
+    // props rather than their order from the tag onwards.
+    const withPaid = app.match(/<DetailPage\s+windowed=\{entryWindowed\}\s+lang=\{uiLang\}\s+paid=\{/g) || [];
     ok("there are DetailPage call sites to check", sites.length >= 4);
     is("and every one of them passes paid", withPaid.length, sites.length);
     // The reader's language rides in the same shared prefix, for the reason the
     // comment above gives about one list copied five times.
-    is("and the language with it", (app.match(/<DetailPage\s+lang=\{uiLang\}/g) || []).length, sites.length);
+    is("and the language with it", (app.match(/<DetailPage\s+windowed=\{entryWindowed\}\s+lang=\{uiLang\}/g) || []).length, sites.length);
     ok("the Studio writes the offer on edit as well as create", /shaped\.__offer\s*=\s*offerFromFields/.test(app));
     ok("and refuses to publish one that would not render", /offerProblems\(offerFromFields\)/.test(app));
   }
@@ -43462,8 +43966,18 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       const flat = rowed.html.replace(/\s/g, "");
       ok("the picture is a column rather than a strip", /flex-direction:column/.test(flat));
       ok("and it carries the assistant bubble's own corner", /border-radius:14px14px14px4px/.test(flat));
-      ok("and it says what tapping it does", /Taptoreadit/.test(flat));
-      ok("and the mark says whose page it is", /OURPAGE/.test(flat));
+      // ── AND WHAT PRESSING IT GETS YOU ────────────────────────────
+      // "Read more" since 9 Sep, Oliver's own words, replacing "Tap to read
+      // it". It says what you GET rather than what to do with your finger,
+      // which is also the right words on a desktop where nobody taps.
+      ok("and it says what pressing it gets you", /Readmore/.test(flat));
+      ok("and not what to do with a finger", !/Taptoreadit/.test(flat));
+      // ── AND THE BADGE IS GONE ────────────────────────────────────
+      // Oliver, 9 Sep 2026: "Do you really think we need the 'our page' badge?"
+      // It distinguished a Gemlyx page from the other things that can appear in
+      // this slot, and nothing else can appear in this slot. His own argument
+      // against "CHECKED" one step further.
+      ok("and nothing awards the card a badge of our own", !/OURPAGE|CHECKED/.test(flat));
       // Arrives a beat after the words, the way a person sends a picture after
       // saying something, and staggered so two read as two.
       ok("it animates in", /gx-shared-photo/.test(flat));
@@ -44181,7 +44695,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // list copied four times." So the props go on in a single shared prefix.
   const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
   is("every detail page gets the buttons",
-     (appF.match(/<DetailPage lang=\{uiLang\} paid=\{hasPaidPlan\(userProfile\)\} signedIn=\{!!userSession\} onNeedAccount=/g) || []).length, 5);
+     (appF.match(/<DetailPage windowed=\{entryWindowed\} lang=\{uiLang\} paid=\{hasPaidPlan\(userProfile\)\} signedIn=\{!!userSession\} onNeedAccount=/g) || []).length, 5);
   is("and none is left without them",
      (appF.match(/<DetailPage /g) || []).length, 5);
 
@@ -45997,11 +46511,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   const KNOWN_UNWIRED = [
     "src/utils/accommodation.js:stayTextForReader",
-    "src/utils/affiliates.js:affiliateActive",
-    "src/utils/affiliates.js:carRentalActive",
     "src/utils/affiliates.js:isAffiliateHref",
-    "src/utils/affiliates.js:ticketmasterActive",
-    "src/utils/affiliates.js:tiqetsActive",
     "src/utils/aiClient.js:geocodeOne",
     "src/utils/apiCost.js:__reset",
     "src/utils/apiCost.js:currentRun",
@@ -50733,21 +51243,37 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and told why in words", why.test(v.reason));
   }
 
-  // ── AND IT SAYS WHEN A LINK EARNS NOTHING ───────────────────────
-  // WEGOTRIP_AFFILIATE_TEMPLATE is empty until he pastes the long-form
-  // Travelpayouts link, so a WeGoTrip admission works for the reader and pays
-  // nothing, and a panel that said "affiliate link added" over it would be
-  // making a claim about money that is not true.
+  // ── AND IT SAYS WHETHER A LINK EARNS ────────────────────────────
+  //
+  // This read "and reported as not earning", which pinned the STATE rather than
+  // the rule, and it went red on 8 Sep the moment Oliver did the thing its own
+  // comment told him to do and pasted the long-form Travelpayouts link. Fourth
+  // time this file has paid for that lesson, and the car-hire block a few
+  // thousand lines up records the third.
+  //
+  // THE RULE is that the panel's claim about money matches the programme. A
+  // panel saying "affiliate link added" over a link that earns nothing is a
+  // false statement about money, and so is a panel saying "NOT earning" over
+  // one that pays.
   const wego = reviewPastedTicketUrl("https://wegotrip.com/billund-d2618499/legoland-billund-ticket-p20636/");
   ok("a WeGoTrip admission is accepted", wego.ok);
-  ok("and reported as not earning", !wego.earning && /NOT earning/.test(wego.reason));
+  is("and what it says about money is what the programme says",
+     !!wego.earning, M.wegotripActive());
+  ok("and it only calls a link NOT earning when it is not",
+     /NOT earning/.test(wego.reason) === !M.wegotripActive());
 
   // ── AND THE PANEL EXISTS AND PRINTS BOTH ADDRESSES ──────────────
   // The whole ask was "so I can test if it got it right", which means the
   // tracked address has to be on screen as something to press.
   ok("Studio has the paste field", /const applyTicketPaste = \(\) => \{/.test(appT));
   ok("and it writes through studioDraftText, which is what Publish reads",
-     /applyTicketPaste[\s\S]{0,900}setStudioDraftText\(JSON\.stringify\(draft, null, 2\)\)/.test(appT));
+     /applyTicketPaste[\s\S]{0,1400}setStudioDraftText\(JSON\.stringify\(draft, null, 2\)\)/.test(appT));
+  // ── AND IT WRITES THE FIELD THE VERDICT NAMES ───────────────────
+  // Not ticketUrl, since 9 Sep 2026: a GetYourGuide activity is a tour and lands
+  // on tourUrl. The Studio must not be the thing deciding which, or the answer
+  // is in two places and one of them goes stale.
+  ok("into whichever field the link belongs in", /draft\[verdict\.field\] = verdict\.url;/.test(appT));
+  ok("and not into a field this line picked", !/draft\.ticketUrl = verdict\.url;/.test(appT));
   ok("and a wrong one can be removed", /const clearTicketLink = \(\) => \{/.test(appT));
   ok("and the tracked address is a link, not text to copy",
      /href=\{ticketPasteResult\.tracked\}/.test(appT));

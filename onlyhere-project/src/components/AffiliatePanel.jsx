@@ -1,7 +1,7 @@
 import { C } from "../utils/theme";
 import { auditRows, auditSummary, auditNote, programmeState } from "../utils/affiliateAudit";
 import { isBookableTicketUrl, ticketAgentOf } from "../utils/ticketLink";
-import { affiliateHref, wegotripBrowseUrl, tripcomActive } from "../utils/affiliates";
+import { affiliateHref, wegotripBrowseUrl, tripcomActive, getyourguideActive } from "../utils/affiliates";
 import { TRIPCOM_CITIES } from "../data/tripcom";
 import { BOOKING_AFFILIATE_ID, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, TICKETMASTER_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_AFFILIATE_TEMPLATE } from "../config";
 
@@ -36,6 +36,9 @@ export const AffiliatePanel = ({ rows }) => {
     // Through the builder, the same way wegotrip is above: this panel and the
     // links a reader sees must never disagree about whether a programme is on.
     tripcom: tripcomActive() ? "on" : "",
+    // Through the builder for the third time and the same reason. Two of the
+    // three rows above were once read off a constant and both of them lied.
+    getyourguide: getyourguideActive() ? "on" : "",
     tripcomCities: TRIPCOM_CITIES.length,
   });
   // The work queue, which is the useful half. A count of failures nobody can act

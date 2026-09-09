@@ -214,34 +214,31 @@ export const TIQETS_BROWSE_LINK = "https://tiqets.tpx.li/gjhkxmoh";
 // makes it safe, not the position.
 export const TIQETS_AFFILIATE_TEMPLATE = "https://tp.media/r?campaign_id=89&marker=765061&p=2074&trs=562709&u={url}";
 
-// ── CAR HIRE, EMPTY ON PURPOSE ──────────────────────────────────────
+// ── CAR HIRE, DECIDED ON INVENTORY RATHER THAN RATE ─────────────────
 //
-// The link Oliver has is GetRentacar, https://getrentacar.tpx.li/KyhVj8Bg, and
-// it is not pasted here yet for one reason: their own front page lists Turkey,
-// the UAE, Spain, Greece and the United States, their /country/denmark page is
-// a 404, and nothing turns up Danish inventory. Cars from local owners is a
-// model that works where the owners are.
+// Two programmes were on the table and the check that settled it was one search
+// on each of their own sites for Danish cars.
 //
-// A rental button that opens on an empty result teaches a reader that Gemlyx
-// sends them to things that are not there, and that costs more than the
-// commission pays. One search on getrentacar.com for Copenhagen settles it: if
-// the cars are there, paste the link and it goes live everywhere at once. If
-// they are not, DiscoverCars and Rentalcars both have real Danish coverage and
-// both are on Travelpayouts.
-// ── SETTLED 26 AUG 2026, BY RUNNING THE CHECK ABOVE ─────────────────
+// GetRentacar: 10% on a 90-day cookie, the best pair on his Travelpayouts page,
+// and getrentacar.com/en/country/denmark returns 404. Cars from local owners is
+// a model that works where the owners are, and they are in Turkey, the UAE,
+// Spain, Greece and the United States. 10% of nothing.
 //
-// Oliver sent both links. GetRentacar's was the one already on hand and the one
-// this comment said to test: getrentacar.com/en/country/denmark returns 404
-// today, and a search of their own domain for Danish coverage turns up nothing
-// at all. 10% and a 90-day cookie, which is the best pair on his Travelpayouts
-// page, of an inventory that does not exist here.
+// AutoEurope: 4.4 to 8%, and it has Copenhagen Kastrup, BILLUND, Aarhus,
+// AALBORG, Esbjerg, Rønne, Sønderborg, Karup and Odense airports, Copenhagen
+// central station and city, Roskilde, Kolding, Aarhus and Billund, brokered
+// from Alamo, Avis, Budget, Europcar, Hertz and Thrifty. Both towns in his own
+// test brief are on that list.
 //
-// AutoEurope has it: Copenhagen Kastrup, BILLUND, Aarhus, AALBORG, Esbjerg,
-// Rønne, Sønderborg, Karup and Odense airports, Copenhagen central station and
-// city, Roskilde, Kolding, Aarhus and Billund, brokered from Alamo, Avis,
-// Budget, Europcar, Hertz and Thrifty. 4.4 to 8%. A worse rate on real cars
-// beats a better one on none, and the two towns in his own test brief are both
-// on the list.
+// A worse rate on real cars beats a better one on none: a rental button that
+// opens on an empty result teaches a reader that Gemlyx sends them to things
+// that are not there, which costs more than any commission pays.
+//
+// Settled 26 Aug 2026. Closed on 8 Sep, Oliver: "Shall we cut out the
+// getrentacar?", and "according to Google, that affiliate is not as great as
+// autoeurope." Nothing of it is left in the code. DiscoverCars and Rentalcars
+// both have real Danish coverage and both are on Travelpayouts, so either is a
+// candidate if this one ever needs replacing.
 //
 // THIS IS THE SHORT LINK, so it is a browse button and not a deep link — the
 // same distinction the Tiqets block above spends a paragraph on. It resolves to
@@ -292,4 +289,54 @@ export const WEGOTRIP_LINK = "https://wegotrip.tpx.li/FqqNAbzW";
 // and `u` MUST BE LAST, for the reason spelled out in the Tiqets block: the
 // destination is appended encoded, and a parameter after it would be swallowed
 // into the URL rather than read by Travelpayouts.
-export const WEGOTRIP_AFFILIATE_TEMPLATE = "";
+//
+// ── AND IT LANDED, 8 SEP 2026 ───────────────────────────────────────
+//
+// Oliver pasted the short link first and then corrected himself with the long
+// one: "https://tp.media/r?campaign_id=150&marker=765061&p=4487&trs=562709&u=
+// https%3A%2F%2Fwegotrip.com". The trailing wegotrip.com is Travelpayouts'
+// example destination and is what {url} replaces.
+//
+// marker and trs are the same two values the Tiqets template above carries,
+// which is the check that this is his account and not a link copied from a
+// forum. campaign_id and p are the programme's, and differ as they should.
+//
+// Every WeGoTrip link already stored on the site starts paying from this line
+// alone: wegotripUrl reads the template AT RENDER, so nothing needs republishing
+// and no entry needs redrafting.
+export const WEGOTRIP_AFFILIATE_TEMPLATE = "https://tp.media/r?campaign_id=150&marker=765061&p=4487&trs=562709&u={url}";
+
+// ── GETYOURGUIDE, AND WHY IT IS SHAPED UNLIKE THE REST ──────────────
+//
+// Oliver, 9 Sep 2026: "I got affiliate link from getyourguide.dk", and then his
+// partner dashboard, which is what settled the one doubt about it: this is the
+// partner programme with bookings, campaigns and integrations, not a consumer
+// share link.
+//
+// THERE IS NO TEMPLATE HERE AND THAT IS NOT AN OVERSIGHT. Tiqets, Ticketmaster
+// and WeGoTrip all redirect through a network, so a tracked link is a DIFFERENT
+// address with the destination encoded inside it. GetYourGuide tracks on its own
+// domain with two query parameters, exactly as Trip.com does with Allianceid and
+// SID, so any GetYourGuide URL becomes a tracked one by appending to it. Nothing
+// has to be generated, nothing has to be looked up, and a product page found
+// today is payable today.
+//
+// WHAT IT IS FOR. Checked 9 Sep 2026 against their Copenhagen results: guided
+// canal tours from 159 kr, city walks, Christiania walks, food tours, the Malmö
+// day trip, the Copenhagen Card. Tours and experiences, in kroner.
+//
+// AND WHAT IT IS NOT FOR. It sells no ARoS admission, and Trip.com sells nothing
+// for Rosenborg or Tivoli. Across all three resellers the Danish inventory is
+// experiences rather than museum doors, which is the whole reason this one earns
+// its place: a guided canal tour has no ticket window selling the same thing
+// cheaper, and a museum admission does. See utils/affiliates.js for the rule
+// that follows from it.
+export const GETYOURGUIDE_PARTNER_ID = "WKOYNZB";
+
+// The campaign tag on the link, which their dashboard reports under Kampagner.
+// "share_to_earn" is what the quick-share button in the portal stamps on a link;
+// a campaign named here instead would let a reader's booking be traced to the
+// surface it came from, the way Trip.com's trip_sub1 carries the town. Left as
+// the portal's own value until there is a campaign in the dashboard to name,
+// because a tag their side has never seen reports nothing.
+export const GETYOURGUIDE_CAMPAIGN = "share_to_earn";

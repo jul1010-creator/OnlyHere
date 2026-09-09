@@ -22,30 +22,29 @@ import { creditIsRequired } from "../utils/imageCredits";
 // api/commons-photo, and it is the only one available: showing it would be a
 // licence breach on the page whose terms clause 10.5 says the photographs
 // belong to their photographers.
-// ── "'CHECKED', WHAT DOES THAT MEAN?" ───────────────────────────────
+// ── "'CHECKED', WHAT DOES THAT MEAN?" AND THEN, "DO WE NEED IT?" ────
 //
-// Oliver, 5 Sep 2026, looking at his own chat. It is a fair question and the
-// badge could not answer it. Checked by whom, against what, and why is it on a
-// photograph — it reads as a trust mark of the kind every site has and nobody
-// believes.
+// Oliver asked the first on 5 Sep 2026, looking at his own chat, and it was a
+// fair question the badge could not answer: checked by whom, against what.
 //
-// What it actually meant is much more specific and much more interesting: a
-// picture appears ONLY when Gemlyx holds its own written page for the place, and
-// tapping it opens that page. That is the rule chatPlaces.js enforces and the
-// reason the silence matters as much as the photograph. So the badge says that
-// instead, in words, and the line under the name says what tapping does.
+// What it meant was specific and interesting: a picture appears ONLY when
+// Gemlyx holds its own written page for the place, and pressing it opens that
+// page. So the badge was rewritten to say that. Then, on 9 Sep: "Do you really
+// think we need the 'our page' badge?"
+//
+// No, and his own argument against "CHECKED" is what settles it. See the note
+// where the badge used to be. The line under the name carries the useful half
+// and the rule lives in chatPlaces.js, where it always did.
 //
 // Two languages here rather than six, for the reason readerLanguage.js gives
 // about its own Danish block: a word nobody in this project can read is a word
 // nobody can correct.
-const OURS = { da: "VORES SIDE", de: "UNSERE SEITE", nl: "ONZE PAGINA", sv: "VÅR SIDA", no: "VÅR SIDE" };
 const OPEN_IT = {
-  da: "Tryk for at læse den", de: "Tippen zum Lesen",
-  nl: "Tik om te lezen", sv: "Tryck för att läsa", no: "Trykk for å lese",
+  da: "Læs mere", de: "Mehr lesen",
+  nl: "Lees meer", sv: "Läs mer", no: "Les mer",
 };
 const langKey = (lang) => String(lang?.tag || "").split("-")[0].toLowerCase();
-const oursLabel = (lang) => OURS[langKey(lang)] || "OUR PAGE";
-const openLabel = (lang) => OPEN_IT[langKey(lang)] || "Tap to read it";
+const openLabel = (lang) => OPEN_IT[langKey(lang)] || "Read more";
 
 // ── AND IT ARRIVES THE WAY A PICTURE ARRIVES ────────────────────────
 //
@@ -188,17 +187,25 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
               position: "absolute", inset: 0, display: "flex", alignItems: "center",
               justifyContent: "center", fontSize: 26, zIndex: -1,
             }}>{place.emoji || "📍"}</div>
-            {/* ── WHAT THE MARK ACTUALLY MEANS ────────────────────────
-                It used to say "CHECKED", which Oliver asked about directly on
-                5 Sep and which could not answer him: checked by whom, against
-                what. What it means is that Gemlyx has its own written page for
-                this place — that is the whole rule for whether a picture appears
-                at all — so that is what it says. */}
-            <div style={{
-              position: "absolute", top: 6, left: 6, fontSize: 9, fontWeight: 700,
-              letterSpacing: ".08em", color: C.onGold || "#20160A", background: C.gold,
-              borderRadius: 100, padding: "2px 6px",
-            }}>✦ {oursLabel(lang)}</div>
+            {/* ── AND THE BADGE IS GONE ───────────────────────────────
+                It said "CHECKED" until Oliver asked what that meant, then "OUR
+                PAGE" once the honest answer was written down. He asked again on
+                9 Sep: "Do you really think we need the 'our page' badge?"
+
+                No. It distinguished a Gemlyx page from the other things that
+                can appear in this slot, and nothing else can appear in this
+                slot. A label on a set with one member.
+
+                It was also the kind of mark he objected to in the first place:
+                a trust badge a site awards its own content, which every site
+                has and nobody believes.
+
+                THE RULE IT DOCUMENTED IS UNTOUCHED. A picture appears only when
+                Gemlyx holds its own written page for the place, and that is
+                enforced in chatPlaces.js rather than by a sticker. If a partner
+                product ever does land in this slot, the label goes on THAT: a
+                badge on the odd one out is information, and a badge on
+                everything is furniture. */}
           </div>
           <div style={{ padding: "7px 9px 8px" }}>
             <EntryLink
@@ -219,9 +226,14 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
                 wordBreak: "break-word",
               }}>{place.name}</div>
             </EntryLink>
-            {/* Says what tapping does, which is the other half of the answer to
-                "what does that mean?". A picture that opens something has to say
-                so, or it is a picture. */}
+            {/* Says what tapping does, which is the whole of what the badge
+                above it was reaching for. A picture that opens something has to
+                say so, or it is a picture.
+
+                "Read more" since 9 Sep, Oliver's own words, replacing "Tap to
+                read it". Shorter, and it says what you GET rather than what to
+                do with your finger, which is also the right words on a desktop
+                where nobody taps anything. */}
             <div style={{ fontSize: 9.5, color: C.muted, marginTop: 2, fontWeight: 600 }}>
               {openLabel(lang)}
             </div>

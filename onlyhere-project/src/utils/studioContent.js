@@ -7,7 +7,7 @@
 // hardcoded data array (towns/events/freeEntrance/foodSpots/etc.) expects.
 import { normaliseTicketStatus } from "./tickets";
 import { cleanKind } from "./essentialKind";
-import { isBookableTicketUrl, ticketUrlSaysElsewhere, ticketUrlIsASubEvent } from "./ticketLink";
+import { isBookableTicketUrl, ticketUrlSaysElsewhere, ticketUrlIsASubEvent, isTourUrl } from "./ticketLink";
 import { cleanBranches } from "./branches";
 import { isWegotripUrl } from "./affiliates";
 import { cleanOffer, offerProblems } from "./offer";
@@ -610,6 +610,23 @@ export const shapeForLive = (type, t) => {
       at: String(t.__audio.at || ""),
     } };
   }
+  // ── AND THE ACTIVITY, WHICH IS NOT THE TICKET EITHER ─────────────
+  //
+  // 9 Sep 2026, and it is the third field to need this paragraph, so the
+  // paragraph is doing its job. shapeForLive is an allow-list: a field written
+  // by the drafting pipeline and not named here works perfectly right up until
+  // the row is published, and then vanishes without a word.
+  //
+  // NOT ticketUrl, for the reason the WeGoTrip block above gives about walks.
+  // Oliver, 9 Sep 2026: "What do we do about the overlap with Tiqets and
+  // GetYourGuide.com?" Tiqets sells the door and GetYourGuide sells the walk,
+  // so they are two fields and two rows rather than two candidates for one, and
+  // a reader sees both instead of whichever we picked for them.
+  //
+  // isTourUrl, not a truthy check, and for the reason recorded one block up: a
+  // hand-edited row could otherwise store any address here and the entry page
+  // would print "Tours ... On GetYourGuide" over it.
+  if (isTourUrl(t?.tourUrl)) out = { ...out, tourUrl: String(t.tourUrl).trim() };
   if (t?.__ticketSweep?.at) {
     out = { ...out, __ticketSweep: { at: String(t.__ticketSweep.at), found: !!t.__ticketSweep.found, ...(t.__ticketSweep.url ? { url: String(t.__ticketSweep.url) } : {}) } };
   }

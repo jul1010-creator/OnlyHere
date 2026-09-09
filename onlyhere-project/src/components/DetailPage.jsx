@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { C } from "../utils/theme";
 import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow, externalHref, hasFinished, TRAVEL_ORIGIN } from "../utils/helpers";
 import { byEventDate } from "../utils/eventDates";
@@ -19,7 +20,7 @@ import { ArticleFeedback } from "./ArticleFeedback";
 import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
 import { bookingUrl, airbnbUrl, tripcomStayUrl, stayDisclosure, STAY_DISCLOSURE, ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote, isWegotripUrl } from "../utils/affiliates";
-import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl, sameShop, priceSourceHost } from "../utils/ticketLink";
+import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl, isTourUrl, sameShop, priceSourceHost } from "../utils/ticketLink";
 import { branchPoints, branchesOf, hasBranches, branchLine, branchLabel } from "../utils/branches";
 import { offerView, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
 import { saveLabel, saveHint, planFromSavedLabel } from "../utils/savedTrip";
@@ -150,7 +151,22 @@ const eventsForTown = (townName) => {
 export const detailPoint = (item, kind) =>
   placeCoords(item) || (kind === "town" ? townPointFor(item?.name) : null);
 
-export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, hasBeen = false, onToggleBeen, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false, signedIn = false, onNeedAccount, lang = DEFAULT_UI_LANGUAGE }) => {
+export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, hasBeen = false, onToggleBeen, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false, signedIn = false, onNeedAccount, lang = DEFAULT_UI_LANGUAGE, windowed = false }) => {
+  // ── ESCAPE CLOSES A WINDOW ────────────────────────────────────────
+  //
+  // Oliver, 9 Sep 2026, on opening an entry from the chat: "a window that when
+  // you click off it, it disappears as if you 'alt-f4' on it." Clicking off it
+  // is handled on the backdrop below; a keyboard has the same expectation and
+  // gets it here, which is also the one thing a person without a mouse has.
+  //
+  // BEFORE the early return, because a hook may not run conditionally. The
+  // effect itself does nothing when there is no window open.
+  useEffect(() => {
+    if (!windowed || !item || typeof window === "undefined") return undefined;
+    const onKey = (e) => { if (e.key === "Escape" && typeof onClose === "function") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [windowed, item, onClose]);
   if (!item) return null;
   const color = item.color || C.accent;
   // ── THE TICKET LINK, RESOLVED ONCE ────────────────────────────────
@@ -250,6 +266,32 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
   const bookRow = ticketHref
     ? { href: ticketHref, label: bookLabel(ticketAgent), note: ticketNote, source: bookSource }
     : null;
+
+  // ── AND THE TOUR, WHICH IS A DIFFERENT QUESTION ─────────────────
+  //
+  // Oliver, 9 Sep 2026: "What do we do about the overlap with Tiqets and
+  // GetYourGuide.com?" They mostly do not overlap. Tiqets sells the door,
+  // GetYourGuide sells the walk, and Denmark has almost no museum admissions on
+  // GetYourGuide because a Danish museum sells its own. So this is a second row
+  // rather than a second candidate for the ticket row, and a reader who sees
+  // both has been told more rather than asked to choose.
+  //
+  // isTourUrl rather than a host test written here, for the reason the ticket
+  // destination above uses isBookableTicketUrl: one file owns the question of
+  // what a link IS, and this file owns what a row looks like.
+  //
+  // NO VALUE ON THE ROW, and that is deliberate rather than unfinished. The
+  // ticket row's value is a price the pipeline drafted; nothing has drafted a
+  // sentence about this tour, and composing one here would be inventing a
+  // description of somebody else's product. "Tours: On GetYourGuide" is
+  // complete and true, and the glance card already renders a link with no value
+  // for exactly this case.
+  const tourDest = String(item?.tourUrl || "").trim();
+  const tourOk = isTourUrl(tourDest);
+  const tourHref = tourOk ? (affiliateHref(tourDest) || tourDest) : "";
+  const tourRow = tourHref
+    ? { href: tourHref, label: "On GetYourGuide", note: affiliateNote(tourDest) }
+    : null;
   // ── AND THE SAME COLOUR CANNOT BE BOTH FILL AND INK ─────────────
   //
   // Oliver, 3 Sep 2026: "the pink/purple writing is so uncomfortable for the
@@ -294,7 +336,38 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
     // render DetailPage BEHIND it, invisible. Bumped above every modal/overlay
     // z-index used elsewhere in the app (all ≤950) so "drill into a real
     // place's full page" always stacks on top, regardless of what else is open.
-    <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 970, overflowY: "auto" }}>
+    // ── FULL SCREEN, OR A WINDOW OVER WHAT YOU WERE DOING ────────────
+    //
+    // Oliver, 9 Sep 2026: "If AI mentions it, and the picture pops up.. it
+    // should say 'read more' on it. And when you click it, you get a new window
+    // popping up. Not a new tab or redirect to the page. But a window that when
+    // you click off it, it disappears as if you 'alt-f4' on it."
+    //
+    // The full-screen version was already not a redirect, but it covered the
+    // conversation completely, so coming back meant finding the close button
+    // and there was nothing to click OFF onto. A reader who opened Ribe out of
+    // curiosity lost the sentence that made them curious.
+    //
+    // So from the chat it is a window: the page floats in the middle, the chat
+    // is visible around it, and the surround closes it. Everywhere else it is
+    // what it always was, because a browse screen has nothing behind it worth
+    // keeping in view.
+    //
+    // THE CLOSE IS ON THE BACKDROP AND NOT ON THE PANEL. onClick on this div
+    // fires for clicks on its children too, so the panel below stops the event:
+    // without that, every press inside the page closes the page.
+    <div
+      onClick={windowed ? (e) => { if (e.target === e.currentTarget && typeof onClose === "function") onClose(); } : undefined}
+      style={windowed
+        ? { position: "fixed", inset: 0, background: "rgba(6,9,18,.72)", zIndex: 970, overflowY: "auto", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "clamp(12px, 4vh, 48px) 16px" }
+        : { position: "fixed", inset: 0, background: C.bg, zIndex: 970, overflowY: "auto" }}
+    >
+    <div
+      onClick={windowed ? (e) => e.stopPropagation() : undefined}
+      style={windowed
+        ? { width: "min(720px, 100%)", maxHeight: "88vh", overflowY: "auto", background: C.bg, borderRadius: 16, border: `1px solid ${C.border}`, boxShadow: "0 24px 60px rgba(0,0,0,.55)" }
+        : undefined}
+    >
       <div style={{ height: 190, background: `${color}22`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
         <span style={{ fontSize: 64, opacity: item.photo ? 0.25 : 1, position: item.photo ? "absolute" : "static" }}>{item.emoji}</span>
         {item.photo && (
@@ -484,6 +557,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           <AtAGlanceCard lang={lang} rows={[
             arrivalRow(item.nearestStation),
             { icon: "🎟️", label: "Tickets", value: item.ticketInfo, link: bookRow },
+            tourRow ? { icon: "🥾", label: "Tours", value: "", link: tourRow } : null,
             // ── "MAKE PEOPLE AWARE" ──────────────────────────────────
             // Oliver, 15 Aug 2026, off a draft with Danish in a reader field:
             // "I wonder if we should make people aware that an event might have
@@ -531,6 +605,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               // ["town"] and says at length why a nightTown row must not, so
               // this is the one card that needs the row.
               audioRow ? { icon: "🎧", label: "Self-guided tour", value: audioSays, link: audioRow } : null,
+            tourRow ? { icon: "🥾", label: "Tours", value: "", link: tourRow } : null,
               { icon: "🏡", label: "Accommodation", value: item.accommodationGlance },
               { icon: "💰", label: "Typical Costs", value: item.typicalCosts },
             ]} />
@@ -1271,6 +1346,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
 
         <ReviewsSection itemType={kind} itemName={item.name} />
       </div>
+    </div>
     </div>
   );
 };

@@ -128,6 +128,47 @@ const GLANCE = {
   "Book on Tiqets":       { da: "Køb på Tiqets",       de: "Auf Tiqets buchen" },
   "Book on Ticketmaster": { da: "Køb på Ticketmaster", de: "Auf Ticketmaster buchen" },
   "Book on WeGoTrip":     { da: "Køb på WeGoTrip",     de: "Auf WeGoTrip buchen" },
+  // ── AND THE TOURS ROW, WHICH IS NOT THE TICKETS ROW ─────────────
+  //
+  // Oliver, 9 Sep 2026, asked what to do about Tiqets and GetYourGuide covering
+  // the same place. They mostly do not: one sells the door and the other sells
+  // the walk, so they are two rows rather than two candidates for one. See
+  // ticketLink.isTourUrl for the measurement behind that.
+  //
+  // "On GetYourGuide" rather than "Book on", matching the self-guided tour row
+  // directly above it. Both rows name a merchant a reader has to be told about,
+  // and two adjacent rows saying it two different ways reads as an accident.
+  "Tours":                { da: "Ture",                de: "Touren" },
+  "On GetYourGuide":      { da: "På GetYourGuide",     de: "Auf GetYourGuide" },
+};
+
+// ── WHAT THE TOUR SENTENCE ENDS ON ──────────────────────────────────
+//
+// Oliver's own line is "Or hop onto Getyourguide and book a beerwalk!", and the
+// half that carries it is "a beerwalk": a plain noun phrase saying what the
+// thing IS.
+//
+// A SEPARATE GROUP FROM THE ROW LABELS, because these are not labels. They are
+// the object of a sentence, so they are lower case and they take an article,
+// and folding them in with "Tickets" and "Price" would put a phrase into
+// GLANCE_LABELS that is not a label and would be asserted about as one.
+//
+// The vocabulary itself is in utils/tourSweep.js, matched against the product
+// slug rather than read off the title: a GetYourGuide title is written to sell
+// ("Aarhus: Craft Beerwalk with 5 Beers & Snacks Included") and reading one
+// aloud in Gemlyx's voice quotes an advert as a recommendation.
+const TOURS = {
+  "a beer walk":         { da: "en ølvandring",           de: "eine Bierwanderung" },
+  "a bar crawl":         { da: "en barrundtur",           de: "eine Bar-Tour" },
+  "a brewery tasting":   { da: "en bryggerismagning",     de: "eine Brauereiverkostung" },
+  "a food tour":         { da: "en madtur",               de: "eine kulinarische Tour" },
+  "a canal tour":        { da: "en kanalrundfart",        de: "eine Kanalrundfahrt" },
+  "a bike tour":         { da: "en cykeltur",             de: "eine Radtour" },
+  "a guided walk":       { da: "en guidet vandretur",     de: "ein geführter Rundgang" },
+  "a Viking tour":       { da: "en vikingetur",           de: "eine Wikinger-Tour" },
+  "a castle tour":       { da: "en slotsrundvisning",     de: "eine Schlossführung" },
+  "a night out":         { da: "en bytur",                de: "ein Abend in der Stadt" },
+  "a guided tour":       { da: "en guidet tur",           de: "eine Führung" },
 };
 
 // ── WHICH OF THEM A LINK WEARS ──────────────────────────────────────
@@ -221,7 +262,7 @@ const KINDS = {
   "Workshop":           { da: "Værksted",            de: "Werkstatt" },
 };
 
-export const ENTRY_WORDS = { ...HEADINGS, ...ARRIVAL, ...BANDS, ...GLANCE, ...TAGS, ...KINDS };
+export const ENTRY_WORDS = { ...HEADINGS, ...ARRIVAL, ...BANDS, ...GLANCE, ...TOURS, ...TAGS, ...KINDS };
 
 // The four groups are exported so the suite can check each against the list it
 // actually comes from, rather than against one flat bag where a missing heading
@@ -229,6 +270,9 @@ export const ENTRY_WORDS = { ...HEADINGS, ...ARRIVAL, ...BANDS, ...GLANCE, ...TA
 export const ENTRY_HEADINGS = Object.keys(HEADINGS);
 export const ARRIVAL_LABELS = Object.keys(ARRIVAL);
 export const GLANCE_LABELS = Object.keys(GLANCE);
+// Read by the suite against tourSweep's own vocabulary, so a phrase added there
+// cannot ship untranslated the way a heading added to the pipeline once could.
+export const TOUR_PHRASE_WORDS = Object.keys(TOURS);
 export const KIND_LABELS = Object.keys(KINDS);
 
 // ── LOOKING ONE UP ──────────────────────────────────────────────────
