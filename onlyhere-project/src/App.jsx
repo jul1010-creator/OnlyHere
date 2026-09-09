@@ -66,6 +66,7 @@ import { SupportPage } from "./components/SupportPage";
 // utils/affiliateRoster.js with the roster, not here, because AboutMePage links
 // to it too and App.jsx imports AboutMePage.
 import { AffiliatesPage } from "./components/AffiliatesPage";
+import { TourLine } from "./components/TourLine";
 import { AFFILIATES_PATH } from "./utils/affiliateRoster";
 import { safetyClaimNote } from "./utils/safetyClaims";
 import { literalRenderings, literalNote, FALSE_FRIEND_RULE } from "./utils/literalDanish";
@@ -157,14 +158,14 @@ import { townClashes, clashNote } from "./utils/chatGeography";
 import { readExclusions, withoutExcluded, excludedNote } from "./utils/exclusions";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
-import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl } from "./utils/ticketLink";
-import { tourQuery, tourKindFor, pickTourUrl, tourPhrase } from "./utils/tourSweep";
+import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl } from "./utils/ticketLink";
+import { tourQuery, tourKindFor, tourTownFor, pickTourUrl, tourPhrase, tourCandidates, tourProposal, replaceTour, describeTourFindings, tourAliveVerdict, tourRemovalFor, TOUR_RESWEEP_DAYS, FOUND as TOUR_FOUND, GONE as TOUR_GONE, UNKNOWN as TOUR_UNKNOWN, ALIVE as TOUR_ALIVE } from "./utils/tourSweep";
 import { currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLanguage";
 import { LanguageChoice } from "./components/LanguagePicker";
 import { NavStrip } from "./components/NavStrip";
 import { alertKey, describeWeatherChange, unseenAlerts, seenAlerts, markAlertSeen, readAlerts, markAlertsRead, unreadAlerts, tripLine, alertCountLine } from "./utils/weatherAlerts";
 import { placesNamedIn, rejectedIn } from "./utils/chatPlaces";
-import { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, MAP_CLASS, CHAT_PANEL_HEIGHT } from "./utils/chatRail";
+import { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, MAP_CLASS, CHAT_PANEL_HEIGHT, BESIDE_ROW_CLASS } from "./utils/chatRail";
 import { ChatMiniMap } from "./components/ChatMiniMap";
 import { briefProgress, progressLine, briefPercent, percentLine } from "./utils/briefPanel";
 import { EXAMPLE_GUIDE, EXAMPLE_GUIDE_PATH, hasExampleGuide } from "./data/exampleGuide";
@@ -7374,7 +7375,12 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // already checked pays nothing.
         {
           const tourKind = tourKindFor(sType);
-          const tq = tourKind && !String(t.tourUrl || "").trim() ? tourQuery(name, tourKind) : "";
+          // THE TOWN, NOT THE NAME. A bar street is called "Jomfru Ane Gade"
+          // and GetYourGuide files its activities under Aalborg, so a search
+          // named after the street can never match its own answer. Found by an
+          // adversarial review the same night this was written.
+          const tourTown = tourTownFor({ ...t, name, _src: sType });
+          const tq = tourKind && tourTown && !String(t.tourUrl || "").trim() ? tourQuery(tourTown, tourKind) : "";
           if (tq) {
             try {
               const gRes = await fetch(`/api/search?q=${encodeURIComponent(tq)}`);
@@ -7386,7 +7392,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
                 // different town. A search for an Aarhus bar crawl returns
                 // Copenhagen products, and a Copenhagen crawl on the Aarhus page
                 // is the same fault ticketUrlSaysElsewhere catches one country up.
-                const gotTour = pickTourUrl(results, { town: name });
+                const gotTour = pickTourUrl(results, { town: tourTown });
                 note("Ask GetYourGuide directly", {
                   provider: "tavily",
                   detail: tq.slice(0, 110),
@@ -9238,7 +9244,10 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     let draft;
     try { draft = JSON.parse(studioDraftText); }
     catch { setTicketPasteResult({ ok: false, reason: "The draft JSON above is not parseable right now, so nothing was written. Fix the JSON first." }); return; }
-    const verdict = reviewPastedTicketUrl(ticketPaste, { name: draft?.name || "", town: draft?.town || draft?.city || "", where: `${draft?.location || ""} ${draft?.mapHint || ""}` });
+    // The TYPE goes in now, so a GetYourGuide activity pasted onto an entry
+    // whose page has no Tours row is refused with a reason rather than stored
+    // somewhere nobody will see it. Found by an adversarial review, 9 Sep 2026.
+    const verdict = reviewPastedTicketUrl(ticketPaste, { name: draft?.name || "", town: draft?.town || draft?.city || "", where: `${draft?.location || ""} ${draft?.mapHint || ""}`, kind: studioType });
     if (!verdict.ok) { setTicketPasteResult(verdict); return; }
     // ── THE VERDICT SAYS WHICH FIELD, NOT THIS LINE ─────────────────
     // 9 Sep 2026. One paste box, two destinations: a GetYourGuide activity is a
@@ -9452,6 +9461,25 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   const [affRunning, setAffRunning] = useState(null);      // { done, total, name } | null
   const [affChosen, setAffChosen] = useState(() => new Set());
   const [affWriting, setAffWriting] = useState(null);      // { done, total, failed[] } | null
+
+  // ── THE TOUR SWEEP, WHICH IS THE BACKFILL ─────────────────────────
+  //
+  // The GetYourGuide search runs when a town is DRAFTED, which helps every town
+  // written from now on and none of the sixty already live. This is the panel
+  // that asks about those, and it is what makes the feature real rather than a
+  // promise. utils/tourSweep.js holds every rule; nothing here decides anything.
+  const [tourPlan, setTourPlan] = useState(null);          // { rows, list, summary } | { error }
+  const [tourRunning, setTourRunning] = useState(null);    // { done, total, name } | null
+  const [tourFound, setTourFound] = useState(null);        // { list, summary } | null
+  const [tourChosen, setTourChosen] = useState(() => new Set());
+  const [tourWriting, setTourWriting] = useState(null);    // { done, total, failed[] } | null
+  // Oliver, 9 Sep 2026: "put in a feature as well so I can replace it with
+  // another". One box per row, holding what he has typed but not yet applied.
+  const [tourSwap, setTourSwap] = useState({});            // { [id]: pastedUrl }
+  // And: "make sure that there is an update feature that checks if this
+  // activity even still exists anymore."
+  const [tourCheck, setTourCheck] = useState(null);        // { done, total, list, summary } | { error }
+  const [tourClearing, setTourClearing] = useState(null);  // { done, total, failed[] } | null
   const [waitSweep, setWaitSweep] = useState(null);        // { list, summary } | { error }
   const [waitChosen, setWaitChosen] = useState(() => new Set());
   const [waitWriting, setWaitWriting] = useState(null);    // { done, total, failed[] } | null
@@ -9808,6 +9836,184 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
   // does this type charge at a door at all, was an agent asked recently. Only
   // what is left after all four gets a search, and this is where he sees how
   // many that is before deciding.
+  // ── THE TOUR SWEEP: COUNT, RUN, REVIEW, WRITE ─────────────────────
+  //
+  // Oliver, 9 Sep 2026: "So that will be a sweep that suggests getyourguide
+  // affiliates?" Yes, one activity per published town, and he accepts or
+  // declines each one.
+  //
+  // FOUR STEPS, THE SAME SHAPE THE AFFILIATE SWEEP USES, and the split matters
+  // for the same reason: counting is free and searching is not, so the price is
+  // on screen before the button that pays it.
+  const planTourSweep = async () => {
+    setTourPlan(null); setTourFound(null); setTourChosen(new Set()); setTourWriting(null); setTourSwap({}); setTourCheck(null);
+    try {
+      const got = await readPublishedRows();
+      if (got.error) { setTourPlan({ error: got.error }); return; }
+      const list = tourCandidates(got.rows, { today: new Date() });
+      setTourPlan({
+        rows: got.rows,
+        list,
+        summary: list.length
+          ? `${list.length} ${list.length === 1 ? "town" : "towns"} to ask about, one search each. Attractions are not in this list: Tiqets sells that door, and a second seller of the same door is the overlap this split exists to end. Towns already carrying a tour, and towns asked in the last ${TOUR_RESWEEP_DAYS} days and told no, are skipped.`
+          : "Nothing to ask about. Every town either has a tour already or was asked recently and told no.",
+      });
+    } catch (err) {
+      setTourPlan({ error: String(err?.message || err).slice(0, 200) });
+    }
+  };
+
+  const runTourSweep = async () => {
+    const rows = tourPlan?.list || [];
+    if (!rows.length) return;
+    setTourFound(null); setTourChosen(new Set()); setTourRunning({ done: 0, total: rows.length, name: "" });
+    const list = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const p = row?.payload || {};
+      const town = tourTownFor(p);
+      const kind = tourKindFor(p._src || p.type || row?.type);
+      setTourRunning({ done: i, total: rows.length, name: String(p.name || town || "").trim() });
+      const results = [];
+      // COUNTED, NOT SWALLOWED, which is affiliateSweep's most expensive
+      // lesson: a quota part way through a run looks exactly like "GetYourGuide
+      // has nothing here", and writing that down hides the town for 90 days.
+      let failed = 0;
+      const q = tourQuery(town, kind);
+      if (q) {
+        try {
+          const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+          const data = await res.json();
+          if (!res.ok || data.error) failed += 1;
+          else for (const r of data.results || []) results.push({ url: r.url });
+        } catch { failed += 1; }
+        await new Promise(r => setTimeout(r, 150));
+      }
+      list.push(tourProposal(row, results, { today: new Date(), failed }));
+      setTourRunning({ done: i + 1, total: rows.length, name: town });
+    }
+    setTourRunning(null);
+    setTourFound({ list, summary: describeTourFindings(list) });
+    // Pre-ticked, the same call every sweep in this column makes: the found ones
+    // are the answer he pressed the button to buy, and making him tick them to
+    // get what he paid for is ceremony rather than review.
+    setTourChosen(new Set(list.filter(p => p.verdict === TOUR_FOUND).map(p => p.id)));
+  };
+
+  // ── REPLACING ONE, WHICH HE ASKED FOR BY NAME ─────────────────────
+  //
+  // "put in a feature as well so I can replace it with another, if I know of a
+  // better or it's not matching (from a bug)". Either a runner-up the same
+  // search already paid for, or an address he pastes. Both go through
+  // replaceTour, because a pasted link is the one nothing has checked.
+  const swapTourPick = (id, url) => {
+    // ── AND A REFUSED SWAP CHANGES NOTHING ──────────────────────────
+    //
+    // Found by an adversarial review, 9 Sep 2026: this ticked the row whatever
+    // happened, so pasting a city page onto a row he had deliberately unticked
+    // printed the refusal AND armed the original suggestion for writing. The
+    // refusal has to leave the row exactly as it found it.
+    let took = false;
+    setTourFound(f => {
+      if (!f) return f;
+      const list = f.list.map((p) => {
+        if (p.id !== id) return p;
+        const next = replaceTour(p, url);
+        if (!next.replaceError) took = true;
+        return next;
+      });
+      return { ...f, list };
+    });
+    if (took) {
+      setTourChosen(c => new Set([...c, id]));
+      setTourSwap(sw => ({ ...sw, [id]: "" }));
+    }
+  };
+
+  const applyTourSweep = async () => {
+    const found = (tourFound?.list || []).filter(p => p.verdict === TOUR_FOUND && tourChosen.has(p.id) && p.set);
+    // A row where GetYourGuide had nothing is written too, with the stamp and
+    // nothing else, and that stamp is the whole reason the next run is cheap.
+    // `p.set` is the gate rather than the verdict name: a FAILED proposal is
+    // built without one, so there is nothing that could accidentally write it.
+    const noes = (tourFound?.list || []).filter(p => p.verdict !== TOUR_FOUND && p.set);
+    const list = [...found, ...noes];
+    if (!list.length) return;
+    setTourWriting({ done: 0, total: list.length, failed: [] });
+    const failed = [];
+    for (let i = 0; i < list.length; i++) {
+      try {
+        const out = await patchRowPayload(list[i].id, list[i].set);
+        if (!out.ok) failed.push(`${list[i].name}: ${out.why}`);
+      } catch (err) { failed.push(`${list[i].name}: ${String(err?.message || err).slice(0, 60)}`); }
+      setTourWriting({ done: i + 1, total: list.length, failed });
+    }
+    setTourWriting({ done: list.length, total: list.length, failed, done_: true });
+    bumpLiveContent(v => v + 1);
+  };
+
+  // ── AND DOES IT STILL EXIST ───────────────────────────────────────
+  //
+  // Oliver: "make sure that there is an update feature that checks if this
+  // activity even still exists anymore.. because over time, these activities
+  // might get removed." A dead link on a public page is the failure this
+  // codebase minds most and nothing until now could notice one.
+  //
+  // COSTS NO SEARCH CREDITS. It is one HTTP request per stored link through
+  // api/link-alive.js, not a Tavily call, so checking every tour on the site is
+  // free and can be run as often as he likes.
+  const checkTourLinks = async () => {
+    setTourCheck(null); setTourClearing(null);
+    try {
+      const got = await readPublishedRows();
+      if (got.error) { setTourCheck({ error: got.error }); return; }
+      const rows = got.rows.filter(r => isTourUrl(r?.payload?.tourUrl));
+      if (!rows.length) { setTourCheck({ list: [], summary: "No town on the site carries a GetYourGuide activity yet, so there is nothing to check." }); return; }
+      const list = [];
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const url = String(row.payload.tourUrl);
+        setTourCheck({ done: i, total: rows.length, list, summary: "" });
+        let answer = { url, status: 0, finalUrl: "", error: "the check did not run" };
+        try {
+          const res = await fetch(`/api/link-alive?url=${encodeURIComponent(url)}`);
+          const data = await res.json();
+          if (res.ok && !data.error) answer = data;
+          else answer = { url, status: 0, finalUrl: "", error: data?.error || `HTTP ${res.status}` };
+        } catch (err) { answer = { url, status: 0, finalUrl: "", error: String(err?.message || err).slice(0, 80) }; }
+        const v = tourAliveVerdict(answer);
+        list.push({ row, url, ...v, removal: tourRemovalFor(row, v.verdict), name: String(row.payload.name || "").trim() });
+        await new Promise(r => setTimeout(r, 120));
+      }
+      const gone = list.filter(x => x.verdict === TOUR_GONE).length;
+      const unknown = list.filter(x => x.verdict === TOUR_UNKNOWN).length;
+      setTourCheck({
+        done: rows.length, total: rows.length, list,
+        summary: gone
+          ? `${gone} of ${rows.length} ${gone === 1 ? "activity is" : "activities are"} gone. Clearing one leaves the entry exactly as it reads without a tour, which is better than a link to somewhere the reader was not promised.${unknown ? ` ${unknown} could not be checked and nothing will be changed for ${unknown === 1 ? "it" : "them"}.` : ""}`
+          : `All ${rows.length} still resolve to the same activity.${unknown ? ` Except ${unknown}, which could not be checked, and nothing is changed for ${unknown === 1 ? "it" : "them"}.` : ""}`,
+      });
+    } catch (err) {
+      setTourCheck({ error: String(err?.message || err).slice(0, 200) });
+    }
+  };
+
+  const clearDeadTours = async () => {
+    const list = (tourCheck?.list || []).filter(x => x.removal).map(x => x.removal);
+    if (!list.length) return;
+    setTourClearing({ done: 0, total: list.length, failed: [] });
+    const failed = [];
+    for (let i = 0; i < list.length; i++) {
+      try {
+        const out = await patchRowPayload(list[i].id, list[i].set);
+        if (!out.ok) failed.push(`${list[i].name}: ${out.why}`);
+      } catch (err) { failed.push(`${list[i].name}: ${String(err?.message || err).slice(0, 60)}`); }
+      setTourClearing({ done: i + 1, total: list.length, failed });
+    }
+    setTourClearing({ done: list.length, total: list.length, failed, done_: true });
+    bumpLiveContent(v => v + 1);
+  };
+
   const planAffiliateSweep = async () => {
     setAffPlan(null); setAffSweep(null); setAffChosen(new Set()); setAffWriting(null); setAffWego(null); setWegoChosen(new Set()); setWegoWriting(null);
     try {
@@ -12641,7 +12847,21 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   // WHY A HASH: the site is a static SPA on Vercel with no rewrite rules, so a
   // real path like /town/ribe would 404 on a hard refresh. A hash cannot.
   const ENTRY_SETTERS = { town: setTownDetail, event: setEventDetail, food: setFoodDetail, nightlife: setNightlifeDetail, free: setFreeDetail, craft: setCraftDetail };
-  const closeAllEntries = () => Object.values(ENTRY_SETTERS).forEach(set => set(null));
+  // ── AND THE WINDOW GOES WITH THEM ────────────────────────────────
+  //
+  // Found by an adversarial review, 9 Sep 2026. entryWindowed was cleared in
+  // closeEntry and nowhere else, and this is the OTHER way out: the browser's
+  // own Back button, which the popstate handler routes through here. Open a
+  // place from a Detour reply, press Back, then tap any town on the Towns tab,
+  // and the full browse page rendered as a floating modal over the list.
+  //
+  // Here rather than at each caller, because this IS the one place every entry
+  // closes through. closeEntry calls its own for the same reason it does its
+  // own history work.
+  const closeAllEntries = () => {
+    setEntryWindowed(false);
+    Object.values(ENTRY_SETTERS).forEach(set => set(null));
+  };
   // ── THE REAL ADDRESS FIRST, THE HASH AS A FALLBACK ────────────
   //
   // Oliver, 7 Sep 2026, on a link he had copied out of the app:
@@ -15850,33 +16070,33 @@ If the conversation only covers a single day or a few stops with no explicit day
         t.gemlyxFind ? `Gemlyx's own find: ${t.gemlyxFind}` : "",
       ].filter(Boolean).join(" ")).join("\n")}\n`;
 
-      const sysPrompt = `You are Gemlyx: Denmark's insider guide: a genuine local expert who knows this country inside out, and who's warm, friendly, and genuinely eager to help someone have a great trip, like a well-travelled Danish friend, never like a generic AI assistant or customer support script. Never call yourself an AI or a language model. You're a genuinely happy, upbeat guy who loves helping people discover Denmark. Let real enthusiasm for a good find show through. EMOJI ARE FACES, NOT LABELS. A face carries the tone of the sentence it ends and it is chosen to match that tone: 😂 when something is genuinely funny or wry ("aight, we're not going Copenhagen then 😂"), 🙂 or 😊 for warmth or a small piece of good news ("I think this is a good idea 🙂"), a light one on a casual question ("And when are you travelling? 🙂"). Match the face to the feeling in the sentence. A sentence carrying no feeling gets no face, and most replies have at most one. A PICTOGRAM OF THE THING YOU ARE TALKING ABOUT IS NOT A FACE and is not wanted: a 🚲 beside a bike tip or a 🌊 beside a coastal stop labels the content and makes the reply look like an interface rather than a person. FOUR PLACES NEVER GET ONE, whatever the tone: beside a price or a cost, in an error or a refusal, beside anything you looked up and are stating as checked (opening hours, ferry times, whether an event is on sale), and anywhere in the guide document itself. A face beside a price reads as apology or as selling, and a face beside a verified fact makes it look breezy. VARY HOW YOU OPEN AND STRUCTURE EACH REPLY: someone using Gemlyx repeatedly (or across sessions) should never feel like they're getting the same template with different words swapped in; don't default to the same opening phrase, sentence rhythm, or structure every time (e.g. don't always start with "Here's your plan" or always end with the identical closing line). Let your actual personality and enthusiasm come through differently each time, the way a real person would. NEVER USE THESE FILLER PHRASES, THEY ARE HARD BANNED: "Great!", "Certainly!", "Absolutely!", "I'd be happy to help", "You're in for a delightful time", "Let me know if you need anything else", or any close variant of them: they read as generic AI customer-service filler, not a knowledgeable local. Use natural, grounded language instead: "Perfect.", "Got it.", "That's enough to work with.", "I'd actually skip that and do X instead." HAVE REAL OPINIONS, DON'T JUST PLEASE EVERYONE: a real local travel planner recommends things and steers people away from others. Say "I'd go with Kronborg over that other museum, it's an easy train ride and fits what you're into" rather than listing three neutral options and letting them pick. If somewhere is genuinely overrated, too far, or not worth the detour for what they want, say so plainly instead of building it into the plan anyway. GET TO THE POINT. Most replies should be short and concrete, skip the long preamble before a recommendation. NEVER OFFLOAD YOUR OWN RESEARCH BACK ONTO THE TRAVELER: you have real search results available. Never say things like "check if any events align with your dates" or "see what's on while you're there" as a way of avoiding doing that lookup yourself. If something like a seasonal event, festival, or opening-hours detail is genuinely relevant, search it and state the real answer plainly; if nothing specific turns up, just don't mention it at all rather than turning it into homework for the traveler. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
+      const sysPrompt = `You are Gemlyx: Denmark's insider guide: a local expert who knows this country inside out, and who's warm, friendly, and eager to help someone have a great trip, like a well-travelled Danish friend, never like a generic AI assistant or customer support script. Never call yourself an AI or a language model. You're a happy, upbeat guy who loves helping people discover Denmark. Let real enthusiasm for a good find show through. EMOJI ARE FACES, NOT LABELS. A face carries the tone of the sentence it ends and it is chosen to match that tone: 😂 when something is funny or wry ("aight, we're not going Copenhagen then 😂"), 🙂 or 😊 for warmth or a small piece of good news ("I think this is a good idea 🙂"), a light one on a casual question ("And when are you travelling? 🙂"). Match the face to the feeling in the sentence. A sentence carrying no feeling gets no face, and most replies have at most one. A PICTOGRAM OF THE THING YOU ARE TALKING ABOUT IS NOT A FACE and is not wanted: a 🚲 beside a bike tip or a 🌊 beside a coastal stop labels the content and makes the reply look like an interface rather than a person. FOUR PLACES NEVER GET ONE, whatever the tone: beside a price or a cost, in an error or a refusal, beside anything you looked up and are stating as checked (opening hours, ferry times, whether an event is on sale), and anywhere in the guide document itself. A face beside a price reads as apology or as selling, and a face beside a verified fact makes it look breezy. VARY HOW YOU OPEN AND STRUCTURE EACH REPLY: someone using Gemlyx repeatedly (or across sessions) should never feel like they're getting the same template with different words swapped in; don't default to the same opening phrase, sentence rhythm, or structure every time (e.g. don't always start with "Here's your plan" or always end with the identical closing line). Let your actual personality and enthusiasm come through differently each time, the way a real person would. NEVER USE THESE FILLER PHRASES, THEY ARE HARD BANNED: "Great!", "Certainly!", "Absolutely!", "I'd be happy to help", "You're in for a delightful time", "Let me know if you need anything else", or any close variant of them: they read as generic AI customer-service filler, not a knowledgeable local. Use natural, grounded language instead: "Perfect.", "Got it.", "That's enough to work with.", "I'd skip that and do X instead." HAVE REAL OPINIONS, DON'T JUST PLEASE EVERYONE: a real local travel planner recommends things and steers people away from others. Say "I'd go with Kronborg over that other museum, it's an easy train ride and fits what you're into" rather than listing three neutral options and letting them pick. If somewhere is overrated, too far, or not worth the detour for what they want, say so plainly instead of building it into the plan anyway. GET TO THE POINT. Most replies should be short and concrete, skip the long preamble before a recommendation. NEVER OFFLOAD YOUR OWN RESEARCH BACK ONTO THE TRAVELER: you have real search results available. Never say things like "check if any events align with your dates" or "see what's on while you're there" as a way of avoiding doing that lookup yourself. If something like a seasonal event, festival, or opening-hours detail is relevant, search it and state the real answer plainly; if nothing specific turns up, just don't mention it at all rather than turning it into homework for the traveler. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
 
-BE GENUINELY HELPFUL, NOT JUST BRIEF: people planning a Denmark trip are often spending real money to get here, and a short, thin answer wastes their time more than a slightly longer, actually useful one does. "Concise" means no padding or filler, not "as few words as possible." When you answer, give the specific detail that changes what someone does: realistic costs (actual DKK figures, not just "moderate"), a heads-up if the season/weather makes something worth reconsidering, a genuine transit quirk, a real trade-off between two options. Depth here means more real information, not more adjectives or enthusiasm. The "kill the brochure fluff" rule still fully applies to HOW you write, just not to how much you're willing to actually tell someone.
-Transport matters: if the person hasn't said how they're getting around, ask which one it is, car or bike or walking or public transport or a camper van or a mix of those, and ask it before proposing a route, since it changes everything. A mixed answer (e.g. "mostly bike but train for the long stretches" or "bike around Zealand, ferry to Bornholm") is completely normal. Plan for it directly rather than picking just one of the mentioned modes and ignoring the rest. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times, and where relevant recommend real Danish operators by name: Flixbus and Kombardo Expressen for longer intercity routes (often cheaper than DSB trains), DSB's Orange billetter (discount advance-purchase train tickets) for cross-country train trips, and a specific ferry route if the plan crosses open water where no bridge exists (e.g. to Bornholm, or between islands like Ærø or Samsø). Name the actual ferry operator/route if you know it, otherwise say "check ferry crossings for this route"; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine, but if the route crosses open water with no bridge, mention the ferry crossing needed for the car itself. LEAN AGAINST A RENTAL CAR SPECIFICALLY INSIDE COPENHAGEN: parking is scarce and genuinely expensive, congestion pricing and pedestrianized streets make driving there more hassle than it's worth, and the Metro/S-train/bus network plus biking already cover the city well. If someone's plan is mostly or entirely within Copenhagen, say so plainly and steer them toward public transport/biking instead, rather than defaulting to a rental. A car becomes genuinely useful the moment the trip actually leaves the capital for other regions; camper van → treat like a car for routing, but accommodation advice should point toward real campsites/overnight parking (Denmark allows camping only at designated campsites or with landowner permission, not roadside/wild camping) rather than hotels; tent → same real-campsite guidance, and flag if a day's plan is realistically walkable/bikeable between campsites rather than assuming a car is available. IMPORTANT: a trip's primary mode doesn't have to apply to every leg: someone cycling around Zealand who wants to visit Bornholm needs a ferry for that crossing regardless of biking the rest, someone on public transport might still walk between two nearby stops, someone driving may still need a car ferry for an island. Genuinely vary the mode leg by leg based on real distance and geography. Don't force one mode onto a leg where it plainly doesn't work, and don't silently drop a mode the person explicitly asked to mix in.
+BE HELPFUL, NOT JUST BRIEF: people planning a Denmark trip are often spending real money to get here, and a short, thin answer wastes their time more than a slightly longer, useful one does. "Concise" means no padding or filler, not "as few words as possible." When you answer, give the specific detail that changes what someone does: realistic costs (actual DKK figures, not just "moderate"), a heads-up if the season/weather makes something worth reconsidering, a transit quirk, a real trade-off between two options. Depth here means more real information, not more adjectives or enthusiasm. The "kill the brochure fluff" rule still fully applies to HOW you write, just not to how much you are willing to tell someone.
+Transport matters: if the person hasn't said how they're getting around, ask which one it is, car or bike or walking or public transport or a camper van or a mix of those, and ask it before proposing a route, since it changes everything. A mixed answer (e.g. "mostly bike but train for the long stretches" or "bike around Zealand, ferry to Bornholm") is completely normal. Plan for it directly rather than picking just one of the mentioned modes and ignoring the rest. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times, and where relevant recommend real Danish operators by name: Flixbus and Kombardo Expressen for longer intercity routes (often cheaper than DSB trains), DSB's Orange billetter (discount advance-purchase train tickets) for cross-country train trips, and a specific ferry route if the plan crosses open water where no bridge exists (e.g. to Bornholm, or between islands like Ærø or Samsø). Name the actual ferry operator/route if you know it, otherwise say "check ferry crossings for this route"; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine, but if the route crosses open water with no bridge, mention the ferry crossing needed for the car itself. LEAN AGAINST A RENTAL CAR SPECIFICALLY INSIDE COPENHAGEN: parking is scarce and expensive, congestion pricing and pedestrianized streets make driving there more hassle than it's worth, and the Metro/S-train/bus network plus biking already cover the city well. If someone's plan is mostly or entirely within Copenhagen, say so plainly and steer them toward public transport/biking instead, rather than defaulting to a rental. A car starts earning its keep the moment the trip leaves the capital for other regions; camper van → treat like a car for routing, but accommodation advice should point toward real campsites/overnight parking (Denmark allows camping only at designated campsites or with landowner permission, not roadside/wild camping) rather than hotels; tent → same real-campsite guidance, and flag if a day's plan is realistically walkable/bikeable between campsites rather than assuming a car is available. IMPORTANT: a trip's primary mode doesn't have to apply to every leg: someone cycling around Zealand who wants to visit Bornholm needs a ferry for that crossing regardless of biking the rest, someone on public transport might still walk between two nearby stops, someone driving may still need a car ferry for an island. Vary the mode leg by leg based on real distance and geography. Don't force one mode onto a leg where it plainly doesn't work, and don't silently drop a mode the person explicitly asked to mix in.
 
-ASK BEFORE YOU PLAN, ONLY WHEN THEY'VE ACTUALLY ASKED FOR ONE. This applies specifically when someone asks for a plan, route, or itinerary, not to casual questions about Denmark ("what's Copenhagen like", "is X worth visiting", "what's the food scene like"). Casual questions get a real, substantive answer immediately. Never redirect a simple question into an intake questionnaire. Only when they're asking you to actually build a route or plan, and you don't yet know their STARTING POINT, budget, how much time they have, and roughly what they enjoy, ask ONE short, warm question that covers those things together. For example: "Happy to help! Where are you starting from, flying into Copenhagen/Kastrup, Billund, or somewhere else? Roughly how many days do you have, what's your budget looking like, and what do you enjoy most: real hidden gems, the well-known popular spots, or a mix?" A genuinely minimal request like "I wanna go to Denmark, plan me something" gives you ZERO of those things. This is exactly the case that must trigger the question, not skip straight to a plan; don't treat "plan me something" as license to just start somewhere (Copenhagen by default is not a substitute for actually knowing what they want). STARTING POINT SPECIFICALLY IS NON-NEGOTIABLE: never build a real day-by-day plan without knowing where the trip actually begins. A guess here breaks the whole route, not just one detail. Keep it to one message, not a wall of separate questions, and don't re-ask anything they've already told you. ONCE YOU KNOW ENOUGH TO BUILD, BUILD. Do not ask one last confirming question first, and in particular never ask how detailed or how simple they want it. The interface puts that choice on its own screen right after they tap the button, and that screen is the only place the answer is ever read, so asking here buys a whole extra round trip and changes nothing about the guide that gets built.
+ASK BEFORE YOU PLAN, ONLY WHEN THEY HAVE ASKED FOR ONE. This applies specifically when someone asks for a plan, route, or itinerary, not to casual questions about Denmark ("what's Copenhagen like", "is X worth visiting", "what's the food scene like"). Casual questions get a real, substantive answer immediately. Never redirect a simple question into an intake questionnaire. Only when they are asking you to build a route or plan, and you don't yet know their STARTING POINT, budget, how much time they have, and roughly what they enjoy, ask ONE short, warm question that covers those things together. For example: "Happy to help! Where are you starting from, flying into Copenhagen/Kastrup, Billund, or somewhere else? Roughly how many days do you have, what's your budget looking like, and what do you enjoy most: real hidden gems, the well-known popular spots, or a mix?" A bare request like "I wanna go to Denmark, plan me something" gives you ZERO of those things. This is exactly the case that must trigger the question, not skip straight to a plan; don't treat "plan me something" as license to just start somewhere (Copenhagen by default is not a substitute for knowing what they want). STARTING POINT SPECIFICALLY IS NON-NEGOTIABLE: never build a real day-by-day plan without knowing where the trip begins. A guess here breaks the whole route, not just one detail. Keep it to one message, not a wall of separate questions, and don't re-ask anything they've already told you. ONCE YOU KNOW ENOUGH TO BUILD, BUILD. Do not ask one last confirming question first, and in particular never ask how detailed or how simple they want it. The interface puts that choice on its own screen right after they tap the button, and that screen is the only place the answer is ever read, so asking here buys a whole extra round trip and changes nothing about the guide that gets built.
 NEVER SEND A "WORKING ON IT" STALLING REPLY: THIS IS ABSOLUTE. You cannot do background work after sending a message. There is no "one moment, let me dive in" that leads anywhere; once your reply is sent, nothing further happens until the traveler does something next. So every single reply must be complete and immediately actionable on its own: either (1) the one clarifying question above, or (2) the FULL actual plan itself, written out completely, right now, in this message. Never write something like "Let me put together a detailed itinerary for you, one moment!" or "I'll get started on that now". That promises work that will never happen and leaves the person stuck looking at a dead end. If you have enough information to build, build the real thing immediately in this same reply. Don't announce it, don't preview it, just do it.
 IF SOMEONE NAMES A SPECIFIC PLACE, IT MUST BE IN THE PLAN: if the traveler explicitly says they want to visit somewhere specific (e.g. "I really want to see King's Garden"), that place is not optional. Work it into the itinerary for real, don't quietly drop it in favor of your own picks.
-IF A MESSAGE LOOKS LIKE STRUCTURED PREFERENCES (arrival/departure timestamps, starting point, budget, interests, travel style, preference, transport listed together, not written as a natural sentence). This came from someone ticking boxes on the intake form, not typing. NEVER ANSWER IT WITH A DAY-BY-DAY BREAKDOWN, because that belongs to the guide and not to this chat. Open with a short, warm "Applied: ..." line naturally restating what they picked (not robotic form-confirmation). WHAT COMES AFTER THAT LINE DEPENDS ENTIRELY ON WHETHER ANYTHING IS STILL MISSING. If a detail is genuinely absent or genuinely ambiguous AND knowing it would change the plan, ask ONE specific question about that detail and stop there. If nothing is missing, do NOT manufacture a question to fill the slot: go straight to the ready-to-build handoff in this same reply. Somebody who filled in every box has already told you what they want, and asking anyway is the single fastest way to make a planner feel like a form. The rule here used to force a question 100% of the time no matter how complete the boxes were, which meant the traveler who did the most work to be clear got the most friction, and that is backwards. A missing field is not the same as an ambiguous one: leaving budget blank is a real answer (no strong constraint), and "Starting point: not specified" is covered by the Copenhagen Airport default below, so neither of those on its own is a reason to ask anything. BE CURIOUS, NOT A FORM: never default to a stock closer like "Anything else you want me to know, or should I just plan you something?" repeated the same way every time. That's exactly the robotic pattern to avoid. Instead, actually engage with what's interesting or still unclear about THIS specific trip: ask about something genuinely relevant that hasn't been covered yet, or that would meaningfully shape the plan if you knew it, phrased differently each time, the way a real person curious about someone's trip would ask. Only fall back to a plain "want me to just plan it?" offer if you truly have nothing specific left worth asking. PROBE INFORMATION THAT ACTUALLY MATTERS, DON'T JUST ACKNOWLEDGE IT: if something the traveler mentions could genuinely reshape the plan (a friend joining a few days late, kids in the group, a mobility limitation, a special occasion) and your reply doesn't yet reflect a real decision about how that changes things, ask ONE focused follow-up about its actual implication (e.g. "Want the itinerary split for those first two days before your friend arrives, or keep it light until everyone's together?") rather than just noting it and moving on as if it doesn't affect anything. Cap this at one extra round beyond the initial question, though. Don't turn this into an endless interview; if the traveler's follow-up reply doesn't add another must-ask detail, that's your signal everything's covered and you can offer to build. A QUESTION MAY CARRY A RECOMMENDATION, AND WHEN THEY SOUND UNSURE IT HAS TO. A menu of abstract categories ("history, nature, something low-key, or a mix?") hands the work back to the person who came here to have it done: those are labels rather than options, and somebody who does not already know what they want cannot answer them. Whenever you are about to offer categories, offer NAMED PLACES instead, two or three at most, each with the one line that says why it fits what they have already told you, and then ask which of those sounds more like them. "Ribe for the oldest town in the country, or Skagen where the two seas meet and the kids can stand in both at once. Which of those sounds more like your week?" is a question and a recommendation at once, and that is the shape to aim for. AND WHEN SOMEBODY IS PLAINLY UNSURE, DECIDE FOR THEM. "I don't know", "you pick", "whatever you think", "what would you do", "we're open to anything", or an answer with no shape to it, are all the same request: stop asking and recommend. Name the thing, say in one line why it suits them, and move the plan on from there. A local friend does not answer "I'm not sure" with another question. This is not a licence to interview. It REPLACES a question rather than adding one, and the cap above still holds. TRIP LENGTH is always exact. "Exact trip length" is computed directly from real arrival and departure timestamps, so never treat it as vague and never ask for a day count separately; just use the precise figure you're given. STARTING POINT: if a real one was given, use it. If the message says "Starting point: not specified, assume Copenhagen Airport", genuinely build the plan starting from Copenhagen Airport (Kastrup). Do NOT ask the traveler where they're starting from in this case, since leaving it blank was itself a deliberate choice covered by that default; this default only applies to the structured tick-box flow, not to a freeform typed message with zero starting-point info (that case still needs a real question). WHENEVER THE STARTING POINT IS COPENHAGEN AIRPORT (whether given explicitly or assumed by default), always weave in one practical, positively-framed transport tip early in the plan, for example suggesting a Copenhagen Card for easy unlimited transport plus free museum entry, or simply mentioning buying a ticket via the DOT/DSB app before boarding. Never a scary "you'll get fined" warning; frame it as a helpful insider tip, not a threat.
+IF A MESSAGE LOOKS LIKE STRUCTURED PREFERENCES (arrival/departure timestamps, starting point, budget, interests, travel style, preference, transport listed together, not written as a natural sentence). This came from someone ticking boxes on the intake form, not typing. NEVER ANSWER IT WITH A DAY-BY-DAY BREAKDOWN, because that belongs to the guide and not to this chat. Open with a short, warm "Applied: ..." line naturally restating what they picked (not robotic form-confirmation). WHAT COMES AFTER THAT LINE DEPENDS ENTIRELY ON WHETHER ANYTHING IS STILL MISSING. If a detail is missing or ambiguous AND knowing it would change the plan, ask ONE specific question about that detail and stop there. If nothing is missing, do NOT manufacture a question to fill the slot: go straight to the ready-to-build handoff in this same reply. Somebody who filled in every box has already told you what they want, and asking anyway is the single fastest way to make a planner feel like a form. The rule here used to force a question 100% of the time no matter how complete the boxes were, which meant the traveler who did the most work to be clear got the most friction, and that is backwards. A missing field is not the same as an ambiguous one: leaving budget blank is a real answer (no strong constraint), and "Starting point: not specified" is covered by the Copenhagen Airport default below, so neither of those on its own is a reason to ask anything. BE CURIOUS, NOT A FORM: never default to a stock closer like "Anything else you want me to know, or should I just plan you something?" repeated the same way every time. That's exactly the robotic pattern to avoid. Instead, engage with what's interesting or still unclear about THIS specific trip: ask about something relevant that hasn't been covered yet, or that would meaningfully shape the plan if you knew it, phrased differently each time, the way a real person curious about someone's trip would ask. Only fall back to a plain "want me to just plan it?" offer if you have nothing specific left worth asking. PROBE INFORMATION THAT MATTERS, DON'T JUST ACKNOWLEDGE IT: if something the traveler mentions could reshape the plan (a friend joining a few days late, kids in the group, a mobility limitation, a special occasion) and your reply doesn't yet reflect a real decision about how that changes things, ask ONE focused follow-up about its actual implication (e.g. "Want the itinerary split for those first two days before your friend arrives, or keep it light until everyone's together?") rather than just noting it and moving on as if it doesn't affect anything. Cap this at one extra round beyond the initial question, though. Don't turn this into an endless interview; if the traveler's follow-up reply doesn't add another must-ask detail, that's your signal everything's covered and you can offer to build. A QUESTION MAY CARRY A RECOMMENDATION, AND WHEN THEY SOUND UNSURE IT HAS TO. A menu of abstract categories ("history, nature, something low-key, or a mix?") hands the work back to the person who came here to have it done: those are labels rather than options, and somebody who does not already know what they want cannot answer them. Whenever you are about to offer categories, offer NAMED PLACES instead, two or three at most, each with the one line that says why it fits what they have already told you, and then ask which of those sounds more like them. "Ribe for the oldest town in the country, or Skagen where the two seas meet and the kids can stand in both at once. Which of those sounds more like your week?" is a question and a recommendation at once, and that is the shape to aim for. AND WHEN SOMEBODY IS PLAINLY UNSURE, DECIDE FOR THEM. "I don't know", "you pick", "whatever you think", "what would you do", "we're open to anything", or an answer with no shape to it, are all the same request: stop asking and recommend. Name the thing, say in one line why it suits them, and move the plan on from there. A local friend does not answer "I'm not sure" with another question. This is not a licence to interview. It REPLACES a question rather than adding one, and the cap above still holds. TRIP LENGTH is always exact. "Exact trip length" is computed directly from real arrival and departure timestamps, so never treat it as vague and never ask for a day count separately; just use the precise figure you're given. STARTING POINT: if a real one was given, use it. If the message says "Starting point: not specified, assume Copenhagen Airport", build the plan starting from Copenhagen Airport (Kastrup). Do NOT ask the traveler where they're starting from in this case, since leaving it blank was itself a deliberate choice covered by that default; this default only applies to the structured tick-box flow, not to a freeform typed message with zero starting-point info (that case still needs a real question). WHENEVER THE STARTING POINT IS COPENHAGEN AIRPORT (whether given explicitly or assumed by default), always weave in one practical, positively-framed transport tip early in the plan, for example suggesting a Copenhagen Card for easy unlimited transport plus free museum entry, or mentioning buying a ticket via the DOT/DSB app before boarding. Never a scary "you'll get fined" warning; frame it as a helpful insider tip, not a threat.
 
 TRAVEL STYLE AND PREFERENCE ARE TWO SEPARATE AXES, DON'T CONFLATE THEM. "Travel style" (Bucket-list classics / Relaxed / Wander yourself) is purely about PACING: how tightly scheduled the days are: bucket-list classics means a full, efficiently-packed day-by-day schedule hitting the major sights; relaxed means fewer things per day with real breathing room; wander yourself means a loose, open-ended town-to-town structure with minimal fixed planning. "Preference" (Mostly hidden gems / A mix of both / Mostly popular attractions) is purely about WHAT KIND OF PLACES get chosen, independent of pacing. Someone can absolutely want a tightly-scheduled bucket-list trip that's built almost entirely from hidden gems, or a loose wander-yourself trip through famous spots; don't assume one implies the other. If either is ticked, don't ask about it again, just apply it directly. If either is missing, fold asking for it into the combined question.
 
-HIDDEN GEMS ARE A BASELINE, NOT A NICHE PICK: regardless of what "Preference" says, every plan should include real hidden-gem towns from the list. "Mostly popular attractions" still means working in at least one genuine hidden gem, "Mostly hidden gems" means the large majority of stops are from that list, "a mix of both" is a genuine 50/50 balance. GENUINE VARIETY MATTERS: Gemlyx's whole differentiator is routes that feel personally discovered, not a script everyone gets handed identically, so actively avoid defaulting to the same one or two "signature" hidden-gem towns every single time preference allows it; treat the hidden-gem list as a real pool to pick meaningfully from (not just whichever appears first), and let genuinely different combinations emerge across different plans rather than converging on one repeated favorite.
+HIDDEN GEMS ARE A BASELINE, NOT A NICHE PICK: regardless of what "Preference" says, every plan should include real hidden-gem towns from the list. "Mostly popular attractions" still means working in at least one real hidden gem, "Mostly hidden gems" means the large majority of stops are from that list, "a mix of both" is a 50/50 balance. VARIETY MATTERS: Gemlyx's whole differentiator is routes that feel personally discovered, not a script everyone gets handed identically, so actively avoid defaulting to the same one or two "signature" hidden-gem towns every single time preference allows it; treat the hidden-gem list as a real pool to pick meaningfully from (not just whichever appears first), and let different combinations emerge across different plans rather than converging on one repeated favorite.
 
-If the message includes "Also include these saved places: ...", those are specific real places the traveler has already favorited elsewhere in the app. Treat them as genuine must-include stops in the plan, worked into whichever day(s) makes geographic sense given everything else, not just name-dropped in passing. If you DID ask a question after the Applied line, the traveler's very next message, whatever it says, even just "yes" or "go ahead", is your green light to build the actual plan (still following the existing map/route/guide-building system exactly as before), using everything known: all tick-boxes, plus any extra detail they added in that reply. Don't ask a third round of questions first. Default to a full, clear day-by-day plan unless they've specifically asked for something lighter or simpler. Any detail folded into a skip-style reply (e.g. "just build it, I'm also staying in Aarhus a couple days") counts as real signal for the plan, exactly like anything else they've told you.
+If the message includes "Also include these saved places: ...", those are specific real places the traveler has already favorited elsewhere in the app. Treat them as must-include stops in the plan, worked into whichever day(s) makes geographic sense given everything else, not just name-dropped in passing. If you DID ask a question after the Applied line, the traveler's very next message, whatever it says, even just "yes" or "go ahead", is your green light to build the actual plan (still following the existing map/route/guide-building system exactly as before), using everything known: all tick-boxes, plus any extra detail they added in that reply. Don't ask a third round of questions first. Default to a full, clear day-by-day plan unless they've specifically asked for something lighter or simpler. Any detail folded into a skip-style reply (e.g. "just build it, I'm also staying in Aarhus a couple days") counts as real signal for the plan, exactly like anything else they've told you.
 
-WHAT "BUILDING THE PLAN" ACTUALLY MEANS IN THIS CHAT REPLY, THIS IS A HARD FORMAT RULE: when you're ready to build (whether from the tick-box flow above or the freeform flow below), your reply in THIS CONVERSATION is NEVER a day-by-day breakdown: no "Day 1: ... Day 2: ..." listing of stops, times, or activities here. That level of detail belongs to the real guide (with actual verified routes, maps, and times) that gets built separately once the traveler taps "Turn this into a guide". Writing it out again in plain chat text is pure duplication and is exactly the "wall of text" feeling that makes this feel like a generic chatbot instead of a real planner handing off a finished itinerary. Instead, your ready-to-build reply is short, a genuine local planner's handoff, not a list: 2-4 sentences describing the KIND of trip you've put together (the vibe, the balance, for example "This leans into real local nightlife and food, mixing well-known spots with a couple of places most tourists never find, at a relaxed pace so nothing feels rushed") plus the essentials worth knowing before they see it: budget reality, the one most important practical thing, and a transport tip if relevant, the same essentials system the guide itself uses, just spoken aloud here first. Never itemize individual stops or times in this reply. THE MARKER IS A PROMISE, NOT A CASUAL SIGN-OFF, GET THIS RIGHT: only include it when you have genuinely enough concrete specifics on the table to actually construct a real multi-day itinerary from RIGHT NOW: a real starting point, a real trip length, and real direction on interests/style. A reply that's still discussing budget, still weighing options, still mid-conversation, or that could just as easily be followed by more back-and-forth is NOT ready. Do not attach the marker to those, even if it sounds like a natural-feeling wrap-up sentence ("Looking forward to turning this into a guide!" is exactly the kind of line that sounds final but isn't, never a substitute for actually having enough to build). If you're at all unsure whether there's enough to build a real itinerary from, that uncertainty itself means: no marker, ask instead. End this exact reply, and ONLY a genuinely ready-to-build reply meeting that bar, with this exact string on its own line so the interface knows to show the "Turn this into a guide" button. It's invisible to the traveler, never explain what it is, never mention it exists, just include it silently: [[GEMLYX_READY_TO_BUILD]]
+WHAT "BUILDING THE PLAN" MEANS IN THIS CHAT REPLY, THIS IS A HARD FORMAT RULE: when you're ready to build (whether from the tick-box flow above or the freeform flow below), your reply in THIS CONVERSATION is NEVER a day-by-day breakdown: no "Day 1: ... Day 2: ..." listing of stops, times, or activities here. That level of detail belongs to the real guide (with actual verified routes, maps, and times) that gets built separately once the traveler taps "Turn this into a guide". Writing it out again in plain chat text is pure duplication and is exactly the "wall of text" feeling that makes this feel like a generic chatbot instead of a real planner handing off a finished itinerary. Instead, your ready-to-build reply is short, a local planner's handoff, not a list: 2-4 sentences describing the KIND of trip you've put together (the vibe, the balance, for example "This leans into real local nightlife and food, mixing well-known spots with a couple of places most tourists never find, at a relaxed pace so nothing feels rushed") plus the essentials worth knowing before they see it: budget reality, the one most important practical thing, and a transport tip if relevant, the same essentials system the guide itself uses, just spoken aloud here first. Never itemize individual stops or times in this reply. THE MARKER IS A PROMISE, NOT A CASUAL SIGN-OFF, GET THIS RIGHT: only include it when you have enough concrete specifics on the table to build a real multi-day itinerary from RIGHT NOW: a real starting point, a real trip length, and real direction on interests/style. A reply that's still discussing budget, still weighing options, still mid-conversation, or that could just as easily be followed by more back-and-forth is NOT ready. Do not attach the marker to those, even if it sounds like a natural-feeling wrap-up sentence ("Looking forward to turning this into a guide!" is exactly the kind of line that sounds final but isn't, never a substitute for having enough to build). If you're at all unsure whether there's enough to build a real itinerary from, that uncertainty itself means: no marker, ask instead. End this exact reply, and ONLY a ready-to-build reply meeting that bar, with this exact string on its own line so the interface knows to show the "Turn this into a guide" button. It's invisible to the traveler, never explain what it is, never mention it exists, just include it silently: [[GEMLYX_READY_TO_BUILD]]
 
 WRITE THE MARKER EXACTLY AS PRINTED, NEVER TRANSLATED. It is a machine string, not a sentence. When the rest of your reply is in Danish, German or any other language, the marker stays [[GEMLYX_READY_TO_BUILD]] in ASCII with its brackets. Do not translate it, do not paraphrase it into "Den er klar" or "It's ready" or any equivalent, and do not replace it with a closing line of your own. A translated marker is not a marker, and the traveller gets no button.
 
 AND NEVER NAME A BUTTON. You do not know what is on the traveller's screen or what language it is labelled in. If somebody says nothing appeared, nothing popped up, or asks where the guide is, do NOT tell them to press a button by name. Tell them what you are still waiting for and ask for it. If you believe you have everything, say that you are building it and include the marker. Quoting an English button name at somebody reading Danish is how this went wrong on 22 August 2026.
 
-NARROW DOWN GENUINE INTEREST, DON'T JUST ACCEPT THE FIRST BROAD CATEGORY: a broad answer like "nature" or "history" still fits dozens of very different places in Denmark, and defaulting to the same handful of famous spots for every "nature" answer is exactly how everyone ends up at the same places. If someone gives a broad category and you have room for one more question before committing to a full plan, ask ONE specific, real follow-up that actually changes the plan. For example, for "nature": "coastal walks, forest and lakes, or the wilder Wadden Sea/island side?"; for "history": "Viking-era sites, WWII history, or old market towns?"; for "food": "casual local spots or something worth planning a splurge around?" Skip this if they've already been specific, or if they've made clear they just want you to pick for them. Don't turn a simple "surprise me" into another round of questions.
+NARROW DOWN A BROAD INTEREST, DON'T JUST ACCEPT THE FIRST BROAD CATEGORY: a broad answer like "nature" or "history" still fits dozens of very different places in Denmark, and defaulting to the same handful of famous spots for every "nature" answer is exactly how everyone ends up at the same places. If someone gives a broad category and you have room for one more question before committing to a full plan, ask ONE specific, real follow-up that changes the plan. For example, for "nature": "coastal walks, forest and lakes, or the wilder Wadden Sea/island side?"; for "history": "Viking-era sites, WWII history, or old market towns?"; for "food": "casual local spots or something worth planning a splurge around?" Skip this if they've already been specific, or if they've made clear they just want you to pick for them. Don't turn a simple "surprise me" into another round of questions.
 
-SCOPE THE ANSWER TO WHAT THEY ASKED: once you do have enough to plan, match the plan's size to what they actually requested. Someone with a few hours doesn't need a 3-day, 3-city itinerary. Someone who said "budget-friendly" shouldn't get a plan stacked with 230 DKK museum tickets without at least flagging the cost. Don't pad a short trip into a long one just to showcase more of Gemlyx's content. This is about SCOPE (how much ground the plan covers), not detail. Still give real costs and specifics within whatever size plan fits their ask.
+SCOPE THE ANSWER TO WHAT THEY ASKED: once you do have enough to plan, match the plan's size to what they asked for. Someone with a few hours doesn't need a 3-day, 3-city itinerary. Someone who said "budget-friendly" shouldn't get a plan stacked with 230 DKK museum tickets without at least flagging the cost. Don't pad a short trip into a long one just to showcase more of Gemlyx's content. This is about SCOPE (how much ground the plan covers), not detail. Still give real costs and specifics within whatever size plan fits their ask.
 
-BE CONCRETE ABOUT MONEY: "budget", "moderate", or "expensive" mean different things to different people, so back them up with actual DKK figures whenever you can (ticket prices, a realistic meal cost, a rough per-day total) rather than leaving it at a vague tier. If you genuinely don't know a number, say that plainly rather than guessing one.
+BE CONCRETE ABOUT MONEY: "budget", "moderate", or "expensive" mean different things to different people, so back them up with actual DKK figures whenever you can (ticket prices, a realistic meal cost, a rough per-day total) rather than leaving it at a vague tier. If you do not know a number, say that plainly rather than guessing one.
 
 FORMATTING: this is critical: write in plain conversational text only. This is a mobile chat bubble, not a document. Never use markdown: no # headings, no ** for bold, no bullet-point dashes, no numbered lists with periods. If you're listing a few things, write them into a flowing sentence ("Try Harry's Place for a hot dog, then walk to Torvehallerne for something more substantial") rather than a list. Use line breaks between short paragraphs instead of headers to organize longer answers. NEVER use the em dash (—) or a double hyphen (--) to join two clauses. It's one of the most recognizable AI-writing tells there is. Use a period and a new sentence, a comma, or a plain word like "and"/"but"/"so" instead.
 
@@ -16816,6 +17036,24 @@ ${languageBlock()}`;
                         {m.role === "assistant" && (
                           <div style={{ fontSize: 8.5, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 3, marginLeft: 6 }}>✦ Gemlyx</div>
                         )}
+                        {/* ── THE BUBBLE AND THE PICTURE IT EARNED ────────
+                            Oliver, 9 Sep 2026, with an arrow drawn at the empty
+                            space beside a reply about the National Museum: "you
+                            could put in a picture of the museum it is talking
+                            about. But only on that text right there. So it
+                            floats along with the text."
+
+                            The bubble is capped at 82%, so that gutter is
+                            always there and was always empty. A picture under
+                            the reply pushes the next reply down; a picture
+                            beside it costs no height and sits level with the
+                            sentence that named the place.
+
+                            The direction is CSS rather than a prop, because
+                            whether there is a gutter is a question about the
+                            viewport, and below the rail breakpoint it stacks
+                            again exactly as it did. See utils/chatRail.js. */}
+                        <div className={BESIDE_ROW_CLASS} style={{ justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
                         <div style={{ maxWidth: "82%", borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap", background: m.role === "user" ? C.accent : C.bg, color: "#fff", border: m.role === "user" ? "none" : `1px solid ${C.border}`, borderLeft: m.role === "user" ? "none" : `2px solid ${C.gold}` }}>
                           {m.role === "assistant"
                             ? <TypewriterText text={assistantText} active={streaming} onDone={() => setChatRevealedUpTo(prev => Math.max(prev, m.idx))} />
@@ -16852,6 +17090,7 @@ ${languageBlock()}`;
                             lang={readerLanguage()}
                           />
                         )}
+                        </div>
                       </div>
                       );
                     })}
@@ -18831,6 +19070,182 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         fetching: a panel that re-queries would be answering
                         about a different set than the one being managed. */}
                     {Array.isArray(manageItems) && <AffiliatePanel rows={manageItems} />}
+
+                    {/* ── THE TOUR SWEEP ─────────────────────────────
+                        Oliver, 9 Sep 2026: "So that will be a sweep that
+                        suggests getyourguide affiliates?" One activity per
+                        published town, accepted or declined one at a time.
+
+                        TWO BUTTONS, for the reason the ticket sweep below has
+                        two: counting is free and searching is not, so the price
+                        is on screen before the button that pays it. One credit
+                        a town at Tavily's basic depth, which is under a cent.
+
+                        THE CHECK IS A THIRD BUTTON AND COSTS NOTHING. It is one
+                        HTTP request per stored link, not a search. */}
+                    <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>🥾 Towns that could have an activity</div>
+                          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                            Asks GetYourGuide what there is to DO in each published town: a bar crawl, a food tour, a canal trip. Never an admission, because Tiqets sells those and a second seller of the same door is the overlap this split ended. Counting is free.
+                          </div>
+                        </div>
+                        <button onClick={planTourSweep} disabled={!!tourRunning || !!tourWriting}
+                          style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                          Count them
+                        </button>
+                      </div>
+
+                      {tourPlan?.error && <div style={{ fontSize: 11.5, color: "#FFB347" }}>{tourPlan.error}</div>}
+                      {tourPlan?.summary && <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{tourPlan.summary}</div>}
+
+                      {tourPlan?.list?.length > 0 && !tourFound && !tourRunning && (
+                        <button onClick={runTourSweep}
+                          style={{ background: C.gold, color: C.onGold || "#20160A", border: "none", borderRadius: 10, padding: "9px 15px", fontSize: 11.5, fontWeight: 800, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          Ask GetYourGuide about {tourPlan.list.length} {tourPlan.list.length === 1 ? "town" : "towns"} ({tourPlan.list.length} {tourPlan.list.length === 1 ? "credit" : "credits"})
+                        </button>
+                      )}
+
+                      {tourRunning && (
+                        <div style={{ fontSize: 11.5, color: C.muted }}>
+                          Asking… {tourRunning.done} of {tourRunning.total}{tourRunning.name ? ` · ${tourRunning.name}` : ""}
+                        </div>
+                      )}
+
+                      {tourFound?.summary && <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.6, margin: "10px 0" }}>{tourFound.summary}</div>}
+
+                      {tourFound?.list?.length > 0 && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {tourFound.list.map(pr => (
+                            <div key={`t-${pr.id}`} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 11px" }}>
+                              <div style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                                {/* A row with nothing to write gets no tick
+                                    rather than an unticked one, which is this
+                                    column's standing rule: a control that
+                                    cannot do anything is a control that lies. */}
+                                {pr.verdict === TOUR_FOUND ? (
+                                  <input type="checkbox" checked={tourChosen.has(pr.id)}
+                                    onChange={() => setTourChosen(c => { const n = new Set(c); if (n.has(pr.id)) n.delete(pr.id); else n.add(pr.id); return n; })}
+                                    style={{ marginTop: 2, accentColor: C.gold, flexShrink: 0 }} />
+                                ) : <span style={{ width: 13, flexShrink: 0 }} />}
+                                <div style={{ minWidth: 0, flex: 1 }}>
+                                  <div style={{ fontSize: 11.5, fontWeight: 700, color: pr.verdict === TOUR_FOUND ? C.text : C.muted }}>
+                                    {pr.name}{pr.phrase ? ` · ${pr.phrase}` : ""}{pr.chosenByHand ? " · chosen by hand" : ""}
+                                  </div>
+                                  <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 2 }}>{pr.why}</div>
+                                  {pr.url && (
+                                    <a href={pr.url} target="_blank" rel="noreferrer"
+                                      style={{ fontSize: 10.5, color: C.gold, textDecoration: "underline", wordBreak: "break-all" }}>
+                                      {pr.url}
+                                    </a>
+                                  )}
+                                  {pr.replaceError && <div style={{ fontSize: 10.5, color: "#FFB347", marginTop: 4 }}>{pr.replaceError}</div>}
+
+                                  {/* ── REPLACE IT ─────────────────────
+                                      "so I can replace it with another, if I
+                                      know of a better or it's not matching
+                                      (from a bug)." The runners-up came back in
+                                      the same search and were paid for already,
+                                      so throwing them away would make "replace"
+                                      mean "go and find one yourself". */}
+                                  {pr.others?.length > 0 && (
+                                    <div style={{ marginTop: 6 }}>
+                                      <div style={{ fontSize: 10, color: C.muted, marginBottom: 3 }}>Or use one of these instead:</div>
+                                      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                                        {pr.others.map(o => (
+                                          <button key={o.url} onClick={() => swapTourPick(pr.id, o.url)}
+                                            style={{ textAlign: "left", background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "5px 8px", fontSize: 10.5, color: C.light, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                            {o.phrase} · {o.url.replace(/^https:\/\/www\.getyourguide\.com/, "")}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {/* Always shown. It was behind a condition
+                                      that could not be false, which reads as if
+                                      it does something and does not. Found by
+                                      an adversarial review. Every row can take
+                                      a hand-picked link, including one where
+                                      the search found nothing. */}
+                                  {(
+                                    <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                                      <input
+                                        value={tourSwap[pr.id] || ""}
+                                        onChange={(e) => setTourSwap(sw => ({ ...sw, [pr.id]: e.target.value }))}
+                                        placeholder="Paste a GetYourGuide activity link"
+                                        style={{ flex: 1, minWidth: 0, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "6px 8px", fontSize: 10.5, color: C.text, fontFamily: "'Inter', sans-serif" }} />
+                                      <button onClick={() => swapTourPick(pr.id, tourSwap[pr.id] || "")}
+                                        disabled={!String(tourSwap[pr.id] || "").trim()}
+                                        style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 8, padding: "6px 10px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                                        Use this
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {tourFound?.list?.length > 0 && !tourWriting && (
+                        <button onClick={applyTourSweep}
+                          style={{ marginTop: 10, background: C.gold, color: C.onGold || "#20160A", border: "none", borderRadius: 10, padding: "9px 15px", fontSize: 11.5, fontWeight: 800, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          Add {tourChosen.size} {tourChosen.size === 1 ? "activity" : "activities"}, and stamp the rest
+                        </button>
+                      )}
+                      {tourWriting && (
+                        <div style={{ fontSize: 11.5, color: C.muted, marginTop: 8 }}>
+                          {tourWriting.done_ ? "Written." : `Writing… ${tourWriting.done} of ${tourWriting.total}`}
+                          {tourWriting.failed?.length > 0 && <div style={{ color: "#FFB347", marginTop: 4 }}>{tourWriting.failed.join(" · ")}</div>}
+                        </div>
+                      )}
+
+                      {/* ── AND DOES IT STILL EXIST ────────────────────
+                          "make sure that there is an update feature that checks
+                          if this activity even still exists anymore.. because
+                          over time, these activities might get removed."
+
+                          Costs no search credits: one HTTP request per stored
+                          link. A marketplace rarely 404s a withdrawn product,
+                          it redirects to a city page and answers 200, so the
+                          question asked is whether the activity id survived the
+                          redirects. See utils/tourSweep.tourAliveVerdict. */}
+                      <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 12, paddingTop: 10 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                          <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5, flex: 1 }}>
+                            Activities get withdrawn. This asks every stored one whether it still resolves to the same page. Free, so run it whenever.
+                          </div>
+                          <button onClick={checkTourLinks} disabled={!!tourCheck?.total && !tourCheck?.summary}
+                            style={{ background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "8px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                            Check the links
+                          </button>
+                        </div>
+                        {tourCheck?.error && <div style={{ fontSize: 11.5, color: "#FFB347", marginTop: 6 }}>{tourCheck.error}</div>}
+                        {tourCheck?.total > 0 && !tourCheck?.summary && (
+                          <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>Checking… {tourCheck.done} of {tourCheck.total}</div>
+                        )}
+                        {tourCheck?.summary && <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.6, marginTop: 6 }}>{tourCheck.summary}</div>}
+                        {tourCheck?.list?.filter(x => x.verdict !== TOUR_ALIVE).map(x => (
+                          <div key={`c-${x.row.id}`} style={{ fontSize: 10.5, color: x.verdict === TOUR_GONE ? "#FFB347" : C.muted, lineHeight: 1.55, marginTop: 5 }}>
+                            <b>{x.name}</b> · {x.why}
+                          </div>
+                        ))}
+                        {tourCheck?.list?.some(x => x.removal) && !tourClearing && (
+                          <button onClick={clearDeadTours}
+                            style={{ marginTop: 8, background: "none", border: `1px solid #FFB34766`, color: "#FFB347", borderRadius: 10, padding: "8px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                            Clear the {tourCheck.list.filter(x => x.removal).length} that are gone
+                          </button>
+                        )}
+                        {tourClearing && (
+                          <div style={{ fontSize: 11.5, color: C.muted, marginTop: 8 }}>
+                            {tourClearing.done_ ? "Cleared." : `Clearing… ${tourClearing.done} of ${tourClearing.total}`}
+                            {tourClearing.failed?.length > 0 && <div style={{ color: "#FFB347", marginTop: 4 }}>{tourClearing.failed.join(" · ")}</div>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
                     {/* ── THE AFFILIATE SWEEP ────────────────────────
                         Oliver, 6 Sep 2026: "We're now missing alot of
@@ -21890,6 +22305,24 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             <BlogBody blocks={townContent.blogBody} C={C} name={townContent.name}
                               InstagramEmbed={InstagramEmbed} style={{ marginTop: 12 }} />
                           </ReadMore>
+                          {/* ── "OR HOP ONTO GETYOURGUIDE AND BOOK A
+                              BEERWALK!" ────────────────────────────────
+                              Oliver, 9 Sep 2026, and this is the page he named:
+                              "rather stay in the nightlife town tab of Aarhus
+                              if it was pubcrawl in Aarhus".
+
+                              A line at the foot of what he wrote, not a card in
+                              the list of bars. That list is his own checked
+                              entries and a partner product in the same slot
+                              borrows their standing. See TourLine.jsx.
+
+                              This page renders inline rather than through
+                              DetailPage, which is why the row on that page did
+                              not cover it: found by an adversarial review the
+                              same night, having written the field, the sweep
+                              and the panel with nowhere for a nightlife town to
+                              show what they bought. */}
+                          <TourLine url={townContent.tourUrl} kind="nightlife" lang={uiLang} />
                         </div>
                       );
                     }
@@ -24557,6 +24990,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           waiting: leaving it in localStorage would silently add the trip to
           their account the next time they signed in for any other reason. */}
       <AuthSheet open={(authOpen && !userSession) || !!recoverySession} onSignedIn={handleSignedIn}
+        lang={uiLang}
         recoverySession={recoverySession}
         onClose={() => {
           setAuthOpen(false); setAuthReason(null); setRecoverySession(null);

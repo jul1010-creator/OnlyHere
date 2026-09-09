@@ -223,10 +223,58 @@ export const ticketAgentOf = (url) =>
 // own row, and this function is what keeps one out of the other's slot.
 export const isTourUrl = (url) => isGetyourguideProductUrl(url);
 
+// ── AND IT IS STORED WITH NOTHING ON IT ─────────────────────────────
+//
+// Found by an adversarial review, 9 Sep 2026, and it made a comment in this
+// codebase false: studioContent says the partner id is never frozen into the
+// database, and nothing enforced it. Every way a tour URL gets in is a paste or
+// a search result, and both hand over an address with a query on it.
+//
+// THREE THINGS COME OFF, and each was a real address Oliver actually handled:
+//
+//   partner_id, cmp   the portal's own share link carries them, and storing one
+//                     means the day the programme ends the database is still
+//                     handing readers a tracked link, with no disclosure under
+//                     it, because getyourguideDisclosure has gone quiet.
+//   ranking_uuid      his own search session's id, on every link copied out of
+//                     a result page.
+//   adults, currency  a party size and a currency chosen for whoever pasted it,
+//                     imposed on a reader who may be four people.
+//
+// Everything else is kept. A GetYourGuide address can carry parameters that
+// matter to the product, and stripping the whole query to be safe would be
+// throwing away things nobody has looked at.
+const TOUR_QUERY_DROP = ["partner_id", "cmp", "ranking_uuid", "adults", "currency", "curr", "visitor-id", "q"];
+
+export const cleanTourUrl = (url) => {
+  const raw = String(url || "").trim();
+  if (!/^https?:\/\//i.test(raw)) return "";
+  try {
+    const u = new URL(raw);
+    for (const k of TOUR_QUERY_DROP) u.searchParams.delete(k);
+    // A trailing "?" left behind by deleting the last parameter is an address
+    // that looks broken to anybody reading it in the Studio.
+    u.search = u.searchParams.toString();
+    return u.toString();
+  } catch { return raw; }
+};
+
 // The two fields a pasted link can land in, named here so the Studio and the
 // render cannot disagree about the spelling of either.
 export const TICKET_FIELD = "ticketUrl";
 export const TOUR_FIELD = "tourUrl";
+
+// ── AND THE TYPES WHOSE PAGE ACTUALLY HAS A TOURS ROW ───────────────
+//
+// Named here rather than assumed at the paste box, because the list is a fact
+// about the RENDER and the suite checks it against DetailPage and App.jsx
+// rather than against this comment. A type not on it is refused with a reason
+// instead of being written somewhere nobody will ever see it.
+//
+// "free" is the interesting absence and it is deliberate. An attraction is
+// where Tiqets sells the door, and a second seller of the same door is the
+// overlap the ticket and tour split exists to end.
+export const TOUR_TYPES = ["town", "nightTown", "nightStreet", "foodStreet", "nightlife", "food", "event"];
 
 // ── AND IS IT EVEN IN DENMARK ───────────────────────────────────────
 //
@@ -591,10 +639,11 @@ export const PASTED_TICKET_REFUSALS = {
   notBookable: "That page is not a bookable one. Tiqets sells from a product page (-p...) or a venue page (-l...), Ticketmaster from /event/, /show/, /artist/ or /venue/, and WeGoTrip from a product page whose address says ticket. A front page or a search is not one.",
   audioWalk: "That is a WeGoTrip AUDIO WALK rather than an admission ticket, and a Book tickets button over a walking tour says something that is not true. Audio walks have their own button and live in __audio.",
   abroad: "That page is not in Denmark. This is the check that was missing when a Danish bar got a Chicago tour link, so it refuses a hand-pasted one the same way.",
+  tourWrongType: "That is a GetYourGuide ACTIVITY, and this kind of entry has nowhere to show one. Activities live on a town, a bar street, a food street, a bar, a restaurant or an event. An attraction is deliberately not on that list: Tiqets sells the door there, and a second seller of the same door is exactly what puts two prices on one line.",
   inside: "That listing is for something happening INSIDE this event rather than admission to it: Ticketmaster writes a guest slot or a VIP add-on as \"the act | the event\", and this one names something before the event's own name. A reader pressing Book tickets would be buying ten minutes with one person. Use the event's own listing.",
 };
 
-export const reviewPastedTicketUrl = (raw, { name = "", town = "", where = "", wrap = affiliateHref } = {}) => {
+export const reviewPastedTicketUrl = (raw, { name = "", town = "", where = "", kind = "", wrap = affiliateHref } = {}) => {
   const url = String(raw || "").trim();
   if (!url) return { ok: false, reason: PASTED_TICKET_REFUSALS.empty };
   if (!/^https?:\/\//i.test(url)) return { ok: false, reason: PASTED_TICKET_REFUSALS.notAUrl };
@@ -608,12 +657,29 @@ export const reviewPastedTicketUrl = (raw, { name = "", town = "", where = "", w
   // BEFORE the ticket checks below, because every one of them is about a ticket:
   // a tour has no venue page to be a category of and no sub-event to be inside.
   if (isTourUrl(url)) {
+    // ── AND ONLY ONTO A TYPE THAT CAN SHOW ONE ────────────────────
+    //
+    // Found by an adversarial review, 9 Sep 2026. The verdict below told him it
+    // was "filed as a TOUR, on the Tours row", and there is no Tours row on an
+    // attraction, a festival or an essential. So a paste onto one of those was
+    // stored, reported as done, and rendered nowhere.
+    //
+    // Refused rather than silently filed, and refused for a reason he can act
+    // on. An attraction is the interesting case and it is not an oversight:
+    // Tiqets sells that door, and a second seller of the same door is the
+    // overlap the tour split exists to end.
+    if (kind && !TOUR_TYPES.includes(String(kind))) {
+      return { ok: false, reason: PASTED_TICKET_REFUSALS.tourWrongType };
+    }
     let tourTracked = url;
     try { tourTracked = (typeof wrap === "function" ? wrap(url) : url) || url; } catch { tourTracked = url; }
     const tourEarning = tourTracked !== url;
     return {
       ok: true,
-      url,
+      // CLEANED on the way in, not on the way out. The Studio writes whatever
+      // this returns straight onto the draft, so a link normalised at render
+      // would still be a tracked address sitting in the database.
+      url: cleanTourUrl(url),
       field: TOUR_FIELD,
       agent: "getyourguide",
       tracked: tourTracked,

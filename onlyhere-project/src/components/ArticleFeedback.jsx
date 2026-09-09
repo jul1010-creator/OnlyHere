@@ -78,8 +78,8 @@ export const ArticleFeedback = ({ itemType, itemName, signedIn, onNeedAccount })
         <div style={{ marginTop: 10, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px" }}>
           <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 9 }}>
             {open === "outdated"
-              ? "What is out of date? A price, an opening time, something that has closed — anything you saw that does not match what is written here."
-              : "How is this article? Anything that reads wrong, is missing, or was genuinely useful."}
+              ? "What is out of date? A price, an opening time, something that has closed, anything you saw that does not match what is written here."
+              : "How is this article? Anything that reads wrong, is missing, or was useful."}
           </div>
           {open === "review" && (
             <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
@@ -101,7 +101,7 @@ export const ArticleFeedback = ({ itemType, itemName, signedIn, onNeedAccount })
           {problem && <div style={{ fontSize: 11, color: "#FFB347", marginTop: 7, lineHeight: 1.5 }}>{problem}</div>}
           {status === "error" && (
             <div style={{ fontSize: 11, color: "#E57373", marginTop: 7, lineHeight: 1.5 }}>
-              That did not send. Your words are still in the box — try again in a moment.
+              That did not send. Your words are still in the box, so try again in a moment.
             </div>
           )}
           <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
@@ -120,7 +120,7 @@ export const ArticleFeedback = ({ itemType, itemName, signedIn, onNeedAccount })
       {status === "sent" && (
         <div style={{ marginTop: 10, fontSize: 12, color: "#6ECF97", lineHeight: 1.6 }}>
           ✓ {open === "outdated"
-            ? "Thank you — that goes straight to the person who researches these, and it is the fastest way this gets fixed."
+            ? "Thank you. That goes straight to the person who researches these, and it is the fastest way this gets fixed."
             : "Thank you. Read, not counted: a person reads every one of these."}
         </div>
       )}

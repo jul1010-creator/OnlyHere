@@ -76,7 +76,7 @@ export const ReviewsSection = ({ itemType, itemName }) => {
       ) : reviews.length === 0 ? (
         <div style={{ fontSize: 12, color: C.muted }}>
           {loadFailed
-            ? "Comments could not be loaded just now. They are not gone, this end simply could not reach them."
+            ? "Comments could not be loaded just now. They are not gone, this end could not reach them."
             : "No comments yet. Be the first to share your experience."}
         </div>
       ) : (

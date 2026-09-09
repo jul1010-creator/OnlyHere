@@ -190,7 +190,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
     || (isBookableTicketUrl(item?.__ticket?.url) ? String(item.__ticket.url).trim() : "");
   const ticketAgent = ticketAgentOf(ticketDest);
   const ticketHref = ticketAgent ? (affiliateHref(ticketDest) || ticketDest) : "";
-  const ticketNote = ticketAgent ? affiliateNote(ticketDest) : "";
+  const ticketNote = ticketAgent ? affiliateNote(ticketDest, lang) : "";
   // The row shape AtAGlanceCard takes, or null when there is nothing to link.
   // Null rather than an empty object, because that card already drops nulls and
   // a caller building this inline should not have to remember to.
@@ -218,7 +218,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
   const audioDest = String(item?.__audio?.url || "").trim();
   const audioOk = /^https:\/\//i.test(audioDest) && isWegotripUrl(audioDest);
   const audioHref = audioOk ? (affiliateHref(audioDest) || audioDest) : "";
-  const audioNote = audioOk ? affiliateNote(audioDest) : "";
+  const audioNote = audioOk ? affiliateNote(audioDest, lang) : "";
   const audioCount = Number(item?.__audio?.count) || 1;
   const audioTown = String(item?.__audio?.town || "").trim() || String(item?.name || "").trim();
   const audioTitle = String(item?.__audio?.title || "").trim();
@@ -290,7 +290,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
   const tourOk = isTourUrl(tourDest);
   const tourHref = tourOk ? (affiliateHref(tourDest) || tourDest) : "";
   const tourRow = tourHref
-    ? { href: tourHref, label: "On GetYourGuide", note: affiliateNote(tourDest) }
+    ? { href: tourHref, label: "On GetYourGuide", note: affiliateNote(tourDest, lang) }
     : null;
   // ── AND THE SAME COLOUR CANNOT BE BOTH FILL AND INK ─────────────
   //
@@ -503,7 +503,22 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                 : { icon: "👍", label: item.tier, color: "#4CAF50", bg: "#4CAF5022" }; // unrecognized value — show it verbatim rather than silently hiding it
               return (
                 <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 100, marginRight: 8, display: "inline-block", marginBottom: 8, color: readableOn(tierStyle.color, C.surface), background: tierStyle.bg }}>
-                  {tierStyle.icon} {tierStyle.label}
+                  {/* ── THE TABLE EXISTED AND NOTHING READ IT, 9 SEP ────
+                      entryWords.js has all four of these in Danish and German
+                      and has since the entry vocabulary was built. This span
+                      printed the English one, so a Dane reading a town or an
+                      event met "Can't Miss Out" in gold above prose that was
+                      otherwise entirely in Danish, and the translation sat one
+                      function call away the whole time.
+
+                      Every other label on this page goes through entryWord:
+                      AtAGlanceCard calls it on every glance row. This badge is
+                      not a glance row, which is the only reason it was missed.
+
+                      The unrecognised-value branch above passes item.tier
+                      through verbatim, and entryWord returns anything it has
+                      no entry for unchanged, so that stays exactly as it was. */}
+                  {tierStyle.icon} {entryWord(tierStyle.label, lang)}
                 </span>
               );
             })()}
@@ -605,7 +620,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               // ["town"] and says at length why a nightTown row must not, so
               // this is the one card that needs the row.
               audioRow ? { icon: "🎧", label: "Self-guided tour", value: audioSays, link: audioRow } : null,
-            tourRow ? { icon: "🥾", label: "Tours", value: "", link: tourRow } : null,
+              tourRow ? { icon: "🥾", label: "Tours", value: "", link: tourRow } : null,
               { icon: "🏡", label: "Accommodation", value: item.accommodationGlance },
               { icon: "💰", label: "Typical Costs", value: item.typicalCosts },
             ]} />
@@ -858,6 +873,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             { icon: "🍽️", label: "Serves", value: item.category },
             { icon: "💰", label: "Price", value: item.price, link: bookRow },
             { icon: "📍", label: "Neighbourhood", value: item.location },
+            tourRow ? { icon: "🥾", label: "Tours", value: "", link: tourRow } : null,
           ]} />
         )}
         {/* ── "WHERE ARE THE PRICES?" ──────────────────────────────
@@ -874,6 +890,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             { icon: "🍺", label: "Type", value: item.category },
             { icon: "💰", label: "What it costs", value: item.priceNote, link: bookRow },
             { icon: "📍", label: "Neighbourhood", value: item.location },
+            tourRow ? { icon: "🥾", label: "Tours", value: "", link: tourRow } : null,
           ]} />
         )}
         {item.gemlyxFind && <GemlyxFindCard text={item.gemlyxFind} />}
@@ -1220,7 +1237,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           // Tiqets page is covered too. See utils/affiliates.js.
           const href = affiliateHref(dest) || dest;
           const paid = href !== dest;
-          const note = affiliateNote(dest);
+          const note = affiliateNote(dest, lang);
           return (
             <div style={{ marginBottom: 10 }}>
               <a href={href} target="_blank" rel={paid ? "noreferrer sponsored nofollow" : "noreferrer"}

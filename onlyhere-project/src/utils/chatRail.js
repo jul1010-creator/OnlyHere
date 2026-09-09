@@ -45,6 +45,26 @@ export const RAIL_CLASS = "chat-rail";
 export const INLINE_CARDS_CLASS = "chat-cards-inline";
 export const RAIL_BREAKPOINT_PX = 900;
 
+// ── AND THE PICTURE SITS BESIDE THE SENTENCE THAT EARNED IT ─────────
+//
+// Oliver, 9 Sep 2026, with an arrow drawn at the empty space to the right of a
+// reply about the National Museum: "you could put in a picture of the museum it
+// is talking about. But only on that text right there. So it floats along with
+// the text. And if it suggests others as well, then the individual pictures
+// will just become smaller to avoid a chaos."
+//
+// The bubble is capped at 82% of the column, so that space is always there and
+// was always empty. A picture under the reply pushes the next reply down; a
+// picture beside it costs no height at all and sits level with the sentence
+// that named the place, which is the half that makes it read as illustration
+// rather than as a gallery.
+//
+// ONLY WHERE THERE IS A GUTTER. Below the rail breakpoint the column is a phone
+// and 18% of it is nothing, so the row goes back to stacking and the picture
+// lands under the text as before. Same breakpoint as the rail, because it is
+// the same question: is there room beside the words.
+export const BESIDE_ROW_CLASS = "chat-msg-row";
+
 // ── HOW TALL THE WHOLE THING IS, WRITTEN ONCE ───────────────────────
 //
 // The message list caps itself here and the rail matches it, so a taller
@@ -62,6 +82,31 @@ export const CHAT_PANEL_HEIGHT = "clamp(300px, 46vh, 460px)";
 // breakpoint above cannot drift from the rule below. Read by App.jsx's <style>.
 export const railCss = () => `
         .chat-with-rail { display: flex; gap: 12px; align-items: stretch; }
+        /* Stacked by default, which is the phone and which is what this was
+           before: bubble, then picture underneath it. */
+        /* ── AND A USER MESSAGE STILL SITS ON THE RIGHT ─────────
+           Found by an adversarial review, 9 Sep 2026. This was
+           align-items: flex-start with width: 100%, which on a phone (where
+           the row is a COLUMN) pinned every bubble to the left and defeated
+           the parent's own alignItems, because a full-width row leaves
+           nothing to align. justify-content on a column does nothing, so the
+           inline style App.jsx sets could not save it either.
+
+           So the column inherits its alignment rather than asserting one, and
+           the row is only full width where it is actually a row. Above the
+           breakpoint the two live side by side and the width is the point;
+           below it, the bubble is as wide as its own text and sits on
+           whichever side the message list puts it. */
+        .${BESIDE_ROW_CLASS} { display: flex; flex-direction: column; align-items: inherit; gap: 6px; max-width: 100%; }
+        @media (min-width: ${RAIL_BREAKPOINT_PX}px) {
+          /* ── THE GUTTER THE BUBBLE ALREADY LEAVES ──────────────
+             The bubble is capped at 82%, so the picture takes what is left and
+             no more. flex-basis 0 with a max means it never widens the row: a
+             short reply gives the picture up to 190px, a full-width one gives
+             it the 18% that was empty anyway. */
+          .${BESIDE_ROW_CLASS} { flex-direction: row; align-items: flex-start; gap: 10px; width: 100%; }
+          .${BESIDE_ROW_CLASS} > .${INLINE_CARDS_CLASS} { flex: 1 1 0; min-width: 0; max-width: 190px; margin-left: 0; }
+        }
         .${RAIL_CLASS} { display: none; }
         @media (min-width: ${RAIL_BREAKPOINT_PX}px) {
           /* ── THE RAIL IS THE MAP NOW, SO IT GETS THE ROOM ────────

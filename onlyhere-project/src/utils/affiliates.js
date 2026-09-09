@@ -2,6 +2,7 @@ import { BOOKING_AFFILIATE_ID, TICKETMASTER_AFFILIATE_TEMPLATE, TIQETS_BROWSE_LI
 // hostOf, not a fourth copy of it. See pageScan.js, and see the four other
 // functions this codebase has already found existing twice.
 import { hostOf } from "./pageScan";
+import { t as uiT, DEFAULT_UI_LANGUAGE } from "./uiLanguage";
 
 // ── WHERE TO STAY LINKS (Oliver, 7 Aug: "on accommodation, put booking.com
 // and AirBnB as affiliate links for me") ─────────────────────────────
@@ -589,7 +590,29 @@ export const affiliateHref = (url) => {
 //
 // Empty for a link that earns nothing, because "this may earn us a commission"
 // printed over a link that earns nothing is a false statement about money.
-export const affiliateNote = (url) => ticketDisclosure(url) || tiqetsDisclosure(url) || wegotripDisclosure(url) || getyourguideDisclosure(url) || "";
+// ── AND IN THE READER'S LANGUAGE, 9 SEP 2026 ────────────────────────
+//
+// The four functions above answer one question: does this link earn, and what
+// is the sentence. They answer it in English because that is the source
+// language of every string in this project. This is the accessor every RENDER
+// site calls, so it is where the reader's language belongs.
+//
+// Found by rendering TourLine in Danish and reading the output: his sentence
+// came out Danish and the disclosure under it came out English, which had been
+// true of every paid link on the site since the first programme went in. A
+// disclosure the reader cannot read is not a disclosure.
+//
+// The default is English, so a caller that passes nothing gets exactly what it
+// got before and no existing behaviour moves.
+export const affiliateNote = (url, lang = DEFAULT_UI_LANGUAGE) => {
+  const earns = ticketDisclosure(url) || tiqetsDisclosure(url) || wegotripDisclosure(url) || getyourguideDisclosure(url) || "";
+  if (!earns) return "";
+  // Falls back to the English those four return rather than to "", because an
+  // empty note is how this file says "this link earns nothing", and printing
+  // nothing under a link that DOES earn is the one failure worse than printing
+  // it in the wrong language.
+  return uiT("affiliate.disclosure", lang) || earns;
+};
 
 // True when the link is going through a programme, for a caller that has to set
 // rel="sponsored nofollow", which is what Google asks of a paid link.

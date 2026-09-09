@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { ProfileQuestions } from "./ProfileQuestions";
 import { EMPTY_PROFILE, saveProfile, holdProfile, missingRequired, REQUIRED_LABEL, underMinimumAge, MIN_ACCOUNT_AGE, TERMS_VERSION } from "../utils/profile";
 import { C } from "../utils/theme";
+import { t as uiT, DEFAULT_UI_LANGUAGE } from "../utils/uiLanguage";
 import { signInWithPassword, signUpWithPassword, sendPasswordReset, startGoogleSignIn, updatePassword, resendConfirmation } from "../utils/auth";
 import { GOOGLE_SIGN_IN } from "../config";
 
@@ -62,7 +63,7 @@ import { GOOGLE_SIGN_IN } from "../config";
 // just mysteriously dead.
 const RESEND_COOLDOWN_MS = 60000;
 
-export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, initialMode, recoverySession = null }) => {
+export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, initialMode, recoverySession = null, lang = DEFAULT_UI_LANGUAGE }) => {
   // ── AND NOW IT DEFAULTS TO SIGNING IN ─────────────────────────────
   //
   // Oliver, 21 Aug 2026, point 9: "The create account gotta change… the big
@@ -215,7 +216,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
     setBusy(true); setError(null); setNotice(null);
     try {
       await resendConfirmation(sentTo);
-      setNotice("Sent again. Check your spam folder too.");
+      setNotice(uiT("auth.sentAgain", lang));
       setResendAt(Date.now() + RESEND_COOLDOWN_MS);
       setNow(Date.now());
     } catch (e) {
@@ -236,12 +237,12 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
     // They arrived holding a recovery token, so who they are is already settled
     // and asking again would be asking them to prove something they just proved.
     if (mode === "newpass") {
-      if (password.length < 6) { setError("Passwords need at least 6 characters."); return; }
-      if (password !== confirm) { setError("The two passwords do not match."); return; }
+      if (password.length < 6) { setError(uiT("auth.needSix", lang)); return; }
+      if (password !== confirm) { setError(uiT("auth.noMatch", lang)); return; }
       setBusy(true); setError(null); setNotice(null);
       try {
         await updatePassword(recoverySession, password);
-        setNotice("Password changed. You are signed in.");
+        setNotice(uiT("auth.passChanged", lang));
         setBusy(false);
         // ── AND THE SHEET HAS TO BE ABLE TO LEAVE ─────────────────
         // onSignedIn closes the sheet by clearing authOpen, but the recovery
@@ -258,17 +259,17 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         return;
       } catch (e) { setError(String(e.message || e)); setBusy(false); return; }
     }
-    if (!email.trim()) { setError("Enter your email."); return; }
-    if (mode !== "reset" && password.length < 6) { setError("Passwords need at least 6 characters."); return; }
+    if (!email.trim()) { setError(uiT("auth.enterEmail", lang)); return; }
+    if (mode !== "reset" && password.length < 6) { setError(uiT("auth.needSix", lang)); return; }
     if (mode === "up") {
       // ── AND A CONFIRM FIELD THAT MEANS SOMETHING ────────────────
       // "And make a confirm password section too." Checked before the account
       // is made, because a typo caught afterwards is an account somebody cannot
       // get back into without the reset flow.
-      if (password !== confirm) { setError("The two passwords do not match."); return; }
+      if (password !== confirm) { setError(uiT("auth.noMatch", lang)); return; }
       const gaps = missingRequired(answers);
       if (gaps.length) {
-        setError(`Still needed: ${gaps.map(k => REQUIRED_LABEL[k]).join(", ")}.`);
+        setError(`${uiT("auth.stillNeeded", lang)} ${gaps.map(k => REQUIRED_LABEL[k]).join(", ")}.`);
         return;
       }
       // ── THE AGE THE TERMS PROMISE ─────────────────────────────
@@ -278,7 +279,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
       // failure. See underMinimumAge, which returns false for a date it cannot
       // read for exactly that reason.
       if (underMinimumAge(answers.bornDate || answers.bornYear)) {
-        setError(`You have to be at least ${MIN_ACCOUNT_AGE} to make an account.`);
+        setError(`${uiT("auth.ageLead", lang)} ${MIN_ACCOUNT_AGE} ${uiT("auth.ageTail", lang)}`);
         return;
       }
     }
@@ -286,7 +287,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
     try {
       if (mode === "reset") {
         await sendPasswordReset(email);
-        setNotice("If that email has an account, a reset link is on its way.");
+        setNotice(uiT("auth.resetSent", lang));
       } else if (mode === "up") {
         // The name goes to Supabase as user metadata as well as into the
         // profile row, because the confirmation email template can only read
@@ -321,7 +322,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         // out, no error, nothing on screen. Exactly the silent failure the OAuth
         // path was rewritten to stop, on the other door.
         const signedIn = await signInWithPassword(email, password);
-        if (!signedIn) { setError("That sign in did not come back with a session. Try again in a moment."); setBusy(false); return; }
+        if (!signedIn) { setError(uiT("auth.noSession", lang)); setBusy(false); return; }
         onSignedIn(signedIn);
       }
     } catch (e) {
@@ -330,16 +331,16 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
     setBusy(false);
   };
 
-  const label = { in: "Sign in", up: "Create account", reset: "Send reset link", newpass: "Set new password" }[mode];
+  const label = uiT({ in: "auth.signIn", up: "auth.createAccount", reset: "auth.sendReset", newpass: "auth.setNewPass" }[mode], lang);
   // The heading answers "why am I being asked", not "what screen is this".
-  const heading = mode === "newpass" ? "Choose a new password"
-    : mode === "reset" ? "Reset password"
-    : reason === "guide" ? (mode === "up" ? "Keep this guide" : "Sign in to keep it")
+  const heading = uiT(mode === "newpass" ? "auth.chooseNewPass"
+    : mode === "reset" ? "auth.resetPassword"
+    : reason === "guide" ? (mode === "up" ? "auth.keepGuide" : "auth.signInKeep")
     // A reader who tapped "Review article" is asking to say something, not to
     // keep something. The heading answers why they are being asked, and the
     // guide wording would be a non-sequitur here.
-    : reason === "review" ? (mode === "up" ? "Review this article" : "Sign in to review it")
-    : mode === "up" ? "Create an account" : "Sign in";
+    : reason === "review" ? (mode === "up" ? "auth.reviewArticle" : "auth.signInReview")
+    : mode === "up" ? "auth.createAnAccount" : "auth.signIn", lang);
 
   const field = { width: "100%", boxSizing: "border-box", background: C.bg, border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px 13px", fontSize: 14, fontFamily: "'Inter', sans-serif", marginBottom: 9 };
   const linkBtn = { background: "none", border: "none", color: C.light, fontSize: 12, cursor: "pointer", textDecoration: "underline", fontFamily: "'Inter', sans-serif", padding: 0 };
@@ -387,7 +388,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
       <div onClick={e => e.stopPropagation()} style={card}>
         {/* A plain dismiss, not a form control. The old "Close" pill was the
             same weight as the buttons that do something. */}
-        <button onClick={onClose} aria-label="Close"
+        <button onClick={onClose} aria-label={uiT("auth.close", lang)}
           style={{ position: "absolute", top: wide ? 18 : 14, right: wide ? 18 : 16, background: "none", border: "none", color: C.muted, fontSize: 22, lineHeight: 1, cursor: "pointer", padding: 4, fontFamily: "'Inter', sans-serif" }}>×</button>
 
         {/* Whose account this is. The sheet had no Gemlyx in it at all. */}
@@ -416,26 +417,26 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             </div>
 
             <div style={{ fontSize: wide ? 26 : 23, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.2, marginBottom: 10 }}>
-              Check your email
+              {uiT("auth.checkEmail", lang)}
             </div>
 
             {/* THE ADDRESS IS THE POINT OF THIS SCREEN. Spelled out in the gold
                 on its own line, because a typo is invisible in a form field
                 somebody has already stopped looking at, and obvious here. */}
             <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.65, marginBottom: 6 }}>
-              A confirmation link is on its way to
+              {uiT("auth.linkOnWay", lang)}
             </div>
             <div style={{ fontSize: 14.5, fontWeight: 700, color: C.gold, marginBottom: 16, wordBreak: "break-all", fontFamily: "'Inter', sans-serif" }}>
               {sentTo}
             </div>
             <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.7, marginBottom: 20, maxWidth: 340, marginLeft: "auto", marginRight: "auto" }}>
-              Open it and you are in. It can take a minute or two, and it does sometimes land in spam.
+              {uiT("auth.openIt", lang)}
               {/* Said here as well as in the old notice, because this is the
                   screen somebody is looking at when they decide which device to
                   open the mail on, and that decision is the one that costs them
                   their answers. */}
               <br /><br />
-              The answers you just gave are kept on this device. Confirm in this same browser and they come with you.
+              {uiT("auth.sameBrowser", lang)}
             </div>
 
             {error && <div style={{ fontSize: 12, color: "#FF8A80", lineHeight: 1.5, marginBottom: 12 }}>{error}</div>}
@@ -447,7 +448,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
                 thing to do. */}
             <button onClick={resend} disabled={busy || now < resendAt}
               style={{ width: "100%", background: "transparent", border: `1px solid ${C.border}`, color: now < resendAt ? C.muted : C.light, borderRadius: 11, padding: "12px", fontSize: 13.5, fontWeight: 600, cursor: (busy || now < resendAt) ? "default" : "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 12 }}>
-              {busy ? "Sending…" : now < resendAt ? `Send it again in ${Math.ceil((resendAt - now) / 1000)}s` : "Send it again"}
+              {busy ? uiT("auth.sending", lang) : now < resendAt ? `${uiT("auth.sendAgainIn", lang)} ${Math.ceil((resendAt - now) / 1000)}s` : uiT("auth.sendAgain", lang)}
             </button>
 
             {/* The other half of showing the address: a way to fix it. Clears
@@ -455,7 +456,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
                 mistyped address is a two-character repair rather than filling
                 the whole thing in again. */}
             <button style={linkBtn} onClick={() => { setSentTo(""); setError(null); setNotice(null); }}>
-              Wrong address? Go back
+              {uiT("auth.wrongAddress", lang)}
             </button>
           </div>
         ) : (<>
@@ -473,17 +474,17 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             code, which is the only way this kind of thing is ever caught. */}
         {mode === "newpass" ? (
           <div style={{ fontSize: 13, color: C.light, lineHeight: 1.62, marginBottom: 14 }}>
-            Type it twice and you are back in. This link works once, so if it fails, ask for a new one.
+            {uiT("auth.newpassLead", lang)}
           </div>
         ) : (
         <div style={{ fontSize: 13, color: C.light, lineHeight: 1.62, marginBottom: 14 }}>
           {reason === "guide"
-            ? <>The guide itself is free and yours to read right now. An account is what keeps it, on this phone and every other one.</>
+            ? <>{uiT("auth.whyGuide", lang)}</>
             : reason === "review"
-              ? <>Reviews of our writing need an account, so we know a real person is behind each one. Reporting something out of date needs nothing at all — that button is right there for everybody.</>
-              : <>An account keeps your saved places and guides on every device instead of just this one.</>}
+              ? <>{uiT("auth.whyReview", lang)}</>
+              : <>{uiT("auth.whyDefault", lang)}</>}
           {localSaveCount > 0 && (
-            <span style={{ color: C.gold }}> The {localSaveCount} {localSaveCount === 1 ? "item" : "items"} already saved on this device will come with you.</span>
+            <span style={{ color: C.gold }}> {localSaveCount} {uiT(localSaveCount === 1 ? "auth.savedOne" : "auth.savedMany", lang)}</span>
           )}
         </div>
         )}
@@ -522,14 +523,14 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             setShowGaps(true);
             const gaps = missingRequired(answers);
             if (gaps.length) {
-              setError(`Still needed: ${gaps.map(k => REQUIRED_LABEL[k]).join(", ")}.`);
+              setError(`${uiT("auth.stillNeeded", lang)} ${gaps.map(k => REQUIRED_LABEL[k]).join(", ")}.`);
               return;
             }
             // The email path has the same two checks in submit(). A gate on one
             // route only is not a gate, and this is the route that leaves the
             // site, so a miss here is an underage account made on the way back.
             if (underMinimumAge(answers.bornDate || answers.bornYear)) {
-              setError(`You have to be at least ${MIN_ACCOUNT_AGE} to make an account.`);
+              setError(`${uiT("auth.ageLead", lang)} ${MIN_ACCOUNT_AGE} ${uiT("auth.ageTail", lang)}`);
               return;
             }
             holdProfile(acceptedNow(answers));
@@ -562,7 +563,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             also says "this one". */}
         {mode === "up" && (
           <div style={{ fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 }}>
-            Email<span style={{ color: showGaps && !email.trim() ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
+            {uiT("auth.email", lang)}<span style={{ color: showGaps && !email.trim() ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
           </div>
         )}
         {mode !== "newpass" && (
@@ -576,11 +577,11 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
                 underneath it has both. */}
             {(mode === "up" || mode === "newpass") && (
               <div style={{ fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 }}>
-                {mode === "newpass" ? "New password" : "Password"}<span style={{ color: showGaps && password.length < 6 ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
-                <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, color: C.muted }}> · at least 6 characters</span>
+                {uiT(mode === "newpass" ? "auth.newPassword" : "auth.password", lang)}<span style={{ color: showGaps && password.length < 6 ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
+                <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, color: C.muted }}> · {uiT("auth.atLeastSix", lang)}</span>
               </div>
             )}
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder={mode === "newpass" ? "New password" : "Password"}
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder={uiT(mode === "newpass" ? "auth.newPassword" : "auth.password", lang)}
               autoComplete={mode === "up" ? "new-password" : "current-password"}
               onKeyDown={e => { if (e.key === "Enter") submit(); }}
               style={{ ...field, ...(mode === "up" && showGaps && password.length < 6 ? { borderColor: "#FF8A80" } : null) }} />
@@ -592,13 +593,13 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         {(mode === "up" || mode === "newpass") && (
           <>
             <div style={{ fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 }}>
-              Confirm password<span style={{ color: showGaps && (!confirm || confirm !== password) ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
+              {uiT("auth.confirmPassword", lang)}<span style={{ color: showGaps && (!confirm || confirm !== password) ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
             </div>
-            <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Type it again"
+            <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder={uiT("auth.typeItAgain", lang)}
               autoComplete="new-password" onKeyDown={e => { if (e.key === "Enter") submit(); }}
               style={{ ...field, ...(showGaps && (!confirm || confirm !== password) ? { borderColor: "#FF8A80" } : null) }} />
             {confirm && confirm !== password && (
-              <div style={{ fontSize: 11.5, color: "#FF8A80", marginTop: -3, marginBottom: 10 }}>These do not match yet.</div>
+              <div style={{ fontSize: 11.5, color: "#FF8A80", marginTop: -3, marginBottom: 10 }}>{uiT("auth.noMatchYet", lang)}</div>
             )}
 
             {/* ── AND THE REST OF THE INFORMATION, ON THE SAME PAGE ──
@@ -616,7 +617,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
 
         <button onClick={submit} disabled={busy}
           style={{ width: "100%", background: C.gold, border: "none", color: C.onGold, borderRadius: 11, padding: "13px", fontSize: 15, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "'Inter', sans-serif", opacity: busy ? 0.6 : 1, marginBottom: 12 }}>
-          {busy ? "Working…" : label}
+          {busy ? uiT("auth.working", lang) : label}
         </button>
 
         {/* ── ACCEPTANCE, AT THE MOMENT OF ACCEPTANCE ──────────────
@@ -631,19 +632,19 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             Navigating away from it would lose every answer, which is the same
             fault the Google button had. */}
         {mode === "up" && <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.55, marginTop: -2, marginBottom: 12 }}>
-          By creating an account you agree to the{" "}
-          <a href="/terms.html" target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>Terms of Service</a>
-          {" "}and the{" "}
-          <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>Privacy Policy</a>.
+          {uiT("auth.agreeLead", lang)}{" "}
+          <a href="/terms.html" target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>{uiT("auth.terms", lang)}</a>
+          {" "}{uiT("auth.andThe", lang)}{" "}
+          <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>{uiT("auth.privacy", lang)}</a>.
         </div>}
 
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
           {/* Nothing to switch to mid-recovery: they are here holding a token
               that expires, and every other screen throws it away. */}
           {/* His words: "The small part should be 'New User? Sign up here!'" */}
-          {mode !== "up" && mode !== "newpass" && <button style={linkBtn} onClick={() => { setMode("up"); setError(null); setNotice(null); setShowGaps(false); }}>New User? Sign up here!</button>}
-          {mode !== "in" && mode !== "newpass" && <button style={linkBtn} onClick={() => { setMode("in"); setError(null); setNotice(null); setShowGaps(false); }}>I already have one</button>}
-          {mode === "in" && <button style={linkBtn} onClick={() => { setMode("reset"); setError(null); setNotice(null); }}>Forgot password</button>}
+          {mode !== "up" && mode !== "newpass" && <button style={linkBtn} onClick={() => { setMode("up"); setError(null); setNotice(null); setShowGaps(false); }}>{uiT("auth.newUser", lang)}</button>}
+          {mode !== "in" && mode !== "newpass" && <button style={linkBtn} onClick={() => { setMode("in"); setError(null); setNotice(null); setShowGaps(false); }}>{uiT("auth.haveOne", lang)}</button>}
+          {mode === "in" && <button style={linkBtn} onClick={() => { setMode("reset"); setError(null); setNotice(null); }}>{uiT("auth.forgot", lang)}</button>}
         </div>
 
         {/* ── SAID AT SIGNUP, NOT DISCOVERED LATER ─────────────────
@@ -651,9 +652,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             promise turn out to have been smaller than it sounded. A free
             account keeps the guide. It does not keep the guide CURRENT. */}
         {mode !== "newpass" && <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}`, fontSize: 11, color: C.muted, lineHeight: 1.6 }}>
-          A free account saves your guide and nothing more. Keeping it live as your trip
-          approaches, new events worth rerouting for, help while you are there,
-          that is the paid side, and it is not switched on yet.
+          {uiT("auth.freeAccount", lang)}
         </div>}
 
         {/* ── THIS LINE HAS TO MOVE WITH THE PRODUCT ───────────────
@@ -667,7 +666,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             Anything added to what an account holds gets added here in the same
             change, and to public/privacy.html on the same day. */}
         <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 12 }}>
-          We store your email, what you fill in here, and your saved list. Gemlyx also notices which kinds of trip you build, so the next guide lands closer. No tracking, no marketing email, nothing sold. You can delete your account and everything in it from this menu at any time, and the <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: C.muted, textDecoration: "underline" }}>Privacy Policy</a> is the long version.
+          {uiT("auth.storeLead", lang)} <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: C.muted, textDecoration: "underline" }}>{uiT("auth.privacy", lang)}</a> {uiT("auth.storeTail", lang)}
         </div>
         </>)}
       </div>

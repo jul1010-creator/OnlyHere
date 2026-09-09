@@ -7,7 +7,7 @@
 // hardcoded data array (towns/events/freeEntrance/foodSpots/etc.) expects.
 import { normaliseTicketStatus } from "./tickets";
 import { cleanKind } from "./essentialKind";
-import { isBookableTicketUrl, ticketUrlSaysElsewhere, ticketUrlIsASubEvent, isTourUrl } from "./ticketLink";
+import { isBookableTicketUrl, ticketUrlSaysElsewhere, ticketUrlIsASubEvent, isTourUrl, cleanTourUrl } from "./ticketLink";
 import { cleanBranches } from "./branches";
 import { isWegotripUrl } from "./affiliates";
 import { cleanOffer, offerProblems } from "./offer";
@@ -626,7 +626,22 @@ export const shapeForLive = (type, t) => {
   // isTourUrl, not a truthy check, and for the reason recorded one block up: a
   // hand-edited row could otherwise store any address here and the entry page
   // would print "Tours ... On GetYourGuide" over it.
-  if (isTourUrl(t?.tourUrl)) out = { ...out, tourUrl: String(t.tourUrl).trim() };
+  if (isTourUrl(t?.tourUrl)) out = { ...out, tourUrl: cleanTourUrl(t.tourUrl) };
+  // ── AND THE STAMP, WHICH WAS MISSED ON THE FIRST PASS ────────────
+  //
+  // Found by an adversarial review, 9 Sep 2026, and it is the exact rule the
+  // paragraph above restates: a field written by a sweep and not named here
+  // works until the row is redrafted and then vanishes. __ticketSweep is here
+  // and __tourSweep was not, so a town told "GetYourGuide has nothing" would
+  // lose that stamp on its next redraft and be paid for all over again.
+  if (t?.__tourSweep?.at) {
+    out = { ...out, __tourSweep: {
+      at: String(t.__tourSweep.at),
+      found: !!t.__tourSweep.found,
+      ...(t.__tourSweep.url ? { url: String(t.__tourSweep.url) } : {}),
+      ...(t.__tourSweep.byHand ? { byHand: true } : {}),
+    } };
+  }
   if (t?.__ticketSweep?.at) {
     out = { ...out, __ticketSweep: { at: String(t.__ticketSweep.at), found: !!t.__ticketSweep.found, ...(t.__ticketSweep.url ? { url: String(t.__ticketSweep.url) } : {}) } };
   }

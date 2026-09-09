@@ -123,6 +123,10 @@ export const showablePhoto = (place) => {
 // Everything that matters, showablePhoto's licence check, the OUR PAGE mark,
 // the wording and its five translations, the credit that wraps rather than
 // truncating, is the same code running in a smaller box.
+// How many pictures may sit beside one reply. Exported so the suite can assert
+// the cap rather than counting a literal, and so the number has one home.
+export const BESIDE_MAX = 2;
+
 export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "row", className = "" }) => {
   // One name for the two, because they were two until the side column stopped
   // carrying cards. Kept as a separate word rather than folded into `pin`
@@ -130,10 +134,47 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
   // "this is the smaller one inside a marker" stays readable.
   const pin = layout === "pin";
   const rail = pin;
-  const rows = (Array.isArray(places) ? places : [])
+  const found = (Array.isArray(places) ? places : [])
     .map(p => ({ place: p, shot: showablePhoto(p) }))
     .filter(x => x.shot);
+  // TWO, for the reason spelled out below. The cap is here rather than at the
+  // call site because both call sites want it and one of them is a map marker
+  // that only ever passes one anyway.
+  const rows = pin ? found : found.slice(0, BESIDE_MAX);
   if (!rows.length) return null;
+
+  // ── HOW MANY, AND HOW BIG ─────────────────────────────────────────
+  //
+  // Oliver, 9 Sep 2026: "if it suggests others as well, then the individual
+  // pictures will just become smaller to avoid a chaos." And then, on his way
+  // to bed: "instead of having multiple pictures if it talks about Legoland and
+  // Tivoli, you could make it into a slideshow. Whatever you find to be the
+  // best solution."
+  //
+  // ── THE SLIDESHOW IS THE WRONG ANSWER AND SHRINKING IS HALF ONE ───
+  //
+  // A slideshow keeps the height constant however many places there are, which
+  // is the thing to want. What it costs is that every picture after the first
+  // is behind a control, and a picture nobody looks at has not appeared. The
+  // whole feature is that a place Gemlyx mentions shows its face; putting the
+  // second face behind a dot is the same as not having it. This component
+  // already argued the shape down once, when the row of 124px cards became a
+  // shared picture: "nobody sends a carousel to a friend."
+  //
+  // Shrinking alone runs out too. Three at 62px stacked in a 190px column is
+  // 330px of pictures beside a reply that is often 120px tall, which pushes the
+  // next reply down and is the exact thing putting them beside the text avoided.
+  //
+  // SO THE ANSWER IS FEWER, NOT SMALLER OR HIDDEN. Two beside the text, at a
+  // size where the photograph is worth looking at. A third place named in the
+  // same reply still gets its name in the sentence, which is where a reader
+  // learns about it anyway, and still gets a pin on the map beside it. It loses
+  // a thumbnail, and it was going to lose one either way, to a dot or to 62px.
+  //
+  // The two heights are this file's own ladder rather than numbers picked
+  // tonight: 132 under a reply, 88 in a column, 62 inside a map marker, each
+  // measured against a real width once.
+  const photoHeight = pin ? 62 : rows.length >= 2 ? 88 : 132;
 
   return (
     <>
@@ -148,6 +189,10 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
         // A column under the reply, left-aligned with it, one picture per row.
         // The old version was a sideways-scrolling strip of 124px cards, which
         // is a carousel; nobody sends a carousel to a friend.
+        // maxWidth and marginLeft are for the STACKED case, which is the phone
+        // and is what this was before 9 Sep. Beside the text the row's own CSS
+        // in chatRail.js overrides both, because there the width is whatever the
+        // bubble left over and there is nothing to indent past.
         display: "flex", flexDirection: "column", gap: 6,
         marginTop: 6, marginLeft: 6, maxWidth: "min(82%, 240px)",
       }}
@@ -173,7 +218,7 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
             animationDelay: `${idx * 90}ms`,
           }}
         >
-          <div style={{ position: "relative", height: pin ? 62 : rail ? 88 : 132, background: `${C.gold}18` }}>
+          <div style={{ position: "relative", height: photoHeight, background: `${C.gold}18` }}>
             <img
               src={shot.photo}
               alt={place.name}

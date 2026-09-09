@@ -69,7 +69,7 @@ writeFileSync(entry, `
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
   export { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
   export { venueCore, venueMentions, venueQuote, venueVerdict, venueVia, describeVenue, VENUE_MIN_MENTIONS, VENUE_MIN_MENTIONS_NO_TOWN, VENUE_MAX_KM, NO_NAME as V_NO_NAME, NOT_NAMED as V_NOT_NAMED, TOO_FAR as V_TOO_FAR, IS_AN_EVENT as V_IS_AN_EVENT, OK as V_OK } from ${JSON.stringify(join(root, "src/utils/venueMatch.js"))};
-  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop, priceSourceHost, isTourUrl, TICKET_FIELD, TOUR_FIELD } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
+  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop, priceSourceHost, isTourUrl, cleanTourUrl, TICKET_FIELD, TOUR_FIELD, TOUR_TYPES } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel, eventLastDay } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
@@ -159,7 +159,7 @@ writeFileSync(entry, `
   export { GOOGLE_SIGN_IN } from ${JSON.stringify(join(root, "src/config.js"))};
   export { writeInLanguage } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { guideLanguage, languageOfProse, ruledOutLanguages, briefSentences, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS, MARKER_FLOOR, MARKER_MARGIN } from ${JSON.stringify(join(root, "src/utils/travellerLanguage.js"))};
-  export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
+  export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, BESIDE_ROW_CLASS } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
   export { costLines, byUrgency, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
@@ -271,7 +271,7 @@ writeFileSync(entry, `
   export { affiliateRoster, payingCount, AFFILIATES_PATH } from ${JSON.stringify(join(root, "src/utils/affiliateRoster.js"))};
   export { UI_LANGUAGES, UI_CODES, UI_STRINGS, UI_KEYS, UI_LANGUAGE_KEY, DEFAULT_UI_LANGUAGE, t, resolveUiLanguage, isUiLanguage, uiLanguageMeta, storedUiLanguage, setStoredUiLanguage, currentUiLanguage } from ${JSON.stringify(join(root, "src/utils/uiLanguage.js"))};
   export { ENTRY_WORDS, ENTRY_HEADINGS, ARRIVAL_LABELS, GLANCE_LABELS, KIND_LABELS, entryWord, BOOK_LABELS, bookLabel, TOUR_PHRASE_WORDS } from ${JSON.stringify(join(root, "src/utils/entryWords.js"))};
-  export { tourQuery, tourUrlIsAboutTown, pickTourUrl, tourPhrase, tourKindFor } from ${JSON.stringify(join(root, "src/utils/tourSweep.js"))};
+  export { tourQuery, tourUrlIsAboutTown, pickTourUrl, tourPhrase, tourKindFor, tourTownFor, tourCandidates, tourProposal, replaceTour, describeTourFindings, guideTours, tourNamesExcluded, tourAliveVerdict, tourRemovalFor, TOUR_RESWEEP_DAYS, FOUND as TOUR_FOUND, NOTHING as TOUR_NOTHING, FAILED as TOUR_FAILED, ALIVE as TOUR_ALIVE, GONE as TOUR_GONE, UNKNOWN as TOUR_UNKNOWN } from ${JSON.stringify(join(root, "src/utils/tourSweep.js"))};
   export { datesFromListings, cityRankOf, cityWanted, CITY_MATCH, CITY_UNKNOWN, CITY_DIFFERENT } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, PRICE_NOT_PUBLISHED, PRICE_UNKNOWN } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { sourceFit, describeSourceFit, LIVING_TYPES } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -7664,7 +7664,10 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the container is re-measured before fitting", mapSrc.indexOf("invalidateSize") < mapSrc.indexOf("fitBounds"));
   // A stop with no coordinate used to vanish with nothing to show it had.
   ok("unplaced stops are counted", /const tripUnplaced =/.test(guideSrc));
-  ok("and named on the page", /are not on this map/.test(guideSrc));
+  ok("and named on the page",
+     /uiT\("guide\.unplacedOne", uiLang\)/.test(guideSrc)
+     && /are not on this map/.test(M.UI_STRINGS["guide.unplacedMany"].en)
+     && /ikke med på kortet/.test(M.UI_STRINGS["guide.unplacedMany"].da));
   ok("the bare filter(Boolean) that hid them is gone", !/\}\)\.filter\(Boolean\);\n  \/\/ Consecutive duplicates/.test(guideSrc));
   // clip, not hidden: hidden on an ancestor kills sticky children, and this
   // page's header and save bar are both sticky.
@@ -8910,6 +8913,136 @@ is("missing licence does not require credit", creditIsRequired({}), false);
      (sysPrompt.match(/—/g) || []).length, 1);
   ok("and that one is the rule naming the character", /NEVER use the em dash \(—\)/.test(sysPrompt));
   is("nor an en dash", (sysPrompt.match(/–/g) || []).length, 0);
+
+  // ── AND IT DOES NOT MODEL THE TIC IT PRODUCES ────────────────────
+  //
+  // Same mechanism as the dashes, one word along. Oliver has objected to
+  // "actually" three times, most memorably "what is your obsession with
+  // 'actually'", and the family goes with it: truly, genuinely, simply.
+  //
+  // MEASURED BEFORE IT WAS TOUCHED: 27 uses of genuine or genuinely in 4,118
+  // words, plus 15 of actually. Roughly one every hundred and fifty words. A
+  // model reads its instructions as a sample of the register being asked for,
+  // and his own screenshot of 8 Sep had it coming back at him: "both genuinely
+  // built for a group with kids".
+  //
+  // Nearly all of them only intensified an adjective that was already true.
+  // "Genuinely eager to help" is "eager to help". The one place the word looked
+  // load-bearing was the worst of them, "genuinely absent or genuinely
+  // ambiguous", where the very next clause already said what it was reaching
+  // for, so the sentence was rewritten rather than trimmed.
+  //
+  // "real" is NOT in this list and is deliberately left alone, 40 uses and
+  // counting. In this app "real places" and "a real starting point" draw a line
+  // against invented ones, and that distinction is the product.
+  for (const word of ["genuine", "genuinely", "actually", "truly", "simply"]) {
+    is(`the prompt does not model "${word}" at the model`,
+       (sysPrompt.match(new RegExp(`\\b${word}\\b`, "gi")) || []).length, 0);
+  }
+  // ── AND THE OTHER PROMPT, WHICH THIS SWEEP MISSED FIRST TIME ─────
+  //
+  // The loop above pins App.jsx's Detour prompt, which was rewritten on 8 Sep
+  // after it turned out to ban em dashes in its own text while using 75 of
+  // them, the ban sentence included. There is a SECOND prompt: the Local Assist
+  // in GuidePage, which answers questions about a guide already built. On
+  // 9 Sep it still had two em dashes and two uses of "genuinely", one sentence
+  // after telling the model never to use a dash.
+  //
+  // Read out of the file by its own opening words rather than by line number,
+  // and checked for the same four words and the same two marks, because "we
+  // fixed the prompt" was true of one of two.
+  {
+    const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+    const at = gp.indexOf("You are Gemlyx's Local Assist");
+    ok("the second prompt is where this test can find it", at > 0);
+    const local = gp.slice(at, gp.indexOf("`;", at));
+    ok("and it is the whole prompt rather than a fragment", local.length > 600);
+    for (const word of ["genuine", "genuinely", "actually", "truly", "simply"]) {
+      is(`the local assist does not model "${word}" at the model`,
+         (local.match(new RegExp(`\\b${word}\\b`, "gi")) || []).length, 0);
+    }
+    is("nor a dash, in the prompt that forbids one", (local.match(/[—–]/g) || []).length, 0);
+    // The ban is still stated. Removing the sentence would pass the two
+    // assertions above and lose the rule they exist to protect.
+    ok("and the ban is still stated", /Never use em dashes or en dashes anywhere in your reply/.test(local));
+    // The stop list is INPUT rather than instruction, and a model reads its
+    // input as a sample of the register it is being asked for. Same reasoning.
+    ok("and the trip handed to it carries no dash either",
+       /\`Day \$\{d\.day \|\| ""\}: \$\{d\.title \|\| ""\}\. Stops: /.test(gp));
+  }
+
+  // ── AND THE SAME RULE ON COPY A READER MEETS ─────────────────────
+  //
+  // The loop above pins the SYSTEM PROMPT, and the Studio audit pins a DRAFTED
+  // entry through fillerWordCounts. Nothing pinned the third place words reach
+  // a reader: the sentences typed by hand into a component. Two had survived
+  // every pass, both on the entry page, under every article on the site:
+  //
+  //   "or was genuinely useful"                      ArticleFeedback
+  //   "this end simply could not reach them"         ReviewsSection
+  //
+  // And a third was added to the catalogue on 9 Sep by copying an existing
+  // English sentence across without reading it: "which is what you will
+  // actually be charged". His note says to check new copy for this before
+  // shipping rather than after he points it out, and that is what this is.
+  //
+  // All three came out by deletion, which is his rule: cut the word unless
+  // cutting it changes the meaning, and none of the three carried any.
+  {
+    const stripCopy = (raw) => {
+      const out = []; let inBlock = false;
+      for (let ln of raw.split("\n")) {
+        if (inBlock) { const e = ln.indexOf("*/"); if (e < 0) { out.push(""); continue; } ln = ln.slice(e + 2); inBlock = false; }
+        for (;;) { const b = ln.indexOf("/*"); if (b < 0) break; const e = ln.indexOf("*/", b + 2);
+          if (e < 0) { ln = ln.slice(0, b); inBlock = true; break; } ln = ln.slice(0, b) + " " + ln.slice(e + 2); }
+        const lc = ln.indexOf("//");
+        if (lc >= 0 && !/https?:$/.test(ln.slice(0, lc))) ln = ln.slice(0, lc);
+        out.push(ln);
+      }
+      return out.join("\n");
+    };
+    // Comments are exempt on purpose: this file's own notes quote the words
+    // while explaining why they went, and so do the components'. The rule is
+    // about what a reader meets, not about what a maintainer reads.
+    const COPY_FILES = [
+      ...readdirSync(join(root, "src/components")).filter(f => f.endsWith(".jsx")).map(f => `src/components/${f}`),
+      ...readdirSync(join(root, "src/pages")).filter(f => f.endsWith(".jsx")).map(f => `src/pages/${f}`),
+      "src/utils/uiLanguage.js", "src/utils/entryWords.js", "src/utils/savedTrip.js",
+    ];
+    const offenders = [];
+    let scanned = 0;
+    for (const rel of COPY_FILES) {
+      const code = stripCopy(readFileSync(join(root, rel), "utf8"));
+      for (const [i, ln] of code.split("\n").entries()) {
+        for (const m of ln.matchAll(/"([^"\n]{8,300})"|'([^'\n]{8,300})'|>([^<>{}\n]{8,300})</g)) {
+          const text = m[1] || m[2] || m[3] || "";
+          scanned += 1;
+          for (const w of M.FILLER_WORDS.concat(["genuine"])) {
+            if (new RegExp(`\\b${w}\\b`, "i").test(text)) offenders.push(`${rel}:${i + 1} ${w}`);
+          }
+        }
+      }
+    }
+    is("no sentence a reader meets uses one of his four words", offenders, []);
+    // The scan found something to scan. A file list that resolved to nothing,
+    // or a regex that matched nothing, passes this the same way a clean app
+    // does, and that is the shape this repo keeps meeting.
+    ok("and there was copy to scan", COPY_FILES.length >= 30 && scanned > 500);
+    ok("the list it checks against is his", M.FILLER_WORDS.join(",") === "actually,truly,genuinely,simply");
+  }
+
+  // ── AND THE ONE THAT EARNS ITS PLACE STAYS ───────────────────────
+  //
+  // A count was the first version of this and a mutation walked through it: 40
+  // uses against a floor of 20 lets half of them go. Pin the RULE, which is
+  // that "real" is doing a job here the banned words were not. In this app it
+  // draws the line against invented places, invented prices and a plan built
+  // from nothing, and that distinction is the product.
+  for (const phrase of [
+    "Recommend real things from the lists below",
+    "a real starting point",
+    "real hidden gems",
+  ]) ok(`the line against invented content survives: ${phrase.slice(0, 34)}`, sysPrompt.includes(phrase));
   // The other half of the same rule, and the one nothing was checking.
   ok("the ban is still stated", /or a double hyphen \(--\) to join two clauses/.test(sysPrompt));
 
@@ -11119,7 +11252,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // was quietly shorter than the list and the highest pin number lower than the
   // stop count, with no line anywhere explaining either.
   ok("and the collapsed stops are counted", /const tripCollapsed = tripPlaced\.length - tripRoute\.length;/.test(code));
-  ok("and explained under the map", /stops share a pin/.test(gp));
+  ok("and explained under the map",
+     /uiT\("guide\.sharedPinMany", uiLang\)/.test(gp)
+     && /stops share a pin/.test(M.UI_STRINGS["guide.sharedPinMany"].en));
   ok("and named under the map", /\{tripApprox\.join\(", "\)\}/.test(gp));
   ok("beside the stops that could not be placed at all", gp.indexOf("tripUnplaced.length > 0") < gp.indexOf("tripApprox.length > 0"));
 
@@ -11129,7 +11264,10 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and a hollow centre", /background:\$\{approx \? "rgba\(10,15,30,\.72\)" : bg\}/.test(map));
 
   // The honest line that was already right stays right.
-  ok("unplaced stops are still named", /could not place/.test(gp));
+  ok("unplaced stops are still named",
+     /could not place/.test(M.UI_STRINGS["guide.unplacedOne"].en)
+     && /could not place/.test(M.UI_STRINGS["guide.approxEndMany"].en)
+     && /uiT\("guide\.approxEndOne" : "guide\.approxEndMany", uiLang\)|guide\.approxEndOne/.test(gp));
 }
 
 
@@ -12073,13 +12211,24 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // The old copy said an account "is optional" and "does one thing: keeps your
   // saved places", which is a different product from the one he described.
   ok("it no longer calls the account optional", !/An account is optional/.test(sheet));
-  ok("it says the guide itself is free", /free and yours to read right now/.test(sheet));
+  ok("it says the guide itself is free",
+     /uiT\("auth\.whyGuide", lang\)/.test(sheet)
+     && /free and yours to read right now/.test(M.UI_STRINGS["auth.whyGuide"].en)
+     && /gratis/.test(M.UI_STRINGS["auth.whyGuide"].da));
   // And the half that is easy to leave out: what a FREE account does not buy.
   // The same rule his entries follow, turned on his own product.
-  ok("it names what free does not include", /A free account saves your guide and nothing more/.test(sheet));
-  ok("and does not pretend the paid side exists yet", /it is not switched on yet/.test(sheet));
+  ok("it names what free does not include",
+     /uiT\("auth\.freeAccount", lang\)/.test(sheet)
+     && /A free account saves your guide and nothing more/.test(M.UI_STRINGS["auth.freeAccount"].en));
+  // In all three, because the promise is the thing that must not turn out to
+  // have been smaller than it sounded, and a Dane reads the Danish one.
+  ok("and does not pretend the paid side exists yet",
+     /it is not switched on yet/.test(M.UI_STRINGS["auth.freeAccount"].en)
+     && /ikke tændt endnu/.test(M.UI_STRINGS["auth.freeAccount"].da)
+     && /noch nicht eingeschaltet/.test(M.UI_STRINGS["auth.freeAccount"].de));
   ok("the reason reaches the sheet", /reason=\{authReason\}/.test(appSrc));
-  ok("and changes the heading", /"Keep this guide"/.test(sheet));
+  ok("and changes the heading",
+     /"auth\.keepGuide"/.test(sheet) && M.UI_STRINGS["auth.keepGuide"].en === "Keep this guide");
 
   // ── AND THE THINGS HE POINTED AT ──────────────────────────────────
   // ── AND THEN HE TURNED IT ROUND, 21 AUG 2026 ────────────────────
@@ -12111,14 +12260,16 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     is("no unnamed opener sets Create", (appA.match(/setAuthMode\("up"\)/g) || []).length, 1);
   }
   // His words changed on 21 Aug from "or create an account" to this.
-  ok("and the secondary line offers creating one, in his words", />New User\? Sign up here!</.test(sheet));
+  ok("and the secondary line offers creating one, in his words",
+     /uiT\("auth\.newUser", lang\)/.test(sheet)
+     && M.UI_STRINGS["auth.newUser"].en === "New User? Sign up here!");
   // The big button reads off `mode`, so flipping the default flips the label
   // rather than needing a second edit that could be forgotten.
   // A fourth mode joined on 22 Aug: "newpass", the screen a password reset link
   // lands on. Asserted as the whole map rather than as three entries, so a mode
   // added without a label shows up here rather than as a blank button.
   ok("the primary button is labelled from the mode",
-     /const label = \{ in: "Sign in", up: "Create account", reset: "Send reset link", newpass: "Set new password" \}\[mode\]/.test(sheet));
+     /const label = uiT\(\{ in: "auth\.signIn", up: "auth\.createAccount", reset: "auth\.sendReset", newpass: "auth\.setNewPass" \}\[mode\], lang\)/.test(sheet));
   // The bottom sheet buried the hero on desktop. One breakpoint, both shapes.
   ok("desktop centres the dialog", /alignItems: wide \? "center" : "flex-end"/.test(sheet));
   ok("and rounds all four corners there", /borderRadius: wide \? 20 :/.test(sheet));
@@ -12275,8 +12426,14 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // is asserted gone through stripComments, which is the only scan that can
   // see the difference between a string and the comment quoting it.
   ok("it says what is actually stored",
-     /We store your email, what you fill in here, and your saved list/.test(asheet));
-  ok("including the part nobody typed", /notices which kinds of trip you build/.test(asheet));
+     /uiT\("auth\.storeLead", lang\)/.test(asheet)
+     && /We store your email, what you fill in here, and your saved list/.test(M.UI_STRINGS["auth.storeLead"].en));
+  // In every language, because this is the sentence that says what is kept
+  // about somebody, and a reader who cannot read it has not been told.
+  ok("including the part nobody typed",
+     /notices which kinds of trip you build/.test(M.UI_STRINGS["auth.storeLead"].en)
+     && /lægger også mærke til/.test(M.UI_STRINGS["auth.storeLead"].da)
+     && /merkt sich auch/.test(M.UI_STRINGS["auth.storeLead"].de));
   ok("and the wording it replaced is off the screen",
      !/add a few optional details about yourself/.test(stripComments(asheet)));
   // The wording moved to a plain register on 23 Aug at his request. The RULE is
@@ -16537,7 +16694,7 @@ rmSync(dir, { recursive: true, force: true });
   // the same question of every programme at once and is the whole reason his
   // already-published entries could start earning without a redraft.
   ok("the destination goes through the affiliate door", /const href = affiliateHref\(dest\) \|\| dest;/.test(detail));
-  ok("and the sentence comes from the same place", /const note = affiliateNote\(dest\);/.test(detail));
+  ok("and the sentence comes from the same place", /const note = affiliateNote\(dest, lang\);/.test(detail));
   // RAW SOURCE, not stripNonCode. It blanks string CONTENTS as well as comments
   // and JSX bodies, so a pattern quoting "noreferrer sponsored nofollow" matches
   // against an empty string and passes whatever the file says. This file's own
@@ -18750,7 +18907,14 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ok("the chip reads the stored response as a journey", /journeyFromStored\(exact\)/.test(gp));
   ok("and only prints a list worth printing", /worthShowingLegs\(journey\)/.test(gp));
   ok("the steps are drawn", /steps\.map\(\(st, i\) =>/.test(gp));
-  ok("a ferry crossing is named to the reader", /This journey includes a ferry crossing/.test(gp));
+  // The sentence moved into the catalogue on 9 Sep so a Dane gets it in Danish.
+  // Asked in two halves, or the assertion stops covering what it was written
+  // for: the key has to be READ by the page, and the words behind it have to
+  // still be the words.
+  ok("a ferry crossing is named to the reader",
+     /uiT\("guide\.ferryLeg", uiLang\)/.test(gp)
+     && /includes a ferry crossing/.test(M.UI_STRINGS["guide.ferryLeg"].en)
+     && /færgeoverfart/.test(M.UI_STRINGS["guide.ferryLeg"].da));
   // NOTHING IS FETCHED FOR THIS. It is the response the build already stored,
   // so this cannot slow a guide down or fail on its own.
   ok("no new request is made for it", !/fetch\(`\/api\/directions/.test(gp));
@@ -19558,7 +19722,23 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   const stripComments = (s) => s
     .replace(/\/\*[\s\S]*?\*\//g, " ")
     .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
-  const FILES = ["src/components/GuidePreviewScreen.jsx", "src/components/EventMatchCard.jsx", "src/components/AtAGlanceCard.jsx"];
+  // ── EVERY SCREEN, NOT THREE BY NAME ─────────────────────────────
+  //
+  // Three files were listed here by hand, and on 9 Sep 2026 an em dash was
+  // found sitting in AuthSheet, on the sign-in sheet, in the sentence that
+  // explains what an account is for. Three more were under every article in
+  // ArticleFeedback, and two were inside GuidePage's Local Assist prompt one
+  // sentence after it tells the model never to use one.
+  //
+  // A hand-kept list of three files is not a rule, it is three assertions. The
+  // directory is the rule: a component added next month is covered the day it
+  // is written, which is the only version of this that stays true.
+  const FILES = [
+    ...readdirSync(join(root, "src/components")).filter(f => f.endsWith(".jsx")).map(f => `src/components/${f}`),
+    ...readdirSync(join(root, "src/pages")).filter(f => f.endsWith(".jsx")).map(f => `src/pages/${f}`),
+    "src/utils/uiLanguage.js", "src/utils/entryWords.js",
+  ];
+  ok("the scan reads every screen rather than a list somebody keeps", FILES.length >= 40);
   for (const f of FILES) {
     const code = stripComments(readFileSync(join(root, f), "utf8"));
     const offenders = code.split("\n")
@@ -22009,6 +22189,22 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       // about the spelling of a field and nothing renders.
       is("the ticket field is named where both sides read it", M.TICKET_FIELD, "ticketUrl");
       is("and so is the tour field", M.TOUR_FIELD, "tourUrl");
+      // ── AND WHAT IS STORED IS NOT WHAT HE COPIED ────────────────
+      //
+      // The address Oliver pasted on 9 Sep, in full, is the one a person gets
+      // by searching on GetYourGuide and copying the bar: it carries a session
+      // id, the query they typed, a party size and a partner id that is not
+      // ours. Frozen into the database, those would follow every reader for
+      // years, and the partner id would credit the sale to somebody else.
+      // Found by an adversarial review the same night: two comments claimed
+      // the address was normalised and nothing normalised it.
+      const HIS = "https://www.getyourguide.com/da-dk/aarhus-l32302/aarhus-craft-beerwalk-t693822/?ranking_uuid=8b5f&partner_id=SOMEONEELSE&q=Aarhus&adults=1&cmp=share_to_earn";
+      const stored = M.reviewPastedTicketUrl(HIS, { kind: "town" });
+      ok("a pasted address is accepted with its tracking on", stored.ok);
+      is("and stored without any of it", stored.url,
+         "https://www.getyourguide.com/da-dk/aarhus-l32302/aarhus-craft-beerwalk-t693822/");
+      ok("no partner id but ours can be frozen into the row", !/partner_id/.test(stored.url));
+      ok("and the question mark does not survive the last one being deleted", !/\?$/.test(stored.url));
     }
 
     // ── APPENDED, NOT TEMPLATED ────────────────────────────────────
@@ -22434,7 +22630,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   ok("the detail page offers the ticket", /🎫 Book tickets/.test(detail));
   ok("tracked at render rather than at publish", /affiliateHref\(dest\)/.test(detail));
-  ok("and disclosed from the same door", /affiliateNote\(dest\)/.test(detail));
+  ok("and disclosed from the same door", /affiliateNote\(dest, lang\)/.test(detail));
   // ABSENT, NOT DEGRADED. A Tickets button falling back to a search is the
   // "something on the card so there is something on the card" failure with
   // money attached.
@@ -22540,9 +22736,21 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("a tour is read from its own field", /const tourDest = String\(item\?\.tourUrl \|\| ""\)\.trim\(\);/.test(detail));
   ok("and validated by the one file that owns what a link is", /const tourOk = isTourUrl\(tourDest\);/.test(detail));
   ok("it goes through the same door every paid link does", /const tourHref = tourOk \? \(affiliateHref\(tourDest\)/.test(detail));
-  ok("and carries the sentence that has to go under it", /note: affiliateNote\(tourDest\)/.test(detail));
-  is("the row is on the entry card and the town card",
-     (detail.match(/label: "Tours", value: "", link: tourRow/g) || []).length, 2);
+  ok("and carries the sentence that has to go under it", /note: affiliateNote\(tourDest, lang\)/.test(detail));
+  // ── ON EVERY CARD A SWEPT TYPE CAN OPEN AS ──────────────────────
+  //
+  // Found by an adversarial review, 9 Sep 2026: the row existed on the entry
+  // and town cards only, while the sweep writes tourUrl to towns, bar streets
+  // and food streets. A bar street opens as kind "nightlife" and a food street
+  // as kind "food", so two of the three types the sweep pays for had nowhere to
+  // render what it bought.
+  is("the row is on every card a swept type opens as",
+     (detail.match(/label: "Tours", value: "", link: tourRow/g) || []).length, 4);
+  // Anchored on the label only that card carries, rather than on an indentation.
+  for (const [k, marker] of [["nightlife", 'label: "Crowd"'], ["food", 'label: "Serves"']]) {
+    const at = detail.indexOf(marker);
+    ok(`the ${k} card carries it`, at > 0 && /label: "Tours"/.test(detail.slice(at, at + 900)));
+  }
   // THE TWO NEVER SHARE A LINK. A tour landing in the ticket row is the overlap
   // this design exists to end, and it would put a 400 kr guided walk beside a
   // 125 kr admission on one line.
@@ -22551,6 +22759,167 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // No value, deliberately: nothing has drafted a sentence about somebody
   // else's product and composing one here would be inventing a description.
   ok("the row states no price it was not given", /label: "Tours", value: ""/.test(detail));
+
+  // ── AND A TOUR IS ONLY FILED WHERE ONE CAN BE SEEN ──────────────
+  //
+  // Found by an adversarial review, 9 Sep 2026. The paste box told him a
+  // GetYourGuide activity was "filed as a TOUR, on the Tours row", and there is
+  // no Tours row on an attraction, a festival or an essential. So it was
+  // stored, reported as done, and rendered nowhere.
+  {
+    const GYG2 = "https://www.getyourguide.com/da-dk/aarhus-l32302/aarhus-craft-beerwalk-t693822/";
+    ok("a tour is accepted onto a town", M.reviewPastedTicketUrl(GYG2, { kind: "town" }).ok);
+    ok("and onto a nightlife town", M.reviewPastedTicketUrl(GYG2, { kind: "nightTown" }).ok);
+    ok("and onto a bar", M.reviewPastedTicketUrl(GYG2, { kind: "nightlife" }).ok);
+    // The interesting refusal, and it is not an oversight: Tiqets sells the
+    // door on an attraction, and a second seller of the same door is the
+    // overlap the ticket and tour split exists to end.
+    const refused = M.reviewPastedTicketUrl(GYG2, { kind: "free" });
+    ok("but refused onto an attraction", !refused.ok);
+    ok("and told why in a way he can act on", /nowhere to show one/.test(refused.reason));
+    // A caller that names no type gets the old behaviour rather than a refusal,
+    // because every other caller of this function passes none.
+    ok("and a caller with no type is not refused", M.reviewPastedTicketUrl(GYG2).ok);
+    // ── AND THE LIST MATCHES WHAT ACTUALLY RENDERS ────────────────
+    // The point of naming the types is that the claim is checkable. Two of them
+    // render through DetailPage's glance card and one renders inline in App.
+    const shown = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+    const appK = readFileSync(join(root, "src/App.jsx"), "utf8");
+    // Each kind's glance card, found by the label that only that card carries,
+    // rather than by an indentation this file cannot see.
+    for (const [k, marker] of [
+      ["town", 'label: "Typical Costs"'],
+      ["event", 'label: "Tickets", value: item.ticketInfo'],
+      ["nightlife", 'label: "Crowd"'],
+      ["food", 'label: "Serves"'],
+    ]) {
+      const at = shown.indexOf(marker);
+      const card = at > 0 ? shown.slice(Math.max(0, at - 900), at + 900) : "";
+      ok(`${k} is on the list and has a row`, M.TOUR_TYPES.includes(k) && at > 0 && /label: "Tours"/.test(card));
+    }
+    ok("a nightlife town has its line instead", /<TourLine url=\{townContent\.tourUrl\}/.test(appK));
+    ok("and an attraction is deliberately not on the list", !M.TOUR_TYPES.includes("free"));
+  }
+
+  // ── AND THE LINE AT THE FOOT OF A SECTION ───────────────────────
+  //
+  // Oliver, 9 Sep 2026, in his own words: "Or hop onto Getyourguide and book a
+  // beerwalk!" and the page he named for it, "the nightlife town tab of Aarhus".
+  //
+  // THAT PAGE RENDERS INLINE, not through DetailPage, which is why the Tours row
+  // did not cover it. Found by an adversarial review the same night: the field,
+  // the sweep and the panel were all built with nowhere for a nightlife town to
+  // show what they had bought.
+  {
+    const line = readFileSync(join(root, "src/components/TourLine.jsx"), "utf8");
+    const appL = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the nightlife town tab carries the line",
+       /<TourLine url=\{townContent\.tourUrl\} kind="nightlife" lang=\{uiLang\} \/>/.test(appL));
+    // A SENTENCE, NOT A CARD. That grid is his own checked writing and a
+    // partner product in the same slot borrows its standing, which is the same
+    // argument that took the OUR PAGE badge off the chat cards the same night.
+    ok("and it is a sentence rather than a card in the list",
+       !/borderRadius: 14|<img/.test(stripComments(line)));
+    ok("gated on the one function that says what a tour link is", /isTourUrl\(url\)/.test(line));
+    ok("and it goes through the one door every paid link does", /affiliateHref\(url\)/.test(line));
+    // The disclosure travels with the link, and a link earning nothing says
+    // nothing, because that sentence over an unpaid link is false about money.
+    ok("the disclosure travels with it", /const note = affiliateNote\(url, lang\)/.test(line));
+    ok("and sets rel from it", /rel=\{note \? "noreferrer sponsored nofollow" : "noreferrer"\}/.test(line));
+    ok("and prints nothing when there is nothing to disclose", /\{note && \(/.test(line));
+    // ── AND IT SPEAKS THE READER'S LANGUAGE ───────────────────────
+    // His half of the sentence is a UI string; the noun it ends on comes from
+    // the product slug through the entry-word table. Both translated, or a
+    // Danish reader meets an English sentence under a Danish nav, which was his
+    // complaint on 7 Sep.
+    ok("his half of the sentence is translated", /uiT\("tour\.lead", lang\)/.test(line));
+    ok("and the noun it ends on too", /entryWord\(tourPhrase\(url, kind\), lang\)/.test(line));
+    is("the lead is written in all three",
+       ["en", "da", "de"].filter(c => !String(M.UI_STRINGS["tour.lead"]?.[c] || "").trim()), []);
+    ok("and none of them is the English one wearing a label",
+       M.UI_STRINGS["tour.lead"].da !== M.UI_STRINGS["tour.lead"].en
+       && M.UI_STRINGS["tour.lead"].de !== M.UI_STRINGS["tour.lead"].en);
+    // NEVER THEIR TITLE. "Aarhus: Craft Beerwalk with 5 Beers & Snacks
+    // Included" read aloud in Gemlyx's voice quotes an advert as a
+    // recommendation, and it is English on a page that promised Danish.
+    ok("and it never reads their own marketing", !/\btitle\b/.test(stripComments(line)));
+
+    // ── AND THE DISCLOSURE UNDER IT, WHICH WAS ENGLISH ────────────
+    //
+    // Found on 9 Sep 2026 by RENDERING this component in Danish and reading
+    // what came out, which no source scan above could do: his sentence was
+    // Danish and the sentence under it was English. That was true of every paid
+    // link on the site, in every language, since the first programme went in.
+    //
+    // It is not a label. It is the sentence that makes a paid link honest, and
+    // a disclosure the reader cannot read is not a disclosure: a Dane was being
+    // told in English that the Danish sentence above it might earn us money.
+    ok("the disclosure is written in all three",
+       ["en", "da", "de"].every(c => String(M.UI_STRINGS["affiliate.disclosure"]?.[c] || "").trim()));
+    ok("and none of them is the English one wearing a label",
+       M.UI_STRINGS["affiliate.disclosure"].da !== M.UI_STRINGS["affiliate.disclosure"].en
+       && M.UI_STRINGS["affiliate.disclosure"].de !== M.UI_STRINGS["affiliate.disclosure"].en);
+    // ── AND THE TWO COPIES ARE ONE SENTENCE ───────────────────────
+    // affiliates.js still hard-codes the English, because its four functions
+    // answer "does this link earn". That is two homes for one sentence, so the
+    // drift is closed here rather than left to be noticed by a reader.
+    is("the catalogue's English is the sentence affiliates.js returns",
+       M.UI_STRINGS["affiliate.disclosure"].en,
+       M.getyourguideDisclosure("https://www.getyourguide.com/da-dk/aarhus-l32302/x-t1/"));
+    // A caller that passes no language gets exactly what it got before.
+    is("a caller that names no language still gets English",
+       M.affiliateNote("https://www.getyourguide.com/da-dk/aarhus-l32302/x-t1/"),
+       M.UI_STRINGS["affiliate.disclosure"].en);
+    is("and a Danish one gets Danish",
+       M.affiliateNote("https://www.getyourguide.com/da-dk/aarhus-l32302/x-t1/", "da"),
+       M.UI_STRINGS["affiliate.disclosure"].da);
+    // Still empty for a link that earns nothing. "This may earn us a
+    // commission" printed over a link that earns nothing is a false statement
+    // about money, and that rule does not change language.
+    is("and a link that earns nothing still says nothing",
+       M.affiliateNote("https://example.com/thing", "da"), "");
+
+    // ── EVERY RENDER SITE HANDS IT THE LANGUAGE ───────────────────
+    // The default is English, so a site that forgets is silently wrong rather
+    // than broken, which is the shape that shipped for weeks here.
+    {
+      const detailD = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+      const sites = [...detailD.matchAll(/affiliateNote\(([^)]*)\)/g)].map(m => m[1]);
+      ok("the entry page calls it in more than one place", sites.length >= 4);
+      is("and every call passes the reader's language",
+         sites.filter(a => !/,\s*lang$/.test(a)), []);
+      ok("and so does the tour line", /affiliateNote\(url, lang\)/.test(line));
+    }
+
+    // ── READ OFF THE SCREEN, NOT OFF THE SOURCE ───────────────────
+    //
+    // The instrument that found the bug is the one that proves the fix. Every
+    // assertion above this point is a regex over source text, and every one of
+    // them was green while a Dane read an English disclosure.
+    {
+      const { renderSurface } = await import(pathToFileURL(join(root, "tests/render.mjs")).href);
+      const AARL = "https://www.getyourguide.com/da-dk/aarhus-l32302/aarhus-craft-beerwalk-t693822/";
+      const shown = async (lang) => (await renderSurface("src/components/TourLine.jsx", "TourLine",
+        { url: AARL, kind: "nightlife", lang })).text;
+      const da = await shown("da"), de = await shown("de"), en = await shown("en");
+      ok("a Danish reader gets the whole line in Danish",
+         da.includes(M.UI_STRINGS["tour.lead"].da) && da.includes(M.UI_STRINGS["affiliate.disclosure"].da));
+      ok("and no English is left in it", !da.includes("may earn Gemlyx"));
+      ok("a German reader gets the whole line in German",
+         de.includes(M.UI_STRINGS["tour.lead"].de) && de.includes(M.UI_STRINGS["affiliate.disclosure"].de));
+      ok("and an English one is unchanged",
+         en.includes(M.UI_STRINGS["tour.lead"].en) && en.includes("may earn Gemlyx"));
+      // The noun comes off the slug, not their marketing title, and it is
+      // translated too. Read off the screen for the same reason.
+      ok("the noun it ends on is translated on the way out",
+         da.includes("ølvandring") && de.includes("Bierwanderung"));
+      // And nothing at all for something that is not one of their products, so
+      // a hand-edited row cannot put an arbitrary address behind his sentence.
+      is("something that is not an activity draws no line",
+         (await renderSurface("src/components/TourLine.jsx", "TourLine",
+           { url: "https://example.com/x", kind: "nightlife", lang: "da" })).text, "");
+    }
+  }
 
   // ── AND THE PAGE OPENS AS A WINDOW WHEN THE CHAT OPENS IT ───────
   //
@@ -22612,14 +22981,130 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is("their address names the town", M.tourUrlIsAboutTown(AAR, "Aarhus"), true);
     is("and a product for somewhere else is refused", M.tourUrlIsAboutTown(CPH, "Aarhus"), false);
     is("a Danish name folds to their slug", M.tourUrlIsAboutTown(CPH, "København"), true);
+    // ── AND THE ENGLISH NAME OF THE SAME TOWN ───────────────────
+    //
+    // The wall variantsOf is here for, and the assertion above does not reach
+    // it: "København" and "kobenhavn" are the same letters, so a plain fold
+    // passes that one and fails this one. Gemlyx's own row for the capital is
+    // named Copenhagen and GetYourGuide's slug is kobenhavn, which share
+    // nothing. Without the variants every Copenhagen activity was refused and
+    // the town was then stamped as having none for ninety days, so the search
+    // was paid for and its answer thrown away. Found by an adversarial review,
+    // 9 Sep 2026.
+    is("and so does the English name of a Danish town", M.tourUrlIsAboutTown(CPH, "Copenhagen"), true);
     is("and a non-product is not an answer at all",
        M.tourUrlIsAboutTown("https://www.getyourguide.com/da-dk/aarhus-l32302/", "Aarhus"), false);
+
+    // ── AND WHICH NAME IS SEARCHED FOR IN THE FIRST PLACE ─────────
+    //
+    // A bar street is a row called "Jomfru Ane Gade", and GetYourGuide has no
+    // product with a street in its slug: their addresses carry the CITY. So a
+    // street searched under its own name could never match the check above,
+    // which meant a credit spent on every street row and a guaranteed nothing.
+    // Found by the same review. parentTownOf is the function affiliateSweep
+    // already uses for exactly this question.
+    is("a bar street searches under the town it is in",
+       M.tourTownFor({ name: "Jomfru Ane Gade", _src: "nightStreet", city: "Aalborg" }), "Aalborg");
+    is("and a food street does too",
+       M.tourTownFor({ name: "Jægergårdsgade", _src: "foodStreet", city: "Aarhus" }), "Aarhus");
+    // The other half of the same branch: a TOWN is searched under its own name
+    // even when a parent field is filled, or every town would search for its
+    // region and find products for the wrong place.
+    is("but a town searches under its own name", M.tourTownFor({ name: "Ribe", _src: "town", city: "Esbjerg" }), "Ribe");
 
     is("the pick takes the first that survives", M.pickTourUrl([{ url: CPH }, { url: AAR }], { town: "Aarhus" }), AAR);
     is("and none surviving is null", M.pickTourUrl([{ url: CPH }], { town: "Aarhus" }), null);
     is("somebody else's site is never picked",
        M.pickTourUrl([{ url: "https://www.tiqets.com/en/x-p1/" }], { town: "Aarhus" }), null);
     is("and nothing searched is null", M.pickTourUrl([], { town: "Aarhus" }), null);
+
+    // ── AND A GUIDE THAT GOES TO ROSKILDE ─────────────────────────
+    //
+    // Oliver, 9 Sep 2026: "Is it possible that our AI guide can recommend a
+    // GetYourGuide activity? If they're sent to Roskilde, then a GetYourGuide
+    // activity could be recommended."
+    //
+    // It reads the field the sweep already filled rather than searching, so a
+    // guide costs nothing extra, and the activity a reader meets in a plan is
+    // the same one Oliver ticked by hand for that town.
+    {
+      const R_AAR = { name: "Aarhus", tourUrl: AAR };
+      const R_BIL = { name: "Billund", tourUrl: "https://www.getyourguide.com/da-dk/billund-l1234/billund-legoland-billet-t99999/" };
+      const R_CPH = { name: "Copenhagen", tourUrl: CPH };
+      const rows = [R_AAR, R_BIL, R_CPH];
+      const days = [
+        { day: 1, stops: [{ name: "Den Gamle By", town: "Aarhus" }] },
+        { day: 2, stops: [{ name: "ARoS", town: "Aarhus" }] },
+        { day: 3, stops: [{ name: "Lalandia", town: "Billund" }] },
+      ];
+      const found = M.guideTours(days, { rows });
+      is("a day in a town with an activity gets the line", found[0]?.town, "Aarhus");
+      is("and a different town gets its own", found[2]?.town, "Billund");
+      // Three days in Aarhus is one beerwalk worth mentioning, not three.
+      is("but the same town is never offered twice", found[1], undefined);
+      is("and a town with no activity gets nothing invented for it",
+         Object.keys(M.guideTours([{ stops: [{ town: "Ribe" }] }], { rows })).length, 0);
+      // The row is matched by name through variantsOf, so the capital's row
+      // being called Copenhagen and the stop saying København is one town.
+      is("the row is found under either name of the same town",
+         M.guideTours([{ stops: [{ town: "København" }] }], { rows })[0]?.town, "København");
+
+      // ── AND THE GATE, WHICH IS THE WHOLE REASON THIS IS NOT THE ──
+      // ── TOWN TAB ─────────────────────────────────────────────────
+      //
+      // exclusions.js opens with the day this went wrong for free: he wrote
+      // "Please don't send us to Legoland" and the preview offered him
+      // Legoland, top of the list, with a picture. A paid line is that screen
+      // with money on it, which reads worse, because a reader who spots it
+      // reads the money as the reason they were sent.
+      const noLego = M.guideTours(days, { rows, excluded: ["Legoland"] });
+      is("a ruled out attraction is not sold under the town it sits in", noLego[2], undefined);
+      is("and the rest of the trip is left alone", noLego[0]?.town, "Aarhus");
+      const noAarhus = M.guideTours(days, { rows, excluded: ["Aarhus"] });
+      is("a ruled out town is not offered one either", noAarhus[0], undefined);
+      // ── AND THE TOWN GATE IS NOT THE ADDRESS GATE WEARING A HAT ──
+      //
+      // The assertion above passes with the town check deleted, and a mutation
+      // proved it: every tour the SWEEP writes has passed tourUrlIsAboutTown,
+      // so its address already names the town, and the address check catches
+      // it either way. The case that separates them is a tour PASTED by hand,
+      // which reviewPastedTicketUrl accepts onto a town without ever comparing
+      // the address to the town's name. Then the slug can say anything, and
+      // the town gate is the only thing standing between a traveller who ruled
+      // out Roskilde and a paid line about Roskilde.
+      const byHand = [{ name: "Roskilde", tourUrl: "https://www.getyourguide.com/da-dk/sjaelland-l999/vikingeskib-sejltur-t555/" }];
+      const trip = [{ stops: [{ town: "Roskilde" }] }];
+      is("a hand pasted tour is offered on the town it was filed under",
+         M.guideTours(trip, { rows: byHand })[0]?.town, "Roskilde");
+      is("and not when that town is the one they ruled out",
+         M.guideTours(trip, { rows: byHand, excluded: ["Roskilde"] })[0], undefined);
+      // Stated rather than assumed: this pair only tests the town gate while
+      // the address genuinely does not name the town.
+      ok("and the address alone would not have caught it",
+         !M.tourNamesExcluded(byHand[0].tourUrl, ["Roskilde"]));
+      is("and a guide may still route through it", noAarhus[2]?.town, "Billund");
+      is("an exclusion naming nothing on the trip changes nothing",
+         M.guideTours(days, { rows, excluded: ["Skagen"] })[0]?.town, "Aarhus");
+      // Their slugs are Danish and a traveller writes English. Same wall
+      // variantsOf exists for in the town match above.
+      ok("a Danish slug is caught by an exclusion written in English",
+         M.tourNamesExcluded(CPH, ["Copenhagen"]));
+      // A slug is one long unpunctuated word, so a two-letter exclusion would
+      // match inside almost every activity on the site.
+      ok("and a very short exclusion cannot match everything",
+         !M.tourNamesExcluded(AAR, ["a"]) && !M.tourNamesExcluded(AAR, ["af"]));
+      ok("while a real one still does", M.tourNamesExcluded(R_BIL.tourUrl, ["Legoland"]));
+    }
+    // ── AND IT IS RENDERED ────────────────────────────────────────
+    // A correct, tested function with no caller is this project's signature
+    // failure and exclusions.js is the file that says so.
+    {
+      const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+      ok("the guide page reads the traveller's own exclusions into it",
+         /guideTours\(guide\?\.days, \{ rows: towns, excluded: guide\?\._constraints\?\.excluded \|\| \[\] \}\)/.test(gp));
+      ok("and prints the line under the day it belongs to",
+         /\{dayTours\[dayIdx\] && \(\s*\n\s*<TourLine url=\{dayTours\[dayIdx\]\.url\} kind="town" lang=\{uiLang\}/.test(gp));
+    }
 
     // ── WHAT THE SENTENCE CALLS IT ────────────────────────────────
     // From the SLUG, never the title. "Aarhus: Craft Beerwalk with 5 Beers &
@@ -22664,17 +23149,171 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is("nor does an event", M.tourKindFor("event"), "");
   }
 
+  // ── THE BACKFILL, AND WHAT IT REFUSES TO ASK ABOUT ──────────────
+  //
+  // Oliver, 9 Sep 2026: "So that will be a sweep that suggests getyourguide
+  // affiliates?" One activity per published town, and the interesting half is
+  // which towns are NOT asked, because every skip is a credit not spent.
+  {
+    const AAR = "https://www.getyourguide.com/da-dk/aarhus-l32302/aarhus-craft-beerwalk-t693822/";
+    const CPH = "https://www.getyourguide.com/da-dk/kobenhavn-l12/kobenhavn-kanal-badtur-fra-gammel-strand-t37848/";
+    const NOW = new Date("2026-09-09T09:00:00Z");
+    const town = (name, extra = {}) => ({ id: name, payload: { name, _src: "town", ...extra } });
+
+    is("a plain town is asked about",
+       M.tourCandidates([town("Ribe")], { today: NOW }).length, 1);
+    is("a town that already has one is not",
+       M.tourCandidates([town("Ribe", { tourUrl: AAR })], { today: NOW }).length, 0);
+    // The stamp is the whole reason a second run is cheap.
+    is("nor one asked recently and told no",
+       M.tourCandidates([town("Ribe", { __tourSweep: { at: "2026-09-01", found: false } })], { today: NOW }).length, 0);
+    is("but it is asked again once the stamp is old",
+       M.tourCandidates([town("Ribe", { __tourSweep: { at: "2026-01-01", found: false } })], { today: NOW }).length, 1);
+    // An attraction is never in this list: Tiqets sells that door.
+    is("and an attraction is never asked",
+       M.tourCandidates([{ id: "x", payload: { name: "ARoS", _src: "free" } }], { today: NOW }).length, 0);
+
+    // ── THE THREE VERDICTS ────────────────────────────────────────
+    {
+      const good = M.tourProposal(town("Aarhus"), [{ url: AAR }], { today: NOW });
+      is("an activity for this town is found", good.verdict, M.TOUR_FOUND);
+      is("and read as what it is", good.phrase, "a beer walk");
+      is("and it writes the plain address", good.set.tourUrl, AAR);
+      ok("and stamps the day it was asked", /^\d{4}-\d{2}-\d{2}$/.test(good.set.__tourSweep.at));
+      // The partner id is never stored. It goes on at render, so the day a
+      // programme ends every link quietly stops paying with no migration.
+      ok("and never the partner id", !/partner_id/.test(JSON.stringify(good.set)));
+
+      const none = M.tourProposal(town("Hornbæk"), [{ url: CPH }], { today: NOW });
+      is("a product for somewhere else is not an answer", none.verdict, M.TOUR_NOTHING);
+      is("and it is stamped so the next run skips it", none.set.__tourSweep.found, false);
+      ok("and nothing is written to the row itself", !("tourUrl" in none.set));
+
+      // ── AND A FAILED SEARCH IS NOT A NO ─────────────────────────
+      // affiliateSweep paid for this one: a quota part way through a run looks
+      // exactly like "GetYourGuide has nothing here", and writing it down as
+      // one hides the town for the whole resweep window.
+      const broke = M.tourProposal(town("Ribe"), [], { today: NOW, failed: 1 });
+      is("a search that failed is its own verdict", broke.verdict, M.TOUR_FAILED);
+      is("and it carries nothing that could be written", broke.set, undefined);
+      ok("and says which of the two things happened", /could not|failed/i.test(broke.why));
+    }
+
+    // ── REPLACING ONE, WHICH HE ASKED FOR BY NAME ─────────────────
+    //
+    // "so I can replace it with another, if I know of a better or it's not
+    // matching (from a bug)."
+    {
+      const first = M.tourProposal(town("Aarhus"), [{ url: AAR }, { url: "https://www.getyourguide.com/da-dk/aarhus-l32302/aarhus-food-tour-t99/" }], { today: NOW });
+      // GUARDED, because a mutation that emptied `others` crashed this block
+      // and a crashed run has no failures in it to count, which reports as the
+      // mutation surviving. Second time tonight.
+      is("the runners-up come back with it", first.others.length, 1);
+      ok("and they are described too", !!(first.others[0] || {}).phrase);
+      const alt = (first.others[0] || {}).url || "";
+      ok("there is a runner-up to swap to", !!alt);
+      const swapped = M.replaceTour(first, alt);
+      is("swapping to one of them takes", swapped.url, alt);
+      is("and it writes that instead", swapped.set.tourUrl, alt);
+      ok("and the row says it was chosen rather than found", swapped.chosenByHand === true);
+      // THE TOWN CHECK IS NOT APPLIED TO A HAND-PICKED LINK. He may know the
+      // right activity for Ebeltoft is listed under Aarhus, and refusing his
+      // own choice on a slug rule makes the feature useless when it matters.
+      const crossTown = M.replaceTour(M.tourProposal(town("Ebeltoft"), [], { today: NOW }), AAR);
+      is("his own choice is not refused for being filed elsewhere", crossTown.verdict, M.TOUR_FOUND);
+      // The product check IS applied: a city page is not something to book.
+      const junk = M.replaceTour(first, "https://www.getyourguide.com/da-dk/aarhus-l32302/");
+      ok("but a city page is refused", !!junk.replaceError);
+      is("and nothing is changed by it", junk.url, first.url);
+    }
+
+    // ── AND DOES IT STILL EXIST ───────────────────────────────────
+    //
+    // "make sure that there is an update feature that checks if this activity
+    // even still exists anymore." The interesting case is not the 404.
+    {
+      is("the same page still resolving is alive",
+         M.tourAliveVerdict({ url: AAR, status: 200, finalUrl: AAR }).verdict, M.TOUR_ALIVE);
+      is("a 404 is gone", M.tourAliveVerdict({ url: AAR, status: 404 }).verdict, M.TOUR_GONE);
+      is("and so is a 410", M.tourAliveVerdict({ url: AAR, status: 410 }).verdict, M.TOUR_GONE);
+      // THE ONE THAT MATTERS. A marketplace rarely 404s a withdrawn product: it
+      // redirects to the city page and answers 200 with a perfectly good page
+      // that is not the thing the reader was promised. A status check alone
+      // calls that alive.
+      is("a 200 that landed on the city page is gone",
+         M.tourAliveVerdict({ url: AAR, status: 200, finalUrl: "https://www.getyourguide.com/da-dk/aarhus-l32302/" }).verdict, M.TOUR_GONE);
+      is("and one that landed on a different activity is too",
+         M.tourAliveVerdict({ url: AAR, status: 200, finalUrl: "https://www.getyourguide.com/da-dk/aarhus-l32302/other-t1/" }).verdict, M.TOUR_GONE);
+      // A network failure and their server having a bad day are not deaths.
+      // Writing either down as one would delete a working link.
+      is("a failed check knows nothing", M.tourAliveVerdict({ url: AAR, status: 0, error: "timeout" }).verdict, M.TOUR_UNKNOWN);
+      is("and a 500 is their bad day, not a withdrawal",
+         M.tourAliveVerdict({ url: AAR, status: 503 }).verdict, M.TOUR_UNKNOWN);
+      is("and something that is not an activity is not asked about",
+         M.tourAliveVerdict({ url: "https://www.getyourguide.com/da-dk/aarhus-l32302/", status: 200 }).verdict, M.TOUR_UNKNOWN);
+      // ── AND A CHECK THAT DID NOT SAY WHERE IT LANDED ────────────
+      //
+      // The first version of the rule above read `productId(finalUrl || url)`,
+      // so a check that came back with no final address compared the URL
+      // against itself, matched, and reported a page nobody had seen as alive.
+      // It also made half of its own message unreachable, which is the giveaway
+      // an adversarial review pulled on 9 Sep 2026. No landing address is not
+      // proof of death either: it is a check that did not answer the question,
+      // and this file has one word for those.
+      is("a 200 with no landing address knows nothing",
+         M.tourAliveVerdict({ url: AAR, status: 200, finalUrl: "" }).verdict, M.TOUR_UNKNOWN);
+      ok("and says that, rather than naming a page it was never shown",
+         /did not report where it landed/.test(M.tourAliveVerdict({ url: AAR, status: 200, finalUrl: "" }).why));
+
+      // Clearing is the only honest thing to do about a dead one: a link that
+      // goes nowhere is worse than no link, and the entry reads perfectly well
+      // without one.
+      const row = { id: 7, payload: { name: "Aarhus", tourUrl: AAR } };
+      is("a dead one is cleared", M.tourRemovalFor(row, M.TOUR_GONE).set.tourUrl, "");
+      is("a live one is left alone", M.tourRemovalFor(row, M.TOUR_ALIVE), null);
+      is("and one nobody could check is left alone too", M.tourRemovalFor(row, M.TOUR_UNKNOWN), null);
+    }
+
+    // ── AND THE SUMMARY SAYS WHICH RUN THIS WAS ───────────────────
+    // A run that half failed is a different event from a run that found little,
+    // and counts alone would read as the second when it was the first.
+    {
+      const half = [
+        M.tourProposal(town("A"), [], { today: NOW, failed: 1 }),
+        M.tourProposal(town("Aarhus"), [{ url: AAR }], { today: NOW }),
+      ];
+      ok("a half-failed run says so first", /^1 of 2 could not be searched/.test(M.describeTourFindings(half)));
+      is("nothing searched says nothing", M.describeTourFindings([]), "Nothing was searched.");
+    }
+  }
+
   // ── WIRED AT DRAFT TIME, AND ONLY WHEN THERE IS NOTHING THERE ───
   {
     const appT2 = readFileSync(join(root, "src/App.jsx"), "utf8");
-    ok("the draft asks GetYourGuide", /const tq = tourKind && !String\(t\.tourUrl \|\| ""\)\.trim\(\) \? tourQuery\(name, tourKind\) : "";/.test(appT2));
+    ok("the draft asks GetYourGuide", /const tq = tourKind && tourTown && !String\(t\.tourUrl \|\| ""\)\.trim\(\) \? tourQuery\(tourTown, tourKind\) : "";/.test(appT2));
+    // ── AND IT ASKS ABOUT THE TOWN, NOT THE STREET ────────────────
+    // A bar street is called "Jomfru Ane Gade" and GetYourGuide files its
+    // activities under Aalborg, so a search named after the street could never
+    // match its own answer. Found by an adversarial review the same night.
+    ok("about the town rather than the entry's own name",
+       /const tourTown = tourTownFor\(\{ \.\.\.t, name, _src: sType \}\);/.test(appT2));
     ok("only for the types whose page it belongs on", /const tourKind = tourKindFor\(sType\);/.test(appT2));
-    ok("and never takes the first result", /const gotTour = pickTourUrl\(results, \{ town: name \}\);/.test(appT2));
+    ok("and never takes the first result", /const gotTour = pickTourUrl\(results, \{ town: tourTown \}\);/.test(appT2));
     ok("the run log records the ask either way", /Ask GetYourGuide directly/.test(appT2));
     // shapeForLive is an allow-list. A field the pipeline writes and this file
     // does not name works perfectly until the row is published.
     const shape = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
-    ok("and the field survives being published", /if \(isTourUrl\(t\?\.tourUrl\)\) out = \{ \.\.\.out, tourUrl: String\(t\.tourUrl\)\.trim\(\) \};/.test(shape));
+    ok("and the field survives being published", /if \(isTourUrl\(t\?\.tourUrl\)\) out = \{ \.\.\.out, tourUrl: cleanTourUrl\(t\.tourUrl\) \};/.test(shape));
+    // ── AND SO DOES THE STAMP ─────────────────────────────────────
+    // Missed on the first pass and found by an adversarial review. A town told
+    // "GetYourGuide has nothing" would lose that stamp on its next redraft and
+    // be paid for all over again, which is the exact rule the paragraph above
+    // it in that file restates.
+    ok("and so does the stamp that stops it being paid for twice",
+       /if \(t\?\.__tourSweep\?\.at\) \{/.test(shape));
+    // ── AND NOTHING TRACKED IS STORED ─────────────────────────────
+    // Two comments in this codebase claimed this and nothing enforced it.
+    ok("the stored address is cleaned of tracking", /cleanTourUrl/.test(shape));
   }
 
   // ── THE QUESTION ITSELF, WHICH DID NOT CHANGE ───────────────────
@@ -26725,7 +27364,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // spells it out.
   ok("the address is shown back to them", /\{sentTo\}\s*<\/div>/.test(sheetS));
   ok("in the gold, on its own line", /fontWeight: 700, color: C\.gold, marginBottom: 16, wordBreak: "break-all"/.test(sheetS));
-  ok("and there is a way to fix it", /Wrong address\? Go back/.test(sheetS));
+  ok("and there is a way to fix it",
+     /uiT\("auth\.wrongAddress", lang\)/.test(sheetS)
+     && M.UI_STRINGS["auth.wrongAddress"].en === "Wrong address? Go back");
   ok("which clears back to the form with the answers still in it",
      /onClick=\{\(\) => \{ setSentTo\(""\); setError\(null\); setNotice\(null\); \}\}/.test(sheetS));
 
@@ -26745,7 +27386,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the button respects it", /disabled=\{busy \|\| now < resendAt\}/.test(sheetS));
   ok("and the handler does too, not only the button", /if \(busy \|\| Date\.now\(\) < resendAt\) return;/.test(sheetS));
   // COUNTED DOWN ON SCREEN. A disabled button with no reason is just broken.
-  ok("it says how long is left", /Send it again in \$\{Math\.ceil\(\(resendAt - now\) \/ 1000\)\}s/.test(sheetS));
+  ok("it says how long is left",
+     /\$\{uiT\("auth\.sendAgainIn", lang\)\} \$\{Math\.ceil\(\(resendAt - now\) \/ 1000\)\}s/.test(sheetS));
   // The ticker runs ONLY while a cooldown is running, or an idle sheet
   // re-renders once a second for as long as it is open.
   // ── AND IT ACTUALLY STOPS ────────────────────────────────────────
@@ -27423,6 +28065,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
        /const closeEntry = \(\) => \{\s*\n[\s\S]{0,400}?setEntryWindowed\(false\);/.test(appC));
     ok("and every open sets it either way",
        /const openStopDetail = \(real, \{ windowed = false \} = \{\} \) =>|setEntryWindowed\(!!windowed\);/.test(appC));
+    // ── AND THE BACK BUTTON IS A SECOND WAY OUT ───────────────────
+    //
+    // popstate does not call closeEntry. It calls closeAllEntries, which until
+    // an adversarial review on 9 Sep 2026 cleared the entries and left the
+    // window flag standing: press back out of a chat window, open anything
+    // from a browse list, and it floated over a conversation that was no
+    // longer on screen. Two ways out means the flag is cleared in both.
+    ok("and the back button clears it too, which does not go through closeEntry",
+       /const closeAllEntries = \(\) => \{\s*\n\s*setEntryWindowed\(false\);/.test(appC));
   }
 }
 
@@ -28073,7 +28724,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the claim on the far side still exists", /const held = takeHeldProfile\(\);/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
     // And the promise made on the email branch matched what happened.
     ok("the notice no longer says saved when it means held", !/your answers are saved/.test(sheetA));
-    ok("it says where they are", /kept on this device/.test(sheetA));
+    ok("it says where they are",
+       /uiT\("auth\.sameBrowser", lang\)/.test(sheetA)
+       && /kept on this device/.test(M.UI_STRINGS["auth.sameBrowser"].en));
   }
 
   // ── A RESET LINK THAT FINALLY FINISHES ───────────────────────────
@@ -28153,7 +28806,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the backdrop no longer closes the form", /\n    <div style=\{overlay\}>/.test(sheetB));
     ok("and the old handler is gone", !/<div onClick=\{onClose\} style=\{overlay\}>/.test(stripNonCode(sheetB)));
     // The cross still does, or there is no way out at all.
-    ok("the cross still closes it", /<button onClick=\{onClose\} aria-label="Close"/.test(sheetB));
+    ok("the cross still closes it",
+       /<button onClick=\{onClose\} aria-label=\{uiT\("auth\.close", lang\)\}/.test(sheetB));
     // And so does Escape, which is the other deliberate act. Bound only while
     // open, so it cannot swallow Escape from anything else on the page.
     ok("so does Escape", /if \(e\.key === "Escape"\) onClose\(\);/.test(sheetB));
@@ -28201,7 +28855,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // it straight through set userSession to null and closed the sheet: signed out,
   // no error, nothing on screen.
   ok("an empty sign in is reported rather than closing the sheet",
-     /if \(!signedIn\) \{ setError\("That sign in did not come back with a session/.test(readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8")));
+     /if \(!signedIn\) \{ setError\(uiT\("auth\.noSession", lang\)\)/.test(readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8"))
+     && /did not come back with a session/.test(M.UI_STRINGS["auth.noSession"].en));
 
   // ── GOOGLE, SWITCHED OFF UNTIL THE POLICIES EXIST ────────────────
   //
@@ -29211,7 +29866,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // nearest neighbour.
   ok("and its sentence is computed, not written by a model",
      /describeLocation\(mapPin, nearbyPublished\(mapPin, mapLibrary, \{ exclude: mapPin\.stopName \|\| mapPin\.name \}\), \{ town: mapPin\.town \}\)/.test(gp2));
-  ok("the card can be closed", /aria-label="Close this pin"/.test(gp2));
+  ok("the card can be closed", /aria-label=\{uiT\("guide\.closePin", uiLang\)\}/.test(gp2));
   ok("our own places are passed to the map", /nearby=\{mapLibrary\}/.test(gp2));
   ok("and drawn only once somebody has zoomed in", /if \(z < 13 \|\| !Array\.isArray\(nearby\) \|\| !nearby\.length\) return;/.test(grm));
   ok("and only the ones actually on screen", /bounds\.contains\(\[r\.lat, r\.lon\]\)/.test(grm));
@@ -30630,14 +31285,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is("and one minute is singular", sd(1, { precise: true }), "1 minute");
     is("while an estimate still rounds", sd(23), "25 minutes");
   }
-  ok("and still says straight line when it is one", /: "Straight line distance, not a measured route/.test(gpSrc));
+  ok("and still says straight line when it is one",
+     /: uiT\("guide\.straightLine", uiLang\)/.test(gpSrc));
 
   ok("a missing coordinate bails out rather than guessing one",
      /if \(!a \|\| !b\) return null;/.test(gpSrc));
   ok("the trip's own mode is what it uses", /mode: guide\._mode,/.test(gpSrc));
   ok("a heavy move is marked", /const heavy = move\.eatsTheDay \|\| move\.band === REACH_FAR;/.test(gpSrc));
   ok("and the estimate says it is an estimate",
-     /Straight line distance, not a measured route, so treat it as the shape of the day/.test(gpSrc));
+     /Straight line distance, not a measured route, so treat it as the shape of the day/
+       .test(M.UI_STRINGS["guide.straightLine"].en));
   // Silent on a simple guide, which has no measured legs at all by design.
   ok("a simple guide draws none of this", /\{!lightMode && \(\(\) => \{\s*\n\s*const nextDay/.test(gpSrc));
   // And the towns come from the same resolver the cards use, so the block and the
@@ -35838,7 +36495,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // A record of agreement to something nobody was shown is worse than no
   // record. The line and its two links are what the stamp refers to.
   ok("the signup screen says what creating an account agrees to",
-     /By creating an account you agree to the/.test(sheet));
+     /uiT\("auth\.agreeLead", lang\)/.test(sheet)
+     && /By creating an account you agree to the/.test(M.UI_STRINGS["auth.agreeLead"].en)
+     // Consent has to be readable to be consent, so this one is asserted in
+     // all three rather than only in the source language.
+     && ["en", "da", "de"].every(c => String(M.UI_STRINGS["auth.agreeLead"][c] || "").trim()));
   ok("and links both documents",
      /href="\/terms\.html"/.test(sheet) && /href="\/privacy\.html"/.test(sheet));
   ok("and says it only on the signup screen", /\{mode === "up" && <div/.test(sheet));
@@ -36022,11 +36683,20 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // must say which day its number came from, and "today" would make it lie the
   // moment it was saved.
   ok("the published date is what gets stamped", /on: String\(data\?\.date \|\| ""\)\.slice\(0, 10\)/.test(fx));
-  ok("and the line says so to the reader", /guide\._fx\.on \? ` on \$\{guide\._fx\.on\}`/.test(guideF));
-  ok("and warns the rate will have moved", /rates will have moved a little by the time you travel/.test(guideF));
+  ok("and the line says so to the reader",
+     /guide\._fx\.on \? ` \$\{uiT\("guide\.onDate", uiLang\)\} \$\{guide\._fx\.on\}`/.test(guideF));
+  ok("and warns the rate will have moved",
+     /uiT\("guide\.ratesMoved", uiLang\)/.test(guideF)
+     && /rates will have moved a little by the time you travel/.test(M.UI_STRINGS["guide.ratesMoved"].en)
+     && /kurserne har flyttet sig/.test(M.UI_STRINGS["guide.ratesMoved"].da));
 
   // AND IT STILL SAYS PRICES ARE IN KRONER, which is the load-bearing half.
-  ok("the line leads with DKK", /Everything here is priced in DKK, which is what you will actually be charged/.test(guideF));
+  ok("the line leads with DKK",
+     /uiT\("guide\.pricedInDkk", uiLang\)/.test(guideF)
+     && /Everything here is priced in DKK, which is what you will be charged/.test(M.UI_STRINGS["guide.pricedInDkk"].en)
+     // The load-bearing half, in every language: the number a reader is quoted
+     // is kroner, whatever their screen is in.
+     && ["en", "da", "de"].every(c => /DKK|danske kroner|dänischen Kronen/.test(M.UI_STRINGS["guide.pricedInDkk"][c])));
 
   // A currency going into a URL is checked against a list, not passed through.
   ok("the target currency is allow-listed", /if \(!ALLOWED\.has\(to\)\)/.test(fx));
@@ -36352,7 +37022,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── CONFIRM PASSWORD, CHECKED BEFORE THE ACCOUNT EXISTS ─────────
   // "And make a confirm password section too." A typo caught afterwards is an
   // account somebody cannot get back into without the reset flow.
-  ok("there is a confirm field", /Confirm password/.test(auth));
+  ok("there is a confirm field",
+     /uiT\("auth\.confirmPassword", lang\)/.test(auth)
+     && M.UI_STRINGS["auth.confirmPassword"].en === "Confirm password");
   ok("checked against the password", /if \(password !== confirm\)/.test(auth));
   ok("before signUpWithPassword is called",
      auth.indexOf("if (password !== confirm)") >= 0 && auth.indexOf("if (password !== confirm)") < signupCall);
@@ -36360,15 +37032,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── THE MANDATORY MARKS ─────────────────────────────────────────
   // "Remember to have '*' on parts that is mandatory to answer."
   ok("required fields are starred", /required showGaps=\{showGaps\}/.test(auth));
-  ok("email carries one", /Email<span style=\{\{ color: showGaps && !email\.trim\(\)/.test(auth));
+  ok("email carries one", /\{uiT\("auth\.email", lang\)\}<span style=\{\{ color: showGaps && !email\.trim\(\)/.test(auth));
   // The label became conditional on 22 Aug, because a reset link lands on a
   // screen where "Password" is the wrong word for a box you are choosing a NEW
   // value in. The mark still has to be on it either way.
   ok("password carries one",
-     /\{mode === "newpass" \? "New password" : "Password"\}<span style=\{\{ color: showGaps && password\.length < 6/.test(auth));
+     /\{uiT\(mode === "newpass" \? "auth\.newPassword" : "auth\.password", lang\)\}<span style=\{\{ color: showGaps && password\.length < 6/.test(auth));
   ok("and the gaps only show after a press", /const \[showGaps, setShowGaps\] = useState\(false\);/.test(auth)
      && /setShowGaps\(true\);/.test(auth));
-  ok("the missing ones are named rather than counted", /Still needed: \$\{gaps\.map/.test(auth));
+  ok("the missing ones are named rather than counted",
+     /\$\{uiT\("auth\.stillNeeded", lang\)\} \$\{gaps\.map/.test(auth));
 
   // ── ONE FORM, TWO CALLERS ───────────────────────────────────────
   // A second copy of these fields is how they drift. This codebase has found
@@ -37327,10 +38000,18 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   //
   // A comma or a colon in place of the dash passes, which is right: his rule
   // names all three as the replacement.
-  const gp = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
-  const failures = gp.match(/Couldn't (?:save|load|check)[^"'`]*/g) || [];
+  const failures = M.UI_KEYS
+    .filter(k => k.startsWith("guide."))
+    .flatMap(k => ["en", "da", "de"].map(c => M.UI_STRINGS[k][c]))
+    .filter(v => /Couldn't|kunne ikke|konnte|Konnte/.test(v));
   ok("the guide page's failure sentences are findable", failures.length >= 4);
   is("and not one of them carries a dash", failures.filter(e => /[–—]/.test(e)), []);
+  // And they are still sentences a reader meets, rather than four keys that
+  // stopped being rendered while this rule went on passing over the catalogue.
+  const gpFail = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  is("and every one is still rendered by the page",
+     ["guide.saveFailed", "guide.saveOffline", "guide.loadOffline", "guide.checkFailed"]
+       .filter(k => !gpFail.includes(`uiT("${k}", uiLang)`)), []);
 
   // Same shape for the two files whose whole job is short reader-facing copy
   // and which hold no model prompt at all, so every dash in them is a dash a
@@ -40132,7 +40813,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // quietly stops honouring them.
   {
     const gp = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
-    ok("the guide page offers the change", /Change this stop/.test(gp));
+    ok("the guide page offers the change", /uiT\("guide\.changeStop", uiLang\)/.test(gp));
     ok("and renders the sheet", /<StopChangeSheet/.test(gp));
     ok("the swap goes through the constraint gate", /swapIsAllowed\(guide, next, constraints/.test(gp));
     ok("using the real mode detector", /modeOf: detectLegMode/.test(gp));
@@ -42977,7 +43658,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const gp = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
     ok("the guide page draws the block", /<CostsBlock guide=\{guide\} C=\{C\} rowFor=\{lookupRealPlace\} now=\{now\} \/>/.test(gp));
     ok("and no longer builds the list inline", !/byUrgency\(costLines\(/.test(gp));
-    ok("it sits in essentials, not in a day card", /Before you go[\s\S]{0,8000}<CostsBlock/.test(gp));
+    ok("it sits in essentials, not in a day card",
+       /uiT\("guide\.beforeYouGo", uiLang\)[\s\S]{0,8000}<CostsBlock/.test(gp));
   }
 }
 
@@ -43981,6 +44663,87 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       // Arrives a beat after the words, the way a person sends a picture after
       // saying something, and staggered so two read as two.
       ok("it animates in", /gx-shared-photo/.test(flat));
+
+      // ── AND IT SITS BESIDE THE SENTENCE THAT EARNED IT ───────────
+      //
+      // Oliver, 9 Sep 2026, with an arrow drawn at the empty space next to a
+      // reply about the National Museum: "you could put in a picture of the
+      // museum it is talking about. But only on that text right there. So it
+      // floats along with the text."
+      //
+      // The bubble is capped at 82% of the column, so that gutter is always
+      // there and was always empty. A picture under the reply pushes the next
+      // reply down; a picture beside it costs no height at all.
+      {
+        const railSrc = readFileSync(join(root, "src/utils/chatRail.js"), "utf8");
+        const appSrcB = readFileSync(join(root, "src/App.jsx"), "utf8");
+        ok("there is a class for the row", /export const BESIDE_ROW_CLASS = "chat-msg-row";/.test(railSrc));
+        ok("the bubble and its picture share a row above the breakpoint",
+           /@media \(min-width: \$\{RAIL_BREAKPOINT_PX\}px\)[\s\S]{0,900}?\.\$\{BESIDE_ROW_CLASS\} \{ flex-direction: row/.test(railSrc));
+        // Below it there is no gutter worth having, so it stacks exactly as it
+        // did before, which is what a phone gets.
+        ok("and stacks on a phone, as it did before",
+           /\.\$\{BESIDE_ROW_CLASS\} \{ display: flex; flex-direction: column;/.test(railSrc));
+        // ── AND IT DOES NOT PICK A SIDE ─────────────────────────────
+        //
+        // The message list already puts the traveller's own words on the right
+        // and Gemlyx's on the left. A wrapper that declares its own
+        // cross-axis alignment overrides that for every message, and the first
+        // draft of this row did: on a phone the reader's own question sat left,
+        // dressed as a reply. `inherit` keeps the side the list chose.
+        //
+        // The second way to break the same thing is a full width: a row as wide
+        // as the column has nothing left to align inside it, so a right-aligned
+        // bubble sits at the left edge of an invisible full-width box. A max is
+        // the cap without the claim. Both found by an adversarial review, 9 Sep.
+        ok("the stacked row takes its side from the list rather than choosing one",
+           /\.\$\{BESIDE_ROW_CLASS\} \{ display: flex; flex-direction: column; align-items: inherit;/.test(railSrc));
+        // Anchored on the STACKED declaration, because the rule above the
+        // breakpoint sets width: 100% on purpose: there it IS a row and the
+        // width is the point.
+        ok("and is capped rather than stretched to the full column",
+           /\.\$\{BESIDE_ROW_CLASS\} \{ display: flex; flex-direction: column;[^}]*max-width: 100%; \}/.test(railSrc)
+           && !/\.\$\{BESIDE_ROW_CLASS\} \{ display: flex; flex-direction: column;[^}]*[^-]width: 100%; \}/.test(railSrc));
+        // Never widens the row: basis 0 with a max, so it takes what the bubble
+        // left over and no more.
+        ok("the picture takes the leftover rather than making room",
+           /flex: 1 1 0; min-width: 0; max-width: \d+px/.test(railSrc));
+        ok("and the row is in the message markup", /className=\{BESIDE_ROW_CLASS\}/.test(appSrcB));
+      }
+
+      // ── TWO PICTURES, NOT THREE AND NOT A SLIDESHOW ──────────────
+      //
+      // He offered a slideshow on his way to bed: "instead of having multiple
+      // pictures if it talks about Legoland and Tivoli, you could make it into
+      // a slideshow. Whatever you find to be the best solution."
+      //
+      // It is the wrong answer for the reason this component already argued
+      // once, when a row of 124px cards became a shared picture: every image
+      // after the first would sit behind a control, and a picture nobody looks
+      // at has not appeared. Shrinking alone runs out too, because three at
+      // 62px is 330px of column beside a reply that is often 120px tall.
+      //
+      // So the answer is fewer. A third place is still named in the sentence
+      // and still gets a pin on the map; it loses a thumbnail it was going to
+      // lose to a dot either way.
+      {
+        const cardsB = readFileSync(join(root, "src/components/ChatPlaceCards.jsx"), "utf8");
+        ok("the cap is named once rather than typed in a slice",
+           /export const BESIDE_MAX = 2;/.test(cardsB) && /found\.slice\(0, BESIDE_MAX\)/.test(cardsB));
+        ok("and nothing hides a picture behind a control",
+           !/carousel|slideshow|currentSlide|activeSlide/i.test(stripComments(cardsB)));
+        const three = await rsr("src/components/ChatPlaceCards.jsx", "ChatPlaceCards",
+          { places: [place, { ...place, name: "Hammershus" }, { ...place, name: "Kronborg" }], C, layout: "row" });
+        const f3 = three.html.replace(/\s/g, "");
+        ok("a third place shows no third picture", !/Kronborg/.test(f3));
+        ok("while the first two do", /Hammershus/.test(f3));
+        // And two are smaller than one, which is the half of his instruction
+        // that survives: "the individual pictures will just become smaller".
+        ok("two are smaller than one", /height:88px/.test(f3));
+        const one = await rsr("src/components/ChatPlaceCards.jsx", "ChatPlaceCards",
+          { places: [place], C, layout: "row" });
+        ok("and one has the room", /height:132px/.test(one.html.replace(/\s/g, "")));
+      }
       const two = await rsr("src/components/ChatPlaceCards.jsx", "ChatPlaceCards",
         { places: [place, { ...place, name: "Hammershus", _src: "towns" }], C, layout: "row" });
       ok("and a second one lands after the first", /animation-delay:90ms/.test(two.html.replace(/\s/g, "")));
@@ -44737,7 +45500,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   const auth = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
   ok("which explains itself for this reason", /reason === "review"/.test(auth));
   ok("and says the report button needs nothing",
-     /Reporting something out of date needs nothing at all/.test(auth));
+     /uiT\("auth\.whyReview", lang\)/.test(auth)
+     && /Reporting something out of date needs nothing at all/.test(M.UI_STRINGS["auth.whyReview"].en));
   // REPORTING IS FOR EVERYBODY, which is the contrast the whole design rests on.
   ok("reporting is not gated", !/signedIn \? \(open === "outdated"/.test(fb));
 
@@ -46823,6 +47587,177 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // reported missing. Written down as a rule rather than left as a trap.
   is("every key added today is two segments",
      [...MENU_KEYS, ...CHROME_KEYS].filter(k => k.split(".").length !== 2), []);
+  // ── AND THE GUIDE PAGE, WHICH WAS ENGLISH UNDER A DANISH NAV ─────
+  //
+  // Oliver, 7 Sep 2026: "work on translating more of the website from English
+  // to Danish and German, rather than just the interface." The guide itself is
+  // WRITTEN in the reader's language, because the model is told to. Everything
+  // AROUND it was typed straight into the page, so a Dane pressed Udforsk,
+  // described a trip in Danish, read a plan in Danish, and met "Does this look
+  // right?" over the top of it, then Copy link, Before you go, Change this
+  // stop and Looks good, save my guide all the way down. That is the shape the
+  // menu fix on 6 Sep already named: half a translation reads worse than none,
+  // because it looks like the switch failed.
+  const GUIDE_KEYS = UI_KEYS.filter(k => k.startsWith("guide."));
+  ok("the guide page has a catalogue of its own", GUIDE_KEYS.length >= 45);
+  is("and every one of its keys is written in all three",
+     GUIDE_KEYS.filter(k => !["en", "da", "de"].every(c => String(UI_STRINGS[k]?.[c] || "").trim())), []);
+  is("and every one is two segments, as the rule above requires",
+     GUIDE_KEYS.filter(k => k.split(".").length !== 2), []);
+  // A column pasted from English is not a translation. One exemption, declared
+  // with the word that earns it and asserted to still BE that word, exactly as
+  // nav.tips is: Danish does not add an s to stop.
+  const GUIDE_SAME = { "guide.stop": ["da"], "guide.kroner": ["da"] };
+  const guideSameOk = (k, c) => (GUIDE_SAME[k] || []).includes(c);
+  is("and none of them is English wearing a Danish label",
+     GUIDE_KEYS.filter(k => UI_STRINGS[k].da === UI_STRINGS[k].en && !guideSameOk(k, "da")), []);
+  is("nor a German one", GUIDE_KEYS.filter(k => UI_STRINGS[k].de === UI_STRINGS[k].en), []);
+  is("the exempt cognate is the word it says it is", UI_STRINGS["guide.stop"].da, "stop");
+  // The currency's own name, which is Danish already. German gets the German
+  // spelling, so the exemption is Danish only and is asserted to still be one
+  // word rather than a hole the whole row could fall through.
+  is("and the currency is called what Danes call it", UI_STRINGS["guide.kroner"].da, "Kroner");
+  is("while German says it the German way", UI_STRINGS["guide.kroner"].de, "Kronen");
+  is("and its plural is the Danish one rather than the English", UI_STRINGS["guide.stops"].da, "stop");
+  // ── AND THE PAGE READS THEM ──────────────────────────────────────
+  //
+  // A catalogue nothing reads is this project's signature failure and it has
+  // shipped here before: exclusions.js opens with the audit that audited a
+  // field no writer filled. So both directions are checked. Every key is
+  // rendered, and the English sentences a reader used to meet are gone from
+  // the page rather than merely duplicated into the catalogue.
+  const guideSrc = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  is("every guide key is actually rendered from the catalogue",
+     GUIDE_KEYS.filter(k => !guideSrc.includes(`"${k}"`)), []);
+  const LEFT_BEHIND = ["Does this look right?", "Copy link", "Before you go", "Change this stop",
+                       "Back to Gemlyx", "Guide not found", "Same place, nothing to travel",
+                       "Check times on Rejseplanen", "Looks good, save my guide", "Where to stay: ",
+                       "Real forecast for this date", "A short walk",
+                       // The three footnotes under the map, which put a number in
+                       // the middle of a clause and were the last English left.
+                       "One stop is not on this map", "stops are not on this map",
+                       "One stop shares a pin", "One pin is approximate",
+                       "Everything here is priced in DKK"];
+  // Its own stripper rather than the one further up the file: that one is a
+  // const inside a block and this is a different block. Three of the comments
+  // in GuidePage quote the button they describe, which is what a comment is
+  // for and not a string any reader meets.
+  const guideCode = guideSrc.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+  is("and none of the English is still typed into the page",
+     LEFT_BEHIND.filter(x => guideCode.includes(`>${x}<`) || guideCode.includes(`"${x}"`)), []);
+  // ── AND THE SINGULAR SITS ON THE SINGULAR BRANCH ─────────────────
+  //
+  // Nine of these keys come in a one and a many, and BOTH are rendered whichever
+  // way round they are wired: "every key is rendered" passes with the pair
+  // swapped, and one stop is told it is several. A mutation proved that on
+  // 9 Sep 2026 and survived everything else in this block. So the wiring is
+  // asserted rather than the presence, per pair, in the shape the page uses.
+  //
+  // The count is the second half of the check: it is printed in front of the
+  // MANY form and never in front of the one, which is what makes "1 stops" and
+  // "One stop" two different bugs rather than one.
+  const PAIRS = [
+    ["shape.dayCount", "guide.day", "guide.days"],
+    ["shape.stopCount", "guide.stop", "guide.stops"],
+    ["shape.towns.length", "guide.town", "guide.towns"],
+    ["tripUnplaced.length", "guide.unplacedEndOne", "guide.unplacedEndMany"],
+    ["tripApprox.length", "guide.approxEndOne", "guide.approxEndMany"],
+  ];
+  is("every plural pair puts the singular on the singular branch",
+     PAIRS.filter(([n, one, many]) => !guideSrc.includes(`uiT(${n} === 1 ? "${one}" : "${many}", uiLang)`))
+       .map(([, one]) => one), []);
+  // The three footnotes are the same rule written over two lines, because the
+  // many form carries the count in front of it.
+  const COUNTED = [
+    ["tripUnplaced.length", "guide.unplacedOne", "guide.unplacedMany"],
+    ["tripCollapsed", "guide.sharedPinOne", "guide.sharedPinMany"],
+    ["tripApprox.length", "guide.approxOne", "guide.approxMany"],
+  ];
+  is("and the counted ones print the number in front of the many, not the one",
+     COUNTED.filter(([n, one, many]) => {
+       const q = n.replace(/\./g, "\\.");
+       return !new RegExp(`${q} === 1\\s*\\n\\s*\\? uiT\\("${one}", uiLang\\)\\s*\\n\\s*: \`\\$\\{${q}\\} \\$\\{uiT\\("${many}", uiLang\\)\\}\``).test(guideSrc);
+     }).map(([, one]) => one), []);
+
+  // The one that would otherwise pass silently: uiT has to be imported, or
+  // every call above is a ReferenceError the moment a reader opens a guide.
+  // ── AND THE SHEET THAT DECIDES WHETHER THEY GET AN ACCOUNT ───────
+  //
+  // 9 Sep 2026, the last screen a reader reaches by doing what the product asks
+  // of them: they described a trip in Danish, read a plan in Danish, pressed
+  // save, and the sheet that stands between them and an account opened in
+  // English. Of every untranslated surface left, this was the one where being
+  // in the wrong language costs something, because a sign-up form nobody can
+  // read is a sign-up that does not happen. His own report, 4 Sep: "I've had
+  // alot of complaints because people say they want a Danish version as well."
+  const AUTH_KEYS = UI_KEYS.filter(k => k.startsWith("auth."));
+  ok("the sheet has a catalogue of its own", AUTH_KEYS.length >= 50);
+  is("and every one of its keys is written in all three",
+     AUTH_KEYS.filter(k => !["en", "da", "de"].every(c => String(UI_STRINGS[k]?.[c] || "").trim())), []);
+  is("and every one is two segments", AUTH_KEYS.filter(k => k.split(".").length !== 2), []);
+  is("and none of them is English wearing a Danish label",
+     AUTH_KEYS.filter(k => UI_STRINGS[k].da === UI_STRINGS[k].en), []);
+  is("nor a German one", AUTH_KEYS.filter(k => UI_STRINGS[k].de === UI_STRINGS[k].en), []);
+  const authSrc = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
+  is("every auth key is rendered by the sheet", AUTH_KEYS.filter(k => !authSrc.includes(`"${k}"`)), []);
+  ok("and the sheet imports the reader",
+     /import \{ t as uiT, DEFAULT_UI_LANGUAGE \} from "\.\.\/utils\/uiLanguage";/.test(authSrc));
+  // A default of English rather than "", so a caller that passes nothing gets
+  // the screen it got before instead of a sheet full of blanks.
+  ok("and defaults to English when nobody passes one",
+     /lang = DEFAULT_UI_LANGUAGE \}\) => \{/.test(authSrc));
+  // And the app hands it the reader's language, or the default above is the
+  // only thing anybody ever sees, which is this repo's signature failure.
+  ok("and the app passes the reader's language into it",
+     /<AuthSheet[\s\S]{0,200}?lang=\{uiLang\}/.test(appMenu));
+  // The count sits in front of the phrase, so both halves are written out and
+  // the singular is on the singular branch. Same rule as the guide counters,
+  // and a mutation walked through the first version of that one.
+  ok("the saved-count line puts the singular on the singular branch",
+     /uiT\(localSaveCount === 1 \? "auth\.savedOne" : "auth\.savedMany", lang\)/.test(authSrc));
+  // ── AND NONE OF THE ENGLISH IS STILL TYPED INTO IT ───────────────
+  const authCode = authSrc.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+  const AUTH_LEFT = ["Sign in to keep it", "Create an account", "Check your email", "Forgot password",
+                     "New User? Sign up here!", "I already have one", "Confirm password", "Type it again",
+                     "Terms of Service", "Privacy Policy", "Wrong address? Go back", "Send it again"];
+  is("and none of the English is still typed into the sheet",
+     AUTH_LEFT.filter(x => authCode.includes(`>${x}<`) || authCode.includes(`"${x}"`)), []);
+  // Supabase's own error text is NOT in this catalogue and cannot be: it comes
+  // back from their API in English. Written down so the gap is a known one
+  // rather than something the next pass reports as a miss.
+  ok("the sheet still shows what the server said, whatever language it is in",
+     /setError\(String\(e\.message \|\| e\)\)/.test(authSrc));
+
+  // ── AND NO SURFACE ASKS FOR A KEY THAT IS NOT THERE ──────────────
+  //
+  // t() returns "" for a key the catalogue does not hold, which is the right
+  // fallback and a silent one: a typo in a key name does not throw and does not
+  // render the key, it renders NOTHING where a label was. On a page of 54 of
+  // them that is invisible by eye and free to check. Every surface that reads
+  // the catalogue is scanned, not only the one added tonight.
+  {
+    const READERS = ["src/pages/GuidePage.jsx", "src/App.jsx", "src/components/TourLine.jsx",
+                     "src/components/DetailPage.jsx", "src/components/AtAGlanceCard.jsx",
+                     "src/components/AuthSheet.jsx"];
+    const unknown = [];
+    let asked = 0;
+    for (const rel of READERS) {
+      const src = readFileSync(join(root, rel), "utf8");
+      for (const m of src.matchAll(/uiT\("([A-Za-z.]+)"/g)) {
+        asked += 1;
+        if (!UI_STRINGS[m[1]]) unknown.push(`${rel}: ${m[1]}`);
+      }
+    }
+    is("no surface asks the catalogue for a key it does not hold", unknown, []);
+    // And the scan found something to scan. A regex that matches nothing passes
+    // this the same way a correct one does, which is the failure shape this
+    // repo keeps meeting.
+    ok("and there was something to ask about", asked > 60);
+  }
+
+  ok("and the page imports the reader",
+     /import \{ currentUiLanguage, isUiLanguage, t as uiT \} from "\.\.\/utils\/uiLanguage";/.test(guideSrc));
+
   is("and German does translate it", UI_STRINGS["nav.tips"].de, "Tipps");
   // A product name is a proper noun. readerLanguage.js has the rule for
   // Nørreport and it is the same rule: a word somebody matches against a screen
@@ -46925,6 +47860,27 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // reason this table holds only labels.
     is("a Danish place name is not a phrase to translate", entryWord("Ribe Station", "da"), "Ribe Station");
     is("nor is a measured figure", entryWord("14min 🚌 from Aalborg", "da"), "14min 🚌 from Aalborg");
+
+    // ── AND THE ONE LABEL THAT IS NOT A GLANCE ROW ────────────────
+    //
+    // The four popularity tags sit in this table with Danish and German beside
+    // them and have since it was built, and until 9 Sep 2026 nothing read them.
+    // The badge on an event and on a town printed tierStyle.label straight, so
+    // a Dane met "Can't Miss Out" in gold letters above prose that was
+    // otherwise entirely Danish. The table was right, complete, and unread.
+    //
+    // The assertion above could not see it, and the reason is worth stating:
+    // it checks the labels DetailPage builds INTO GLANCE ROWS, and this one is
+    // a badge. Every glance row goes through AtAGlanceCard, which translates
+    // them all in one place. A badge has no such place.
+    ok("the popularity badge translates its label too",
+       /\{tierStyle\.icon\} \{entryWord\(tierStyle\.label, lang\)\}/.test(detailSrc));
+    is("so a Danish reader is told not to miss it", entryWord("Can't Miss Out", "da"), "Må ikke misses");
+    is("and a German one the same", entryWord("Can't Miss Out", "de"), "Nicht verpassen");
+    // The branch above it hands an unrecognised item.tier through verbatim,
+    // deliberately, and entryWord returns anything it does not hold unchanged.
+    // So a tier nobody has translated still shows rather than going blank.
+    is("while a tier nobody translated still shows", entryWord("Worth A Detour", "da"), "Worth A Detour");
 
     // ── WIRED, AT THE ONE PLACE THAT RENDERS THEM ALL ──────────────
     const glanceSrc = readFileSync(join(root, "src/components/AtAGlanceCard.jsx"), "utf8");
@@ -49874,6 +50830,127 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // ── THE PANEL: COUNT, THEN SPEND, THEN WRITE ────────────────────
   {
     const appS = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    // ── AND THE TOUR SWEEP BESIDE IT ─────────────────────────────
+    //
+    // Oliver, 9 Sep 2026: "So that will be a sweep that suggests getyourguide
+    // affiliates?" Same four steps and the same reason for the split: counting
+    // is free and searching is not, so the price is on screen before the button
+    // that pays it.
+    {
+      ok("the tour panel exists", /Towns that could have an activity/.test(appS));
+      ok("counting is its own press", /onClick=\{planTourSweep\}/.test(appS));
+      ok("spending is another", /onClick=\{runTourSweep\}/.test(appS));
+      ok("and writing is a third", /onClick=\{applyTourSweep\}/.test(appS));
+      // The check is a fourth and it costs nothing, so it is not behind the
+      // paid button and says so on screen.
+      ok("checking is a fourth", /onClick=\{checkTourLinks\}/.test(appS));
+      ok("and it is not sold as a cost", /Free, so run it whenever/.test(appS));
+
+      const tPlan = appS.slice(appS.indexOf("const planTourSweep = async () => {"),
+                               appS.indexOf("const runTourSweep = async () => {"));
+      ok("the counter is findable", tPlan.length > 200);
+      // The half that makes "counting is free" true.
+      ok("counting buys nothing",
+         !/\/api\/search|askPerplexity|askClaude|askOpenAI|firecrawl/i.test(tPlan));
+      ok("and it reads the published rows rather than the merged ones",
+         /readPublishedRows\(\)/.test(tPlan));
+      ok("and it is the sweep module that decides who is a candidate",
+         /tourCandidates\(got\.rows/.test(tPlan));
+
+      const tRun = appS.slice(appS.indexOf("const runTourSweep = async () => {"),
+                              appS.indexOf("const swapTourPick = "));
+      ok("the paid half asks once per town", (tRun.match(/\/api\/search/g) || []).length === 1);
+      ok("and counts a failure rather than swallowing it", /failed \+= 1/.test(tRun));
+      ok("and hands the answer to the module rather than judging it here",
+         /tourProposal\(row, results, \{ today: new Date\(\), failed \}\)/.test(tRun));
+
+      // ── THE WRITE INCLUDES THE NOES ────────────────────────────
+      // A town where GetYourGuide had nothing is written with the stamp and
+      // nothing else, and that stamp is the whole reason the next run is cheap.
+      const tApply = appS.slice(appS.indexOf("const applyTourSweep = async () => {"),
+                                appS.indexOf("const checkTourLinks = async () => {"));
+      ok("a town told no is stamped so the next run is cheap",
+         /verdict !== TOUR_FOUND && p\.set/.test(tApply));
+      // p.set is the gate rather than the verdict name, because a FAILED
+      // proposal is built without one and could not be written by accident.
+      ok("and a town whose search failed is not stamped as a no",
+         /p\.set/.test(tApply) && !/verdict === TOUR_FAILED/.test(tApply));
+
+      // ── REPLACE, WHICH HE ASKED FOR BY NAME ────────────────────
+      ok("a suggestion can be swapped for a runner-up", /onClick=\{\(\) => swapTourPick\(pr\.id, o\.url\)\}/.test(appS));
+      ok("or for one he pastes", /Paste a GetYourGuide activity link/.test(appS));
+      ok("and both go through the one function that checks it",
+         /replaceTour\(p, url\)/.test(appS));
+      // ── AND A REFUSED ONE CHANGES NOTHING ──────────────────────
+      //
+      // It ticked the row whatever happened, so pasting a city page onto a row
+      // he had deliberately unticked printed the refusal AND armed the original
+      // suggestion for writing: the message said no and the panel said yes.
+      // Found by an adversarial review, 9 Sep 2026. A refusal has to leave the
+      // row exactly as it found it, which means the tick sits behind the same
+      // flag the error does, and sits there once.
+      const tSwap = appS.slice(appS.indexOf("const swapTourPick = (id, url) => {"),
+                               appS.indexOf("const applyTourSweep = async () => {"));
+      ok("a refused paste does not arm the row it was refused on",
+         /let took = false;[\s\S]*?if \(!next\.replaceError\) took = true;[\s\S]*?if \(took\) \{\s*\n\s*setTourChosen\(c => new Set\(\[\.\.\.c, id\]\)\);/.test(tSwap));
+      is("and the row is ticked in exactly one place", (tSwap.match(/setTourChosen\(/g) || []).length, 1);
+
+      // ── AND THE LIVENESS CHECK ─────────────────────────────────
+      const tCheck = appS.slice(appS.indexOf("const checkTourLinks = async () => {"),
+                                appS.indexOf("const clearDeadTours = async () => {"));
+      ok("the check costs no search credits", !/\/api\/search/.test(tCheck));
+      ok("and asks the endpoint built for it", /\/api\/link-alive\?url=/.test(tCheck));
+      ok("and the verdict is the module's, not this file's", /tourAliveVerdict\(answer\)/.test(tCheck));
+      // A network failure is not a death. Writing "could not ask" down as
+      // "it is gone" would delete a working link.
+      ok("a link that could not be checked is not cleared",
+         /tourRemovalFor\(row, v\.verdict\)/.test(tCheck));
+
+      // ── AND THE ENDPOINT IS NOT AN OPEN PROXY ──────────────────
+      //
+      // apiGuard.js opens on an audit: of fourteen functions, exactly one
+      // checked anything. A fifteenth that makes the server fetch any address
+      // and reports the status back is the shape of a server-side request
+      // forgery, so it gets both halves and an allow-list of hosts.
+      const alive = readFileSync(join(root, "api/link-alive.js"), "utf8");
+      ok("the check endpoint requires the request to come from the site",
+         /requestIsFromSite\(req\.headers\)/.test(alive));
+      ok("and a founder session", /isFounder\(who\.userId/.test(alive));
+      // ASSERTED AS THE GUARD, not as the presence of a list. A mutation that
+      // left the list in place and replaced the check with `if (false)`
+      // survived the first version of this, which is the whole difference
+      // between a list and a rule.
+      ok("and it will only fetch hosts we hold a programme with",
+         /const ALLOWED = \[/.test(alive) && /getyourguide\.com/.test(alive));
+      ok("and the list is actually applied to the host",
+         /if \(!host \|\| !ALLOWED\.some\(d => host === d \|\| host\.endsWith\(`\.\$\{d\}`\)\)\)/.test(alive));
+      ok("and it refuses anything else", /That host is not one this check covers/.test(alive));
+      // ── AND WHERE THE REDIRECT LANDED, WHICH THE LIST DID NOT COVER ─
+      //
+      // The fetch follows redirects, so an allow-list on the host we ASKED
+      // about says nothing about the host we arrived at: an open redirect on a
+      // partner's own domain would have had this server fetch anywhere at all
+      // and report the result, which is the forgery the list exists to stop,
+      // arrived at the long way round. Found by an adversarial review, 9 Sep
+      // 2026. An off-site landing is reported as NO landing, which
+      // tourAliveVerdict already reads as knowing nothing.
+      ok("and the host it landed on is checked as well as the one it asked for",
+         /if \(landed && !ALLOWED\.some\(d => landed === d \|\| landed\.endsWith\(`\.\$\{d\}`\)\)\)/.test(alive));
+      ok("and an off-site landing is reported as no landing at all",
+         /finalUrl: "", offSite: landed/.test(alive));
+      // The refusal has to be reachable: a guard whose body is a return is only
+      // a guard if something can enter it.
+      ok("and the refusal returns rather than falling through",
+         /That host is not one this check covers[\s\S]{0,40}\}\);/.test(alive));
+      // The judgement is not in the network call. "200 and a redirect to the
+      // city page" is how a marketplace retires a listing, and telling that
+      // from a live page is a rule with a reason attached.
+      ok("the endpoint reports and does not judge",
+         !/alive|gone|withdrawn/i.test(stripComments(alive).replace(/GemlyxLinkCheck/g, "")));
+      ok("and it follows redirects, which is the whole question",
+         /redirect: "follow"/.test(alive));
+    }
+
     ok("the panel exists", /Rows that could be earning/.test(appS));
     // TWO PRESSES. Every other sweep in this column is free and one button is
     // honest about that. This one spends two searches a row.

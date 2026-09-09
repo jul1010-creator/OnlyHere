@@ -8,7 +8,7 @@ import { languageBlock } from "../utils/readerLanguage";
 // complaint lives: "Danish prose with English weather blocks, English ticket
 // blocks and English leg lines." This page is ROUTED rather than rendered by
 // App.jsx, so it reads the stored choice itself instead of being handed it.
-import { currentUiLanguage, isUiLanguage } from "../utils/uiLanguage";
+import { currentUiLanguage, isUiLanguage, t as uiT } from "../utils/uiLanguage";
 // ── AND THE GUIDE'S OWN WORDS FOLLOW THE GUIDE'S OWN LANGUAGE ───────
 // Not the picker. The picker says what language the SITE is in; a guide was
 // written in whatever language the traveller wrote their brief in, and it now
@@ -23,7 +23,9 @@ import { GemlyxLoader, GemlyxMark } from "../components/GemlyxLogo";
 import { TypewriterText } from "../components/TypewriterText";
 import { DetailPage } from "../components/DetailPage";
 import { GuideRouteMap } from "../components/GuideRouteMap";
+import { TourLine } from "../components/TourLine";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
+import { guideTours } from "../utils/tourSweep";
 import { previewPools } from "../utils/previewMatch";
 import { placedLibrary, nearbyPublished, describeLocation } from "../utils/nearbyPlaces";
 import { stopCard } from "../utils/mapStops";
@@ -382,9 +384,9 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
       const query = `${item.name} ${item.location || item.town || ""} Instagram Facebook official page latest update opening hours events 2026`;
       const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
       const data = await res.json();
-      setLiveInfo(prev => ({ ...prev, [item.name]: data.answer || (data.results?.[0]?.snippet) || "No current updates found." }));
+      setLiveInfo(prev => ({ ...prev, [item.name]: data.answer || (data.results?.[0]?.snippet) || uiT("guide.noUpdates", uiLang) }));
     } catch {
-      setLiveInfo(prev => ({ ...prev, [item.name]: "Couldn't check right now. Try again in a moment." }));
+      setLiveInfo(prev => ({ ...prev, [item.name]: uiT("guide.checkFailed", uiLang) }));
     }
     setLiveInfoLoading(null);
   };
@@ -442,10 +444,10 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
     })
       .then(r => r.json())
       .then(rows => {
-        if (!rows?.[0]?.payload) { setLoadError("This guide link doesn't exist or was removed."); return; }
+        if (!rows?.[0]?.payload) { setLoadError(uiT("guide.linkGone", uiLang)); return; }
         setGuide(rows[0].payload);
       })
-      .catch(() => setLoadError("Couldn't load this guide. Check your connection and try again."))
+      .catch(() => setLoadError(uiT("guide.loadOffline", uiLang)))
       .finally(() => setLoading(false));
   }, [guideId, freshGuide]);
 
@@ -480,7 +482,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
         // other half of it, on the pipeline he cares about most.
         body: JSON.stringify({ id, payload: (({ _testProfile, _testPlan, _planProblems, ...rest }) => rest)(guide) }),
       });
-      if (!res.ok) { setSaveError("Couldn't save this guide. Try again."); setSaving(false); return; }
+      if (!res.ok) { setSaveError(uiT("guide.saveFailed", uiLang)); setSaving(false); return; }
       // Also bookmark it into the same "gemlyx_saved_guides" localStorage list
       // Home's "Your Saved Guides" quick list reads — this is what used to happen
       // from the old popup's own separate "Save Guide" button, now this page's
@@ -499,7 +501,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
       // not whenever they think to look for a button.
       navigate(`/guide/${id}`, { replace: true, state: { guide, justSaved: true } });
     } catch {
-      setSaveError("Couldn't save this guide. Check your connection and try again.");
+      setSaveError(uiT("guide.saveOffline", uiLang));
     }
     setSaving(false);
   };
@@ -538,10 +540,10 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
     setChatInput("");
     setChatLoading(true);
     const convoText = nextMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
-    const stopList = (guide.days || []).map(d => `Day ${d.day || ""}: ${d.title || ""} — ${(d.stops || []).map(s => s.name).join(", ") || "no stops yet"}`).join("\n");
-    const prompt = `You are Gemlyx's Local Assist, continuing to help with a Denmark trip after the itinerary below was already built. Answer naturally and conversationally, like a knowledgeable local friend giving real advice — never claim to have personally visited a place. You're a genuinely happy, upbeat guy who loves helping; a fitting emoji or two per reply is welcome where it adds warmth, never a wall of them. Never use em dashes or en dashes anywhere in your reply. Keep answers focused and reasonably short unless the question genuinely needs more detail. If asked to change the itinerary itself, explain what you'd change in words — you can't directly edit this saved guide from here, so tell them to describe the change back on the main planning chat to rebuild it.\n\nTHE TRIP ALREADY BUILT:\nTitle: ${guide.title || "Untitled trip"}\n${stopList}${guide.essentials ? `\nBudget: ${guide.essentials.budgetReality || ""}\nGetting around: ${guide.essentials.transportTip || ""}\nKeep in mind: ${guide.essentials.keepInMind || ""}` : ""}\n\nCONVERSATION SO FAR:\n${convoText}\n\nRespond to the traveler's last message.${languageBlock()}`;
+    const stopList = (guide.days || []).map(d => `Day ${d.day || ""}: ${d.title || ""}. Stops: ${(d.stops || []).map(s => s.name).join(", ") || "no stops yet"}`).join("\n");
+    const prompt = `You are Gemlyx's Local Assist, continuing to help with a Denmark trip after the itinerary below was already built. Answer naturally and conversationally, like a knowledgeable local friend giving real advice. Never claim to have personally visited a place. You're a happy, upbeat guy who loves helping; a fitting emoji or two per reply is welcome where it adds warmth, never a wall of them. Never use em dashes or en dashes anywhere in your reply. Keep answers focused and reasonably short unless the question needs more detail. If asked to change the itinerary itself, explain what you'd change in words, since you can't directly edit this saved guide from here, so tell them to describe the change back on the main planning chat to rebuild it.\n\nTHE TRIP ALREADY BUILT:\nTitle: ${guide.title || "Untitled trip"}\n${stopList}${guide.essentials ? `\nBudget: ${guide.essentials.budgetReality || ""}\nGetting around: ${guide.essentials.transportTip || ""}\nKeep in mind: ${guide.essentials.keepInMind || ""}` : ""}\n\nCONVERSATION SO FAR:\n${convoText}\n\nRespond to the traveler's last message.${languageBlock()}`;
     const result = await askClaude(prompt, 500);
-    setChatMessages(prev => [...prev, { role: "assistant", text: result.error ? "Sorry, I couldn't get an answer just now, try again in a moment." : result.text }]);
+    setChatMessages(prev => [...prev, { role: "assistant", text: result.error ? uiT("guide.chatFailed", uiLang) : result.text }]);
     setChatLoading(false);
   };
 
@@ -563,6 +565,19 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   const [mapPin, setMapPin] = useState(null);
   const [libraryTick, setLibraryTick] = useState(0);
   useEffect(() => { ensureLiveContentLoaded().then(() => setLibraryTick(t => t + 1)).catch(() => {}); }, []);
+  // ── ONE PARTNER ACTIVITY PER TOWN, WHERE THE TOWN IS ────────────────
+  //
+  // Oliver, 9 Sep 2026: "If they're sent to Roskilde, then a GetYourGuide
+  // activity could be recommended." It reads the field the sweep already
+  // filled, so this searches nothing and costs nothing, and it reads the
+  // traveller's OWN exclusions out of the guide: see guideTours in
+  // utils/tourSweep.js for why a paid line needs that gate when a town tab
+  // does not. libraryTick is read here for the same reason mapLibrary reads
+  // it: the towns array is empty until the published rows land.
+  const dayTours = useMemo(
+    () => guideTours(guide?.days, { rows: towns, excluded: guide?._constraints?.excluded || [] }),
+    [guide, libraryTick],
+  );
   const mapLibrary = useMemo(
     () => placedLibrary(previewPools({
       towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
@@ -655,9 +670,9 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   if (loadError || !guide) {
     return (
       <div style={{ minHeight: "100vh", background: C.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center" }}>
-        <div style={{ fontSize: 16, color: C.text, fontWeight: 700, marginBottom: 8, fontFamily: "'Fraunces', serif" }}>Guide not found</div>
-        <div style={{ fontSize: 13, color: C.muted, marginBottom: 20 }}>{loadError || "Something went wrong loading this guide."}</div>
-        <button onClick={() => navigate("/")} style={{ background: C.accent, color: "#fff", border: "none", borderRadius: 100, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Back to Gemlyx</button>
+        <div style={{ fontSize: 16, color: C.text, fontWeight: 700, marginBottom: 8, fontFamily: "'Fraunces', serif" }}>{uiT("guide.notFound", uiLang)}</div>
+        <div style={{ fontSize: 13, color: C.muted, marginBottom: 20 }}>{loadError || uiT("guide.loadFailed", uiLang)}</div>
+        <button onClick={() => navigate("/")} style={{ background: C.accent, color: "#fff", border: "none", borderRadius: 100, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{uiT("guide.back", uiLang)}</button>
       </div>
     );
   }
@@ -868,7 +883,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
         <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}>
           <div style={{ maxWidth: 960, margin: "0 auto", padding: "18px 16px 20px" }}>
             <div style={{ fontSize: 14.5, fontWeight: 700, color: C.text, marginBottom: 3 }}>
-              {justSaved ? "Saved. This link is your guide." : "Send this to whoever you're travelling with."}
+              {justSaved ? uiT("guide.saved", uiLang) : uiT("guide.sendIt", uiLang)}
             </div>
             <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6, marginBottom: 13, maxWidth: 520 }}>
               Anyone with the link can open it, on any device. Nobody needs an account, and it does not expire.
@@ -883,7 +898,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 style={{ flex: "1 1 260px", minWidth: 0, background: C.bg, border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "10px 16px", fontSize: 12.5, fontFamily: "'Inter', sans-serif" }} />
               <button onClick={copyLink}
                 style={{ background: copied === "done" ? C.gold : "none", border: `1px solid ${copied === "done" ? C.gold : C.border}`, color: copied === "done" ? C.onGold : C.light, borderRadius: 100, padding: "10px 18px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
-                {copied === "done" ? "✓ Copied" : "Copy link"}
+                {copied === "done" ? uiT("guide.copied", uiLang) : uiT("guide.copyLink", uiLang)}
               </button>
               {canSend && (
                 <button onClick={sendLink}
@@ -993,7 +1008,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.92) 0%, rgba(10,15,30,0.45) 45%, rgba(10,15,30,0.15) 100%)" }} />
             <div style={{ position: "absolute", left: 18, right: 18, bottom: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>✦ Your Gemlyx guide</div>
-              <div style={{ fontSize: 34, fontWeight: 500, fontFamily: "'Fraunces', serif", color: "#fff", lineHeight: 1.1, maxWidth: 680, textShadow: "0 2px 18px rgba(0,0,0,0.55)" }}>{guide.title || "Your Denmark Guide"}</div>
+              <div style={{ fontSize: 34, fontWeight: 500, fontFamily: "'Fraunces', serif", color: "#fff", lineHeight: 1.1, maxWidth: 680, textShadow: "0 2px 18px rgba(0,0,0,0.55)" }}>{guide.title || uiT("guide.fallbackTitle", uiLang)}</div>
               {/* Said out loud. An unlabelled photograph on a page about where to
                   go is a decoration; a labelled one is information. */}
               {heroCaption(hero) && (
@@ -1013,7 +1028,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
         {!hero?.photo && (
           <>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 10 }}>✦ Your Gemlyx guide</div>
-            <div style={{ fontSize: 36, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: lightMode ? 10 : 24, maxWidth: 680 }}>{guide.title || "Your Denmark Guide"}</div>
+            <div style={{ fontSize: 36, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: lightMode ? 10 : 24, maxWidth: 680 }}>{guide.title || uiT("guide.fallbackTitle", uiLang)}</div>
           </>
         )}
         {/* So the absence of maps/routes reads as the choice it was, not a bug. */}
@@ -1049,11 +1064,11 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
         {shape.stopCount > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 18, maxWidth: 640 }}>
             {[
-              { n: shape.dayCount, label: shape.dayCount === 1 ? "day" : "days" },
-              { n: shape.stopCount, label: shape.stopCount === 1 ? "stop" : "stops" },
-              shape.towns.length ? { n: shape.towns.length, label: shape.towns.length === 1 ? "town" : "towns" } : null,
-              shape.km ? { n: shape.km, label: "km of travel", sub: true } : null,
-              shape.minutes ? { n: humanMinutes(shape.minutes), label: "moving in total", sub: true } : null,
+              { n: shape.dayCount, label: uiT(shape.dayCount === 1 ? "guide.day" : "guide.days", uiLang) },
+              { n: shape.stopCount, label: uiT(shape.stopCount === 1 ? "guide.stop" : "guide.stops", uiLang) },
+              shape.towns.length ? { n: shape.towns.length, label: uiT(shape.towns.length === 1 ? "guide.town" : "guide.towns", uiLang) } : null,
+              shape.km ? { n: shape.km, label: uiT("guide.kmTravel", uiLang), sub: true } : null,
+              shape.minutes ? { n: humanMinutes(shape.minutes), label: uiT("guide.movingTotal", uiLang), sub: true } : null,
             ].filter(Boolean).map((s2, i) => (
               <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "9px 14px", minWidth: 76 }}>
                 <div style={{ fontSize: 20, fontWeight: 600, fontFamily: "'Fraunces', serif", color: s2.sub ? C.light : C.gold, lineHeight: 1.1 }}>{s2.n}</div>
@@ -1064,7 +1079,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
         )}
         {shape.towns.length > 1 && (
           <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.7, marginBottom: shape.longest ? 8 : 24, maxWidth: 640 }}>
-            <span style={{ color: C.muted, fontWeight: 700 }}>Your route: </span>{shape.towns.join(" → ")}
+            <span style={{ color: C.muted, fontWeight: 700 }}>{uiT("guide.yourRoute", uiLang)} </span>{shape.towns.join(" → ")}
           </div>
         )}
         {/* His words, on why the transport has to stay visible: "people coming
@@ -1074,7 +1089,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             chip halfway down. */}
         {shape.longest && (
           <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.7, marginBottom: 24, maxWidth: 640 }}>
-            <span style={{ color: C.muted, fontWeight: 700 }}>Longest single journey: </span>
+            <span style={{ color: C.muted, fontWeight: 700 }}>{uiT("guide.longestLeg", uiLang)} </span>
             {shape.longest.text}, {shape.longest.from} to {shape.longest.to}
           </div>
         )}
@@ -1132,7 +1147,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                     </div>
                     <button
                       onClick={() => setMapPin(null)}
-                      aria-label="Close this pin"
+                      aria-label={uiT("guide.closePin", uiLang)}
                       style={{ background: "transparent", border: 0, color: C.muted, fontSize: 15, lineHeight: 1, cursor: "pointer", padding: 2 }}
                     >×</button>
                   </div>
@@ -1162,17 +1177,23 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 had, which is how a route naming three towns drew two. */}
             {tripUnplaced.length > 0 && (
               <div style={{ fontSize: 11, color: "#FFB347", marginTop: 5, lineHeight: 1.55 }}>
-                {tripUnplaced.length === 1 ? "One stop is not on this map" : `${tripUnplaced.length} stops are not on this map`}, because we could not place {tripUnplaced.length === 1 ? "it" : "them"} on a coordinate: {tripUnplaced.join(", ")}. {tripUnplaced.length === 1 ? "It is" : "They are"} still in the day-by-day below.
+                {tripUnplaced.length === 1
+                  ? uiT("guide.unplacedOne", uiLang)
+                  : `${tripUnplaced.length} ${uiT("guide.unplacedMany", uiLang)}`} {tripUnplaced.join(", ")}. {uiT(tripUnplaced.length === 1 ? "guide.unplacedEndOne" : "guide.unplacedEndMany", uiLang)}
               </div>
             )}
             {tripCollapsed > 0 && (
               <div style={{ fontSize: 11, color: C.muted, marginTop: 5, lineHeight: 1.5 }}>
-                {tripCollapsed === 1 ? "One stop shares a pin" : `${tripCollapsed} stops share a pin`} with the stop before it, because they are the same place. That is why the highest number here is lower than the number of stops.
+                {tripCollapsed === 1
+                  ? uiT("guide.sharedPinOne", uiLang)
+                  : `${tripCollapsed} ${uiT("guide.sharedPinMany", uiLang)}`}
               </div>
             )}
             {tripApprox.length > 0 && (
               <div style={{ fontSize: 11, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
-                {tripApprox.length === 1 ? "One pin is approximate" : `${tripApprox.length} pins are approximate`}: {tripApprox.join(", ")}. We could not place {tripApprox.length === 1 ? "it" : "them"} exactly, so {tripApprox.length === 1 ? "it sits" : "they sit"} at the middle of the town rather than at the door. The dashed outline on the map marks {tripApprox.length === 1 ? "it" : "them"}.
+                {tripApprox.length === 1
+                  ? uiT("guide.approxOne", uiLang)
+                  : `${tripApprox.length} ${uiT("guide.approxMany", uiLang)}`} {tripApprox.join(", ")}. {uiT(tripApprox.length === 1 ? "guide.approxEndOne" : "guide.approxEndMany", uiLang)}
               </div>
             )}
           </div>
@@ -1189,7 +1210,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
           if (actions.length === 0) return null;
           return (
             <div style={{ background: `${C.accent}12`, border: `1px solid ${C.accent}44`, borderRadius: 16, padding: "16px 18px", marginBottom: 26, maxWidth: 640 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 10 }}>Book before you go</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 10 }}>{uiT("guide.bookAhead", uiLang)}</div>
               {actions.map((a, i) => (
                 <div key={i} style={{ display: "flex", gap: 10, alignItems: "baseline", marginBottom: i === actions.length - 1 ? 0 : 9 }}>
                   <span style={{ color: C.accent, fontSize: 12 }}>◆</span>
@@ -1204,7 +1225,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
 
         {guide.essentials && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 18px", marginBottom: 30, maxWidth: 640 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 10 }}>Before you go</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 10 }}>{uiT("guide.beforeYouGo", uiLang)}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {/* ── WHAT A HUNDRED KRONER IS WORTH, ONCE ──────────
                   Oliver, 21 Aug 2026: "In the create an account, ask what
@@ -1226,15 +1247,15 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                   no rate line is still completely correct. */}
               {guide._fx?.amount > 0 && (
                 <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>Kroner</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>{uiT("guide.kroner", uiLang)}</span>
                   <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>
-                    Everything here is priced in DKK, which is what you will actually be charged. {guide._fx.baseAmount} DKK was about {guide._fx.amount} {guide._fx.to}{guide._fx.on ? ` on ${guide._fx.on}` : ""}, so rates will have moved a little by the time you travel.
+                    {uiT("guide.pricedInDkk", uiLang)} {guide._fx.baseAmount} DKK {uiT("guide.wasAbout", uiLang)} {guide._fx.amount} {guide._fx.to}{guide._fx.on ? ` ${uiT("guide.onDate", uiLang)} ${guide._fx.on}` : ""}, {uiT("guide.ratesMoved", uiLang)}
                   </span>
                 </div>
               )}
-              {[["Money", guide.essentials.budgetReality], ["Getting around", guide.essentials.transportTip], ["Keep in mind", guide.essentials.keepInMind], ["Weather", guide.essentials.weatherNote]].filter(([, v]) => v).map(([label, v]) => (
+              {[["guide.money", guide.essentials.budgetReality], ["guide.gettingAround", guide.essentials.transportTip], ["guide.keepInMind", guide.essentials.keepInMind], ["guide.weather", guide.essentials.weatherNote]].filter(([, v]) => v).map(([label, v]) => (
                 <div key={label} style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>{label}</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>{uiT(label, uiLang)}</span>
                   <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>{v}</span>
                 </div>
               ))}
@@ -1255,8 +1276,8 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
 
         {isUnsaved && (
           <div style={{ background: `${C.gold}14`, border: `1px solid ${C.gold}55`, borderRadius: 14, padding: "14px 16px", marginBottom: 24, maxWidth: 640 }}>
-            <div style={{ fontSize: 13.5, color: C.text, fontWeight: 700, marginBottom: 4 }}>Does this look right?</div>
-            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>Here's everything your guide will include. Take a look, then save it to get your own link.</div>
+            <div style={{ fontSize: 13.5, color: C.text, fontWeight: 700, marginBottom: 4 }}>{uiT("guide.previewTitle", uiLang)}</div>
+            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>{uiT("guide.previewSub", uiLang)}</div>
           </div>
         )}
 
@@ -1319,7 +1340,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             take the walking day or the museum day. */}
         {weatherMoved.length > 0 && (
           <div style={{ background: C.surface, border: "1px solid #FFB34766", borderRadius: 12, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: C.text, lineHeight: 1.6 }}>
-            <b style={{ color: "#FFB347" }}>The forecast moved since you saved this.</b> {weatherMoved.join(". ")}.
+            <b style={{ color: "#FFB347" }}>{uiT("guide.forecastMoved", uiLang)}</b> {weatherMoved.join(". ")}.
           </div>
         )}
         {days.map((day, dayIdx) => {
@@ -1427,7 +1448,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             if (isSameSpot(originName, destName, geo, stopTownOf(originName), (day.stops || []).find(s => s.name === destName)?.town)) {
               return (
                 <div style={{ display: "flex", justifyContent: "center", padding: "2px 0 6px" }}>
-                  <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Same place, nothing to travel</span>
+                  <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>{uiT("guide.samePlace", uiLang)}</span>
                 </div>
               );
             }
@@ -1472,7 +1493,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             // turned into a confident "~1 min" for legs that were really 30:
             // the exact bug Oliver has now reported four times.
             const km = legDistanceKm(originName, destName, geo, legOriginTown, legDestTown);
-            const modeLabel = usedMode === "bicycling" ? "by bike" : usedMode === "driving" ? "by car" : usedMode === "walking" ? "on foot" : "by train/bus";
+            const modeLabel = uiT(usedMode === "bicycling" ? "guide.byBike" : usedMode === "driving" ? "guide.byCar" : usedMode === "walking" ? "guide.onFoot" : "guide.byTransit", uiLang);
             const routeFailed = noRouteFound[`${originName}|${destName}|${mode}`];
             if (routeFailed) {
               // SHORT-LEG GUARD, also covers guides built before the fetch-side
@@ -1494,7 +1515,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                   <a href={routeUrl(originName, destName, "walking")} target="_blank" rel="noreferrer"
                     style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
                     <span style={{ fontSize: 12 }}>🚶</span>
-                    <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{km != null ? `${estimateDurationText(km, "walking")} on foot` : "A short walk"}</span>
+                    <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{km != null ? `${estimateDurationText(km, "walking")} ${uiT("guide.onFoot", uiLang)}` : uiT("guide.shortWalk", uiLang)}</span>
                     <span style={{ fontSize: 9.5, color: C.light, fontWeight: 700 }}>· Maps ↗</span>
                   </a>
                 );
@@ -1528,7 +1549,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 <a href={OPERATORS.rejseplanen.url} target="_blank" rel="noreferrer"
                   style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
                   <span style={{ fontSize: 12 }}>🚆</span>
-                  <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>Check times on Rejseplanen</span>
+                  <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{uiT("guide.checkTimes", uiLang)}</span>
                   <span style={{ fontSize: 9.5, color: C.light, fontWeight: 700 }}>↗</span>
                 </a>
               );
@@ -1560,7 +1581,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             const unverified = !exactLabel && !estIsImpossibleWalk && km === null;
             const estLabel = estIsImpossibleWalk
               ? `Too far to walk, check the route`
-              : km !== null ? `${estimateDurationText(km, usedMode)} ${modeLabel}` : (how || "Check route");
+              : km !== null ? `${estimateDurationText(km, usedMode)} ${modeLabel}` : (how || uiT("guide.checkRoute", uiLang));
             // ── "PERHAPS REFER THEM TO FLIXBUS OR DSB" ─────────
             // Oliver, 9 Aug 2026. A chip saying "~1h30 by train/bus" states a
             // fact and leaves the reader to work out who sells that seat, and
@@ -1633,7 +1654,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                   <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>
                     {journey.ferries.length
                       ? `Ferry: ${journey.ferries.map(f => [f.line, f.from && f.to ? `${f.from} to ${f.to}` : ""].filter(Boolean).join(", ")).filter(Boolean).join(" · ")}`
-                      : "This journey includes a ferry crossing."}
+                      : uiT("guide.ferryLeg", uiLang)}
                   </div>
                 )}
                 {/* ── WHO RAN IT, AND WHO MEASURED IT ──────────────────
@@ -1723,7 +1744,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               {wx && (
                 <div title={wx.source === "normals"
                   ? `Ten year average for this place and this week${wx.years ? `, from ${wx.years} years of records` : ""}. Not a forecast.`
-                  : "Real forecast for this date"}
+                  : uiT("guide.realForecast", uiLang)}
                   style={{ display: "flex", alignItems: "center", gap: 8, background: C.surface, border: `1px solid ${wx.risk === "high" ? "#FFB34766" : C.border}`, borderRadius: 14, padding: "7px 13px", fontSize: 11 }}>
                   <span style={{ fontSize: 22, lineHeight: 1 }}>{wx.icon}</span>
                   <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
@@ -1830,7 +1851,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                     {longNote && (
                       <button onClick={e => { e.stopPropagation(); setOpenNotes(o => ({ ...o, [noteKey]: !noteOpen })); }}
                         style={{ background: "none", border: "none", padding: 0, color: C.gold, fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                        {noteOpen ? "Less" : "Read more"}
+                        {noteOpen ? uiT("guide.readLess", uiLang) : uiT("guide.readMore", uiLang)}
                       </button>
                     )}
                   </div>
@@ -1982,7 +2003,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                         <button onClick={() => { setChanging(swapOpen ? null : `${dayIdx}-${stopIdx}`); setSwapBlocked(""); }}
                           style={{ background: "none", border: "none", color: swapOpen ? C.gold : C.muted, fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: 0, fontFamily: "'Inter', sans-serif" }}>
-                          {swapOpen ? "Never mind" : "Change this stop"}
+                          {swapOpen ? uiT("guide.neverMind", uiLang) : uiT("guide.changeStop", uiLang)}
                         </button>
                         {/* Said on the CARD, not in a changelog nobody opens: a
                             traveller who swapped something and then shared the
@@ -2136,7 +2157,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 12, padding: "12px 14px", marginTop: 16 }}>
                   <span style={{ fontSize: 14, flexShrink: 0 }}>🏡</span>
                   <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
-                    <span style={{ color: C.muted, fontWeight: 700 }}>Where to stay: </span>
+                    <span style={{ color: C.muted, fontWeight: 700 }}>{uiT("guide.whereToStay", uiLang)} </span>
                     <span style={{ color: C.light }}>{stayText}</span>
 
                     {day.glance.recommendedStay && (
@@ -2275,12 +2296,22 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                         // is only worth printing when the leg genuinely was NOT
                         // done the way they asked, which is the Great Belt case.
                         ? `Measured with Google Maps${usableMeasure.mode && !sameMode(usableMeasure.mode, guide._mode) ? `, routed as ${howForReader(usableMeasure.mode)}` : ""}. The distance is straight line, the time is the real route.`
-                        : "Straight line distance, not a measured route, so treat it as the shape of the day rather than as a timetable."}
+                        : uiT("guide.straightLine", uiLang)}
                     </div>
                   </div>
                 </div>
               );
             })()}
+            {/* ── AND ONE LINE ABOUT SOMEBODY ELSE'S ACTIVITY ───────
+                At the foot of the day, in his own sentence, never as a card in
+                the stop list. Same decision TourLine.jsx records for the town
+                tab and for the same reason: the cards above are Gemlyx's own
+                checked writing, and a partner product in that slot borrows
+                their standing. A line underneath is obviously somebody
+                pointing somewhere else. */}
+            {dayTours[dayIdx] && (
+              <TourLine url={dayTours[dayIdx].url} kind="town" lang={uiLang} style={{ marginTop: 18 }} />
+            )}
           </div>
           );
         })}
@@ -2388,7 +2419,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               </button>
               <button onClick={saveGuide} disabled={saving}
                 style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, color: "#fff", border: "none", borderRadius: 100, padding: "12px 24px", fontSize: 13, fontWeight: 700, cursor: saving ? "default" : "pointer", opacity: saving ? 0.7 : 1, boxShadow: "0 4px 16px rgba(226,59,78,0.3)" }}>
-                {saving ? "Saving…" : "Looks good, save my guide"}
+                {saving ? uiT("guide.saving", uiLang) : uiT("guide.saveCta", uiLang)}
               </button>
             </div>
           </div>
@@ -2463,7 +2494,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
           <div style={{ display: "flex", gap: 8, padding: 12, borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
             <input value={chatInput} onChange={e => setChatInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } }}
-              placeholder="Ask about this trip, or anything else…"
+              placeholder={uiT("guide.askPlaceholder", uiLang)}
               style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "10px 14px", fontSize: 13, color: C.text, outline: "none" }} />
             <button onClick={sendChatMessage} disabled={chatLoading || !chatInput.trim()}
               style={{ background: C.accent, color: "#fff", border: "none", borderRadius: 100, width: 40, height: 40, flexShrink: 0, cursor: chatLoading ? "default" : "pointer", opacity: chatLoading || !chatInput.trim() ? 0.55 : 1, fontSize: 15 }}>
