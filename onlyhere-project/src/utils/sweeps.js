@@ -60,7 +60,7 @@
 import { enforceScope } from "./correction";
 import { PLACE_KINDS } from "./placeKind";
 import { PLACE_THEMES, cleanThemes, MAX_THEMES } from "./placeThemes";
-import { normaliseTicketStatus } from "./tickets";
+import { soldOutClaim, soldOutContradiction } from "./tickets";
 import { citationUrls } from "./aiClient";
 
 const clean = (v) => String(v == null ? "" : v).trim();
@@ -141,7 +141,17 @@ export const SWEEPS = [
     // the sold-out ones." A wrong price is annoying. A wrong sold out talks
     // somebody out of a trip that would have worked, which is the Layla
     // complaint this whole codebase was written against.
-    only: (payload) => normaliseTicketStatus(payload?.ticketStatus) === "sold_out",
+    // BOTH, because an entry can tell a reader it is sold out without the
+    // status field ever saying so. Tønder's status is one thing and its ticket
+    // line says "(sold out)" three times in prose. See soldOutClaim.
+    only: (payload) => soldOutClaim(payload),
+    // ── THE ONES THE ROW ITSELF ALREADY DISPROVES ─────────────────
+    //
+    // Nibe says sold out on the outside and "booking starts selling the 1st of
+    // october" in its own description. No research settles which half is wrong,
+    // but nothing has to be researched to know one of them IS, and that puts it
+    // ahead of a row whose only fault is being a year old.
+    leadWith: (payload) => soldOutContradiction(payload),
     // ── AND THE ENTRY CANNOT ANSWER THIS ONE ──────────────────────
     //
     // Tier 2 reads the entry and checks a quote against it. A published entry
@@ -216,7 +226,7 @@ export const selectRows = (rows, sweep, { revise = false } = {}) => {
   if (revise && !sweep.revisable) return [];
   if (!revise && sweep.reviseOnly) return [];
   const types = new Set(sweep.types || []);
-  return (Array.isArray(rows) ? rows : []).filter(r => {
+  const picked = (Array.isArray(rows) ? rows : []).filter(r => {
     if (!r || !r.payload || !clean(r.payload.name)) return false;
     if (types.size && !types.has(r.type)) return false;
     // A sweep may narrow to the rows it is actually about. `types` says what
@@ -228,6 +238,16 @@ export const selectRows = (rows, sweep, { revise = false } = {}) => {
       ? need.every(f => clean(r.payload[f]))
       : need.some(f => !clean(r.payload[f]));
   });
+  // ── AND THE CAP SPENDS ITSELF ON THE WORST ONES FIRST ───────────
+  //
+  // A cap means some of what matched will not be read this run. Where a sweep
+  // can tell which of its rows are ALREADY WRONG rather than only possibly
+  // wrong, those go first, so a run of 25 out of 60 is 25 rows that need it.
+  // Stable within each half: order otherwise stays the order it came in.
+  if (typeof sweep.leadWith !== "function") return picked;
+  const lead = [], rest = [];
+  for (const r of picked) (sweep.leadWith(r.payload) ? lead : rest).push(r);
+  return lead.concat(rest);
 };
 
 // The published places of the types this sweep works on, keyed by lowercase name

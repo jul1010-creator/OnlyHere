@@ -63,6 +63,17 @@ const NORTHERN_EUROPE = [[52.4, 2.5], [60.8, 21.0]];
 const PIN_RED = "#E8232A";
 
 export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, height = 220, sayWhatFor = false }) => {
+  // ── THE READER'S LANGUAGE, ONCE ─────────────────────────────────
+  //
+  // `lang` is readerLanguage()'s OBJECT, not a two letter code. Handing the
+  // object to entryWord or to t() gives them "[object Object]", which is not a
+  // language either of them knows, so both return the English and say nothing
+  // about it: a translation that silently does not happen. ChatPlaceCards reads
+  // the same field the same way one file over.
+  //
+  // It lived inside the pin effect, which is why the CAPTION under the map was
+  // three English sentences sitting under labels that were already translated.
+  const uiCode = String(lang?.tag || "").split("-")[0].toLowerCase();
   const holderRef = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);
@@ -197,13 +208,12 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // The hosts go with the markers. Leaving them would keep React rendering
     // cards into divs that are no longer attached to anything.
     if (!list.length) { setHosts([]); return; }
-    // ── AND THE CODE, NOT THE OBJECT ─────────────────────────────
-    //
-    // `lang` here is readerLanguage()'s object, not a two letter code, so
-    // handing it to entryWord would give it "[object Object]", which is not a
-    // language it knows, so it would return the English and say nothing about
-    // it. ChatPlaceCards reads the same field the same way one file over.
-    const code = String(lang?.tag || "").split("-")[0].toLowerCase();
+    // Derived at the top of the component now, because the caption under the
+    // map needs it too and was rendering English while these labels were
+    // already translated. See uiCode there for why it is `lang.tag` and not
+    // `lang`. Read out of the closure, exactly as it was: this effect's deps
+    // are [pinKey] and always have been.
+    const code = uiCode;
     // ── ONE THEME EACH, CHOSEN SO THEY DIFFER ────────────────────
     //
     // Across the whole set rather than per pin, which is the entire idea: the
@@ -569,10 +579,10 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
           sentence explaining a control nobody can use is the clutter Oliver
           objects to on every form in this app. */}
       <div style={{ fontSize: 10, color: C?.muted || "#9AA3BC", marginTop: 6, lineHeight: 1.5 }}>
-        {list.length === 0 ? "" : list.length > 1 ? "Where these are. Tap a pin to see it." : "Tap the pin to see it."}
+        {list.length === 0 ? "" : uiT(list.length > 1 ? "map.tapOne" : "map.tapTheOne", uiCode)}
         {/* Named rather than swallowed. A map quietly showing part of the
             conversation is a map of a different trip. */}
-        {dropped > 0 && ` ${dropped} earlier ${dropped === 1 ? "place is" : "places are"} off this map.`}
+        {dropped > 0 && ` ${uiT(dropped === 1 ? "map.offMapOne" : "map.offMapMany", uiCode).replace("{n}", String(dropped))}`}
       </div>
     </div>
   );

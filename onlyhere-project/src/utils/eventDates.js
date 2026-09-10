@@ -277,6 +277,74 @@ export const DATE_PROPOSITION_WHY = {
   "inside-the-dates-already-on-file": "the suggested date is one of the days this event already runs on, so it is the same edition rather than a new date",
 };
 
+// ── AND A REFUSED DATE CAN CONDEMN THE REST OF THE ANSWER ───────────
+//
+// The date is not the only thing one of these replies carries. It also carries
+// a ticket status, and a ticket status is a CLAIM ABOUT AN EDITION: sold out,
+// on sale, selling fast are all answers to "which edition are we looking at".
+//
+// So when the date in the same reply is refused BECAUSE IT BELONGS TO ANOTHER
+// EDITION, the status beside it was read off that same page and is about that
+// same edition. Letting it through writes last year's sold-out banner onto next
+// year's festival, which is the Roskilde row Oliver reported on 10 Sep 2026 and
+// the exact failure the date gate was built to stop.
+//
+// NOT EVERY REFUSAL MEANS THAT, and the difference matters. A date landing
+// inside the run already on file came off the RIGHT page and was only
+// misreported as a move (Comic Con, 7 to 8 November), and a date that would not
+// parse at all says nothing about which edition was read. Those two leave the
+// status alone.
+export const WRONG_EDITION = ["in-the-past", "earlier-than-the-one-on-file", "a-different-month-from-the-one-on-file"];
+
+export const readAnotherEdition = (problem) => WRONG_EDITION.includes(String(problem || ""));
+
+// ── AND A FINISHED EDITION HAS NO STATUS LEFT TO CHANGE ─────────────
+//
+// Oliver, 10 Sep 2026, on Nibe: sold out on the outside, "booking starts
+// selling the 1st of october" in its own description. Roskilde the same week,
+// reported sold out for an edition whose tickets have not gone on sale at all.
+//
+// Both rows are dated in the past, and SOLD OUT IS THE STATE EVERY FINISHED
+// FESTIVAL IS IN FOREVER. A check that comes back "now sold out" on a row whose
+// date has gone by, and that found no new date to go with it, has found last
+// year's banner and nothing else. There is no edition for the status to be
+// about.
+//
+// The status is only worth something once the row has a date still ahead of it,
+// whether it already had one or this same answer supplied it, which is what
+// `accepted` is: the new date the gate let through, not the one the model
+// offered.
+export const statusIsAboutAFinishedEdition = (onFile, accepted, today) => {
+  if (parseEventDate(accepted)) return false;
+  const have = parseEventDate(onFile);
+  if (!have) return false;
+  return isPastDate(have, today);
+};
+
+export const STATUS_REFUSAL_WHY = {
+  "another-edition": "the date in the same answer was refused for belonging to a different edition, and a ticket status read off that page is about that edition too",
+  "a-finished-edition": "the date on file has already gone by and the check found no new one, so there is no edition left for a ticket status to be about",
+};
+
+// ── AND THE WHOLE DECISION IN ONE PLACE ─────────────────────────────
+//
+// The two rules above were three lines inside the update loop in App.jsx, where
+// nothing can run them: that component cannot be rendered by the suite, so the
+// only assertion available was that the lines EXIST. Mutation testing said so
+// out loud — the guard was changed to `if (false)` and every assertion still
+// passed, because each of them was reading source text rather than behaviour.
+//
+// So the decision moved here and App.jsx keeps the two lines that apply it.
+// Returns the key, or "" when the status is allowed through, which is the
+// common case and the one worth protecting: the point of this gate is to stop
+// last year's banner, not to stop the check reporting anything.
+export const statusRefusalFor = ({ status = "", dateProblem = "", onFile = "", accepted = "", today = null } = {}) => {
+  if (!String(status || "").trim()) return "";
+  if (readAnotherEdition(dateProblem)) return "another-edition";
+  if (statusIsAboutAFinishedEdition(onFile, accepted, today)) return "a-finished-edition";
+  return "";
+};
+
 export const isUndated = (v) => parseEventDate(v) === null;
 
 // `today` is always passed in. A date helper that reads the clock cannot be
@@ -687,6 +755,18 @@ export const stepWords = (step) => {
     const key = why.slice("refused-".length);
     const because = DATE_PROPOSITION_WHY[key] || key;
     return step.refused ? `found ${step.refused} and refused it, because ${because}` : `found a date and refused it, because ${because}`;
+  }
+  // ── AND A REFUSED STATUS IS ITS OWN LINE ────────────────────────
+  // Its own prefix rather than a second meaning for `refused-`, because the two
+  // refusals can both happen on one row and the panel renders a line per step.
+  // See statusIsAboutAFinishedEdition: the row this fires on is a past-dated
+  // festival that came back "now sold out", which is the shape that put a red
+  // badge on Roskilde for an edition whose tickets had not gone on sale.
+  if (why.startsWith("status-")) {
+    const because = STATUS_REFUSAL_WHY[why.slice("status-".length)] || why;
+    return step.refusedStatus
+      ? `found the ticket status "${step.refusedStatus}" and refused it, because ${because}`
+      : `found a ticket status and refused it, because ${because}`;
   }
   if (why.startsWith("http-")) return `the page answered ${why.replace("http-", "")}`;
   if (why.startsWith("firecrawl-")) return "the paid reader could not get the page either";

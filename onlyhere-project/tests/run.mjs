@@ -51,7 +51,7 @@ writeFileSync(entry, `
   export { supabaseFailure, studioErrorMessage, refreshIsDead, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, dateRangesInText, isoDay, anchoredEdition, venueRatherThanEvent, PROGRAMME_DATES, dateMentions, labelledAt, otherLabelAt, CALENDAR_DATES, DATE_LABEL_WINDOW, looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER, OFFICE_CONTEXT_WINDOW, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
+  export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, dateRangesInText, isoDay, anchoredEdition, venueRatherThanEvent, PROGRAMME_DATES, dateMentions, labelledAt, otherLabelAt, CALENDAR_DATES, DATE_LABEL_WINDOW, looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER, OFFICE_CONTEXT_WINDOW, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS, WRONG_EDITION, readAnotherEdition, statusIsAboutAFinishedEdition, statusRefusalFor, STATUS_REFUSAL_WHY } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isApiCoveredHost, API_COVERED_HOSTS, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES, bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK, linksInMarkdown, ticketLinksFromMarkdown, scoreTicketLinks } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
@@ -176,7 +176,7 @@ writeFileSync(entry, `
   export { isSameSpot, SAME_SPOT_KM, cityFromLocation, stopTown } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { travellerBudget, budgetTierMismatch, dayTripClaim, dayTripHonest, dayTripRadiusKm, withoutDayTripClaim, describeDayTripClaim, DAY_TRIP_FRACTION } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { placedLibrary, nearbyPublished, describeLocation, distanceWords, walkMinutes, nearbyLabel, NEAR_KM, WALK_KMH, SAME_VISIT_KM, SAME_VISIT_LIMIT } from ${JSON.stringify(join(root, "src/utils/nearbyPlaces.js"))};
-  export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, appearances, otherDatesHere, alsoPlayingLine, describeAppearances, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP, stampTicketSource, ticketProvenance, isMeasured, TICKET_SOURCES, TICKET_SOURCE_LABEL, isAncillaryListing, isSubEventListing } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
+  export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, appearances, otherDatesHere, alsoPlayingLine, describeAppearances, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP, stampTicketSource, ticketProvenance, isMeasured, TICKET_SOURCES, TICKET_SOURCE_LABEL, isAncillaryListing, isSubEventListing, soldOutClaim, saleOpensLater, soldOutContradiction } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, readNudge, EMPTY_NUDGE, MIN_SAVES, COOLDOWN_DAYS, MAX_ASKS, NUDGE_KEY, PROFILE_NUDGE_KEY } from ${JSON.stringify(join(root, "src/utils/accountNudge.js"))};
   export { groupRows, groupLabel, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
   export { filterRows, rowMatchesQuery, rowHaystack } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
@@ -4355,6 +4355,41 @@ is("missing licence does not require credit", creditIsRequired({}), false);
          /A SALE THAT HAS NOT OPENED CANNOT BE SOLD OUT/.test(so.question));
       ok("and empty is a correct answer for the edition",
          /roughly half the time and is a correct answer/.test(so.question));
+
+      // ── AND THE CLAIM CAN LIVE IN THE PROSE ────────────────────
+      //
+      // Every row above carries the claim in BOTH places, so selecting on the
+      // status alone passes them all. Tønder's real shape does not: the status
+      // says on sale and the ticket line says "(sold out)" per tier, and a
+      // status-only gate reads that row as healthy and leaves standing the one
+      // line that talks a reader out of the trip.
+      const prose = { id: 41, type: "festival", payload: { name: "Tønder Festival", ticketStatus: "on_sale", ticketInfo: "4-day pass 2,495 DKK (sold out) - 1-day 895 DKK" } };
+      const dansk = { id: 42, type: "festival", payload: { name: "Skanderborg", ticketStatus: "unknown", ticketInfo: "Partout udsolgt" } };
+      const fine  = { id: 43, type: "festival", payload: { name: "Ribelund", ticketStatus: "on_sale", ticketInfo: "400 DKK" } };
+      is("a sold-out line picks the row where the status would not",
+         selectRows([prose, dansk, fine], so, { revise: true }).map(r => r.id), [41, 42]);
+
+      // ── AND THE CAP GOES TO THE ONES ALREADY DISPROVED ─────────
+      //
+      // Nibe says sold out and, in its own description, that booking opens on
+      // 1 October. Nothing has to be researched to know one half is wrong. A
+      // cap of 25 over sixty-odd sold-out rows means some are not read at all,
+      // and these are the ones that should not be the ones left out.
+      const nibe = { id: 44, type: "festival", payload: { name: "Nibe Festival", ticketStatus: "sold_out", ticketInfo: "Partout udsolgt", desc: "Billetsalget åbner 1. oktober." } };
+      is("the row whose own words contradict themselves goes first",
+         selectRows([prose, dansk, fine, nibe], so, { revise: true }).map(r => r.id), [44, 41, 42]);
+      // AND THAT IS WHAT THE ORDER IS FOR: a cap of one spends itself on Nibe
+      // rather than on whichever sold-out row happened to be entered first.
+      is("so a run smaller than the pile starts there",
+         applyCap(selectRows([prose, dansk, fine, nibe], so, { revise: true }), 1).batch.map(r => r.id), [44]);
+
+      // The mechanism, on a sweep that is not this one, so the rule is the
+      // rule rather than a property of festivals. Stable in both halves:
+      // everything else keeps the order it came in.
+      is("a sweep with no such test leaves the order alone",
+         selectRows(rows, { ...tax, leadWith: () => false }).map(r => r.id), [1, 2, 6, 7]);
+      is("and one with a test lifts only what it names",
+         selectRows(rows, { ...tax, leadWith: (pl) => pl.name === "Aalborg" }).map(r => r.id), [6, 1, 2, 7]);
     }
 
     // ── AND THE RUN ITSELF STRIPS WHAT DID NOT CHANGE ──────────────
@@ -4388,7 +4423,17 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // the wrong rows.
     const appSweeps = readFileSync(join(root, "src/App.jsx"), "utf8");
     ok("the choice is offered only where there are two modes",
-       /\{sweepById\(sweepId\)\?\.revisable && \(/.test(appSweeps));
+       /\{sweepById\(sweepId\)\?\.revisable && !sweepById\(sweepId\)\?\.reviseOnly && \(/.test(appSweeps));
+    // ── AND A REVISE-ONLY SWEEP OPENS IN THE ONE MODE IT HAS ─────
+    //
+    // Oliver, 10 Sep 2026: "The 'sold-out' sweep does nothing. Just instantly
+    // says that nothing needs it." Picking a sweep reset the mode to fill, and
+    // selectRows returns nothing for a reviseOnly sweep in fill mode, so the
+    // rule and the button beside it said opposite things and the button won.
+    ok("and picking a revise-only sweep opens it in revise",
+       /setSweepId\(sw\.id\);[^}]*setSweepRevise\(!!sw\.reviseOnly\)/.test(appSweeps));
+    ok("and no reset anywhere hard-codes the mode it cannot run",
+       !/setSweepRevise\(false\)/.test(appSweeps));
     ok("the rows it picks follow the mode",
        /selectRows\(rows, sweep, \{ revise: sweepRevise \}\)/.test(appSweeps));
     ok("and so does what it asks about them",
@@ -12748,7 +12793,44 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 {
   const { TICKET_STATUS, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent,
           nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText,
-          SAME_EDITION_DAYS, bookingActions, isAncillaryListing } = M;
+          SAME_EDITION_DAYS, bookingActions, isAncillaryListing,
+          soldOutClaim, saleOpensLater, soldOutContradiction } = M;
+
+  // ── A SOLD-OUT CLAIM IS NOT ONLY A STATUS ────────────────────────
+  //
+  // Oliver, 10 Sep 2026, having opened Tønder himself: the status field is one
+  // thing and the ticket LINE says "(sold out)" three times, once per tier. An
+  // entry can tell a reader it is sold out without the status field ever saying
+  // so, and that reader is talked out of the trip either way. Anything hunting
+  // for the claim has to read both.
+  ok("a status of sold out is a sold-out claim", soldOutClaim({ ticketStatus: "sold_out" }));
+  ok("and so is a ticket line saying it while the status does not",
+     soldOutClaim({ ticketStatus: "on_sale", ticketInfo: "4-day pass 2,495 DKK (sold out)" }));
+  ok("in Danish too, because half the pages these were read off are",
+     soldOutClaim({ ticketStatus: "unknown", ticketInfo: "Partout udsolgt" }));
+  ok("a priced festival with no such line is not one",
+     !soldOutClaim({ ticketStatus: "on_sale", ticketInfo: "400 DKK, under 12 free" }));
+  ok("and neither is a row with nothing on it", !soldOutClaim({}) && !soldOutClaim(null));
+
+  // ── AND A SALE THAT HAS NOT OPENED CANNOT BE SOLD OUT ────────────
+  //
+  // Oliver, same night, on Nibe: "its description says that booking starts
+  // selling the 1st of october", on an entry that says sold out. Both halves
+  // are in the row's own words and they cannot both be true, which is a thing
+  // no web access and no model is needed to see.
+  ok("a description that says the sale opens later says so",
+     saleOpensLater({ desc: "Billetsalget åbner 1. oktober." }));
+  ok("in English as well", saleOpensLater({ desc: "Tickets go on sale 1 October." }));
+  ok("and a row that says nothing about a future sale does not",
+     !saleOpensLater({ desc: "Four days of folk music in the marshes." }));
+  // One half alone is not a contradiction, in either direction. Both halves
+  // together are, and that is the entire claim this function makes.
+  ok("both halves are the contradiction",
+     soldOutContradiction({ ticketStatus: "sold_out", desc: "Tickets go on sale 1 October." }));
+  ok("a sold-out row that says nothing about a sale is not one",
+     !soldOutContradiction({ ticketStatus: "sold_out", desc: "Four days of folk music." }));
+  ok("nor is a future sale on a row that never claimed sold out",
+     !soldOutContradiction({ ticketStatus: "on_sale", desc: "Tickets go on sale 1 October." }));
 
   // ── THE VOCABULARY THAT WAS WRITTEN DOWN THREE TIMES ─────────────
   // studioPrompts asked for free/on_sale/limited/sold_out, the badges rendered
@@ -12909,10 +12991,10 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 
   // ── WHO IS ALLOWED TO WRITE THE FIELD ────────────────────────────
   const filed = (status, date = "2026-06-27") => ({ ticketStatus: status, date });
-  const soldOutClaim = reconcileTickets(filed("sold_out"), strong);
-  is("a measured on-sale overrules a written sold-out", soldOutClaim.status, "on_sale");
-  ok("and the change is marked as a change", soldOutClaim.changed === true);
-  ok("with the reason a person would want", soldOutClaim.findings.some(f => /talks a reader out of a trip/.test(f.detail)));
+  const overruled = reconcileTickets(filed("sold_out"), strong);
+  is("a measured on-sale overrules a written sold-out", overruled.status, "on_sale");
+  ok("and the change is marked as a change", overruled.changed === true);
+  ok("with the reason a person would want", overruled.findings.some(f => /talks a reader out of a trip/.test(f.detail)));
 
   // THE CENTRAL ONE. offsale is allowed to replace a DEFAULT and is never
   // allowed to become sold_out, anywhere, in any field.
@@ -34195,11 +34277,147 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ["unreadable", "in-the-past", "earlier-than-the-one-on-file", "inside-the-dates-already-on-file"].forEach(k =>
     ok(`${k} has a sentence`, typeof DATE_PROPOSITION_WHY[k] === "string" && DATE_PROPOSITION_WHY[k].length > 20));
 
+  // ── AND THE DATE IS NOT THE ONLY THING IN THE ANSWER ─────────────
+  //
+  // Oliver, 10 Sep 2026: Roskilde reported sold out for an edition whose tickets
+  // have not gone on sale. The date in that same reply had ALREADY been refused
+  // for belonging to another edition, and the ticket status sitting beside it
+  // was let straight through, which is how last year's banner reaches next
+  // year's festival. A ticket status is a claim about an edition.
+  const { readAnotherEdition, statusIsAboutAFinishedEdition, WRONG_EDITION, STATUS_REFUSAL_WHY } = M;
+  ok("a date refused for being in the past condemns the status beside it",
+     readAnotherEdition("in-the-past"));
+  ok("so does one that came off an older page",
+     readAnotherEdition("earlier-than-the-one-on-file"));
+  ok("and one from a month this event has never used",
+     readAnotherEdition("a-different-month-from-the-one-on-file"));
+  // THE TWO THAT DO NOT, and the difference is which page was read rather than
+  // how bad the refusal was. Comic Con's model read the right site and only
+  // misreported a day of the run as a move; its status is as good as the page.
+  ok("a day of the run already on file does not",
+     !readAnotherEdition("inside-the-dates-already-on-file"));
+  ok("nor does a date that would not parse", !readAnotherEdition("unreadable"));
+  ok("and neither does no refusal at all",
+     !readAnotherEdition("") && !readAnotherEdition(null) && !readAnotherEdition(undefined));
+  // Every reason the gate can return is decided one way or the other here, so a
+  // new refusal reason cannot quietly default to letting a status through.
+  ok("every refusal the gate can return has been decided",
+     Object.keys(DATE_PROPOSITION_WHY).every(k =>
+       WRONG_EDITION.includes(k) || ["inside-the-dates-already-on-file", "unreadable"].includes(k)));
+
+  // ── AND A FINISHED EDITION HAS NO STATUS LEFT TO CHANGE ──────────
+  //
+  // Nibe: sold out on the outside, "billetsalget åbner 1. oktober" in its own
+  // description, on a row dated last summer. Sold out is the state every
+  // finished festival is in forever, so "now sold out" on a past-dated row with
+  // no new date found is last year's banner and nothing else.
+  {
+    const now = new Date(2026, 8, 10);
+    ok("a past date with no new one leaves no edition for a status",
+       statusIsAboutAFinishedEdition("2026-06-27", "", now));
+    // The date the GATE let through, not the one the model offered: a row that
+    // has just gained a real future date has an edition again.
+    ok("a new date that got through gives it one back",
+       !statusIsAboutAFinishedEdition("2026-06-27", "2027-06-30", now));
+    ok("a row still ahead of today keeps its status",
+       !statusIsAboutAFinishedEdition("2026-12-01", "", now));
+    // An undated row is not a finished one. It has no edition on file at all,
+    // which is the whole reason it is being looked up, and refusing its status
+    // would refuse the only answer this check can give it.
+    ok("and an undated row is not a finished one",
+       !statusIsAboutAFinishedEdition("", "", now));
+    ok("every status refusal has a sentence a person can read",
+       Object.keys(STATUS_REFUSAL_WHY).every(k => typeof STATUS_REFUSAL_WHY[k] === "string" && STATUS_REFUSAL_WHY[k].length > 20));
+
+    // ── AND THE WHOLE DECISION, RUN RATHER THAN READ ───────────────
+    //
+    // These three lines lived inside the update loop in App.jsx, which the
+    // suite cannot render, so every assertion about them was reading source
+    // text. A mutant that turned the guard into `if (false)` SURVIVED all of
+    // them: the lines were all still there and none of them ran. This is the
+    // same rule as a function and these are the assertions that can fail.
+    const { statusRefusalFor } = M;
+    const gate = (o) => statusRefusalFor({ today: now, ...o });
+    is("a status read off another edition's page is refused",
+       gate({ status: "sold_out", dateProblem: "in-the-past", onFile: "2027-06-30" }), "another-edition");
+    is("a status on a row whose edition is over is refused",
+       gate({ status: "sold_out", onFile: "2026-06-27", accepted: "" }), "a-finished-edition");
+    // THE COMMON CASE, and the one worth protecting. This gate exists to stop
+    // last year's banner, not to stop the check reporting anything.
+    is("a status on a row still ahead of today comes through",
+       gate({ status: "sold_out", onFile: "2026-12-01" }), "");
+    is("and so does one on a row that just gained a real date",
+       gate({ status: "on_sale", onFile: "2026-06-27", accepted: "2027-06-30" }), "");
+    is("a day of the run already on file does not condemn the status",
+       gate({ status: "on_sale", dateProblem: "inside-the-dates-already-on-file", onFile: "2026-11-07", accepted: "" }), "");
+    // No status, nothing to refuse: it must not report a refusal of nothing,
+    // which would put a line on a card about a claim that was never made.
+    is("an answer with no status is not a refusal", gate({ status: "", dateProblem: "in-the-past", onFile: "2026-06-27" }), "");
+    is("nor is a blank one", gate({ status: "   ", onFile: "2026-06-27" }), "");
+    is("and an empty call answers rather than throwing", statusRefusalFor(), "");
+    // Order matters: a row can be both, and the page it was read off is the
+    // more specific answer of the two.
+    is("a row that is both is named by the page it came off",
+       gate({ status: "sold_out", dateProblem: "in-the-past", onFile: "2026-06-27" }), "another-edition");
+    ok("and every answer it can give has a sentence",
+       ["another-edition", "a-finished-edition"].every(k => !!STATUS_REFUSAL_WHY[k]));
+  }
+
   // And the checker uses it, and says when it ignored something.
   const appD = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the event check refuses a backwards proposal",
      /datePropositionProblem\(parsed\.dateChanged, ev\.date, new Date\(\), \{ onFileEnd: ev\.dateEnd \}\)/.test(appD));
   ok("and says so rather than dropping it in silence", /Ignored a suggested date of/.test(appD));
+  // The wiring, both halves. Either one left out runs the gate over a value
+  // nothing ever reads.
+  // Source pins, because this component cannot be rendered here. They say the
+  // call is made and say WHAT IT IS ASKED, which is the half a source pin can
+  // honestly carry; the rule itself is run above, in statusRefusalFor.
+  ok("the search tier runs its status through that gate",
+     /const statusRefusal = statusRefusalFor\(\{/.test(appD)
+     && /status: parsed\.ticketStatusChanged, dateProblem: badProposal,/.test(appD));
+  ok("and asks about the date the gate let through, not the one offered",
+     /onFile: ev\.date, accepted: parsed\.dateChanged, today: new Date\(\),/.test(appD));
+  // THE CONDITION, not only the body. A mutant that changed this to `if (false)`
+  // survived three assertions that each read a line inside the block: the code
+  // was all still there and none of it ran.
+  ok("a refused status is cleared rather than published",
+     /if \(statusRefusal\) \{\n            parsed\.ignoredStatus = parsed\.ticketStatusChanged;/.test(appD)
+     && /parsed\.ticketStatusChanged = "";\n          \}/.test(appD));
+  ok("and it says so on the card too", /Ignored a suggested ticket status of/.test(appD));
+  // A refused status with nothing else on the row makes NO card, deliberately:
+  // it is not a change, and a list where several rows are not changes is a list
+  // he has twice said nobody finishes. The trace is where it lands instead, and
+  // the rows it happens to are the ones the panel already lists as still having
+  // no usable date, so it arrives beside the reason it is undated.
+  ok("and a refused status that makes no card still reaches the trace",
+     /if \(statusRefusal\) trace\.push\(\{ step: "search", why: `status-\$\{statusRefusal\}`/.test(appD));
+  ok("while the card list itself is left alone",
+     /const hasChange = parsed\.stillHappening === false \|\| parsed\.dateChanged \|\| parsed\.ticketStatusChanged \|\| parsed\.ignoredDate;/.test(appD));
+  ok("while a status with an edition to be about still comes through",
+     /\{c\.ticketStatusChanged && <div/.test(appD));
+
+  // ── AND THE PAGE IT WAS READ OFF TRAVELS WITH THE FINDING ────────
+  //
+  // Oliver, 10 Sep 2026: "you can add the link to its evidence. So I can
+  // fact-check it." Every tier already held the address it read and every one
+  // of them passed on the hostname instead.
+  ok("the search tier keeps the pages the answer cited",
+     /const evidence = citationUrls\(result, \{ limit: 3 \}\);/.test(appD));
+  // AFTER the spread, like waitingRow above it: a model that echoed the key
+  // back would otherwise be handing itself the evidence line.
+  ok("and hands them over after the model's own fields",
+     /\.\.\.parsed, waitingRow: isWaiting\(ev\) \? ev : null, evidence \}\)/.test(appD));
+  ok("every tier that reads a date off a page records that page",
+     (appD.match(/fromSite = \{[^}]*\}/g) || []).length === 3
+     && (appD.match(/fromSite = \{[^}]*\}/g) || []).every(m => /\burl:/.test(m)));
+  ok("and the site tier carries it onto the card",
+     /evidence: \[fromSite\.url\]\.filter\(Boolean\)/.test(appD));
+  // Same lesson, same shape: pinning the map and the href left the surrounding
+  // guard free to be turned off, and a mutant that did exactly that survived.
+  ok("the card renders them as links rather than as hostnames",
+     /\{Array\.isArray\(c\.evidence\) && c\.evidence\.length > 0 && \(/.test(appD)
+     && /c\.evidence\.slice\(0, 3\)\.map/.test(appD) && /href=\{u\} target="_blank"/.test(appD));
 
   // ── AND A DAY OF THE EVENT IS NOT THE EVENT MOVING ───────────────
   //
@@ -34741,6 +34959,20 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("a refused date names the date it refused", /2026-06-03/.test(refused));
   ok("and says why in the same words the rest of the app uses", refused.includes(DATE_PROPOSITION_WHY["in-the-past"]));
   ok("a found date is stated plainly", stepWords({ step: "poster", found: "2027-06-02" }) === "found 2027-06-02");
+
+  // ── AND A REFUSED STATUS IS ITS OWN LINE ────────────────────────
+  // Its own prefix rather than a second meaning for refused-, because both
+  // refusals can land on one row and the panel renders a line per step. The row
+  // this fires on is a past-dated festival that came back "now sold out", which
+  // is the shape that put a red badge on Roskilde.
+  const noStatus = stepWords({ step: "search", why: "status-a-finished-edition", refusedStatus: "sold_out" });
+  ok("a refused status names the status it refused", /sold_out/.test(noStatus));
+  ok("and says why in the same words the panel uses",
+     noStatus.includes(M.STATUS_REFUSAL_WHY["a-finished-edition"]));
+  ok("and it still says something when the value did not survive",
+     /found a ticket status and refused it, because /.test(stepWords({ step: "search", why: "status-another-edition" })));
+  ok("a refused status is not confused with a refused date",
+     noStatus !== stepWords({ step: "search", why: "refused-in-the-past", refused: "sold_out" }));
 
   // Never blank. A trace line with no words in it is the same failure as the
   // sentence it replaces.
@@ -45457,7 +45689,30 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      /distinctThemes\(list\.map\(p => \(\{ key: p\.key, themes: p\.place\?\.themes \}\)\)\)/.test(chatCode));
   ok("and the sentence is his, in the reader's language",
      /uiT\("map\.bestFor", code\)/.test(chatCode)
-     && /const code = String\(lang\?\.tag \|\| ""\)\.split\("-"\)\[0\]\.toLowerCase\(\);/.test(chatCode));
+     && /const uiCode = String\(lang\?\.tag \|\| ""\)\.split\("-"\)\[0\]\.toLowerCase\(\);/.test(chatCode)
+     && /const code = uiCode;/.test(chatCode));
+
+  // ── AND THE LINE UNDER THE MAP, WHICH WAS NOT ────────────────────
+  //
+  // Three English sentences hard-coded into a component that already takes
+  // `lang` and already runs the labels ON the map through it, because the code
+  // was derived inside the pin effect and the caption renders outside it. A
+  // Danish reader got Danish pin labels and an English instruction under them.
+  ok("the caption is looked up rather than typed in English",
+     /uiT\(list\.length > 1 \? "map\.tapOne" : "map\.tapTheOne", uiCode\)/.test(chatCode));
+  ok("and so is the count of what is not on the map",
+     /uiT\(dropped === 1 \? "map\.offMapOne" : "map\.offMapMany", uiCode\)\.replace\("\{n\}", String\(dropped\)\)/.test(chatCode));
+  // THE ONE WAY THIS BREAKS SILENTLY. {n} is the only placeholder in the whole
+  // catalogue, and a translation that drops it renders a sentence about places
+  // that are off the map without saying how many, which reads as finished.
+  ok("every language keeps the placeholder the count goes into",
+     ["map.offMapOne", "map.offMapMany"].every(k => ["en", "da", "de"].every(c => M.t(k, c).includes("{n}"))));
+  // And neither of them names the pin, in any language: English says "the pin",
+  // Danish and German each have two competing words for the thing and no agreed
+  // one, and a reader looking at a map with dots on it does not need the dot
+  // named. Written as a rule because the obvious "fix" later is to add it.
+  ok("and no caption names the pin in Danish or German",
+     ["map.tapOne", "map.tapTheOne"].every(k => !/n[aå]l|mark[oø]r|Stecknadel|Marker/i.test(`${M.t(k, "da")} ${M.t(k, "de")}`)));
   // A row with no themes gets the name alone rather than a dangling separator:
   // the fallback towns carry none, and "Aarhus · " with nothing after it is
   // worse than "Aarhus". Written as the whole ternary, because `: ""` on its

@@ -111,6 +111,44 @@ export const TICKET_BADGE = {
 
 export const ticketBadge = (status) => TICKET_BADGE[normaliseTicketStatus(status)] || TICKET_BADGE.unknown;
 
+// ── A SOLD-OUT CLAIM IS NOT ONLY A STATUS ───────────────────────────
+//
+// Oliver, 10 Sep 2026, on Tønder: the status field is one thing and the ticket
+// LINE says "(sold out)" three times, per tier, in prose. An entry can tell a
+// reader it is sold out without the status field ever saying so, and that
+// reader is talked out of the trip either way.
+//
+// So anything that has to find the sold-out claims looks at both. Danish too,
+// because half the pages these were read off are.
+const SAYS_SOLD_OUT = /\b(?:sold\s?out|soldout|udsolgt|alle\s+billetter\s+er\s+væk)\b/i;
+
+export const soldOutClaim = (payload) => {
+  const p = payload || {};
+  if (normaliseTicketStatus(p.ticketStatus) === "sold_out") return true;
+  return SAYS_SOLD_OUT.test([p.ticketInfo, p.ticketsGlance, p.camping].filter(Boolean).join(" "));
+};
+
+// ── AND A SALE THAT HAS NOT OPENED CANNOT BE SOLD OUT ───────────────
+//
+// Oliver, 10 Sep 2026, on Nibe Festival: "its description says that booking
+// starts selling the 1st of october", on an entry that says sold out.
+//
+// That contradiction is in the entry's OWN WORDS. No web access, no model, no
+// research: the row states both halves and they cannot both be true. It is the
+// same rule the sold-out sweep puts in its question, and it turns out not to
+// need the sweep at all for the rows where the entry says it out loud.
+const SALE_OPENS = /\b(?:billetsalg(?:et)?\s+(?:åbner|starter)|billetter\s+(?:sælges|går\s+i\s+salg)|salget\s+åbner|går\s+i\s+salg|goes?\s+on\s+sale|tickets?\s+(?:go|going)\s+on\s+sale|on\s+sale\s+from|booking\s+(?:opens|starts))\b/i;
+
+export const saleOpensLater = (payload) => {
+  const p = payload || {};
+  return SALE_OPENS.test([p.ticketInfo, p.ticketsGlance, p.desc, p.gemlyxFind].filter(Boolean).join(" "));
+};
+
+// The row states both halves and they cannot both be true. Reported rather than
+// resolved: which half is wrong is a question for the page, not for this file.
+export const soldOutContradiction = (payload) =>
+  soldOutClaim(payload) && saleOpensLater(payload);
+
 // ── WHERE DID THIS STATUS COME FROM ─────────────────────────────────
 //
 // Oliver, 11 Aug 2026: "considering some events are ticketmaster.com and some

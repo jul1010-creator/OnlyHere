@@ -443,6 +443,31 @@ export const UI_STRINGS = {
   // having three of them.
   "map.bestFor":     { en: "Best if you want", da: "Bedst hvis du vil have", de: "Am besten für" },
 
+  // ── AND THE LINE UNDER THE MAP ────────────────────────────────────
+  //
+  // Three English sentences hard-coded into a component that already takes
+  // `lang` and already translates the labels ON the map through it. A Danish
+  // reader got Danish pin labels and an English instruction under them.
+  //
+  // NEITHER TRANSLATION NAMES THE PIN. English says "the pin", and Danish and
+  // German each have two competing words for the thing (nål/markør,
+  // Stecknadel/Marker) with no agreed one. Saying what to tap ON is what the
+  // sentence is for, and a reader looking at a map with dots on it does not
+  // need the dot named.
+  "map.tapOne":      { en: "Where these are. Tap a pin to see it.", da: "Hvor de ligger. Tryk på en af dem for at se stedet.", de: "Wo sie liegen. Tippe auf einen Punkt, um ihn zu sehen." },
+  "map.tapTheOne":   { en: "Tap the pin to see it.", da: "Tryk for at se stedet.", de: "Tippe auf den Punkt, um ihn zu sehen." },
+
+  // ── AND THE ONES THAT ARE NOT ON IT ───────────────────────────────
+  //
+  // "A map quietly showing part of the conversation is a map of a different
+  // trip", so the count is said out loud. {n} IS THE COUNT, and it is the only
+  // placeholder in this whole table: the three languages put the number in the
+  // same place but not the noun or the verb, so the sentence has to be one
+  // string per language rather than fragments glued together at the render
+  // site. tests/run.mjs asserts every column keeps the token.
+  "map.offMapOne":   { en: "{n} earlier place is off this map.", da: "{n} tidligere sted ligger uden for kortet.", de: "{n} früherer Ort liegt außerhalb dieser Karte." },
+  "map.offMapMany":  { en: "{n} earlier places are off this map.", da: "{n} tidligere steder ligger uden for kortet.", de: "{n} frühere Orte liegen außerhalb dieser Karte." },
+
   // The two search boxes that are not the header's. header.search covers that
   // one already, and these say what they search rather than repeating "Søg".
   "search.attractions": { en: "Search attractions", da: "Søg i attraktioner", de: "Attraktionen suchen" },

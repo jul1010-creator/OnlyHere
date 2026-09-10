@@ -130,7 +130,7 @@ import { WeatherHeaderStrip } from "./components/WeatherHeaderStrip";
 import { StoreBadge } from "./components/StoreBadge";
 import { DateTimePicker } from "./components/DateTimePicker";
 import { GuidePage } from "./pages/GuidePage";
-import { askClaude, parseClaudeJSON, askPerplexity, withRetry, askOpenAI, readDatesFromImage, readPosterText, wholeSentences } from "./utils/aiClient";
+import { askClaude, parseClaudeJSON, askPerplexity, withRetry, askOpenAI, readDatesFromImage, readPosterText, wholeSentences, citationUrls } from "./utils/aiClient";
 import { STUDIO_VOICE, slugify, J, bb, bbBullets, bbData, bulletsBlock, shapeForLive, madeHeading } from "./utils/studioContent";
 import BlogBody from "./components/BlogBody";
 import { studioPrompts } from "./utils/studioPrompts";
@@ -214,7 +214,7 @@ import { dateClaimProblems } from "./utils/dateClaims";
 import { proposals as waitingProposals, describeProposals, writeFor, MOVE as WAIT_MOVE } from "./utils/undatedSweep";
 import { avatarUrl } from "./utils/accountAvatar";
 import { WAITING_TYPE, waitingReason, waitingPayload, waitingLine, waitingDays, waitingOrder, promoted, isWaiting } from "./utils/undatedEvents";
-import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition, venueRatherThanEvent } from "./utils/eventDates";
+import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition, venueRatherThanEvent, statusRefusalFor, STATUS_REFUSAL_WHY } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
 import { newStreamState, readStreamEvent, visibleText, streamContent, streamContentForApi, streamDiagnosis, streamTrace, ranOutThinking } from "./utils/streamRead";
 import { heroNeedsReplacing, heroPatch, heroStatusLine, isAbsolutePhoto } from "./utils/heroPhoto";
@@ -10464,7 +10464,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
             collect(first.banners, domainOf(ev.website));
             trace.push({ step: "site", host: domainOf(ev.website), ok: first.ok, why: first.why, refused: first.refused, status: first.status, detail: first.detail, via: first.data?.via || "", chars: (first.data?.text || "").length, images: (first.banners || []).length, found: first.found ? isoDay(first.found.start) : "" });
             if (first.found) {
-              fromSite = { start: isoDay(first.found.start), end: isoDay(first.found.end), via: first.data.via || "fetch", host: domainOf(ev.website), how: "text" };
+              fromSite = { start: isoDay(first.found.start), end: isoDay(first.found.end), via: first.data.via || "fetch", host: domainOf(ev.website), how: "text", url: ev.website || "" };
             } else if (first.ok || (first.banners || []).length || (first.data?.tickets || []).length) {
               // ── A BLOCKED FRONT PAGE IS NOT A DEAD END ──────────
               //
@@ -10490,7 +10490,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
                 collect(second.banners, domainOf(ticket.href));
                 trace.push({ step: "ticket", host: domainOf(ticket.href), ok: second.ok, why: second.why, refused: second.refused, status: second.status, detail: second.detail, via: second.data?.via || "", chars: (second.data?.text || "").length, images: (second.banners || []).length, found: second.found ? isoDay(second.found.start) : "" });
                 if (second.found) {
-                  fromSite = { start: isoDay(second.found.start), end: isoDay(second.found.end), via: second.data.via || "fetch", host: domainOf(ticket.href), how: "text" };
+                  fromSite = { start: isoDay(second.found.start), end: isoDay(second.found.end), via: second.data.via || "fetch", host: domainOf(ticket.href), how: "text", url: ticket.href || "" };
                 }
               } else {
                 trace.push({ step: "ticket", why: "no-ticket-link" });
@@ -10529,7 +10529,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
             const e = editionFrom(shot.text);
             trace.push({ step: "poster", host: banner.host || "", why: e.why, refused: e.refused, printed: shot.text.slice(0, 60), found: e.found ? isoDay(e.found.start) : "" });
             if (e.found) {
-              fromSite = { start: isoDay(e.found.start), end: isoDay(e.found.end), via: "poster", host: banner.host || domainOf(banner.url), how: "poster", printed: shot.text.slice(0, 60) };
+              fromSite = { start: isoDay(e.found.start), end: isoDay(e.found.end), via: "poster", host: banner.host || domainOf(banner.url), how: "poster", printed: shot.text.slice(0, 60), url: banner.url || "" };
               break;
             }
           }
@@ -10559,6 +10559,12 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
             notes: fromSite.how === "poster"
               ? `Read off the poster on ${fromSite.host}, which prints "${fromSite.printed}", so ${span}.`
               : `Read off ${fromSite.host}, the event's own site, which states ${span}.`,
+            // ── THE PAGE ITSELF, NOT ITS NAME ───────────────────
+            // Oliver, 10 Sep 2026: "you can add the link to its evidence. So I
+            // can fact-check it." Every tier in this chain already held the
+            // address it read and every one of them passed on the hostname
+            // instead, so checking a finding meant finding the festival again.
+            evidence: [fromSite.url].filter(Boolean),
           });
           traces.push({ name: ev.name, town: ev.town, date: ev.date, steps: trace, resolved: fromSite.start });
           continue;
@@ -10612,6 +10618,11 @@ ${researchRules("festival", ev)}`
             traces.push({ name: ev.name, town: ev.town, date: ev.date, steps: trace, resolved: "" });
             continue;
           }
+          // Same reason as the site tier above: the pages this answer was read
+          // off are in the reply and were being dropped. citationUrls, not a
+          // string filter, because these are {title, url} objects and
+          // String(object) is "[object Object]".
+          const evidence = citationUrls(result, { limit: 3 });
           const cleaned = result.text.replace(/^```json\s*|\s*```$/g, "").trim();
           const parsed = JSON.parse(cleaned);
           // ── A CHANGE IS A DIFFERENCE, NOT AN ANSWER ─────────────
@@ -10649,15 +10660,54 @@ ${researchRules("festival", ev)}`
             && normaliseTicketStatus(parsed.ticketStatusChanged) !== normaliseTicketStatus(ev.ticketStatus);
           if (parsed.dateChanged && !dateReallyChanged) parsed.dateChanged = "";
           if (parsed.ticketStatusChanged && !statusReallyChanged) parsed.ticketStatusChanged = "";
+          // ── AND THE STATUS GOES THROUGH A GATE TOO ──────────────
+          //
+          // Until now only the date did. A ticket status is a claim about an
+          // edition, and this same reply had already been caught proposing the
+          // wrong edition's date: the status sitting beside it came off the same
+          // page. Roskilde, 10 Sep 2026, reported sold out for an edition whose
+          // tickets have not gone on sale, is what that costs a reader.
+          //
+          // Two ways it can be about the wrong edition, and they are different
+          // questions. Both live in statusRefusalFor in utils/eventDates.js,
+          // which is where they can be run: this component cannot be rendered by
+          // the suite, and while the rule lived here the only thing any
+          // assertion could check was that the lines existed. A mutant that
+          // turned the guard into `if (false)` proved that by surviving.
+          //
+          // `accepted: parsed.dateChanged` rather than the model's original,
+          // because what matters is the date THE GATE LET THROUGH: a row that
+          // just gained a real future date has an edition for a status to be
+          // about again.
+          const statusRefusal = statusRefusalFor({
+            status: parsed.ticketStatusChanged, dateProblem: badProposal,
+            onFile: ev.date, accepted: parsed.dateChanged, today: new Date(),
+          });
+          if (statusRefusal) {
+            parsed.ignoredStatus = parsed.ticketStatusChanged;
+            parsed.ignoredStatusWhy = STATUS_REFUSAL_WHY[statusRefusal] || statusRefusal;
+            parsed.ticketStatusChanged = "";
+          }
+          // `notes` is deliberately left as the model wrote it. It is the one
+          // place the claim survives in its own words, and a note reading "the
+          // festival has moved to 14 June" beside "refused, because that date is
+          // in the past" is the pair he needs to judge which of them is right.
           const hasChange = parsed.stillHappening === false || parsed.dateChanged || parsed.ticketStatusChanged || parsed.ignoredDate;
           if (hasChange) {
             // AFTER the spread, unlike the three fields before it. Those are
             // defaults a model reply is allowed to overrule; this one is ours,
             // it decides whether a Publish button appears, and a model that
             // happened to echo the key back would be handing itself one.
-            changed.push({ name: ev.name, town: ev.town, currentDate: ev.date, ...parsed, waitingRow: isWaiting(ev) ? ev : null });
+            changed.push({ name: ev.name, town: ev.town, currentDate: ev.date, ...parsed, waitingRow: isWaiting(ev) ? ev : null, evidence });
           }
           trace.push({ step: "search", why: parsed.dateChanged ? "" : parsed.ignoredDate ? `refused-${parsed.ignoredWhy || "backwards"}` : "search-found-nothing", refused: parsed.ignoredDate || "", found: parsed.dateChanged || "" });
+          // A refused status with nothing else on the row makes no card, by
+          // design: it is not a change, and Oliver has said twice that a list
+          // where several rows are not changes is a list nobody finishes. It is
+          // still not allowed to vanish, so it goes to the trace, where the rows
+          // it happens to are exactly the ones the panel already lists as still
+          // having no usable date.
+          if (statusRefusal) trace.push({ step: "search", why: `status-${statusRefusal}`, refusedStatus: parsed.ignoredStatus || "" });
           traces.push({ name: ev.name, town: ev.town, date: ev.date, steps: trace, resolved: parsed.dateChanged || "" });
         } catch {
           // one event's check failing shouldn't kill the whole batch, but it
@@ -19611,7 +19661,22 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                     {/* Said out loud. A refusal nobody can see is
                                         indistinguishable from a check that found nothing. */}
                                     {c.ignoredDate && <div style={{ fontSize: 11.5, color: C.muted }}>Ignored a suggested date of {c.ignoredDate}, because {c.ignoredWhy}.</div>}
+                                    {c.ignoredStatus && <div style={{ fontSize: 11.5, color: C.muted }}>Ignored a suggested ticket status of {c.ignoredStatus}, because {c.ignoredStatusWhy}.</div>}
                                     {c.notes && <div style={{ fontSize: 11.5, color: C.light, marginTop: 3 }}>{c.notes}</div>}
+                                    {/* ── AND THE PAGE IT WAS READ OFF ─────
+                                        Oliver, 10 Sep 2026: "you can add the
+                                        link to its evidence. So I can
+                                        fact-check it." The address, as a link,
+                                        because clicking it is the thing he
+                                        does with it. */}
+                                    {Array.isArray(c.evidence) && c.evidence.length > 0 && (
+                                      <div style={{ fontSize: 10.5, color: C.muted, marginTop: 4, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                                        <span>Read off:</span>
+                                        {c.evidence.slice(0, 3).map((u, k) => (
+                                          <a key={k} href={u} target="_blank" rel="noreferrer" style={{ color: C.gold, textDecoration: "underline" }}>{domainOf(u) || u}</a>
+                                        ))}
+                                      </div>
+                                    )}
                                     {/* ── "THEN IT APPEARS" ────────────────────
                                         A waiting entry is on no page, so the
                                         line below does not apply to it: there
@@ -19807,7 +19872,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
                           {SWEEPS.map(sw => (
                             <button key={sw.id} disabled={sweepBusy || sweepWriteState?.running}
-                              onClick={() => { setSweepId(sw.id); setSweepProposals(null); setSweepState(null); setSweepWriteState(null); setSweepSnapshot(null); setSweepRevise(false); }}
+                              onClick={() => { setSweepId(sw.id); setSweepProposals(null); setSweepState(null); setSweepWriteState(null); setSweepSnapshot(null); setSweepRevise(!!sw.reviseOnly); }}
                               style={{ background: sweepId === sw.id ? `${C.gold}22` : "none", border: `1px solid ${sweepId === sw.id ? C.gold : C.border}`, color: sweepId === sw.id ? C.gold : C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                               {sw.label}
                             </button>
@@ -19820,7 +19885,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           modes are disjoint by design in selectRows, so this is
                           a real choice between two sets of rows rather than a
                           filter on one, and the count under it says which. */}
-                      {sweepById(sweepId)?.revisable && (
+                      {/* ── AND NOT OFFERED A RUN THAT CANNOT WORK ─────
+                          Oliver, 10 Sep 2026: "The 'sold-out' sweep does
+                          nothing. Just instantly says that nothing needs it."
+
+                          It was doing exactly what it was told. Choosing a sweep
+                          reset the mode to fill, and a reviseOnly sweep returns
+                          nothing in fill mode by design, so the one sweep whose
+                          blurb says revise only opened in the mode that cannot
+                          work. A rule written in one place and contradicted by
+                          the button beside it. */}
+                      {sweepById(sweepId)?.revisable && !sweepById(sweepId)?.reviseOnly && (
                         <div style={{ display: "flex", gap: 6, marginBottom: 10, alignItems: "center" }}>
                           {[[false, "Fill the empty ones"], [true, "Look again at the filled ones"]].map(([mode, label]) => (
                             <button key={String(mode)} disabled={sweepBusy || sweepWriteState?.running}
