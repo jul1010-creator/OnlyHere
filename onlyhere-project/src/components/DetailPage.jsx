@@ -1,8 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { C } from "../utils/theme";
 import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow, externalHref, hasFinished, TRAVEL_ORIGIN } from "../utils/helpers";
 import { byEventDate } from "../utils/eventDates";
 import { relationLine, kindLabel, areasInside } from "../utils/placeKind";
+import { pricedLine } from "../utils/provenance";
 import { ticketBadge } from "../utils/tickets";
 // ── "ATTRACTIONS ALL SAY FREE" ────────────────────────────────────
 // Oliver, 27 Aug 2026. The badge below appended a literal "· FREE" to every
@@ -19,7 +20,7 @@ import { ReviewsSection } from "./ReviewsSection";
 import { ArticleFeedback } from "./ArticleFeedback";
 import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
-import { bookingUrl, airbnbUrl, tripcomStayUrl, stayDisclosure, STAY_DISCLOSURE, ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote, isWegotripUrl } from "../utils/affiliates";
+import { ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote, isWegotripUrl } from "../utils/affiliates";
 import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl, isTourUrl, sameShop, priceSourceHost } from "../utils/ticketLink";
 import { branchPoints, branchesOf, hasBranches, branchLine, branchLabel } from "../utils/branches";
 import { offerView, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
@@ -152,6 +153,28 @@ export const detailPoint = (item, kind) =>
   placeCoords(item) || (kind === "town" ? townPointFor(item?.name) : null);
 
 export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, hasBeen = false, onToggleBeen, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false, signedIn = false, onNeedAccount, lang = DEFAULT_UI_LANGUAGE, windowed = false }) => {
+  // Folded away by default. See the events block below for why, and for why
+  // the count sits on the row that opens it.
+  const [eventsOpen, setEventsOpen] = useState(false);
+  // ── A MISSING PHOTOGRAPH AND A BROKEN ONE ARE ONE STATE ───────────
+  //
+  // Oliver, 10 Sep 2026: "what to do with places where I can't find pictures..
+  // shall we somehow collapse the events without pictures? So it's not an empty
+  // box, but a collapsed frame."
+  //
+  // The empty box was not the no-photo case, which already draws the emoji at
+  // full size. It was the BROKEN one: `item.photo` is truthy, so the header
+  // styled itself as having a photograph, dropped the emoji to a quarter opacity
+  // behind it, and then onError hid the image. A 190px band with a ghost in it,
+  // and nothing anywhere could tell it from a page whose photo simply had not
+  // been found yet.
+  //
+  // One state, decided before render, the way showablePhoto already does it for
+  // the chat cards. Reset when the entry changes, or one bad image would collapse
+  // the header of every entry opened after it.
+  const [shotFailed, setShotFailed] = useState(false);
+  useEffect(() => { setShotFailed(false); }, [item?.photo]);
+  const hasShot = !!String(item?.photo || "").trim() && !shotFailed;
   // ── ESCAPE CLOSES A WINDOW ────────────────────────────────────────
   //
   // Oliver, 9 Sep 2026, on opening an entry from the chat: "a window that when
@@ -368,11 +391,14 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
         ? { width: "min(720px, 100%)", maxHeight: "88vh", overflowY: "auto", background: C.bg, borderRadius: 16, border: `1px solid ${C.border}`, boxShadow: "0 24px 60px rgba(0,0,0,.55)" }
         : undefined}
     >
-      <div style={{ height: 190, background: `${color}22`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
-        <span style={{ fontSize: 64, opacity: item.photo ? 0.25 : 1, position: item.photo ? "absolute" : "static" }}>{item.emoji}</span>
-        {item.photo && (
-          <img src={item.photo} alt={item.name} referrerPolicy="no-referrer" onError={e => { e.target.style.display = "none"; }}
-            style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
+      {/* Collapsed rather than empty: a band with no photograph in it is
+          shorter, so it reads as a deliberate marker for the entry rather than
+          as a picture that failed to arrive, and the writing starts higher. */}
+      <div style={{ height: hasShot ? 190 : 120, background: `${color}22`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
+        <span style={{ fontSize: 64, opacity: hasShot ? 0.25 : 1, position: hasShot ? "absolute" : "static" }}>{item.emoji}</span>
+        {!!String(item?.photo || "").trim() && (
+          <img src={item.photo} alt={item.name} referrerPolicy="no-referrer" onError={() => setShotFailed(true)}
+            style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative", display: shotFailed ? "none" : "block" }} />
         )}
         <button onClick={onClose}
           style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", left: 14, background: "rgba(10,15,30,0.7)", border: "none", color: "#fff", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
@@ -397,7 +423,9 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           entry instead of having to be matched by filename in
           image-credits.json, which only knows about downloaded files. Falls
           back to that lookup when it is absent, which is every older entry. */}
-      <PhotoCredit photo={item.photo} credit={item.__photoCredit} style={{ padding: "6px 20px 0", maxWidth: 620, margin: "0 auto" }} />
+      {/* No credit under a photograph that did not load: it credits nothing,
+          and it is the one line that tells a reader the picture is real. */}
+      <PhotoCredit photo={hasShot ? item.photo : ""} credit={item.__photoCredit} style={{ padding: "6px 20px 0", maxWidth: 620, margin: "0 auto" }} />
       <div style={{ padding: "14px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: ink, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>
           {kind === "event" ? `${item.town}` : kind === "nightlife" ? item.location : kind === "free" ? item.city : kind === "food" ? item.location : item.region}
@@ -571,7 +599,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
         {kind === "event" && (
           <AtAGlanceCard lang={lang} rows={[
             arrivalRow(item.nearestStation),
-            { icon: "🎟️", label: "Tickets", value: item.ticketInfo, link: bookRow },
+            { icon: "🎟️", label: "Tickets", value: pricedLine(item.ticketInfo, item), link: bookRow },
             tourRow ? { icon: "🥾", label: "Tours", value: "", link: tourRow } : null,
             // ── "MAKE PEOPLE AWARE" ──────────────────────────────────
             // Oliver, 15 Aug 2026, off a draft with Danish in a reader field:
@@ -616,11 +644,17 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               (() => { const r = relationLine(item); return r ? { icon: r.label === "Inside" ? "◇" : "🧭", label: r.label, value: r.value } : null; })(),
               { icon: "🛏️", label: "Recommended Stay", value: item.recommendedStayGlance },
               { icon: "☀️", label: "Best Time", value: item.bestTimeGlance },
+              // ── GUIDED FIRST, SELF-GUIDED UNDER IT ──────────────
+              // Oliver, 10 Sep 2026: "The guided tours, keep them. But swap
+              // them around.. so guided tour first and then self-guided tour
+              // afterwards." A guided walk is what most visitors mean when
+              // they think about booking something, and an audio walk is the
+              // cheaper alternative you offer once they have seen it.
+              tourRow ? { icon: "🥾", label: "Tours", value: "", link: tourRow } : null,
               // Only a TOWN can carry one: wegotripMatch's TOWN_TYPES is
               // ["town"] and says at length why a nightTown row must not, so
               // this is the one card that needs the row.
               audioRow ? { icon: "🎧", label: "Self-guided tour", value: audioSays, link: audioRow } : null,
-              tourRow ? { icon: "🥾", label: "Tours", value: "", link: tourRow } : null,
               { icon: "🏡", label: "Accommodation", value: item.accommodationGlance },
               { icon: "💰", label: "Typical Costs", value: item.typicalCosts },
             ]} />
@@ -700,41 +734,29 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                 </div>
               );
             })()}
-            {/* ── WHERE TO STAY (Oliver, 7 Aug: "on accommodation, put
-                booking.com and AirBnB as affiliate links for me") ────────
-                The guide's day cards already had a Booking link under a
-                standing rule never to remove it. A town page had the
-                accommodation ADVICE and no way to act on it, which is the
-                worse of the two places to be missing it: the town page is
-                where someone decides they want to sleep there.
-                Searches the specific neighbourhood the entry recommends when
-                it names one, and the town itself when it does not, because
-                "Indre By or Vesterbro" is a far better search than
-                "Copenhagen". Only one of the two links can pay, and the note
-                underneath says which. */}
-            {(() => {
-              const area = (item.accommodationGlance || "").trim() || item.name;
-              const b = bookingUrl({ area: `${area}${area === item.name ? "" : `, ${item.name}`}` });
-              const a = airbnbUrl({ area: `${area}${area === item.name ? "" : `, ${item.name}`}` });
-              // ── AND TRIP.COM, ON THE TOWN ITSELF ─────────────────
-              // The TOWN, not the neighbourhood: Trip.com's hotel list is keyed
-              // to a city id and there is no id for Vesterbro. Null on a town
-              // it has no city for, which is most of the hidden gems, and then
-              // this card is exactly what it was. See data/tripcom.js.
-              const t = tripcomStayUrl(item.name);
-              if (!b && !a && !t) return null;
-              const link = { flex: 1, textAlign: "center", display: "block", borderRadius: 100, padding: "10px 12px", fontSize: 12.5, fontWeight: 700, textDecoration: "none", border: `1px solid ${C.border}` };
-              return (
-                <div style={{ marginBottom: 14 }}>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <a href={b} target="_blank" rel="noreferrer sponsored" style={{ ...link, background: `${C.gold}1f`, borderColor: `${C.gold}66`, color: C.gold }}>🏨 Stays on Booking.com ↗</a>
-                    <a href={a} target="_blank" rel="noreferrer" style={{ ...link, background: C.surface, color: C.light }}>🏡 Homes on Airbnb ↗</a>
-                    {t && <a href={t} target="_blank" rel="noreferrer sponsored nofollow" style={{ ...link, background: `${C.gold}1f`, borderColor: `${C.gold}66`, color: C.gold }}>🏨 Trip.com ↗</a>}
-                  </div>
-                  <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>{stayDisclosure({ tripcom: !!t })}</div>
-                </div>
-              );
-            })()}
+            {/* ── AND NO HOTEL LINKS HERE, ONLY IN THE GUIDE ─────────
+                Oliver, 10 Sep 2026, looking at the three of them on the
+                Copenhagen page: "Remove the hotel links. No reason to have
+                them. nobody will click the Trip.com and order because of
+                this."
+
+                This block was his own ask on 7 Aug, and the reason written
+                here was that "the town page is where someone decides they
+                want to sleep there". That is true about the DECISION and
+                wrong about the act. Deciding you like Copenhagen and booking
+                a bed are not the same moment, and the second one needs dates.
+
+                A town page has no dates to send, so all three could ever be
+                is a link to somebody's empty search box. GuidePage's day
+                cards send Booking a real checkin date and the day's own stay
+                area, and read "See 3-4 nights on Booking.com". Same three
+                partners, and only one of the two versions knows what it is
+                asking for.
+
+                Two of the three earned nothing besides. The note under them
+                said so out loud, so the block was three buttons wide and
+                needed a line of small print to explain that most of it did
+                not pay. See GuidePage for the version that stays. */}
             {/* Hands travelLabel the WHOLE ENTRY, so partOf is visible and
                 anywhere inside Copenhagen is not a journey from Copenhagen, and
                 renders nothing at all when there is no figure. Dragør's page
@@ -754,14 +776,30 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                 Nothing is generated, nothing is inferred from the town's text, and
                 if no published festival matches, the section does not render at
                 all rather than saying something vague like "check back later". */}
+            {/* ── AND FOLDED AWAY UNTIL SOMEBODY WANTS IT ────────────
+                Oliver, 10 Sep 2026, on the Copenhagen page: "What's on in
+                Copenhagen make it a dropdown link."
+
+                Four event cards is most of a screen, and it sits between the
+                At a Glance card and the first sentence about what the place
+                actually is. Somebody reading a town page is deciding whether
+                to go at all; what is on in five weeks is a question they ask
+                second, if they ask it. The count is on the row so it is still
+                answerable without opening it, which is the difference between
+                folding something away and hiding it. */}
             {(townEvents.length > 0 || townNearby.length > 0) && (
               <div style={{ marginBottom: 22 }}>
-                {townEvents.length > 0 && (
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>
-                  What's on in {item.name}
-                </div>
-                )}
-                {townEvents.map(e => {
+                <button onClick={() => setEventsOpen(o => !o)}
+                  style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "none", border: "none", padding: 0, marginBottom: eventsOpen ? 10 : 0, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase" }}>
+                    {townEvents.length > 0 ? `What's on in ${item.name}` : "What's on nearby"}
+                  </span>
+                  <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 600 }}>
+                    {townEvents.length + townNearby.length === 1 ? "1 event" : `${townEvents.length + townNearby.length} events`}
+                  </span>
+                  <span style={{ fontSize: 11, color: C.muted, marginLeft: "auto", transform: eventsOpen ? "rotate(180deg)" : "none" }}>⌄</span>
+                </button>
+                {eventsOpen && townEvents.map(e => {
                   const live = isCurrentlyLive(e.date, e.dateEnd);
                   // Was a bare comparison against one string, so "cancelled"
                   // and "off_sale" both fell through to showing ticketInfo as
@@ -800,7 +838,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                   );
                 })}
 
-                {townNearby.length > 0 && (
+                {eventsOpen && townNearby.length > 0 && (
                   <>
                     <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", margin: `${townEvents.length > 0 ? 16 : 0}px 0 10px` }}>
                       Nearby, worth knowing about
@@ -829,7 +867,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
         )}
         {(kind === "free" || kind === "attraction") && (
           <AtAGlanceCard lang={lang} rows={[
-            { icon: "🎟️", label: "Tickets", value: item.ticketsGlance, link: bookRow },
+            { icon: "🎟️", label: "Tickets", value: pricedLine(item.ticketsGlance, item), link: bookRow },
             /* ── AND NOW NOT ON ATTRACTIONS EITHER ────────────────────
                Oliver, 19 Aug 2026: "I think we should get rid of
                'time-needed'."

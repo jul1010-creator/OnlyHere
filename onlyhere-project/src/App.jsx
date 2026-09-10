@@ -158,7 +158,7 @@ import { townClashes, clashNote } from "./utils/chatGeography";
 import { readExclusions, withoutExcluded, excludedNote } from "./utils/exclusions";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
-import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl } from "./utils/ticketLink";
+import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl, TICKET_FIELD, TOUR_FIELD } from "./utils/ticketLink";
 import { tourQuery, tourKindFor, tourTownFor, pickTourUrl, tourPhrase, tourCandidates, tourProposal, replaceTour, describeTourFindings, tourAliveVerdict, tourRemovalFor, TOUR_RESWEEP_DAYS, FOUND as TOUR_FOUND, GONE as TOUR_GONE, UNKNOWN as TOUR_UNKNOWN, ALIVE as TOUR_ALIVE } from "./utils/tourSweep";
 import { currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLanguage";
 import { LanguageChoice } from "./components/LanguagePicker";
@@ -225,6 +225,7 @@ import { tripChange, MATTERS, BETTER } from "./utils/tripChanges";
 import { echoInDraft, describeEcho, ECHO_RUN } from "./utils/echoCheck";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AffiliatePanel } from "./components/AffiliatePanel";
+import { linkPatch } from "./utils/affiliateAudit";
 import { EntryLink } from "./components/EntryLink";
 import { AuthSheet } from "./components/AuthSheet";
 import { ProfileSheet } from "./components/ProfileSheet";
@@ -1370,6 +1371,40 @@ function GemlyxApp() {
         : `Saved. ${merged.name} is unplaced again, so it shows under Essentials until you place it.`, 3500);
     } catch (e) { setKindError(String(e.message || e)); }
     setKindSaving(false);
+  };
+
+  // ── AND ONE FOR AN AFFILIATE LINK ────────────────────────────────
+  // Oliver, 10 Sep 2026: "I just want to have some control over it." Same shape
+  // as the two editors above and for the same stated reason: one field, one
+  // PATCH, no redraft. The judgement is affiliateAudit.linkPatch, which holds a
+  // pasted link to the gates the sweep's own proposals go through, so a link
+  // saved here cannot be one the page would then refuse to render.
+  const [linkSavingId, setLinkSavingId] = useState(null);
+
+  const saveAffiliateLink = async (finding, raw) => {
+    const row = (manageItems || []).find(r => String(r.id) === String(finding?.id));
+    if (!row) return;
+    const { patch, why } = linkPatch(row.payload || {}, finding.kind, raw, {
+      isBookable: isBookableTicketUrl, isTour: isTourUrl,
+      ticketField: TICKET_FIELD, tourField: TOUR_FIELD,
+    });
+    // A refusal is a sentence rather than a silent no-op, or pasting a search
+    // page looks exactly like saving one.
+    if (!Object.keys(patch).length) { showToast(why, 4500); return; }
+    setLinkSavingId(row.id);
+    try {
+      const merged = { ...(row.payload || {}), ...patch };
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(row.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ payload: merged }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { showToast(studioErrorMessage("this entry", res.status, body), 5000); setLinkSavingId(null); return; }
+      setManageItems(prev => (prev || []).map(r => (r.id === row.id ? { ...r, payload: merged } : r)));
+      showToast(`${why} Visitors see it on their next load.`, 3500);
+    } catch (e) { showToast(String(e.message || e), 5000); }
+    setLinkSavingId(null);
   };
 
   const openPlaceEdit = (row) => {
@@ -10565,7 +10600,7 @@ BE CAREFUL OF TWO THINGS. A festival page carries its own history, so make sure 
 
 Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "YYYY-MM-DD or empty", "dateEndChanged": "YYYY-MM-DD or empty", "ticketStatusChanged": "", "notes": "one short sentence naming WHERE the date came from, or saying the next edition is not announced yet"}.
 ${researchRules("festival", ev)}`
-          : `Using real, current web search, check the current real status of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. Currently on file: date ${ev.date || "unknown"}${ev.ticketInfo ? `, ticket info "${ev.ticketInfo}"` : ""}${ev.ticketStatus ? `, ticket status "${ev.ticketStatus}"` : ""}. Check: (1) is it still genuinely scheduled to happen, or was it cancelled/postponed, (2) has the date actually changed from what's on file, (3) is ticket availability different from what's on file (now sold out, now on sale, now limited). Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "ticketStatusChanged": "", "notes": ""} — dateChanged is the new real date if it genuinely changed from what's on file, else empty string; ticketStatusChanged is the new real status ONLY if genuinely different from what's on file, else empty string; notes is one short sentence explaining what changed, ONLY if something in this response is non-empty/non-default, else empty string. If nothing has changed, all fields should be empty/true/default and notes empty.\n${researchRules("festival", ev)}`;
+          : `Using real, current web search, check the current real status of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. Currently on file: date ${ev.date || "unknown"}${ev.ticketInfo ? `, ticket info "${ev.ticketInfo}"` : ""}${ev.ticketStatus ? `, ticket status "${ev.ticketStatus}"` : ""}. Check: (1) is it still genuinely scheduled to happen, or was it cancelled/postponed, (2) has the date actually changed from what's on file, (3) is ticket availability different from what's on file (now sold out, now on sale, now limited). A MULTI-DAY EVENT HAS TWO DATES AND THIS ANSWER HAS A FIELD FOR EACH: a page saying the event runs 7 to 8 November is dateChanged 2026-11-07 AND dateEndChanged 2026-11-08, never one end of the run squeezed into dateChanged on its own, because a day the event already runs on reads as the event moving. Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "dateEndChanged": "", "ticketStatusChanged": "", "notes": ""} — dateChanged is the new real date if it genuinely changed from what's on file, else empty string; ticketStatusChanged is the new real status ONLY if genuinely different from what's on file, else empty string; notes is one short sentence explaining what changed, ONLY if something in this response is non-empty/non-default, else empty string. If nothing has changed, all fields should be empty/true/default and notes empty.\n${researchRules("festival", ev)}`;
         try {
           const result = await askPerplexity(prompt);
           if (result.error) {
@@ -10599,7 +10634,15 @@ ${researchRules("festival", ev)}`
           // to move Rock under broen from a correct 2027 to a 2026 date that has
           // already passed. Refused, and the reason is kept so the panel can say
           // it was refused rather than dropping it in silence.
-          const badProposal = parsed.dateChanged ? datePropositionProblem(parsed.dateChanged, ev.date, new Date()) : "";
+          // ── AND THE GATE IS TOLD HOW LONG THE EVENT RUNS ────────
+          // Oliver, 10 Sep 2026: "for some reason it changed from 7-8th when
+          // it's the two dates where the event is going on." Comic Con runs 7 to
+          // 8 November, the file holds the 7th, and the 8th came back as a move.
+          // Without dateEnd the gate cannot tell a day of the event from a new
+          // date. See datePropositionProblem in utils/eventDates.js.
+          const badProposal = parsed.dateChanged
+            ? datePropositionProblem(parsed.dateChanged, ev.date, new Date(), { onFileEnd: ev.dateEnd })
+            : "";
           if (badProposal) { parsed.ignoredDate = parsed.dateChanged; parsed.ignoredWhy = DATE_PROPOSITION_WHY[badProposal] || badProposal; parsed.dateChanged = ""; }
           const dateReallyChanged = parsed.dateChanged && !sameDay(parsed.dateChanged, ev.date);
           const statusReallyChanged = parsed.ticketStatusChanged
@@ -19079,7 +19122,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         Reads manageItems, the rows already loaded, rather than
                         fetching: a panel that re-queries would be answering
                         about a different set than the one being managed. */}
-                    {Array.isArray(manageItems) && <AffiliatePanel rows={manageItems} />}
+                    {Array.isArray(manageItems) && <AffiliatePanel rows={manageItems} onSetLink={saveAffiliateLink} savingId={linkSavingId} />}
 
                     {/* ── THE TOUR SWEEP ─────────────────────────────
                         Oliver, 9 Sep 2026: "So that will be a sweep that
@@ -21621,7 +21664,22 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <div style={{ fontSize: 13, color: "#4CAF50", fontWeight: 700, marginBottom: 28 }}>✓ You're on the list. We'll be in touch.</div>
                 )}
                 <GemlyxLogo size={18} color={C.text} style={{ marginBottom: 6 }} />
-                <div style={{ fontSize: 11, color: C.muted, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>Every find personally verified · Denmark <FlagDK height={10} /></div>
+                {/* ── AND NO CLAIM THE EVIDENCE CANNOT CARRY ──────────
+                    Oliver, 10 Sep 2026, on "Every find personally verified":
+                    "I'm not gonna lie to people."
+
+                    He is right, and the word doing the lying is `personally`,
+                    which reads as having been there. The night this came off, a
+                    price nobody had looked at since August was sitting on a live
+                    2027 festival page, and nothing in this app has ever had a
+                    way to say an entry was re-checked after it was written.
+
+                    The true version of this claim is already on every entry and
+                    is stronger than a badge: HowWeKnow prints that entry's own
+                    sources, the corrections it needed and the questions still
+                    open. Specific and checkable, rather than a promise in a
+                    footer. So the line goes and nothing replaces it. */}
+                <div style={{ fontSize: 11, color: C.muted, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>Denmark <FlagDK height={10} /></div>
                 <div style={{ fontSize: 11, color: C.muted, marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
                   <span onClick={() => setShowPrivacy(true)} style={{ textDecoration: "underline", cursor: "pointer" }}>Privacy & Data</span>
                   <span style={{ opacity: 0.5 }}>·</span>

@@ -219,7 +219,7 @@ export const eventMonths = (e) => eventMonthsShort(e?.date ?? e?.dateStart, e?.d
 // something instead of quietly dropping it. A silent refusal here would be the
 // same fault as the silent slice on the review screen: he would have no way to
 // tell a checked event from an unchecked one.
-export const datePropositionProblem = (proposed, onFile, today, { labelled = false } = {}) => {
+export const datePropositionProblem = (proposed, onFile, today, { labelled = false, onFileEnd = "" } = {}) => {
   const next = parseEventDate(proposed);
   if (!next) return "unreadable";
   const now = parseEventDate(today) || (today instanceof Date ? today : null);
@@ -228,6 +228,25 @@ export const datePropositionProblem = (proposed, onFile, today, { labelled = fal
   }
   const have = parseEventDate(onFile);
   if (have && next.getTime() < have.getTime()) return "earlier-than-the-one-on-file";
+  // ── AND A DAY OF THE EVENT IS NOT THE EVENT MOVING ────────────────
+  //
+  // Oliver, 10 Sep 2026: "for some reason it changed from 7-8th when it's the
+  // two dates where the event is going on."
+  //
+  // Comic Con Denmark runs 7 to 8 November. The file holds the 7th, the model
+  // read the event's own site correctly, and the prompt branch it was asked
+  // through has ONE date field, so it had to pick an end of a range the file
+  // already covers. That came out as a move from the 7th to the 8th.
+  //
+  // The model was right and the form was wrong. This is the half fixable from
+  // here: a proposal landing inside the dates already on file is not a change.
+  // The same rule as the sameDay check in the caller, widened from a day to a
+  // run, and it exists because Oliver said a list where several rows are not
+  // changes is a list nobody finishes.
+  const end = parseEventDate(onFileEnd);
+  if (have && end && next.getTime() >= have.getTime() && next.getTime() <= end.getTime()) {
+    return "inside-the-dates-already-on-file";
+  }
   // ── AN ANNUAL FESTIVAL KEEPS ITS SLOT IN THE YEAR ─────────────────
   //
   // Oliver, 20 Aug 2026, on a run that fixed two events and broke two others:
@@ -255,6 +274,7 @@ export const DATE_PROPOSITION_WHY = {
   "in-the-past": "the suggested date is in the past, so it is not the next edition",
   "earlier-than-the-one-on-file": "the suggested date is earlier than the one already on file, which means it came from an older page",
   "a-different-month-from-the-one-on-file": "the suggested date is in a different month from the one on file and the page never says it is the event's own date, so it is far more likely to be another date printed on the same page",
+  "inside-the-dates-already-on-file": "the suggested date is one of the days this event already runs on, so it is the same edition rather than a new date",
 };
 
 export const isUndated = (v) => parseEventDate(v) === null;

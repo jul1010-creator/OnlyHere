@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
 import { dayLabel } from "../utils/calendarDay";
-import { readerCorrections, readerUncertainties } from "../utils/provenance";
+import { readerCorrections, readerUncertainties, lastCheckedLabel } from "../utils/provenance";
 
 // ── SHOWING THE WORKING (Oliver, 7 Aug 2026) ─────────────────────────
 //
@@ -106,7 +106,10 @@ export const HowWeKnow = ({ item }) => {
   // The most recent thing that actually happened to this entry. `verified` is
   // the festival stamp written at draft time; a correction is newer and more
   // specific, so it wins when both exist.
-  const lastCheck = dateLabel(corrections.length ? corrections[corrections.length - 1].at : null) || (typeof item.verified === "string" ? item.verified : null);
+  // One definition, in utils/provenance.js, because the ticket line says it too
+  // now and two copies of "when was this looked at" drift the first time either
+  // is touched.
+  const lastCheck = lastCheckedLabel(item, dateLabel) || null;
 
   // ── "1 SOURCE" IS THE WORST THING THIS PANEL CAN SAY ─────────────
   // Oliver, 9 Aug 2026: "the picture with '1 source' makes me look like we got

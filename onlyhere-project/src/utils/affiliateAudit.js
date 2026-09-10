@@ -40,25 +40,50 @@ export const ticketDestination = (row) => {
   return clean(p.ticketUrl) || clean(p?.__ticket?.url) || "";
 };
 
+// ── AND THE OTHER HALF OF THE MONEY, WHICH IT COULD NOT SEE ─────────
+//
+// Oliver, 10 Sep 2026: "can you put into managed published 'affiliate links'?
+// I don't care if it's in edit or as its own. I just want to have some control
+// over it."
+//
+// This file audited ONE field. Every GetYourGuide link on the site lives in
+// `tourUrl`, and nothing here ever read it, so the panel built to answer "what
+// do my affiliates reach" was blind to a whole programme while printing a
+// number that read as though it covered everything. The same failure this file
+// was written to end, one field along.
+export const tourDestination = (row) => clean((row?.payload || row || {}).tourUrl);
+
+export const TICKET = "ticket";
+export const TOUR = "tour";
+
 // ── ONE ROW, ANSWERED ───────────────────────────────────────────────
 //
 // `isBookable` and `agentOf` are injected from utils/ticketLink.js rather than
 // imported, for the reason every other audit in this codebase gives: a second
 // copy of the judgement drifts the first time either is touched.
-export const auditRow = (row, { isBookable, agentOf, wrap } = {}) => {
+// ── ONE ROW, ONE KIND OF LINK ───────────────────────────────────────
+// `kind` picks which field is read and which gate judges it. Both gates are
+// injected for the reason the ticket one always was: a second copy of the
+// judgement drifts the first time either is touched.
+export const auditRow = (row, { isBookable, isTour, agentOf, wrap, kind = TICKET } = {}) => {
   const p = row?.payload || row || {};
   const name = clean(p.name) || clean(row?.name) || "(unnamed)";
-  const dest = ticketDestination(row);
-  if (!dest) return { name, state: "none", why: "no ticket link on this row at all" };
+  const tour = kind === TOUR;
+  const word = tour ? "tour" : "ticket";
+  const dest = tour ? tourDestination(row) : ticketDestination(row);
+  const id = row?.id ?? null;
+  if (!dest) return { name, id, kind, state: "none", why: `no ${word} link on this row at all` };
 
+  const gate = tour ? isTour : isBookable;
   let bookable = false;
-  try { bookable = typeof isBookable === "function" && !!isBookable(dest); } catch { bookable = false; }
+  try { bookable = typeof gate === "function" && !!gate(dest); } catch { bookable = false; }
   const agent = (() => { try { return typeof agentOf === "function" ? clean(agentOf(dest)) : ""; } catch { return ""; } })();
 
   if (!bookable) {
     // THE WORK QUEUE. The pipeline found something and the gate refused it, so
     // the row is one hand-edit from earning.
-    return { name, state: "refused", url: dest, host: host(dest), why: `${host(dest) || "that link"} is not a product page, so no button renders` };
+    return { name, id, kind, state: "refused", url: dest, host: host(dest),
+      why: `${host(dest) || "that link"} is not a ${tour ? "tour" : "product"} page, so no button renders` };
   }
   // Wrapped or bare: a bookable URL with no template configured still reaches
   // the tickets and still earns nothing, and the difference is invisible on the
@@ -67,12 +92,33 @@ export const auditRow = (row, { isBookable, agentOf, wrap } = {}) => {
   try { wrapped = typeof wrap === "function" ? clean(wrap(dest)) : ""; } catch { wrapped = ""; }
   const earning = !!wrapped && wrapped !== dest;
   return {
-    name, state: earning ? "earning" : "bookable-unwrapped", url: dest, host: host(dest), agent,
-    why: earning ? `wrapped through ${host(wrapped)}` : "a real product page, but no affiliate template is configured for this agent, so the click earns nothing",
+    name, id, kind, state: earning ? "earning" : "bookable-unwrapped", url: dest, host: host(dest), agent,
+    why: earning ? `wrapped through ${host(wrapped)}` : `a real ${tour ? "tour" : "product"} page, but no affiliate template is configured for this agent, so the click earns nothing`,
   };
 };
 
-export const auditRows = (rows, opts) => (Array.isArray(rows) ? rows : []).map(r => auditRow(r, opts)).filter(Boolean);
+// ── AND ONLY THE SLOTS THAT COULD EXIST ─────────────────────────────
+//
+// `canCarry` keeps an attraction out of the TOUR count. Attractions get no
+// GetYourGuide search on purpose, Oliver's own position on 10 Sep: "It's often
+// cheaper (and better) to use a museum's own guide. I'm not trying to steal
+// people's money." Counting every museum as a tour link that is missing would
+// report a deliberate decision as a hundred and forty gaps.
+//
+// Absent, every row counts, which is what every existing caller does.
+export const auditRows = (rows, opts = {}) => {
+  const can = opts.canCarry;
+  return (Array.isArray(rows) ? rows : [])
+    .filter(r => typeof can !== "function" || can(r))
+    .map(r => auditRow(r, opts))
+    .filter(Boolean);
+};
+
+// Both kinds, flattened, each finding carrying the kind it is about.
+export const auditLinks = (rows, opts = {}) => [
+  ...auditRows(rows, { ...opts, kind: TICKET, canCarry: opts.canTicket }),
+  ...auditRows(rows, { ...opts, kind: TOUR, canCarry: opts.canTour }),
+];
 
 // ── THE SUMMARY, WHICH IS THE ANSWER TO HIS QUESTION ────────────────
 export const auditSummary = (audited) => {
@@ -172,3 +218,42 @@ export const programmeState = ({ tiqetsTemplate, tiqetsBrowse, ticketmasterTempl
   { name: "Car hire", what: "rentals", on: !!clean(carRental),
     note: clean(carRental) ? "AutoEurope, real Danish inventory at 9 airports. Only renders on a trip the traveller said is a driving one" : "empty: the link on hand had no Danish inventory, and a button that opens on an empty result costs more than the commission pays" },
 ];
+
+// ── AND A LINK HE SETS BY HAND GOES THROUGH THE SAME DOOR ───────────
+//
+// Oliver, 10 Sep 2026: "I just want to have some control over it."
+//
+// Control means writing, and a hand-pasted link that skips the gates the sweep
+// writes through is the worst of both: it renders a button the audit will then
+// report as refused, or it earns nothing and looks identical to one that does.
+// So the same two judgements decide, injected the same way, and a refusal comes
+// back as a SENTENCE rather than as a silent no-op.
+//
+// An empty draft is a clear, deliberately: taking a link off a row is half of
+// having control over it, and a row with a refused link on it is worse than a
+// row with none.
+// The FIELD comes in with the gates, because ticketLink.js already names both
+// and is what the pipeline writes through. A second pair of constants here is
+// the drift the rest of this file is written to avoid.
+export const linkPatch = (payload, kind, raw, { isBookable, isTour, ticketField, tourField } = {}) => {
+  const k = clean(kind);
+  const field = k === TOUR ? clean(tourField) : k === TICKET ? clean(ticketField) : "";
+  if (!field) return { patch: {}, why: "that is not a kind of link this entry can carry" };
+  const url = clean(raw);
+  const was = clean((payload || {})[field]);
+  if (!url) {
+    if (!was) return { patch: {}, why: "there was nothing on it to take off" };
+    return { patch: { [field]: "" }, why: `Cleared. No ${k === TOUR ? "tour" : "ticket"} link on this entry, so no button renders.` };
+  }
+  if (!/^https:\/\//i.test(url)) return { patch: {}, why: "a link has to start with https://" };
+  const gate = k === TOUR ? isTour : isBookable;
+  let ok = false;
+  try { ok = typeof gate === "function" && !!gate(url); } catch { ok = false; }
+  if (!ok) {
+    return { patch: {}, why: k === TOUR
+      ? `${host(url) || "that link"} is not a GetYourGuide tour page, so it would render nothing. Paste the product page rather than a search or a city listing.`
+      : `${host(url) || "that link"} is not a bookable product page, so it would render nothing. Paste the ticket's own page rather than a search or a category.` };
+  }
+  if (url === was) return { patch: {}, why: "that is already what the row carries" };
+  return { patch: { [field]: url }, why: `Saved. ${host(url)} is live on this entry.` };
+};

@@ -101,7 +101,7 @@ writeFileSync(entry, `
   export { AI_DISCLOSURE, aiDisclosure, aiDisclosureFor, AI_CHAT_SURFACES } from ${JSON.stringify(join(root, "src/utils/aiDisclosure.js"))};
   export { SUPPORT_TOPICS, REPORT_TOPIC, topicIds, topicLabel, isTopic, GOOD_FAITH_STATEMENT, messagePrompt, MESSAGE_MIN, MESSAGE_MAX, looksLikeEmail, looksLikeUrl, supportProblems, problemFor, supportReference, supportPayload, supportMailto, supportReceipt, SUPPORT_TABLE, SUPPORT_SETUP_SQL, SUPPORT_EMAIL, PRIVACY_EMAIL } from ${JSON.stringify(join(root, "src/utils/support.js"))};
   export { SAFETY_CLAIM_FIELDS, claimIsSupported, unsupportedSafetyClaims, safetyClaimNote } from ${JSON.stringify(join(root, "src/utils/safetyClaims.js"))};
-  export { hasEntrySources, missingSourcesNote } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
+  export { hasEntrySources, missingSourcesNote, lastCheckedAt, lastCheckedLabel, pricedNote, pricedLine } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
   export { rowStamp, rowStampIsEdit, stampLabel, hasSources, sortRows, SORTS } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
   export { PAID_PLANS_LIVE } from ${JSON.stringify(join(root, "src/config.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -221,7 +221,7 @@ writeFileSync(entry, `
   export { factCheckCopy } from ${JSON.stringify(join(root, "src/utils/factCheckCopy.js"))};
   export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn, travelModeKey, modeReachKm, MODE_DAY_KM, preferReachable, preferPassing, overnightMove, describeOvernightMove, spokenDuration, beyondModeRange, BEYOND_DAY_FACTOR, sameMode, howForReader, EATS_THE_DAY_MINUTES } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { LANGUAGES, MONTH_INDEX, PARTY_BARE, PARTY_POSSESSIVE, YES_WORDS, NO_WORDS, alt, LETTER } from ${JSON.stringify(join(root, "src/utils/travellerWords.js"))};
-  export { auditRow, auditRows, auditSummary, auditNote, programmeState, ticketDestination } from ${JSON.stringify(join(root, "src/utils/affiliateAudit.js"))};
+  export { auditRow, auditRows, auditLinks, auditSummary, auditNote, programmeState, ticketDestination, tourDestination, linkPatch, TICKET, TOUR } from ${JSON.stringify(join(root, "src/utils/affiliateAudit.js"))};
   export { problemText, problemList, problemHeading, PROBLEM_NOTE } from ${JSON.stringify(join(root, "src/utils/planProblems.js"))};
   export { readExclusions, isExcluded, withoutExcluded, excludedNote } from ${JSON.stringify(join(root, "src/utils/exclusions.js"))};
   export { latestRelativeAnswer, departureDateIn } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
@@ -4300,6 +4300,62 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ok("and revising keeps the quote rule",
        /you may not use anything you know about Denmark/.test(rev)
        && /checked automatically against the entry text/.test(rev));
+
+    // ── AND THE ONE THAT RE-READS A SOLD-OUT FESTIVAL ──────────────
+    //
+    // Oliver, 10 Sep 2026, after going to tf.dk himself. Tønder's entry says
+    // "4-day pass 2,495 DKK (sold out)" for August 2027 and the festival is
+    // selling that pass at 2,295 with an early bird running to 1 December.
+    // Roskilde's entry was reported sold out for an edition whose tickets have
+    // not gone on sale at all.
+    //
+    // Asked which of seventy-odd festivals to re-read, he picked these: "Only
+    // the sold-out ones." A wrong price is annoying. A wrong sold out talks
+    // somebody out of a trip that would have worked.
+    {
+      const so = sweepById("soldout");
+      const fests = [
+        { id: 31, type: "festival", payload: { name: "Tønder Festival", ticketInfo: "4-day pass 2,495 DKK (sold out)", ticketStatus: "sold_out" } },
+        { id: 32, type: "festival", payload: { name: "Ribelund", ticketInfo: "400 DKK", ticketStatus: "on_sale" } },
+        { id: 33, type: "festival", payload: { name: "Sebbersund", ticketInfo: "Free", ticketStatus: "free" } },
+        { id: 34, type: "town", payload: { name: "Aalborg", ticketStatus: "sold_out" } },
+      ];
+      // A STATUS picks these rows, not a missing field, which is what `only` is
+      // for. Every one of them has a full ticketInfo; none is a gap.
+      is("only the sold-out festivals are taken",
+         selectRows(fests, so, { revise: true }).map(r => r.id), [31]);
+      // Revise only. Every row it wants already HAS a status, so a fill run
+      // could only ever return nothing, and offering the button would offer a
+      // run that cannot work.
+      is("and filling returns nothing rather than an empty run", selectRows(fests, so), []);
+      // THAT ASSERTION PROVED NOTHING ON ITS OWN, and its mutant said so: a row
+      // with no ticketStatus can never read as sold_out, so fill mode is empty
+      // here whether the guard exists or not. The rule is about reviseOnly
+      // sweeps in general, so it is tested on one where fill would otherwise
+      // return rows.
+      ok("a fill run over a revise-only sweep is refused as a rule",
+         selectRows(rows, tax).length > 0
+         && selectRows(rows, { ...tax, reviseOnly: true }).length === 0);
+      ok("because it says it is revise only", so.reviseOnly === true && so.revisable === true);
+      // The allow-list rule this whole file rests on, for all three fields.
+      is("publish carries every field it writes",
+         so.fields.filter(f => !(f in M.shapeForLive("festival", { name: "X" }))), []);
+      // ── AND THE ENTRY CANNOT ANSWER THIS ONE ─────────────────────
+      // Tier 2 reads the entry and checks a quote against it. A published entry
+      // says "2,495 DKK" and nothing about which edition it was reading, so the
+      // quote check would refuse every row and cost a model call each to do it.
+      ok("the entry tier is skipped by name", so.noEntry === true);
+      const src = readFileSync(join(root, "src/utils/sweeps.js"), "utf8");
+      ok("and the run honours that", /if \(stillNeed\.length && askClaude && !sweep\.noEntry\) \{/.test(src));
+      ok("while research is left on, because only the web can answer it", !so.noResearch);
+      // Both guards, in the question, because this sweep writes a live price.
+      ok("the edition test is position rather than presence",
+         /THE EDITION TEST IS POSITION, NOT PRESENCE/.test(so.question) && /siden 1974/.test(so.question));
+      ok("and a sale that has not opened cannot be sold out",
+         /A SALE THAT HAS NOT OPENED CANNOT BE SOLD OUT/.test(so.question));
+      ok("and empty is a correct answer for the edition",
+         /roughly half the time and is a correct answer/.test(so.question));
+    }
 
     // ── AND THE RUN ITSELF STRIPS WHAT DID NOT CHANGE ──────────────
     //
@@ -22885,8 +22941,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Every row that can carry a price or a ticket offers it, so the link is
   // where the reader is already looking rather than only under the fold.
   for (const row of [
-    /\{ icon: "🎟️", label: "Tickets", value: item\.ticketInfo, link: bookRow \}/,
-    /\{ icon: "🎟️", label: "Tickets", value: item\.ticketsGlance, link: bookRow \}/,
+    /\{ icon: "🎟️", label: "Tickets", value: pricedLine\(item\.ticketInfo, item\), link: bookRow \}/,
+    /\{ icon: "🎟️", label: "Tickets", value: pricedLine\(item\.ticketsGlance, item\), link: bookRow \}/,
     /\{ icon: "💰", label: "Price", value: item\.price, link: bookRow \}/,
     /\{ icon: "💰", label: "What it costs", value: item\.priceNote, link: bookRow \}/,
   ]) ok(`a glance row offers the ticket link: ${String(row).slice(12, 46)}`, row.test(detail));
@@ -22991,7 +23047,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // rather than by an indentation this file cannot see.
     for (const [k, marker] of [
       ["town", 'label: "Typical Costs"'],
-      ["event", 'label: "Tickets", value: item.ticketInfo'],
+      ["event", 'label: "Tickets", value: pricedLine(item.ticketInfo, item)'],
       ["nightlife", 'label: "Crowd"'],
       ["food", 'label: "Serves"'],
     ]) {
@@ -34136,13 +34192,227 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // Every refusal has words, because a refusal nobody can read is
   // indistinguishable from a check that found nothing.
-  ["unreadable", "in-the-past", "earlier-than-the-one-on-file"].forEach(k =>
+  ["unreadable", "in-the-past", "earlier-than-the-one-on-file", "inside-the-dates-already-on-file"].forEach(k =>
     ok(`${k} has a sentence`, typeof DATE_PROPOSITION_WHY[k] === "string" && DATE_PROPOSITION_WHY[k].length > 20));
 
   // And the checker uses it, and says when it ignored something.
   const appD = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the event check refuses a backwards proposal", /datePropositionProblem\(parsed\.dateChanged, ev\.date, new Date\(\)\)/.test(appD));
+  ok("the event check refuses a backwards proposal",
+     /datePropositionProblem\(parsed\.dateChanged, ev\.date, new Date\(\), \{ onFileEnd: ev\.dateEnd \}\)/.test(appD));
   ok("and says so rather than dropping it in silence", /Ignored a suggested date of/.test(appD));
+
+  // ── AND A DAY OF THE EVENT IS NOT THE EVENT MOVING ───────────────
+  //
+  // Oliver, 10 Sep 2026, on a card reading "Date on file: 2026-11-07 → possibly
+  // now: 2026-11-08": "for some reason it changed from 7-8th when it's the two
+  // dates where the event is going on."
+  //
+  // Comic Con Denmark runs 7 to 8 November. The model read comicondenmark.com
+  // correctly. The prompt branch for a DATED event had one date field, so it had
+  // to pick an end of a range the file already covers, and the gate could not
+  // tell the difference because it was never given the other end.
+  {
+    const nov = new Date(2026, 8, 10);   // the day he was looking at it
+    is("a day inside the event's own run is not a change",
+       M.datePropositionProblem("2026-11-08", "2026-11-07", nov, { onFileEnd: "2026-11-08" }),
+       "inside-the-dates-already-on-file");
+    is("nor the first day of it",
+       M.datePropositionProblem("2026-11-07", "2026-11-07", nov, { onFileEnd: "2026-11-08" }),
+       "inside-the-dates-already-on-file");
+    // A real move is still a move, or the check has swallowed the thing it is
+    // supposed to let through.
+    is("but a date past the end of the run still is",
+       M.datePropositionProblem("2026-11-14", "2026-11-07", nov, { onFileEnd: "2026-11-08" }), "");
+    // Without the end date it cannot tell, which is exactly the state it was in,
+    // and the honest answer is that nothing here refuses it.
+    is("and with no end date on file it is a change again",
+       M.datePropositionProblem("2026-11-08", "2026-11-07", nov), "");
+    // The reasons above it still win: a past date is refused whether or not it
+    // sits inside a run.
+    is("a run that has already happened is still in the past",
+       M.datePropositionProblem("2026-08-27", "2026-08-26", nov, { onFileEnd: "2026-08-29" }), "in-the-past");
+
+    // ── AND THE ANSWER HAS SOMEWHERE TO PUT THE SECOND DATE ────────
+    // The undated branch has always asked for dateEndChanged; the branch for a
+    // dated event did not, which is the other half of the same fault. A model
+    // with one field for a two-day fact will pick one of the two.
+    const appEv = readFileSync(join(root, "src/App.jsx"), "utf8");
+    is("both prompt branches ask for an end date",
+       (appEv.match(/"dateEndChanged": ""/g) || []).length
+       + (appEv.match(/"dateEndChanged": "YYYY-MM-DD or empty"/g) || []).length, 2);
+    ok("and the dated branch says why it matters",
+       /A MULTI-DAY EVENT HAS TWO DATES AND THIS ANSWER HAS A FIELD FOR EACH/.test(appEv));
+  }
+
+  // ── AND A PRICE SAYS WHEN IT WAS TRUE ────────────────────────────
+  //
+  // Oliver, 10 Sep 2026, having gone to tf.dk himself: the Tønder page states
+  // "4-day pass 2,495 DKK (sold out)" for a festival in August 2027, and the
+  // festival is selling that pass at 2,295 with an early-bird deadline. The
+  // 2,495 is the 2026 edition's final price, and sold out is the state every
+  // finished festival is in forever.
+  //
+  // Then the question that settles what to build: "Will this Gemlyx Find and at
+  // a glance get updated when there is tickets out then?" No. `ticketInfo` is
+  // written once by shapeForLive at draft time and nothing in this app touches
+  // it again. The events sweep asks for stillHappening, dateChanged,
+  // dateEndChanged, ticketStatusChanged and notes, and there is no ticketInfo
+  // anywhere in it.
+  //
+  // So the price cannot be kept current, and the cheap honest move is for it to
+  // carry the date it was last true. The page already prints that date, 800
+  // pixels below, as "Sources: last checked 25 Aug 2026".
+  {
+    const { lastCheckedAt, lastCheckedLabel, pricedNote, pricedLine } = M;
+    const drafted = { verified: "Aug 2026" };
+    // TWO corrections, in order, or first and last are the same entry and the
+    // assertion below passes whichever end it reads. Found by its own mutant.
+    const corrected = { verified: "Aug 2026", __corrections: [
+      { at: "2026-08-02", field: "date" },
+      { at: "2026-08-16", field: "ticketInfo" },
+    ] };
+    // A correction is newer and more specific than the draft stamp, so it wins.
+    is("the NEWEST correction is what was checked last", lastCheckedAt(corrected), "2026-08-16");
+    ok("and not the oldest one on the row", lastCheckedAt(corrected) !== corrected.__corrections[0].at);
+    is("and the draft stamp carries no correction date", lastCheckedAt(drafted), "");
+    is("but it is still what the entry was last looked at", lastCheckedLabel(drafted), "Aug 2026");
+    is("and the newest correction is preferred over it", lastCheckedLabel(corrected), "2026-08-16");
+    // The caller formats, so a component that already renders dates one way
+    // keeps doing it rather than growing a second style.
+    is("the caller's own formatting is used where it has one",
+       lastCheckedLabel(corrected, () => "16 Aug 2026"), "16 Aug 2026");
+    is("and its own is fallen back on when the formatter has nothing",
+       lastCheckedLabel(corrected, () => ""), "2026-08-16");
+    is("nothing known says nothing", lastCheckedLabel({}), "");
+
+    // ── AND IT IS SAID NEXT TO THE NUMBER ──────────────────────────
+    is("a price carries when it was checked",
+       pricedLine("4-day pass 2,495 DKK (sold out)", corrected),
+       "4-day pass 2,495 DKK (sold out) · checked 2026-08-16");
+    // A date hanging off an empty field is furniture, and "checked at some
+    // point" says nothing at all.
+    is("an empty ticket line stays empty", pricedLine("", corrected), "");
+    is("and a price with no date stays a bare price", pricedLine("400 DKK", {}), "400 DKK");
+    is("the note on its own is the same rule", pricedNote(corrected), "checked 2026-08-16");
+    is("and nothing where there is no date", pricedNote({}), "");
+
+    // ── ONE DEFINITION, BECAUSE TWO DRIFT ──────────────────────────
+    // HowWeKnow printed this at the foot of the page and held its own copy of
+    // "when was this looked at". The ticket line says it now too.
+    const how = readFileSync(join(root, "src/components/HowWeKnow.jsx"), "utf8");
+    ok("the sources line reads the shared definition", /lastCheckedLabel\(item, dateLabel\)/.test(how));
+    ok("and holds no second copy of it",
+       !/corrections\[corrections\.length - 1\]\.at/.test(how));
+    const shownD = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+    is("and both ticket rows carry it",
+       (shownD.match(/pricedLine\(item\.(?:ticketInfo|ticketsGlance), item\)/g) || []).length, 2);
+  }
+
+  // ── AND WHICH EDITION THE PRICE IS FOR ───────────────────────────
+  //
+  // The date above says when somebody last looked. This says what they were
+  // looking AT, which is the half that was wrong on both entries Oliver checked:
+  // Tønder's 2,495 sold-out pass and Roskilde's sold-out status are both true
+  // sentences about an edition that has already happened.
+  //
+  // An adversarial pass over realistic Danish festival pages put the share of
+  // prices that genuinely say nothing about their edition at roughly half, on
+  // the marketing pages a search actually lands on. So EMPTY is the expected
+  // answer and the field exists to make the difference visible rather than to be
+  // filled in every time.
+  {
+    const { shapeForLive, studioPrompts } = M;
+    // The allow-list rule this whole file rests on: a field publish does not
+    // carry is a field that renders once and is silently dropped on the next
+    // redraft. Same reason themes had to be added to it.
+    ok("publish carries the edition a price is for",
+       "ticketPricedFor" in shapeForLive("festival", { name: "X" }));
+    is("and it defaults to nothing rather than to a year", shapeForLive("festival", { name: "X" }).ticketPricedFor, "");
+    is("a year given is kept as written", shapeForLive("festival", { name: "X", ticketPricedFor: " 2027 " }).ticketPricedFor, "2027");
+
+    const fest = String(studioPrompts("Tønder Festival").festival || "");
+    ok("the research is asked which edition it priced", /"ticketPricedFor"/.test(fest));
+    // THE TEST IS POSITION. A year in the banner, the footer or a heritage line
+    // is on the page and not on the price, and both of the real failures came
+    // from a year that was somewhere on the page.
+    ok("and told that a year on the page is not a year on the price",
+       /THE TEST IS POSITION, NOT PRESENCE/.test(fest) && /siden 1974/.test(fest));
+    ok("and that empty is a correct answer rather than a failure",
+       /EMPTY STRING IS THE EXPECTED ANSWER/.test(fest));
+    // ── AND A SALE THAT HAS NOT OPENED CANNOT BE SOLD OUT ──────────
+    // The one check that catches both failures without attributing anything:
+    // Roskilde 2027 had not gone on sale, and Tønder's early bird is still
+    // running. Neither can be sold out, whatever banner is on the page.
+    ok("a status cannot be sold out before the sale opens",
+       /A SALE THAT HAS NOT OPENED CANNOT BE SOLD OUT/.test(fest));
+    ok("and the words a Danish page uses for it are named",
+       /billetsalget åbner/.test(fest) && /Early Bird gælder til/.test(fest));
+  }
+
+  // ── AND NO CLAIM THE EVIDENCE CANNOT CARRY ───────────────────────
+  //
+  // Oliver, 10 Sep 2026, on the footer's "Every find personally verified":
+  // "I'm not gonna lie to people."
+  //
+  // The word doing the lying is `personally`, which reads as having been there.
+  // The night it came off, a Tønder price nobody had looked at since August was
+  // sitting on a live 2027 page, and nothing in this app has ever had a way to
+  // record that an entry was re-checked after it was written.
+  {
+    const appV = readFileSync(join(root, "src/App.jsx"), "utf8");
+    is("nothing claims a find was personally verified",
+       (stripComments(appV).match(/personally verified/gi) || []).length, 0);
+    // What stays is what is true. The pipeline does research an entry and check
+    // it against several sources, and saying so is not the same claim: cutting
+    // it would leave nothing at all where a reader asks why to trust the page.
+    // FOUR copies of that phrase, so a mutant that changed one left three and
+    // the assertion passed on the survivors. Pinned to the answer that carries
+    // the claim, by its own sentence, and counted so a quiet deletion shows.
+    ok("but the honest description of the process stays",
+       /Every listing is researched and checked by one person before it goes live, and nothing here is invented/.test(appV));
+    ok("and it admits the older entries show fewer sources",
+       /Older entries were written before we started storing sources/.test(appV));
+    is("every place that describes the process still does",
+       (appV.match(/hand-researched and checked against multiple sources/g) || []).length, 4);
+    // And the real version of the claim is per entry and checkable, which is why
+    // the badge going costs nothing: HowWeKnow prints that entry's own sources,
+    // its corrections and its open questions.
+    const howV = readFileSync(join(root, "src/components/HowWeKnow.jsx"), "utf8");
+    ok("the entry itself still shows its working", /Sources:/.test(howV));
+  }
+
+  // ── A MISSING PHOTOGRAPH AND A BROKEN ONE ARE ONE STATE ──────────
+  //
+  // Oliver, 10 Sep 2026: "shall we somehow collapse the events without
+  // pictures? So it's not an empty box, but a collapsed frame."
+  //
+  // The empty box was never the no-photo case, which already drew the emoji at
+  // full size. It was the BROKEN one: `item.photo` is truthy, so the header
+  // styled itself as having a photograph, dropped the emoji to a quarter opacity
+  // behind it, and onError then hid the image. A 190px band with a ghost in it.
+  {
+    const shot = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+    ok("a photograph that fails to load is remembered",
+       /const \[shotFailed, setShotFailed\] = useState\(false\);/.test(shot));
+    ok("rather than hidden where nothing can see it",
+       !/onError=\{e => \{ e\.target\.style\.display = "none"; \}\}/.test(shot));
+    ok("and the two cases are one answer",
+       /const hasShot = !!String\(item\?\.photo \|\| ""\)\.trim\(\) && !shotFailed;/.test(shot));
+    // Reset per entry, or one bad image collapses the header of every entry
+    // opened after it for the rest of the session.
+    ok("and it is forgotten when the entry changes",
+       /useEffect\(\(\) => \{ setShotFailed\(false\); \}, \[item\?\.photo\]\);/.test(shot));
+    // Collapsed rather than empty: shorter, so it reads as a marker for the
+    // entry rather than as a picture that did not arrive.
+    ok("a band with no photograph in it is shorter",
+       /height: hasShot \? 190 : 120/.test(shot));
+    ok("and its emoji is at full strength rather than a ghost",
+       /opacity: hasShot \? 0\.25 : 1/.test(shot));
+    // A credit under an image nobody can see credits nothing, and it is the one
+    // line that tells a reader the picture is real.
+    ok("and no credit runs under a photograph that did not load",
+       /<PhotoCredit photo=\{hasShot \? item\.photo : ""\}/.test(shot));
+  }
   // ── AND A NON-CHANGE IS NOT A CHANGE ───────────────────────────
   // One row read "Date on file: 2026-09-19 -> possibly now: 2026-09-19". The
   // model filled the field with the date it had just been handed, which is a
@@ -41807,10 +42077,176 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── AND IT IS ON SCREEN ──────────────────────────────────────────
   {
     const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
-    ok("the Studio renders the panel", /<AffiliatePanel rows=\{manageItems\} \/>/.test(app));
+    ok("the Studio renders the panel", /<AffiliatePanel rows=\{manageItems\} onSetLink=\{saveAffiliateLink\} savingId=\{linkSavingId\} \/>/.test(app));
     // Reads the rows already loaded rather than fetching: a panel that
     // re-queries answers about a different set than the one being managed.
     ok("from the rows already loaded", /Array\.isArray\(manageItems\) && <AffiliatePanel/.test(app));
+  }
+
+  // ── AND THE OTHER PROGRAMME, WHICH IT COULD NOT SEE ──────────────
+  //
+  // Oliver, 10 Sep 2026: "can you put into managed published 'affiliate links'?
+  // I just want to have some control over it."
+  //
+  // This file audited ONE field. Every GetYourGuide link lives in `tourUrl`, so
+  // the panel built to answer "what do my affiliates reach" was blind to a whole
+  // programme while printing a number that read as though it covered them.
+  {
+    const { auditRows, auditLinks, auditSummary, linkPatch, TICKET, TOUR,
+            isBookableTicketUrl, isTourUrl, affiliateHref, TICKET_FIELD, TOUR_FIELD, TOUR_TYPES } = M;
+    const gates = { isBookable: isBookableTicketUrl, isTour: isTourUrl, wrap: affiliateHref,
+                    ticketField: TICKET_FIELD, tourField: TOUR_FIELD };
+    const rows = [
+      { id: 1, type: "town", payload: { name: "Aalborg", tourUrl: "https://www.getyourguide.com/aalborg-l32304/craft-beer-walk-t1/" } },
+      { id: 2, type: "attraction", payload: { name: "ARoS", ticketUrl: "https://www.tiqets.com/en/aarhus-attractions/aros-p974132/" } },
+      { id: 3, type: "town", payload: { name: "Ribe", tourUrl: "https://www.getyourguide.com/s/?q=ribe" } },
+    ];
+    // The old call is untouched, which is what every caller written before this
+    // does: tickets only, and Aalborg's tour is invisible to it.
+    is("the ticket audit is what it was", auditRows(rows, gates).map(x => [x.name, x.state]),
+       [["Aalborg", "none"], ["ARoS", "earning"], ["Ribe", "none"]]);
+    // And the same row set, asked about both, finds the tour the old one missed
+    // and refuses the one that is a search page.
+    is("and both kinds are counted when asked for both",
+       auditLinks(rows, gates).filter(x => x.kind === TOUR).map(x => [x.name, x.state]),
+       [["Aalborg", "earning"], ["ARoS", "none"], ["Ribe", "refused"]]);
+    // ── AND ONLY THE SLOTS THAT COULD EXIST ────────────────────────
+    // An attraction gets no GetYourGuide search on purpose. Oliver, 10 Sep:
+    // "It's often cheaper (and better) to use a museum's own guide. I'm not
+    // trying to steal people's money." Counting every museum as a missing tour
+    // link reports a decision as a hundred and forty gaps.
+    is("an attraction is not a missing tour link",
+       auditLinks(rows, { ...gates, canTour: (r) => TOUR_TYPES.includes(r.type) })
+         .filter(x => x.kind === TOUR).map(x => x.name), ["Aalborg", "Ribe"]);
+    ok("and TOUR_TYPES is what decides that, not a list kept here",
+       !TOUR_TYPES.includes("attraction") && TOUR_TYPES.includes("town"));
+    // Each finding names the row it is about, or the panel cannot write back.
+    is("every finding carries its row id", auditLinks(rows, gates).every(x => x.id != null), true);
+    is("and the kind it is about", [...new Set(auditLinks(rows, gates).map(x => x.kind))].sort(), [TICKET, TOUR]);
+    // Counted separately, because one total would hide which of the two is the
+    // one not working.
+    is("the two are summarised apart",
+       auditSummary(auditLinks(rows, { ...gates, canTicket: () => false })).earning, 1);
+
+    // ── AND A LINK HE SETS BY HAND GOES THROUGH THE SAME DOOR ──────
+    //
+    // Control means writing, and a pasted link that skips the gates the sweep
+    // writes through is the worst of both: a button the audit then reports as
+    // refused, or one that earns nothing and looks identical to one that does.
+    const had = { tourUrl: "https://www.getyourguide.com/old-l1/y-t2/", ticketUrl: "" };
+    is("a real tour page is saved",
+       linkPatch(had, TOUR, "https://www.getyourguide.com/aalborg-l32304/x-t9/", gates).patch,
+       { tourUrl: "https://www.getyourguide.com/aalborg-l32304/x-t9/" });
+    is("a search page is refused rather than saved",
+       linkPatch(had, TOUR, "https://www.getyourguide.com/s/?q=aalborg", gates).patch, {});
+    ok("and the refusal says what to paste instead",
+       /product page rather than a search/.test(linkPatch(had, TOUR, "https://www.getyourguide.com/s/?q=aalborg", gates).why));
+    is("a ticket product page is saved on the ticket field",
+       linkPatch(had, TICKET, "https://www.tiqets.com/en/aarhus-attractions/aros-p974132/", gates).patch,
+       { ticketUrl: "https://www.tiqets.com/en/aarhus-attractions/aros-p974132/" });
+    // http, not a malformed string: isTourUrl accepts http quite happily, so a
+     // bare "getyourguide.com/x" was refused by the gate and proved nothing about
+     // the scheme check. Found by its own mutant.
+    is("http is refused where https would be taken",
+       linkPatch(had, TOUR, "http://www.getyourguide.com/aalborg-l32304/x-t9/", gates).patch, {});
+    // Emptying the box takes the link off, which is half of having control over
+    // it: a refused link on a row is worse than no link at all.
+    is("an empty box clears the field", linkPatch(had, TOUR, "", gates).patch, { tourUrl: "" });
+    is("and clearing a field that is already empty proposes nothing",
+       linkPatch({ tourUrl: "" }, TOUR, "", gates).patch, {});
+    // A proposal that changes nothing is not a proposal, the same rule the
+    // sweeps hold.
+    is("the link it already carries is not a change",
+       linkPatch(had, TOUR, "https://www.getyourguide.com/old-l1/y-t2/", gates).patch, {});
+    // A link the TICKET gate would accept, or the kind guard is never what
+     // refuses it and the assertion passes on the gate's work. Found by its own
+     // mutant, the same way.
+    is("and a kind nothing can carry writes nothing",
+       linkPatch(had, "audio", "https://www.tiqets.com/en/aarhus-attractions/aros-p974132/", gates).patch, {});
+    // The FIELD comes in with the gates. ticketLink.js already names both and is
+    // what the pipeline writes through; a second pair of constants here is the
+    // drift this file is written to avoid.
+    is("the fields are ticketLink's own", [TICKET_FIELD, TOUR_FIELD], ["ticketUrl", "tourUrl"]);
+    is("and with none passed in, nothing is written", linkPatch(had, TOUR, "https://www.getyourguide.com/a-l1/b-t2/", { isTour: isTourUrl }).patch, {});
+
+    // ── AND IT IS ON SCREEN, WITH SOMEWHERE TO TYPE ────────────────
+    const { renderSurface } = await import(pathToFileURL(join(root, "tests/render.mjs")).href);
+    const panel = await renderSurface("src/components/AffiliatePanel.jsx", "AffiliatePanel",
+      { rows, onSetLink: () => {}, savingId: null });
+    ok("the panel offers a way to change one", panel.says("Change"));
+    ok("and counts the tours apart from the tickets", /Tours \(1 of 2 earning\)/.test(panel.text));
+    ok("and a refused tour is listed by name", /Ribe · tour/.test(panel.text));
+    ok("while an attraction never appears in that list", !/ARoS · tour/.test(panel.text));
+    // Read-only where nothing can be written, or the field is a lie about what
+    // pressing it does.
+    const readOnly = await renderSurface("src/components/AffiliatePanel.jsx", "AffiliatePanel", { rows });
+    ok("and no field at all where there is nothing to write with", !readOnly.says("Change"));
+
+    // The write goes through linkPatch rather than straight to the database, so
+    // a pasted link is held to what a proposed one is held to.
+    const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the app validates before it writes", /const \{ patch, why \} = linkPatch\(row\.payload \|\| \{\}, finding\.kind, raw, \{/.test(appSrc));
+    ok("and a refusal is a sentence rather than a silent no-op",
+       /if \(!Object\.keys\(patch\)\.length\) \{ showToast\(why, 4500\); return; \}/.test(appSrc));
+    ok("and it patches the one row rather than republishing it",
+       /gemlyx_content\?id=eq\.\$\{Number\(row\.id\)\}`, \{\s*method: "PATCH"/.test(appSrc.slice(appSrc.indexOf("const saveAffiliateLink"))));
+  }
+
+  // ── AND NO HOTEL LINKS ON AN ENTRY PAGE ──────────────────────────
+  //
+  // Oliver, 10 Sep 2026, looking at the three of them on the Copenhagen page:
+  // "Remove the hotel links. No reason to have them. nobody will click the
+  // Trip.com and order because of this."
+  //
+  // The block was his own ask on 7 Aug, and the reason written into the file was
+  // that "the town page is where someone decides they want to sleep there".
+  // True about the decision, wrong about the act: deciding you like Copenhagen
+  // and booking a bed are not the same moment, and the second one needs dates.
+  //
+  // A town page has none to send, so all three could ever be was a link to an
+  // empty search box. Two of them earned nothing besides, and said so in a line
+  // of small print underneath.
+  {
+    const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+    is("no stay buttons on an entry page",
+       ["Stays on Booking.com", "Homes on Airbnb", "Trip.com ↗"].filter(s => detail.includes(s)), []);
+    is("and none of the builders are even imported",
+       ["bookingUrl", "airbnbUrl", "tripcomStayUrl", "stayDisclosure"].filter(s => detail.includes(s)), []);
+    // The guide's version stays, and the difference is the whole argument: it
+    // sends a real date and the day's own stay area.
+    const guide = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+    ok("the guide still books a stay", /bookingUrl\(/.test(guide) && /tripcomStayUrl\(/.test(guide));
+    ok("and its link knows which nights it is asking about", /checkin/.test(guide));
+
+    // ── AND THE GUIDED TOUR SITS ABOVE THE SELF-GUIDED ONE ─────────
+    // Oliver, 10 Sep: "so guided tour first and then self-guided tour
+    // afterwards." A guided walk is what most visitors mean by booking
+    // something; the audio walk is the cheaper alternative offered under it.
+    // THE TOWN CARD, not the first one in the file. There are four AtAGlanceCard
+    // calls and three of them carry a Tours row, so slicing from the first found
+    // a "Tours" that was never in the same card as the audio row and the
+    // assertion passed whichever order they were in. Found by its own mutant.
+    const townCard = detail.split("<AtAGlanceCard").find(c => c.includes('label: "Self-guided tour"')) || "";
+    const tourAt = townCard.indexOf('label: "Tours"');
+    const audioAt = townCard.indexOf('label: "Self-guided tour"');
+    ok("both rows are on the town card", tourAt > 0 && audioAt > 0);
+    ok("and the guided one comes first", tourAt < audioAt);
+    // One card carries both, or the slice above found the wrong one.
+    is("and only one card carries the audio row",
+       (detail.match(/label: "Self-guided tour"/g) || []).length, 1);
+
+    // ── AND WHAT IS ON IS FOLDED AWAY ──────────────────────────────
+    // Oliver, 10 Sep: "What's on in Copenhagen make it a dropdown link." Four
+    // event cards is most of a screen, sitting between the At a Glance card and
+    // the first sentence about what the place is.
+    ok("the events section opens and closes", /onClick=\{\(\) => setEventsOpen\(o => !o\)\}/.test(detail));
+    ok("and starts closed", /const \[eventsOpen, setEventsOpen\] = useState\(false\);/.test(detail));
+    ok("the cards render only when it is open", /\{eventsOpen && townEvents\.map\(e => \{/.test(detail));
+    ok("and so does what is on nearby", /\{eventsOpen && townNearby\.length > 0 && \(/.test(detail));
+    // The count stays on the row, which is the difference between folding
+    // something away and hiding it.
+    ok("the count is answerable without opening it",
+       /townEvents\.length \+ townNearby\.length === 1 \? "1 event" : `\$\{townEvents\.length \+ townNearby\.length\} events`/.test(detail));
   }
 }
 
@@ -47874,6 +48310,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   const KNOWN_UNWIRED = [
     "src/utils/accommodation.js:stayTextForReader",
+    // Airbnb was only ever on the entry page's stay row, and that row came off
+    // on 10 Sep: Oliver, on the three hotel buttons, "Remove the hotel links.
+    // No reason to have them." bookingUrl and tripcomStayUrl survive because
+    // the guide's day cards send them a real date. Airbnb had no second call
+    // site and no affiliate account behind it, so it is parked rather than
+    // deleted, against the day there is one.
+    "src/utils/affiliates.js:airbnbUrl",
     "src/utils/affiliates.js:isAffiliateHref",
     "src/utils/aiClient.js:geocodeOne",
     "src/utils/apiCost.js:__reset",

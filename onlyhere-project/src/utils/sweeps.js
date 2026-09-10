@@ -60,6 +60,7 @@
 import { enforceScope } from "./correction";
 import { PLACE_KINDS } from "./placeKind";
 import { PLACE_THEMES, cleanThemes, MAX_THEMES } from "./placeThemes";
+import { normaliseTicketStatus } from "./tickets";
 import { citationUrls } from "./aiClient";
 
 const clean = (v) => String(v == null ? "" : v).trim();
@@ -113,6 +114,49 @@ export const SWEEPS = [
     // arriving not at all.
     noResearch: true,
     question: `What is this place actually FOR? Choose 1 to ${MAX_THEMES} from EXACTLY this list and nothing else: ${PLACE_THEMES.join(", ")}. Pick only what the entry gives a real reason to go for. Almost every Danish town has a church and a bakery, so history and food belong here only when the entry treats them as a reason to visit rather than as scenery. Fewer is better than more.`,
+  },
+  {
+    id: "soldout",
+    label: "Sold out, read again",
+    blurb: "Re-reads the price, the availability and the edition on published festivals that currently say sold out. Those are the rows where being wrong costs a trip rather than an eyebrow.",
+    types: ["festival"],
+    fields: ["ticketInfo", "ticketStatus", "ticketPricedFor"],
+    // Revise, always. Every row it wants already HAS a status; there is no
+    // version of this that fills an empty one, and offering the fill button
+    // would offer a run that can only ever return nothing.
+    revisable: true,
+    reviseOnly: true,
+    missing: ["ticketStatus"],
+    cap: 25,
+    // ── ONLY THE ONES THAT COST A TRIP ────────────────────────────
+    //
+    // Oliver, 10 Sep 2026, having gone to tf.dk himself. Tønder's entry states
+    // "4-day pass 2,495 DKK (sold out)" for August 2027 and the festival is
+    // selling that pass at 2,295 with an early bird running to 1 December.
+    // Roskilde's entry was reported sold out for an edition whose tickets have
+    // not gone on sale. Both are last year's fact wearing this year's date, and
+    // sold out is the state every finished festival is in forever.
+    //
+    // Asked which of seventy-odd festivals to re-read, he picked these: "Only
+    // the sold-out ones." A wrong price is annoying. A wrong sold out talks
+    // somebody out of a trip that would have worked, which is the Layla
+    // complaint this whole codebase was written against.
+    only: (payload) => normaliseTicketStatus(payload?.ticketStatus) === "sold_out",
+    // ── AND THE ENTRY CANNOT ANSWER THIS ONE ──────────────────────
+    //
+    // Tier 2 reads the entry and checks a quote against it. A published entry
+    // says "2,495 DKK" and nothing at all about which edition it was reading,
+    // because nobody recorded that. So the quote check would refuse every row
+    // and cost a model call each to do it. Skipped by name rather than left to
+    // fail quietly.
+    noEntry: true,
+    question: `What do tickets for this festival cost RIGHT NOW, and which edition is that price for? Read the festival's own ticket shop or official site rather than a listing or a news article.
+
+THE EDITION TEST IS POSITION, NOT PRESENCE. The year has to be in the ticket's own name or in the heading directly above the price table: "Partout 2027", "TF 2027", "Billetter til 2027", or the run dates printed on the ticket line itself. A year in the site banner, the nav, the footer, a copyright line, a "siden 1974" heritage line, a hashtag or a line-up is on the page and NOT on the price, and none of them count. Leave the edition empty when the page does not pin it, which is roughly half the time and is a correct answer.
+
+AND A SALE THAT HAS NOT OPENED CANNOT BE SOLD OUT. Neither can one whose early bird is still running. If the page says "billetsalget åbner", "endnu ikke sat til salg", "Early Bird gælder til", or gives a future on-sale date, the status is not sold_out whatever banner is on the page, because that banner is about the edition that has already happened.
+
+Give: ticketInfo as the price list as a reader would want it, ticketStatus as one of free, on_sale, limited, sold_out, unknown, and ticketPricedFor as the four-digit year or empty.`,
   },
 ];
 
@@ -170,10 +214,15 @@ export const changedOnly = (patch, payload, fields) => {
 export const selectRows = (rows, sweep, { revise = false } = {}) => {
   if (!sweep) return [];
   if (revise && !sweep.revisable) return [];
+  if (!revise && sweep.reviseOnly) return [];
   const types = new Set(sweep.types || []);
   return (Array.isArray(rows) ? rows : []).filter(r => {
     if (!r || !r.payload || !clean(r.payload.name)) return false;
     if (types.size && !types.has(r.type)) return false;
+    // A sweep may narrow to the rows it is actually about. `types` says what
+    // KIND of row; this says which of them, and the sold-out sweep is the whole
+    // reason it exists: a status, not a missing field, is what picks them.
+    if (typeof sweep.only === "function" && !sweep.only(r.payload)) return false;
     const need = sweep.missing || sweep.fields;
     return revise
       ? need.every(f => clean(r.payload[f]))
@@ -584,7 +633,7 @@ export const proposeSweep = async ({ sweep, rows, knownPlaces, revise = false, d
     // rather than filtered, because tier 1 may have closed a field instead of
     // filling it.
     const stillNeed = openFields(sweep, p, patch, { revise });
-    if (stillNeed.length && askClaude) {
+    if (stillNeed.length && askClaude && !sweep.noEntry) {
       const res = await askClaude(FROM_ENTRY_PROMPT(p, sweep.question, stillNeed, hint, { revise }), 700, "claude-sonnet-5", true);
       if (!res.error && res.text) {
         let parsed = null;

@@ -447,3 +447,63 @@ export const missingSourcesNote = (payload) => {
   if (hasEntrySources(payload)) return "";
   return "CHECK BEFORE PUBLISHING: nothing records where anything in this entry came from. The promise on the front page is that every place is checked against its own sources before it is printed, and this entry cannot show that to anybody. Publish it and it joins the 77 that already cannot. Open the pages this was written from and put them in __sources, or accept that this one is unprovable and say so out loud.";
 };
+
+// ── WHEN THIS ENTRY WAS LAST LOOKED AT ──────────────────────────────
+//
+// Oliver, 10 Sep 2026, having gone to tf.dk himself to check a price Gemlyx
+// states flat: the Tønder page says the 4-day pass is 2,495 DKK and sold out,
+// and the festival is selling it at 2,295 with an early-bird deadline. The
+// 2,495 is almost certainly the 2026 edition's final price, and "sold out" is
+// the state every finished festival is in forever.
+//
+// ── AND NOTHING EVER UPDATES A PRICE ────────────────────────────────
+//
+// `ticketInfo` is written once by shapeForLive at draft time and no pass in
+// this app touches it again: the events sweep asks for stillHappening,
+// dateChanged, ticketStatusChanged and notes, and there is no ticketInfo
+// anywhere in it. So a price is a claim from the day it was drafted, wearing no
+// date, on a page about an edition a year later.
+//
+// The date already exists and the page already prints it, 800 pixels below the
+// price, as "Sources: last checked 25 Aug 2026". This lifts the one definition
+// out of HowWeKnow so the ticket line can say it too, next to the number it is
+// about, rather than a second copy drifting from the first.
+//
+// A correction is newer and more specific than the draft-time stamp, so it wins
+// where both exist. `verified` is the festival stamp and is a plain string like
+// "Aug 2026" rather than an ISO date, which is why the caller formats.
+export const lastCheckedAt = (entry) => {
+  const corrections = Array.isArray(entry?.__corrections) ? entry.__corrections : [];
+  const newest = corrections.length ? corrections[corrections.length - 1]?.at : "";
+  return String(newest || "").trim() || "";
+};
+
+export const lastCheckedLabel = (entry, format) => {
+  const at = lastCheckedAt(entry);
+  const shown = at && typeof format === "function" ? format(at) : "";
+  if (shown) return shown;
+  if (at) return at;
+  const stamp = entry?.verified;
+  return typeof stamp === "string" ? stamp.trim() : "";
+};
+// ── AND THE PRICE SAYS WHEN IT WAS TRUE ─────────────────────────────
+//
+// "4-day pass 2,495 DKK (sold out)" on a page dated August 2027 reads as this
+// year's price. It is the price somebody read in August 2026, and the whole
+// difference between a fact and a lie here is four words after it.
+//
+// Only where there IS a date, because "checked at some point" says nothing, and
+// only where the line has something in it, because a date hanging off an empty
+// field is furniture. `format` is the caller's, so a component that already
+// formats dates one way keeps doing it.
+export const pricedNote = (entry, format) => {
+  const when = lastCheckedLabel(entry, format);
+  return when ? `checked ${when}` : "";
+};
+
+export const pricedLine = (value, entry, format) => {
+  const text = String(value ?? "").trim();
+  if (!text) return text;
+  const note = pricedNote(entry, format);
+  return note ? `${text} · ${note}` : text;
+};
