@@ -1,4 +1,4 @@
-import { BOOKING_AFFILIATE_ID, TICKETMASTER_AFFILIATE_TEMPLATE, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_LINK, WEGOTRIP_AFFILIATE_TEMPLATE , TRIPCOM_ALLIANCE_ID, TRIPCOM_SID, GETYOURGUIDE_PARTNER_ID, GETYOURGUIDE_CAMPAIGN } from "../config";
+import { BOOKING_AFFILIATE_ID, TICKETMASTER_AFFILIATE_TEMPLATE, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_LINK, WEGOTRIP_AFFILIATE_TEMPLATE , TRIPCOM_ALLIANCE_ID, TRIPCOM_SID, GETYOURGUIDE_PARTNER_ID, GETYOURGUIDE_CAMPAIGN, BAJABIKES_REFERRAL_ID, BAJABIKES_BANNERS, BAJABIKES_RENTAL_SLUG } from "../config";
 // hostOf, not a fourth copy of it. See pageScan.js, and see the four other
 // functions this codebase has already found existing twice.
 import { hostOf } from "./pageScan";
@@ -416,6 +416,140 @@ export const getyourguideDisclosure = (url, partner = GETYOURGUIDE_PARTNER_ID) =
     ? "Booking through this link may earn Gemlyx a small commission. It costs you nothing and does not change the price."
     : "";
 
+// ── BAJA BIKES, AND WHAT A SECOND TOUR PARTNER COSTS ────────────────
+//
+// Approved 11 Sep 2026, the morning after he applied. Guided bike tours, bike
+// rental and a private guide, ten products, every one of them Copenhagen.
+//
+// SAME SHAPE AS GETYOURGUIDE, for the same reason: they track on their own
+// domain, so this reads the URL and sets parameters on it rather than pasting a
+// template together. A hand-built `${url}?bb=` would throw away a query the
+// product page might need.
+//
+// TWO PARAMETERS AND THEY DO DIFFERENT JOBS. `bb` is the referral id and it is
+// what makes a sale his. `a_bid` names the creative, which is what turns his
+// dashboard from one number into ten, so a link missing it still pays and still
+// reports nothing useful. The id is per product and comes off his panel; see
+// BAJABIKES_BANNERS in config.js for why it lives there rather than on the row.
+const BAJABIKES_HOST = "bajabikes.eu";
+
+export const isBajabikesUrl = (url) => {
+  const h = hostOf(url);
+  return !!h && (h === BAJABIKES_HOST || h.endsWith(`.${BAJABIKES_HOST}`));
+};
+
+// ── AND A PRODUCT IS ONE THIS PROGRAMME ACTUALLY SELLS ──────────────
+//
+// The same distinction isGetyourguideProductUrl and isTiqetsProductUrl draw, and
+// the same reason: a city page or a language root is a browse link wearing a
+// product's clothes, and a reader sent to one has been handed a menu rather than
+// the thing the entry was talking about.
+//
+// THE TEST IS THE BANNER TABLE, not the shape of the path, and that is the
+// difference worth knowing. GetYourGuide encodes the product in the URL as
+// -t<id>, so a regex can recognise one it has never seen. Baja's paths are plain
+// slugs, so the only thing that can say whether an address is a product HE CAN
+// EARN ON is the list off his own panel. A product they add tomorrow is not one
+// of his until the row exists, and answering yes for it would print a
+// disclosure over a link that pays nothing.
+export const bajabikesSlug = (url) => {
+  if (!isBajabikesUrl(url)) return "";
+  try {
+    const parts = new URL(String(url)).pathname.split("/").filter(Boolean);
+    // /en/<slug>/ and /<slug>/ both, since their language prefix is optional on
+    // some of these and a slug is always the last real segment.
+    return parts.length ? parts[parts.length - 1].toLowerCase() : "";
+  } catch { return ""; }
+};
+
+export const isBajabikesProductUrl = (url) =>
+  !!bajabikesSlug(url) && Object.prototype.hasOwnProperty.call(BAJABIKES_BANNERS, bajabikesSlug(url));
+
+// The one product that is not an activity. Rental answers "how do I get around
+// today" rather than "what shall I do", so it is the only row here that belongs
+// on a day rather than in the tour slot, and the tour slot has to be able to
+// tell them apart.
+export const isBajabikesRental = (url) => bajabikesSlug(url) === BAJABIKES_RENTAL_SLUG;
+
+export const bajabikesUrl = (url, { referral = BAJABIKES_REFERRAL_ID, banners = BAJABIKES_BANNERS } = {}) => {
+  const raw = String(url || "").trim();
+  if (!/^https?:\/\//i.test(raw)) return null;
+  if (!referral || !isBajabikesUrl(raw)) return raw;
+  try {
+    const u = new URL(raw);
+    u.searchParams.set("bb", referral);
+    // Only where there is one. A product they sell that he has no banner for
+    // still tracks the sale, and stamping a guessed id on it would file the
+    // earning under a creative that does not exist.
+    const bid = banners?.[bajabikesSlug(raw)];
+    if (bid) u.searchParams.set("a_bid", String(bid));
+    return u.toString();
+  } catch { return raw; }
+};
+
+// The referral id, not a sample link, for the reason tiqetsActive spells out
+// about templates: the id is what makes a named link pay.
+export const bajabikesActive = (referral = BAJABIKES_REFERRAL_ID) => !!referral;
+
+export const bajabikesDisclosure = (url, referral = BAJABIKES_REFERRAL_ID) =>
+  !!referral && isBajabikesUrl(url)
+    ? "Booking through this link may earn Gemlyx a small commission. It costs you nothing and does not change the price."
+    : "";
+
+// ── WHO SELLS IT, WHICH IS NOT THE SAME QUESTION AS WHO PAYS US ─────
+//
+// partnerMerchant answers "which programme is this tracked through", so it needs
+// the tracking parameter and returns nothing without it. The SENTENCE needs a
+// different fact: who the reader is about to buy from. Those are the same
+// merchant on a normal day and they come apart the moment a programme is
+// switched off, because the link is still a GetYourGuide link and still worth
+// following, it just earns nothing.
+//
+// Found by mutation testing on 11 Sep 2026. TourLine's first version asked
+// partnerMerchant and refused to render without an answer, which meant turning a
+// partner id off HID THE RECOMMENDATION rather than hiding the disclosure. That
+// is backwards, and this file already had the rule the other way round:
+// wegotripUrl "hands back the plain link when it has none", and the disclosure
+// is what a link that earns nothing must not carry, not the link itself.
+//
+// By host, and only the two that sell tours, so an arbitrary address still names
+// nobody and still draws no line.
+export const tourMerchant = (url) => {
+  if (isGetyourguideUrl(url)) return "GetYourGuide";
+  if (isBajabikesUrl(url)) return "Baja Bikes";
+  return "";
+};
+
+// ── AND WHEN A RENTED BIKE IS THE ANSWER TO A DAY ───────────────────
+//
+// Oliver, asked where the rental belonged, chose the guide day over the town
+// page: "on a bike day", at the point they need one, and never on a
+// public-transport trip. The town page is read by everybody and the question
+// "where do I get a bike" is only somebody's question on the day they want one.
+//
+// TWO CONDITIONS AND BOTH ARE NECESSARY. Copenhagen, because Baja has no other
+// Danish city and a line offered in Aarhus is a link to somewhere they cannot
+// help. And bike, because a traveller on trains is being sold something they
+// did not ask for, which is the thing this whole file's disclosure rules exist
+// to keep honest.
+//
+// `mode` is the traveller's own words, folded through travelModeKey by the
+// caller, for the same reason carRentalFits takes the folded key: "cykel",
+// "mostly bike but train for the long stretches" and a chip label all have to
+// mean the same thing here.
+//
+// AND IT IS THE DAY'S TOWN, not the trip's. A Copenhagen trip that spends day
+// four in Roskilde gets no line on day four, because the bike shop is not there.
+const RENTAL_TOWN = "copenhagen";
+const RENTAL_TOWN_DA = "københavn";
+
+export const bikeRentalFits = ({ mode = "", town = "" } = {}) => {
+  if (String(mode || "").trim().toLowerCase() !== "bike") return false;
+  const t = String(town || "").trim().toLowerCase();
+  if (!t) return false;
+  return t.includes(RENTAL_TOWN) || t.includes(RENTAL_TOWN_DA);
+};
+
 // ── CAR HIRE, ONE LINK, CHOSEN ON INVENTORY ─────────────────────────
 //
 // Oliver, 15 Aug 2026, sending a GetRentacar link: "I guess multiple car ones
@@ -486,6 +620,10 @@ export const isPartnerLink = (url) => {
   // tracking link cannot hide, and which is also what keeps a plain
   // GetYourGuide reference in prose from being labelled as paid.
   if (/(?:[?&])partner_id=[^&]/.test(raw) && isGetyourguideUrl(raw)) return true;
+  // Baja Bikes is the third, 11 Sep 2026, and the same argument applies: their
+  // product pages are ordinary links until `bb` is on them, and a plain
+  // reference to bajabikes.eu in prose must not be labelled as paid.
+  if (/(?:[?&])bb=[^&]/.test(raw) && isBajabikesUrl(raw)) return true;
   return /(?:[?&])aid=\d/.test(raw) && (h === "booking.com" || h.endsWith(".booking.com"));
 };
 
@@ -526,6 +664,7 @@ export const partnerDisclosure = (url) =>
 // down gets the honest generic label.
 const PARTNER_MERCHANTS = {
   tiqets: "Tiqets",
+  bajabikes: "Baja Bikes",
   booking: "Booking.com",
   ticketmaster: "Ticketmaster",
   // ── THE CAR PROGRAMMES ───────────────────────────────────────────
@@ -542,6 +681,7 @@ const PARTNER_MERCHANTS = {
   // lost the decision on 26 August, on inventory rather than rate: 10% and a
   // 90-day cookie, the best pair on his page, of cars that are not in Denmark.
   getyourguide: "GetYourGuide",
+  bajabikes: "Baja Bikes",
   autoeurope: "AutoEurope",
   discovercars: "DiscoverCars",
   rentalcars: "Rentalcars",
@@ -576,7 +716,7 @@ export const affiliateHref = (url) => {
   // The same refusal both wrappers make, kept here so a caller gets one
   // contract: null means "this is not a link", never "this is not a partner".
   if (!/^https?:\/\//i.test(raw)) return null;
-  for (const wrap of [ticketmasterUrl, tiqetsUrl, wegotripUrl, getyourguideUrl]) {
+  for (const wrap of [ticketmasterUrl, tiqetsUrl, wegotripUrl, getyourguideUrl, bajabikesUrl]) {
     const out = wrap(raw);
     if (out && out !== raw) return out;
   }
@@ -605,7 +745,7 @@ export const affiliateHref = (url) => {
 // The default is English, so a caller that passes nothing gets exactly what it
 // got before and no existing behaviour moves.
 export const affiliateNote = (url, lang = DEFAULT_UI_LANGUAGE) => {
-  const earns = ticketDisclosure(url) || tiqetsDisclosure(url) || wegotripDisclosure(url) || getyourguideDisclosure(url) || "";
+  const earns = ticketDisclosure(url) || tiqetsDisclosure(url) || wegotripDisclosure(url) || getyourguideDisclosure(url) || bajabikesDisclosure(url) || "";
   if (!earns) return "";
   // Falls back to the English those four return rather than to "", because an
   // empty note is how this file says "this link earns nothing", and printing

@@ -340,3 +340,47 @@ export const GETYOURGUIDE_PARTNER_ID = "WKOYNZB";
 // the portal's own value until there is a campaign in the dashboard to name,
 // because a tag their side has never seen reports nothing.
 export const GETYOURGUIDE_CAMPAIGN = "share_to_earn";
+
+// ── BAJA BIKES, APPROVED 11 SEP 2026 ────────────────────────────────
+//
+// Oliver applied the night before and was approved by morning. Their programme
+// runs on PostAffiliatePro, and the referral id he chose is the brand rather
+// than his name, because it appears in every link a reader can see.
+//
+// TEN PRODUCTS AND ALL TEN ARE COPENHAGEN. That is the whole of this partner's
+// inventory in Denmark, confirmed off his own panel and off their Denmark page,
+// which opens "Cycling in Denmark starts with a tour of Copenhagen". So nothing
+// here can ever fire on an Aarhus or an Odense page, and a version of this that
+// looked like a national bike partner would be lying about the coverage.
+export const BAJABIKES_REFERRAL_ID = "gemlyx";
+
+// ── AND THE BANNER ID IS PER PRODUCT ────────────────────────────────
+//
+// PostAffiliatePro tracks the SALE on the referral id above; `a_bid` names which
+// creative it came through, which is what turns his dashboard from one number
+// into ten. So a link without it still pays and still reports nothing useful,
+// and that is why these are written down rather than left off.
+//
+// KEYED BY SLUG, NOT STORED ON THE ROW. utils/ticketLink.js already holds the
+// rule this follows, in cleanTourUrl: a stored URL carries no tracking, because
+// "the day the programme ends the database is still handing readers a tracked
+// link, with no disclosure under it". So the entry keeps
+// bajabikes.eu/en/copenhagen-bike-tour/ and the wrapper pastes the id on at
+// render. Read off his panel on 11 Sep 2026, one at a time.
+export const BAJABIKES_BANNERS = {
+  "copenhagen-bike-tour": "11111133",
+  "bike-rental-copenhagen": "11112144",
+  "private-guide-copenhagen": "11112316",
+  "copenhagen-christianshavn": "11112317",
+  "copenhagen-student-bike-tour": "11112318",
+  "copenhagen-by-night": "11112319",
+  "copenhagen-highlights-bike-tour": "11112418",
+  "copenhagen-christmas-bike-tour": "11112419",
+  "copenhagen-tour": "11112420",
+  "copenhagen-sightseeing": "11110369",
+};
+
+// The one product that is not an activity. Rental is transport: it answers "how
+// do I get around today" rather than "what shall I do", and it is the only row
+// here that belongs on a day rather than in the tour slot.
+export const BAJABIKES_RENTAL_SLUG = "bike-rental-copenhagen";

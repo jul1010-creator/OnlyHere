@@ -164,6 +164,14 @@ const TOURS = {
   "a food tour":         { da: "en madtur",               de: "eine kulinarische Tour" },
   "a canal tour":        { da: "en kanalrundfart",        de: "eine Kanalrundfahrt" },
   "a bike tour":         { da: "en cykeltur",             de: "eine Radtour" },
+  // Baja Bikes, 11 Sep 2026. Their slugs name the ride rather than the vehicle,
+  // so the phrase has to as well: "copenhagen-by-night" is a bike tour and
+  // saying only "a bike tour" throws away the half that makes somebody want it.
+  "a bike tour after dark": { da: "en cykeltur efter mørkets frembrud", de: "eine Radtour nach Einbruch der Dunkelheit" },
+  "a bike tour through Christianshavn": { da: "en cykeltur gennem Christianshavn", de: "eine Radtour durch Christianshavn" },
+  "a student bike tour": { da: "en cykeltur for studerende", de: "eine Radtour für Studierende" },
+  "a Christmas bike tour": { da: "en juletur på cykel",     de: "eine weihnachtliche Radtour" },
+  "a private guide":     { da: "en privat guide",          de: "ein privater Guide" },
   "a guided walk":       { da: "en guidet vandretur",     de: "ein geführter Rundgang" },
   "a Viking tour":       { da: "en vikingetur",           de: "eine Wikinger-Tour" },
   "a castle tour":       { da: "en slotsrundvisning",     de: "eine Schlossführung" },

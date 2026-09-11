@@ -123,9 +123,28 @@ export const showablePhoto = (place) => {
 // Everything that matters, showablePhoto's licence check, the OUR PAGE mark,
 // the wording and its five translations, the credit that wraps rather than
 // truncating, is the same code running in a smaller box.
-// How many pictures may sit beside one reply. Exported so the suite can assert
-// the cap rather than counting a literal, and so the number has one home.
-export const BESIDE_MAX = 2;
+// How many pictures one reply may show. Exported so the suite can assert the
+// cap rather than counting a literal, and so the number has one home.
+//
+// ── IT WAS TWO, AND TWO WAS A HEIGHT BUDGET ───────────────────────
+//
+// Two existed because the cards ran DOWN a 190px column beside the bubble, and
+// three at 88px stacked is 264px of pictures beside a reply that is often 120px
+// tall, which pushes the next reply off the screen. That was a real cost and it
+// is gone: a row has the same height whether it holds one card or four.
+//
+// So the ceiling is CHAT_PLACE_CAP now, upstream in chatPlaces.js, where the
+// reason is about the reply rather than about the layout: "a reply that names
+// six places and shows six photographs is a gallery with a sentence attached,
+// and the sentence is the product." Three is that rule's number, and this slice
+// stops throwing away the third thing it found.
+export const CARDS_MAX = 3;
+
+// The width of one card in a row of them. Three plus their gaps is 466px, which
+// sits inside the chat column on a laptop and runs past the edge of a phone,
+// where it scrolls. Beside photoHeight rather than in the CSS file, because the
+// two numbers are one decision about the shape of a card.
+export const STRIP_CARD_W = 150;
 
 export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "row", className = "" }) => {
   // One name for the two, because they were two until the side column stopped
@@ -140,8 +159,23 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
   // TWO, for the reason spelled out below. The cap is here rather than at the
   // call site because both call sites want it and one of them is a map marker
   // that only ever passes one anyway.
-  const rows = pin ? found : found.slice(0, BESIDE_MAX);
+  const rows = pin ? found : found.slice(0, CARDS_MAX);
   if (!rows.length) return null;
+  // ── ONE PICTURE, OR A ROW OF THEM ─────────────────────────────────
+  //
+  // Oliver, 10 Sep 2026: "have the pictures going under its text. So if the AI
+  // mentions multiple attractions or towns, it will become a long horrizontal
+  // line, rather than vertical."
+  //
+  // THIS DOES NOT UNDO "NOBODY SENDS A CAROUSEL TO A FRIEND". That was about
+  // ONE picture rendered as a small card in a scrolling strip, and one picture
+  // is still one picture, message width, the size it has been since 5 Sep. What
+  // changes is the case that argument never covered: several places in one
+  // reply. Down a column they cost height per place and the answer was to show
+  // fewer; across a row they cost none, and the third card comes back.
+  //
+  // Asked which he wanted for a single place, he chose the big picture.
+  const strip = !pin && rows.length > 1;
 
   // ── HOW MANY, AND HOW BIG ─────────────────────────────────────────
   //
@@ -174,7 +208,12 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
   // The two heights are this file's own ladder rather than numbers picked
   // tonight: 132 under a reply, 88 in a column, 62 inside a map marker, each
   // measured against a real width once.
-  const photoHeight = pin ? 62 : rows.length >= 2 ? 88 : 132;
+  // 132 under a reply, 110 in a row of them, 62 inside a map marker. The middle
+  // number is new and it is not a shrink for its own sake: a row card is about
+  // as wide as it is tall, so 110 keeps three of them inside a laptop column
+  // while leaving the photograph worth looking at. STRIP_CARD_W is the width
+  // that goes with it.
+  const photoHeight = pin ? 62 : strip ? 110 : 132;
 
   return (
     <>
@@ -184,15 +223,22 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
       style={rail ? {
         display: "flex", flexDirection: "column", gap: 10,
         width: pin ? 132 : "100%",
+      } : strip ? {
+        // ── SEVERAL PLACES RUN ACROSS ───────────────────────────────
+        // Constant height however many there are, which is the property the
+        // column never had and the reason a third card can exist again. Wider
+        // than the column can hold, it scrolls sideways rather than wrapping:
+        // a second row would put the height back.
+        display: "flex", flexDirection: "row", gap: 8,
+        marginTop: 6, marginLeft: 6, maxWidth: "100%",
+        overflowX: "auto", overflowY: "hidden",
+        paddingBottom: 2, scrollbarWidth: "thin",
       } : {
         // ── SHOWN, NOT SHELVED ──────────────────────────────────────
-        // A column under the reply, left-aligned with it, one picture per row.
-        // The old version was a sideways-scrolling strip of 124px cards, which
-        // is a carousel; nobody sends a carousel to a friend.
-        // maxWidth and marginLeft are for the STACKED case, which is the phone
-        // and is what this was before 9 Sep. Beside the text the row's own CSS
-        // in chatRail.js overrides both, because there the width is whatever the
-        // bubble left over and there is nothing to indent past.
+        // One place, one picture, roughly the width of the message it came
+        // with. "Imagine you're talking to me and you want to show me a
+        // picture." A single card in a strip would be that same picture made
+        // small for no reason, which is the carousel argument again.
         display: "flex", flexDirection: "column", gap: 6,
         marginTop: 6, marginLeft: 6, maxWidth: "min(82%, 240px)",
       }}
@@ -209,7 +255,12 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
             border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden",
             cursor: onOpen ? "pointer" : "default",
           } : {
-            width: "100%", background: C.surface,
+            // A fixed width in the strip, because a flex row of `100%` children
+            // collapses them all to nothing. The single-picture case keeps the
+            // full width of its own container.
+            width: strip ? STRIP_CARD_W : "100%",
+            flex: strip ? `0 0 ${STRIP_CARD_W}px` : undefined,
+            background: C.surface,
             border: `1px solid ${C.border}`,
             // The same corner the assistant's own bubble has, so the picture
             // reads as coming from the same speaker rather than from the page.

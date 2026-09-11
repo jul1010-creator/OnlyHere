@@ -2,9 +2,9 @@ import { useState } from "react";
 import { C } from "../utils/theme";
 import { auditRows, auditLinks, auditSummary, auditNote, programmeState, TICKET, TOUR } from "../utils/affiliateAudit";
 import { isBookableTicketUrl, ticketAgentOf, isTourUrl, TOUR_TYPES, TICKET_FIELD, TOUR_FIELD } from "../utils/ticketLink";
-import { affiliateHref, wegotripBrowseUrl, tripcomActive, getyourguideActive } from "../utils/affiliates";
+import { affiliateHref, wegotripBrowseUrl, tripcomActive, getyourguideActive, bajabikesActive } from "../utils/affiliates";
 import { TRIPCOM_CITIES } from "../data/tripcom";
-import { BOOKING_AFFILIATE_ID, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, TICKETMASTER_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_AFFILIATE_TEMPLATE } from "../config";
+import { BOOKING_AFFILIATE_ID, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, TICKETMASTER_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_AFFILIATE_TEMPLATE, BAJABIKES_BANNERS } from "../config";
 
 // ── WHAT DO MY AFFILIATES ACTUALLY CONNECT TO ───────────────────────
 //
@@ -59,6 +59,11 @@ export const AffiliatePanel = ({ rows, onSetLink, savingId = null }) => {
     // Through the builder for the third time and the same reason. Two of the
     // three rows above were once read off a constant and both of them lied.
     getyourguide: getyourguideActive() ? "on" : "",
+    // Through the builder for the fourth time, same reason. Baja Bikes joined on
+    // 11 Sep 2026 and the suite refused the commit until this row existed, which
+    // is the completeness test doing exactly what it was written for.
+    bajabikes: bajabikesActive() ? "on" : "",
+    bajabikesProducts: Object.keys(BAJABIKES_BANNERS).length,
     tripcomCities: TRIPCOM_CITIES.length,
   });
   // The work queue, which is the useful half. A count of failures nobody can act

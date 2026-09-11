@@ -63,7 +63,7 @@ writeFileSync(entry, `
   export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
   export { TICKET_HUNT_PROMPT, ticketHuntUrls } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
-  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, partnerMerchant, linkLabel, affiliateHref, affiliateNote, isAffiliateHref, isGetyourguideUrl, isGetyourguideProductUrl, getyourguideUrl, getyourguideActive, getyourguideDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
+  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, partnerMerchant, linkLabel, affiliateHref, affiliateNote, isAffiliateHref, isGetyourguideUrl, isGetyourguideProductUrl, getyourguideUrl, getyourguideActive, getyourguideDisclosure, bikeRentalFits, tourMerchant, isBajabikesUrl, isBajabikesProductUrl, isBajabikesRental, bajabikesSlug, bajabikesUrl, bajabikesActive, bajabikesDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isWegotripUrl, wegotripUrl, wegotripBrowseUrl, wegotripActive, wegotripDisclosure, tripcomActive } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { TOWN_TYPES, townNameOf, audioFor, audioLine, ticketFor, unmatchedProducts, wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO, TICKET as WEGO_TICKET } from ${JSON.stringify(join(root, "src/utils/wegotripMatch.js"))};
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
@@ -248,6 +248,7 @@ writeFileSync(entry, `
   export { routeTowns, countStops, orderedStops, shareSummary, shareMessage, shareTitle, metaDescription, hasMeasuredTravel, escapeHtml } from ${JSON.stringify(join(root, "src/utils/share.js"))};
   export { buildPreviewHtml, injectMeta, isCrawler, guideIdFromPath, articleBlocks, articleHtml, worthServing, structuredData, injectArticle } from ${JSON.stringify(join(root, "src/utils/linkPreview.js"))};
   export { SITE_ORIGIN } from ${JSON.stringify(join(root, "src/config.js"))};
+  export { BAJABIKES_REFERRAL_ID, BAJABIKES_BANNERS, BAJABIKES_RENTAL_SLUG } from ${JSON.stringify(join(root, "src/config.js"))};
   export { tripStatus, currentTrip, tripStatusLine, tripStatusForPrompt } from ${JSON.stringify(join(root, "src/utils/tripStatus.js"))};
   export { SPEND, OBSERVED_VOCAB, knownAboutTraveller, REPLY_LENGTHS } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
   export { PARTS as PARTS_FOR_TEST } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
@@ -22617,6 +22618,85 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
        M.getyourguideUrl("https://www.tiqets.com/en/x-p1/", { partner: "WKOYNZB" }), "https://www.tiqets.com/en/x-p1/");
     is("and junk is not a link at all", M.getyourguideUrl("not a url"), null);
 
+    // ── BAJA BIKES, APPROVED 11 SEP 2026 ───────────────────────────
+    //
+    // Oliver applied the night before and was approved by morning: guided bike
+    // tours, bike rental and a private guide, ten products, every one of them
+    // Copenhagen. Same shape as GetYourGuide because they track on their own
+    // domain too, so the wrapper appends rather than substitutes.
+    {
+      const BB = "https://www.bajabikes.eu/en/copenhagen-bike-tour/";
+      const RENT = "https://www.bajabikes.eu/en/bike-rental-copenhagen/";
+      const paid = M.bajabikesUrl(BB);
+      // TWO PARAMETERS DOING DIFFERENT JOBS. `bb` is what makes the sale his;
+      // `a_bid` names the creative, which is what turns his dashboard from one
+      // number into ten.
+      ok("the referral id is on it", /[?&]bb=gemlyx(?:&|$)/.test(paid));
+      ok("and so is the banner id for THAT product", /[?&]a_bid=11111133(?:&|$)/.test(paid));
+      is("a different product gets a different banner id",
+         new URL(M.bajabikesUrl(RENT)).searchParams.get("a_bid"), "11112144");
+      ok("and the page it points at is untouched", paid.startsWith(BB));
+      // A product page can carry a query and it has to survive, which is why
+      // this reads the URL rather than pasting a string together.
+      {
+        const q = M.bajabikesUrl(`${BB}?lang=da`);
+        ok("an existing query survives", /lang=da/.test(q) && /bb=gemlyx/.test(q));
+      }
+      // Somebody else's referral on a pasted link is OURS after wrapping, or the
+      // link pays a stranger.
+      ok("another affiliate's id is replaced rather than joined",
+         (M.bajabikesUrl(`${BB}?bb=someone`).match(/bb=/g) || []).length === 1
+         && /bb=gemlyx/.test(M.bajabikesUrl(`${BB}?bb=someone`)));
+      // The three-way contract every wrapper in this file keeps.
+      is("no referral id hands back the plain link", M.bajabikesUrl(BB, { referral: "" }), BB);
+      is("and it never wraps a destination that is not theirs",
+         M.bajabikesUrl("https://www.tiqets.com/en/x-p1/"), "https://www.tiqets.com/en/x-p1/");
+      is("and junk is not a link at all", M.bajabikesUrl("not a url"), null);
+      // ── A PRODUCT IS ONE HE CAN ACTUALLY EARN ON ─────────────────
+      // The test is the banner table rather than the shape of the path, which is
+      // the difference from GetYourGuide. Baja's paths are plain slugs, so the
+      // only thing that can say whether an address is a product HE HAS is the
+      // list off his own panel. Answering yes for a product they added
+      // yesterday would print a disclosure over a link that pays nothing.
+      is("a product off his panel is bookable", M.isBajabikesProductUrl(BB), true);
+      is("their Denmark page is not", M.isBajabikesProductUrl("https://www.bajabikes.eu/en/cycling-in-denmark/"), false);
+      is("nor is their front page", M.isBajabikesProductUrl("https://www.bajabikes.eu/en/"), false);
+      is("and a product with no banner of his is not either",
+         M.bajabikesUrl(BB, { banners: {} }).includes("a_bid"), false);
+      ok("though it still tracks the sale", /bb=gemlyx/.test(M.bajabikesUrl(BB, { banners: {} })));
+      // RENTAL IS NOT A TOUR. It answers how you get around rather than what you
+      // do, and it has its own place on a day in the guide.
+      is("the rental is marked as one", M.isBajabikesRental(RENT), true);
+      is("and a guided ride is not", M.isBajabikesRental(BB), false);
+      is("a tour of theirs goes in the tour slot", M.isTourUrl(BB), true);
+      is("the rental does not", M.isTourUrl(RENT), false);
+      is("and GetYourGuide still does", M.isTourUrl(GYG), true);
+      // The stored row carries no tracking, which is the rule cleanTourUrl
+      // already enforced for the other programme. His panel hands him every link
+      // with both parameters already on, so without this every Baja URL he
+      // pasted would be stored tracked.
+      {
+        const stored = M.cleanTourUrl(`${BB}?bb=gemlyx&a_bid=11111133`);
+        ok("a pasted link is stored bare", !/bb=|a_bid=/.test(stored) && stored.startsWith(BB));
+      }
+      // Through the one door, and disclosed, like every paid link on the site.
+      ok("the shared door wraps it", /bb=gemlyx/.test(M.affiliateHref(BB) || ""));
+      ok("and it says it earns", !!M.affiliateNote(BB));
+      // The ten ids, pinned, because a typo in one is a product whose earnings
+      // report under the wrong creative and nothing anywhere would say so.
+      is("every product he was given is written down", Object.keys(M.BAJABIKES_BANNERS).length, 10);
+      ok("and every id is digits rather than a copied sentence",
+         Object.values(M.BAJABIKES_BANNERS).every(v => /^\d{6,}$/.test(v)));
+      // ── AND THE LINE SAYS WHAT THE RIDE IS ───────────────────────
+      // Their slugs name the ride rather than the vehicle, so "a bike tour" for
+      // copenhagen-by-night throws away the half that makes somebody want it.
+      is("a night ride says so", M.tourPhrase("https://www.bajabikes.eu/en/copenhagen-by-night/"), "a bike tour after dark");
+      is("and the Christianshavn one names the place",
+         M.tourPhrase("https://www.bajabikes.eu/en/copenhagen-christianshavn/"), "a bike tour through Christianshavn");
+      is("a plain tour is still a bike tour",
+         M.tourPhrase("https://www.bajabikes.eu/en/copenhagen-bike-tour/"), "a bike tour");
+    }
+
     // ── PAID BY THE PARAMETER, NOT BY THE HOST ─────────────────────
     // getyourguide.com is a partner link with partner_id on it and an ordinary
     // link without, exactly as booking.com is with aid. Asked of the parameter,
@@ -22689,9 +22769,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         wegotripTemplate: M.wegotripActive() ? "on" : "",
         tripcom: M.tripcomActive() ? "on" : "",
         getyourguide: M.getyourguideActive() ? "on" : "",
+        bajabikes: M.bajabikesActive() ? "on" : "",
       });
       const byName = { tiqets: "Tiqets", getyourguide: "GetYourGuide", ticketmaster: "Ticketmaster",
-        wegotrip: "WeGoTrip", booking: "Booking.com", tripcom: "Trip.com", carhire: "Car hire" };
+        wegotrip: "WeGoTrip", booking: "Booking.com", tripcom: "Trip.com", carhire: "Car hire",
+        bajabikes: "Baja Bikes" };
       const disagreed = roster.filter(p => {
         const row = panel.find(r => r.name === byName[p.key]);
         return !row || row.on !== p.earning;
@@ -22714,7 +22796,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       const OWN = {
         tiqets: "tiqetsActive", getyourguide: "getyourguideActive", ticketmaster: "ticketmasterActive",
         wegotrip: "wegotripActive", booking: "affiliateActive", tripcom: "tripcomActive",
-        carhire: "carRentalActive",
+        carhire: "carRentalActive", bajabikes: "bajabikesActive",
       };
       is("every programme in the roster is one this test knows", pairs.map(([k]) => k).filter(k => !OWN[k]), []);
       is("and every one this test knows is in the roster",
@@ -23034,8 +23116,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // different address; GetYourGuide tracks on its own domain with two query
   // parameters, so the wrapper appends rather than substitutes. Same door, same
   // three-way contract, different mechanism.
+  // The fifth joined on 11 Sep 2026. Baja Bikes tracks on its own domain like
+  // GetYourGuide, so it appends rather than substitutes, and it is in the same
+  // door keeping the same three-way contract.
   ok("each agent goes through the one door",
-     /for \(const wrap of \[ticketmasterUrl, tiqetsUrl, wegotripUrl, getyourguideUrl\]\)/.test(readFileSync(join(root, "src/utils/affiliates.js"), "utf8")));
+     /for \(const wrap of \[ticketmasterUrl, tiqetsUrl, wegotripUrl, getyourguideUrl, bajabikesUrl\]\)/.test(readFileSync(join(root, "src/utils/affiliates.js"), "utf8")));
   {
     const wego = "https://wegotrip.com/billund-d2624144/legoland-billund-entry-ticket-p20636/";
     ok("and the third one wraps when it has a template",
@@ -23280,13 +23365,115 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       const shown = async (lang) => (await renderSurface("src/components/TourLine.jsx", "TourLine",
         { url: AARL, kind: "nightlife", lang })).text;
       const da = await shown("da"), de = await shown("de"), en = await shown("en");
+      // {merchant} is filled from the link, so the catalogue string is compared
+      // with it filled in rather than raw. See the note on tour.lead.
+      const lead = (code, who) => M.UI_STRINGS["tour.lead"][code].replace("{merchant}", who);
       ok("a Danish reader gets the whole line in Danish",
-         da.includes(M.UI_STRINGS["tour.lead"].da) && da.includes(M.UI_STRINGS["affiliate.disclosure"].da));
+         da.includes(lead("da", "GetYourGuide")) && da.includes(M.UI_STRINGS["affiliate.disclosure"].da));
       ok("and no English is left in it", !da.includes("may earn Gemlyx"));
       ok("a German reader gets the whole line in German",
-         de.includes(M.UI_STRINGS["tour.lead"].de) && de.includes(M.UI_STRINGS["affiliate.disclosure"].de));
+         de.includes(lead("de", "GetYourGuide")) && de.includes(M.UI_STRINGS["affiliate.disclosure"].de));
       ok("and an English one is unchanged",
-         en.includes(M.UI_STRINGS["tour.lead"].en) && en.includes("may earn Gemlyx"));
+         en.includes(lead("en", "GetYourGuide")) && en.includes("may earn Gemlyx"));
+
+      // ── AND IT NAMES THE PARTNER IT IS POINTING AT ──────────────
+      //
+      // The lead said GetYourGuide in all three columns until 11 Sep 2026, which
+      // was true while there was one tour partner. A Baja Bikes ride through the
+      // same slot would have credited GetYourGuide, under a disclosure saying
+      // Gemlyx earns from it: wrong about who is paid, on the page, in three
+      // languages. Every assertion above this point was green while that was so.
+      {
+        const baja = (await renderSurface("src/components/TourLine.jsx", "TourLine",
+          { url: "https://www.bajabikes.eu/en/copenhagen-by-night/", kind: "nightlife", lang: "en" })).text;
+        ok("a Baja ride names Baja Bikes", baja.includes("Baja Bikes"));
+        ok("and never the other partner", !baja.includes("GetYourGuide"));
+        ok("and still says it earns", /may earn Gemlyx/.test(baja));
+        ok("and the noun is the ride rather than the vehicle", /after dark/.test(baja));
+        // RENTAL IS NOT A TOUR, so it draws nothing here however it is passed in.
+        is("the rental draws no tour line",
+           (await renderSurface("src/components/TourLine.jsx", "TourLine",
+             { url: "https://www.bajabikes.eu/en/bike-rental-copenhagen/", kind: "town", lang: "en" })).text.trim(), "");
+        // ── AND IT HAS ITS OWN SENTENCE ────────────────────────────
+        // Oliver chose the guide day over the town page: on a bike day, at the
+        // point the question is theirs.
+        const rent = async (lang) => (await renderSurface("src/components/TourLine.jsx", "BikeRentalLine",
+          { url: "https://www.bajabikes.eu/en/bike-rental-copenhagen/", lang })).text;
+        const rentEn = await rent("en"), rentDa = await rent("da");
+        ok("the rental line reads as transport rather than as an activity",
+           rentEn.includes(M.UI_STRINGS["rental.lead"].en) && rentEn.includes(M.UI_STRINGS["rental.link"].en));
+        ok("in the reader's language, disclosure included",
+           rentDa.includes(M.UI_STRINGS["rental.lead"].da) && rentDa.includes(M.UI_STRINGS["affiliate.disclosure"].da));
+        ok("and it says it earns, like every paid link on the site", /may earn Gemlyx/.test(rentEn));
+        is("something that is not a partner draws nothing",
+           (await renderSurface("src/components/TourLine.jsx", "BikeRentalLine",
+             { url: "https://example.com/bikes/", lang: "en" })).text.trim(), "");
+
+        // ── WHO SELLS IT IS NOT WHO PAYS US ───────────────────────
+        //
+        // Found by a mutant on 11 Sep 2026 that survived everything above.
+        // The first version asked partnerMerchant, which answers "is this
+        // tracked", so switching a partner id OFF hid the recommendation rather
+        // than the disclosure. Backwards: a GetYourGuide tour is still a
+        // GetYourGuide tour when the id is empty, it just earns nothing, and
+        // this file already had the rule the right way round for WeGoTrip.
+        is("the seller is named by the host, paid or not",
+           [M.tourMerchant("https://www.getyourguide.com/da-dk/x-t1/"),
+            M.tourMerchant("https://www.bajabikes.eu/en/copenhagen-bike-tour/")],
+           ["GetYourGuide", "Baja Bikes"]);
+        is("and an address that sells no tours names nobody",
+           [M.tourMerchant("https://example.com/x"), M.tourMerchant(""), M.tourMerchant(null)], ["", "", ""]);
+        // ── AND THE TWO GATES CANNOT DRIFT APART ──────────────────
+        //
+        // TourLine had a "did we recognise it" guard until a mutant deleted it
+        // and killed nothing: isTourUrl accepts a GetYourGuide product or a Baja
+        // product and tourMerchant names both, so no address reaches the line
+        // with no seller. The guard is gone and this is the property that makes
+        // it unnecessary. Widen one of the two without the other and this goes
+        // red, which is the drift worth guarding rather than the impossible case.
+        is("every address the tour slot accepts has a seller to name",
+           ["https://www.getyourguide.com/da-dk/aarhus-l32302/x-t1/",
+            "https://www.bajabikes.eu/en/copenhagen-bike-tour/",
+            "https://www.bajabikes.eu/en/copenhagen-by-night/"]
+             .filter(u => M.isTourUrl(u) && !M.tourMerchant(u)), []);
+        // The two questions come apart exactly here, which is the property the
+        // mutant exposed: tracked says no, sold-by still says GetYourGuide.
+        // A STORED ROW IS BARE, which is the state this matters in: cleanTourUrl
+        // takes the tracking off before it is saved, so the url a component is
+        // handed has no parameter on it and partnerMerchant cannot name anyone.
+        // It earns all the same, because affiliateHref puts the id back on the
+        // way out, which is why the disclosure is right and the refusal was not.
+        const stored = "https://www.getyourguide.com/da-dk/aarhus-l32302/x-t1/";
+        ok("a stored row names no programme, because it carries no tracking",
+           !M.partnerMerchant(stored));
+        ok("but it still has a seller to put in the sentence", !!M.tourMerchant(stored));
+        ok("and the door still tracks it on the way out", /partner_id=/.test(M.affiliateHref(stored) || ""));
+      }
+
+      // ── AND WHEN THE RENTAL IS OFFERED AT ALL ────────────────────
+      // Two conditions and both are necessary. Copenhagen, because Baja has no
+      // other Danish city and a line offered in Aarhus points at somewhere that
+      // cannot help. Bike, because a traveller on trains is being sold something
+      // they did not ask for.
+      ok("a bike day in Copenhagen gets it", M.bikeRentalFits({ mode: "bike", town: "Copenhagen" }));
+      ok("and the Danish spelling of the city too", M.bikeRentalFits({ mode: "bike", town: "København" }));
+      ok("a bike day anywhere else does not", !M.bikeRentalFits({ mode: "bike", town: "Aarhus" }));
+      ok("nor does a train trip through Copenhagen",
+         !M.bikeRentalFits({ mode: "public transport", town: "Copenhagen" }));
+      ok("nor a car trip", !M.bikeRentalFits({ mode: "car", town: "Copenhagen" }));
+      ok("and an unknown mode offers nothing rather than guessing",
+         !M.bikeRentalFits({ mode: "", town: "Copenhagen" }) && !M.bikeRentalFits({ town: "Copenhagen" }));
+      ok("and a day with no town does not either", !M.bikeRentalFits({ mode: "bike", town: "" }));
+      ok("nor does an empty call throw", !M.bikeRentalFits());
+      {
+        // The day's town, not the trip's: a Copenhagen trip spending day four in
+        // Roskilde gets no line on day four, because the bike shop is not there.
+        const gpB = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+        ok("the guide asks about the day's own town",
+           /const town = \(day\.stops \|\| \[\]\)[^;]*stopTown\(s\)\)\.find\(Boolean\) \|\| "";\s*\n\s*if \(!bikeRentalFits\(\{ mode: travelModeKey\(guide\._mode\), town \}\)\) return null;/.test(gpB));
+        ok("and folds the traveller's own words through the shared reader",
+           /travelModeKey\(guide\._mode\)/.test(gpB));
+      }
       // The noun comes off the slug, not their marketing title, and it is
       // translated too. Read off the screen for the same reason.
       ok("the noun it ends on is translated on the way out",

@@ -29,7 +29,7 @@
 // able to cause.
 import {
   affiliateActive, tiqetsActive, ticketmasterActive, wegotripActive,
-  tripcomActive, carRentalActive, getyourguideActive,
+  tripcomActive, carRentalActive, getyourguideActive, bajabikesActive,
 } from "./affiliates";
 import { TRIPCOM_CITIES } from "../data/tripcom";
 
@@ -62,6 +62,13 @@ const ROSTER = [
     sells: "Guided tours and experiences",
     why: "This is where Denmark's canal tours, food tours, city walks and day trips actually are. A guided tour has no ticket window selling the same thing cheaper, which is why we point at experiences here and not at museum admissions.",
     live: getyourguideActive,
+  },
+  {
+    key: "bajabikes",
+    name: "Baja Bikes",
+    sells: "Guided bike tours and bike rental, Copenhagen only",
+    why: "Copenhagen is a city you see properly from a bike and badly from a bus, and they are the one partner on this list who rents you one. Every product they have in Denmark is in Copenhagen, which is why you will not see this anywhere else on the site.",
+    live: bajabikesActive,
   },
   {
     key: "ticketmaster",

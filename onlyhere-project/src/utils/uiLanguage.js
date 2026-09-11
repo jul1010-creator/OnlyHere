@@ -222,7 +222,26 @@ export const UI_STRINGS = {
   // beerwalk!" The phrase it ends on comes from the product's slug and is
   // translated in entryWords; this is the half he wrote, so it keeps his
   // cadence rather than being tidied into a sentence nobody would say.
-  "tour.lead":        { en: "Or hop onto GetYourGuide and book", da: "Eller smut forbi GetYourGuide og book", de: "Oder schau bei GetYourGuide vorbei und buche" },
+  // ── AND THE MERCHANT IS A PLACEHOLDER FROM 11 SEP 2026 ───────────
+  //
+  // It read "GetYourGuide" in all three columns, which was true while there was
+  // one tour partner. Baja Bikes approved that morning and the same line would
+  // have credited GetYourGuide for a ride Baja sells, under a disclosure saying
+  // Gemlyx earns from it. Wrong about who is paid and wrong on the page.
+  //
+  // {merchant} is filled from partnerMerchant, off the link itself, so the
+  // sentence cannot name one partner while the href points at another. His
+  // cadence is untouched, which is the half worth keeping.
+  "tour.lead":        { en: "Or hop onto {merchant} and book", da: "Eller smut forbi {merchant} og book", de: "Oder schau bei {merchant} vorbei und buche" },
+
+  // ── AND THE ONE PARTNER LINK THAT IS NOT AN ACTIVITY ──────────────
+  //
+  // Bike rental answers "how do I get around today" rather than "what shall I
+  // do", so it gets its own sentence rather than being dressed as a tour. It
+  // shows on a Copenhagen day of a bike trip and nowhere else: see
+  // bikeRentalFits, and Oliver's own choice of the day over the town page.
+  "rental.lead":      { en: "You will want a bike for this one.", da: "Du får brug for en cykel til den her.", de: "Für diesen Tag brauchst du ein Rad." },
+  "rental.link":      { en: "Rent one in Copenhagen", da: "Lej en i København", de: "Miete eines in Kopenhagen" },
 
   // ── THE GUIDE PAGE, WHICH WAS ENGLISH UNDER A DANISH NAV ──────────
   //
@@ -432,16 +451,17 @@ export const UI_STRINGS = {
 
   // ── WHAT A PIN ON THE MAP IS BEST FOR ─────────────────────────────
   //
-  // Oliver's own wording, 9 Sep 2026: "a short 'Best if you want history'
-  // 'Best if you want nightlife' 'Best if you want Art'".
+  // ── AND THE PIN LABEL LOST ITS PREFIX ─────────────────────────────
   //
-  // GERMAN TAKES A DIFFERENT SHAPE ON PURPOSE. "Best if you want art" is a
-  // prefix plus a noun in English and in Danish, and in German the verb goes to
-  // the end ("Am besten, wenn du Kunst willst"), so a prefix cannot work. The
-  // German column says "best for" instead, which is the same thing said the way
-  // the language says it. Each column is its own sentence; that is the point of
-  // having three of them.
-  "map.bestFor":     { en: "Best if you want", da: "Bedst hvis du vil have", de: "Am besten für" },
+  // "map.bestFor" lived here and read "Best if you want history" on a pin.
+  // Oliver, 10 Sep 2026: "no need to mention 'best if you want'.. that is only
+  // for when someone is in doubt." The label is the theme word alone now, which
+  // comes from THEME_LABEL through entryWord and needs no key of its own.
+  //
+  // The key is deleted rather than left unused. An entry nothing renders is a
+  // translation nobody can check and three columns to keep in step for no
+  // reader, which is the same argument this file makes for reusing the nav keys
+  // in the category filter rather than growing a parallel set.
 
   // ── AND THE LINE UNDER THE MAP ────────────────────────────────────
   //

@@ -116,6 +116,16 @@ const PHRASES = [
   [/bryggeri|beer-?tast|olsmagning/, "a brewery tasting"],
   [/mad-?tur|madtur|food-?tour|food-?tast|street-?food/, "a food tour"],
   [/kanal|canal|bad-?tur|badtur|boat|havnerundfart|harbou?r-?cruise/, "a canal tour"],
+  // Baja Bikes joined on 11 Sep 2026 and its slugs are plain English with no
+  // "bike" in most of them: copenhagen-christianshavn, copenhagen-by-night,
+  // copenhagen-sightseeing. Read off the slug like every line here, because
+  // their own titles are written to sell and reading one aloud in Gemlyx's voice
+  // quotes an advert as though it were a recommendation.
+  [/copenhagen-by-night|by-?night/, "a bike tour after dark"],
+  [/copenhagen-christianshavn|christianshavn/, "a bike tour through Christianshavn"],
+  [/student-bike-tour/, "a student bike tour"],
+  [/christmas-bike-tour/, "a Christmas bike tour"],
+  [/private-guide/, "a private guide"],
   [/cykel|bike-?tour|cycling-?tour/, "a bike tour"],
   [/vandretur|byvandring|walking-?tour|city-?walk|guided-?walk/, "a guided walk"],
   [/viking/, "a Viking tour"],

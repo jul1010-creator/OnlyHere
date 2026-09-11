@@ -162,7 +162,7 @@ export const auditNote = (s) => {
 // switched on at all. An empty template is not a bug and is not a mistake, and
 // there is no way to tell an empty one from a filled one without opening
 // config.js, which is exactly the state this panel exists to end.
-export const programmeState = ({ tiqetsTemplate, tiqetsBrowse, ticketmasterTemplate, bookingId, carRental, wegotrip, wegotripTemplate, tripcom, tripcomCities = 0, getyourguide } = {}) => [
+export const programmeState = ({ tiqetsTemplate, tiqetsBrowse, ticketmasterTemplate, bookingId, carRental, wegotrip, wegotripTemplate, tripcom, tripcomCities = 0, getyourguide, bajabikes, bajabikesProducts = 0 } = {}) => [
   { name: "Tiqets", what: "attraction tickets, deep link", on: !!clean(tiqetsTemplate),
     note: clean(tiqetsTemplate) ? "live on every row with a Tiqets product page" : "no template, so Tiqets product pages render a button that earns nothing" },
   { name: "Tiqets browse", what: "one generic button per guide", on: !!clean(tiqetsBrowse),
@@ -215,6 +215,16 @@ export const programmeState = ({ tiqetsTemplate, tiqetsBrowse, ticketmasterTempl
     note: clean(getyourguide)
       ? "live on every row with a GetYourGuide activity page. Tours and experiences only: their Danish catalogue has canal tours, walks and day trips and no museum admissions, which is the reason to point at it and the limit on where"
       : "no partner id configured" },
+  // ── AND THE ONE THAT COVERS ONE CITY ─────────────────────────────
+  // Approved 11 Sep 2026. Their whole Danish inventory is Copenhagen, confirmed
+  // off his panel and off their own Denmark page, so this row says so rather
+  // than reading "live" over a programme that can never fire in Aarhus. Same
+  // fault the Trip.com row exists to avoid, one step further along: that one
+  // reaches a fifth of the site, this one reaches a single town.
+  { name: "Baja Bikes", what: `guided bike tours and rental, ${bajabikesProducts} products, Copenhagen only`, on: !!clean(bajabikes),
+    note: clean(bajabikes)
+      ? "live on Copenhagen rows only. Every product they sell in Denmark is in Copenhagen, so no other town can ever show one, and the rental is the only partner link on the site that answers how you get around rather than what you do"
+      : "no referral id configured" },
   { name: "Car hire", what: "rentals", on: !!clean(carRental),
     note: clean(carRental) ? "AutoEurope, real Danish inventory at 9 airports. Only renders on a trip the traveller said is a driving one" : "empty: the link on hand had no Danish inventory, and a button that opens on an empty result costs more than the commission pays" },
 ];

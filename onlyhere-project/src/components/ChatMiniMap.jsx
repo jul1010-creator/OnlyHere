@@ -225,12 +225,6 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // a name, which is also what stops five labels fighting over a 380px map on
     // the turn that names the most places and knows the least.
     const picked = sayWhatFor ? distinctThemes(list.map(p => ({ key: p.key, themes: p.place?.themes }))) : {};
-    // ── AND LOWERCASE, EXCEPT IN GERMAN ──────────────────────────
-    // THEME_LABEL holds capitalised nouns because they are labels on a chip.
-    // Inside a sentence English and Danish want them lowercase, and German
-    // capitalises every noun, so it keeps the label as it is. A fact about the
-    // language rather than a special case.
-    const inSentence = (word) => (code === "de" ? word : word.toLowerCase());
     const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => (
       { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     // The newest ones last, so they are drawn on top of anything they overlap.
@@ -298,10 +292,22 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       // Empty when the row carries no themes, and the label is then the name
       // alone: the fallback towns have none, and "Aarhus · " with nothing after
       // it is worse than "Aarhus".
+      // ── AND IT IS THE WORD, NOT A SENTENCE ABOUT IT ───────────
+      //
+      // It read "Best if you want history" until Oliver, 10 Sep 2026: "no need
+      // to mention 'best if you want'.. that is only for when someone is in
+      // doubt."
+      //
+      // He is right, and the prefix was answering a question nobody had asked
+      // yet. What he wanted on 9 Sep was pins that "paint a difference", and
+      // the difference is entirely in the word: food, history, coast. The four
+      // words in front of it were the same on every pin, so they said nothing
+      // and took most of the label to say it.
+      //
+      // Capitalised as THEME_LABEL holds it, because a label is a label again
+      // rather than the tail of a sentence, which is what inSentence was for.
       const theme = picked[p.key];
-      const best = theme
-        ? `${uiT("map.bestFor", code)} ${inSentence(entryWord(THEME_LABEL[theme] || "", code))}`
-        : "";
+      const best = theme ? entryWord(THEME_LABEL[theme] || "", code) : "";
       marker.bindTooltip(
         `<span class="pin-name">${esc(p.place?.name || "")}</span>`
         + (best ? `<span class="pin-best">${esc(best)}</span>` : ""),

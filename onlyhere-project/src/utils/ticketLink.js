@@ -36,7 +36,7 @@
 //                               solves exactly this for research sources and
 //                               already knows that an ordinary name like
 //                               "Harbour" needs corroborating.
-import { isTiqetsUrl, isTicketmasterUrl, isWegotripUrl, isGetyourguideProductUrl, affiliateHref } from "./affiliates";
+import { isTiqetsUrl, isTicketmasterUrl, isWegotripUrl, isGetyourguideProductUrl, isBajabikesProductUrl, isBajabikesRental, affiliateHref } from "./affiliates";
 import { sourceIsAboutPlace } from "./sourcePolicy";
 import { containsName, fold, PLACE_NAMES, SIGHT_NAMES } from "./danishNames";
 import { haversineKm } from "./helpers";
@@ -221,7 +221,24 @@ export const ticketAgentOf = (url) =>
 // A TOUR IS THEREFORE NOT A TICKET, anywhere: not in isBookableTicketUrl, not in
 // ticketAgentOf, not in the Book tickets button. It has its own field and its
 // own row, and this function is what keeps one out of the other's slot.
-export const isTourUrl = (url) => isGetyourguideProductUrl(url);
+// ── AND THE SLOT IS NO LONGER ONE PROGRAMME WIDE ────────────────────
+//
+// This was `isGetyourguideProductUrl` alone, which was right while there was one
+// tour partner and quietly wrong the morning Baja Bikes approved him: a Baja
+// product would have been refused by the only gate the tour line consults, so
+// the link would have been stored, wrapped, disclosed and never rendered.
+//
+// BOTH TESTS ARE PRODUCT TESTS, and that is the property worth keeping rather
+// than the list of hosts. A city page or a search result is a browse link
+// wearing a product's clothes, and a reader sent to one has been handed a menu
+// instead of the thing the entry was talking about.
+//
+// RENTAL IS NOT A TOUR. Baja sells a bike by the day alongside its guided rides,
+// and it answers "how do I get around" rather than "what shall I do". It has its
+// own place on a day in the guide, so it is refused here rather than printed at
+// the foot of a section as though it were an activity.
+export const isTourUrl = (url) =>
+  isGetyourguideProductUrl(url) || (isBajabikesProductUrl(url) && !isBajabikesRental(url));
 
 // ── AND IT IS STORED WITH NOTHING ON IT ─────────────────────────────
 //
@@ -244,7 +261,12 @@ export const isTourUrl = (url) => isGetyourguideProductUrl(url);
 // Everything else is kept. A GetYourGuide address can carry parameters that
 // matter to the product, and stripping the whole query to be safe would be
 // throwing away things nobody has looked at.
-const TOUR_QUERY_DROP = ["partner_id", "cmp", "ranking_uuid", "adults", "currency", "curr", "visitor-id", "q"];
+// `bb` and `a_bid` join the list the morning Baja Bikes approved, and for the
+// identical reason the first two are on it: they are HIS tracking, and a stored
+// one means the day that programme ends the database is still handing readers a
+// tracked link with no disclosure under it. His panel gives every link with both
+// already on, so without this every Baja URL he pastes would be stored tracked.
+const TOUR_QUERY_DROP = ["partner_id", "cmp", "ranking_uuid", "adults", "currency", "curr", "visitor-id", "q", "bb", "a_bid"];
 
 export const cleanTourUrl = (url) => {
   const raw = String(url || "").trim();

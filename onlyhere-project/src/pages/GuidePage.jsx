@@ -23,12 +23,15 @@ import { GemlyxLoader, GemlyxMark } from "../components/GemlyxLogo";
 import { TypewriterText } from "../components/TypewriterText";
 import { DetailPage } from "../components/DetailPage";
 import { GuideRouteMap } from "../components/GuideRouteMap";
-import { TourLine } from "../components/TourLine";
+import { TourLine, BikeRentalLine } from "../components/TourLine";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
 import { guideTours } from "../utils/tourSweep";
 import { previewPools } from "../utils/previewMatch";
 import { placedLibrary, nearbyPublished, describeLocation } from "../utils/nearbyPlaces";
 import { ADD_IN_QUESTION, addInOffers, addInSeed, addInKindOf, addInNear } from "../utils/addIn";
+import { bikeRentalFits } from "../utils/affiliates";
+import { travelModeKey } from "../utils/routeOrder";
+import { BAJABIKES_RENTAL_SLUG } from "../config";
 import { stopCard } from "../utils/mapStops";
 import { markMany, canBeMarked, dayVisitRows } from "../utils/beenThere";
 import { cleanBeen } from "../utils/beenSync";
@@ -2329,6 +2332,19 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             {dayTours[dayIdx] && (
               <TourLine url={dayTours[dayIdx].url} kind="town" lang={uiLang} style={{ marginTop: 18 }} />
             )}
+
+            {/* ── AND A BIKE, ON THE DAY THEY NEED ONE ───────────────
+                Oliver, 11 Sep 2026, asked where bike rental belonged and chose
+                the day over the town page: "on a bike day", at the point the
+                question is theirs. Two conditions and both are necessary, see
+                bikeRentalFits: Copenhagen, because Baja has no other Danish
+                city, and bike, because a traveller on trains is being sold
+                something they did not ask for. */}
+            {(() => {
+              const town = (day.stops || []).filter(s => s && s.name).map(s => stopTown(s)).find(Boolean) || "";
+              if (!bikeRentalFits({ mode: travelModeKey(guide._mode), town })) return null;
+              return <BikeRentalLine url={`https://www.bajabikes.eu/en/${BAJABIKES_RENTAL_SLUG}/`} lang={uiLang} style={{ marginTop: 14 }} />;
+            })()}
 
             {/* ── AND THE GAP THE BUILDER WOULD HAVE GUESSED AT ──────
                 Oliver, 10 Sep 2026, asked what fills the slots the nightlife cap

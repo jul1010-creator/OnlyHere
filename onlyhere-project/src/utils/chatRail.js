@@ -45,25 +45,27 @@ export const RAIL_CLASS = "chat-rail";
 export const INLINE_CARDS_CLASS = "chat-cards-inline";
 export const RAIL_BREAKPOINT_PX = 900;
 
-// ── AND THE PICTURE SITS BESIDE THE SENTENCE THAT EARNED IT ─────────
+// ── THE WRAPPER ROUND A BUBBLE AND ITS PICTURES ─────────────────────
 //
-// Oliver, 9 Sep 2026, with an arrow drawn at the empty space to the right of a
-// reply about the National Museum: "you could put in a picture of the museum it
-// is talking about. But only on that text right there. So it floats along with
+// It was called BESIDE_ROW_CLASS and it put the pictures in the 18% gutter to
+// the right of the bubble, which is what Oliver asked for on 9 Sep: "you could
+// put in a picture of the museum it is talking about. So it floats along with
 // the text. And if it suggests others as well, then the individual pictures
 // will just become smaller to avoid a chaos."
 //
-// The bubble is capped at 82% of the column, so that space is always there and
-// was always empty. A picture under the reply pushes the next reply down; a
-// picture beside it costs no height at all and sits level with the sentence
-// that named the place, which is the half that makes it read as illustration
-// rather than as a gallery.
+// THAT LAYOUT SOLVED THE ONE-PICTURE CASE AND LOST THE OTHER ONE. A gutter is
+// 190px wide and unbounded downward, so several places ran DOWN it: two at 88px
+// beside a 120px reply, and a third that had to be dropped to stop the stack
+// pushing the next reply off the screen. Oliver, 10 Sep, looking at exactly
+// that: "have the pictures going under its text. So if the AI mentions multiple
+// attractions or towns, it will become a long horrizontal line, rather than
+// vertical."
 //
-// ONLY WHERE THERE IS A GUTTER. Below the rail breakpoint the column is a phone
-// and 18% of it is nothing, so the row goes back to stacking and the picture
-// lands under the text as before. Same breakpoint as the rail, because it is
-// the same question: is there room beside the words.
-export const BESIDE_ROW_CLASS = "chat-msg-row";
+// So the pictures come back under the bubble at every width and run ACROSS when
+// there is more than one, which costs the same height whether there are two or
+// four. See ChatPlaceCards, which owns that shape. This class is now only what
+// its CSS name always said: the row a message occupies.
+export const MSG_ROW_CLASS = "chat-msg-row";
 
 // ── HOW TALL THE WHOLE THING IS, WRITTEN ONCE ───────────────────────
 //
@@ -97,16 +99,16 @@ export const railCss = () => `
            breakpoint the two live side by side and the width is the point;
            below it, the bubble is as wide as its own text and sits on
            whichever side the message list puts it. */
-        .${BESIDE_ROW_CLASS} { display: flex; flex-direction: column; align-items: inherit; gap: 6px; max-width: 100%; }
-        @media (min-width: ${RAIL_BREAKPOINT_PX}px) {
-          /* ── THE GUTTER THE BUBBLE ALREADY LEAVES ──────────────
-             The bubble is capped at 82%, so the picture takes what is left and
-             no more. flex-basis 0 with a max means it never widens the row: a
-             short reply gives the picture up to 190px, a full-width one gives
-             it the 18% that was empty anyway. */
-          .${BESIDE_ROW_CLASS} { flex-direction: row; align-items: flex-start; gap: 10px; width: 100%; }
-          .${BESIDE_ROW_CLASS} > .${INLINE_CARDS_CLASS} { flex: 1 1 0; min-width: 0; max-width: 190px; margin-left: 0; }
-        }
+        .${MSG_ROW_CLASS} { display: flex; flex-direction: column; align-items: inherit; gap: 6px; max-width: 100%; }
+        /* ── AND THE STRIP DOES NOT WRAP ────────────────────────────
+           A second line of cards puts back the height the row exists to save,
+           so a strip too wide for the column scrolls sideways instead. The bar
+           itself is hidden: it sits under a photograph, it appears and vanishes
+           as the pointer moves, and the cards running to the edge already say
+           there is more. Firefox takes scrollbar-width from the inline style
+           the component sets. */
+        .${INLINE_CARDS_CLASS} { flex-wrap: nowrap; }
+        .${INLINE_CARDS_CLASS}::-webkit-scrollbar { height: 0; }
         .${RAIL_CLASS} { display: none; }
         @media (min-width: ${RAIL_BREAKPOINT_PX}px) {
           /* ── THE RAIL IS THE MAP NOW, SO IT GETS THE ROOM ────────

@@ -84,9 +84,23 @@ const mentions = (hay, name) => {
 //
 // Defaults to true, so every existing caller keeps the behaviour it was
 // written with and this is opt-out rather than opt-in.
-export const placesNamedIn = (text, pools, { cap = CHAT_PLACE_CAP, alreadyKnown = "", needsPhoto = true } = {}) => {
+export const placesNamedIn = (text, pools, { cap = CHAT_PLACE_CAP, alreadyKnown = "", alreadyShown = null, needsPhoto = true } = {}) => {
   const said = String(text || "");
   if (!said.trim()) return [];
+  // ── AND INTRODUCED ONCE ─────────────────────────────────────────
+  //
+  // Oliver, 10 Sep 2026, on a conversation that carded Copenhagen at the start
+  // and again four replies later: "it doesn't need to do it again.. once is
+  // enough."
+  //
+  // The same rule as `alreadyKnown` pointed at the other speaker. A card is for
+  // something GEMLYX INTRODUCED, and the second picture of a place introduces
+  // nothing: the traveller has seen it, and by then they may well have opened
+  // it. Names, lowercased, from the replies before this one. See cardsByMessage
+  // for the walk that fills it, which is where the ORDER lives.
+  const shownAlready = alreadyShown instanceof Set
+    ? alreadyShown
+    : new Set((Array.isArray(alreadyShown) ? alreadyShown : []).map(k => String(k || "").trim().toLowerCase()).filter(Boolean));
   // What the traveller has already named. A place they asked for is a place they
   // do not need introducing to.
   const theirs = String(alreadyKnown || "").toLowerCase();
@@ -100,6 +114,9 @@ export const placesNamedIn = (text, pools, { cap = CHAT_PLACE_CAP, alreadyKnown 
     if (!name) continue;
     const key = name.toLowerCase();
     if (seen.has(key)) continue;
+    // Shown under an earlier reply. Not a duplicate within this one, which is
+    // what `seen` is for: a duplicate across the conversation.
+    if (shownAlready.has(key)) continue;
     // THE RULE. Named by the traveller means no card: they know, and the picture
     // is decoration. Named by Gemlyx and not by them is a suggestion, and a
     // suggestion is exactly what a photograph is for.
@@ -203,5 +220,41 @@ export const rejectedIn = (text, pools, { own = false } = {}) => {
     if (out.includes(key)) continue;
     if (isExcluded(p, ruledOut)) out.push(key);
   }
+  return out;
+};
+
+// ── WHICH REPLY EACH PICTURE BELONGS TO ─────────────────────────────
+//
+// Oliver, 10 Sep 2026: "It was good it mentioned Copenhagen with a picture at
+// start.. but it doesn't need to do it again.. once is enough."
+//
+// A card cannot decide this alone, because "have I been shown before" is a
+// question about the conversation and placesNamedIn only ever sees one reply.
+// So the walk lives here and the answer is computed for the WHOLE list at once,
+// oldest first, carrying the names forward. That order is the only thing that
+// makes it stable: the first reply to name a place keeps the picture, every
+// later one loses it, and nothing changes underneath a reply already on screen
+// when the next one arrives.
+//
+// PASS THE LIST THAT IS ACTUALLY RENDERED. A hidden message and the opening
+// system turn are not on screen, so a place named only there was never
+// introduced and must still be allowed its card. The caller slices and filters
+// first and hands the result in, rather than this walking the raw transcript.
+//
+// `textOf` for the same reason: App.jsx renders stripMarkdown(stripReadyMarker(
+// text)) and the match has to run on the words a reader sees, not on the marker
+// and the asterisks around them.
+export const cardsByMessage = (messages, pools, { alreadyKnown = "", cap = CHAT_PLACE_CAP, textOf = (m) => m?.text } = {}) => {
+  const shown = new Set();
+  const out = new Map();
+  (Array.isArray(messages) ? messages : []).forEach((m, i) => {
+    if (m?.role !== "assistant") return;
+    const found = placesNamedIn(textOf(m), pools, { cap, alreadyKnown, alreadyShown: shown });
+    found.forEach(pl => {
+      const k = String(pl?.name || "").trim().toLowerCase();
+      if (k) shown.add(k);
+    });
+    out.set(Number.isFinite(m?.idx) ? m.idx : i, found);
+  });
   return out;
 };
