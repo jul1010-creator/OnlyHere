@@ -213,16 +213,37 @@ const PRICED_TYPES = new Set(["free"]);
 
 export const priceProblems = (payload, type) => {
   if (!PRICED_TYPES.has(String(type || ""))) return [];
-  const { free, says } = entryPrice(payload);
+  const { free, says, impliesPaid } = entryPrice(payload);
   if (free !== null) return [];
   // A row with no ticket line at all has simply never been told. A row WITH one
   // that still cannot answer is telling the reader about somebody else.
   if (clean(says)) {
+    // ── AND THERE ARE TWO WAYS TO QUALIFY A FREE CLAIM ──────────
+    //
+    // 11 Sep 2026. This sentence said "about who gets in free" for every row it
+    // flagged, and entryPrice's own comment says there are two kinds:
+    //
+    //   WHO         Legoland   "Children under 2: free entry"
+    //               AROS       "Free entry for everyone under 18"
+    //   WHICH PART  Tivoli     "Free entry from the street"
+    //               Trelleborg "Free entry year-round to the ramparts"
+    //
+    // Told he had a WHO problem on a WHICH PART row, the obvious move is to go
+    // and check the concession, which is not what is wrong with it. Tivoli's
+    // line is true about the street and says nothing about the gardens, and the
+    // fix is to name the admission, not to rewrite who gets a discount.
+    //
+    // impliesPaid ALREADY ANSWERS IT and no new judgement is added here:
+    // entryPrice sets it from CONCESSION_SCOPE on exactly this branch, and only
+    // priceChip read it. Two readers now.
+    const kindOfQualifier = impliesPaid
+      ? "which is about who gets in free rather than what entry costs"
+      : "which is about one part of the place rather than what entry costs";
     return [{
       kind: "misleading-free",
       cost: "one field",
       says: clean(says),
-      detail: `The ticket line says "${clean(says)}", which is about who gets in free rather than what entry costs. Reads as a free attraction at a glance. One field, no redraft.`,
+      detail: `The ticket line says "${clean(says)}", ${kindOfQualifier}. Reads as a free attraction at a glance. One field, no redraft.`,
     }];
   }
   return [{

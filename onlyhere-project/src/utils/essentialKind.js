@@ -73,10 +73,140 @@ export const unsortedEssentials = (rows) => (Array.isArray(rows) ? rows : []).fi
 // The same rule the food Type dropdown already states: "with nothing published
 // as a food street, 'Restaurants' means everything and the control is a tap
 // that does nothing."
-export const categoriesPresent = (rows, allCategories) => {
-  const used = new Set((Array.isArray(rows) ? rows : []).map(r => String(r?.category || "").trim()).filter(Boolean));
-  return (Array.isArray(allCategories) ? allCategories : []).filter(c => used.has(c.cat));
+// ── AND THE EIGHT ARE NO LONGER ALL OF THEM ─────────────────────────
+//
+// Oliver, 11 Sep 2026: "make me able to choose category or let me make a new
+// category. But only for Essentials."
+//
+// ESSENTIAL_CATEGORIES lives in sourcePolicy.js and is eight entries long, each
+// with an anchor, an icon and a colour. Its comment is the strictest warning in
+// that file: "A CATEGORY THE PAGE DOES NOT LOOP OVER IS A ROW THAT VANISHES",
+// written after a published essential filed under a category the loop never
+// asked for wrote to the database, merged cleanly, and appeared nowhere.
+//
+// So a new category cannot simply be typed into a field. Three things have to
+// be true of it or that is the same bug again, deliberately this time:
+//
+//   IT MUST SURVIVE WITHOUT A DEPLOY.  Studio writes to Supabase and the eight
+//     live in code. A category he can only add by editing a file is not a
+//     category he can add. So the live vocabulary is DERIVED: the fixed eight,
+//     plus every category the published rows are already using.
+//   IT MUST HAVE AN ANCHOR, AN ICON AND A COLOUR.  He asked to type only a
+//     name, so the other three are computed from it.
+//   A ROW MUST NEVER FALL OUT OF THE LIST.  A row whose category is empty, or
+//     filed under something later renamed, lands in Unsorted rather than
+//     nowhere. Unsorted exists only while something is in it.
+const clean1 = (v) => String(v == null ? "" : v).trim().replace(/\s+/g, " ");
+
+// A category is a LABEL. Not a sentence, not a description, and not the entry's
+// own name pasted into the wrong box. Same discipline as cleanIsland in
+// placeEdit.js: refuse prose rather than store it and render it as a heading.
+export const MAX_CATEGORY_WORDS = 4;
+export const cleanCategory = (v) => {
+  const t = clean1(v).slice(0, 40);
+  if (!t) return "";
+  if (t.split(" ").length > MAX_CATEGORY_WORDS || /[.;:!?]/.test(t)) return "";
+  return t;
 };
+
+export const UNSORTED_CATEGORY = "Unsorted";
+
+// ── THE ANCHOR IS NAMESPACED, AND THAT IS NOT COSMETIC ──────────────
+//
+// The Essentials page hand-writes three anchors that are NOT categories:
+// ess-weather, ess-faq and ess-safety, the last being the fine warning drawn
+// above everything else. A category called "Safety" would derive "ess-safety",
+// two elements would share one id, and the chip would scroll to whichever the
+// browser found first. Deriving into a namespace of its own makes that
+// collision impossible rather than unlikely, so nobody has to remember the list
+// of hand-written anchors when adding the next one.
+const CATEGORY_ANCHOR_PREFIX = "ess-c-";
+export const categoryAnchor = (cat) => {
+  const slug = clean1(cat).toLowerCase()
+    .replace(/æ/g, "ae").replace(/ø/g, "o").replace(/å/g, "aa")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return slug ? CATEGORY_ANCHOR_PREFIX + slug : "";
+};
+
+// One emoji for every category he makes, because he asked to type only a name.
+// Deliberately a filing icon rather than a guess at the subject: an icon picked
+// by keyword would be right about "Ferries" and silently wrong about everything
+// it had no rule for, and a wrong icon is worse than a neutral one.
+export const NEW_CATEGORY_ICON = "📌";
+
+// A colour from the name, so a category he invents looks like the eight rather
+// than like a bug. Stable, because the same name has to draw the same colour on
+// every device and every reload, so it cannot be random or index-based: a
+// category added later would then repaint the ones before it.
+//
+// Hue only. Saturation and lightness are fixed in the range the eight already
+// sit in, which is what keeps a derived chip readable on the dark surface and
+// against its own 22-alpha background. A colour picker was the other option and
+// he said name only.
+const hueOf = (cat) => {
+  const t = clean1(cat).toLowerCase();
+  let h = 0;
+  for (let i = 0; i < t.length; i += 1) h = (h * 31 + t.charCodeAt(i)) % 360;
+  return h;
+};
+export const categoryColor = (cat) => {
+  const h = hueOf(cat) / 360, s = 0.55, l = 0.38;
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const ch = (t0) => {
+    const t = t0 < 0 ? t0 + 1 : t0 > 1 ? t0 - 1 : t0;
+    const v = t < 1 / 6 ? p + (q - p) * 6 * t
+      : t < 1 / 2 ? q
+      : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6
+      : p;
+    return Math.round(v * 255).toString(16).padStart(2, "0");
+  };
+  return `#${ch(h + 1 / 3)}${ch(h)}${ch(h - 1 / 3)}`;
+};
+
+// The category a row is IN, which is the question the chip row and the render
+// loop both have to answer the same way or a row sits under a heading that does
+// not list it. One function, exported, so there is one answer to it.
+export const categoryOf = (row) => cleanCategory(row?.category) || UNSORTED_CATEGORY;
+
+export const rowsInCategory = (rows, cat) =>
+  (Array.isArray(rows) ? rows : []).filter(r => categoryOf(r) === cat);
+
+// Every category that may be OFFERED: the fixed eight in their own order, then
+// whatever the published rows have grown, alphabetically so the list stays
+// stable as rows come and go, then Unsorted last and only when something is
+// unfiled.
+//
+// Fed the WHOLE pool rather than one tab's rows, so a category he made on the
+// Tips side is offered when he files an Essential, which is the point of being
+// able to make one at all.
+export const categoryVocabulary = (rows, fixed) => {
+  const base = Array.isArray(fixed) ? fixed : [];
+  const known = new Set(base.map(c => c.cat));
+  const all = Array.isArray(rows) ? rows : [];
+  const grown = [...new Set(all.map(r => cleanCategory(r?.category)).filter(c => c && !known.has(c)))].sort();
+  const out = [...base, ...grown.map(cat => ({ cat, anchor: categoryAnchor(cat), icon: NEW_CATEGORY_ICON, color: categoryColor(cat) }))];
+  if (all.some(r => categoryOf(r) === UNSORTED_CATEGORY)) {
+    out.push({ cat: UNSORTED_CATEGORY, anchor: categoryAnchor(UNSORTED_CATEGORY), icon: "🗂", color: "#5F6672" });
+  }
+  return out;
+};
+
+export const categoriesPresent = (rows, allCategories) => {
+  const list = Array.isArray(rows) ? rows : [];
+  return (Array.isArray(allCategories) ? allCategories : []).filter(c => list.some(r => categoryOf(r) === c.cat));
+};
+
+// One field, one PATCH, the same shape as kindPatch above and for the same
+// stated reason. "" is a real value here and means unfiled, which is why
+// cleanCategory returning "" on prose is safe: the row goes to Unsorted where he
+// can see it, rather than under a heading made out of a sentence.
+export const categoryPatch = (row, next) => {
+  const want = cleanCategory(next);
+  return want === cleanCategory(row && row.category) ? {} : { category: want };
+};
+
+export const hasCategoryChange = (row, next) => Object.keys(categoryPatch(row, next)).length > 0;
 
 // ── ONE CARD CAN HOLD TWO OPERATORS ─────────────────────────────────
 //

@@ -6,7 +6,7 @@
 // helpers; shapeForLive turns a raw AI draft into the exact object shape each
 // hardcoded data array (towns/events/freeEntrance/foodSpots/etc.) expects.
 import { normaliseTicketStatus } from "./tickets";
-import { cleanKind } from "./essentialKind";
+import { cleanKind, cleanCategory } from "./essentialKind";
 import { cleanIsland, cleanRelation } from "./placeEdit";
 import { isBookableTicketUrl, ticketUrlSaysElsewhere, ticketUrlIsASubEvent, isTourUrl, cleanTourUrl } from "./ticketLink";
 import { cleanBranches } from "./branches";
@@ -230,7 +230,22 @@ const shapeForLiveFields = (type, t) => {
   // visitorNote is carried because for this type it is often the whole point:
   // a system that needs a Danish CPR number is the wrong answer for a visitor,
   // and that sentence is worth more than the rest of the entry.
-  if (type === "essential") return { name: t.name, category: t.category || "Transport", emoji: t.emoji || "✨",
+  // ── AND "Transport" WAS AN INVENTING DEFAULT ──────────────────
+  //
+  // 11 Sep 2026, while making the category list something he can add to. A
+  // draft that named no category was filed under Transport, which is a claim
+  // about the row made by a fallback. This file documents the same mistake
+  // twice already, in the two comments above: ticketStatus defaulting to a
+  // status nobody measured, and popularityTag defaulting an unasked attraction
+  // to HIDDEN GEM. Both were changed to the honest empty and both comments say
+  // why in the strongest terms the file uses.
+  //
+  // "" IS SAFE NOW AND WAS NOT BEFORE. A row with no category used to render
+  // under no heading at all, which is why a default existed: the loop asked for
+  // each of eight names and a row matching none of them vanished. categoryOf in
+  // utils/essentialKind.js puts it under Unsorted instead, so the honest empty
+  // is visible on the page and findable in Manage rather than lost.
+  if (type === "essential") return { name: t.name, category: cleanCategory(t.category), emoji: t.emoji || "✨",
     desc: t.desc || "", howTo: t.howTo || "", price: t.price || "", link: t.link || null, linkAndroid: t.linkAndroid || "", tip: t.tip || "",
     visitorNote: t.visitorNote || "",
     // ── AND WHICH OF THE TWO LISTS IT BELONGS ON ──────────────────

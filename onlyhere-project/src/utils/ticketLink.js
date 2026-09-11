@@ -422,6 +422,54 @@ const geoSegment = (url) => {
   return geo.length ? geo[geo.length - 1] : "";
 };
 
+// ── AND A TICKETMASTER VENUE SLUG CARRIES ITS CITY ──────────────────
+//
+// 11 Sep 2026, from the Torvehallerne run log. The direct agent search
+//
+//   site:ticketmaster.dk "Torvehallerne" Denmark billetter
+//
+// came back with
+//
+//   ticketmaster.dk/venue/torvehallerne-scenen-vejle-billetter/tos/203
+//
+// on a draft the pipeline had already placed at 55.6839, 12.5696 in København
+// Kommune, and the gate passed it: "bookable, and vetted as being about this
+// place". Vejle is 196 km from Copenhagen by the same kommune register this
+// file measures with, and MAX_TICKET_TOWN_KM is 50.
+//
+// One step earlier the run had reached the RIGHT answer, "No ticket page found
+// for Torvehallerne on Tiqets or Ticketmaster", and this overturned a correct
+// empty with a wrong link. That is the worst trade this pipeline can make: a
+// weak fact is a reader who learns less, a wrong ticket link is a reader who
+// paid for something else.
+//
+// geoSegment above returns "" for every Ticketmaster URL, under a comment
+// saying a Ticketmaster path carries no geography. True of an /event/ path.
+// False of a /venue/ one, which names the city in its own slug exactly as this
+// one does. So ticketUrlSaysElsewhere returned at its `if (!geo)` line and
+// farFromTown has never once run against a Ticketmaster link. The distance half
+// of the gate was dark for a whole agent, and it stayed dark whether or not the
+// draft had a town, which is why this is not the missing-town bug it looks like.
+//
+// READ SEPARATELY FROM geoSegment, because the two segments are not the same
+// kind of thing. A Tiqets -c1234 segment is a geography id and nothing else, so
+// what it names can be demanded to be Danish. A venue slug is a venue NAME that
+// sometimes ends in a city: "vega-billetter" names none and is correct. Feeding
+// it to the positive half would refuse every venue that does not happen to
+// spell its city out, which is the mistake the comment over
+// ticketUrlSaysElsewhere already records paying for once, with Tivoli and
+// Amalienborg as the receipts.
+//
+// ONLY /venue/. An /artist/ slug is a band and an /attraction/ slug can be
+// either, so neither is read here. A city in one of those would be a guess, and
+// this file refuses one-sided guesses in the direction that deletes good links.
+const TM_VENUE_SEG = /\/venue\/([^/?#]+)/i;
+export const ticketmasterVenuePhrase = (url) => {
+  if (!isTicketmasterUrl(url)) return "";
+  const m = TM_VENUE_SEG.exec(pathOf(url));
+  return m ? segmentPhrase(m[1]) : "";
+};
+
 // ── THE GATE, AND WHAT IT IS ALLOWED TO CONCLUDE ────────────────────
 //
 // The first version of this demanded POSITIVE evidence of Denmark and refused
@@ -472,7 +520,33 @@ const geoSegment = (url) => {
 // towns and not kommuner, so neither can be measured here, and a rule that
 // guessed at them would refuse real links for a place this list does not name.
 // Same one-sided discipline coordFitsTown states: it can only ever demote.
-const KOMMUNE_POINTS = new Map(KOMMUNER.map(k => [fold(k[K.name]), { lat: k[K.lat], lon: k[K.lon] }]));
+// ── AND "COPENHAGEN" IS NOT IN THE DANISH ADDRESS REGISTER ──────────
+//
+// Found while fixing the Torvehallerne link, 11 Sep 2026. The register spells
+// the kommune København, and fold turns that into "kobenhavn". This app is
+// English-facing and writes "Copenhagen", which folds to "copenhagen" and
+// matches nothing, so farFromTown answered false for EVERY Copenhagen entry and
+// the distance gate was dark on the city this app has most of.
+//
+// fold already makes Århus and Aarhus one needle, and Ålborg and Aalborg, so the
+// spelling pairs need nothing. Only the two real exonyms do: Copenhagen for
+// København and Elsinore for Helsingør.
+//
+// TAKEN FROM PLACE_NAMES RATHER THAN TYPED HERE, on the rule DANISH_PLACES
+// below already states: "THE LIST IS NOT MINE." An alias is registered only
+// when the Danish half is an EXACT kommune name, so this invents no place that
+// the state register does not hold, and it grows on its own the day
+// danishNames.js gains another pair. Never overwrites a real kommune, because a
+// name the register itself carries outranks a translation of one.
+const KOMMUNE_POINTS = (() => {
+  const at = new Map(KOMMUNER.map(k => [fold(k[K.name]), { lat: k[K.lat], lon: k[K.lon] }]));
+  for (const [en, da] of PLACE_NAMES) {
+    const home = at.get(fold(da));
+    const key = fold(en);
+    if (home && key && !at.has(key)) at.set(key, home);
+  }
+  return at;
+})();
 
 // containsName rather than a substring test, and a mutation SURVIVED swapping it
 // for `.includes`, so the reason is written down rather than left as a gap
@@ -512,7 +586,12 @@ export const ticketUrlSaysElsewhere = (url, town = "") => {
   const raw = String(url || "").trim();
   if (!raw) return false;
   const geo = geoSegment(raw);
-  if (!geo) return false;
+  // No geography id, which is every Ticketmaster URL and every Tiqets venue
+  // page. A venue slug is the one other place an agent writes a city into its
+  // own address, so it gets the DISTANCE half and never the Denmark half. See
+  // ticketmasterVenuePhrase. farFromTown answers false on an empty phrase, so a
+  // URL that names no city is untouched, exactly as before.
+  if (!geo) return farFromTown(ticketmasterVenuePhrase(raw), town);
   const where = segmentPhrase(geo);
   if (!saysDenmark(where, town)) return true;
   // In Denmark, and possibly ninety kilometres from the entry. See above.
@@ -614,7 +693,15 @@ export const ticketMatches = (result, { name, town, where = "" } = {}) => {
   // THE COUNTRY BEFORE THE NAME, because the name is the test the Chicago link
   // passed. Only the negative half: see ticketUrlSaysElsewhere for why demanding
   // proof of Denmark deletes the venue pages that are the good links.
-  if (ticketUrlSaysElsewhere(url, town)) return false;
+  // `town || where`, because `town` is a field only nightStreet stores. A food
+  // street, a restaurant and a bar carry their geography in a location line and
+  // a map hint and nowhere else, so a gate reading `town` alone is half blind on
+  // the types this app has most of. Torvehallerne is placed in København by its
+  // map hint and by nothing else. kommunePoint is already written to find a
+  // kommune name inside a phrase, and an address is a phrase with a kommune in
+  // it. Falls back only when there is no town, so nothing that worked before
+  // reads a different value now.
+  if (ticketUrlSaysElsewhere(url, town || where)) return false;
   // And admission rather than a guest slot inside it. Same reason as the
   // country: it is a question about WHAT is being sold, which no amount of name
   // matching answers, and the name matching is what let both bugs through.
@@ -814,10 +901,36 @@ export const describeTicketSearch = (results, { name, town } = {}) => {
   // page was about this place": it means the name is generic enough to hit
   // marketing copy in another country, and pasting a link by hand is the fix
   // rather than renaming anything.
+  // ── AND THE WRONG DANISH CITY IS A THIRD ANSWER ───────────────
+  //
+  // 11 Sep 2026. ticketUrlSaysElsewhere refuses for TWO reasons, not one: the
+  // page is outside Denmark, or it is in Denmark and more than
+  // MAX_TICKET_TOWN_KM from this entry. This function called both of them
+  // "abroad" and told him a Billund page was outside Denmark, which is a
+  // sentence about a real Danish town that is not true.
+  //
+  // Nobody noticed while the distance half could barely fire. It could not
+  // place "Copenhagen" at all, so the entries most likely to hit a far Danish
+  // page were the entries where the check did nothing. Fixing that surfaced the
+  // wording immediately, which is the suite doing its job.
+  //
+  // Three answers because they are three different things for him to do. A
+  // foreign page means the name is matching marketing copy abroad and the fix
+  // is a hand-pasted link. A far Danish page means the agent has a REAL page
+  // under a name this place shares with somewhere else, and the fix is reading
+  // which one it is. Neither is "none of them is about this place", which is
+  // about the name and not about geography at all.
   const here = bookable.filter(r => !ticketUrlSaysElsewhere(r.url, town));
-  const abroad = bookable.length - here.length;
+  const refused = bookable.filter(r => ticketUrlSaysElsewhere(r.url, town));
+  const foreign = refused.filter(r => !ticketIsInDenmark(r.url, { town }));
+  const elsewhereInDK = refused.length - foreign.length;
+  if (!here.length && !foreign.length && elsewhereInDK) return `Found ${elsewhereInDK} bookable Danish page${elsewhereInDK === 1 ? "" : "s"} for that name, and ${elsewhereInDK === 1 ? "it names a different part" : "every one of them names a different part"} of Denmark than this entry, more than ${MAX_TICKET_TOWN_KM} km away. "${name || "This name"}" belongs to somewhere else as well${town ? `, not only to ${town}` : ""}. Left empty. Paste a link by hand if there is a real one.`;
   if (!here.length) return `Found ${bookable.length} bookable page${bookable.length === 1 ? "" : "s"} for that name, and ${bookable.length === 1 ? "it is" : "every one of them is"} outside Denmark. "${name || "This name"}" is matching marketing copy on a foreign product page rather than naming this place. Left empty. Paste a link by hand if there is a real one.`;
-  return `Found ${here.length} bookable Danish page${here.length === 1 ? "" : "s"}${abroad ? `, plus ${abroad} outside Denmark that ${abroad === 1 ? "was" : "were"} refused,` : ""} and none of them is clearly about ${name || "this place"}${town ? ` in ${town}` : ""}. Left empty rather than guessing. Paste one by hand if you know which is right.`;
+  const refusedNote = foreign.length && elsewhereInDK ? `, plus ${foreign.length} outside Denmark and ${elsewhereInDK} elsewhere in Denmark that were refused,`
+    : foreign.length ? `, plus ${foreign.length} outside Denmark that ${foreign.length === 1 ? "was" : "were"} refused,`
+    : elsewhereInDK ? `, plus ${elsewhereInDK} elsewhere in Denmark that ${elsewhereInDK === 1 ? "was" : "were"} refused,`
+    : "";
+  return `Found ${here.length} bookable Danish page${here.length === 1 ? "" : "s"}${refusedNote} and none of them is clearly about ${name || "this place"}${town ? ` in ${town}` : ""}. Left empty rather than guessing. Paste one by hand if you know which is right.`;
 };
 
 // The search a lookup should run. One query, phrased so the engine has to find

@@ -188,7 +188,7 @@ import { wegotripActive } from "./utils/affiliates";
 // ── "SOME THINGS ARE ESSENTIALS WHILE OTHERS ARE TIPS" ──────────────
 // Oliver, 30 Aug 2026. See utils/essentialKind.js: the categories were never
 // the problem, two documents sharing one list were.
-import { essentialsOnly, tipsOnly, categoriesPresent, linksOf, isMerged, tabForEssential, ESSENTIAL_KINDS, ESSENTIAL_KIND_LABEL, KIND_RULE, cleanKind, kindPatch, hasKindChange, kindStated } from "./utils/essentialKind";
+import { essentialsOnly, tipsOnly, categoriesPresent, categoryVocabulary, rowsInCategory, cleanCategory, categoryPatch, hasCategoryChange, UNSORTED_CATEGORY, linksOf, isMerged, tabForEssential, ESSENTIAL_KINDS, ESSENTIAL_KIND_LABEL, KIND_RULE, cleanKind, kindPatch, hasKindChange, kindStated } from "./utils/essentialKind";
 import { scopeOf, isNational, scopePatch, hasScopeChange, essentialsForPlace } from "./utils/essentialPlace";
 // ── "ATTRACTIONS ALL SAY FREE" ──────────────────────────────────────
 // Oliver, 27 Aug 2026. Five places in this file published a price claim built
@@ -1378,6 +1378,12 @@ function GemlyxApp() {
   // Odense Blog." Which list and which place are one question about one row, so
   // they are one panel and one save. See utils/essentialPlace.js.
   const [scopeDraft, setScopeDraft] = useState("");
+  // ── AND WHICH CATEGORY, IN THE SAME PANEL ────────────────────────
+  // Oliver, 11 Sep 2026: "make me able to choose category or let me make a new
+  // category." Which list, which category and which place are three questions
+  // about one row, so they are one panel and one save. See categoryVocabulary
+  // in utils/essentialKind.js for why a new one needs no deploy.
+  const [categoryDraft, setCategoryDraft] = useState("");
   const [kindSaving, setKindSaving] = useState(false);
   const [kindError, setKindError] = useState(null);
 
@@ -1385,13 +1391,14 @@ function GemlyxApp() {
     setKindEditId(v => (v === row.id ? null : row.id));
     setKindDraft(cleanKind((row.payload || {}).kind));
     setScopeDraft(String((row.payload || {}).scope || ""));
+    setCategoryDraft(cleanCategory((row.payload || {}).category));
     setKindError(null);
   };
 
   const saveKindEdit = async (row) => {
-    // TWO FIELDS, ONE PATCH, and still not the payload. Spread rather than
-    // merged by hand so a field one of them does not touch cannot be resent.
-    const patch = { ...kindPatch(row.payload || {}, kindDraft), ...scopePatch(row.payload || {}, scopeDraft) };
+    // THREE FIELDS, ONE PATCH, and still not the payload. Spread rather than
+    // merged by hand so a field none of them touches cannot be resent.
+    const patch = { ...kindPatch(row.payload || {}, kindDraft), ...scopePatch(row.payload || {}, scopeDraft), ...categoryPatch(row.payload || {}, categoryDraft) };
     if (!Object.keys(patch).length) { setKindEditId(null); return; }
     setKindSaving(true); setKindError(null);
     try {
@@ -1405,16 +1412,28 @@ function GemlyxApp() {
       if (!res.ok) { setKindError(studioErrorMessage("this entry", res.status, body)); setKindSaving(false); return; }
       setManageItems(prev => (prev || []).map(r => (r.id === row.id ? { ...r, payload: merged } : r)));
       setKindEditId(null);
-      // SAY WHICH OF THE TWO CHANGED. The panel holds two fields now, and a
-      // message about the list after a save that only set the place confirms
-      // the one thing the save did not touch.
-      showToast("scope" in patch
-        ? (patch.scope
-          ? `Saved. ${merged.name} is now on the ${patch.scope} page as well. Visitors see it on their next load.`
-          : `Saved. ${merged.name} is back on the national list only.`)
-        : merged.kind
-          ? `Saved. ${merged.name} is now under ${merged.kind === "tip" ? "Tips" : "Essentials"}. Visitors see it on their next load.`
-          : `Saved. ${merged.name} is unplaced again, so it shows under Essentials until you place it.`, 3500);
+      // ── SAY WHICH OF THE THREE CHANGED ───────────────────────────
+      //
+      // The panel held two fields and this was a nested ternary that reported
+      // one of them, so a save that set both told him about the place and left
+      // him to guess at the list. Three fields make that shape unwritable.
+      //
+      // One clause per field that actually changed, which is why each reads
+      // `"x" in patch` rather than testing the merged value: kindPatch returns
+      // {} when nothing moved, and an empty string IS a real saved value for
+      // all three. Saying "unfiled" after a save that only touched the scope
+      // would be a message about the one thing the save did not do.
+      const said = [];
+      if ("kind" in patch) said.push(merged.kind
+        ? `now under ${merged.kind === "tip" ? "Tips" : "Essentials"}`
+        : "unplaced again, so it shows under Essentials until you place it");
+      if ("category" in patch) said.push(merged.category
+        ? `filed under ${merged.category}`
+        : "unfiled, so it shows under Unsorted");
+      if ("scope" in patch) said.push(patch.scope
+        ? `on the ${patch.scope} page as well`
+        : "back on the national list only");
+      showToast(`Saved. ${merged.name} is ${said.join(", and ")}. Visitors see it on their next load.`, 3500);
     } catch (e) { setKindError(String(e.message || e)); }
     setKindSaving(false);
   };
@@ -10985,6 +11004,32 @@ ${researchRules("festival", ev)}`
     return true;
   };
 
+  // The draft as an object, for the controls that read a field out of it. Null
+  // when the box does not parse, which is the state every one of them disables
+  // itself in rather than silently editing a draft that cannot be published.
+  const draftObject = (() => {
+    try { return JSON.parse(studioDraftText); } catch { return null; }
+  })();
+
+  // Writes one field into the draft box and returns the new text. The RETURN is
+  // the point: setStudioDraftText is a React state setter and does not take
+  // effect until the next render, so a caller that wants to publish the change
+  // it just made has to be handed the text rather than read it back.
+  const setDraftField = (field, value) => {
+    if (!draftObject) return null;
+    const next = JSON.stringify({ ...draftObject, [field]: value }, null, 2);
+    setStudioDraftText(next);
+    return next;
+  };
+
+  // One button, one list. cleanKind rather than the raw string, so the only
+  // values this can write are the two in the vocabulary.
+  const publishAs = (kind) => {
+    const next = setDraftField("kind", cleanKind(kind));
+    if (!next) { setDraftEditError("The edited draft isn't valid JSON — check for a missing comma or quote before publishing."); return; }
+    publishDraft(next);
+  };
+
   const publishAsWaiting = async () => {
     if (!waitingOffer?.shaped || !studioSession) return;
     // ── AND IT ONLY GOES IN ONCE ──────────────────────────────────
@@ -11051,11 +11096,33 @@ ${researchRules("festival", ev)}`
     }
   };
 
-  const publishDraft = async () => {
+  // ── AND PUBLISH AS ESSENTIAL, OR AS TIP ──────────────────────────
+  //
+  // Oliver, 11 Sep 2026: "I think you should make a 'publish as essential' and
+  // 'publish as tip'."
+  //
+  // `kind` has been storable since 1 Sep and settable only afterwards, in
+  // Manage, one row at a time. So every essential published since then landed
+  // unplaced and had to be moved by hand, which is the step he is asking to
+  // delete.
+  //
+  // THE BUTTON WRITES THE DRAFT, IT DOES NOT OVERRIDE THE SAVE. publishAs below
+  // puts the kind into studioDraftText and hands that same text straight here,
+  // so what he is looking at in the box is what reaches shapeForLive. The
+  // alternative was the shape the offer fields use, two controls that override
+  // the payload on the way past, and this is the standing rule from PASS 45
+  // quoted further down this function: what you review is what you publish, and
+  // a field on screen that the save ignores is what that rule exists to stop.
+  //
+  // `textOverride` IS TYPE-CHECKED rather than truthy-checked, and that is not
+  // defensive dressing: the plain Publish button is `onClick={publishDraft}`,
+  // so React hands this a click EVENT as its first argument. A truthy check
+  // would try to JSON.parse a SyntheticEvent on every ordinary publish.
+  const publishDraft = async (textOverride) => {
     if (!studioDraft || !studioSession) return;
     let editedDraft;
     try {
-      editedDraft = JSON.parse(studioDraftText);
+      editedDraft = JSON.parse(typeof textOverride === "string" ? textOverride : studioDraftText);
     } catch {
       setDraftEditError("The edited draft isn't valid JSON — check for a missing comma or quote before publishing.");
       return;
@@ -18377,7 +18444,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               })()}
                               {kindEditId === row.id && (() => {
                                 const pl = row.payload || {};
-                                const changed = hasKindChange(pl, kindDraft) || hasScopeChange(pl, scopeDraft);
+                                const changed = hasKindChange(pl, kindDraft) || hasScopeChange(pl, scopeDraft) || hasCategoryChange(pl, categoryDraft);
+                                // Every category any published essential is
+                                // using, so picking an existing one is a click
+                                // and inventing one is typing. The list is built
+                                // from the WHOLE pool rather than this row's
+                                // tab, because a category is a category on both.
+                                const catOptions = categoryVocabulary(
+                                  (manageItems || []).filter(r => r.type === "essential").map(r => r.payload || {}),
+                                  ESSENTIAL_CATEGORIES);
                                 return (
                                   <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px", marginBottom: 10 }}>
                                     <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 5 }}>Which list</div>
@@ -18387,6 +18462,33 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                       {ESSENTIAL_KINDS.map(k => <option key={k} value={k}>{ESSENTIAL_KIND_LABEL[k]}</option>)}
                                     </select>
                                     <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8, lineHeight: 1.55 }}>{KIND_RULE}</div>
+                                    {/* ── CHOOSE ONE OR MAKE ONE, IN ONE FIELD ──
+                                        A datalist rather than a select plus a
+                                        reveal, because "choose category or let
+                                        me make a new category" is one question
+                                        and a control that asks it twice is a
+                                        control he has to think about. Typing a
+                                        name nobody has used yet IS making the
+                                        category: categoryVocabulary reads the
+                                        published rows, so it exists everywhere
+                                        the moment this row saves.
+                                        A label and a control and nothing else. */}
+                                    <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", margin: "14px 0 5px" }}>Category</div>
+                                    <input value={categoryDraft} onChange={e => setCategoryDraft(e.target.value)}
+                                      list={`ess-cats-${row.id}`} placeholder="Unsorted"
+                                      style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 12, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", width: "100%", boxSizing: "border-box" }} />
+                                    <datalist id={`ess-cats-${row.id}`}>
+                                      {catOptions.filter(c => c.cat !== UNSORTED_CATEGORY).map(c => <option key={c.cat} value={c.cat} />)}
+                                    </datalist>
+                                    {/* NOT help text. This fires only when what
+                                        is typed would be thrown away, which is a
+                                        thing that happened rather than a thing
+                                        that might. */}
+                                    {categoryDraft.trim() && !cleanCategory(categoryDraft) && (
+                                      <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.55, marginTop: 8 }}>
+                                        ⚠ That reads as a sentence rather than a category, so it will not be saved. A category is a few words, like Ferries or Culture &amp; Etiquette.
+                                      </div>
+                                    )}
                                     {/* ── AND WHERE IT APPLIES ────────────────
                                         Odense Letbane is one city's light rail
                                         and FynBus is Funen's bus, and both sat
@@ -21244,6 +21346,53 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               This creates a second row rather than changing the one you just published. Delete the older of the two in Manage Published, or edit it there instead.
                             </div>
                           </>
+                        ) : studioType === "essential" && editingId === null ? (
+                          /* ── TWO BUTTONS, BECAUSE IT IS TWO LISTS ────────
+                             Oliver, 11 Sep 2026. Publishing an essential used
+                             to mean publishing it unplaced and then going to
+                             Manage to say which list it was for, every time.
+                             KIND_RULE is the same sentence the drafting prompt
+                             and the Manage panel use, so the question reads
+                             identically wherever it is asked.
+                             ONLY ON A FRESH PUBLISH. Editing a published row is
+                             a save, and that row's list is already decided and
+                             already movable in Manage; two buttons there would
+                             offer to change it as a side effect of fixing a
+                             typo. */
+                          <>
+                            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                              <button onClick={() => publishAs("essential")} disabled={publishStatus === "sending" || !draftObject}
+                                style={{ flex: 1, background: C.gold, border: "none", borderRadius: 10, padding: "10px", fontSize: 12.5, fontWeight: 700, color: C.onGold, cursor: draftObject ? "pointer" : "default", fontFamily: "'Inter', sans-serif" }}>
+                                {publishStatus === "sending" ? "Publishing…" : "✓ Publish as Essential"}
+                              </button>
+                              <button onClick={() => publishAs("tip")} disabled={publishStatus === "sending" || !draftObject}
+                                style={{ flex: 1, background: "none", border: `1px solid ${C.gold}`, borderRadius: 10, padding: "10px", fontSize: 12.5, fontWeight: 700, color: C.gold, cursor: draftObject ? "pointer" : "default", fontFamily: "'Inter', sans-serif" }}>
+                                {publishStatus === "sending" ? "Publishing…" : "✦ Publish as Tip"}
+                              </button>
+                            </div>
+                            <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 8, lineHeight: 1.55 }}>{KIND_RULE}</div>
+                            {/* ── AND WHICH CATEGORY, BEFORE IT GOES ────────
+                                Same control as the Manage panel, for the same
+                                reason: choose one or type one. It writes into
+                                the draft box rather than overriding the save,
+                                so the JSON above stays the thing that publishes.
+                                A label and a control. */}
+                            <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 5 }}>Category</div>
+                            <input value={draftObject ? String(draftObject.category || "") : ""}
+                              onChange={e => setDraftField("category", e.target.value)}
+                              disabled={!draftObject} list="ess-cats-publish" placeholder="Unsorted"
+                              style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 12, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", width: "100%", boxSizing: "border-box", marginBottom: 8 }} />
+                            <datalist id="ess-cats-publish">
+                              {categoryVocabulary((manageItems || []).filter(r => r.type === "essential").map(r => r.payload || {}), ESSENTIAL_CATEGORIES)
+                                .filter(c => c.cat !== UNSORTED_CATEGORY)
+                                .map(c => <option key={c.cat} value={c.cat} />)}
+                            </datalist>
+                            {draftObject && String(draftObject.category || "").trim() && !cleanCategory(draftObject.category) && (
+                              <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.55, marginBottom: 8 }}>
+                                ⚠ That reads as a sentence rather than a category, so it will not be saved and the entry will show under Unsorted.
+                              </div>
+                            )}
+                          </>
                         ) : (
                           <button onClick={publishDraft} disabled={publishStatus === "sending"}
                             style={{ width: "100%", background: C.gold, border: "none", borderRadius: 10, padding: "10px", fontSize: 12.5, fontWeight: 700, color: C.onGold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 8 }}>
@@ -23517,7 +23666,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             // Only the categories THIS tab's rows actually use. A chip that
             // scrolls a reader to an empty heading is worse than no chip, and
             // split across two tabs most of the eight are empty on either.
-            const cats = categoriesPresent(rows, ESSENTIAL_CATEGORIES);
+            // ── AND THE VOCABULARY IS NOT THE EIGHT ANY MORE ──────
+            // See categoryVocabulary in utils/essentialKind.js. Fed the WHOLE
+            // pool rather than this tab's rows, so a category he made while
+            // filing a Tip is known here too; categoriesPresent then narrows it
+            // to the ones this tab actually uses, exactly as before.
+            const cats = categoriesPresent(rows, categoryVocabulary(essentials, ESSENTIAL_CATEGORIES));
             return (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 16 }}>
@@ -23589,7 +23743,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               {cats.map(({ cat, anchor }) => (
                 <div key={cat} id={anchor} style={{ marginBottom: 20, scrollMarginTop: 90 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>{cat}</div>
-                  {rows.filter(e => e.category === cat && e.id !== 7).map(item => (
+                  {/* rowsInCategory, not `e.category === cat`. One function
+                      answers "which category is this row in" for the chips and
+                      for this loop, so a row cannot be counted under a heading
+                      that then does not list it. It is also what puts an
+                      unfiled row under Unsorted instead of nowhere. */}
+                  {rowsInCategory(rows, cat).filter(e => e.id !== 7).map(item => (
                     <div key={item.id} style={{ background: C.surface, borderRadius: 14, padding: "14px 16px", marginBottom: 10, border: `1px solid ${C.border}` }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                         <span style={{ fontSize: 22 }}>{item.emoji}</span>

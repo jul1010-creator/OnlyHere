@@ -69,7 +69,7 @@ writeFileSync(entry, `
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
   export { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
   export { venueCore, venueMentions, venueQuote, venueVerdict, venueVia, describeVenue, VENUE_MIN_MENTIONS, VENUE_MIN_MENTIONS_NO_TOWN, VENUE_MAX_KM, NO_NAME as V_NO_NAME, NOT_NAMED as V_NOT_NAMED, TOO_FAR as V_TOO_FAR, IS_AN_EVENT as V_IS_AN_EVENT, OK as V_OK } from ${JSON.stringify(join(root, "src/utils/venueMatch.js"))};
-  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop, priceSourceHost, isTourUrl, cleanTourUrl, TICKET_FIELD, TOUR_FIELD, TOUR_TYPES } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
+  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketmasterVenuePhrase, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop, priceSourceHost, isTourUrl, cleanTourUrl, TICKET_FIELD, TOUR_FIELD, TOUR_TYPES } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel, eventLastDay } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
@@ -136,7 +136,7 @@ writeFileSync(entry, `
   export { directionsEndpoint, collapsedRoute } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { upgradeWorthIt, onFootMinutes, MIN_UPGRADE_SAVING, COLLAPSE_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { essentials } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
-  export { ESSENTIAL_KINDS, ESSENTIAL_KIND_LABEL, KIND_RULE, kindOf, kindStated, cleanKind, kindPatch, hasKindChange, essentialsOnly, tipsOnly, unsortedEssentials, categoriesPresent, linksOf, isMerged, tabForEssential } from ${JSON.stringify(join(root, "src/utils/essentialKind.js"))};
+  export { ESSENTIAL_KINDS, ESSENTIAL_KIND_LABEL, KIND_RULE, kindOf, kindStated, cleanKind, kindPatch, hasKindChange, essentialsOnly, tipsOnly, unsortedEssentials, categoriesPresent, categoryVocabulary, categoryOf, rowsInCategory, cleanCategory, categoryAnchor, categoryColor, categoryPatch, hasCategoryChange, UNSORTED_CATEGORY, MAX_CATEGORY_WORDS, NEW_CATEGORY_ICON, linksOf, isMerged, tabForEssential } from ${JSON.stringify(join(root, "src/utils/essentialKind.js"))};
   export { scopeOf, isNational, placeScopes, scopeFits, essentialsForPlace, scopePatch, hasScopeChange } from ${JSON.stringify(join(root, "src/utils/essentialPlace.js"))};
   export { saleLabelledDateIn } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { spellingsIn } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
@@ -6283,9 +6283,40 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // ── THE BOX, THE BLOCK AND THE CHIP ─────────────────────────
     ok("the studio panel has a box for it", /scopeDraft/.test(app11));
     ok("it opens holding what is stored", /setScopeDraft\(String\(\(row\.payload \|\| \{\}\)\.scope \|\| ""\)\)/.test(app11));
-    // ONE PATCH, TWO FIELDS, and still not the payload: a PATCH that resends the
-    // whole object is how an unrelated field gets clobbered.
-    ok("and one save sends both fields", /\{ \.\.\.kindPatch\(row\.payload \|\| \{\}, kindDraft\), \.\.\.scopePatch\(row\.payload \|\| \{\}, scopeDraft\) \}/.test(app11));
+    // ONE PATCH, THREE FIELDS since 11 Sep, and still not the payload: a PATCH
+    // that resends the whole object is how an unrelated field gets clobbered.
+    // Which list, which category and which place are three questions about one
+    // row, so they share a panel and a save.
+    ok("and one save sends all three fields", /\{ \.\.\.kindPatch\(row\.payload \|\| \{\}, kindDraft\), \.\.\.scopePatch\(row\.payload \|\| \{\}, scopeDraft\), \.\.\.categoryPatch\(row\.payload \|\| \{\}, categoryDraft\) \}/.test(app11));
+    ok("the panel has a box for the category", /categoryDraft/.test(app11));
+    ok("it opens holding what is stored", /setCategoryDraft\(cleanCategory\(\(row\.payload \|\| \{\}\)\.category\)\)/.test(app11));
+    // The whole point of the field: pick one that exists, or type one that does
+    // not. A select alone could only ever do the first.
+    ok("and offers every category the live rows use", /categoryVocabulary\(\s*\(manageItems \|\| \[\]\)/.test(app11));
+    ok("Unsorted is not offered as something to file into", /catOptions\.filter\(c => c\.cat !== UNSORTED_CATEGORY\)/.test(app11));
+
+    // ── AND THE LIST IS CHOSEN AT PUBLISH, NOT AFTERWARDS ────────
+    //
+    // Oliver, 11 Sep 2026: "I think you should make a 'publish as essential'
+    // and 'publish as tip'." `kind` became storable on 1 Sep and settable only
+    // in Manage, one row at a time, so every essential published since then
+    // landed unplaced and had to be moved by hand.
+    ok("there are two publish buttons for an essential", /publishAs\("essential"\)/.test(app11) && /publishAs\("tip"\)/.test(app11));
+    ok("and only the two in the vocabulary can be written", /setDraftField\("kind", cleanKind\(kind\)\)/.test(app11));
+    // THE STANDING RULE FROM PASS 45. publishAs edits the draft box and hands
+    // that same text to publishDraft, rather than overriding the payload on the
+    // way past, so what he reviews is what publishes.
+    ok("the button writes the draft rather than overriding the save", /const next = setDraftField\("kind", cleanKind\(kind\)\);\s*\n[^\n]*\n\s*publishDraft\(next\);/.test(app11));
+    ok("and publishDraft reads the text it was handed", /JSON\.parse\(typeof textOverride === "string" \? textOverride : studioDraftText\)/.test(app11));
+    // A TYPE CHECK AND NOT A TRUTHY ONE. The plain button is
+    // onClick={publishDraft}, so React hands it a SyntheticEvent; a truthy
+    // check would JSON.parse that on every ordinary publish.
+    ok("the override is type-checked, because the plain button passes an event",
+       /onClick=\{publishDraft\}/.test(app11) && /typeof textOverride === "string"/.test(app11));
+    // ONLY ON A FRESH PUBLISH. An edit is a save, and that row's list is
+    // already decided and already movable in Manage.
+    ok("an edit keeps one save button", /studioType === "essential" && editingId === null \?/.test(app11));
+    ok("the split button block cannot publish without a parseable draft", /publishAs\("tip"\)\} disabled=\{publishStatus === "sending" \|\| !draftObject\}/.test(app11));
     // NOTHING IS HIDDEN FROM THE NATIONAL PAGE. A local row is labelled, not
     // moved: a filter that quietly removes an entry from every view is the
     // blank-page failure this project has shipped once already.
@@ -10566,7 +10597,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // filed under "Culture & Etiquette" or "Solo Travel" published cleanly and
   // appeared nowhere. Both lists are derived from ESSENTIAL_CATEGORIES now.
   {
-    const { ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES } = M;
+    const { ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES, categoryVocabulary, categoryAnchor, categoryColor, categoryOf, rowsInCategory, categoriesPresent, UNSORTED_CATEGORY } = M;
     // ── AND THIS COUNTED THEM INSTEAD OF CHECKING THEM ────────────
     // It read `=== 7` and broke on a correct eighth: Nightlife, added because the
     // app has three nightlife content types and the practical list behind them had
@@ -10596,9 +10627,94 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // 30 Aug the loop started rendering only the categories the current tab's
     // rows actually use — still derived from ESSENTIAL_CATEGORIES, still
     // incapable of inventing one — and this assertion broke on the characters.
-    ok("and the page's headings are derived from the same list",
-      /const cats = categoriesPresent\(rows, ESSENTIAL_CATEGORIES\);/.test(app));
+    // ── AND THE LIST GREW A SECOND SOURCE ON 11 SEP ──────────────
+    // Oliver asked to be able to make a category, which cannot be a code edit
+    // because Studio writes to Supabase and this list is in a file. So the page
+    // reads categoryVocabulary(essentials, ESSENTIAL_CATEGORIES): still the
+    // eight, still incapable of dropping one, plus whatever the published rows
+    // are already using. The rule this assertion protects is unchanged and is
+    // now checked at both ends, because the vocabulary function is pure and the
+    // block below tests it directly: a category the prompt has never heard of
+    // can still only appear on the page if a ROW already carries it.
+    ok("and the page's headings are derived from that list plus the live rows",
+      /const cats = categoriesPresent\(rows, categoryVocabulary\(essentials, ESSENTIAL_CATEGORIES\)\);/.test(app));
+    ok("the vocabulary keeps every fixed category",
+      ESSENTIAL_CATEGORY_NAMES.every(n => categoryVocabulary([], ESSENTIAL_CATEGORIES).some(c => c.cat === n)));
+    ok("and adds nothing when no row has grown one",
+      categoryVocabulary([], ESSENTIAL_CATEGORIES).length === ESSENTIAL_CATEGORIES.length);
+
+    // ── THE THREE THINGS A DERIVED CATEGORY HAS TO GET RIGHT ─────
+    // Each of these survived its mutant on the first run, which is the whole
+    // reason mutation testing is the discipline here: all three were true and
+    // none of them was checked, so all three could have been broken silently.
+    {
+      const grown = categoryVocabulary([{ category: "Ferries" }, { category: "Ferries" }, { category: "Cycling" }], ESSENTIAL_CATEGORIES);
+      const names = grown.map(c => c.cat);
+      is("a category only the rows know about is offered once", names.filter(n => n === "Ferries").length, 1);
+      ok("alongside the fixed eight, not instead of them", ESSENTIAL_CATEGORY_NAMES.every(n => names.includes(n)));
+      is("and grown ones are alphabetical, so the list is stable",
+         names.slice(ESSENTIAL_CATEGORIES.length), ["Cycling", "Ferries"]);
+      is("every grown category is renderable, same as the fixed ones",
+         grown.filter(c => !(c.cat && c.anchor && c.icon && c.color)).map(c => c.cat), []);
+      ok("and its colour is a hex the page can use", grown.every(c => /^#[0-9a-f]{6}$/i.test(c.color)));
+
+      // ── A DERIVED ANCHOR MUST NOT COLLIDE WITH A HAND-WRITTEN ONE ──
+      // The Essentials page hand-writes ess-weather, ess-faq and ess-safety,
+      // the last being the fine warning drawn above everything. A category
+      // called "Safety" deriving "ess-safety" would give two elements one id
+      // and the chip would scroll to whichever the browser found first.
+      const HAND_WRITTEN = ["ess-weather", "ess-faq", "ess-safety"];
+      for (const name of ["Safety", "Weather", "FAQ"]) {
+        ok(`a category called ${name} cannot steal a hand-written anchor`,
+           !HAND_WRITTEN.includes(categoryAnchor(name)));
+      }
+      ok("and the hand-written three are still in the page", HAND_WRITTEN.every(a => app.includes(`id="${a}"`)));
+      is("anchors are unique across the whole vocabulary",
+         new Set(grown.map(c => c.anchor)).size, grown.length);
+
+      // ── THE COLOUR IS FROM THE NAME, SO IT CANNOT MOVE ───────────
+      // Random or index-based would both repaint the existing categories the
+      // day he adds one, and the same chip would be a different colour on his
+      // phone and his laptop.
+      is("the same name draws the same colour twice", categoryColor("Ferries"), categoryColor("Ferries"));
+      ok("and two names do not share one", categoryColor("Ferries") !== categoryColor("Cycling"));
+      is("adding a category does not repaint the ones before it",
+         categoryVocabulary([{ category: "Ferries" }], ESSENTIAL_CATEGORIES).find(c => c.cat === "Ferries").color,
+         categoryVocabulary([{ category: "Aardvarks" }, { category: "Ferries" }], ESSENTIAL_CATEGORIES).find(c => c.cat === "Ferries").color);
+
+      // ── AND UNSORTED EXISTS EXACTLY WHEN SOMETHING IS IN IT ──────
+      // A row with no category used to render under no heading at all. This is
+      // the bucket that stops that, and an empty bucket on the page would be a
+      // chip scrolling a reader to nothing.
+      ok("no Unsorted bucket while everything is filed",
+         !categoryVocabulary([{ category: "Transport" }], ESSENTIAL_CATEGORIES).some(c => c.cat === UNSORTED_CATEGORY));
+      ok("and one the moment a row is unfiled",
+         categoryVocabulary([{ category: "Transport" }, { category: "" }], ESSENTIAL_CATEGORIES).some(c => c.cat === UNSORTED_CATEGORY));
+      is("Unsorted comes last, after everything somebody chose",
+         categoryVocabulary([{ category: "" }, { category: "Ferries" }], ESSENTIAL_CATEGORIES).slice(-1)[0].cat, UNSORTED_CATEGORY);
+      ok("a row whose category is prose is unfiled rather than a heading",
+         categoryOf({ category: "This is a sentence about it." }) === UNSORTED_CATEGORY);
+      // The chip row and the render loop ask the same function, so a chip can
+      // never scroll to a heading that then lists nothing.
+      const unfiledRows = [{ name: "A", category: "" }, { name: "B", category: "Transport" }];
+      is("and the bucket's chip and its rows agree",
+         categoriesPresent(unfiledRows, categoryVocabulary(unfiledRows, ESSENTIAL_CATEGORIES))
+           .every(c => rowsInCategory(unfiledRows, c.cat).length > 0), true);
+    }
     ok("and the loop renders those and nothing else", /\{cats\.map\(\(\{ cat, anchor \}\) =>/.test(app));
+    // ── AND THE CHIPS AND THE LOOP ASK ONE FUNCTION ──────────────
+    //
+    // categoriesPresent decides which headings exist and this loop decides
+    // which rows sit under each. Before 11 Sep the loop compared `e.category`
+    // to the heading directly, so the two answered the question separately and
+    // a row whose category was empty was counted by neither: no heading, no
+    // row, gone from the page. categoryOf is the one answer both go through.
+    //
+    // ASSERTED BECAUSE A MUTANT SURVIVED IT. Reverting this line to the old
+    // comparison broke nothing in the suite, which means the Unsorted bucket
+    // could have been emptied silently at any point.
+    ok("and the rows under a heading come from the same function as the heading",
+      /\{rowsInCategory\(rows, cat\)\.filter\(e => e\.id !== 7\)\.map\(item =>/.test(app));
     // The filter can only ever narrow: categoriesPresent picks FROM the list it
     // is given, so a heading the prompt has never heard of cannot appear.
     {
@@ -10629,7 +10745,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 // fact-check; the page telling somebody which ticket to buy got whatever was
 // true on the day it was typed.
 {
-  const { shapeForLive, studioPrompts, CONTENT_TYPES, TYPE_LABEL } = M;
+  const { shapeForLive, studioPrompts, CONTENT_TYPES, TYPE_LABEL, categoryOf } = M;
   const p = studioPrompts("Rejsebillet")["essential"];
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
 
@@ -10677,9 +10793,24 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // An essential is not a place and must not pretend to be one.
   ok("it claims no photo", !!shaped && !("photo" in sh));
   ok("and no coordinates", !!shaped && !("__lat" in sh));
+  // ── AND IT USED TO LAND IN TRANSPORT, WHICH NOBODY SAID ────────────
+  //
   // The Essentials page renders by category, so a category-less draft would
-  // land in no section at all rather than merely looking wrong.
-  is("a category-less draft still lands somewhere", (shapeForLive("essential", { name: "X" }) || {}).category, "Transport");
+  // land in no section at all rather than merely looking wrong. That is why
+  // this defaulted to "Transport", and the default was a claim about the row
+  // made by a fallback, the same mistake ticketStatus and popularityTag both
+  // made and both had removed.
+  //
+  // 11 Sep: categoryOf puts an unfiled row under Unsorted, so the field can be
+  // honestly empty AND the row still reaches a heading. Both halves asserted,
+  // because either one alone is a regression: an empty field that renders
+  // nowhere is the vanishing bug, and a default that invents Transport is the
+  // inventing bug.
+  is("a category-less draft invents no category", (shapeForLive("essential", { name: "X" }) || {}).category, "");
+  is("and still lands somewhere a reader can see", categoryOf(shapeForLive("essential", { name: "X" })), "Unsorted");
+  is("prose in the category box is refused rather than made a heading",
+     (shapeForLive("essential", { name: "X", category: "This is a sentence about transport." }) || {}).category, "");
+  is("and a real category is kept", (shapeForLive("essential", { name: "X", category: " Ferries " }) || {}).category, "Ferries");
 
   // ── AND IT IS REACHABLE ───────────────────────────────────────────
   ok("there is a button for it in Studio", /\["essential", "🧭 Essential"\]/.test(app));
@@ -11627,6 +11758,42 @@ is("missing licence does not require credit", creditIsRequired({}), false);
      M.stopKind("Strøget Testby", lookupRealPlace("Strøget Testby")) ?? null, "Bar street");
   is("not as a bar, which is what it read as before",
      M.stopKind("Strøget Testby", { _src: "nightlife" }), "Bar");
+  // ── AND THE ATTRACTIONS POOL IS CALLED "free" AND IS NOT ─────────
+  //
+  // Oliver, 11 Sep 2026, on a built guide: "it now says entrance to Tivoli is
+  // free.. which is a wild flaw." The pill read "Free to enter" and the row's
+  // own prose under it read "Adult entry runs 150-275 DKK depending on the day".
+  //
+  // The row is real, published 3 Sep, and its Tickets field says "Free entry
+  // from the street" while its extraCosts field prices a ride pass "sold
+  // separately from entry". Two fields, one door, and the pill believed the
+  // bucket name instead of either of them.
+  //
+  // Third site of one bug. DetailPage's hardcoded "· FREE" was fixed on 27 Aug
+  // and App.jsx's "Free to enter" facet was renamed to "Attractions"; this map
+  // was written from the same assumption and nobody came back for it.
+  {
+    const tivoli = { _src: "free", name: "Tivoli", type: "Amusement park & pleasure garden",
+      ticketsGlance: "Free entry from the street",
+      extraCosts: "Ride pass 199-349 DKK adult, 99-175 DKK child, sold separately from entry" };
+    is("a paid attraction gets no free pill from its bucket", M.stopKind("Tivoli", tivoli) ?? null, null);
+    is("nor when the row states the entry price outright",
+       M.stopKind("Tivoli", { ...tivoli, ticketsGlance: "Adult entry 150-275 DKK depending on the day" }) ?? null, null);
+    // Legoland's own ticket line, quoted in entryPrice.js. Free for under-2s is
+    // not a free attraction, and the pill must not read it as one.
+    is("nor when free is scoped to who gets in free",
+       M.stopKind("Legoland", { _src: "free", name: "Legoland", ticketsGlance: "Children under 2: free entry" }) ?? null, null);
+    // THE OTHER DIRECTION. Most of that pool really is free and saying so is the
+    // whole value of the label, so a gate that refuses every row is not a fix.
+    is("an attraction that says it is free still says so",
+       M.stopKind("Kastellet", { _src: "free", name: "Kastellet", ticketsGlance: "Free entry" }), "Free to enter");
+    // And a name that says what it is still outranks the row, unchanged.
+    is("a name that says museum is still a museum",
+       M.stopKind("Vikingeskibsmuseet", { _src: "free", name: "Vikingeskibsmuseet", ticketsGlance: "Adult 160 DKK" }), "Viking ship museum");
+    // The other buckets are untouched, because only `free` names a price.
+    is("a restaurant is still a restaurant", M.stopKind("Noma", { _src: "food" }), "Restaurant");
+    is("a town is still a town", M.stopKind("Testville", { _src: "town" }), "Town");
+  }
   // Its coordinate comes with it, which is the other half of what the pool is
   // for: a stop with no coordinate is not judged on distance at all.
   ok("and its coordinate comes with it", !!placeCoords(lookupRealPlace("Jomfru Ane Gade")));
@@ -44209,6 +44376,22 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     priceProblems(row("Rundetaarn", "Adults: 60 DKK").payload, "free").length, 0);
   is("and neither is one that is genuinely free",
     priceProblems(row("Davids Samling", "Free entry all year round").payload, "free").length, 0);
+  // ── AND THE SENTENCE HAS TO NAME THE RIGHT QUALIFIER ────────────
+  //
+  // 11 Sep 2026, off the live Tivoli row. Both of these are flagged and they are
+  // wrong in different ways, so being told the wrong one sends him to check a
+  // concession that is not the problem. entryPrice's impliesPaid is what tells
+  // them apart, and until now only priceChip read it.
+  ok("a WHO row says who gets in free",
+    /about who gets in free/.test(priceProblems(row("Legoland", "Children under 2: free entry").payload, "free")[0].detail));
+  ok("a WHICH PART row says one part of the place",
+    /about one part of the place/.test(priceProblems(row("Tivoli", "Free entry from the street").payload, "free")[0].detail));
+  ok("and does not call it a concession", 
+    !/who gets in free/.test(priceProblems(row("Tivoli", "Free entry from the street").payload, "free")[0].detail));
+  ok("the ramparts line is the same case as Tivoli's",
+    /about one part of the place/.test(priceProblems(row("Trelleborg", "Free entry year-round to the fortress ramparts").payload, "free")[0].detail));
+  ok("and AROS is the same case as Legoland's",
+    /about who gets in free/.test(priceProblems(row("AROS", "Free entry for everyone under 18").payload, "free")[0].detail));
   // ONLY ATTRACTIONS. A restaurant with no ticket line is not missing anything.
   is("a restaurant is not swept", priceProblems({ name: "Alma", ticketsGlance: "" }, "food").length, 0);
   is("nor a festival, whose price lives in its own fields", priceProblems({ name: "Roskilde" }, "festival").length, 0);
@@ -50109,6 +50292,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const kinds = new Set([
       ...[...readingSrc.matchAll(/\["[^"]+", "([^"]+)"\]/g)].map(m => m[1]),
       ...[...readingSrc.matchAll(/(?:town|free|food|nightlife|nightlifeStreet|event|craft): "([^"]+)"/g)].map(m => m[1]),
+      // "Free to enter" left BY_SOURCE on 11 Sep and is a named const now. See
+      // sourceLabel: the pool is called `free` and holds Tivoli, so the label is
+      // decided by the row and not by the bucket. It still ships, so it is still
+      // checked.
+      ...[...readingSrc.matchAll(/_LABEL = "([^"]+)"/g)].map(m => m[1]),
     ]);
     ok("guideReading declares stop kinds this test can see", kinds.size >= 30);
     is("and every one of them is translated",
@@ -52901,7 +53089,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 {
   const { SWEEP_STATE, RESWEEP_DAYS, sweptAt, askedRecently, rowHasADoor, rowState,
           sweepPlan, describeSweepPlan, ticketProposal, describeTicketFindings,
-          affiliateWriteFor, AFF_FOUND, AFF_NOTHING, AFF_FAILED, TYPES_WITH_A_DOOR, affiliateHref } = M;
+          affiliateWriteFor, AFF_FOUND, AFF_NOTHING, AFF_FAILED, TYPES_WITH_A_DOOR, affiliateHref,
+          ticketmasterVenuePhrase, ticketUrlSaysElsewhere, ticketMatches, pickTicketUrl } = M;
   const SEP = new Date(2026, 8, 6);
   const TIVOLI = "https://www.tiqets.com/en/copenhagen-attractions-c66144/tickets-for-tivoli-gardens-l178305/";
   const LEGO = "https://www.tiqets.com/en/billund-attractions-c123/tickets-for-legoland-billund-p974091/";
@@ -53053,8 +53242,60 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     is("a bookable page about somewhere else is refused", p.verdict, AFF_NOTHING);
     ok("and the row is left without a link", !p.set.ticketUrl);
     ok("with the stamp saying it was asked", p.set.__ticketSweep.found === false);
-    ok("and the reason names the case rather than saying nothing found",
-       /none of them is clearly about/.test(p.why));
+    // THE REASON CHANGED ON 11 SEP AND THE OLD ONE WAS A LIE. Billund is in
+    // Denmark. This said "outside Denmark" because describeTicketSearch called
+    // both halves of ticketUrlSaysElsewhere "abroad", and it only started
+    // reaching this branch once kommunePoint learned to place "Copenhagen",
+    // which it never could before. Both are fixed; this asserts the true one.
+    ok("and the reason says a different part of Denmark, not abroad",
+       /names a different part of Denmark/.test(p.why));
+    ok("and it does not call a Danish town foreign", !/outside Denmark/.test(p.why));
+  }
+  {
+    // ── THE TORVEHALLERNE LINK ──────────────────────────────
+    //
+    // 11 Sep 2026, from the run log. `site:ticketmaster.dk "Torvehallerne"
+    // Denmark billetter` returned a VENUE in Vejle, 196 km from the Copenhagen
+    // food market being drafted, and the gate reported it as "bookable, and
+    // vetted as being about this place". A step earlier the run had correctly
+    // concluded there was no ticket page at all.
+    //
+    // Two separate holes, and the test names both, because fixing either alone
+    // leaves this link live:
+    //   geoSegment returned "" for every Ticketmaster URL, so farFromTown never
+    //   ran for that whole agent, even when the town WAS known;
+    //   and a foodStreet stores no `town`, so the gate had no "here" to measure
+    //   from until it was allowed to read the entry's own address.
+    const TM_VEJLE = "https://www.ticketmaster.dk/venue/torvehallerne-scenen-vejle-billetter/tos/203";
+    const hit = { url: TM_VEJLE, snippet: "Torvehallerne Scenen Vejle billetter" };
+    ok("a Ticketmaster venue slug is read for its city",
+       ticketmasterVenuePhrase(TM_VEJLE) === "torvehallerne scenen vejle billetter");
+    ok("an artist path is not read for one", ticketmasterVenuePhrase("https://www.ticketmaster.dk/artist/vejle-billetter/123") === "");
+    ok("a far Ticketmaster venue is elsewhere even with the town known",
+       ticketUrlSaysElsewhere(TM_VEJLE, "København"));
+    ok("and with the town written in English", ticketUrlSaysElsewhere(TM_VEJLE, "Copenhagen"));
+    ok("and a food street places itself from its address instead",
+       ticketMatches(hit, { name: "Torvehallerne", town: "", where: "Torvehallerne, Rømersgade 18, 1362 København" }) === false);
+    ok("so the picker returns nothing rather than the wrong city",
+       pickTicketUrl([hit], { name: "Torvehallerne", town: "", where: "Torvehallerne, Rømersgade 18, 1362 København" }) === null);
+    // THE OTHER DIRECTION, because a gate that refuses everything is not a gate.
+    ok("the same venue is fine for an entry in Vejle", !ticketUrlSaysElsewhere(TM_VEJLE, "Vejle"));
+    ok("a venue slug naming no city is untouched", !ticketUrlSaysElsewhere("https://www.ticketmaster.dk/venue/vega-billetter/1234", "København"));
+    ok("and it still matches its own entry",
+       ticketMatches({ url: "https://www.ticketmaster.dk/venue/vega-billetter/1234", snippet: "VEGA København billetter" }, { name: "VEGA", town: "København", where: "" }));
+    // The two venue pages the comment over ticketUrlSaysElsewhere calls the
+    // receipts for never demanding proof of Denmark. Both carry no city at all.
+    ok("Tivoli survives", !ticketUrlSaysElsewhere("https://www.tiqets.com/en/tivoli-gardens-tickets-l145543", "Copenhagen"));
+    ok("Amalienborg survives", !ticketUrlSaysElsewhere("https://www.tiqets.com/en/amalienborg-palace-tickets-l259028", "Copenhagen"));
+  }
+  {
+    // And the name branch stays covered, since the block above moved the LEGO
+    // case off it. A Danish page, in the right town, that is about something
+    // else entirely.
+    const p = ticketProposal(row(13, "free", { name: "Rosenborg Slot", town: "Copenhagen" }),
+      [{ url: "https://www.tiqets.com/en/tickets-for-den-bla-planet-p556677/", snippet: "Den Blå Planet aquarium Copenhagen" }], { today: SEP });
+    is("a Danish page about another attraction here is refused", p.verdict, AFF_NOTHING);
+    ok("and the reason is about the name, not the map", /none of them is clearly about/.test(p.why));
   }
   {
     const p = ticketProposal(row(12, "festival", { name: "Sebbersund Vikingemarked", town: "Nibe" }),

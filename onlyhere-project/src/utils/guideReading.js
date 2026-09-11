@@ -2,6 +2,7 @@ import { isFerryText, getEventDate } from "./helpers";
 import { normaliseTicketStatus } from "./tickets";
 import { dayStart, dayPlus, dayWithin } from "./calendarDay";
 import { fold, PLACE_NAMES } from "./danishNames";
+import { entryPrice } from "./entryPrice";
 import { KOMMUNER, K } from "../data/kommuner";
 // ── READING A GUIDE WHEN YOU HAVE NEVER BEEN TO DENMARK ─────────────
 // Oliver, 7 Aug 2026, asking whether the guide would still be overwhelming to
@@ -94,7 +95,55 @@ export const STOP_KINDS = [
 // What a published entry's own category is worth saying, when the name itself
 // gives nothing away. Deliberately concrete words: "Attraction" tells a visitor
 // nothing they did not already assume.
-const BY_SOURCE = { town: "Town", free: "Free to enter", food: "Restaurant", nightlife: "Bar", nightlifeStreet: "Bar street", event: "Event", craft: "Workshop" };
+const BY_SOURCE = { town: "Town", food: "Restaurant", nightlife: "Bar", nightlifeStreet: "Bar street", event: "Event", craft: "Workshop" };
+
+// ── AND "free" IS THE BUCKET'S NAME, NOT A PRICE ──────────────────
+//
+// Oliver, 11 Sep 2026, on a built guide: "it now says entrance to Tivoli is
+// free.. which is a wild flaw." The stop card carried a pill reading "Free to
+// enter" and, three lines under it, the row's own prose: "Adult entry runs
+// 150-275 DKK depending on the day, with ride passes on top." The research was
+// right. This line overruled it with the name of a database bucket.
+//
+// THIS IS THE THIRD SITE OF ONE BUG AND THE OTHER TWO WERE FIXED.
+//
+//   27 Aug  DetailPage's chip ended in a hardcoded "· FREE" for the same
+//           reason. Moved to components/AttractionBadge.jsx, which asks
+//           entryPrice and draws nothing when the row has not said.
+//   later   App.jsx's attraction facet was labelled "Free to enter" and now
+//           reads "Attractions", with a comment saying the old label "filters
+//           Legoland in under a heading that says it costs nothing".
+//
+// Both fixes are in this repo. This map was written from the same assumption
+// and nobody came back for it, which is this codebase's oldest scar restated:
+// one hand-written list, copied, and only some copies repaired.
+//
+// entryPrice.js opens by saying it "Never reads `type`, `_kind` or `_src`, and
+// that omission is the entire point of the file." An `_src` of "free" means the
+// row came from the attractions pool. That pool holds Legoland and Tivoli.
+//
+// NULL WHEN THE ROW HAS NOT SAID, not a softer word. The rule is already
+// written four lines below in stopKind: "no pill beats a wrong pill". The row's
+// own `type` was the other candidate ("Amusement park & pleasure garden") and
+// it is too long for a pill and free text besides, so it is left for a caller
+// that has room for it rather than squeezed in here.
+//
+// The label still ships for the attractions that really are free, which is most
+// of that pool, because entryPrice answers true for them and that is a fact a
+// traveller planning a day wants on the card.
+// NAMED rather than inline, because the suite reads the labels out of THIS FILE
+// by regex to check every one of them is translated, and it was finding this one
+// through its old BY_SOURCE entry, which no longer exists. That scrape reads
+// this file as text, so a comment quoting the shape it looks for is picked up as
+// a label too, which is how this very comment first broke it. A label that ships
+// and
+// is invisible to that check is a label that can lose its translation quietly.
+const FREE_LABEL = "Free to enter";
+const sourceLabel = (real) => {
+  const src = real && real._src;
+  if (src !== "free") return (real && BY_SOURCE[src]) || null;
+  return entryPrice(real).free === true ? FREE_LABEL : null;
+};
 
 // ── AND A PLACE NAME IS NOT A DESCRIPTION OF A THING ────────────────
 //
@@ -129,7 +178,7 @@ const IS_A_PLACE = new Set([
 export const namesAPlace = (name) => IS_A_PLACE.has(fold(name));
 
 export const stopKind = (name, real) => {
-  const own = (real && BY_SOURCE[real._src]) || null;
+  const own = sourceLabel(real);
   // A name that IS a place gets what the row says, or nothing. Nothing is the
   // right answer for a name nobody published: no pill beats a wrong pill.
   if (namesAPlace(name)) return own;
