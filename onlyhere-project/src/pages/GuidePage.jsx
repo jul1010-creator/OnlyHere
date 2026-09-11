@@ -28,6 +28,7 @@ import { ensureLiveContentLoaded } from "../utils/liveContent";
 import { guideTours } from "../utils/tourSweep";
 import { previewPools } from "../utils/previewMatch";
 import { placedLibrary, nearbyPublished, describeLocation } from "../utils/nearbyPlaces";
+import { ADD_IN_QUESTION, addInOffers, addInSeed, addInKindOf, addInNear } from "../utils/addIn";
 import { stopCard } from "../utils/mapStops";
 import { markMany, canBeMarked, dayVisitRows } from "../utils/beenThere";
 import { cleanBeen } from "../utils/beenSync";
@@ -578,6 +579,22 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
     () => guideTours(guide?.days, { rows: towns, excluded: guide?._constraints?.excluded || [] }),
     [guide, libraryTick],
   );
+  // ── "WHAT ARE YOU INTERESTED IN HERE?" ──────────────────────────
+  //
+  // Oliver, 10 Sep 2026: "when the build is done there will be a question for
+  // the user ... And then Gemlyx AI is ready to communicate with the user or
+  // the user can instantly pick something ... Then instead it's just into that
+  // specific day."
+  //
+  // The reader is built once off the same pools the map library uses, so a stop
+  // and a chip cannot disagree about what kind of place something is. See
+  // utils/addIn.js for why the match is exact.
+  const addInKind = useMemo(
+    () => (name) => addInKindOf(name, { free: freeEntrance, food: foodSpots, nightlife: nightlifeSpots }),
+    [libraryTick],
+  );
+  const [addInOpen, setAddInOpen] = useState(null);   // `${dayIdx}:${cat.key}`
+
   const mapLibrary = useMemo(
     () => placedLibrary(previewPools({
       towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
@@ -2312,6 +2329,76 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             {dayTours[dayIdx] && (
               <TourLine url={dayTours[dayIdx].url} kind="town" lang={uiLang} style={{ marginTop: 18 }} />
             )}
+
+            {/* ── AND THE GAP THE BUILDER WOULD HAVE GUESSED AT ──────
+                Oliver, 10 Sep 2026, asked what fills the slots the nightlife cap
+                frees up: "depends on the person. Do they fancy a nice dinner or
+                a quick kebab before drinking ... Ask is better than
+                hallucination."
+
+                TWO DOORS, which is the pair GuidePreviewScreen already has and
+                the reason it has them: a door onto an empty composer hands the
+                traveller the job of writing the question. So either they pick,
+                and the published places near this day open underneath, or the
+                question goes to Gemlyx already typed and already naming the day.
+
+                Only the categories the day is SHORT of, so a day with two
+                restaurants is not offered a third. */}
+            {(() => {
+              const offers = addInOffers(day, { kindOf: addInKind });
+              if (!offers.length) return null;
+              const dayNo = day.day || dayIdx + 1;
+              const stops = (day.stops || []).filter(s => s && s.name);
+              const town = stops.map(s => stopTown(s)).find(Boolean) || "";
+              const anchor = stops.map(s => resolveStopCoords(s, guide)).find(p => p && Number.isFinite(p.lat));
+              return (
+                <div style={{ marginTop: 18, background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "12px 14px" }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text, marginBottom: 8 }}>{ADD_IN_QUESTION}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {offers.map(cat => {
+                      const key = `${dayIdx}:${cat.key}`;
+                      const on = addInOpen === key;
+                      return (
+                        <button key={cat.key} onClick={() => setAddInOpen(on ? null : key)}
+                          style={{ background: on ? `${C.gold}22` : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? C.gold : C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          {cat.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {offers.map(cat => {
+                    if (addInOpen !== `${dayIdx}:${cat.key}`) return null;
+                    const near = anchor ? addInNear(cat, anchor, mapLibrary, nearbyPublished, { limit: 3 }) : [];
+                    return (
+                      <div key={cat.key} style={{ marginTop: 10 }}>
+                        {near.length > 0 ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {near.map(r => (
+                              <div key={r.name} onClick={() => openStopDetail(r)}
+                                style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 10px", cursor: "pointer" }}>
+                                <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>{r.name}</div>
+                                <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{r.walk ? `${r.walk} min walk` : describeLocation(r, [], { town })}</div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          /* Nothing published near this day for that category.
+                             Said plainly rather than shown as an empty box, and
+                             the other door still works. */
+                          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6 }}>Nothing of ours is close enough to this day to suggest. Ask and Gemlyx will look.</div>
+                        )}
+                        {/* THE SEED NAMES THE DAY, which is the whole of his
+                            "instead it's just into that specific day". */}
+                        <button onClick={() => navigate("/", { state: { detourAsk: addInSeed(cat, { town, dayNo }) } })}
+                          style={{ marginTop: 8, background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          Ask Gemlyx about day {dayNo}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
           );
         })}

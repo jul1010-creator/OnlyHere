@@ -49,7 +49,8 @@ import { matchEvent, reconcileTickets, ticketsForPrompt, appearances, otherDates
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT, correctionLanded, describeCorrection } from "./utils/factCheckRead";
 import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, launderedAbsence, priceSource, priceMisses, findTicketPrice, whoSaid, ticketPriceOn, pricesAdmission, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit, LIVING_TYPES, VENUE_KINDS, UNCONFIRMED_IDENTITY, UNVERIFIED_PROSE } from "./utils/entryAudit";
 import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM, upgradeWorthIt, onFootMinutes } from "./utils/guideEnrichment";
-import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
+import { checkPlan, planProblemsForPrompt, titlePromises, MAX_BARS_A_NIGHT, MAX_CLUBS_A_NIGHT } from "./utils/planGate";
+import { isPremium } from "./utils/premium";
 import { stayProblems, travellerBudget, budgetTierMismatch } from "./utils/accommodation";
 import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from "./utils/discovery";
 import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
@@ -164,8 +165,8 @@ import { currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLang
 import { LanguageChoice } from "./components/LanguagePicker";
 import { NavStrip } from "./components/NavStrip";
 import { alertKey, describeWeatherChange, unseenAlerts, seenAlerts, markAlertSeen, readAlerts, markAlertsRead, unreadAlerts, tripLine, alertCountLine } from "./utils/weatherAlerts";
-import { placesNamedIn, rejectedIn } from "./utils/chatPlaces";
-import { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, MAP_CLASS, CHAT_PANEL_HEIGHT, BESIDE_ROW_CLASS } from "./utils/chatRail";
+import { placesNamedIn, cardsByMessage, rejectedIn } from "./utils/chatPlaces";
+import { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, MAP_CLASS, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS } from "./utils/chatRail";
 import { ChatMiniMap } from "./components/ChatMiniMap";
 import { briefProgress, progressLine, briefPercent, percentLine } from "./utils/briefPanel";
 import { EXAMPLE_GUIDE, EXAMPLE_GUIDE_PATH, hasExampleGuide } from "./data/exampleGuide";
@@ -178,7 +179,7 @@ import { travelModeKey, withoutNonModes } from "./utils/routeOrder";
 import { buildChatReport, chatReportFilename } from "./utils/chatReport";
 import { openingThread, withTestBrief, withoutTestBrief, loadThread, saveThread, clearThread } from "./utils/chatThread";
 import { downloadReport } from "./utils/previewReport";
-import { briefThemes , essentialsForTrip, essentialsBlock, fitsBrief, preferenceRowState, PREF_READY, PREF_NO_ACCOUNT } from "./utils/interestFit";
+import { briefThemes , essentialsForTrip, essentialsBlock, reservedEssential, fitsBrief, preferenceRowState, PREF_READY, PREF_NO_ACCOUNT } from "./utils/interestFit";
 import { partnerDisclosure, linkLabel, affiliateHref } from "./utils/affiliates";
 import { sweepPlan, describeSweepPlan, ticketProposal, describeTicketFindings, affiliateWriteFor, agentLabel, FOUND as AFF_FOUND, RESWEEP_DAYS } from "./utils/affiliateSweep";
 import { wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO } from "./utils/wegotripMatch";
@@ -202,7 +203,7 @@ import { venueStyleOf, showVenueStyleFacet, stylesPresent, VENUE_STYLE_LABEL } f
 import { VenueStyleChip } from "./components/VenueStyleChip";
 import { dayKey, dayStart, dayPlus } from "./utils/calendarDay";
 import { arrivalPoint } from "./utils/arrival";
-import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, nightlifeForTown, barsOnStreet, townOfLocation } from "./utils/nightlife";
+import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, nightlifeForTown, barsOnStreet, townOfLocation, nightKindOf, strandedNight } from "./utils/nightlife";
 import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
 import { supabaseFailure, studioErrorMessage, refreshIsDead, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
 import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
@@ -13507,7 +13508,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       let planProblems = [];
       try {
         const plannerRes = await askOpenAI(
-          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name actually mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nUse only real place names actually mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.${beenBlock}\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a genuinely different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.${chosenEventsBlock}${chosenExtrasBlock}\n\nConversation:\n${convoText}`,
+          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name actually mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nA NIGHT OUT IS AT MOST ${MAX_BARS_A_NIGHT} BARS AND ${MAX_CLUBS_A_NIGHT} CLUB, PER DAY, AND THE CLUB IS OPTIONAL. Nobody follows an itinerary once the night has started, so a day carrying four bars is a day where two of them will never be reached and the whole plan reads as padding. Pick the one or two worth STARTING at and leave the rest out. This is a ceiling and not a target: most days need no bar at all.\n\nUse only real place names actually mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.${beenBlock}\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a genuinely different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.${chosenEventsBlock}${chosenExtrasBlock}\n\nConversation:\n${convoText}`,
           1200
         );
         if (!plannerRes.error && plannerRes.text) {
@@ -13567,7 +13568,17 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
             // Their words only, for the reason written at the mode block below: the
       // assistant's own question names three modes and would answer the gate.
       const gateMode = travelModeKey(saidByTravellerForGuide);
-            let verdict = checkPlan(skeleton.days, gateCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate, datePrecision, wasDone });
+      // ── AND WHAT COUNTS AS A NIGHT OUT ────────────────────────────
+      // Injected the same way isPublished and hoursFor are. See nightKindOf: it
+      // reads isClub off the published row and returns nothing for a name it
+      // does not hold, so the cap can only ever fire on a real bar or club.
+      const nightKind = (name) => nightKindOf(name, nightlifeSpots);
+      // ── AND WHETHER IT HAS ANYTHING AROUND IT ─────────────────────
+      // "Don't send the visitor to Støvlen in Vanløse." See strandedNight: it
+      // only speaks when the same town holds a venue that IS on a bar street,
+      // so a lone bar in a town with no bar street is left alone.
+      const nightAlone = (name) => strandedNight(name, nightlifeSpots, nightlifeStreets);
+            let verdict = checkPlan(skeleton.days, gateCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate, datePrecision, wasDone, nightKind, nightAlone });
             let planDays = skeleton.days;
 
             // ONE RETRY, NEVER A REFUSAL. Some trips genuinely are awkward, and
@@ -13598,7 +13609,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
                       const key = townKeyFor(st.town || "") || townKeyFor(st.name);
                       if (key) fixedCoords[st.name] = { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
                     }));
-                    const second = checkPlan(fixed.days, fixedCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate, datePrecision, wasDone });
+                    const second = checkPlan(fixed.days, fixedCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate, datePrecision, wasDone, nightKind, nightAlone });
                     // Keep whichever is actually better. A "fix" that trades two
                     // problems for three is not a fix.
                     if (second.problems.length < verdict.problems.length) { verdict = second; planDays = fixed.days; }
@@ -14706,6 +14717,25 @@ If the conversation only covers a single day or a few stops with no explicit day
   // stuck to it). GuidePage renders it as a "Pipeline test" card.
   const randomTestProfileRef = useRef(null);
   const [aiInput, setAiInput] = useState("");
+  // ── AND A QUESTION SENT OVER FROM A GUIDE DAY ───────────────────
+  //
+  // The other half of Add in. GuidePage navigates here with the question
+  // already written, naming the day and the town, because a door onto an empty
+  // composer hands the traveller the job of phrasing it.
+  //
+  // TYPED, NOT SENT. It lands in the box for them to read and change, since the
+  // seed is a guess at what they meant and sending it for them would spend a
+  // model call on a sentence they never chose. The state is cleared on the way
+  // in so a refresh does not put it back.
+  useEffect(() => {
+    const seed = String(location.state?.detourAsk || "").trim();
+    if (!seed) return;
+    setAiInput(seed);
+    setDetourTab("sightseeing");
+    goTab("ai");
+    navigate(location.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state?.detourAsk]);
   const [chatResetAsk, setChatResetAsk] = useState(false);
   const [intakeArrival, setIntakeArrival] = useState("");
   const departurePickerRef = useRef(null);
@@ -16173,6 +16203,21 @@ If the conversation only covers a single day or a few stops with no explicit day
         t.gemlyxFind ? `Gemlyx's own find: ${t.gemlyxFind}` : "",
       ].filter(Boolean).join(" ")).join("\n")}\n`;
 
+      // ── AND THE ONE THING A NIGHT OUT HERE NEEDS ──────────────────
+      //
+      // Oliver, 10 Sep 2026: "tell the AI always to remind the user of Nightpay
+      // if they have nightlife included in their trip." The guide reserves it a
+      // seat; this is the half that reaches the conversation, which had never
+      // seen an essential at all.
+      //
+      // Give-before-you-ask material, so it sits beside heldBlock and is subject
+      // to the same one-thing-per-turn rule rather than being a second block
+      // competing with it. Empty when nightlife is not on the table, and empty
+      // when nothing published matches, so nothing is ever named that is not
+      // there.
+      const nightTip = reservedEssential(essentials, { convoText: travellerTurns.join("\n"), interests: intakeInterest });
+      const nightBlock = !nightTip ? "" : `\n── AND THE ONE THING A NIGHT OUT HERE NEEDS ──\nThey have said nightlife is part of this trip, so tell them about this once, in your own words, at whatever point in the conversation it is useful rather than all at once. It is a published Gemlyx entry, quoted here as written: state it, never embellish it, and never invent a second app like it.\n\n${essentialsBlock([nightTip])}\n`;
+
       const sysPrompt = `You are Gemlyx: Denmark's insider guide: a local expert who knows this country inside out, and who's warm, friendly, and eager to help someone have a great trip, like a well-travelled Danish friend, never like a generic AI assistant or customer support script. Never call yourself an AI or a language model. You're a happy, upbeat guy who loves helping people discover Denmark. Let real enthusiasm for a good find show through. EMOJI ARE FACES, NOT LABELS. A face carries the tone of the sentence it ends and it is chosen to match that tone: 😂 when something is funny or wry ("aight, we're not going Copenhagen then 😂"), 🙂 or 😊 for warmth or a small piece of good news ("I think this is a good idea 🙂"), a light one on a casual question ("And when are you travelling? 🙂"). Match the face to the feeling in the sentence. A sentence carrying no feeling gets no face, and most replies have at most one. A PICTOGRAM OF THE THING YOU ARE TALKING ABOUT IS NOT A FACE and is not wanted: a 🚲 beside a bike tip or a 🌊 beside a coastal stop labels the content and makes the reply look like an interface rather than a person. FOUR PLACES NEVER GET ONE, whatever the tone: beside a price or a cost, in an error or a refusal, beside anything you looked up and are stating as checked (opening hours, ferry times, whether an event is on sale), and anywhere in the guide document itself. A face beside a price reads as apology or as selling, and a face beside a verified fact makes it look breezy. VARY HOW YOU OPEN AND STRUCTURE EACH REPLY: someone using Gemlyx repeatedly (or across sessions) should never feel like they're getting the same template with different words swapped in; don't default to the same opening phrase, sentence rhythm, or structure every time (e.g. don't always start with "Here's your plan" or always end with the identical closing line). Let your actual personality and enthusiasm come through differently each time, the way a real person would. NEVER USE THESE FILLER PHRASES, THEY ARE HARD BANNED: "Great!", "Certainly!", "Absolutely!", "I'd be happy to help", "You're in for a delightful time", "Let me know if you need anything else", or any close variant of them: they read as generic AI customer-service filler, not a knowledgeable local. Use natural, grounded language instead: "Perfect.", "Got it.", "That's enough to work with.", "I'd skip that and do X instead." HAVE REAL OPINIONS, DON'T JUST PLEASE EVERYONE: a real local travel planner recommends things and steers people away from others. Say "I'd go with Kronborg over that other museum, it's an easy train ride and fits what you're into" rather than listing three neutral options and letting them pick. If somewhere is overrated, too far, or not worth the detour for what they want, say so plainly instead of building it into the plan anyway. GET TO THE POINT. Most replies should be short and concrete, skip the long preamble before a recommendation. NEVER OFFLOAD YOUR OWN RESEARCH BACK ONTO THE TRAVELER: you have real search results available. Never say things like "check if any events align with your dates" or "see what's on while you're there" as a way of avoiding doing that lookup yourself. If something like a seasonal event, festival, or opening-hours detail is relevant, search it and state the real answer plainly; if nothing specific turns up, just don't mention it at all rather than turning it into homework for the traveler. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
 
 BE HELPFUL, NOT JUST BRIEF: people planning a Denmark trip are often spending real money to get here, and a short, thin answer wastes their time more than a slightly longer, useful one does. "Concise" means no padding or filler, not "as few words as possible." When you answer, give the specific detail that changes what someone does: realistic costs (actual DKK figures, not just "moderate"), a heads-up if the season/weather makes something worth reconsidering, a transit quirk, a real trade-off between two options. Depth here means more real information, not more adjectives or enthusiasm. The "kill the brochure fluff" rule still fully applies to HOW you write, just not to how much you are willing to tell someone.
@@ -16239,7 +16284,7 @@ ONE QUESTION PER TURN. Not two, whatever else is missing. Somebody asked two thi
 DO NOT COMPLIMENT THEIR CHOICE. "Great pick", "excellent choice", "you'll love it", "way underrated" said about a place they just named is the banned filler in a different costume: it is a sentence with no information in it, spent on making them feel approved of.
 
 GIVE BEFORE YOU ASK. Every turn puts one real thing on the table before its question: a fact about the place they named, an opinion about it, or a warning worth having. One thing, not three, and off the block below when there is one. A conversation where one side only asks is an intake form, and it puts the whole weight of the trip on somebody who came here so they would not have to carry it. This is also what makes a short answer workable: a traveller who types four words at a time is normal, and a turn that gives something is still a real turn when their half is thin.
-${heldBlock}
+${heldBlock}${nightBlock}
 ── THE TRIP BRIEF, AS MEASURED RATHER THAN AS YOU FEEL IT ──
 This block is computed from what the traveller has actually typed and from the form they filled in. It is not your impression of the conversation and it overrides your impression of the conversation. Never say you have everything you need unless this block says so, and never say a traveller has already told you something that is not listed as known here.
 
@@ -17127,10 +17172,32 @@ ${languageBlock()}`;
                     towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
                   }), beenList);
                   const theirWords = aiMessages.filter(x => x.role === "user" && !x.isError).map(x => x.text).join("\n");
+                  // ── AND EACH PLACE IS INTRODUCED ONCE ─────────────
+                  //
+                  // Oliver, 10 Sep 2026: "It was good it mentioned Copenhagen
+                  // with a picture at start.. but it doesn't need to do it
+                  // again.. once is enough."
+                  //
+                  // One walk for the whole panel rather than a call inside the
+                  // loop, because "has this been shown already" is a question
+                  // about the replies BEFORE this one and a call inside the map
+                  // can only see its own. cardsByMessage carries the names
+                  // forward, oldest first, so the first reply to name a place
+                  // keeps the picture and nothing shifts under a reply already
+                  // on screen when the next one lands.
+                  //
+                  // Over the RENDERED list, not the transcript: the opening
+                  // turn and any hidden message are not on screen, so a place
+                  // named only there was never introduced and keeps its card.
+                  const shownMsgs = aiMessages.map((x, i) => ({ ...x, idx: i })).slice(1).filter(x => !x.hidden);
+                  const msgCards = cardsByMessage(shownMsgs, pools, {
+                    alreadyKnown: theirWords,
+                    textOf: (x) => stripMarkdown(stripReadyMarker(x.text)),
+                  });
                   return (
                   <>
                   <div className="ai-msgs" style={{ flex: "1 1 auto", minWidth: 0, maxHeight: CHAT_PANEL_HEIGHT, overflowY: "auto", marginBottom: 12, WebkitOverflowScrolling: "touch" }}>
-                    {aiMessages.map((m, idx) => ({ ...m, idx })).slice(1).filter(m => !m.hidden).map((m) => {
+                    {shownMsgs.map((m) => {
                       const isLatestAssistant = m.role === "assistant" && m.idx === aiMessages.length - 1;
                       const streaming = isLatestAssistant && m.idx > chatRevealedUpTo;
                       const assistantText = m.role === "assistant" ? stripMarkdown(stripReadyMarker(m.text)) : m.text;
@@ -17139,24 +17206,19 @@ ${languageBlock()}`;
                         {m.role === "assistant" && (
                           <div style={{ fontSize: 8.5, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 3, marginLeft: 6 }}>✦ Gemlyx</div>
                         )}
-                        {/* ── THE BUBBLE AND THE PICTURE IT EARNED ────────
-                            Oliver, 9 Sep 2026, with an arrow drawn at the empty
-                            space beside a reply about the National Museum: "you
-                            could put in a picture of the museum it is talking
-                            about. But only on that text right there. So it
-                            floats along with the text."
+                        {/* ── THE BUBBLE AND THE PICTURES IT EARNED ───────
+                            They sat in the 18% gutter beside the bubble from
+                            9 Sep, which read well with one picture and stacked
+                            downward with three. Oliver, 10 Sep: "have the
+                            pictures going under its text. So if the AI mentions
+                            multiple attractions or towns, it will become a long
+                            horrizontal line, rather than vertical."
 
-                            The bubble is capped at 82%, so that gutter is
-                            always there and was always empty. A picture under
-                            the reply pushes the next reply down; a picture
-                            beside it costs no height and sits level with the
-                            sentence that named the place.
-
-                            The direction is CSS rather than a prop, because
-                            whether there is a gutter is a question about the
-                            viewport, and below the rail breakpoint it stacks
-                            again exactly as it did. See utils/chatRail.js. */}
-                        <div className={BESIDE_ROW_CLASS} style={{ justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+                            So the wrapper is a column at every width and the
+                            pictures decide their own direction, because how
+                            many there are is a question about the reply rather
+                            than about the viewport. See ChatPlaceCards. */}
+                        <div className={MSG_ROW_CLASS} style={{ justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
                         <div style={{ maxWidth: "82%", borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap", background: m.role === "user" ? C.accent : C.bg, color: "#fff", border: m.role === "user" ? "none" : `1px solid ${C.border}`, borderLeft: m.role === "user" ? "none" : `2px solid ${C.gold}` }}>
                           {m.role === "assistant"
                             ? <TypewriterText text={assistantText} active={streaming} onDone={() => setChatRevealedUpTo(prev => Math.max(prev, m.idx))} />
@@ -17187,7 +17249,7 @@ ${languageBlock()}`;
                             // looking at a reply that suggested Ribe and
                             // mentioned Copenhagen because Copenhagen is where he
                             // lands. Two cards, one of them useful.
-                            places={placesNamedIn(assistantText, pools, { alreadyKnown: theirWords })}
+                            places={msgCards.get(m.idx) || []}
                             C={C}
                             onOpen={(p) => openStopDetail(p, { windowed: true })}
                             lang={readerLanguage()}
@@ -23005,13 +23067,58 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               </div>
 
               <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${C.border}`, marginBottom: 20 }}>
-                {[["sightseeing", "Sightseeing", "map"], ["roadtrip", "Road Trip", "car"]].map(([key, label, ico]) => (
+                {/* ── AND A THIRD ROW ─────────────────────────────────
+                    Oliver, 10 Sep 2026: "You have Sightseeing, Road Trip, and
+                    we need a third called 'pub crawl'. That's for true
+                    bar-hopping. That is premium-account only."
+
+                    It exists because the built guide now carries at most two
+                    bars and an optional club a night, on his call that "nobody
+                    is gonna follow the guide when they get drunk anyway". The
+                    real bar-hop had to go somewhere, and behind the login is
+                    where it earns rather than bloats.
+
+                    THE ROW IS ALWAYS VISIBLE. A paid feature nobody can see
+                    sells nothing. What it holds depends on isPremium, which
+                    returns false for everybody until there is a plan field for
+                    it to read. See utils/premium.js. */}
+                {[["sightseeing", "Sightseeing", "map"], ["roadtrip", "Road Trip", "car"], ["pubcrawl", "Pub Crawl", "beer"]].map(([key, label, ico]) => (
                   <button key={key} onClick={() => setDetourTab(key)}
                     style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, background: "none", border: "none", borderBottom: `2px solid ${detourTab === key ? C.accent : "transparent"}`, color: detourTab === key ? C.text : C.muted, fontWeight: 700, fontSize: 13.5, padding: "10px 4px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                     <Ico name={ico} size={15} /> {label}
                   </button>
                 ))}
               </div>
+
+              {detourTab === "pubcrawl" && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 16, padding: "18px 16px" }}>
+                    <div style={{ fontSize: 18, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 6 }}>🍻 Pub Crawl</div>
+                    <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.7, marginBottom: 14 }}>
+                      A real bar-hop for one night in one town: where to start, where to go when it thins out, which street to stay on, and what a round costs at each stop. The guide keeps a night to a couple of places worth starting at, because nobody follows an itinerary once the night has started. This is the other half, built to be opened on the street rather than read the week before.
+                    </div>
+                    {isPremium(studioSession) ? (
+                      <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.7 }}>
+                        Tell Gemlyx which town and which night, and it will put one together from the bars it holds.
+                      </div>
+                    ) : (
+                      /* ── SAID PLAINLY, NOT DANGLED ──────────────────
+                          No countdown, no blurred screenshot of a thing that
+                          does not exist yet. It says what it is and what it
+                          needs, and it does not pretend a button would work.
+                          isPremium returns false for everybody today, so this
+                          is what every visitor sees until there is a plan to
+                          read. */
+                      <div style={{ background: C.bg, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "12px 14px" }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: C.gold, marginBottom: 4 }}>Part of a premium account</div>
+                        <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.65 }}>
+                          Premium accounts are not open yet. When they are, this is one of the things they carry.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {detourTab === "roadtrip" && (
                 <div style={{ marginBottom: 20 }}>
@@ -23100,7 +23207,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 </div>
               )}
 
-              <div style={{ marginBottom: 20, display: detourTab === "roadtrip" ? "none" : "block" }}>
+              {/* ── AND THE CHAT BELONGS TO ONE ROW, NAMED ─────────────
+                  This read `detourTab === "roadtrip" ? "none" : "block"`, which
+                  was correct while there were two rows and wrong the moment
+                  there was a third: Pub Crawl is not Road Trip, so the whole
+                  intake and conversation would have appeared underneath it.
+                  Naming the row that owns it means a fourth row cannot inherit
+                  it by accident either. */}
+              <div style={{ marginBottom: 20, display: detourTab === "sightseeing" ? "block" : "none" }}>
                 {/* Redesign pass: the intake used to be ~10 fields stacked in one long
                     wall, all visible at once. Now it's one card — dates + starting point
                     up front (the inputs that genuinely shape the plan), and everything

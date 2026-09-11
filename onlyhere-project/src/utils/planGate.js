@@ -51,6 +51,31 @@ export const MIN_STOPS_MIDDLE_DAY = 2;
 // day, and how much of it is usable is a question about the flight, which the
 // plan does not know.
 export const MAX_STOPS_ARRIVAL_DAY = 2;
+
+// ── AND A NIGHT OUT IS TWO BARS AND AN OPTIONAL CLUB ────────────────
+//
+// Oliver, 10 Sep 2026: "I think the build should only include at most 2 bars
+// and 1 club. That's it. Nobody is gonna follow the guide when they get drunk
+// anyway. So if someone choose nightlife on night, then only include 1-2 bars
+// and an optional nightclub."
+//
+// His reason is right and there is a sharper one underneath it. A night guide is
+// read BEFORE anyone leaves, so the only stop that reliably gets used is the
+// first. Everything after it is competing with whatever the night actually does,
+// and a list of six bars is a list abandoned at bar two, which makes the whole
+// guide feel wrong rather than just that day.
+//
+// PER NIGHT, not per guide, which is what he chose when asked. Six nights may
+// carry six of these; one night may not carry six bars.
+//
+// THE CLUB IS ALWAYS OPTIONAL, in his words, "many bars have dancing life". So
+// there is no rule that a night needs one, only a ceiling if it has any.
+//
+// The rest of the night is the paid Pub crawl, which is where a real bar-hop
+// belongs: a thing somebody opens on the street, not a thing printed in an
+// itinerary they read the week before.
+export const MAX_BARS_A_NIGHT = 2;
+export const MAX_CLUBS_A_NIGHT = 1;
 // Straight-line, so this is deliberately generous: real roads are longer, and a
 // ferry makes the gap between the number and the day even bigger. 120 km as the
 // crow flies is already most of a day once you have parked, waited and walked.
@@ -352,6 +377,60 @@ export const checkPlan = (days, coords = {}, opts = {}) => {
   // link and facts that were checked; one that does not brings none of those.
   // Reported so it can be seen, not enforced, because a genuinely good stop
   // Gemlyx has not covered yet is a gap in the guide, not a flaw in the plan.
+  // ── AND HOW MANY OF THEM ARE A NIGHT OUT ──────────────────────────
+  //
+  // `nightKind` is injected the same way isPublished and hoursFor are, and for
+  // the same reason: this file knows about days and distances and has no
+  // business holding a copy of the nightlife library. It answers "bar", "club"
+  // or nothing for a stop name, off the published rows, where isClub is already
+  // decided honestly per venue by the draft prompt.
+  //
+  // No classifier, no rule. A caller that cannot tell a bar from a museum gets
+  // the gate it had before rather than a guess about names.
+  if (typeof opts.nightKind === "function") {
+    list.forEach((d, i) => {
+      const dayNo = d.day || i + 1;
+      const kinds = (d.stops || []).filter(s => s && s.name).map(s => opts.nightKind(s.name));
+      const bars = kinds.filter(k => k === "bar").length;
+      const clubs = kinds.filter(k => k === "club").length;
+      if (bars <= MAX_BARS_A_NIGHT && clubs <= MAX_CLUBS_A_NIGHT) return;
+      const over = [
+        bars > MAX_BARS_A_NIGHT ? `${bars} bars` : "",
+        clubs > MAX_CLUBS_A_NIGHT ? `${clubs} clubs` : "",
+      ].filter(Boolean).join(" and ");
+      problems.push({
+        code: "CROWDED_NIGHT",
+        day: dayNo,
+        detail: `Day ${dayNo} holds ${over}. One night is at most ${MAX_BARS_A_NIGHT} bars and ${MAX_CLUBS_A_NIGHT} club, and the club is optional. Nobody follows an itinerary once the night has started, so keep the one or two places worth starting at and cut the rest.`,
+      });
+    });
+  }
+
+  // ── AND A BAR WITH NOTHING AROUND IT ──────────────────────────────
+  //
+  // Injected like nightKind above. See strandedNight in utils/nightlife.js for
+  // the claim it makes and how narrow it is: this venue is on no published
+  // street and another one in the same town is, so the plan took the isolated
+  // one off the same shelf as a connected one.
+  //
+  // A PROBLEM, NOT A SWAP. The gate reports and the repair pass decides, the
+  // same as every other rule here. Naming the alternative is what makes it
+  // actionable rather than a complaint.
+  if (typeof opts.nightAlone === "function") {
+    list.forEach((d, i) => {
+      const dayNo = d.day || i + 1;
+      (d.stops || []).filter(s => s && s.name).forEach(st => {
+        const alone = opts.nightAlone(st.name);
+        if (!alone || !alone.better?.name) return;
+        problems.push({
+          code: "STRANDED_NIGHT",
+          day: dayNo,
+          detail: `Day ${dayNo} sends them to ${st.name}, which is on no bar street, when ${alone.better.name} on ${alone.street?.name || "a bar street"} is in the same town. A bar is somewhere you might leave after twenty minutes, so what is next door decides the evening. Use the one with somewhere to go after it.`,
+        });
+      });
+    });
+  }
+
   const matched = typeof opts.isPublished === "function"
     ? allStops.filter(s => opts.isPublished(s.name)).length
     : null;

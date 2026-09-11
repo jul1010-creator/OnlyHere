@@ -47,7 +47,7 @@ writeFileSync(entry, `
   export { legSteps, journeyFromStored, worthShowingLegs, journeyParts, journeyBlock, vehicleWord, arrivalStop, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn, closedButPlanned, storedJourney, journeyReach, journeyChanges, journeyBreakdown, journeyDriving, journeyStamp, journeyAgencies, JOURNEY_SOURCE } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS, foundAt, matchVariantsOf, GENERIC_ALIASES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
-  export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, townOfStreet, streetForSpot, barsOnStreet, nightlifeForTown } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
+  export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, townOfStreet, streetForSpot, barsOnStreet, nightlifeForTown, nightKindOf, strandedNight } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { supabaseFailure, studioErrorMessage, refreshIsDead, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
@@ -159,7 +159,7 @@ writeFileSync(entry, `
   export { GOOGLE_SIGN_IN } from ${JSON.stringify(join(root, "src/config.js"))};
   export { writeInLanguage } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { guideLanguage, languageOfProse, ruledOutLanguages, briefSentences, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS, MARKER_FLOOR, MARKER_MARGIN } from ${JSON.stringify(join(root, "src/utils/travellerLanguage.js"))};
-  export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, BESIDE_ROW_CLASS, LABEL_CLASS, LABEL_SIDES, LABEL_GAP, labelBox, labelSides } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
+  export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, LABEL_CLASS, LABEL_SIDES, LABEL_GAP, labelBox, labelSides } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
   export { costLines, byUrgency, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
@@ -172,7 +172,7 @@ writeFileSync(entry, `
   export { stayTextProblem, stayTextForReader, withoutStump, withoutDayTripClaim as wdtc } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { offerReason as offerReasonFn, rowThemeWords, ARRIVAL_WORDS } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { outOfBudget, budgetWarning, BUDGET_RULES_OUT, PRICED_KINDS } from ${JSON.stringify(join(root, "src/utils/budgetFit.js"))};
-  export { MAX_STOPS_ARRIVAL_DAY, MIN_STOPS_MIDDLE_DAY, namedIn, ISLAND_KOMMUNE_NAMES } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
+  export { MAX_STOPS_ARRIVAL_DAY, MIN_STOPS_MIDDLE_DAY, MAX_BARS_A_NIGHT, MAX_CLUBS_A_NIGHT, namedIn, ISLAND_KOMMUNE_NAMES } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { isSameSpot, SAME_SPOT_KM, cityFromLocation, stopTown } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { travellerBudget, budgetTierMismatch, dayTripClaim, dayTripHonest, dayTripRadiusKm, withoutDayTripClaim, describeDayTripClaim, DAY_TRIP_FRACTION } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { placedLibrary, nearbyPublished, describeLocation, distanceWords, walkMinutes, nearbyLabel, NEAR_KM, WALK_KMH, SAME_VISIT_KM, SAME_VISIT_LIMIT } from ${JSON.stringify(join(root, "src/utils/nearbyPlaces.js"))};
@@ -204,7 +204,7 @@ writeFileSync(entry, `
   export { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK, CHARACTERISATION_FIELDS, REPORT_FIELDS } from ${JSON.stringify(join(root, "src/utils/checkScope.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
-  export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
+  export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, reservedEssential, RESERVED_THEME, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { cardLine, cardLineSource, sentencesOf, isOriginSentence, CARD_LINE_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
   export { buildPreviewReport, rowReport, passOf, reportFilename, REPORT_KIND } from ${JSON.stringify(join(root, "src/utils/previewReport.js"))};
   export { OBSERVED_MIN, learnedIsEmpty, seenFromTrip, observeTrip, settledObservations, observedForPrompt } from ${JSON.stringify(join(root, "src/utils/profileLearning.js"))};
@@ -236,6 +236,8 @@ writeFileSync(entry, `
   export { coverageByPart, thinnestParts, coverageSummary, discoveryFraming, isAlreadyCovered, splitAlreadyCovered } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget, placeFromText, candidateFitsTarget, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { checkPlan, planProblemsForPrompt, titlePromises, MAX_DAY_KM, dayCeilingKm } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
+  export { isPremium, PAID_PLANS } from ${JSON.stringify(join(root, "src/utils/premium.js"))};
+  export { ADD_IN_QUESTION, ADD_IN_CATS, addInOffers, addInSeed, addInKindOf, addInNear } from ${JSON.stringify(join(root, "src/utils/addIn.js"))};
   export { toggleBeen, markMany, isBeen, canBeMarked, beenNote, withoutBeen, excludedBeen, knownBeen, beenRecord, sameEntry, isContextKind, dayVisitRows, BEEN_CAP, BEEN_KINDS } from ${JSON.stringify(join(root, "src/utils/beenThere.js"))};
   export { cleanBeen, mergeBeen, missingBeenColumn } from ${JSON.stringify(join(root, "src/utils/beenSync.js"))};
   export { isOwnSiteFor, urlNames, isKommuneHost, isTownWord, ownershipWords, subjectIsEvent, EVENT_SUBJECT_TYPES, isTourismHost, KOMMUNE_HOSTS } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
@@ -8991,6 +8993,42 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // counts a trip: twenty nights is twenty-one days.
     const nights = readBrief({ travellerText: "Hi\n20 nights", travellerTurns: ["Hi", "20 nights"], answering: [[], ["days"]], today: new Date("2026-09-06T09:00:00Z") });
     is("and so are nights", [nights.known.days?.value, nights.cappedDays], [14, 21]);
+    // ── AND A CORRECTION HAS TO BE ABLE TO LAND ──────────────────
+    //
+    // Oliver, 10 Sep 2026, on a guide built for nine days. He said nine, was
+    // told at turn 8 that his own dates were six, answered "It's 6 days.." and
+    // was agreed with. The brief held 9 to the end and the guide was built for
+    // 9, which is a wrong length on every day of the itinerary.
+    //
+    // dayCountIn returns on its FIRST match and was handed every traveller turn
+    // joined together, so the first number anyone said was the only number
+    // reachable. This file already fixed the same class on the direct-answer
+    // path and wrote down why: "A correction is the one thing the traveller
+    // most needs to land."
+    const HIS = ["Hi!", "I'm coming from Sweden", "I'm going to be in Denmark for 9 days",
+                 "I'm travelling from the 13th to the 19th", "It's 6 days..", "It's this month"];
+    const fixed = readBrief({ travellerText: HIS.join("\n"), travellerTurns: HIS, today: new Date("2026-09-10T09:00:00Z") });
+    is("the number he corrected it to is the one that lands", fixed.known.days?.value, 6);
+    // The other direction, so this is last-wins rather than smallest-wins: a
+    // traveller who extends a trip is correcting it just as much as one who
+    // shortens it, and a rule that only ever went down would look right on his
+    // transcript and be wrong on the opposite one.
+    const longer = ["4 days I think", "no wait, we can do 8 days"];
+    is("and a correction upward lands too",
+       readBrief({ travellerText: longer.join("\n"), travellerTurns: longer, today: new Date("2026-09-10T09:00:00Z") }).known.days?.value, 8);
+    // PER TURN, not per match. Inside one sentence dayCountIn's own first-match
+    // rule still stands, so a split trip is read exactly as it was before
+    // rather than quietly becoming the second half.
+    const split = ["2 days in Copenhagen and 4 in Jutland"];
+    is("two numbers in one sentence are unchanged by this",
+       readBrief({ travellerText: split[0], travellerTurns: split, today: new Date("2026-09-10T09:00:00Z") }).known.days?.value, 2);
+    // And the ceiling still applies to whichever number won, or a correction
+    // would be a way around the cap.
+    const late = ["5 days", "actually make it 20 days"];
+    is("a corrected length is still capped",
+       [readBrief({ travellerText: late.join("\n"), travellerTurns: late, today: new Date("2026-09-10T09:00:00Z") }).known.days?.value,
+        readBrief({ travellerText: late.join("\n"), travellerTurns: late, today: new Date("2026-09-10T09:00:00Z") }).cappedDays], [14, 20]);
+
     // One cap, and it is the one already written down. directAnswer had a
     // second literal 14 under a comment saying exactly that.
     ok("the two readers share one ceiling",
@@ -25315,7 +25353,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // type maps and by NO PROMPT IN THE APP, so the type his own codegen calls the
 // fastest to go stale could not reach a reader through a guide at all.
 {
-  const { essentialsForTrip, essentialsBlock, storeKindOf } = M;
+  const { essentialsForTrip, essentialsBlock, reservedEssential, storeKindOf } = M;
 
   // His two real rows, as published.
   const NIGHTPAY = {
@@ -25361,6 +25399,88 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   const many = Array.from({ length: 9 }, (_, i) => ({ ...NIGHTPAY, name: `Bar app ${i}` }));
   is("the block is capped", essentialsForTrip(many, { interests: ["Nightlife"] }).length, M.ESSENTIALS_IN_GUIDE);
   ok("and the cap is a small number", M.ESSENTIALS_IN_GUIDE <= 5);
+
+  // ── AND IT KEEPS ITS SEAT RATHER THAN COMPETING FOR ONE ─────────
+  //
+  // Oliver, 10 Sep 2026: "tell the AI always to remind the user of Nightpay if
+  // they have nightlife included in their trip. In the guide too, of course."
+  //
+  // It was not guaranteed. The sort is by how many themes a row matches, and
+  // Nightpay matches exactly one, so four rows answering two themes each push it
+  // out with nothing said. It got into his own 10 Sep build by ranking rather
+  // than by rule, which is a coincidence wearing the shape of a feature.
+  {
+    // Four rows that each answer THREE of this brief's themes, so every seat is
+    // taken on merit and Nightpay, which answers one, does not make the cut.
+    // "museums" sits in both history and art, which is what makes three easy.
+    const twoThemers = ["A", "B", "C", "D"].map(n => ({
+      name: `Food and museums ${n}`, category: "Culture", price: "Free",
+      desc: "Restaurants and museums in one app, for eating and for museums.",
+      howTo: "Download it.", tip: "Book a table beside a gallery.",
+    }));
+    const busy = { convoText: "We want bars and clubs, plus food and museums" };
+    const got = essentialsForTrip([...twoThemers, NIGHTPAY], busy).map(p => p.row.name);
+    // Without the reservation this list is the four Food and museums rows, since
+    // three themes beats one every time.
+    ok("a crowded brief still carries it", got.includes("Nightpay"));
+    is("and it is still only four rows", got.length, M.ESSENTIALS_IN_GUIDE);
+    // The weakest row gives up the seat, not the strongest. A fourth general tip
+    // is worth less to somebody going out than the app that pays for the night.
+    ok("the lowest ranked row is the one that makes room",
+       !got.includes("Food and museums D")
+       && got.includes("Food and museums A") && got.includes("Food and museums C"));
+    // ── AND ONLY WHERE THEY ASKED FOR IT ──────────────────────────
+    // A trip with no nightlife in it reserves nothing and gets exactly what it
+    // always got, or this would put a bar app in front of a family on a castle
+    // holiday.
+    const quiet = { convoText: "We want castles, food and museums" };
+    ok("a trip with no night out in it reserves nothing",
+       !essentialsForTrip([...twoThemers, NIGHTPAY], quiet).map(p => p.row.name).includes("Nightpay"));
+    // NO ROW, NO SEAT. Nothing published matches, so nothing is held empty for it.
+    is("and an unpublished row holds no empty seat",
+       essentialsForTrip(twoThemers, busy).length, M.ESSENTIALS_IN_GUIDE);
+    // The theme rather than the name, so renaming the row does not break this
+    // and a second nightlife essential competes for the seat on the ranking.
+    is("the seat is held by a theme, not by a name", M.RESERVED_THEME, "nightlife");
+    // ── AND WHY NEITHER OF THEM NEEDS A "DID THEY ASK" GUARD ────
+    //
+    // Both had one and neither guard could fail: `themes` is built by filtering
+    // the brief's own theme set, so a row's themes are always a SUBSET of what
+    // was asked for, and a theme nobody asked for can never appear on a row.
+    // Mutation testing deleted both lines and killed nothing. They are gone and
+    // this is the property asserted in their place, the same call the labelledAt
+    // guard in eventDates.js records for itself.
+    ok("a row can never carry a theme the brief did not ask for",
+       essentialsForTrip([...twoThemers, NIGHTPAY], busy)
+         .every(p => p.themes.every(t => M.briefThemes(busy.convoText).has(t))));
+    ok("and a renamed row still gets it",
+       essentialsForTrip([...twoThemers, { ...NIGHTPAY, name: "Natbetaling" }], busy)
+         .map(p => p.row.name).includes("Natbetaling"));
+
+    // ── AND THE CHAT GETS ONE ROW, WHICH IT NEVER GOT AT ALL ──────
+    //
+    // essentialsForTrip had exactly one caller and it was inside the guide
+    // build, so a traveller talking about a night out heard nothing about the
+    // app that pays for it until after the guide was finished, which is the
+    // wrong end of the conversation for something you install before you go.
+    //
+    // ONE row, because a chat turn cannot carry a block of four and the
+    // give-before-you-ask rule wants one real thing per turn anyway.
+    is("the chat is handed the one row", reservedEssential([...twoThemers, NIGHTPAY], busy)?.row?.name, "Nightpay");
+    is("and nothing at all on a quiet trip", reservedEssential([...twoThemers, NIGHTPAY], quiet), null);
+    is("and nothing when the row is not published", reservedEssential(twoThemers, busy), null);
+    is("and an empty call answers rather than throwing", reservedEssential(null), null);
+    // The prompt names it and the wiring is the half a source pin can carry.
+    const appN = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the chat prompt asks for it",
+       /const nightTip = reservedEssential\(essentials, \{ convoText: travellerTurns\.join\("\\n"\), interests: intakeInterest \}\);/.test(appN));
+    ok("and it reaches the prompt beside the other give-before-you-ask material",
+       /\$\{heldBlock\}\$\{nightBlock\}/.test(appN));
+    // Quoted, never summarised, for the reason the frozen transport facts give:
+    // a model asked to describe a payment system invents a payment system.
+    ok("and the row is quoted rather than described",
+       /never embellish it, and never invent a second app like it/.test(appN));
+  }
 
   // ── THE BLOCK QUOTES HIM RATHER THAN DESCRIBING HIM ─────────────
   const block = essentialsBlock(essentialsForTrip(ROWS, { interests: ["Nightlife"] }));
@@ -28371,7 +28491,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // call previewPools inside the loop, once per assistant turn, and the pin
     // beside it called it again.
     ok("built from the same pool the pin beside it reads",
-       /places=\{placesNamedIn\(assistantText, pools, \{ alreadyKnown: theirWords \}\)\}/.test(appC));
+       /cardsByMessage\(shownMsgs, pools, \{\s*alreadyKnown: theirWords,/.test(appC));
     // ── AND IT OPENS A WINDOW, NOT A REDIRECT ─────────────────────
     //
     // Oliver, 9 Sep 2026: "when you click it, you get a new window popping up.
@@ -29615,6 +29735,257 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and the reason names the airport, not a style preference",
      /land|passport|check in/i.test(v1.problems.find(p => p.code === "CROWDED_ARRIVAL")?.detail || ""));
   is("two things after a flight is a real afternoon", MAX_STOPS_ARRIVAL_DAY, 2);
+
+  // ── AND A NIGHT OUT IS TWO BARS AND AN OPTIONAL CLUB ────────────
+  //
+  // Oliver, 10 Sep 2026: "at most 2 bars and 1 club. That's it. Nobody is gonna
+  // follow the guide when they get drunk anyway." Per night, which is what he
+  // chose when asked, and the club is always optional because "many bars have
+  // dancing life".
+  //
+  // The sharper reason underneath it: a night guide is read BEFORE anyone
+  // leaves, so the only stop that reliably gets used is the first. A day
+  // carrying four bars is a day where two are never reached, and that makes the
+  // whole guide read as padding rather than just that day.
+  {
+    const VENUES = [
+      { name: "Toga Vinstue", isClub: false }, { name: "Mesteren og Laerlingen", isClub: false },
+      { name: "JOJO", isClub: false }, { name: "Bakken KBH", isClub: true },
+      { name: "Rust", isClub: true }, { name: "Louisiana", isClub: false },
+    ];
+    const kind = (name) => M.nightKindOf(name, VENUES);
+    const night = (names) => checkPlan(
+      [{ day: 1, stops: [{ name: "Nyhavn" }] },
+       { day: 2, stops: names.map(n => ({ name: n })) },
+       { day: 3, stops: [{ name: "Odense" }, { name: "H.C. Andersen" }] }],
+      {}, { nightKind: kind });
+    // Optional-chained, every one of them. Six mutants killed this block by
+    // CRASHING on an empty list rather than failing, and a crash aborts the file,
+    // which reads every later block as a pass. Fifth time in this suite.
+    const crowdedNight = (v) => v.problems.filter(p => p.code === "CROWDED_NIGHT");
+
+    is("two bars and a club is a night", crowdedNight(night(["Toga Vinstue", "JOJO", "Bakken KBH"])).length, 0);
+    is("one bar on its own is a night too", crowdedNight(night(["Toga Vinstue", "Louisiana"])).length, 0);
+    // The club is OPTIONAL, in both directions: a night with no club is fine and
+    // so is a club with no bar. There is no rule that a night needs either.
+    is("a club with no bar is not a problem", crowdedNight(night(["Bakken KBH", "Louisiana"])).length, 0);
+    const three = crowdedNight(night(["Toga Vinstue", "JOJO", "Mesteren og Laerlingen"]));
+    is("a third bar is", three.length, 1);
+    ok("and it names the day and the count", /Day 2 holds 3 bars/.test(three[0]?.detail || ""));
+    ok("and says why rather than asserting a house style",
+       /Nobody follows an itinerary once the night has started/.test(three[0]?.detail || ""));
+    const twoClubs = crowdedNight(night(["Bakken KBH", "Rust"]));
+    is("a second club is a problem of its own", twoClubs.length, 1);
+    ok("and the sentence says clubs rather than bars", /2 clubs/.test(twoClubs[0]?.detail || ""));
+    // Both at once reads as one problem naming both, rather than two cards about
+    // the same evening.
+    const both = crowdedNight(night(["Toga Vinstue", "JOJO", "Mesteren og Laerlingen", "Bakken KBH", "Rust"]));
+    is("too many of both is still one problem for that night", both.length, 1);
+    ok("naming both counts", /3 bars and 2 clubs/.test(both[0]?.detail || ""));
+
+    // PER NIGHT, not per guide. Six nights may carry six of these; one night
+    // may not carry six bars.
+    const spread = checkPlan([
+      { day: 1, stops: [{ name: "Toga Vinstue" }, { name: "Nyhavn" }] },
+      { day: 2, stops: [{ name: "JOJO" }, { name: "Louisiana" }] },
+      { day: 3, stops: [{ name: "Mesteren og Laerlingen" }, { name: "Odense" }] },
+    ], {}, { nightKind: kind });
+    is("the same bars spread across three nights are fine",
+       spread.problems.filter(p => p.code === "CROWDED_NIGHT").length, 0);
+
+    // NO CLASSIFIER, NO RULE. A caller that cannot tell a bar from a museum gets
+    // the gate it had before rather than a guess about names.
+    is("without a classifier nothing is capped",
+       checkPlan([{ day: 1, stops: [{ name: "Toga Vinstue" }, { name: "JOJO" }, { name: "Mesteren og Laerlingen" }] }])
+         .problems.filter(p => p.code === "CROWDED_NIGHT").length, 0);
+
+    // ── AND THE CLASSIFIER READS THE ROW, NOT THE NAME ────────────
+    // isClub is decided per venue by the draft prompt, so there is nothing to
+    // infer here. An exact name, deliberately: a miss means the cap does not
+    // apply, which is yesterday's behaviour, while a loose match would delete a
+    // stop from somebody's day for no reason. Wrong in the safe direction.
+    is("a bar reads as a bar", M.nightKindOf("Toga Vinstue", VENUES), "bar");
+    is("a club reads as a club", M.nightKindOf("Bakken KBH", VENUES), "club");
+    is("a museum reads as nothing", M.nightKindOf("Louisiana Museum", VENUES), null);
+    is("and a name nobody published reads as nothing", M.nightKindOf("Some Bar", VENUES), null);
+    is("an empty name is nothing rather than a throw", M.nightKindOf("", VENUES), null);
+    is("and no rows is nothing rather than a throw", M.nightKindOf("Toga Vinstue", null), null);
+    is("case and spacing do not decide it", M.nightKindOf("  toga vinstue  ", VENUES), "bar");
+
+    // The numbers are his, named once, and the gate and the planner prompt read
+    // the same two constants rather than each carrying a literal.
+    is("two bars", M.MAX_BARS_A_NIGHT, 2);
+    is("and one club", M.MAX_CLUBS_A_NIGHT, 1);
+    const appG = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the planner is told before it plans",
+       /A NIGHT OUT IS AT MOST \$\{MAX_BARS_A_NIGHT\} BARS AND \$\{MAX_CLUBS_A_NIGHT\} CLUB, PER DAY/.test(appG));
+    ok("and the gate is handed a classifier on both passes",
+       (appG.match(/wasDone, nightKind, /g) || []).length === 2);
+    ok("built off the published rows rather than a list typed here",
+       /const nightKind = \(name\) => nightKindOf\(name, nightlifeSpots\);/.test(appG));
+
+    // ── AND A BAR WITH NOTHING AROUND IT ──────────────────────────
+    //
+    // Oliver, 10 Sep 2026: "don't send the visitor to 'Støvlen' in Vanløse.. he
+    // has to go to Barcelona Bar at Gothersgade." A bar is somewhere you might
+    // leave after twenty minutes, so what is within two minutes of it decides
+    // the evening. Støvlen is the wrong pick even if it is the better bar.
+    const STREETS = [{ id: 1, name: "Gothersgade", town: "Copenhagen", location: "Indre By, Copenhagen" }];
+    // THREE, and the third one is what makes the "already on a street" guard
+    // testable: with only two, removing that guard still returns nothing for
+    // Barcelona Bar, because the one other venue is the stranded one. A second
+    // venue ON the street is what a wrong answer would reach for.
+    const KBH = [
+      { name: "Stovlen", location: "Vanlose, Copenhagen", isClub: false },
+      { name: "Barcelona Bar", location: "Gothersgade, Indre By, Copenhagen", isClub: false },
+      { name: "Kruts Karport", location: "Gothersgade, Indre By, Copenhagen", isClub: false },
+    ];
+    const alone = (name) => M.strandedNight(name, KBH, STREETS);
+    const stranded = alone("Stovlen");
+    ok("the isolated one is named", !!stranded);
+    is("and so is the one to use instead", stranded?.better?.name, "Barcelona Bar");
+    is("with the street it is on", stranded?.street?.name, "Gothersgade");
+    is("while the one on the street says nothing", alone("Barcelona Bar"), null);
+    // THE CLAIM IS NARROW ON PURPOSE. A lone bar in a town with no bar street at
+    // all is not a mistake, it is that town, and a rule that flagged it would be
+    // telling him his own library is wrong rather than his plan.
+    is("a town with no bar street flags nothing",
+       M.strandedNight("Stovlen", [KBH[0], { name: "Anden Bar", location: "Vanlose, Copenhagen" }], []), null);
+    is("and a venue nobody published is nothing rather than a throw", alone("Some Bar"), null);
+    is("nor does an empty name throw", alone(""), null);
+
+    // Through the gate, which is where it costs somebody a stop.
+    const sent = checkPlan(
+      [{ day: 1, stops: [{ name: "Nyhavn" }] },
+       { day: 2, stops: [{ name: "Stovlen" }, { name: "Louisiana" }] },
+       { day: 3, stops: [{ name: "Odense" }, { name: "H.C. Andersen" }] }],
+      {}, { nightAlone: alone });
+    const wrong = sent.problems.filter(p => p.code === "STRANDED_NIGHT");
+    is("the gate reports it", wrong.length, 1);
+    ok("naming both venues, so the fix is obvious rather than a complaint",
+       /Stovlen/.test(wrong[0]?.detail || "") && /Barcelona Bar/.test(wrong[0]?.detail || "") && /Gothersgade/.test(wrong[0]?.detail || ""));
+    ok("and saying why a lone bar is the wrong pick",
+       /leave after twenty minutes/.test(wrong[0]?.detail || ""));
+    // Same rule as nightKind: no classifier, no rule. A caller that cannot
+    // answer the question gets the gate it had yesterday.
+    is("without the reader nothing is flagged",
+       checkPlan([{ day: 1, stops: [{ name: "Stovlen" }] }]).problems.filter(p => p.code === "STRANDED_NIGHT").length, 0);
+    ok("and the build hands it the published streets rather than a list typed here",
+       /const nightAlone = \(name\) => strandedNight\(name, nightlifeSpots, nightlifeStreets\);/.test(appG));
+    ok("on both gate passes", (appG.match(/wasDone, nightKind, nightAlone \}\)/g) || []).length === 2);
+
+    // ── AND THE REST OF THE NIGHT IS BEHIND THE LOGIN ─────────────
+    //
+    // Oliver, 10 Sep 2026: "You have Sightseeing, Road Trip, and we need a third
+    // called 'pub crawl'. That's for true bar-hopping. That is premium-account
+    // only." It exists because the cap above took the bar-hop out of the guide.
+    //
+    // THERE IS NO PAID TIER IN THIS CODEBASE. No plan, tier or subscription
+    // field on the profile and nothing reads one, so this is the seam rather
+    // than the billing, and it says false for everybody until there is a plan
+    // to read. Signed-in is NOT the check: that would let anybody with an email
+    // address into a paid feature.
+    is("nobody is premium today", M.isPremium({ email: "x@y.dk", access_token: "t" }), false);
+    is("and neither is nothing at all", M.isPremium(null), false);
+    is("and neither is a plan nobody sells", M.isPremium({ plan: "gold" }), false);
+    is("the day there is a plan field, it works", M.isPremium({ plan: "premium" }), true);
+    is("spacing and case do not decide it", M.isPremium({ plan: "  Premium " }), true);
+    ok("and what counts as paid is named once", M.PAID_PLANS.includes("premium"));
+
+    // The row is ALWAYS VISIBLE. A paid feature nobody can see sells nothing,
+    // and one that is ungated is given away.
+    ok("the third row is in the picker",
+       /\["sightseeing", "Sightseeing", "map"\], \["roadtrip", "Road Trip", "car"\], \["pubcrawl", "Pub Crawl", "beer"\]/.test(appG));
+    ok("and its panel asks the seam rather than asking whether they are signed in",
+       /\{isPremium\(studioSession\) \?/.test(appG));
+    ok("which says plainly that it is not open yet",
+       /Premium accounts are not open yet/.test(appG));
+    // ── AND THE CHAT BELONGS TO ONE ROW, NAMED ────────────────────
+    // It read "roadtrip ? none : block", which was right with two rows and
+    // wrong the moment there was a third: the whole intake would have appeared
+    // under Pub Crawl. Naming the owner means a fourth row cannot inherit it
+    // either.
+    ok("the conversation belongs to Sightseeing by name",
+       /display: detourTab === "sightseeing" \? "block" : "none"/.test(appG));
+    // stripComments, because the sentence explaining the old shape contains the
+    // old shape. That is the comment trap this repo has caught twice before: an
+    // assertion satisfied by the note describing the bug it guards against.
+    ok("and no panel is shown by ruling one row out",
+       !/detourTab === "roadtrip" \? "none" : "block"/.test(stripComments(appG)));
+
+    // ── "WHAT ARE YOU INTERESTED IN HERE?" ────────────────────────
+    //
+    // Oliver, 10 Sep 2026, asked what fills the slots the nightlife cap frees
+    // up: "hmmm... depends on the person. Do they fancy a nice dinner or a
+    // quick kebab before drinking. At the guide you can make a feature called
+    // 'add in' if there is a space of uncertainty. Ask is better than
+    // hallucination."
+    //
+    // Which is the rule this whole pipeline runs on, pointed at a new thing. An
+    // empty price field beats an invented number.
+    {
+      const { addInOffers, addInSeed, addInKindOf, addInNear, ADD_IN_CATS } = M;
+      const POOLS = {
+        free: [{ name: "Rundetaarn" }], food: [{ name: "Silo Bakery" }], nightlife: [{ name: "Toga Vinstue" }],
+      };
+      const kindOf = (n) => addInKindOf(n, POOLS);
+      const keys = (d) => addInOffers(d, { kindOf }).map(c => c.key);
+
+      is("a day with nothing in it is offered all three",
+         keys({ stops: [{ name: "Kronborg is not published" }] }), ["free", "food", "nightlife"]);
+      // Only what the day is SHORT of. A day already carrying a restaurant does
+      // not need "Somewhere to eat" put in front of it, and offering it anyway
+      // is the noise he has objected to in three other shapes.
+      is("a day that already eats is not offered food",
+         keys({ stops: [{ name: "Silo Bakery" }] }), ["free", "nightlife"]);
+      is("and a full day is offered nothing at all",
+         keys({ stops: [{ name: "Rundetaarn" }, { name: "Silo Bakery" }, { name: "Toga Vinstue" }] }), []);
+      // NO READER, NOTHING OFFERED, the same rule as every other injected
+      // reader here: a caller that cannot say what a stop is would otherwise be
+      // told every day is short of everything.
+      // Caught rather than called bare: the mutant that deletes the guard makes
+      // this THROW, and a throw aborts the file and reads every later assertion
+      // as a pass. The assertion has to be able to go red on its own.
+      const noReader = (() => { try { return addInOffers({ stops: [{ name: "X" }] }); } catch { return "it threw"; } })();
+      is("without a reader nothing is offered", noReader, []);
+      is("and an empty day does not throw", keys({}), ["free", "food", "nightlife"]);
+
+      // ── AND THE QUESTION NAMES THE DAY ──────────────────────────
+      // His words for what makes this different from the preview screen's
+      // version: "Then instead it's just into that specific day."
+      const food = ADD_IN_CATS.find(c => c.key === "food");
+      is("the seed is a question somebody can send unedited",
+         addInSeed(food, { town: "Koge", dayNo: 4 }), "Where should I eat in Koge on day 4?");
+      is("a day with no town still asks about the day",
+         addInSeed(food, { dayNo: 2 }), "Where should I eat on day 2?");
+      // Dropped rather than faked: "on day 0" is worse than no day at all.
+      is("and an unknown day number is left out rather than printed",
+         addInSeed(food, { town: "Ribe" }), "Where should I eat in Ribe?");
+      is("a category with no question of its own produces none", addInSeed(null, { dayNo: 1 }), "");
+      ok("every category has one", ADD_IN_CATS.every(c => c.key && c.label && c.ask));
+
+      // The pick door: published places of ONE category near the day, through
+      // the shared nearby reader rather than a second one.
+      const LIB = [
+        { name: "Silo Bakery", _src: "food", lat: 55.68, lon: 12.57 },
+        { name: "Rundetaarn", _src: "free", lat: 55.681, lon: 12.573 },
+        { name: "Far Away Cafe", _src: "food", lat: 57.0, lon: 10.0 },
+      ];
+      const near = addInNear(food, { lat: 55.6805, lon: 12.5705 }, LIB, M.nearbyPublished, { limit: 3 });
+      is("only that category is offered", near.map(r => r.name), ["Silo Bakery"]);
+      is("and no reader is an empty list rather than a throw", addInNear(food, { lat: 1, lon: 1 }, LIB, null), []);
+
+      // ── AND THE OTHER DOOR LANDS IN THE BOX, NOT IN A SEND ──────
+      const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+      ok("the guide asks the question at the foot of a day", /\{ADD_IN_QUESTION\}/.test(gp));
+      ok("and only about what the day is short of", /addInOffers\(day, \{ kindOf: addInKind \}\)/.test(gp));
+      ok("and hands the question over naming the day",
+         /navigate\("\/", \{ state: \{ detourAsk: addInSeed\(cat, \{ town, dayNo \}\) \} \}\)/.test(gp));
+      ok("the chat types it rather than sending it", /setAiInput\(seed\);/.test(appG));
+      ok("and clears it so a refresh does not put it back",
+         /navigate\(location\.pathname, \{ replace: true, state: null \}\);/.test(appG));
+    }
+  }
   const calm = [
     { day: 1, stops: [{ name: "Copenhagen Airport" }, { name: "Nyhavn" }] },
     { day: 2, stops: [{ name: "Tivoli" }, { name: "Glyptotek" }] },
@@ -45139,7 +45510,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the inline cards are still marked, which is how this file finds them", appR.includes("className={INLINE_CARDS_CLASS}"));
   ok("and the rail is marked so it can be shown", appR.includes("className={RAIL_CLASS}"));
   // The rail is inside the flex row, not floating after it.
-  ok("the messages and the rail share one flex row", /<div className="chat-with-rail">[\s\S]{0,1600}<div className="ai-msgs"/.test(appR));
+  ok("the messages and the rail share one flex row", /<div className="chat-with-rail">[\s\S]{0,3000}<div className="ai-msgs"/.test(appR));
   ok("and the message list can shrink so the rail has room", /className="ai-msgs" style=\{\{ flex: "1 1 auto", minWidth: 0/.test(appR));
 
   // ── AND THE RAIL CAN NO LONGER SET THE HEIGHT OF THE ROW ─────────
@@ -45190,7 +45561,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // only card layout there is.
   is("previewPools is read once for the whole panel",
      (appR.match(/const pools = withoutBeen\(previewPools\(\{/g) || []).length, 1);
-  ok("and the card reads that pool", /places=\{placesNamedIn\(assistantText, pools, \{ alreadyKnown: theirWords \}\)\}/.test(appR));
+  ok("and the card reads that pool", /cardsByMessage\(shownMsgs, pools, \{\s*alreadyKnown: theirWords,/.test(appR));
   ok("so a place they have been is not suggested to them again", /\}\), beenList\);/.test(appR));
 
   // ── THE MAP UNDER THE CHAT ───────────────────────────────────────
@@ -45512,7 +45883,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // only fail twice for one reason. This is the card's pool and the one below
   // is the map's.
   ok("while the card still sees every kind",
-     /places=\{placesNamedIn\(assistantText, pools, \{ alreadyKnown: theirWords \}\)\}/.test(appR));
+     /cardsByMessage\(shownMsgs, pools, \{\s*alreadyKnown: theirWords,/.test(appR));
   ok("and the map's narrower one is a filter of it, not a second reading",
      /const townPool = pools\.filter\(/.test(appR));
   // ONE POOLS CALL FOR BOTH. The card and the pin have to be looking at the
@@ -45687,10 +46058,18 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // it still separates them.
   ok("one theme each, chosen across the whole set rather than per pin",
      /distinctThemes\(list\.map\(p => \(\{ key: p\.key, themes: p\.place\?\.themes \}\)\)\)/.test(chatCode));
-  ok("and the sentence is his, in the reader's language",
-     /uiT\("map\.bestFor", code\)/.test(chatCode)
+  // ── AND IT IS THE WORD, NOT A SENTENCE ABOUT IT ──────────────────
+  //
+  // It read "Best if you want history" until Oliver, 10 Sep 2026: "no need to
+  // mention 'best if you want'.. that is only for when someone is in doubt."
+  // The prefix was identical on every pin, so it said nothing and took most of
+  // the label to say it. The difference he asked for is entirely in the word.
+  ok("the label is the theme word, in the reader's language",
+     /const best = theme \? entryWord\(THEME_LABEL\[theme\] \|\| "", code\) : "";/.test(chatCode)
      && /const uiCode = String\(lang\?\.tag \|\| ""\)\.split\("-"\)\[0\]\.toLowerCase\(\);/.test(chatCode)
      && /const code = uiCode;/.test(chatCode));
+  ok("and no prefix is put in front of it anywhere",
+     !/bestFor|Best if you want/.test(chatCode));
 
   // ── AND THE LINE UNDER THE MAP, WHICH WAS NOT ────────────────────
   //
@@ -45727,16 +46106,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the label carries the name and the line under it",
      /`<span class="pin-name">\$\{esc\(p\.place\?\.name \|\| ""\)\}<\/span>`\s*\+ \(best \? `<span class="pin-best">\$\{esc\(best\)\}<\/span>` : ""\)/
        .test(chatCode));
-  // His words, and read from the catalogue rather than typed into the
-  // component, because it is chrome and the rest of the chrome is read from
-  // there. The German column takes a different SHAPE rather than a translation
-  // of the English one, since the verb would go to the end of it.
-  ok("the sentence is written in all three languages",
-     ["en", "da", "de"].every(c => String(M.UI_STRINGS["map.bestFor"]?.[c] || "").trim()));
-  ok("and neither column is English wearing another label",
-     M.UI_STRINGS["map.bestFor"].da !== M.UI_STRINGS["map.bestFor"].en
-     && M.UI_STRINGS["map.bestFor"].de !== M.UI_STRINGS["map.bestFor"].en);
-  ok("and the Danish one is Danish", /hvis du/i.test(M.UI_STRINGS["map.bestFor"].da));
+  // The key went with the prefix rather than being left unused. An entry
+  // nothing renders is a translation nobody can check and three columns to keep
+  // in step for no reader.
+  ok("and the key it used is gone from the catalogue rather than left unused",
+     !Object.prototype.hasOwnProperty.call(M.UI_STRINGS, "map.bestFor"));
+  // The word itself still comes from the catalogue THEME_LABEL feeds, so a
+  // Danish reader gets a Danish word and not an English one wearing the label.
+  ok("the word is still translated rather than passed through",
+     /entryWord\(THEME_LABEL\[theme\]/.test(chatCode));
   ok("at the layout built for it", /layout="pin"/.test(chatCode));
   is("and the map writes no <img> of its own", (chatCode.match(/<img|innerHTML/g) || []).length, 0);
   ok("a pin with no showable photograph gets no card", /const shot = showablePhoto\(p\.place\);\s*if \(!shot\) \{/.test(chatCode));
@@ -45954,26 +46332,33 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       // saying something, and staggered so two read as two.
       ok("it animates in", /gx-shared-photo/.test(flat));
 
-      // ── AND IT SITS BESIDE THE SENTENCE THAT EARNED IT ───────────
+      // ── AND THE PICTURES SIT UNDER THE REPLY, ACROSS ─────────────
       //
-      // Oliver, 9 Sep 2026, with an arrow drawn at the empty space next to a
-      // reply about the National Museum: "you could put in a picture of the
-      // museum it is talking about. But only on that text right there. So it
-      // floats along with the text."
+      // They sat in the gutter beside the bubble from 9 Sep, which read well
+      // with one picture and stacked downward with three. Oliver, 10 Sep 2026:
+      // "have the pictures going under its text. So if the AI mentions multiple
+      // attractions or towns, it will become a long horrizontal line, rather
+      // than vertical."
       //
-      // The bubble is capped at 82% of the column, so that gutter is always
-      // there and was always empty. A picture under the reply pushes the next
-      // reply down; a picture beside it costs no height at all.
+      // The wrapper is a column at every width now, and the pictures pick their
+      // own direction, because how many there are is a question about the reply
+      // and not about the viewport.
       {
         const railSrc = readFileSync(join(root, "src/utils/chatRail.js"), "utf8");
         const appSrcB = readFileSync(join(root, "src/App.jsx"), "utf8");
-        ok("there is a class for the row", /export const BESIDE_ROW_CLASS = "chat-msg-row";/.test(railSrc));
-        ok("the bubble and its picture share a row above the breakpoint",
-           /@media \(min-width: \$\{RAIL_BREAKPOINT_PX\}px\)[\s\S]{0,900}?\.\$\{BESIDE_ROW_CLASS\} \{ flex-direction: row/.test(railSrc));
-        // Below it there is no gutter worth having, so it stacks exactly as it
-        // did before, which is what a phone gets.
-        ok("and stacks on a phone, as it did before",
-           /\.\$\{BESIDE_ROW_CLASS\} \{ display: flex; flex-direction: column;/.test(railSrc));
+        ok("there is a class for the row", /export const MSG_ROW_CLASS = "chat-msg-row";/.test(railSrc));
+        // THE ONE THAT WOULD PUT IT BACK. A media query turning the wrapper into
+        // a row is the whole of the old layout, so its absence is the assertion.
+        ok("nothing turns the wrapper back into a row at any width",
+           !/\.\$\{MSG_ROW_CLASS\} \{ flex-direction: row/.test(railSrc));
+        ok("and no width gives the cards a column of their own",
+           !/\.\$\{MSG_ROW_CLASS\} > \.\$\{INLINE_CARDS_CLASS\}/.test(railSrc));
+        ok("it stacks, which is what every width gets now",
+           /\.\$\{MSG_ROW_CLASS\} \{ display: flex; flex-direction: column;/.test(railSrc));
+        // A strip wider than the column scrolls rather than wrapping: a second
+        // line of cards puts back the height the row exists to save.
+        ok("and a strip too wide for the column never wraps",
+           /\.\$\{INLINE_CARDS_CLASS\} \{ flex-wrap: nowrap; \}/.test(railSrc));
         // ── AND IT DOES NOT PICK A SIDE ─────────────────────────────
         //
         // The message list already puts the traveller's own words on the right
@@ -45987,52 +46372,65 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         // bubble sits at the left edge of an invisible full-width box. A max is
         // the cap without the claim. Both found by an adversarial review, 9 Sep.
         ok("the stacked row takes its side from the list rather than choosing one",
-           /\.\$\{BESIDE_ROW_CLASS\} \{ display: flex; flex-direction: column; align-items: inherit;/.test(railSrc));
-        // Anchored on the STACKED declaration, because the rule above the
-        // breakpoint sets width: 100% on purpose: there it IS a row and the
-        // width is the point.
+           /\.\$\{MSG_ROW_CLASS\} \{ display: flex; flex-direction: column; align-items: inherit;/.test(railSrc));
         ok("and is capped rather than stretched to the full column",
-           /\.\$\{BESIDE_ROW_CLASS\} \{ display: flex; flex-direction: column;[^}]*max-width: 100%; \}/.test(railSrc)
-           && !/\.\$\{BESIDE_ROW_CLASS\} \{ display: flex; flex-direction: column;[^}]*[^-]width: 100%; \}/.test(railSrc));
-        // Never widens the row: basis 0 with a max, so it takes what the bubble
-        // left over and no more.
-        ok("the picture takes the leftover rather than making room",
-           /flex: 1 1 0; min-width: 0; max-width: \d+px/.test(railSrc));
-        ok("and the row is in the message markup", /className=\{BESIDE_ROW_CLASS\}/.test(appSrcB));
+           /\.\$\{MSG_ROW_CLASS\} \{ display: flex; flex-direction: column;[^}]*max-width: 100%; \}/.test(railSrc)
+           && !/\.\$\{MSG_ROW_CLASS\} \{ display: flex; flex-direction: column;[^}]*[^-]width: 100%; \}/.test(railSrc));
+        ok("and the row is in the message markup", /className=\{MSG_ROW_CLASS\}/.test(appSrcB));
       }
 
-      // ── TWO PICTURES, NOT THREE AND NOT A SLIDESHOW ──────────────
+      // ── ONE PICTURE, OR A ROW OF THEM ────────────────────────────
       //
-      // He offered a slideshow on his way to bed: "instead of having multiple
-      // pictures if it talks about Legoland and Tivoli, you could make it into
-      // a slideshow. Whatever you find to be the best solution."
+      // The cap was TWO, and two was a height budget: three at 88px down a
+      // 190px gutter is 264px of pictures beside a reply that is often 120px
+      // tall, which pushes the next reply off the screen. Across a row the
+      // height is the same whether there are two or four, so the budget is
+      // gone and the third card comes back.
       //
-      // It is the wrong answer for the reason this component already argued
-      // once, when a row of 124px cards became a shared picture: every image
-      // after the first would sit behind a control, and a picture nobody looks
-      // at has not appeared. Shrinking alone runs out too, because three at
-      // 62px is 330px of column beside a reply that is often 120px tall.
+      // The ceiling is CHAT_PLACE_CAP now, and that rule is about the REPLY
+      // rather than the layout: "a reply that names six places and shows six
+      // photographs is a gallery with a sentence attached, and the sentence is
+      // the product."
       //
-      // So the answer is fewer. A third place is still named in the sentence
-      // and still gets a pin on the map; it loses a thumbnail it was going to
-      // lose to a dot either way.
+      // A slideshow is still the wrong answer, for the reason this component
+      // argued once already: every picture after the first sits behind a
+      // control, and a picture nobody looks at has not appeared.
       {
         const cardsB = readFileSync(join(root, "src/components/ChatPlaceCards.jsx"), "utf8");
         ok("the cap is named once rather than typed in a slice",
-           /export const BESIDE_MAX = 2;/.test(cardsB) && /found\.slice\(0, BESIDE_MAX\)/.test(cardsB));
+           /export const CARDS_MAX = 3;/.test(cardsB) && /found\.slice\(0, CARDS_MAX\)/.test(cardsB));
+        const cardsMax = Number((cardsB.match(/export const CARDS_MAX = (\d+);/) || [])[1]);
+        const stripW = Number((cardsB.match(/export const STRIP_CARD_W = (\d+);/) || [])[1]);
+        ok("and it does not outrun the rule upstream that sets it",
+           cardsMax > 0 && cardsMax <= M.CHAT_PLACE_CAP);
         ok("and nothing hides a picture behind a control",
            !/carousel|slideshow|currentSlide|activeSlide/i.test(stripComments(cardsB)));
         const three = await rsr("src/components/ChatPlaceCards.jsx", "ChatPlaceCards",
           { places: [place, { ...place, name: "Hammershus" }, { ...place, name: "Kronborg" }], C, layout: "row" });
         const f3 = three.html.replace(/\s/g, "");
-        ok("a third place shows no third picture", !/Kronborg/.test(f3));
-        ok("while the first two do", /Hammershus/.test(f3));
-        // And two are smaller than one, which is the half of his instruction
-        // that survives: "the individual pictures will just become smaller".
-        ok("two are smaller than one", /height:88px/.test(f3));
+        ok("all three places show now", /Hammershus/.test(f3) && /Kronborg/.test(f3));
+        // ── AND THEY RUN ACROSS ────────────────────────────────────
+        // The whole of his instruction, and the one thing that makes a third
+        // card affordable: a row is the same height as one card.
+        ok("several run across rather than down", /flex-direction:row/.test(f3));
+        // Read off the unstripped html, because the width is two declarations
+        // with a space in the middle and f3 above has had every space removed.
+        ok("at a width each, because a flex row of full-width cards collapses",
+           stripW > 0 && three.html.includes(`width:${stripW}px;flex:0 0 ${stripW}px`));
+        ok("and it scrolls sideways rather than wrapping onto a second line",
+           /overflow-x:auto/.test(f3));
+        ok("a row card is shorter than a lone picture", /height:110px/.test(f3));
+        // ── AND ONE IS STILL ONE ───────────────────────────────────
+        // "Imagine you're talking to me and you want to show me a picture." A
+        // single card in a strip is that same picture made small for no reason,
+        // which is the carousel argument again. Asked directly, he chose the
+        // big picture.
         const one = await rsr("src/components/ChatPlaceCards.jsx", "ChatPlaceCards",
           { places: [place], C, layout: "row" });
-        ok("and one has the room", /height:132px/.test(one.html.replace(/\s/g, "")));
+        const f1 = one.html.replace(/\s/g, "");
+        ok("and one has the room it always had", /height:132px/.test(f1));
+        ok("and is not dressed as a strip of one",
+           !/flex-direction:row/.test(f1) && !/overflow-x:auto/.test(f1));
       }
       const two = await rsr("src/components/ChatPlaceCards.jsx", "ChatPlaceCards",
         { places: [place, { ...place, name: "Hammershus", _src: "towns" }], C, layout: "row" });

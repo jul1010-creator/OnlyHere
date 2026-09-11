@@ -297,3 +297,68 @@ export const nightlifeForTown = (town, spots, streets, cities = NIGHTLIFE_CITIES
   });
   return { streets: withBars, loose: inTown.filter(s => !claimed.has(s)) };
 };
+
+// ── BAR, CLUB, OR NOT A NIGHT OUT AT ALL ────────────────────────────
+//
+// Oliver, 10 Sep 2026, capping a night at two bars and an optional club. The
+// plan gate is the thing that has to enforce it and the plan gate holds stop
+// NAMES, so somebody has to turn a name into a kind. It is here rather than
+// there because this is where the nightlife rows live, and planGate has no
+// business carrying a copy of the library.
+//
+// isClub is already decided honestly per venue by the draft prompt: "a
+// dedicated dance club/nightclub is a club, an ordinary bar/pub/bodega is not,
+// even if it gets lively late." So there is nothing to infer here.
+//
+// EXACT NAME, DELIBERATELY. Every other matcher in this codebase is fuzzy
+// because it is reading prose, and this is reading a stop the planner copied out
+// of the pool it was handed. A miss returns null, and a null means the cap does
+// not apply to that stop, which is the behaviour the guide had yesterday. A
+// loose match would mean the cap firing on something that is not a bar, which is
+// a stop deleted from somebody's day for no reason. Wrong in the safe direction.
+export const nightKindOf = (name, spots) => {
+  const n = String(name || "").trim().toLowerCase();
+  if (!n) return null;
+  const row = (Array.isArray(spots) ? spots : [])
+    .find(s => String(s?.name || "").trim().toLowerCase() === n);
+  if (!row) return null;
+  return row.isClub ? "club" : "bar";
+};
+
+// ── AND A BAR ON ITS OWN IS A WASTED EVENING ────────────────────────
+//
+// Oliver, 10 Sep 2026: "don't send the visitor to 'Støvlen' in Vanløse.. he has
+// to go to Barcelona Bar at Gothersgade."
+//
+// A bar is not a destination. It is somewhere you might leave after twenty
+// minutes, so the thing that decides the evening is what is within two minutes
+// of it. Barcelona Bar is the right pick because Gothersgade is around it;
+// Støvlen is the wrong pick even if it is the better bar, because a wrong call
+// out there costs the whole night rather than one drink.
+//
+// THE CLAIM IS NARROW ON PURPOSE, and it is the only one that can be checked
+// without guessing: this venue is on no published street, and another venue IN
+// THE SAME TOWN is. That is the plan having chosen the isolated one when a
+// connected one was on the same shelf. It says nothing about a lone bar in a
+// town that has no bar street at all, which is not a mistake, it is that town.
+export const strandedNight = (name, spots, streets, cities = NIGHTLIFE_CITIES) => {
+  const n = String(name || "").trim().toLowerCase();
+  if (!n) return null;
+  const list = Array.isArray(spots) ? spots : [];
+  const row = list.find(s => String(s?.name || "").trim().toLowerCase() === n);
+  if (!row) return null;
+  // On a street already. Nothing to say.
+  if (streetForSpot(row, streets, cities)) return null;
+  const town = townOfLocation(String(row.location || row.mapHint || ""), cities);
+  // Nowhere to compare it against. An unplaceable venue is a different problem
+  // and this is not the gate that reports it.
+  if (!town) return null;
+  for (const other of list) {
+    if (other === row) continue;
+    const otherTown = townOfLocation(String(other?.location || other?.mapHint || ""), cities);
+    if (!otherTown || !samePlaceName(otherTown, town)) continue;
+    const street = streetForSpot(other, streets, cities);
+    if (street) return { row, better: other, street, town };
+  }
+  return null;
+};

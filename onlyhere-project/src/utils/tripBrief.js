@@ -176,14 +176,42 @@ const readWhen = (text, turns, intakeArrival, intakeDeparture, today) => {
   return rel ? { value: rel.start, precision: "day", source: "said", end: rel.end } : null;
 };
 
-const readDays = (text, intakeArrival, intakeDeparture, today = new Date()) => {
+const readDays = (text, intakeArrival, intakeDeparture, today = new Date(), turns = null) => {
   const both = daysBetween(intakeArrival, intakeDeparture);
   if (both && both > 0) return { value: both, source: "intake" };
-  // ── READ UNCAPPED, THEN CAP, AND KEEP WHAT THEY SAID ──────────────
-  // "No I mean 15 days" was stored as 14 and nothing anywhere held the 15, so
-  // no screen could say which day had been dropped or that one had been. The
-  // ceiling still applies; it just stops being invisible.
-  const raw = dayCountIn(text, { cap: Infinity });
+  // ── THE LAST NUMBER THEY SAID, NOT THE FIRST ──────────────────────
+  //
+  // Oliver, 10 Sep 2026, on a guide built for nine days: he said nine at turn
+  // 5, was told at turn 8 that his own dates were six, answered "It's 6 days.."
+  // at turn 9, and the reply agreed with him. The brief held 9 to the end and
+  // the guide was built for 9.
+  //
+  // dayCountIn scans and RETURNS ON THE FIRST MATCH, and the text it was handed
+  // is every traveller turn joined together, so the first number anyone says is
+  // the only number that can ever be read. A correction is unreachable by
+  // construction.
+  //
+  // This file has already settled this argument once, three hundred lines down,
+  // where a direct answer was overwriting a corrected one: "A correction is the
+  // one thing the traveller most needs to land, and the override was quietly
+  // eating them." That fix guarded the direct-answer path. The sentence path
+  // still read first-wins, and this is the same rule reaching it.
+  //
+  // PER TURN, not per match. Last wins across the conversation, and inside one
+  // turn dayCountIn's own first-match rule stands, so "2 days in Copenhagen and
+  // 4 in Jutland" behaves exactly as it did rather than quietly becoming 4.
+  //
+  // WHAT THIS DOES NOT FIX, stated rather than papered over: a late sentence
+  // that names days without being a trip length ("the festival runs 3 days")
+  // now wins where before it was ignored. Both rules are wrong on that sentence
+  // and only one of them is wrong on a correction, which is the common case and
+  // the one that reaches the builder.
+  const said = Array.isArray(turns) && turns.length ? turns : [String(text || "")];
+  let raw = null;
+  for (const turn of said) {
+    const n = dayCountIn(turn, { cap: Infinity });
+    if (n) raw = n;
+  }
   if (raw) {
     const value = Math.min(raw, MAX_TRIP_DAYS);
     return raw > value
@@ -552,7 +580,7 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   const set = (key, res) => { if (res) known[key] = res; };
 
   set("origin", readOrigin(t, intake.startPoint));
-  set("days", readDays(t, intake.arrival, intake.departure, today));
+  set("days", readDays(t, intake.arrival, intake.departure, today, turns));
   set("when", readWhen(t, turns, intake.arrival, intake.departure, today));
   set("party", readParty(t, intake.travelers, intake.familyMode));
   set("interests", readInterests(t, intake.interest));

@@ -363,6 +363,29 @@ const TIER_RANK = { must: 3, high: 2, worth: 1, nearby: 0 };
 // taxonomy that cannot express the thing being matched.
 export const ESSENTIALS_IN_GUIDE = 4;
 
+// ── AND ONE THEME KEEPS ITS SEAT ────────────────────────────────────
+//
+// Oliver, 10 Sep 2026: "tell the AI always to remind the user of Nightpay if
+// they have nightlife included in their trip. In the guide too, of course."
+//
+// It was not guaranteed. Four slots, ranked by how many of the brief's themes
+// each row matches, and Nightpay matches exactly one. A row answering two
+// outranks it, so a nightlife trip that also wants history, food and coast can
+// push it out with nothing said. It got into his 10 Sep build by ranking, not
+// by rule, which is the difference between a feature and a coincidence.
+//
+// ALWAYS is a reservation, not a sort order. The lowest-ranked row that made the
+// cut gives up its place, because a fourth general tip is worth less to somebody
+// going out than the app that pays for the night.
+//
+// THE THEME, NOT THE NAME. Matching on "nightpay" would hardcode one published
+// row into a matcher and break the day he renames it, and it would say nothing
+// about what makes it special. What makes it special is that it is the only
+// essential a nightlife traveller cannot get anywhere else, and if he publishes
+// a second one they compete for this seat on the ranking already here.
+export const RESERVED_THEME = "nightlife";
+
+
 export const essentialsForTrip = (rows, { convoText = "", interests = [], limit = ESSENTIALS_IN_GUIDE } = {}) => {
   const want = briefThemes(convoText, interests);
   if (!want) return [];
@@ -381,7 +404,60 @@ export const essentialsForTrip = (rows, { convoText = "", interests = [], limit 
   // tie-break, so one brief always produces one list.
   hit.sort((a, b) => (b.themes.length - a.themes.length)
     || String(a.row.name).localeCompare(String(b.row.name), "da"));
-  return hit.slice(0, Math.max(0, Number(limit) || 0));
+  const cap = Math.max(0, Number(limit) || 0);
+  const taken = hit.slice(0, cap);
+  // ── AND IT HAS NO "ONLY WHEN THEY ASKED" GUARD, DELIBERATELY ────
+  //
+  // The first version opened with `if (!want.has(RESERVED_THEME)) return taken`,
+  // on the reasoning that a trip with no nightlife in it should reserve nothing.
+  // Mutation testing deleted that line and killed nothing, and the reason is
+  // worth writing down rather than papering over with a fixture built to reach
+  // it: `themes` above is `[...want].filter(...)`, so a row's themes are always
+  // a SUBSET of what the brief asked for. If nightlife is not wanted, no row can
+  // carry it, so `held` below is always undefined and the function returns
+  // `taken` anyway. The guard could never run.
+  //
+  // A branch that cannot run is decoration, and decoration in a gate is worse
+  // than nothing because it reads like care. So it is gone and the property that
+  // made it pointless is asserted instead. Same call, and the same note, as the
+  // labelledAt guard in utils/eventDates.js.
+  //
+  // Already in on merit, which is the common case: nothing to do.
+  if (taken.some(h => h.themes.includes(RESERVED_THEME))) return taken;
+  const held = hit.find(h => h.themes.includes(RESERVED_THEME));
+  // NO ROW, NO SEAT. Nothing published matches the theme, so there is nothing to
+  // reserve it for, and an empty slot is not an improvement on a real tip. Same
+  // rule the front page tip already follows for its Nightpay link.
+  if (!held) return taken;
+  return [...taken.slice(0, Math.max(0, cap - 1)), held];
+};
+
+// ── AND THE CHAT HAS NEVER SEEN ONE AT ALL ──────────────────────────
+//
+// Oliver, 10 Sep 2026: "tell the AI always to remind the user of Nightpay if
+// they have nightlife included in their trip. In the guide too, of course."
+//
+// The guide half is the reservation above. The chat half did not exist:
+// essentialsForTrip has exactly one caller and it is inside the guide build, so
+// a traveller talking about a night out has never been told about the app that
+// pays for it until after the guide is finished, which is the wrong end of the
+// conversation for a thing you have to install before you go.
+//
+// ONE ROW, NOT FOUR. The guide can carry a block; a chat turn cannot. Four
+// essentials in a system prompt is the wall of text the comment above warns
+// about, and the give-before-you-ask rule wants ONE real thing per turn anyway.
+// So this returns the reserved row or nothing.
+//
+// NO ROW, NOTHING SAID. If nothing published matches the theme, the chat is
+// handed no block and mentions nothing, rather than naming a page that is not
+// there. Same rule the front page tip follows for its own Nightpay link.
+export const reservedEssential = (rows, { convoText = "", interests = [] } = {}) => {
+  // `!want` only, for the reason essentialsForTrip's own note gives: a themed
+  // check here could never fail either, since the find below can only match a
+  // theme the brief asked for. This one guards the .has call, not the answer.
+  if (!briefThemes(convoText, interests)) return null;
+  const picked = essentialsForTrip(rows, { convoText, interests, limit: 1 });
+  return picked.find(p => p?.themes?.includes(RESERVED_THEME)) || null;
 };
 
 // ── AS FROZEN FACTS, IN THE ROW'S OWN WORDS ──────────────────────────
