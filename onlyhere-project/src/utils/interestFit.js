@@ -477,7 +477,7 @@ export const essentialsBlock = (picked) => {
     ].filter(Boolean);
     return `- ${row.name} (${row.category || "practical"}, relevant because this trip is about ${themes.join(" and ")}): ${row.desc || ""} ${bits.join(". ")}`.trim();
   });
-  return `\nFROZEN PRACTICAL FACTS, PUBLISHED BY GEMLYX AND CHOSEN FOR THIS TRIP'S OWN INTERESTS. Every one of these is already verified, so USE THE WORDS BELOW and do not restate, improve, price or extend them. Work whichever genuinely helps into keepInMind or transportTip, naming the thing and what it costs. If none of them fits the trip you have written, leave them out rather than forcing one in. NEVER invent a Danish app, card, pass or payment system that is not in this list: an app that sounds plausible and does not exist is the single worst thing this guide can tell somebody, and these are here so there is no reason to reach for one.\n${lines.join("\n")}`;
+  return `\nFROZEN PRACTICAL FACTS, PUBLISHED BY GEMLYX AND CHOSEN FOR THIS TRIP'S OWN INTERESTS. Every one of these is already verified, so USE THE WORDS BELOW and do not restate, improve, price or extend them. Work whichever helps into keepInMind or transportTip, naming the thing and what it costs. If none of them fits the trip you have written, leave them out rather than forcing one in. NEVER invent a Danish app, card, pass or payment system that is not in this list: an app that sounds plausible and does not exist is the single worst thing this guide can tell somebody, and these are here so there is no reason to reach for one.\n${lines.join("\n")}`;
 };
 
 export const OFFER_LIMIT = 3;

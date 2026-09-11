@@ -690,7 +690,7 @@ INCLUDE these in your search every time, in addition to everything you would nor
 
 THIS IS AN ADDITION, NOT A RESTRICTION. Search everything else exactly as you normally would. If one of them has nothing about this place, that is ordinary and expected: keep looking elsewhere rather than reporting that nothing was found. A small village with no page on any of these still has real facts somewhere, and finding them is still the job.
 
-WHERE SOURCES DISAGREE, one of these outranks an anonymous aggregator or a content farm, because somebody has actually looked at it.
+WHERE SOURCES DISAGREE, one of these outranks an anonymous aggregator or a content farm, because somebody has looked at it.
 
 BUT THEY DO NOT OUTRANK A VENUE ON ITS OWN DETAILS. For anything current, a price, an opening hour, a departure time, the venue's or operator's own website is still the authority, exactly as stated above. A tourist board page beating an operator's own timetable is the specific error this rule exists to prevent.`;
 };

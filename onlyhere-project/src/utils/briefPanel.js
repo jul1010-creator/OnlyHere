@@ -221,7 +221,7 @@ export const briefSentence = (brief) => {
 const GAP_COST = {
   origin: "I don't know where you're starting, so I can't tell you whether the first day is a drive or a train.",
   days: "I don't know how long you've got, so I can't tell you what fits.",
-  when: "Without dates I can't tell you what's actually on while you're there.",
+  when: "Without dates I can't tell you what's on while you're there.",
   party: "I don't know who's coming, and that changes the pace more than anything else here.",
   interests: "I'd be guessing at what to put in.",
   transport: "I can't work out the ferries and the crossings until I know how you're getting around.",

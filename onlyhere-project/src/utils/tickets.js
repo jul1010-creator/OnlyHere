@@ -810,7 +810,7 @@ export const reconcileTickets = (onFile, match) => {
     const replaceable = filed === "unknown";
     const contradicts = filed === "on_sale";
     findings.push(contradicts
-      ? { severity: "medium", field: "ticketInfo", detail: `This entry says tickets are on sale and Ticketmaster's listing reads off sale. ${st.detail} It is also one seller's allocation rather than the event's, so a festival selling through its own site can be both at once. The entry was left as it is — check the operator's own ticket page${ev.url ? ` against ${ev.url}` : ""} and set it by hand if it has genuinely closed.` }
+      ? { severity: "medium", field: "ticketInfo", detail: `This entry says tickets are on sale and Ticketmaster's listing reads off sale. ${st.detail} It is also one seller's allocation rather than the event's, so a festival selling through its own site can be both at once. The entry was left as it is — check the operator's own ticket page${ev.url ? ` against ${ev.url}` : ""} and set it by hand if it has closed.` }
       : { severity: "low", field: "ticketInfo", detail: st.detail });
     return {
       ...base,
@@ -883,7 +883,7 @@ export const reconcileTickets = (onFile, match) => {
 // built from a pattern.
 const HUNT_RULES = `
 RULES:
-- Only URLs you have actually seen in your search results. Do not construct a URL from a pattern, and do not guess an id. A made-up link is worse than no link, because somebody will follow it.
+- Only URLs you have seen in your search results. Do not construct a URL from a pattern, and do not guess an id. A made-up link is worse than no link, because somebody will follow it.
 - If you cannot find one, say NONE. That is a real and useful answer.
 
 Answer with ONLY a JSON array of URL strings, best first, at most 4. No other text. If there are none, answer exactly: []`;
@@ -895,14 +895,14 @@ export const TICKET_HUNT_PROMPT = (name, town, kind = "festival") => {
 
 I do not want a price in your answer and I do not want a description. I want the URLs of the pages that state what it costs to get in, or where a person can buy a ticket.
 
-Look on the attraction's OWN site first. Danish museums and attractions usually keep fares on a page called billetter, priser, entré, besøg, praktisk info, plan your visit or tickets, and very often on a separate ticket subdomain of their own domain, like billet.<their-domain>. A great many of them state a free day or a free age band on their main visitor page and put the actual fare only on the ticket page, which is exactly the gap this search exists to close. If the attraction genuinely sells through a reseller, that page counts too.
+Look on the attraction's OWN site first. Danish museums and attractions usually keep fares on a page called billetter, priser, entré, besøg, praktisk info, plan your visit or tickets, and very often on a separate ticket subdomain of their own domain, like billet.<their-domain>. A great many of them state a free day or a free age band on their main visitor page and put the actual fare only on the ticket page, which is exactly the gap this search exists to close. If the attraction sells through a reseller, that page counts too.
 
 The page must be for THIS attraction and must be current, not an archived price list.
 ${HUNT_RULES}`;
   }
   return `Using real, current web search, find WHERE TICKETS ARE SOLD for the Danish event "${name}"${where}.
 
-I do not want a price and I do not want a description. I want the URLs of the pages where a person can actually buy a ticket, or where the ticket price is stated.
+I do not want a price and I do not want a description. I want the URLs of the pages where a person can buy a ticket, or where the ticket price is stated.
 
 Look for the event's own ticket page and for whichever Danish ticket agent it uses. Danish events sell through many different ones: Billetto, Billetlugen, Billetexpressen, Madbillet, Ticketmaster, Safeticket, Ticketbutler, Place2Book, NemTilmeld, or a shop on the organiser's own domain. Do not assume it is any particular one.
 

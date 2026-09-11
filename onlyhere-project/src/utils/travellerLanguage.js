@@ -292,7 +292,7 @@ export const guideLanguage = ({ said = "", lang = null } = {}) => {
 // Kept short and unconditional. It says the thing is in Danish; it does not
 // promise the traveller a solution this app cannot deliver.
 export const NO_DANISH_NOTE =
-  "THE TRAVELLER HAS SAID THEY CANNOT READ DANISH. Write every word of this guide in English. Where a step genuinely requires Danish — a phone number that will be answered in Danish, an operator page with no English version, a timetable or a booking form published only in Danish — say so plainly in the note for that stop, in one short clause, so they can plan for it. Do not translate the name of the page, the line or the company: they have to match it against what is on the screen.";
+  "THE TRAVELLER HAS SAID THEY CANNOT READ DANISH. Write every word of this guide in English. Where a step requires Danish — a phone number that will be answered in Danish, an operator page with no English version, a timetable or a booking form published only in Danish — say so plainly in the note for that stop, in one short clause, so they can plan for it. Do not translate the name of the page, the line or the company: they have to match it against what is on the screen.";
 
 // The block to append for a brief that ruled a language out. Empty when nothing
 // was ruled out, so a call site can splice it unconditionally.

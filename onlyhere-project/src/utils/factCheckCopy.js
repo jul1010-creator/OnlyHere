@@ -193,7 +193,7 @@ export const factCheckCopy = (draft, { type = "", now = "" } = {}) => {
   if (measured.length) {
     out.push("");
     out.push("DO NOT CORRECT ANYTHING BELOW THIS LINE. It was measured, not written.");
-    out.push("Google Directions and a page we actually opened produced these.");
+    out.push("Google Directions and a page we opened produced these.");
     out.push("If a claim above contradicts one of them, that is the finding worth reporting.");
     out.push("");
     out.push(...measured);
@@ -260,7 +260,7 @@ export const factCheckCopy = (draft, { type = "", now = "" } = {}) => {
   out.push("WHAT A USEFUL ANSWER LOOKS LIKE. One block per finding, in this shape:");
   out.push("");
   out.push("  Claim: the line above that is wrong, quoted");
-  out.push("  Wrong because: what the source actually says");
+  out.push("  Wrong because: what the source says");
   out.push("  Should be: the corrected value");
   out.push("  Source: one URL, the page you read it on");
   out.push("");

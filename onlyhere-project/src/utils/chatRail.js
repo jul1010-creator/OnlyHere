@@ -95,7 +95,7 @@ export const railCss = () => `
            inline style App.jsx sets could not save it either.
 
            So the column inherits its alignment rather than asserting one, and
-           the row is only full width where it is actually a row. Above the
+           the row is only full width where it is a row. Above the
            breakpoint the two live side by side and the width is the point;
            below it, the bubble is as wide as its own text and sits on
            whichever side the message list puts it. */

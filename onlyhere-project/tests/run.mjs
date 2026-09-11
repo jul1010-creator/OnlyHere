@@ -49,7 +49,7 @@ writeFileSync(entry, `
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS, foundAt, matchVariantsOf, GENERIC_ALIASES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, townOfStreet, streetForSpot, barsOnStreet, nightlifeForTown, nightKindOf, strandedNight } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { supabaseFailure, studioErrorMessage, refreshIsDead, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
-  export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
+  export { cleanPlaceKind, cleanRelation, cleanIsland, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, dateRangesInText, isoDay, anchoredEdition, venueRatherThanEvent, PROGRAMME_DATES, dateMentions, labelledAt, otherLabelAt, CALENDAR_DATES, DATE_LABEL_WINDOW, looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER, OFFICE_CONTEXT_WINDOW, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS, WRONG_EDITION, readAnotherEdition, statusIsAboutAFinishedEdition, statusRefusalFor, STATUS_REFUSAL_WHY } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isApiCoveredHost, API_COVERED_HOSTS, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES, bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK, linksInMarkdown, ticketLinksFromMarkdown, scoreTicketLinks } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
@@ -74,12 +74,12 @@ writeFileSync(entry, `
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
   export { scopeTier, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
-  export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM, islandOf, ISLAND_BY_KOMMUNE, ISLAND_LABEL } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
+  export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM, islandOf, statedIsland, namedIslandOf, islandsPresent, ISLAND_BY_KOMMUNE, ISLAND_LABEL } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES, distinctThemes } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { tierBadge, TIER_TONE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { withoutNonModes, travelModeKey as travelModeKeyForTest } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { travelLabel, isAtTravelOrigin, ORIGIN_TAIL, TRAVEL_ORIGIN as TRAVEL_ORIGIN_NAME, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, stripMarkdown, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
-  export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { fillerWordCounts, FILLER_WORDS, FILLER_ADJECTIVES, FILLER_COUNTED, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, HOUR_OF, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll, priceLabel } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { icsEscape, icsFold, icsStamp, stayMinutes, DEFAULT_STAY_MINUTES, icsUid, stopEvent, guideEvents, buildIcs, icsFilename } from ${JSON.stringify(join(root, "src/utils/calendarExport.js"))};
@@ -137,6 +137,7 @@ writeFileSync(entry, `
   export { upgradeWorthIt, onFootMinutes, MIN_UPGRADE_SAVING, COLLAPSE_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { essentials } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { ESSENTIAL_KINDS, ESSENTIAL_KIND_LABEL, KIND_RULE, kindOf, kindStated, cleanKind, kindPatch, hasKindChange, essentialsOnly, tipsOnly, unsortedEssentials, categoriesPresent, linksOf, isMerged, tabForEssential } from ${JSON.stringify(join(root, "src/utils/essentialKind.js"))};
+  export { scopeOf, isNational, placeScopes, scopeFits, essentialsForPlace, scopePatch, hasScopeChange } from ${JSON.stringify(join(root, "src/utils/essentialPlace.js"))};
   export { saleLabelledDateIn } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { spellingsIn } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { distinctiveWords as dWords } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
@@ -4679,7 +4680,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // THE ONE THAT MATTERS: an answer whose quote is not in the entry is thrown
   // away and escalated, not written.
   is("an answer from the model's own memory is refused", props[2].patch, { placeKind: "village", dayTripFrom: "Nordby" });
-  ok("and it is reported as having happened", props[2].notes.some(n => /without a quote that is actually in the entry/.test(n)));
+  ok("and it is reported as having happened", props[2].notes.some(n => /without a quote that is in the entry/.test(n)));
   is("the researched values are marked as researched, per field", props[2].detail.map(d => [d.field, d.mark]), [["placeKind", MARKS.research], ["dayTripFrom", MARKS.research]]);
   is("with its source", props[2].detail[0].sourceUrl, "https://example.dk/fano");
   is("the entry tier is tried before the paid one", calls, ["claude", "claude", "perplexity"]);
@@ -5762,7 +5763,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and is told not announced yet is a real answer",
      /that is a real answer and it is far better than a guess/.test(app3));
   ok("while a dated one is still asked whether it changed",
-     /has the date actually changed from what's on file/.test(app3));
+     /has the date changed from what's on file/.test(app3));
   // FIVE of the seven know where the draft is and say so. The other two are the
   // traveller-facing guide pipeline, which covers several towns at once, so it
   // deliberately carries only the national sources.
@@ -6152,6 +6153,243 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("through the one auth helper", /savePlaceEdit[\s\S]{0,900}await supaFetch\(/.test(app11));
   ok("and it builds no Authorization of its own", !/savePlaceEdit[\s\S]{0,900}Authorization/.test(app11));
   ok("and warns when the row is one of several", /is published \{dupes\.length\} times/.test(app11));
+
+  // ── AND THE ESSENTIALS THAT ONLY APPLY IN ONE PLACE ────────────
+  // Oliver, 11 Sep 2026: "we need to input 'essentials' on the blog pages. So
+  // essentials or tips for Odense. Could be put into the Odense Blog. And some
+  // new 'essentials' I generated belong to tips instead.."
+  //
+  // On his Essentials page, between Rejsekort and MobilePay, sit "Odense
+  // Letbane" and "FynBus Tourist". An essential row has NO place field of any
+  // kind, so neither the page nor the town blog could sort them.
+  {
+    // Real coordinates, because placeScopes derives the kommune, the island and
+    // the part of the country from them and a made-up point answers none.
+    const ODENSE = { name: "Odense", __lat: 55.4038, __lon: 10.4024 };
+    const SVENDBORG = { name: "Svendborg", __lat: 55.0597, __lon: 10.6077 };
+    const AARHUS = { name: "Aarhus", __lat: 56.1629, __lon: 10.2039 };
+    const AEROESKOEBING = { name: "Ærøskøbing", __lat: 54.8869, __lon: 10.4103, island: "Ærø" };
+
+    const letbane = { name: "Odense Letbane", kind: "essential", scope: "Odense" };
+    const fynbus = { name: "FynBus Tourist", kind: "essential", scope: "Funen" };
+    const rejsekort = { name: "Rejsekort", kind: "essential" };
+    const ferry = { name: "Ærøfærgerne", kind: "tip", scope: "Ærø" };
+
+    // ── THE TWO ROWS HE POINTED AT ──────────────────────────────
+    ok("the city's own light rail is on the city's page", M.scopeFits(letbane, ODENSE));
+    ok("and on nobody else's", !M.scopeFits(letbane, SVENDBORG));
+    // THE REASON THE FIELD IS A SCOPE AND NOT A TOWN. FynBus is Funen's bus and
+    // belongs on every Funen town's page, not only on the biggest one.
+    ok("the island's bus is on Odense's page", M.scopeFits(fynbus, ODENSE));
+    ok("and on Svendborg's too", M.scopeFits(fynbus, SVENDBORG));
+    ok("but not in Jutland", !M.scopeFits(fynbus, AARHUS));
+    // A ROW WITH NO SCOPE IS NATIONAL, which is every published row today, so
+    // this whole feature renders nothing until somebody places something.
+    ok("a national row is not for any one town", !M.scopeFits(rejsekort, ODENSE));
+    ok("and says so by name", M.isNational(rejsekort));
+    ok("while a placed one does not", !M.isNational(letbane));
+    // A STATED ISLAND REACHES THE TOWNS ON IT, which is the island field of the
+    // same day doing a second job: nobody typed Ærøskøbing on the ferry row.
+    ok("an island row reaches a town on that island", M.scopeFits(ferry, AEROESKOEBING));
+
+    // ── FOUR TIERS, AND EACH ONE ISOLATED ───────────────────────
+    // Four mutations survived a tidier version of this block, one per tier, all
+    // for the same reason: ODENSE answers "Odense" to its name AND its kommune,
+    // and islandOf falls back to the part of the country, so three of the four
+    // tiers could be deleted one at a time and Odense still matched. A tier is
+    // only tested by a town where NO OTHER TIER gives the same answer.
+    //
+    //   name     Ærøskøbing   kommune Ærø           → only the name says Ærøskøbing
+    //   kommune  Sejerø       kommune Kalundborg    → only the kommune says Kalundborg
+    //   island   Stege        kommune Vordingborg   → only the stated island says Møn
+    //   part     Ærøskøbing   island Ærø            → only the part says Funen
+    //
+    // Every kommune here was read out of data/kommuner.js at the real
+    // coordinate rather than assumed: Møn shares Vordingborg Kommune with the
+    // mainland, which is the case islandOf's own comment names, and Stege is
+    // the largest town on it.
+    const SEJEROE_TOWN = { name: "Sejerø", __lat: 55.8925, __lon: 11.1447, island: "Sejerø" };
+    const STEGE = { name: "Stege", __lat: 54.98583, __lon: 12.28750, island: "Møn" };
+    ok("the town's own name is a scope", M.scopeFits({ scope: "Ærøskøbing" }, AEROESKOEBING));
+    ok("and it is not its kommune's name", !M.scopeFits({ scope: "Ærøskøbing" }, { name: "Marstal", __lat: 54.8556, __lon: 10.5153 }));
+    ok("the kommune is a scope", M.scopeFits({ scope: "Kalundborg" }, SEJEROE_TOWN));
+    ok("the stated island is a scope", M.scopeFits({ scope: "Møn" }, STEGE));
+    ok("and Stege's kommune alone would never have said Møn", !M.placeScopes({ name: "Stege", __lat: 54.98583, __lon: 12.28750 }).includes("Møn"));
+    ok("the part of the country is a scope", M.scopeFits({ scope: "Funen" }, AEROESKOEBING));
+
+    // ── SPELLING IS NOT A FILTER ────────────────────────────────
+    // "Kobenhavn" and not "København": the kommune at that coordinate IS spelled
+    // København, so the Danish spelling matched on a bare string compare and the
+    // folding was never exercised. This one only passes through samePlaceName.
+    ok("a scope typed without the letters still matches", M.scopeFits({ scope: "Kobenhavn" }, { name: "Copenhagen", __lat: 55.6761, __lon: 12.5683 }));
+    ok("and the Danish name of a part of the country does too", M.scopeFits({ scope: "Fyn" }, ODENSE));
+    is("and the scope is cleaned like any other place field", M.scopeOf({ scope: "  near Odense " }), "Odense");
+    is("a sentence is refused rather than stored", M.scopeOf({ scope: "It covers most of the island but not the north" }), "");
+    // ── WHY THE EMPTY-SCOPE GUARD IS A FAST PATH AND NOT A RULE ──
+    // Deleting it changes no answer, which a mutation proved. The property that
+    // makes it safe is this one, so it is asserted rather than left implied.
+    is("an empty scope could never have matched anything anyway", M.placeScopes(ODENSE).some(x => M.samePlaceName(x, "")), false);
+
+    // ── NARROWEST FIRST, AND ESSENTIALS BEFORE TIPS ─────────────
+    // THE WHOLE LIST, not two facts about it. Odense Kommune is also called
+    // Odense and islandOf falls back to the part of the country, so the raw list
+    // is Odense, Odense, Funen, Funen — a town that answers to each of its names
+    // twice is a wrong answer to "every name this town answers to", whoever asks.
+    is("a town answers to each of its names once, narrowest first",
+       M.placeScopes(ODENSE).join(" | "), "Odense | Funen");
+    // And all four tiers at once, on the town that needs all four: Stege is on
+    // Møn, which shares Vordingborg Kommune with the mainland.
+    is("and all four tiers show where they differ",
+       M.placeScopes(STEGE).join(" | "), "Stege | Vordingborg | Møn | Zealand");
+    // ── AND NOTHING REACHES THE RANKING WITHOUT A PLACE IN IT ───
+    // The rank function has no "not found" branch, because the filter has
+    // already matched every row against this same list with this same
+    // predicate. Asserted rather than guarded, after a mutation showed the
+    // guard was a branch no input could produce.
+    ok("every row on a town page has a rank in that town's own list",
+       M.essentialsForPlace([fynbus, letbane, ferry, rejsekort], ODENSE)
+        .every(r => M.placeScopes(ODENSE).findIndex(x => M.samePlaceName(x, M.scopeOf(r))) >= 0));
+    ok("while a town with nothing published about it gets nothing", M.essentialsForPlace([rejsekort], AARHUS).length === 0);
+    const shown = M.essentialsForPlace([fynbus, { name: "A tip about Odense", kind: "tip", scope: "Odense" }, letbane, rejsekort], ODENSE);
+    is("national rows stay off the town page", shown.some(r => r.name === "Rejsekort"), false);
+    // An essential about the island beats a TIP about the town, because that
+    // split is the whole point of the two tabs: an essential costs you money or
+    // strands you and a tip only makes the trip better.
+    is("essentials come before tips", shown.map(r => r.name).join(" | "), "Odense Letbane | FynBus Tourist | A tip about Odense");
+    is("a row with no name is not a row", M.essentialsForPlace([{ scope: "Odense" }], ODENSE).length, 0);
+    is("and nothing in is an empty block, not a crash", M.essentialsForPlace(null, ODENSE).length, 0);
+
+    // ── PLACED WITHOUT REDRAFTING, WHICH IS THE HALF THAT MATTERS ──
+    // The prompt reaches entries written from now on. Odense Letbane and FynBus
+    // are already published, and without a box they could never be placed.
+    is("only what changed is sent", M.scopePatch(rejsekort, "Odense"), { scope: "Odense" });
+    is("nothing changed means nothing sent", M.scopePatch(letbane, "Odense"), {});
+    is("and clearing it puts the row back on the national list", M.scopePatch(letbane, ""), { scope: "" });
+    ok("the save button knows", M.hasScopeChange(rejsekort, "Odense"));
+    ok("and knows when there is nothing to do", !M.hasScopeChange(letbane, "Odense"));
+
+    // ── AND IT SURVIVES PUBLISH ─────────────────────────────────
+    // shapeForLive is an allow-list and the only insert path into
+    // gemlyx_content. It has eaten a feature twice.
+    is("a placed row reaches the database", M.shapeForLive("essential", { name: "Odense Letbane", scope: "Odense" }).scope, "Odense");
+    is("cleaned on the way through", M.shapeForLive("essential", { name: "X", scope: "near Odense" }).scope, "Odense");
+    is("and a national row stores nothing", M.shapeForLive("essential", { name: "Rejsekort" }).scope, "");
+    {
+      const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
+      ok("the essential prompt asks where it applies", /"scope": "WHERE this applies/.test(prompts));
+      ok("and says a regional operator is the region, not its biggest town", /NOT the biggest town on it/.test(prompts));
+    }
+
+    // ── THE BOX, THE BLOCK AND THE CHIP ─────────────────────────
+    ok("the studio panel has a box for it", /scopeDraft/.test(app11));
+    ok("it opens holding what is stored", /setScopeDraft\(String\(\(row\.payload \|\| \{\}\)\.scope \|\| ""\)\)/.test(app11));
+    // ONE PATCH, TWO FIELDS, and still not the payload: a PATCH that resends the
+    // whole object is how an unrelated field gets clobbered.
+    ok("and one save sends both fields", /\{ \.\.\.kindPatch\(row\.payload \|\| \{\}, kindDraft\), \.\.\.scopePatch\(row\.payload \|\| \{\}, scopeDraft\) \}/.test(app11));
+    // NOTHING IS HIDDEN FROM THE NATIONAL PAGE. A local row is labelled, not
+    // moved: a filter that quietly removes an entry from every view is the
+    // blank-page failure this project has shipped once already.
+    ok("a local row is labelled on the essentials page", /!isNational\(item\) && \(/.test(app11));
+    ok("and it is not filtered out of it", !/essentialsOnly\(essentials\)\.filter\(isNational\)/.test(app11));
+    {
+      const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+      ok("the town page draws the block", /const here = essentialsForPlace\(essentials, item\);/.test(detail));
+      ok("and draws nothing when there is nothing", /if \(!here\.length\) return null;/.test(detail));
+      // linksOf and not row.link: a merged row carries two operators and reading
+      // the singular field renders a card with no way out of it.
+      ok("a merged row keeps both its links", /const links = linksOf\(row\);/.test(detail));
+      // The heading is a reader-facing sentence, so it is in all three
+      // languages. A Danish nav over an English heading is the half-translation
+      // uiLanguage.js calls worse than none.
+      const ui = readFileSync(join(root, "src/utils/uiLanguage.js"), "utf8");
+      // ONE LINE, NOT [^}]*. The first version of this check stopped at the
+      // first closing brace, and the English value is "Sort this out in {town}"
+      // — so the scan ended inside the placeholder and reported Danish and
+      // German missing while both were sitting right there.
+      const headingLine = (ui.split("\n").find(l => l.includes('"entry.localEssentials":')) || "");
+      for (const code of ["en", "da", "de"]) {
+        ok(`the heading is written in ${code}`, new RegExp(`\\b${code}: "`).test(headingLine));
+      }
+      ok("and the town's name is filled in rather than translated", /uiT\("entry.localEssentials", lang\)\.replace\("\{town\}", item\.name\)/.test(detail));
+    }
+  }
+
+  // ── AND THE ISLAND, TYPED ONCE AND KEPT ────────────────────────
+  // Oliver, 11 Sep 2026, on searching for towns on small islands: "maybe we
+  // should put islands into a category of towns instead. Sejerø as an example.."
+  //
+  // The drafting prompt only reaches entries written from today on, and the
+  // islands are ALREADY PUBLISHED — this file's own opening notes have Samsø as
+  // rows 24 and 79. Without a box in this editor a stated island could never
+  // reach one of them, so the feature would have shipped as an empty filter.
+  is("on an island is stripped to the island", M.cleanIsland("on Ærø"), "Ærø");
+  is("and the phrase the field already means", M.cleanIsland("the island of Ærø"), "Ærø");
+  is("a plain island name is untouched", M.cleanIsland("Sejerø"), "Sejerø");
+  is("a two word island survives", M.cleanIsland("Lolland Falster"), "Lolland Falster");
+  is("a sentence is refused rather than stored", M.cleanIsland("It is a forty minute ferry from Havnsø"), "");
+  is("nothing in, nothing out", M.cleanIsland(""), "");
+  // NOT CHECKED AGAINST A LIST OF ISLANDS. Denmark has more than four hundred and
+  // the subject of this site is the ones nobody has heard of, so a list here
+  // would refuse exactly the entries it exists to serve.
+  is("an island nobody has heard of is still an island", M.cleanIsland("Egholm"), "Egholm");
+
+  const isle = { name: "Sejerø", placeKind: "village", partOf: "", dayTripFrom: "Kalundborg", island: "", desc: "keep me" };
+  is("the island reaches the patch", M.placePatch(isle, { placeKind: "village", dayTripFrom: "Kalundborg", island: "Sejerø" }), { island: "Sejerø" });
+  is("and not when it did not change", M.placePatch({ ...isle, island: "Sejerø" }, { placeKind: "village", dayTripFrom: "Kalundborg", island: "Sejerø" }), {});
+  is("a sentence is cleaned on the way in", M.placePatch(isle, { placeKind: "village", dayTripFrom: "Kalundborg", island: "on Sejerø" }), { island: "Sejerø" });
+  ok("and the save button knows about it", M.hasPlaceChange(isle, { placeKind: "village", dayTripFrom: "Kalundborg", island: "Sejerø" }));
+  // AN ISLAND NAMED AFTER ITSELF IS NOT A CONTRADICTION, unlike a parent named
+  // after itself one block up. Sejerø the town is ON Sejerø the island, and
+  // refusing that would refuse the example he gave.
+  is("an island with its own name is fine", M.placeIssues({ name: "Sejerø", placeKind: "village", island: "Sejerø" }), []);
+  ok("but a sentence in it is named with the value",
+     M.placeIssues({ name: "Sejerø", placeKind: "village", island: "a small island off Kalundborg" }).some(m => /island reads as a sentence/.test(m)));
+  ok("the editor has a box for it", /placeDraft\.island/.test(app11));
+  ok("and it opens holding what is stored", /island: String\(pl\.island \|\| ""\)/.test(app11));
+
+  // ── AND IT SURVIVES PUBLISH, WHICH IS WHERE FEATURES DIE HERE ──
+  // shapeForLive is an allow-list and the ONLY insert path into gemlyx_content.
+  // It has eaten a feature twice: placeKind/partOf/dayTripFrom on 8 Aug, and the
+  // entry-voice realityCheck on 10 Aug. Both were in a prompt, both were
+  // rendered, and neither was ever stored.
+  is("a stated island reaches the database", M.shapeForLive("town", { name: "Sejerø", characterAndFit: "x", island: "Sejerø" }).island, "Sejerø");
+  is("cleaned on the way through", M.shapeForLive("town", { name: "Sejerø", characterAndFit: "x", island: "on Sejerø" }).island, "Sejerø");
+  is("and an entry that says nothing stores nothing", M.shapeForLive("town", { name: "Aarhus", characterAndFit: "x" }).island, "");
+  // The paste-ready codegen is the other publish path and the two have drifted
+  // before: they are two hand-written lists of the same fields.
+  ok("the paste-ready code carries it too", /island: \$\{J\(cleanIsland\(t\.island\)\)\}/.test(app11));
+  // And the model has to be asked for it, or every new town leaves it empty.
+  {
+    const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
+    ok("the town prompt asks for the island", /"island": "the Danish island this place is ON/.test(prompts));
+    ok("and tells it to leave the field empty rather than guess", /EMPTY when you are not certain which island it is/.test(prompts));
+  }
+
+  // ── THE FILTER IT ALL EXISTS FOR ───────────────────────────────
+  // A field nothing reads is a field nobody can see. townMatches is the one
+  // predicate the grids, the areas section and the empty-state line all read, so
+  // the axis has to be in it or the chip does nothing.
+  ok("the towns page filters on it", /const townIslandOk = \(t\) => !townIsland \|\| islandOfTown\(t\) === townIsland;/.test(app11));
+  ok("and the grids read it", /const townMatches = \(t\) => [^;]*townIslandOk\(t\)/.test(app11));
+  ok("and so does the areas section", /const areaMatches = \(t\) => [^;]*townIslandOk\(t\)/.test(app11));
+  ok("clear all clears it", /const clearTownFilters = \(\) => \{[^}]*setTownIsland\(null\)/.test(app11));
+  ok("and it counts towards the badge on the Filters button", /const activeTownFilters = \[[^\]]*townIsland/.test(app11));
+  // COUNTS ON EVERY OPTION, and every count honours every OTHER live axis. A
+  // count that ignores one promises a number the grid will not deliver.
+  for (const [which, re] of [
+    ["worth the trip", /const nWithKind = \(k\) =>[^;]*townIslandOk\(t\)/],
+    ["what it is for", /const nWithTheme = \(th\) =>[^;]*townIslandOk\(t\)/],
+    ["size of place", /const nWithSize = \(z\) =>[^;]*townIslandOk\(t\)/],
+  ]) ok(`the ${which} counts see the island filter`, re.test(app11));
+  ok("and the island counts see everything else", /const nWithIsland = \(v\) =>[^;]*townKindOk\(t\) && townSizeOk\(t\) && townThemeOk\(t\)/.test(app11));
+  // ONE DEFINITION OF WHICH ISLANDS ARE PRESENT, read by both pages, so the
+  // towns row and the attractions row cannot come to disagree about what counts
+  // as present or what order to print.
+  is("both pages build the row from the same helper", (app11.match(/islandsPresent\(/g) || []).length, 2);
+  // namedIslandOf and not islandOf on this page: the part-of-the-country row is
+  // directly above these filters, so the landmass fallback would print Zealand
+  // twice under two headings meaning two different things.
+  ok("the towns row stops before the landmass fallback", /new Map\(towns\.map\(t => \[t, namedIslandOf\(/.test(app11));
 }
 
 // ── "1 SOURCE... WOULD INSTANTLY MAKE PEOPLE DELETE THE APP" ─────
@@ -6666,6 +6904,79 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // and this one sometimes is. Merging them would make two uses of "actually"
   // count toward the threshold that marks an entry as a high-severity problem.
   ok("and deliberately NOT on the outright-ban list", !M.AI_TELL_PHRASES.includes("actually"));
+
+  // ── AND THE THIRD WORD HE NAMED ────────────────────────────────
+  // Oliver, 10 Sep 2026: "'Genuinely' and 'genuine' and 'actually' are three
+  // words that are used too much, and in cases where it really isn't needed."
+  ok("the adjective is counted", "genuine" in M.fillerWordCounts("A genuine find, and a genuine bargain."));
+  ok("and it is NOT on the list that gets cut at read time", !M.FILLER_WORDS.includes("genuine"));
+  // WHY THE TWO LISTS ARE NOT ONE. Every word on FILLER_WORDS is an adverb and
+  // an adverb is optional; an adjective is not. From his own Essentials page,
+  // before this was written: "For food and a more genuine feel". Cut the word
+  // and the reader gets "a more feel".
+  is("cutting an adverb leaves a sentence", M.trimFillerRuns(["It is genuinely worth it. It is genuinely free."])[0],
+     "It is genuinely worth it. It is free.");
+  is("and the adjective is left for a person to rewrite",
+     M.trimFillerRuns(["A more genuine feel. A more genuine street."])[0], "A more genuine feel. A more genuine street.");
+  ok("both lists are counted", M.FILLER_COUNTED.includes("genuine") && M.FILLER_COUNTED.includes("actually"));
+
+  // ── AND THE INSTRUCTIONS NO LONGER TEACH THE WORDS ─────────────
+  // Oliver again, on the same day: "Opus and Fable need to dig around the page
+  // and rewrite some of these." helpers.js wrote down why that has to reach the
+  // prompts and not only the output: "A model writes in the register of its
+  // instructions. It was being asked for the word on every draft and then
+  // flagged for using it."
+  //
+  // The sweep found 94 in studioPrompts.js, 209 in App.jsx and 111 across the
+  // rest, all outside comments, all in prompt or reader-facing text. What is
+  // left is the handful that has to stay, each named with its reason, and this
+  // is an EXACT count so a new one cannot arrive quietly under an old total.
+  {
+    const KEPT = {
+      // The rulebook has to be able to name the words it bans, and its two
+      // worked examples of when "actually" earns its place have to use it.
+      "src/utils/studioContent.js": 10,
+      // RIGHT_HALF MATCHES the word in what a person typed, to tell a correction
+      // from a comment. Sweeping a detector is not the same as improving prose.
+      "src/utils/correction.js": 6,
+      // The lists themselves.
+      "src/utils/helpers.js": 5,
+      // NO_TRANSPORT reads "driving is genuinely the only" out of MODEL output.
+      "src/App.jsx": 1,
+      "src/utils/entryAudit.js": 1,
+      // CORRECTION_LEAD reads "actually" at the start of a traveller's message.
+      "src/utils/directAnswer.js": 1,
+      // A stop word: a traveller types it, so the parser has to know it.
+      "src/utils/exclusions.js": 1,
+    };
+    const WORDS = /\b(actually|genuinely|truly|simply|genuine)\b/gi;
+    const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap(e => {
+      const full = join(dir, e.name);
+      return e.isDirectory() ? walk(full) : (/\.(js|jsx)$/.test(e.name) ? [full] : []);
+    });
+    const found = {};
+    for (const full of walk(join(root, "src"))) {
+      // root already ends in a separator, so slicing root.length + 1 ate the
+      // first letter of every path and the allow-list matched nothing.
+      const rel = full.slice(root.length).replace(/^[\\/]+/, "").split(sep).join("/");
+      let n = 0;
+      for (const line of readFileSync(full, "utf8").split("\n")) {
+        const st = line.trimStart();
+        // Comments are for the people reading the code, not for the model or
+        // the traveller, so they are out of scope. This skips the opener of a
+        // block comment and every line of a // run; a JSX block comment's
+        // middle lines are swept with everything else, which is why the ones in
+        // DetailPage and GuidePage came out with the prose.
+        if (st.startsWith("//") || st.startsWith("*") || st.startsWith("/*")) continue;
+        n += (line.match(WORDS) || []).length;
+      }
+      if (n) found[rel] = n;
+    }
+    is("nothing outside the named exceptions asks the model for these words",
+       Object.keys(found).filter(k => !(k in KEPT)).sort(), []);
+    is("and each exception still holds exactly what it was allowed",
+       Object.entries(KEPT).filter(([k, n]) => (found[k] || 0) !== n).map(([k, n]) => `${k}: allowed ${n}, found ${found[k] || 0}`), []);
+  }
 
   const tic = M.auditEntry({ id: 9, type: "town", payload: {
     name: "Somewhere", desc: "It is actually free. The bakery is actually good. Actually worth the trip.",
@@ -7319,7 +7630,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the door-to-door figure written as time on a train is caught",
      found.some(p => /2h51min.*DOOR TO DOOR/.test(p)));
   ok("and the sentence says what the ride actually was",
-     found.some(p => /actually moving is 2h 30min/.test(p)));
+     found.some(p => /moving is 2h 30min/.test(p)));
   // ── THE ONE A BAG OF NUMBERS CANNOT CATCH ────────────────────────
   // 7 minutes lands within a minute of this route's measured WAITING time, so
   // asking only "was this number measured" waves it through. The claim is
@@ -19549,7 +19860,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // them, not added to. The checker was handed the raw research the writer
   // never saw, and the comment above it asserted they were the same research.
   ok("the checker is given the notes the writer actually read",
-    /AND THE ORGANISED NOTES THE WRITER ACTUALLY READ/.test(appC));
+    /AND THE ORGANISED NOTES THE WRITER READ/.test(appC));
   ok("and told that a claim in the notes was not invented by the writer",
     /was NOT invented by the writer even if the raw research does not obviously support it/.test(appC));
 }
@@ -24696,7 +25007,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Empty is its own case and a worse one.
   const none = describeEvidence(evidenceStanding({ sources: [], ownSite: "x.dk" }), { untracedPrices: 0 });
   ok("an empty list says nothing is sourced", /^NOTHING IS SOURCED/.test(none));
-  ok("and offers both explanations rather than one", /genuinely unwritten about/.test(none) && /source filter refused/.test(none));
+  ok("and offers both explanations rather than one", /unwritten about/.test(none) && /source filter refused/.test(none));
 
   // ONE INDEPENDENT PAGE is thin but not the same failure, so it gets its own
   // sentence rather than being folded in with the other two.
@@ -34507,6 +34818,87 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // left out or quietly called an island.
   is("Jutland is labelled as the mainland", ISLAND_LABEL.Jutland, "Jutland (mainland)");
   is("and the islands are not relabelled", ISLAND_LABEL["Ærø"], undefined);
+
+  // ── AND SEJERØ, WHICH THE KOMMUNE TABLE CANNOT SEE ─────────
+  // Oliver, 11 Sep 2026: "I tried searching for towns 'on small islands'..
+  // nothing popped up. I think that's fine, maybe we should put islands into a
+  // category of towns instead. Sejerø as an example.."
+  //
+  // Sejerø has around three hundred people on it and it shares KALUNDBORG
+  // Kommune with a long stretch of Zealand mainland, so both derivations answer
+  // "Zealand": true, and useless, because the one thing worth knowing about
+  // Sejerø is the thing neither can reach.
+  const SEJEROE = { name: "Sejerø", __lat: 55.8925, __lon: 11.1447 };
+  is("without the field, the island filter calls Sejerø Zealand",
+     islandOf(SEJEROE, "Kalundborg"), "Zealand");
+  is("and with it, Sejerø is Sejerø",
+     islandOf({ ...SEJEROE, island: "Sejerø" }, "Kalundborg"), "Sejerø");
+  // STATED BEATS DERIVED, which is the whole point of the tier and is only
+  // visible where the two disagree. Strynø is its own island inside LANGELAND
+  // Kommune, so the kommune table would file it under Langeland.
+  is("Strynø is not Langeland", islandOf({ name: "Strynø", __lat: 54.8936, __lon: 10.6000, island: "Strynø" }, "Langeland"), "Strynø");
+  // A TOWN ON AN ISLAND AND THE ISLAND ITSELF ARE THE SAME FIELD, which is why
+  // this is not a fifth PLACE_KINDS value: Ærøskøbing would have had to choose
+  // between being a town and being on Ærø.
+  is("Ærøskøbing is a town on Ærø", islandOf({ ...aeroe, name: "Ærøskøbing", island: "Ærø", placeKind: "town" }, "Ærø"), "Ærø");
+  // An empty or blank field is not an answer and must fall through, or one
+  // published row with a stray space in the box empties its own chip.
+  is("a blank island falls through to the kommune", islandOf({ ...SEJEROE, island: "   " }, "Ærø"), "Ærø");
+  is("and statedIsland trims what it is given", M.statedIsland({ island: "  Ærø " }), "Ærø");
+  is("and reads nothing out of an entry without one", M.statedIsland({ name: "Aarhus" }), "");
+
+  // ── THE TOWNS PAGE STOPS ONE TIER EARLIER ───────────────
+  // It has a part-of-the-country row directly above its filters, so the landmass
+  // fallback would put Zealand in two rows meaning two different things.
+  is("a named island still answers", M.namedIslandOf({ ...SEJEROE, island: "Sejerø" }, "Kalundborg"), "Sejerø");
+  is("the kommune tier still answers", M.namedIslandOf(aeroe, "Ærø"), "Ærø");
+  is("but the landmass fallback does not", M.namedIslandOf({ __lat: 56.1629, __lon: 10.2039 }, "Aarhus"), "");
+  is("while islandOf still answers it", islandOf({ __lat: 56.1629, __lon: 10.2039 }, "Aarhus"), "Jutland");
+
+  // ── ONLY THE ISLANDS SOMETHING IS PUBLISHED ON ───────────
+  // Same deal partsPresent makes: a chip that returns nothing is a filter
+  // offering an empty room. Danish order, so Æ comes after S and not before A.
+  {
+    // ── THE POOL IS IN NONE OF THE THREE ORDERS, ON PURPOSE ──
+    // Two mutations got through a tidier version of this fixture, and both for
+    // the same reason: it was already in the right order by accident.
+    //
+    //   sort(daCompare)  Sejerø, Ærø, Årø   ← Danish: Æ then Ø then Å, after Z
+    //   sort()           Sejerø, Årø, Ærø   ← UTF-16: Å is 0xC5, Æ is 0xC6
+    //   no sort at all   Årø, Ærø, Sejerø   ← the order they are written below
+    //
+    // Three different answers, so the fixture can now tell a Danish sort from a
+    // default one AND from no sort. With only Sejerø and Ærø in it all three
+    // agreed and the comparator was decorative.
+    const pool = [
+      { name: "Årø", island: "Årø" },
+      { name: "Ærøskøbing", island: "Ærø" },
+      { name: "Kalundborg" },                 // nothing stated, nothing derived
+      { name: "Nordby", island: "Ærø" },      // the same island twice
+      { name: "Sejerø", island: "Sejerø" },
+      { island: "Anholt" },                   // no name, so not a published row
+      null,
+    ];
+    const got = M.islandsPresent(pool, (e) => M.statedIsland(e));
+    is("one chip per island, however many towns are on it", got.join("|"), "Sejerø|Ærø|Årø");
+    is("and an entry with no island gets no chip of its own", got.includes(""), false);
+    is("a pool with nothing in it is an empty row, not a crash", M.islandsPresent(null).length, 0);
+  }
+
+  // ── AND TYPING THE ISLAND FINDS THE TOWN ──────────────
+  // He searched for the islands before he asked for the chip. The chip is the
+  // answer he chose, and this is the other half: somebody who knows the island
+  // but not the town types the island.
+  ok("searching an island finds a town on it",
+     M.matchesSearch({ name: "Nordby", island: "Ærø" }, "Ærø"));
+  // fold() maps ø to a bare o and æ to ae, so this is "sejero" and not
+  // "sejeroe". Checked against the function rather than guessed: the ø/oe
+  // spelling does NOT match and asserting it would have been a test for
+  // behaviour this app does not have.
+  ok("and the Danish folding means the letters are optional",
+     M.matchesSearch({ name: "Sejerø By", island: "Sejerø" }, "sejero"));
+  ok("while a town on another island is not a match",
+     !M.matchesSearch({ name: "Nordby", island: "Ærø" }, "sejero"));
 
   // ── THE ROW IS SHORT, AND NOTHING WAS DELETED TO SHORTEN IT ────
   const fb2 = readFileSync(join(root, "src/components/FilterBar.jsx"), "utf8");
@@ -44446,7 +44838,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("and it names the Danish words those pages use", /billetter/.test(forPlace) && /entré/.test(forPlace));
     ok("a festival still gets the agents", /Billetto/.test(forEvent));
     ok("and both keep the rule that made the hunt worth having",
-      [forPlace, forEvent].every(p => /Only URLs you have actually seen/.test(p)));
+      [forPlace, forEvent].every(p => /Only URLs you have seen/.test(p)));
     ok("and both still ask for JSON only", [forPlace, forEvent].every(p => /JSON array of URL strings/.test(p)));
     // The default keeps every existing caller on the event wording.
     ok("the default is the event shape", /Danish event/.test(TICKET_HUNT_PROMPT("X", "Y")));
@@ -49074,7 +49466,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and says something a reader can act on",
      /Nearest public transport: \$\{craftDetail\.nearestStation\}/.test(appR));
   ok("with an honest fallback when there is no station on file",
-     /genuinely awkward to reach without your own transport/.test(appR));
+     /awkward to reach without your own transport/.test(appR));
   // The flag still decides WHETHER the box appears, which is what it is for.
   ok("the flag still gates the box", /craftDetail\.transportWarning && \(/.test(appR));
 
@@ -49213,7 +49605,6 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     "src/utils/redraftImpact.js:redraftBrief",
     "src/utils/redraftImpact.js:redraftRisks",
     "src/utils/redraftImpact.js:townDependents",
-    "src/utils/regions.js:kommuneOf",
     "src/utils/regions.js:regionsPresent",
     "src/utils/regions.js:sameRegion",
     "src/utils/runLog.js:currentLog",

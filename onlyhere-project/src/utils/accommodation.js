@@ -282,7 +282,7 @@ export const budgetTierMismatch = (level, accommodationText) => {
     return {
       level: lvl, tier,
       detail: lvl === "generous"
-        ? `They said money is not the constraint and this recommends a ${tier}. Suggest somewhere that matches what they told you, or say plainly why the ${tier} is genuinely the better choice here.`
+        ? `They said money is not the constraint and this recommends a ${tier}. Suggest somewhere that matches what they told you, or say plainly why the ${tier} is the better choice here.`
         : `They said the budget is tight and this recommends a ${tier}.`,
     };
   }
@@ -416,7 +416,7 @@ export const stayProblems = (days, budgetSaid = "") => {
     // exists for exactly that and has a grounding rule attached to it.
     const name = !rec && namedProperty(text);
     if (name) {
-      out.push(`The where-to-stay sentence names a specific place, "${name}", instead of an area. There is a separate field for a named property with a rule about only using one the search actually found; a name written into the prose skips that rule.`);
+      out.push(`The where-to-stay sentence names a specific place, "${name}", instead of an area. There is a separate field for a named property with a rule about only using one the search found; a name written into the prose skips that rule.`);
     }
   }
   return out;

@@ -192,7 +192,7 @@ ${TIERS.map(t => `- "${t.value}" — ${TIER_MEANING[t.id]}`).join("\n")}
 
 MOST PLACES ARE NOT AT THE TOP. A country has a handful of "Can't Miss Out" places, not one per region, and a scale where everything is near the top tells a reader nothing. If two tiers both seem arguable, pick the LOWER one: overselling a place costs somebody a day of their trip, underselling it costs them nothing they will ever find out about.
 
-Judge the place as it actually is, not as its own marketing describes it. A town's website calls it unmissable; that is not evidence. What matters is whether a stranger who went there on your word would feel the journey was repaid.`;
+Judge the place as it is, not as its own marketing describes it. A town's website calls it unmissable; that is not evidence. What matters is whether a stranger who went there on your word would feel the journey was repaid.`;
 
 export const tierOf = (entry) => {
   const t = String(entry?.tier ?? "").trim();

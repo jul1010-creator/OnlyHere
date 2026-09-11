@@ -129,7 +129,7 @@ export const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather, comp
               <div style={{ fontSize: 27, fontWeight: 600, fontFamily: "'Fraunces', serif", color: ready ? sky.ink : C.muted, lineHeight: 1.1, marginTop: 6 }}>
                 {ready ? `${Math.round(d.temperature_c)}°` : "--"}
               </div>
-              {/* Only ever shown when the number is genuinely there. An empty
+              {/* Only ever shown when the number is there. An empty
                   line is better than a zero standing in for "not loaded". */}
               <div style={{ fontSize: 10.5, color: ready ? `${sky.ink}9a` : C.muted, marginTop: 3, minHeight: 13 }}>
                 {rain != null && rain > 0 ? `${rain} mm rain` : wind != null ? `${wind} m/s wind` : ""}

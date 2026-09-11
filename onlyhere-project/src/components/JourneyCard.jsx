@@ -68,7 +68,7 @@ export const JourneyCard = ({ item }) => {
 
       {/* WHERE YOU GET OFF, which is the single most useful line here and the
           one a reader cannot get from a duration. It is the last leg's
-          destination, so it is where the journey actually puts you down, not
+          destination, so it is where the journey puts you down, not
           the nearest transit stop by distance: see arrivalStop for the ferry
           slip to two islands that answer once produced. */}
       {getOff && (

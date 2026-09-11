@@ -57,7 +57,7 @@ export const StopChangeSheet = ({ stop, guide, point, library, nearby, onSwap, o
         </>
       )}
 
-      {/* ── SCREEN TWO: WHAT I CAN ACTUALLY VOUCH FOR ──────────────
+      {/* ── SCREEN TWO: WHAT I CAN VOUCH FOR ──────────────
           Every candidate is a published, researched, sourced row with real
           coordinates. Nothing here can produce a place that does not exist,
           which is the entire argument for doing it this way rather than asking

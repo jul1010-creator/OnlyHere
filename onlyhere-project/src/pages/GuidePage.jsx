@@ -939,7 +939,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             )}
             {/* Desktop has no share sheet, and "copy it then go and find the
                 app yourself" is where a share flow loses people. These two
-                cover almost everything a trip actually gets sent through. */}
+                cover almost everything a trip gets sent through. */}
             {!canSend && (
               <div style={{ display: "flex", gap: 14, marginTop: 12 }}>
                 <a href={`https://wa.me/?text=${encodeURIComponent(`${shareMessage(guide)} ${shareUrl}`)}`}
@@ -955,7 +955,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             <TripCalendarCard guide={guide} guideUrl={shareUrl} />
 
             {/* The rule stated where the action is, which is the only place a
-                rule in a terms page ever actually lands. Note that every target
+                rule in a terms page ever lands. Note that every target
                 this panel offers — the native sheet, WhatsApp, email — is
                 person to person, so the panel and the rule already agree: this
                 is for the people coming with you. */}
@@ -1061,7 +1061,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
         {/* ── AT A GLANCE, BEFORE THE DETAIL ──────────────────────────
             The answer to "how big is this trip", which the page previously made
             you scroll the whole thing to work out. Only figures that are
-            genuinely known appear: tripShape withholds a total rather than
+            known appear: tripShape withholds a total rather than
             build one out of the legs that happened to resolve. */}
         {/* ── WHAT KIND OF TRIP, BEFORE HOW BIG ──────────────────────
             The numbers below answer "how big" and dodge "what shape". Both are
@@ -1178,7 +1178,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                       about the neighbours of a place it never described.
                       stopCard puts the guide's own words first and the distances
                       after, which is the order a reader who has just flown down
-                      to a pin actually wants them in. */}
+                      to a pin wants them in. */}
                   <div style={{ fontSize: 11, color: C.light, lineHeight: 1.55, marginTop: 5 }}>
                     {/* stopName, not name: the pin's `name` is "Day 2 · LEGO House" and the
                         published rows are called "LEGO House", so the exclusion never
@@ -1222,7 +1222,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
         {/* ── DECISIONS, NOT INFORMATION ─────────────────────────────
             The real anxiety of a first trip abroad is not what to see, it is
             what you have to sort out before you go. Only things the guide can
-            genuinely stand up appear here: a dated event, a ferry, a bed.
+            stand up appear here: a dated event, a ferry, a bed.
             Nothing pads it out, because a "book ahead" list that repeats itself
             is one a traveler learns to skip. */}
         {(() => {
@@ -1279,7 +1279,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                   <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>{v}</span>
                 </div>
               ))}
-              {/* ── WHAT YOU ACTUALLY PAY FOR ───────────────────────
+              {/* ── WHAT YOU PAY FOR ───────────────────────
                   Oliver, 26 Aug 2026, replacing one Tiqets browse link: "I'd
                   rather you give them a list of what they have to pay for
                   instead. Direct links."
@@ -1827,7 +1827,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 attached to nothing. A day is a SEQUENCE, so it now renders as
                 one: a single column of stop cards with the transport chip
                 sitting on a small connector line BETWEEN the two stops it
-                actually joins. The cards themselves are unchanged (same photo
+                joins. The cards themselves are unchanged (same photo
                 height as the Towns nav, per Oliver's earlier call). */}
             <div style={{ maxWidth: 620 }}>
               {/* Redesign pass: stops became real cards (surface, border, radius) instead
@@ -2302,7 +2302,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                     {/* Same honesty as Getting back, and for the same reason:
                         every other distance on this page is a measured road
                         journey and this one is not. */}
-                    {/* The note has to match what was actually done. Saying
+                    {/* The note has to match what was done. Saying
                         "straight line, not a measured route" under a measured
                         route is the same class of error as the estimate it
                         replaced, in the opposite direction: it throws away
@@ -2464,7 +2464,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             because it is about the document and not about the journey. Small and
             quiet on purpose: a large legal box on a travel guide reads as a
             threat, gets skipped, and makes the page feel like a licence
-            agreement. Two lines somebody will actually read beat six they will
+            agreement. Two lines somebody will read beat six they will
             not. The wording, and what it deliberately does NOT claim, is in
             utils/rights.js. */}
         {/* ── ASKING, ONCE, AT THE END ───────────────────────────────
@@ -2472,9 +2472,9 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             Guide that we'd appreciate if they use our affiliates."
 
             At the foot, after the trip is written, and ONLY when the page
-            actually carries a partner link. The sentence is a claim about this
+            carries a partner link. The sentence is a claim about this
             page — "some of the booking links in this guide" — and on a guide
-            that sends you nowhere paid it is simply false.
+            that sends you nowhere paid it is false.
 
             Counted off the rendered DOM rather than off what the app is capable
             of, so it can never promise a link the page does not have. See

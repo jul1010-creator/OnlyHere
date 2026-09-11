@@ -520,7 +520,7 @@ The claim: ${claim?.says || ""}${claim?.proposed ? `\nThe correction proposed: $
 The page cited: ${host}
 
 Answer with ONLY strict JSON:
-{"says":"supports"|"contradicts"|"silent","quote":"the exact sentence from the page, or an empty string","correctValue":"the value the page actually gives, or an empty string"}
+{"says":"supports"|"contradicts"|"silent","quote":"the exact sentence from the page, or an empty string","correctValue":"the value the page gives, or an empty string"}
 
 "supports"    the page states this, or states something that plainly entails it.
 "contradicts" the page states something incompatible with it. This is the most
@@ -582,7 +582,7 @@ Rules for your answer, and they are strict:
 - If you cannot find a primary source, say so plainly. "Could not confirm" is a correct and useful answer here. Do not reason your way to a conclusion.
 
 Respond with ONLY strict JSON:
-{"verdict": "confirmed" | "rejected" | "unresolved", "entryIsAlreadyCorrect": true | false | null, "correctValue": "the real verified value, or an empty string", "evidence": "one or two sentences on what the source actually says", "sourceUrl": "the primary source URL, or an empty string"}
+{"verdict": "confirmed" | "rejected" | "unresolved", "entryIsAlreadyCorrect": true | false | null, "correctValue": "the real verified value, or an empty string", "evidence": "one or two sentences on what the source says", "sourceUrl": "the primary source URL, or an empty string"}
 
 "confirmed" means the criticism is right and the entry needs changing. "rejected" means the criticism is wrong and the entry is already correct, and your evidence must say why. "unresolved" means no primary source settled it.
 
@@ -649,7 +649,7 @@ export const verifyTransportClaim = async (claim, entry, { directions, origin = 
       return {
         verdict: claimsNoFerryNeeded ? "rejected" : "confirmed",
         correctValue: "A ferry crossing is required, there is no road connection.",
-        evidence: "Measured live: the same driving query with ferries banned returns no route at all, so no road reaches this place and the crossing is genuinely required.",
+        evidence: "Measured live: the same driving query with ferries banned returns no route at all, so no road reaches this place and the crossing is required.",
         sourceUrl: "",
       };
     }
@@ -953,7 +953,7 @@ Below are the bulk changes his Studio knows how to make. Each one fills specific
 
 ${registry.map(s => `id: ${s.id}\n  what it does: ${s.blurb}\n  fields it may touch: ${s.fields.join(", ")}`).join("\n\n")}
 
-Which one, if any, is he asking for? Match on what the change would actually DO, not on shared words.
+Which one, if any, is he asking for? Match on what the change would DO, not on shared words.
 
 If none of them is what he means, answer null. That is a normal answer and it is better than a near miss: running the wrong bulk change over seventy entries is expensive, and he has no way to know it was the wrong one from the name alone.
 
@@ -1566,7 +1566,7 @@ export const keepProse = (before, corrected) => {
   return {
     patched,
     restored: bad,
-    why: `The correction answered in ${bad.join(" and ")} with a statement about the checking rather than with prose, so ${bad.length === 1 ? "that field was" : "those fields were"} put back. A reader is not the audience for "the claim is not confirmed by the checked sources": if a claim genuinely cannot stand, it comes out of the sentence and goes into uncertainties.`,
+    why: `The correction answered in ${bad.join(" and ")} with a statement about the checking rather than with prose, so ${bad.length === 1 ? "that field was" : "those fields were"} put back. A reader is not the audience for "the claim is not confirmed by the checked sources": if a claim cannot stand, it comes out of the sentence and goes into uncertainties.`,
   };
 };
 

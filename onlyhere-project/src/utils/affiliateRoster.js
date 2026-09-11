@@ -60,7 +60,7 @@ const ROSTER = [
     key: "getyourguide",
     name: "GetYourGuide",
     sells: "Guided tours and experiences",
-    why: "This is where Denmark's canal tours, food tours, city walks and day trips actually are. A guided tour has no ticket window selling the same thing cheaper, which is why we point at experiences here and not at museum admissions.",
+    why: "This is where Denmark's canal tours, food tours, city walks and day trips are. A guided tour has no ticket window selling the same thing cheaper, which is why we point at experiences here and not at museum admissions.",
     live: getyourguideActive,
   },
   {

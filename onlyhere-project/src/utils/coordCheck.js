@@ -130,7 +130,7 @@ export const coordProblems = (payload, type = "") => {
   if (d && d.km > MAX_TOWN_KM) {
     out.push({ severity: "critical", kind: "far-from-town", km: d.km, town: d.town, detail: `Sits ${Math.round(d.km)} km from ${d.town}, which is the town this entry names. Nothing in a town is ${Math.round(d.km)} km from it, so this coordinate is about somewhere else.` });
   } else if (d && d.km > ODD_TOWN_KM) {
-    out.push({ severity: "low", kind: "far-from-town", km: d.km, town: d.town, detail: `Sits ${Math.round(d.km)} km from ${d.town}. That can be honest for somewhere genuinely outside the town, but it is worth opening the map once.` });
+    out.push({ severity: "low", kind: "far-from-town", km: d.km, town: d.town, detail: `Sits ${Math.round(d.km)} km from ${d.town}. That can be honest for somewhere outside the town, but it is worth opening the map once.` });
   }
   return out;
 };

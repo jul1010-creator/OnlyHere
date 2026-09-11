@@ -559,7 +559,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         {/* ── THE MANDATORY MARKS ───────────────────────────────────
             "Remember to have '*' on parts that is mandatory to answer." Gold
             until somebody presses the button with one empty, then red on the
-            ones actually missing, so the same mark that says "this is needed"
+            ones missing, so the same mark that says "this is needed"
             also says "this one". */}
         {mode === "up" && (
           <div style={{ fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 }}>

@@ -333,7 +333,7 @@ export const StudioAssistant = ({ session, supaFetch, readPage, item, kind, draf
       return;
     }
     const written = await askClaude(
-      `Answer the question below using ONLY the fresh research provided. Be short and direct. If the research does not actually settle it, say so plainly rather than hedging into a non-answer. Never use an em dash or an en dash.\n\nQuestion: ${message}\n\nFresh research:\n${research.text}`,
+      `Answer the question below using ONLY the fresh research provided. Be short and direct. If the research does not settle it, say so plainly rather than hedging into a non-answer. Never use an em dash or an en dash.\n\nQuestion: ${message}\n\nFresh research:\n${research.text}`,
       500
     );
     // Citations are objects with a title and a url from api/perplexity.js, and

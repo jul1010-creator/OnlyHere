@@ -682,7 +682,7 @@ export const GuidePreviewScreen = ({
           <div key={cat.label} style={{ marginBottom: 24 }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase" }}>{cat.label}</span>
-              {/* Only when it actually cut something. A count on every section
+              {/* Only when it cut something. A count on every section
                   would be noise; a count on the sections that hid a row is the
                   difference between a review and a sample. */}
               {cat.itemsTotal > cat.items.length && (

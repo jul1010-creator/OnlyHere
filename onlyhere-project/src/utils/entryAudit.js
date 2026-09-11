@@ -536,7 +536,7 @@ export const auditEntry = (row) => {
     add("high", "ranking", `Says "${m[0]}" without naming the measure. This is the Odense case: third by municipality and fourth by urban population are both real, so an unqualified ranking is unverifiable and reads as wrong to anyone using the other one.`);
   } else if (RANK.test(all) && /\bin denmark\b/i.test(all) && !MEASURE.test(all)) {
     const m = all.match(RANK);
-    add("low", "ranking", `Makes a "${m[0]}" claim about Denmark with no measure or scope stated. Worth checking it is the claim the source actually supports.`);
+    add("low", "ranking", `Makes a "${m[0]}" claim about Denmark with no measure or scope stated. Worth checking it is the claim the source supports.`);
   }
   if (BARE_YEAR_CLAIM.test(all) && !NAMED_EVENT.test(all)) {
     const m = all.match(BARE_YEAR_CLAIM);
@@ -1409,7 +1409,7 @@ export const describePriceTrace = (r, { statedOn = undefined } = {}) => {
   if (!r.untraced.length) {
     return r.traced.length
       ? `Every price in this draft (${r.traced.map(showPrice).join(", ")}) appears in the official site's own text.${listedNote}`
-      : `Every price in this draft is stated by a source that was actually read.${listedNote}`;
+      : `Every price in this draft is stated by a source that was read.${listedNote}`;
   }
   const many = r.untraced.length > 1;
   const figures = `${r.untraced.map(showPrice).join(", ")}`;
@@ -1543,7 +1543,7 @@ export const describeUnpriced = ({ siteChecked = false, siteHasPrice = false, na
   // find the operator's page, or say in the prose what the money actually works
   // like here.
   if (!siteChecked && !hasWebsite) {
-    return `NO PRICE AND NO WEBSITE${who ? ` (${who})` : ""}. The field reads "${PRICE_UNKNOWN}" rather than "${PRICE_UNCHECKED}", because telling a reader to see a website this entry does not give them is not an answer. If the operator has a page, put it in the website field and redraft; if they genuinely have none, say so in the prose along with whatever is known about what things cost.`;
+    return `NO PRICE AND NO WEBSITE${who ? ` (${who})` : ""}. The field reads "${PRICE_UNKNOWN}" rather than "${PRICE_UNCHECKED}", because telling a reader to see a website this entry does not give them is not an answer. If the operator has a page, put it in the website field and redraft; if they have none, say so in the prose along with whatever is known about what things cost.`;
   }
   if (!siteChecked || siteHasPrice) return "";
   return `NO PRICE, AND THE SITE DOES NOT PUBLISH ONE EITHER${who ? ` (${who})` : ""}. The field now reads "${PRICE_NOT_PUBLISHED}" rather than "${PRICE_UNCHECKED}", because sending a reader to a page that cannot answer them is worse than telling them nobody publishes it. If the real answer is that entry is free and you pay per stall or per item, that belongs in the entry as a sentence rather than as a missing number.`;
@@ -1794,7 +1794,7 @@ export const describeEvidence = (standing, { untracedPrices = 0 } = {}) => {
     ? ` ${untracedPrices} price${untracedPrices === 1 ? "" : "s"} in the prose ${untracedPrices === 1 ? "is" : "are"} stated as fact on top of that.`
     : "";
   if (s.total === 0) {
-    return `NOTHING IS SOURCED. __sources is empty, so every sentence in this draft rests on a page nobody kept.${priced} Either the place is genuinely unwritten about, in which case say less, or the source filter refused pages that were about it, which is a bug and not a gap.`;
+    return `NOTHING IS SOURCED. __sources is empty, so every sentence in this draft rests on a page nobody kept.${priced} Either the place is unwritten about, in which case say less, or the source filter refused pages that were about it, which is a bug and not a gap.`;
   }
   if (s.others === 0) {
     return `THE ONLY SOURCE IS THE VENUE'S OWN SITE. Nothing independent was kept, so the opening hours are as good as they get and every judgement in this draft, what it is worth and who it suits, is unreviewed.${priced} Check whether the name in this draft is the name the rest of the internet uses: a title the place does not call itself makes every page about it fail the relevance filter at once.`;
@@ -2029,7 +2029,7 @@ export const findLeak = (value) => {
 export const curatedFindProblems = (payload) => {
   const why = findLeak(payload?.gemlyxFind);
   if (!why) return [];
-  return [`gemlyxFind ${why}: "${String(payload.gemlyxFind).trim().slice(0, 140)}". This field is the one curated recommendation in the entry, so it takes a real place, dish or detail. Logistics belong in the Reality Check, and an unconfirmed connection belongs in uncertainties. If there is no genuine find, leave it empty.`];
+  return [`gemlyxFind ${why}: "${String(payload.gemlyxFind).trim().slice(0, 140)}". This field is the one curated recommendation in the entry, so it takes a real place, dish or detail. Logistics belong in the Reality Check, and an unconfirmed connection belongs in uncertainties. If there is no real find, leave it empty.`];
 };
 
 // ── A DRAFT MUST NOT PUBLISH AN INVENTION AND ITS RETRACTION ────────

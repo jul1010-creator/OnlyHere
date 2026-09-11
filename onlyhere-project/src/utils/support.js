@@ -90,7 +90,7 @@ export const GOOD_FAITH_STATEMENT =
 // SUBSTANTIATED explanation, and "Tell us what's wrong" does not ask for one.
 export const MESSAGE_PROMPT = {
   report: "Explain why you believe this content is illegal. Be specific: what it says, and which law or right it breaks.",
-  wrong: "What does the page say, and what is actually true? A link to where you saw it helps.",
+  wrong: "What does the page say, and what is true? A link to where you saw it helps.",
   privacy: "Tell us what you would like us to do. A copy of your data, a correction, or deletion.",
 };
 export const MESSAGE_PROMPT_DEFAULT = "What would you like to tell us?";
@@ -165,7 +165,7 @@ export const supportProblems = (form = {}) => {
   }
 
   if (!message) out.push({ field: "message", message: "Tell us what you would like to say." });
-  else if (message.length < MESSAGE_MIN) out.push({ field: "message", message: "A little more detail, so we can actually help." });
+  else if (message.length < MESSAGE_MIN) out.push({ field: "message", message: "A little more detail, so we can help." });
   else if (message.length > MESSAGE_MAX) out.push({ field: "message", message: `That is longer than we can take. ${MESSAGE_MAX} characters is the limit.` });
 
   if (reporting) {

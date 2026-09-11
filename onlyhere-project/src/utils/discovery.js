@@ -96,12 +96,12 @@ export const discoveryFraming = (rows, { typeLabel = "places" } = {}) => {
   const parts = thinnestParts(rows, 3);
   const summary = coverageSummary(rows);
   const gapLine = parts.length
-    ? `COVERAGE GAP, COMPUTED FROM WHAT IS ALREADY PUBLISHED: the thinnest parts of the country right now are ${parts.join(", ")}. ${summary && summary.empty.length ? `Nothing at all is published in ${summary.empty.join(" or ")}. ` : ""}Aim at least three of your five queries at those, naming the region, island or municipality explicitly. Do not aim any query at Copenhagen unless the type genuinely only exists there.`
+    ? `COVERAGE GAP, COMPUTED FROM WHAT IS ALREADY PUBLISHED: the thinnest parts of the country right now are ${parts.join(", ")}. ${summary && summary.empty.length ? `Nothing at all is published in ${summary.empty.join(" or ")}. ` : ""}Aim at least three of your five queries at those, naming the region, island or municipality explicitly. Do not aim any query at Copenhagen unless the type only exists there.`
     : "";
 
   return `${gapLine}
 
-SEARCH IN DANISH FOR AT LEAST THREE OF THE FIVE. This is the single most important instruction here and it is not about politeness. English-language writing about Denmark is the tourist canon: the same roundups, ranked by how many people already read them, which is the precise opposite of what this guide is for. Danish-language pages are written by Danes for Danes, and that is where a place with one good local source lives. Write those queries as a Dane would actually type them, fully in Danish, not an English sentence with Danish place names dropped into it: "skjulte perler", "hvad laver man i", "lokale anbefalinger", "seværdigheder", "bedste sted at", "ikke turistet". Include the Danish spelling of the place, with its real letters, so Ærø is Ærø and not Aero.
+SEARCH IN DANISH FOR AT LEAST THREE OF THE FIVE. This is the single most important instruction here and it is not about politeness. English-language writing about Denmark is the tourist canon: the same roundups, ranked by how many people already read them, which is the precise opposite of what this guide is for. Danish-language pages are written by Danes for Danes, and that is where a place with one good local source lives. Write those queries as a Dane would type them, fully in Danish, not an English sentence with Danish place names dropped into it: "skjulte perler", "hvad laver man i", "lokale anbefalinger", "seværdigheder", "bedste sted at", "ikke turistet". Include the Danish spelling of the place, with its real letters, so Ærø is Ærø and not Aero.
 
 FAMOUS IS A DISQUALIFIER, NOT A RECOMMENDATION. If a candidate appears in every "top 10 Denmark" list, this guide does not need it and neither does its reader. Prefer ${typeLabel} that a well-travelled Dane would name and a guidebook would not.`.trim();
 };

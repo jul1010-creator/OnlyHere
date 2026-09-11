@@ -67,6 +67,22 @@ export const cleanRelation = (v) => {
   return t;
 };
 
+// ── WHICH ISLAND, WRITTEN DOWN RATHER THAN DERIVED ──────────────────
+// See islandOf in utils/geography.js for why this field exists: the kommune
+// table cannot see Sejerø, because Sejerø shares Kalundborg Kommune with a
+// stretch of Zealand mainland, and no amount of redrawing fixes that.
+//
+// Same cleaning as a relation, plus the two leads a person writes for this field
+// and for no other: "on Ærø" and "the island of Ærø". The field IS the phrase
+// "the island of", so the value is the half that belongs here — the same rule
+// that turned "Day trip from Copenhagen" back into "Copenhagen".
+//
+// NOT VALIDATED AGAINST A LIST OF ISLANDS. Denmark has more than four hundred
+// of them and the whole subject of this site is the ones nobody has heard of, so
+// a list here would refuse exactly the entries it exists to serve.
+const ISLAND_LEAD = /^(the\s+island\s+of|on|at)\s+/i;
+export const cleanIsland = (v) => cleanRelation(String(v == null ? "" : v).trim().replace(ISLAND_LEAD, ""));
+
 // ── WHAT IS WRONG WITH THIS PLACE, IN PLAIN WORDS ───────────────────
 // Every check is a fact about the stored payload, phrased so the panel can print
 // it without rewording. No check is a matter of taste: each one describes a
@@ -94,6 +110,13 @@ export const placeIssues = (entry) => {
   if (partOf && cleanRelation(partOf) !== partOf) {
     out.push(`The parent reads as a sentence, not a place name: "${partOf}".`);
   }
+  // An island nothing can match is the same failure as a parent nothing can
+  // match: the filter chip reads the stored string, so "on the island of Ærø"
+  // becomes its own chip sitting beside "Ærø" and splits one island in two.
+  const island = clean(entry?.island);
+  if (island && cleanIsland(island) !== island) {
+    out.push(`The island reads as a sentence, not a place name: "${island}".`);
+  }
   return out;
 };
 
@@ -104,10 +127,17 @@ export const placePatch = (entry, next) => {
   const kind = cleanPlaceKind(next?.placeKind);
   const partOf = cleanRelation(next?.partOf);
   const trip = cleanRelation(next?.dayTripFrom);
+  const island = cleanIsland(next?.island);
   const patch = {};
   if (kind !== cleanPlaceKind(entry?.placeKind)) patch.placeKind = kind;
   if (partOf !== clean(entry?.partOf)) patch.partOf = partOf;
   if (trip !== clean(entry?.dayTripFrom)) patch.dayTripFrom = trip;
+  // THE FIELD THAT MADE THIS EDITOR WORTH REOPENING. The drafting prompt can
+  // only put an island on entries written from today on, and the islands are
+  // already published — Samsø is in this file's own opening notes as row 24 and
+  // row 79. Without a box here, a stated island could never reach a single one
+  // of them.
+  if (island !== clean(entry?.island)) patch.island = island;
   return patch;
 };
 

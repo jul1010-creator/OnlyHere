@@ -550,7 +550,7 @@ export const AboutMePage = ({
           Oliver, 9 Sep 2026, asked for the affiliates page in the menu. It sits
           under Legal rather than in a section of its own because it answers the
           same kind of question the other two do: what the arrangement between
-          you and Gemlyx actually is. It opens in this tab rather than a new one,
+          you and Gemlyx is. It opens in this tab rather than a new one,
           because unlike the other two it is a page of this app.
           "How we are paid" rather than "Affiliates": a reader asking the
           question is not asking about our commercial arrangements, they are

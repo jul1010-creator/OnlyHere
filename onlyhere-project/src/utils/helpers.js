@@ -601,11 +601,37 @@ export const AI_TELL_PHRASES = [
 // distinctive enough not to collide; a bare word cannot.
 export const FILLER_WORDS = ["actually", "truly", "genuinely", "simply"];
 
+// ── AND THE ADJECTIVE, WHICH IS COUNTED AND NOT CUT ─────────────────
+//
+// Oliver, 10 Sep 2026: "'Genuinely' and 'genuine' and 'actually' are three
+// words that are used too much, and in cases where it really isn't needed."
+//
+// Two of the three were already on the list above. "genuine" is the third and
+// it is NOT on it, and the reason is grammar rather than judgement: every word
+// above is an ADVERB, and an adverb is syntactically optional. "how long is
+// genuinely worth spending" loses nothing when the word goes.
+//
+// AN ADJECTIVE IS NOT OPTIONAL. From his own Essentials page, before this was
+// written: "For food and a more genuine feel, step a few streets off it." Run
+// that through trimFillerRuns and the reader gets "a more feel". The right
+// rewrite was "a more local feel", which is a word nothing here could have
+// chosen, because it comes from the two neighbourhoods the sentence goes on to
+// name.
+//
+// So this one is COUNTED and surfaced, and the two halves that can act without
+// guessing do: the drafting prompts no longer contain the word, so a new draft
+// is not taught it, and the audit names the rows that already carry it so they
+// can be edited in Studio rather than silently mangled at read time.
+export const FILLER_ADJECTIVES = ["genuine"];
+
+// What the audit counts: everything, because counting is safe on both.
+export const FILLER_COUNTED = [...FILLER_WORDS, ...FILLER_ADJECTIVES];
+
 // Twice in one entry is the signal. Once can be doing real work, and flagging a
 // considered use is how a review tool teaches its owner to ignore it.
 export const FILLER_REPEAT = 2;
 
-export const fillerWordCounts = (text, words = FILLER_WORDS) => {
+export const fillerWordCounts = (text, words = FILLER_COUNTED) => {
   const out = {};
   if (!text) return out;
   for (const w of words) {

@@ -36,6 +36,10 @@ import { fold, variantsOf } from "./danishNames";
 
 import { DK_SHAPES, KM_LAT, KM_LON } from "../data/mapShapes";
 import { kommuneAt, K as KCOL } from "./regions";
+// Danish sort for the island chips: Æ, Ø and Å come after Z, so Ærø belongs at
+// the end of the list and not between Aarhus and Bornholm. helpers.js imports
+// nothing from here, so this is not a cycle.
+import { daCompare } from "./helpers";
 
 // Ordered as a traveller would think about the country, west to east, with the
 // island that is its own trip last.
@@ -233,7 +237,10 @@ export const matchesSearch = (entry, query) => {
   if (!q) return true;
   // Both spellings of the entry's own name go into the haystack, so typing
   // Copenhagen finds a place filed as København and the other way round.
-  const hay = fold([...variantsOf(entry?.name), entry?.region, entry?.tag, entry?.desc, entry?.partOf, entry?.dayTripFrom].filter(Boolean).join(" "));
+  // `island` is in the haystack so a reader who knows the island but not the
+  // town gets there by typing: "sejeroe" finds Sejerø, and the fold means the
+  // letters are optional.
+  const hay = fold([...variantsOf(entry?.name), entry?.region, entry?.tag, entry?.desc, entry?.partOf, entry?.dayTripFrom, entry?.island].filter(Boolean).join(" "));
   // Every word must appear somewhere, so "fyn harbour" narrows rather than
   // widening the way a single OR match would.
   return q.split(" ").every(w => hay.includes(w));
@@ -279,5 +286,63 @@ export const ISLAND_BY_KOMMUNE = {
 };
 export const ISLAND_LABEL = { Jutland: "Jutland (mainland)" };
 
+// ── AND THE ENTRY IS ALLOWED TO SIMPLY SAY SO ──────────────────
+// Oliver, 11 Sep 2026: "I tried searching for towns 'on small islands'.. nothing
+// popped up. I think that's fine, maybe we should put islands into a category of
+// towns instead. Sejerø as an example.."
+//
+// SEJERØ IS THE CASE THE KOMMUNE TABLE CANNOT ANSWER, and it is the case the
+// paragraph above predicted in the abstract. Sejerø has around 300 people on it
+// and it is in KALUNDBORG Kommune, along with a long stretch of Zealand
+// mainland. So ISLAND_BY_KOMMUNE holds nothing for it and partOfCountry answers
+// "Zealand" — true, and useless, because the single most useful fact about
+// Sejerø is the one thing neither instrument can reach: it is an island.
+//
+// A STATED FIELD IS THE THIRD INSTRUMENT, and it goes FIRST, for the same reason
+// placeKindOf reads a stated placeKind ahead of anything it derives: somebody
+// who knows beats a table that infers. The two derivations stay exactly where
+// they are, so every entry that never states one answers as it always did.
+//
+// AND ISLAND IS NOT A SIZE, which is why this is its own field and not a fifth
+// value in PLACE_KINDS beside city/town/village/area. Sejerø IS an island;
+// Ærøskøbing is a town ON one. One field answers both. `placeKind: "island"`
+// would have forced Ærøskøbing to choose between being a town and being on Ærø,
+// and whichever it chose would have been a false answer to the other question.
+export const statedIsland = (entry) => String(entry?.island == null ? "" : entry.island).trim();
+
 export const islandOf = (entry, kommuneName) =>
-  ISLAND_BY_KOMMUNE[(kommuneName || "").trim()] || partOfCountry(entry) || "";
+  statedIsland(entry) || ISLAND_BY_KOMMUNE[(kommuneName || "").trim()] || partOfCountry(entry) || "";
+
+// ── A NAMED ISLAND, AS AGAINST THE LANDMASS IT SITS NEAREST ────────
+// islandOf falls back to the part of the country so that EVERY entry gets an
+// answer. That is right for the attractions page, which has one geography
+// control and must leave nothing unreachable.
+//
+// The towns page has a part-of-the-country row directly above its filters, so
+// there the fallback would print "Zealand" twice, under two headings, meaning
+// two different things: once as "this is on Zealand" and once as "we could not
+// tell you which island this is". This is the same lookup stopped one tier
+// earlier, so a caller can ask for only the tiers that actually name an island.
+export const namedIslandOf = (entry, kommuneName) =>
+  statedIsland(entry) || ISLAND_BY_KOMMUNE[(kommuneName || "").trim()] || "";
+
+// Only the islands something is actually published on, deduped and in Danish
+// order. The same deal partsPresent makes one section up: a chip that returns
+// nothing is a filter offering an empty room.
+//
+// THE CALLER RESOLVES, this only counts. Both pages precompute one island per
+// entry and hand the getter over, because the per-option counts run a full pass
+// over the pool for every option of every row, and islandOf geocodes against the
+// kommune boxes — a lookup inside those loops runs kommuneAt a thousand times
+// for one open panel. Passing the resolver in is also what lets the towns page
+// ask for namedIslandOf and the attractions page for islandOf without this
+// function growing a flag about pages it should know nothing about.
+export const islandsPresent = (entries, islandOfEntry = () => "") => {
+  const found = new Set();
+  for (const e of Array.isArray(entries) ? entries : []) {
+    if (!e || !e.name) continue;
+    const v = islandOfEntry(e);
+    if (v) found.add(v);
+  }
+  return [...found].sort(daCompare);
+};

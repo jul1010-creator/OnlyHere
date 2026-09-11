@@ -84,7 +84,7 @@ export const AffiliatesPage = () => {
         {roster.map(p => <Row key={p.key} {...p} />)}
 
         {/* ── WHAT WE WILL NOT DO, WHICH IS THE PART WORTH READING ──
-            Every line here is a rule the code actually keeps, and each one was
+            Every line here is a rule the code keeps, and each one was
             written the day something broke it. A promise on this page that the
             site does not enforce is worth less than nothing. */}
         <h2 style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, margin: "26px 0 12px" }}>

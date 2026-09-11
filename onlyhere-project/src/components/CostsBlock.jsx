@@ -91,7 +91,7 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
             )}
           </div>
         ))}
-        {/* Printed from the links that are actually on the page, never typed, so
+        {/* Printed from the links that are on the page, never typed, so
             it cannot say "this pays us" over a list that happens to contain no
             partner link at all. */}
         {partnered.length > 0 && (

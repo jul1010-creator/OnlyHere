@@ -82,7 +82,7 @@ export const SWEEPS = [
     // set but no placeKind still has work to do.
     missing: ["placeKind"],
     cap: 40,
-    question: "What kind of place is this (city, town, village or area), is it INSIDE a bigger place, and if it is too small to sleep in, where would a visitor actually base themselves?",
+    question: "What kind of place is this (city, town, village or area), is it INSIDE a bigger place, and if it is too small to sleep in, where would a visitor base themselves?",
   },
   {
     id: "themes",
@@ -113,7 +113,7 @@ export const SWEEPS = [
     // stapled on, and it would arrive marked as researched, which is worse than
     // arriving not at all.
     noResearch: true,
-    question: `What is this place actually FOR? Choose 1 to ${MAX_THEMES} from EXACTLY this list and nothing else: ${PLACE_THEMES.join(", ")}. Pick only what the entry gives a real reason to go for. Almost every Danish town has a church and a bakery, so history and food belong here only when the entry treats them as a reason to visit rather than as scenery. Fewer is better than more.`,
+    question: `What is this place FOR? Choose 1 to ${MAX_THEMES} from EXACTLY this list and nothing else: ${PLACE_THEMES.join(", ")}. Pick only what the entry gives a real reason to go for. Almost every Danish town has a church and a bakery, so history and food belong here only when the entry treats them as a reason to visit rather than as scenery. Fewer is better than more.`,
   },
   {
     id: "soldout",
@@ -667,7 +667,7 @@ export const proposeSweep = async ({ sweep, rows, knownPlaces, revise = false, d
             // Reported, not silently dropped. This is the single most useful
             // line in the whole run: it is the model answering from memory,
             // caught, and it should be visible when it happens often.
-            notes.push(`Answered ${Object.keys(found).join(", ")} without a quote that is actually in the entry, so it was not used.`);
+            notes.push(`Answered ${Object.keys(found).join(", ")} without a quote that is in the entry, so it was not used.`);
           }
         }
       }
@@ -720,8 +720,8 @@ ${question}
 Answer ONLY these: ${fields.join(", ")}.
 
 placeKind must be exactly one of: city, town, village, area. Use "area" only for somewhere INSIDE a larger place, like a district or a quarter or a named waterfront. A town twelve kilometres outside a city is not inside it, and a village on an island is not inside the island.
-partOf is only for a place that is genuinely within another place's boundary. A region, a municipality and a province are NOT parents: nobody says they are staying "in the Capital Region".
-dayTripFrom is where a visitor would actually sleep, and only when the place itself is too small to stay in.
+partOf is only for a place that is within another place's boundary. A region, a municipality and a province are NOT parents: nobody says they are staying "in the Capital Region".
+dayTripFrom is where a visitor would sleep, and only when the place itself is too small to stay in.
 
 Every answer must be a plain place name and nothing else. Do not explain, do not qualify, do not write a sentence. If a source does not settle one of these, write exactly "unknown" for it. "unknown" is a correct answer here and a guess is not.
 

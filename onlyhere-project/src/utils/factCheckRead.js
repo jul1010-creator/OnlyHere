@@ -781,12 +781,12 @@ export const researchForCheck = (raw, cap = RESEARCH_CHECK_CAP) => {
     const tail = cap - head;
     return {
       total: t.length, kept: cap, truncated: true, dropped: ["the middle of a single unbroken block"],
-      text: `${t.slice(0, head)}\n\n[${t.length - cap} characters of the middle of this research are not shown. A CLAIM YOU CANNOT FIND HERE MAY SIMPLY BE IN THE OMITTED PART: do not call anything invented on the strength of it being missing from this text alone.]\n\n${t.slice(-tail)}`,
+      text: `${t.slice(0, head)}\n\n[${t.length - cap} characters of the middle of this research are not shown. A CLAIM YOU CANNOT FIND HERE MAY BE IN THE OMITTED PART: do not call anything invented on the strength of it being missing from this text alone.]\n\n${t.slice(-tail)}`,
     };
   }
   const label = (b) => String(b.text || "").trimStart().split("\n")[0].slice(0, 60).trim() || "an unlabelled block";
   const names = [...new Set(dropped.map(label))];
   const text = blocks.filter(b => keep.has(b.at)).map(b => trimmed.get(b.at) || b.text).join("\n\n")
-    + `\n\n[${dropped.length} block${dropped.length === 1 ? "" : "s"} of this research (${t.length - used} characters) are not shown, the least authoritative first: ${names.join("; ")}. A CLAIM YOU CANNOT FIND HERE MAY SIMPLY BE IN AN OMITTED BLOCK: do not call anything invented on the strength of it being missing from this text alone.]`;
+    + `\n\n[${dropped.length} block${dropped.length === 1 ? "" : "s"} of this research (${t.length - used} characters) are not shown, the least authoritative first: ${names.join("; ")}. A CLAIM YOU CANNOT FIND HERE MAY BE IN AN OMITTED BLOCK: do not call anything invented on the strength of it being missing from this text alone.]`;
   return { total: t.length, kept: used, truncated: true, dropped: names, text };
 };

@@ -135,7 +135,7 @@ export const swapAnswer = (stop, candidates, reason) => {
     const scope = r.id === "far" ? "closer in" : r.sameKind === false ? "of a different sort nearby" : "nearby";
     return {
       ok: false,
-      why: `I have nothing ${scope} that I have actually researched, so I am leaving ${name} where it is rather than putting in somewhere I cannot vouch for. Take it out and I will rebuild the day around what is left.`,
+      why: `I have nothing ${scope} that I have researched, so I am leaving ${name} where it is rather than putting in somewhere I cannot vouch for. Take it out and I will rebuild the day around what is left.`,
     };
   }
   return {

@@ -199,7 +199,7 @@ export const journeyBlock = (parts) => {
   const bits = [`DOOR TO DOOR: ${hm(parts.total)}. This is the whole journey between a point in central Copenhagen and a point in the middle of the destination, INCLUDING the walk at both ends and the wait for the departure. It is the figure travelTime takes.`];
   if (parts.longest) {
     const l = parts.longest;
-    bits.push(`ON BOARD: ${hm(parts.onBoard)} of that is actually moving${parts.changes ? `, across ${parts.changes + 1} legs with ${parts.changes} change${parts.changes === 1 ? "" : "s"}` : ""}. The longest single leg is ${hm(l.mins)}${l.vehicle ? ` by ${l.vehicle}` : ""}${l.line ? ` on ${l.line}` : ""}${l.from && l.to ? `, ${l.from} to ${l.to}` : ""}.`);
+    bits.push(`ON BOARD: ${hm(parts.onBoard)} of that is moving${parts.changes ? `, across ${parts.changes + 1} legs with ${parts.changes} change${parts.changes === 1 ? "" : "s"}` : ""}. The longest single leg is ${hm(l.mins)}${l.vehicle ? ` by ${l.vehicle}` : ""}${l.line ? ` on ${l.line}` : ""}${l.from && l.to ? `, ${l.from} to ${l.to}` : ""}.`);
   }
   if (parts.interchanges?.length) {
     bits.push(`CHANGE AT: ${parts.interchanges.map(x => x.replace(/\.$/, "")).join(", then ")}. These are the interchange stations Google returned. Name them if you name any, and never name one that is not on this list.`);
@@ -416,7 +416,7 @@ export const transitProblems = (prose, { parts, drivingMins } = {}) => {
       // Only when the two figures actually differ. On a short hop where the
       // ride IS the journey there is nothing to confuse and nothing to flag.
       if (ride && near(d.mins, parts.total) && parts.onBoard > 0 && !near(parts.total, parts.onBoard, 5)) {
-        out.push(`"${d.text}" is presented as time on board, and it is the DOOR TO DOOR figure: it includes the walk at both ends and the wait. The measured time actually moving is ${hm(parts.onBoard)}. Say which one the sentence means, or a reader who checks the timetable will read this as wrong.`);
+        out.push(`"${d.text}" is presented as time on board, and it is the DOOR TO DOOR figure: it includes the walk at both ends and the wait. The measured time moving is ${hm(parts.onBoard)}. Say which one the sentence means, or a reader who checks the timetable will read this as wrong.`);
       } else if (ours && !measured.some(m => near(d.mins, m))) {
         out.push(`"${d.text}" was not measured by anything in this run. The figures that were: ${measured.map(hm).join(", ")}. Either name a source for it or take it out.`);
       }

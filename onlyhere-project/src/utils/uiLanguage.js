@@ -197,6 +197,12 @@ export const UI_STRINGS = {
   // the badge is called in all three languages.
   "entry.find":       { en: "Gemlyx Find",     da: "Gemlyx Find",         de: "Gemlyx Find" },
   "entry.branches":   { en: "Where you can go", da: "Hvor du kan tage hen", de: "Wo du hingehen kannst" },
+  // ── ESSENTIALS THAT BELONG TO ONE PLACE ────────────────────────
+  // Oliver, 11 Sep 2026: "essentials or tips for Odense. Could be put into the
+  // Odense Blog." {town} is filled by the caller, because the town's name is a
+  // proper noun and does not translate.
+  "entry.localEssentials": { en: "Sort this out in {town}", da: "Husk det her i {town}", de: "Das solltest du in {town} regeln" },
+  "entry.localEssentialsNote": { en: "Only applies here. Everything that applies all over Denmark is on the Essentials page.", da: "Gælder kun her. Alt det, der gælder i hele Danmark, står under Essentials.", de: "Gilt nur hier. Alles, was in ganz Dänemark gilt, steht auf der Essentials-Seite." },
   "entry.liveInfo":   { en: "Check live info", da: "Tjek aktuel info",    de: "Aktuelle Infos prüfen" },
   "entry.checking":   { en: "Checking...",     da: "Tjekker...",          de: "Wird geprüft..." },
   "entry.website":    { en: "Visit website",   da: "Besøg hjemmesiden",   de: "Zur Website" },

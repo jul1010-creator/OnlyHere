@@ -81,7 +81,7 @@ export const denmarkFacts = [
     // in the upper third — a plain center crop pushes him too far right and
     // trims close to his hat. photoPos keeps him properly framed.
     photoPos: "35% 30%",
-    fact: "The Danish royal family's winter home is actually four matching rococo palaces arranged around an octagonal courtyard, with a daily changing of the guard when the monarch is in residence.",
+    fact: "The Danish royal family's winter home is four matching rococo palaces arranged around an octagonal courtyard, with a daily changing of the guard when the monarch is in residence.",
   },
   {
     id: "harrys-place",

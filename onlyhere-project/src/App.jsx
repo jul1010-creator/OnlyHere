@@ -189,6 +189,7 @@ import { wegotripActive } from "./utils/affiliates";
 // Oliver, 30 Aug 2026. See utils/essentialKind.js: the categories were never
 // the problem, two documents sharing one list were.
 import { essentialsOnly, tipsOnly, categoriesPresent, linksOf, isMerged, tabForEssential, ESSENTIAL_KINDS, ESSENTIAL_KIND_LABEL, KIND_RULE, cleanKind, kindPatch, hasKindChange, kindStated } from "./utils/essentialKind";
+import { scopeOf, isNational, scopePatch, hasScopeChange, essentialsForPlace } from "./utils/essentialPlace";
 // ── "ATTRACTIONS ALL SAY FREE" ──────────────────────────────────────
 // Oliver, 27 Aug 2026. Five places in this file published a price claim built
 // out of the CATEGORY NAME: the attractions pool's Studio type is called
@@ -206,7 +207,7 @@ import { arrivalPoint } from "./utils/arrival";
 import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, nightlifeForTown, barsOnStreet, townOfLocation, nightKindOf, strandedNight } from "./utils/nightlife";
 import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
 import { supabaseFailure, studioErrorMessage, refreshIsDead, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
-import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
+import { cleanPlaceKind, cleanRelation, cleanIsland, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
 import { resolveUncertainties, CONFIRM_FORMAT } from "./utils/uncertaintyResolve";
 import AccountAvatar from "./components/AccountAvatar";
@@ -233,7 +234,7 @@ import { ProfileSheet } from "./components/ProfileSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
 import { C, THEMES, THEME_ORDER, applyTheme, storedTheme } from "./utils/theme";
 import { StudioAssistant } from "./components/StudioAssistant";
-import { partOfCountry, partsPresent, matchesSearch, islandOf, ISLAND_LABEL } from "./utils/geography";
+import { partOfCountry, partsPresent, matchesSearch, islandOf, namedIslandOf, islandsPresent, ISLAND_LABEL } from "./utils/geography";
 import { tileCss } from "./utils/mapTiles";
 import { dayCrossings, tripWeatherWarning } from "./utils/weatherWarn";
 import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel, tierBadge, TIERS, tierOf, TIER_VALUES } from "./utils/placeThemes";
@@ -440,18 +441,18 @@ const NIGHTLIFE_TYPES = CONTENT_TYPES.filter(t => /^night/.test(t));
 const PLACES_WITH_A_LISTING = PLACE_TYPES_WITH_A_JOURNEY.filter(t => t !== "town");
 
 const FACT_CHECK_SCOPE_RULES = `SCOPE, AND THIS OVERRIDES EVERYTHING ELSE HERE: only report a correction that is about the EXACT same thing the draft is about. A real fact about a similar-but-different thing is not a correction, and offering it as one is worse than staying silent, because a correction gets trusted and applied.
-This has already caused a real, confirmed near-miss: a draft about one specific ferry route was "corrected" using the sailing time of a DIFFERENT route to the same island. Both durations were genuinely real. Applying the correction would have reverted an entry that had already been fixed.
+This has already caused a real, confirmed near-miss: a draft about one specific ferry route was "corrected" using the sailing time of a DIFFERENT route to the same island. Both durations were real. Applying the correction would have reverted an entry that had already been fixed.
 So, before reporting any correction, check that it matches on the specific variant the draft names: the exact route and pair of ports, the exact venue rather than another branch of the same chain, the exact ticket type, the exact season or vessel. If a source gives you a figure for a DIFFERENT variant, you may mention it, but you must label it plainly as a different one ("the Hou to Sælvig route is 60 minutes, which is a different crossing") and you must NOT present it as an error in the draft.
-NEVER REPLACE A SPECIFIC FIGURE WITH A VAGUER ONE. Going from "1 hour 20 minutes" to "about an hour" is a regression, not a correction, even when the vaguer phrasing is technically defensible. If you cannot beat the draft's precision with a source that is genuinely about the same thing, leave it alone.
+NEVER REPLACE A SPECIFIC FIGURE WITH A VAGUER ONE. Going from "1 hour 20 minutes" to "about an hour" is a regression, not a correction, even when the vaguer phrasing is technically defensible. If you cannot beat the draft's precision with a source that is about the same thing, leave it alone.
 If the draft's own figure and your source disagree by a small amount and both look credible, say exactly that, name both numbers and both sources, and let the human decide. Do not silently pick one.
 
 "I COULD NOT FIND IT" IS NOT "IT IS WRONG", AND THE TWO MUST NEVER READ THE SAME. This is the single most misleading thing you can hand back, because both arrive as a flagged line and only one of them is a fact about the world. A real case: a draft's ticket price was reported as unverified because the festival's own page did not state it, when the price was published in full on the ticketing subdomain the checker never opened. The finding was literally true and completely useless, and it read as though the festival had no such price.
 
 So label EVERY finding as exactly one of these two words, at the start of the line:
 CONTRADICTED: you reached a page that states something different. Name the page and give its figure.
-UNVERIFIED: no page you actually reached states this either way. Then name the pages you DID open, and say where you would look next.
+UNVERIFIED: no page you reached states this either way. Then name the pages you DID open, and say where you would look next.
 
-Before writing UNVERIFIED about a price, an opening hour or a departure time, check that you went past the front page to the place that would actually carry it: the ticket shop, the operator's timetable, the booking page. Coming back with UNVERIFIED after reading only a marketing page is a report about your own search, not about the draft.`;
+Before writing UNVERIFIED about a price, an opening hour or a departure time, check that you went past the front page to the place that would carry it: the ticket shop, the operator's timetable, the booking page. Coming back with UNVERIFIED after reading only a marketing page is a report about your own search, not about the draft.`;
 
 // ── GETYOURGUIDE, AND WHAT IT IS ACTUALLY GOOD FOR ─────────────────
 // Oliver, 7 Aug 2026: "make getyourguide.com a must-research as well!!!"
@@ -472,7 +473,7 @@ Before writing UNVERIFIED about a price, an opening hour or a departure time, ch
 // RESELLER charges, which is routinely above the gate price and sometimes
 // bundles things. So it is authoritative for "this tour exists and is bookable"
 // and never for "this is what it costs to get in".
-const BOOKING_PLATFORM_RULES = `GETYOURGUIDE, MANDATORY on any attraction, tour, boat trip, guided walk or experience: check getyourguide.com for the place as part of your research, every time. It is the fastest way to establish what is genuinely BOOKABLE there, what it costs to book, whether it runs in the season being written about, and whether it sells out in advance. Danish venues are often bad at listing their own tours in English, so a real listing there is evidence a tour runs when the venue's own site is silent.
+const BOOKING_PLATFORM_RULES = `GETYOURGUIDE, MANDATORY on any attraction, tour, boat trip, guided walk or experience: check getyourguide.com for the place as part of your research, every time. It is the fastest way to establish what is BOOKABLE there, what it costs to book, whether it runs in the season being written about, and whether it sells out in advance. Danish venues are often bad at listing their own tours in English, so a real listing there is evidence a tour runs when the venue's own site is silent.
 
 TWO HARD LIMITS ON IT, because it is a reseller and not the venue:
 1. It is NEVER the official website. Never put a getyourguide.com link in an official site or website field. The venue's own domain is the official site; if there is not one, that field stays empty.
@@ -524,7 +525,7 @@ THE OPERATOR'S TIMETABLE OUTRANKS ALL OF THIS for how long a named service takes
 THE WALKING FIGURE IS NOT A FACT ABOUT GEOGRAPHY. It is measured from a coordinate a geocoder chose for the middle of the destination, which for anywhere bigger than a village is an arbitrary point. NEVER write that a station is a certain number of minutes from the town centre on the strength of it, and never write that it is "just outside" or "a short walk from" the centre either. In most Danish towns the station IS in the centre, and Odense Banegård Center in particular sits at the northern edge of the pedestrian streets: you are in the centre the moment you walk out of it. If you have nothing sourced to say about where a station sits, say nothing about it.
 A CHANGE IS WORTH MENTIONING AND A WAIT IS NOT. The number of changes is a real property of the route. The waiting time is an artefact of the one departure the query happened to land on, so never publish it as a fact about the service.`;
 
-const TICKET_SOURCE_RULES = `WHERE A PRICE ACTUALLY LIVES, MANDATORY on any festival, concert, event or anything ticketed: a festival's own website is a poster. It very often carries NO prices at all. The prices live in the TICKET SHOP, which is usually a different address, and you have to go there.
+const TICKET_SOURCE_RULES = `WHERE A PRICE LIVES, MANDATORY on any festival, concert, event or anything ticketed: a festival's own website is a poster. It very often carries NO prices at all. The prices live in the TICKET SHOP, which is usually a different address, and you have to go there.
 
 The shop is normally one of: a subdomain of the same site (billet., billetter., tickets., shop., ticket.), a "Billetter"/"Tickets"/"Køb billet" link on the festival page, or a named Danish ticketing partner (Ticketmaster, United Tickets, Billetto, Billetlugen, Ticketbutler, Safeticket, Place2Book). Follow it. A price you could not find on the festival's front page is almost never a price that does not exist, it is a price you have not reached yet.
 
@@ -556,7 +557,7 @@ DO NOT INVENT A CONCESSION and do not assume one exists because it usually does.
 // translation is not a harmless miss, it is a query spent asking about a place
 // that does not exist under that name, and a search will always return
 // something.
-const DANISH_LANGUAGE_RULES = `SEARCH IN DANISH AS WELL AS ENGLISH, EVERY TIME. This is Denmark. The page that actually carries an opening hour, a ticket price, a ferry departure or a closure notice is very often written only in Danish, and it does not rank for an English query. An English-only search quietly returns the English-language layer of the internet, which for Denmark means international travel magazines and blog round-ups rather than the museum, the municipality or the operator.
+const DANISH_LANGUAGE_RULES = `SEARCH IN DANISH AS WELL AS ENGLISH, EVERY TIME. This is Denmark. The page that carries an opening hour, a ticket price, a ferry departure or a closure notice is very often written only in Danish, and it does not rank for an English query. An English-only search quietly returns the English-language layer of the internet, which for Denmark means international travel magazines and blog round-ups rather than the museum, the municipality or the operator.
 
 So for anything you look up, also run the Danish form of the question. Useful Danish words for this work: åbningstider (opening hours), priser (prices), billetter (tickets), entré (admission), praktisk information, sådan kommer du hertil (getting here), afgange (departures), færge (ferry), lukket (closed), helligdage (public holidays), seværdigheder (sights), arrangementer (events).
 
@@ -584,7 +585,7 @@ NEVER carry a year forward by arithmetic. A festival that ran the third weekend 
 
 WHERE THE NEXT DATES LIVE, when the front page is still showing the last edition: the ticket shop often lists the new one first, and the festival's own newsletter signup, "next year", "kommende", or a year in the URL are all faster than the homepage.`;
 
-const RESEARCH_SOURCE_RULES = `SOURCES, EVERY TIME: always check Wikipedia and the place's own official website — Wikipedia for background/history, the official site for anything current (prices, hours, booking). Britannica and Denmark.dk are also good general/background sources when relevant. Use Reddit, Quora and Facebook specifically for real visitor opinions and reviews (what it's actually like), never as the source of a hard fact like a date, price, or opening hour — those need the official site or a source that would actually know. If the official site and Wikipedia disagree on something current (a price, a status), the official site wins. Anything priced or timed from before ${STALE_BEFORE_YEAR} should be treated as stale, not current. ${EXISTENCE_RULE}
+const RESEARCH_SOURCE_RULES = `SOURCES, EVERY TIME: always check Wikipedia and the place's own official website — Wikipedia for background/history, the official site for anything current (prices, hours, booking). Britannica and Denmark.dk are also good general/background sources when relevant. Use Reddit, Quora and Facebook specifically for real visitor opinions and reviews (what it's like), never as the source of a hard fact like a date, price, or opening hour — those need the official site or a source that would know. If the official site and Wikipedia disagree on something current (a price, a status), the official site wins. Anything priced or timed from before ${STALE_BEFORE_YEAR} should be treated as stale, not current. ${EXISTENCE_RULE}
 
 ${BOOKING_PLATFORM_RULES}
 
@@ -941,6 +942,7 @@ function GemlyxApp() {
   const [townSearch, setTownSearch] = useState("");
   const [townPart, setTownPart] = useState(null);
   const [townTheme, setTownTheme] = useState(null);
+  const [townIsland, setTownIsland] = useState(null);
   const [townFiltersOpen, setTownFiltersOpen] = useState(false);
   // AN ENTRY THIS CANNOT PLACE IS NOT HIDDEN. partOfCountry returns null for a
   // row with no stored coordinate, and a filter that silently removes an entry
@@ -949,14 +951,42 @@ function GemlyxApp() {
   const townPartOk = (t) => !townPart || partOfCountry(t) === townPart;
   const townThemeOk = (t) => hasTheme(t, townTheme);
   const townSearchOk = (t) => matchesSearch(t, townSearch);
+  // ── WHICH ISLAND, ON THE PAGE THAT IS ABOUT TOWNS ─────────────
+  // Oliver, 11 Sep 2026: "I tried searching for towns 'on small islands'..
+  // nothing popped up. I think that's fine, maybe we should put islands into a
+  // category of towns instead. Sejerø as an example.."
+  //
+  // The Island facet has been on the ATTRACTIONS page since 19 Aug and was never
+  // on this one, which is the page a person browsing towns is looking at.
+  //
+  // namedIslandOf, not islandOf: the part-of-the-country row sits right above
+  // these filters, so the landmass fallback would put Zealand in both rows
+  // meaning two different things. Here an entry either names an island or it
+  // does not appear under this heading at all. See utils/geography.js.
+  //
+  // COMPUTED ONCE PER TOWN. The counts below run a full pass over the list for
+  // every option of every row, and the kommune tier of namedIslandOf geocodes,
+  // so resolving inside them would run kommuneAt a thousand times for one open
+  // panel. The attractions page carries a precomputed _island for the same
+  // reason.
+  //
+  // KEYED ON THE LENGTH and not on the array. liveContent pushes the published
+  // rows into the imported `towns` array IN PLACE, so its identity never changes
+  // and a dependency on it would hold the empty first render forever.
+  const townIslands = useMemo(
+    () => new Map(towns.map(t => [t, namedIslandOf(t, kommuneNameAt(t.__lat ?? t.lat, t.__lon ?? t.lon))])),
+    [towns.length]
+  );
+  const islandOfTown = (t) => townIslands.get(t) || "";
+  const townIslandOk = (t) => !townIsland || islandOfTown(t) === townIsland;
   // ONE PREDICATE, READ IN FIVE PLACES, for the same reason as before: copies of
   // the same conditions are chances to drift, which is how the Major Cities
   // heading once rendered over an empty grid.
-  const townMatches = (t) => townPartOk(t) && townKindOk(t) && townSizeOk(t) && townThemeOk(t) && townSearchOk(t);
+  const townMatches = (t) => townPartOk(t) && townKindOk(t) && townSizeOk(t) && townThemeOk(t) && townIslandOk(t) && townSearchOk(t);
   // An area is judged on every axis EXCEPT size, because the areas section below
   // has its own size rule. Written once here so the section, the empty state and
   // the count cannot disagree about it.
-  const areaMatches = (t) => townPartOk(t) && townKindOk(t) && townThemeOk(t) && townSearchOk(t);
+  const areaMatches = (t) => townPartOk(t) && townKindOk(t) && townThemeOk(t) && townIslandOk(t) && townSearchOk(t);
   // ── WHAT IT IS FOR, AND HOW WELL KNOWN, BEFORE ANYBODY CLICKS ───
   // Oliver, 8 Aug 2026: "I would also like the 'tier' to be showing on the
   // captions before clicking the blog. OH, and what category it fits into."
@@ -985,8 +1015,8 @@ function GemlyxApp() {
       </div>
     );
   };
-  const clearTownFilters = () => { setTownPart(null); setTownKind(null); setTownSize(null); setTownTheme(null); setTownSearch(""); };
-  const activeTownFilters = [townPart, townKind, townSize, townTheme, townSearch.trim()].filter(Boolean).length;
+  const clearTownFilters = () => { setTownPart(null); setTownKind(null); setTownSize(null); setTownTheme(null); setTownIsland(null); setTownSearch(""); };
+  const activeTownFilters = [townPart, townKind, townSize, townTheme, townIsland, townSearch.trim()].filter(Boolean).length;
   useEffect(() => { ensureSourcesLoaded(); }, []);
   const [craftItems, setCraftItems] = useState(craftItemsFallback);
   const [craftLoading, setCraftLoading] = useState(true);
@@ -1261,7 +1291,7 @@ function GemlyxApp() {
   const [discoverOffMonth, setDiscoverOffMonth] = useState("");
   const [discoverTown, setDiscoverTown] = useState("");
   const [placeEditId, setPlaceEditId] = useState(null);
-  const [placeDraft, setPlaceDraft] = useState({ placeKind: "", partOf: "", dayTripFrom: "" });
+  const [placeDraft, setPlaceDraft] = useState({ placeKind: "", partOf: "", dayTripFrom: "", island: "" });
   const [placeSaving, setPlaceSaving] = useState(false);
   const [placeError, setPlaceError] = useState(null);
 
@@ -1343,17 +1373,25 @@ function GemlyxApp() {
   // the place editor above and for the same stated reason.
   const [kindEditId, setKindEditId] = useState(null);
   const [kindDraft, setKindDraft] = useState("");
+  // ── AND WHERE IT APPLIES, IN THE SAME PANEL ──────────────────────
+  // Oliver, 11 Sep 2026: "essentials or tips for Odense. Could be put into the
+  // Odense Blog." Which list and which place are one question about one row, so
+  // they are one panel and one save. See utils/essentialPlace.js.
+  const [scopeDraft, setScopeDraft] = useState("");
   const [kindSaving, setKindSaving] = useState(false);
   const [kindError, setKindError] = useState(null);
 
   const openKindEdit = (row) => {
     setKindEditId(v => (v === row.id ? null : row.id));
     setKindDraft(cleanKind((row.payload || {}).kind));
+    setScopeDraft(String((row.payload || {}).scope || ""));
     setKindError(null);
   };
 
   const saveKindEdit = async (row) => {
-    const patch = kindPatch(row.payload || {}, kindDraft);
+    // TWO FIELDS, ONE PATCH, and still not the payload. Spread rather than
+    // merged by hand so a field one of them does not touch cannot be resent.
+    const patch = { ...kindPatch(row.payload || {}, kindDraft), ...scopePatch(row.payload || {}, scopeDraft) };
     if (!Object.keys(patch).length) { setKindEditId(null); return; }
     setKindSaving(true); setKindError(null);
     try {
@@ -1367,9 +1405,16 @@ function GemlyxApp() {
       if (!res.ok) { setKindError(studioErrorMessage("this entry", res.status, body)); setKindSaving(false); return; }
       setManageItems(prev => (prev || []).map(r => (r.id === row.id ? { ...r, payload: merged } : r)));
       setKindEditId(null);
-      showToast(merged.kind
-        ? `Saved. ${merged.name} is now under ${merged.kind === "tip" ? "Tips" : "Essentials"}. Visitors see it on their next load.`
-        : `Saved. ${merged.name} is unplaced again, so it shows under Essentials until you place it.`, 3500);
+      // SAY WHICH OF THE TWO CHANGED. The panel holds two fields now, and a
+      // message about the list after a save that only set the place confirms
+      // the one thing the save did not touch.
+      showToast("scope" in patch
+        ? (patch.scope
+          ? `Saved. ${merged.name} is now on the ${patch.scope} page as well. Visitors see it on their next load.`
+          : `Saved. ${merged.name} is back on the national list only.`)
+        : merged.kind
+          ? `Saved. ${merged.name} is now under ${merged.kind === "tip" ? "Tips" : "Essentials"}. Visitors see it on their next load.`
+          : `Saved. ${merged.name} is unplaced again, so it shows under Essentials until you place it.`, 3500);
     } catch (e) { setKindError(String(e.message || e)); }
     setKindSaving(false);
   };
@@ -1411,7 +1456,7 @@ function GemlyxApp() {
   const openPlaceEdit = (row) => {
     const pl = row.payload || {};
     setPlaceEditId(v => v === row.id ? null : row.id);
-    setPlaceDraft({ placeKind: cleanPlaceKind(pl.placeKind), partOf: String(pl.partOf || ""), dayTripFrom: String(pl.dayTripFrom || "") });
+    setPlaceDraft({ placeKind: cleanPlaceKind(pl.placeKind), partOf: String(pl.partOf || ""), dayTripFrom: String(pl.dayTripFrom || ""), island: String(pl.island || "") });
     setPlaceError(null);
   };
 
@@ -1433,7 +1478,10 @@ function GemlyxApp() {
       if (!res.ok) { setPlaceError(studioErrorMessage("this entry", res.status, body)); setPlaceSaving(false); return; }
       setManageItems(prev => (prev || []).map(r => r.id === row.id ? { ...r, payload: merged } : r));
       setPlaceEditId(null);
-      showToast(`Saved. ${merged.name} is now a ${cleanPlaceKind(merged.placeKind) || "town"}. Visitors see it on their next load.`, 3500);
+      // ── SAY WHAT CHANGED, NOT ALWAYS THE KIND ──────────────────
+      // This read "is now a town" whatever had been edited, so setting the
+      // island on Sejerø confirmed the one fact the save had not touched.
+      showToast(`Saved. ${"island" in patch && patch.island ? `${merged.name} is on ${patch.island}` : `${merged.name} is now a ${cleanPlaceKind(merged.placeKind) || "town"}`}. Visitors see it on their next load.`, 3500);
       
     } catch (e) { setPlaceError(String(e.message || e)); }
     setPlaceSaving(false);
@@ -2450,7 +2498,7 @@ function GemlyxApp() {
   const [studioDraft, setStudioDraft] = useState(null);
   const [studioIdentityWarning, setStudioIdentityWarning] = useState(null);
   const [studioInventedWarning, setStudioInventedWarning] = useState(null);
-  const [studioDraftText, setStudioDraftText] = useState(""); // editable JSON — what actually gets published
+  const [studioDraftText, setStudioDraftText] = useState(""); // editable JSON — what gets published
 
   // ── Discover (Tavily + OpenAI find candidates, you pick, then it queues
   // into the normal draft pipeline above) ──────────────────────────────
@@ -2475,7 +2523,7 @@ function GemlyxApp() {
   // dropdown may say anything.
   const [discoverForType, setDiscoverForType] = useState(null);
   const [updateEventsLoading, setUpdateEventsLoading] = useState(false);
-  const [updateEventsResults, setUpdateEventsResults] = useState(null); // [{name, notes, ticketStatus, dateChanged}] — only ones that actually changed
+  const [updateEventsResults, setUpdateEventsResults] = useState(null); // [{name, notes, ticketStatus, dateChanged}] — only ones that changed
   // Per row of that panel, keyed by the live id: "saving", "done", or the
   // reason the promotion was refused. An object rather than one value because
   // a sweep can find dates for several waiting entries in one run, and a single
@@ -2874,13 +2922,13 @@ function GemlyxApp() {
     const namedRule = named.length
       ? `OPEN THESE SPECIFIC SOURCES FIRST, and say what each one said: ${named.join(", ")}. These are pages the founder has read and vouches for, so start there.
 
-THIS IS AN ADDITION, NOT A RESTRICTION. After reading them, search everything else exactly as you normally would, and use whatever genuinely answers the question. A named source is a good place to start looking, never the only place you are allowed to look.
+THIS IS AN ADDITION, NOT A RESTRICTION. After reading them, search everything else exactly as you normally would, and use whatever answers the question. A named source is a good place to start looking, never the only place you are allowed to look.
 
 If one of them answers something the draft left uncertain, that answer is what the entry should use. If a named source does not load, or does not cover this place at all, that is ordinary: say so, then keep looking elsewhere and answer from what you find. Never report that something could not be confirmed just because the named sources did not have it.
 
 Say which answer came from which source, so a fact from a vouched page and a fact from a general search result can be told apart.\n\n`
       : "";
-    const prompt = `${namedRule}Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name, (4) any historical or founding claim is accurate — specifically, check whether the draft conflates two different historical events or dates (e.g. an earlier institution, building, or monastery being founded at a place is NOT the same fact as the town/place itself later gaining an official status such as market-town/købstad rights, and a draft that blends these into one date is wrong even if each individual date is real). ONLY report things that are actually WRONG, unverifiable, or missing — do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else.\n\nTHE ONE EXCEPTION, AND IT IS NARROW: this draft carries an "uncertainties" list of things the writer could not confirm. If you find a page that SETTLES one of them, say so, because a caveat that has gone false is worse than no caveat: it teaches a reader the caveats are decoration. Write it in exactly this shape, because it is read by code and not by a person:\n\n${CONFIRM_FORMAT}\n\nBoth the QUOTE and the SOURCE are required. A confirmation with no quotation from the page is an opinion and will be discarded, and only the operator's own site or a public authority can settle a caveat: a listing site or an aggregator cannot. Confirm nothing that is not already in the uncertainties list. For each real problem found, give the correct real fact where you have it. Be concise — bullet points, not an essay.\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(studioType, studioDraft)}\n\nDraft: ${JSON.stringify(studioDraft)}`;
+    const prompt = `${namedRule}Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room exists under that exact name, (4) any historical or founding claim is accurate — specifically, check whether the draft conflates two different historical events or dates (e.g. an earlier institution, building, or monastery being founded at a place is NOT the same fact as the town/place itself later gaining an official status such as market-town/købstad rights, and a draft that blends these into one date is wrong even if each individual date is real). ONLY report things that are WRONG, unverifiable, or missing — do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else.\n\nTHE ONE EXCEPTION, AND IT IS NARROW: this draft carries an "uncertainties" list of things the writer could not confirm. If you find a page that SETTLES one of them, say so, because a caveat that has gone false is worse than no caveat: it teaches a reader the caveats are decoration. Write it in exactly this shape, because it is read by code and not by a person:\n\n${CONFIRM_FORMAT}\n\nBoth the QUOTE and the SOURCE are required. A confirmation with no quotation from the page is an opinion and will be discarded, and only the operator's own site or a public authority can settle a caveat: a listing site or an aggregator cannot. Confirm nothing that is not already in the uncertainties list. For each real problem found, give the correct real fact where you have it. Be concise — bullet points, not an essay.\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(studioType, studioDraft)}\n\nDraft: ${JSON.stringify(studioDraft)}`;
     const result = await askPerplexity(prompt);
     if (result.error) { setGoogleCheckError(result.error); setGoogleCheckLoading(false); return; }
     setGoogleCheckResult({ text: result.text, citations: result.citations });
@@ -2922,7 +2970,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
           model: "gpt-5.6-sol",
           response_format: { type: "json_object" },
           messages: [
-            { role: "system", content: `Extract every distinct Danish festival/event mentioned in this page text into strict JSON: {"items": [{"name": "exact name as written", "town": "town/city if given, else empty string", "dates": "date range as written, else empty string"}]}. Only include items ACTUALLY present in the text — never invent, never guess at ones you think might exist. If the same festival appears twice (e.g. a duplicate listing), include it once. This is a discovery list only, not final content — the founder will individually research and verify each one before anything is published.` },
+            { role: "system", content: `Extract every distinct Danish festival/event mentioned in this page text into strict JSON: {"items": [{"name": "exact name as written", "town": "town/city if given, else empty string", "dates": "date range as written, else empty string"}]}. Only include items present in the text — never invent, never guess at ones you think might exist. If the same festival appears twice (e.g. a duplicate listing), include it once. This is a discovery list only, not final content — the founder will individually research and verify each one before anything is published.` },
             { role: "user", content: pageData.text },
           ],
           // max_tokens -> max_completion_tokens: "gpt-5.6-sol" REJECTS max_tokens
@@ -3324,7 +3372,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       let plannedQueries = [];
       const planResult = await withRetry(
         () => askOpenAI(
-          `Planning research for a Danish travel guide entry: "${subject}"${subject !== name ? ` (the street "${name}" in ${draftTown} — a street name alone is ambiguous in Denmark, so every query you write must keep the town in it)` : ""} (type: ${sType}). List 2-3 SPECIFIC search queries that would find the most important facts for THIS particular place — not generic categories, actual search strings a researcher would type. Include at least one query aimed at finding a genuine downside or limitation, not just highlights. Respond with ONLY a JSON array of strings, nothing else.`,
+          `Planning research for a Danish travel guide entry: "${subject}"${subject !== name ? ` (the street "${name}" in ${draftTown} — a street name alone is ambiguous in Denmark, so every query you write must keep the town in it)` : ""} (type: ${sType}). List 2-3 SPECIFIC search queries that would find the most important facts for THIS particular place — not generic categories, actual search strings a researcher would type. Include at least one query aimed at finding a real downside or limitation, not just highlights. Respond with ONLY a JSON array of strings, nothing else.`,
           // BUG FIX: 300 was almost certainly the actual cause of the "Empty
           // response from OpenAI" errors on town/event drafts and Discover runs —
           // gpt-5.6-sol is a reasoning model, and 300 tokens is tight enough that
@@ -4149,19 +4197,19 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         // approach is validated on these two.
         const precheckPrompt = ((sType === "food" || sType === "foodStreet")
           ? `Using real, current web search, find accurate facts about "${subject}" in Denmark, and organize them into exactly three labeled groups — do not write prose, just sort real facts you find into these buckets:
-VIBE/LOCATION FACTS: its exact address or a real nearby landmark, why locals actually go there.
-FOOD MECHANICS FACTS: ${sType === "foodStreet" ? "what vendors/stalls are actually there, the range of cuisines/dishes on offer, how it's organized (indoor hall, outdoor stalls, etc.)" : "how the food is actually made — cooking method (stone-baked, flame-grilled, slow-cooked, hand-rolled), specific real dishes people order"}.
+VIBE/LOCATION FACTS: its exact address or a real nearby landmark, why locals go there.
+FOOD MECHANICS FACTS: ${sType === "foodStreet" ? "what vendors/stalls are there, the range of cuisines/dishes on offer, how it's organized (indoor hall, outdoor stalls, etc.)" : "how the food is made — cooking method (stone-baked, flame-grilled, slow-cooked, hand-rolled), specific real dishes people order"}.
 REALITY CHECK FACTS: real current prices, typical wait times, seating situation, anything else logistically true.
 If you can't find something for a bucket, leave it out rather than guessing. Short facts only, no essay, no flowing sentences — ChatGPT handles the actual writing.`
           : sType === "town"
           ? `Using real, current web search, find accurate facts about the town "${name}" in Denmark, and organize them into exactly three labeled groups — do not write prose, just sort real facts you find into these buckets:
-CHARACTER/FIT FACTS: founding date or defining historical fact, its region, what kind of place it genuinely is, who it suits. IMPORTANT: if the town has more than one relevant historical date (e.g. an older institution, monastery, or building founded there vs. the town itself later being granted official status such as market-town/købstad rights), list each as its own separate fact with its own date — do not merge them into a single date or imply one caused the other unless your source explicitly says so.
+CHARACTER/FIT FACTS: founding date or defining historical fact, its region, what kind of place it is, who it suits. IMPORTANT: if the town has more than one relevant historical date (e.g. an older institution, monastery, or building founded there vs. the town itself later being granted official status such as market-town/købstad rights), list each as its own separate fact with its own date — do not merge them into a single date or imply one caused the other unless your source explicitly says so.
 WHAT TO DO FACTS: specific real streets, buildings, museums, or activities — named and concrete, not generic. For any named attraction that has real access rules (opening hours, whether the grounds are open to the public even if a building itself is closed, seasonal restrictions), state exactly what you find rather than just naming the place. Also find the town's real signature or best-known named annual event, if it has one — its actual specific real name (e.g. a real festival or regatta name), not a generic placeholder description like "harbour festival" or "summer fest".
-GETTING THERE/REALITY FACTS: real transit routes and times from Copenhagen. If the town is not well served by train/bus, or driving is genuinely faster or more practical, also give the real driving time and route (e.g. via a named motorway/highway) — don't leave travel time blank just because transit is impractical. How long a visit genuinely takes, any real logistical downside (limited dining, seasonal closures, etc).
+GETTING THERE/REALITY FACTS: real transit routes and times from Copenhagen. If the town is not well served by train/bus, or driving is faster or more practical, also give the real driving time and route (e.g. via a named motorway/highway) — don't leave travel time blank just because transit is impractical. How long a visit takes, any real logistical downside (limited dining, seasonal closures, etc).
 IDENTITY CHECK, IMPORTANT: a town's real signature event has been mistaken for a generic placeholder name before (a made-up description standing in for the event's actual real name). If you're not fully confident of the event's exact real name, or you find more than one similarly-named or same-season event connected to this town, start your entire response with a single line: "IDENTITY WARNING: [explain exactly what's uncertain, e.g. no confirmed real name found for this town's signature event, or a possible mix-up between two events]" — then continue with the facts as normal. If you're confident there's no such issue, don't include that line at all.
 If you can't find something for a bucket, leave it out rather than guessing. Short facts only, no essay, no flowing sentences — ChatGPT handles the actual writing.`
           : sType === "festival"
-          ? `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay. IDENTITY CHECK, IMPORTANT: this exact event has been confused with a different, similarly-named or co-occurring event before (a small event mistaken for a much bigger one sharing part of its name or season) — actively check whether "${name}" might be getting confused with a different real event in your search results. If there's genuine risk of that, start your entire response with a single line: "IDENTITY WARNING: [explain exactly what might be getting mixed up, e.g. a different, larger festival with a similar name in the same town]" — then continue with the facts as normal. If you're confident there's no confusion, don't include that line at all.`
+          ? `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay. IDENTITY CHECK, IMPORTANT: this exact event has been confused with a different, similarly-named or co-occurring event before (a small event mistaken for a much bigger one sharing part of its name or season) — actively check whether "${name}" might be getting confused with a different real event in your search results. If there's real risk of that, start your entire response with a single line: "IDENTITY WARNING: [explain exactly what might be getting mixed up, e.g. a different, larger festival with a similar name in the same town]" — then continue with the facts as normal. If you're confident there's no confusion, don't include that line at all.`
           // ── A BAR STREET WAS BEING ASKED FOR ITS LINEUP ──────────
           //
           // Everything that was not a town, a restaurant or a festival fell
@@ -4177,13 +4225,13 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           // Danish towns and "Vestergade in Denmark" names none of them.
           : sType === "nightStreet"
           ? `Using real, current web search, find accurate current facts about the bar street "${subject}" in Denmark, and sort them into exactly three labeled groups — do not write prose, just real facts:
-WHO IT'S FOR FACTS: who actually drinks there (students, stag parties, locals, tourists), the real named bars and clubs ON this street, how many venues it genuinely has, what a beer costs.
-BEST NIGHTS FACTS: which nights of the week are actually busy and which are dead, when it fills up and when it empties, seasonal differences, closing times.
+WHO IT'S FOR FACTS: who drinks there (students, stag parties, locals, tourists), the real named bars and clubs ON this street, how many venues it has, what a beer costs.
+BEST NIGHTS FACTS: which nights of the week are busy and which are dead, when it fills up and when it empties, seasonal differences, closing times.
 WALKING IT FACTS: how long the street is, which end is which and how they differ, where it starts and finishes, what is at each end, real safety or reputation issues people report.
 This is a STREET, not a venue and not an event: it has no opening hours of its own, no tickets, no lineup and no stages. If you find yourself reporting a date or a stage, you are describing something else. If you can't find something for a bucket, leave it out rather than guessing.
-IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is a Vestergade, a Nørregade and an Algade in many of them. Everything you report must be about this street in ${draftTown || "the town named above"}. If your results are actually about a street of the same name in a different town, or you cannot tell which town a result means, start your entire response with a single line: "IDENTITY WARNING: [what is uncertain]" — then continue with whatever you can confirm.`
+IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is a Vestergade, a Nørregade and an Algade in many of them. Everything you report must be about this street in ${draftTown || "the town named above"}. If your results are about a street of the same name in a different town, or you cannot tell which town a result means, start your entire response with a single line: "IDENTITY WARNING: [what is uncertain]" — then continue with whatever you can confirm.`
           : sType === "nightTown"
-          ? `Using real, current web search, find accurate current facts about the nightlife of "${name}" in Denmark. Short facts only, no essay: where people actually go out (real named streets, quarters and venues), who the crowd genuinely is and why (student population, garrison, tourism), which nights are busy, roughly what a night out costs, and any real logistical downside (last transport, distances between areas, closing times). This is a TOWN, not a venue: it has no opening hours, no tickets and no lineup. If you can't find something, leave it out rather than guessing.`
+          ? `Using real, current web search, find accurate current facts about the nightlife of "${name}" in Denmark. Short facts only, no essay: where people go out (real named streets, quarters and venues), who the crowd is and why (student population, garrison, tourism), which nights are busy, roughly what a night out costs, and any real logistical downside (last transport, distances between areas, closing times). This is a TOWN, not a venue: it has no opening hours, no tickets and no lineup. If you can't find something, leave it out rather than guessing.`
           : `Using real, current web search, find accurate, current, checkable facts about "${subject}" in Denmark. Short facts only, no essay: exactly where it is, what it costs to get in or take part and what that price covers, when it is open or when it is busy, how a visitor gets there, and any real logistical downside. If it is a dated event, give the dates; if it is not, do not invent a season for it. If you can't find something, leave it out rather than guessing.`) + `\n${researchRules(sType, researchWhere())}`;
         setStudioStage({ label: "Fact-checking the research (Perplexity)", percent: 50 });
         const preCheck = await withRetry(
@@ -4333,7 +4381,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
         const KIND_WORD = { rail: "railway station", ferry: "ferry terminal", bus: "bus stop", air: "airport", other: "transit stop" };
         const kindWord = KIND_WORD[stopKind] || "transit stop";
         return `VERIFIED LOCATION DATA (from real geocoding + Places + Directions API queries, not a guess): coordinates are ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}.${station
-        ? ` The real nearest arrival point is ${station}, and it is a ${kindWord}${st.walk ? `, about ${st.walk} on foot from the centre` : ""}. It was verified to be walkable from here by a real walking-route query, so it is genuinely the stop that serves this place AND THE READER CAN WALK IT. Do not tell them to look up a bus, a taxi or a journey planner for this leg, and do not hedge the connection: the walk is the connection, and it is measured.${coordIsTownCentre ? ` THIS COORDINATE IS THE CENTRE OF ${String(draftTown || "the town").toUpperCase()}, NOT THE VENUE, because neither geocode found the venue itself. The stop above is the one nearest the town centre. Do not state a walking time from it to this place, and do not put a walking time in any field.` : ""}${!coordIsTownCentre && st.walkMinutes != null && st.walkMinutes <= SHORT_WALK_MINUTES ? ` THAT WALK IS ${st.walkMinutes} MINUTES. Under ${SHORT_WALK_MINUTES} minutes, NOTHING in this entry may suggest a bus, a taxi, driving or a journey planner for getting from there to here. Write the walk.` : ""} ${hasArrivalField(sType) ? "Put ONLY that name in the nearestStation field, with no walking time and no explanation inside it." : "There is deliberately NO nearestStation field on this content type: a town is the destination itself and has as many arrival points as it has edges, so naming one states a fact about a coordinate rather than about the place. This is given to you so the PROSE gets the mode of arrival right, and for nothing else."} Call it a ${kindWord} in the prose and nowhere call it something it is not: ${stopKind === "ferry" ? "this place is reached by boat, so do not write about arriving by train." : stopKind === "bus" ? "there is no railway here, so do not write about a train station." : "describe it as what it is."}`
+        ? ` The real nearest arrival point is ${station}, and it is a ${kindWord}${st.walk ? `, about ${st.walk} on foot from the centre` : ""}. It was verified to be walkable from here by a real walking-route query, so it is the stop that serves this place AND THE READER CAN WALK IT. Do not tell them to look up a bus, a taxi or a journey planner for this leg, and do not hedge the connection: the walk is the connection, and it is measured.${coordIsTownCentre ? ` THIS COORDINATE IS THE CENTRE OF ${String(draftTown || "the town").toUpperCase()}, NOT THE VENUE, because neither geocode found the venue itself. The stop above is the one nearest the town centre. Do not state a walking time from it to this place, and do not put a walking time in any field.` : ""}${!coordIsTownCentre && st.walkMinutes != null && st.walkMinutes <= SHORT_WALK_MINUTES ? ` THAT WALK IS ${st.walkMinutes} MINUTES. Under ${SHORT_WALK_MINUTES} minutes, NOTHING in this entry may suggest a bus, a taxi, driving or a journey planner for getting from there to here. Write the walk.` : ""} ${hasArrivalField(sType) ? "Put ONLY that name in the nearestStation field, with no walking time and no explanation inside it." : "There is deliberately NO nearestStation field on this content type: a town is the destination itself and has as many arrival points as it has edges, so naming one states a fact about a coordinate rather than about the place. This is given to you so the PROSE gets the mode of arrival right, and for nothing else."} Call it a ${kindWord} in the prose and nowhere call it something it is not: ${stopKind === "ferry" ? "this place is reached by boat, so do not write about arriving by train." : stopKind === "bus" ? "there is no railway here, so do not write about a train station." : "describe it as what it is."}`
         : " This lookup returned no arrival point, so leave nearestStation EMPTY rather than naming a landmark or a stop on the other side of water. AN EMPTY FIELD MEANS THIS SEARCH FOUND NOTHING, AND IT IS NOT EVIDENCE THAT NO STATION OR SERVICE EXISTS. A Ribelund draft turned this exact blank into the sentence 'Ribe has no train station of its own', and Ribe has a station on the Bramming to Tønder line. Do not write that this place has no station, no stop, no bus or no public transport, and do not write that its transport is unmapped or unclear. Say nothing about the arrival point at all, or say plainly that it could not be confirmed here."} This is provided for your context only — the system will use the verified values directly regardless of what you write, so focus your words on the EXPERIENCE and description, not on restating these numbers precisely.`;
       };
 
@@ -4723,8 +4771,8 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
               ? `Those port names and that operator come from the routing API itself, not from research: use them exactly. Do NOT name a different crossing to the same island. If a traveler could start from a different part of the country and use a different route, say so, but this is the confirmed one from ${journeyFrom.name}.\n`
               : "")
               + (namedLegs.length > 0 ? `REAL CONNECTING SERVICES on that public transport route, also from the API: ${namedLegs.join("; ")}.\n` : "")
-              + `REAL TRANSPORT CHECK from ${journeyFrom.name} (a live Google Directions query, not a search result and not a guess; the public transport figure is for a normal weekday mid-morning departure, which is the journey a traveler would actually make, not a late-night or weekend timetable): `
-              + (transit ? `BY PUBLIC TRANSPORT: ${transit}.\n${journeyBlock(transitParts)}\n` : `BY PUBLIC TRANSPORT: the routing query returned no itinerary. This means UNCONFIRMED, NOT "no route exists" — rural Danish bus links and island ferry operators are not always in the transit feed, and this is ESPECIALLY common for islands, where a real, frequent, well-used ferry simply is not indexed. Do NOT write that public transport is unavailable or that driving is the only option; say the connection could not be confirmed and point at rejseplanen.dk and the ferry operator, IN THE REALITY CHECK PARAGRAPH AND NOWHERE ELSE. NEVER put that advice in a short At a Glance field, and NEVER IN gemlyxFind: that field is the one curated find in the entry and an errand is not a find. A Ribelund draft put "the useful move is to check Rejseplanen the same week for the real bus connection from Ribe Station" there, for a station eight minutes' walk away. Before you write anything about looking up a bus, check whether a nearest arrival point is named above: if one is, and it is walkable, the answer is the walk, not a journey planner. The nearestStation field takes a real station, stop or terminal NAME and nothing else: no sentence, no semicolon, no "likely", no "check rejseplanen", no explanation. If no real stop can be named, nearestStation must be an EMPTY STRING. An empty field reads as "we do not know"; a field containing advice reads as a station called "check rejseplanen.dk", which is what actually shipped. If a ferry is named anywhere above, that crossing is real and carries foot passengers unless the operator says otherwise. `)
+              + `REAL TRANSPORT CHECK from ${journeyFrom.name} (a live Google Directions query, not a search result and not a guess; the public transport figure is for a normal weekday mid-morning departure, which is the journey a traveler would make, not a late-night or weekend timetable): `
+              + (transit ? `BY PUBLIC TRANSPORT: ${transit}.\n${journeyBlock(transitParts)}\n` : `BY PUBLIC TRANSPORT: the routing query returned no itinerary. This means UNCONFIRMED, NOT "no route exists" — rural Danish bus links and island ferry operators are not always in the transit feed, and this is ESPECIALLY common for islands, where a real, frequent, well-used ferry is not indexed. Do NOT write that public transport is unavailable or that driving is the only option; say the connection could not be confirmed and point at rejseplanen.dk and the ferry operator, IN THE REALITY CHECK PARAGRAPH AND NOWHERE ELSE. NEVER put that advice in a short At a Glance field, and NEVER IN gemlyxFind: that field is the one curated find in the entry and an errand is not a find. A Ribelund draft put "the useful move is to check Rejseplanen the same week for the real bus connection from Ribe Station" there, for a station eight minutes' walk away. Before you write anything about looking up a bus, check whether a nearest arrival point is named above: if one is, and it is walkable, the answer is the walk, not a journey planner. The nearestStation field takes a real station, stop or terminal NAME and nothing else: no sentence, no semicolon, no "likely", no "check rejseplanen", no explanation. If no real stop can be named, nearestStation must be an EMPTY STRING. An empty field reads as "we do not know"; a field containing advice reads as a station called "check rejseplanen.dk", which is what shipped. If a ferry is named anywhere above, that crossing is real and carries foot passengers unless the operator says otherwise. `)
               + (driving ? `BY CAR: ${driving}. ` : "")
               + `Use these real figures for travelTime and for anything you say about getting there, in preference to any duration from a search snippet. If a ferry is involved, these already include it. NEVER state that no public transport route exists on the strength of this block alone.`;
           }
@@ -5503,7 +5551,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
               listingPages.push({ host: domainOf(l.href), text: tData.text });
               if (!listingDomains.includes(domainOf(l.href))) listingDomains.push(domainOf(l.href));
               if (!candidateUrls.includes(l.href)) candidateUrls.push(l.href);
-              context += `\nTHE TICKET AGENT THE OPERATOR LINKS TO (${domainOf(l.href)}), reached from a "${(l.text || "tickets").slice(0, 40)}" link on ${domainOf(l.from)}. This is where the tickets are actually sold, so it is the authority on the PRICE and on what is still buyable. It is NOT the operator and may not be called the official site. Attribute it in uncertainties, never inside a glance field: ${tData.text.slice(0, 2200)}`;
+              context += `\nTHE TICKET AGENT THE OPERATOR LINKS TO (${domainOf(l.href)}), reached from a "${(l.text || "tickets").slice(0, 40)}" link on ${domainOf(l.from)}. This is where the tickets are sold, so it is the authority on the PRICE and on what is still buyable. It is NOT the operator and may not be called the official site. Attribute it in uncertainties, never inside a glance field: ${tData.text.slice(0, 2200)}`;
             }
           } catch { /* one agent failing is not a reason to lose the draft */ }
         }
@@ -5940,7 +5988,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
         : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}\n\n` : "") + (realAddressText ? `${realAddressText}\n\n` : "") + (ticketText ? `${ticketText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below).
 WHEN THESE TWO CONFLICT, PREFER THE ONE YOU CAN POINT AT. "More specific" is not the test and never was: a synthesised answer always reads as more specific than a raw snippet, so preferring specificity means preferring whichever source happens to sound most confident, which is the opposite of what this pipeline is for. Prefer the claim that names a real page, an operator, an official site or a dated announcement. If the two disagree and neither is traceable, say so in uncertainties and leave the field empty rather than picking a winner.
 A DATE, PRICE OR OPENING TIME FROM EITHER SOURCE IS A LEAD, NOT A FACT, unless it comes from the place's own site or its official ticketing page.
-BUT A LEAD THAT A CURRENT SOURCE ACTUALLY STATES IS STILL WRITTEN AS A FACT. "Lead" governs how much you should go looking for a better source, not how you phrase the number once it is the best you have. If a current page states a price, WRITE THE PRICE. Never write that it is unconfirmed, never call it an estimate, never say it was not verified by the organiser, and never tell the reader to ring and check. A reader who is told 400 kr and finds 400 kr is served; a reader told "400 kr, but treat it as an estimate" is told nothing and trusts nothing. Where the figure came from goes in __sources, and it goes nowhere else.
+BUT A LEAD THAT A CURRENT SOURCE STATES IS STILL WRITTEN AS A FACT. "Lead" governs how much you should go looking for a better source, not how you phrase the number once it is the best you have. If a current page states a price, WRITE THE PRICE. Never write that it is unconfirmed, never call it an estimate, never say it was not verified by the organiser, and never tell the reader to ring and check. A reader who is told 400 kr and finds 400 kr is served; a reader told "400 kr, but treat it as an estimate" is told nothing and trusts nothing. Where the figure came from goes in __sources, and it goes nowhere else.
 ${googleFindings}\n\n` : "") + (context || "No search context found — use only well-established knowledge, leave uncertain fields empty, and use 'See website' / 'Check locally' fallbacks.");
 
       // STAGE 4 — OpenAI structures the raw research into organized notes per
@@ -5954,7 +6002,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       setStudioStage({ label: "Organizing the research notes", percent: 62 });
       const structureResult = await withRetry(
         () => askOpenAI(
-          `You're organizing raw research into notes for a writer — NOT writing final prose yourself, just sorting real facts under clear headings so the writer's job narrows to pure wording. This is for a "${sType}" entry about "${name}" in a Danish travel guide. Read the raw research below and organize it into plain point-form notes under headings matching what needs to be written (use your judgment on what headings fit this content type — e.g. for a town: character/atmosphere facts, things-to-do facts, getting-there-and-downsides facts; for a restaurant: vibe facts, how-it's-made facts, price/wait/reality facts). Include ONLY facts actually present in the research — never invent to fill a heading, leave it sparse instead. Keep every specific number, name, date, and price exactly as found. Be concise — notes, not paragraphs.${isLodgingType(sType) ? LODGING_NOTES_RULE : ""}\n\nRaw research:\n${rawResearch}`,
+          `You're organizing raw research into notes for a writer — NOT writing final prose yourself, just sorting real facts under clear headings so the writer's job narrows to pure wording. This is for a "${sType}" entry about "${name}" in a Danish travel guide. Read the raw research below and organize it into plain point-form notes under headings matching what needs to be written (use your judgment on what headings fit this content type — e.g. for a town: character/atmosphere facts, things-to-do facts, getting-there-and-downsides facts; for a restaurant: vibe facts, how-it's-made facts, price/wait/reality facts). Include ONLY facts present in the research — never invent to fill a heading, leave it sparse instead. Keep every specific number, name, date, and price exactly as found. Be concise — notes, not paragraphs.${isLodgingType(sType) ? LODGING_NOTES_RULE : ""}\n\nRaw research:\n${rawResearch}`,
           // 1200 → 3000 (Oliver's console: "OpenAI returned no text" 3/3 on this
           // exact stage): gpt-5.6-sol is a reasoning model whose internal
           // reasoning shares this same budget, and organizing a large research
@@ -6024,7 +6072,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             if (distFromTownCenter > 1.5) { // walking-friction threshold — beyond this, "the town's station" stops being a useful answer for THIS specific place
               const hlStation = (await findRealNearestStation(hlCoords.lat, hlCoords.lon))?.name || null;
               ui(setStudioIdentityWarning, identityWarning =
-                `"${t.highlight}" is ${distFromTownCenter.toFixed(1)} km from ${name}'s town-center station (verified) — that's too far to describe reaching it the same way as the town center. ${hlStation ? `The real nearest station to "${t.highlight}" specifically is ${hlStation}.` : "Couldn't verify its actual nearest station — check this manually."} Compare this against what "Getting There & Reality" actually says before publishing.`
+                `"${t.highlight}" is ${distFromTownCenter.toFixed(1)} km from ${name}'s town-center station (verified) — that's too far to describe reaching it the same way as the town center. ${hlStation ? `The real nearest station to "${t.highlight}" specifically is ${hlStation}.` : "Couldn't verify its actual nearest station — check this manually."} Compare this against what "Getting There & Reality" says before publishing.`
               );
             }
           }
@@ -6124,7 +6172,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         const proseFields = Object.entries(t).filter(([, v]) => typeof v === "string" && v.length > 20).map(([k, v]) => `${k}: "${v}"`).join("\n");
         if (proseFields) {
           const scanResult = await askOpenAI(
-            `Read this travel-guide draft's text fields below. Flag specific phrases that fall into either category: (1) phrases that sound stilted, unnatural, or like an awkward/non-native English construction — the kind of sentence a real editor winces at, not a general writing-quality opinion (example: "the town itself grew up around the harbour" — nobody writes that a town "grew up" that way; "developed" or "formed" reads naturally instead); (2) actual grammar errors — subject-verb agreement, wrong verb tense/form, misused words, typos (example: "if you genuinely wants" — should be "want", a plain agreement mistake a human editor would catch immediately). Do NOT flag plain, simple writing just for being simple — only genuinely awkward phrasing or genuinely incorrect grammar. If nothing qualifies, respond with exactly: NONE. Otherwise respond with ONLY a JSON array: [{"field": "the field name", "phrase": "the exact flagged phrase, verbatim from the text", "why": "one short reason, say whether it's awkward phrasing or a grammar error"}].\n\nDraft text fields:\n${proseFields}`,
+            `Read this travel-guide draft's text fields below. Flag specific phrases that fall into either category: (1) phrases that sound stilted, unnatural, or like an awkward/non-native English construction — the kind of sentence a real editor winces at, not a general writing-quality opinion (example: "the town itself grew up around the harbour" — nobody writes that a town "grew up" that way; "developed" or "formed" reads naturally instead); (2) actual grammar errors — subject-verb agreement, wrong verb tense/form, misused words, typos (example: "if you wants" — should be "want", a plain agreement mistake a human editor would catch immediately). Do NOT flag plain, simple writing just for being simple — only awkward phrasing or incorrect grammar. If nothing qualifies, respond with exactly: NONE. Otherwise respond with ONLY a JSON array: [{"field": "the field name", "phrase": "the exact flagged phrase, verbatim from the text", "why": "one short reason, say whether it's awkward phrasing or a grammar error"}].\n\nDraft text fields:\n${proseFields}`,
             700
           );
           if (!scanResult.error && scanResult.text && scanResult.text.trim() !== "NONE") {
@@ -6188,7 +6236,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       let code = "";
       if (sType === "town") {
         const nextId = Math.max(0, ...towns.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const towns = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, photo: "/towns/${slug}.jpg", region: ${J(t.region)}, emoji: ${J(t.emoji || "📍")}, tag: ${J(t.tag)}, desc: ${J(t.characterAndFit)}, highlight: ${J(t.highlight)}, travelTime: ${J(t.travelTime)}, mapHint: ${J(t.mapHint || t.name + ", Denmark")}, nomiPotential: ${J(t.nomiPotential || "Medium")}, tier: ${J(t.tier)}, placeKind: ${J(t.placeKind || "")}, partOf: ${J(t.partOf || "")}, dayTripFrom: ${J(t.dayTripFrom || "")}, recommendedStayGlance: ${J(t.recommendedStayGlance)}, bestTimeGlance: ${J(t.bestTimeGlance)}, accommodationGlance: ${J(t.accommodationGlance)}, typicalCosts: ${J(t.typicalCosts)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([[`What to Do in ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Ctrl+F for \`const TOWN_COORDS\` and paste right after the { :\n${J(t.name)}: [${Number.isFinite(Number(t.lat)) ? Number(t.lat).toFixed(3) : "??"}, ${Number.isFinite(Number(t.lon)) ? Number(t.lon).toFixed(3) : "??"}],\n\n// 3) Add a photo at public/towns/${slug}.jpg\n// 4) VERIFY every fact before committing — especially highlight, travelTime, dates and coordinates.`;
+        code = `// 1) Ctrl+F for \`const towns = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, photo: "/towns/${slug}.jpg", region: ${J(t.region)}, emoji: ${J(t.emoji || "📍")}, tag: ${J(t.tag)}, desc: ${J(t.characterAndFit)}, highlight: ${J(t.highlight)}, travelTime: ${J(t.travelTime)}, mapHint: ${J(t.mapHint || t.name + ", Denmark")}, nomiPotential: ${J(t.nomiPotential || "Medium")}, tier: ${J(t.tier)}, placeKind: ${J(t.placeKind || "")}, partOf: ${J(t.partOf || "")}, dayTripFrom: ${J(t.dayTripFrom || "")}, island: ${J(cleanIsland(t.island))}, recommendedStayGlance: ${J(t.recommendedStayGlance)}, bestTimeGlance: ${J(t.bestTimeGlance)}, accommodationGlance: ${J(t.accommodationGlance)}, typicalCosts: ${J(t.typicalCosts)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([[`What to Do in ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Ctrl+F for \`const TOWN_COORDS\` and paste right after the { :\n${J(t.name)}: [${Number.isFinite(Number(t.lat)) ? Number(t.lat).toFixed(3) : "??"}, ${Number.isFinite(Number(t.lon)) ? Number(t.lon).toFixed(3) : "??"}],\n\n// 3) Add a photo at public/towns/${slug}.jpg\n// 4) VERIFY every fact before committing — especially highlight, travelTime, dates and coordinates.`;
       } else if (sType === "festival") {
         const isMajor = (t.scale || "").toLowerCase().startsWith("major");
         const targetArr = isMajor ? majorEvents : events;
@@ -6197,7 +6245,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         code = `// This reads as a ${isMajor ? "MAJOR, well-known" : "LOCAL/smaller-scale"} festival — targeting the ${targetName} array. If that feels wrong, move the block below to the other array yourself.\n// 1) Ctrl+F for \`const ${targetName} = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, tier: ${J(t.tier)}, nearestStation: ${J(t.nearestStation)}, ticketInfo: ${J(t.ticketInfo)}, camping: ${J(t.camping)}, accommodationTip: ${J(t.accommodationTip)}, travelTime: ${J(t.travelTime)}, ticketStatus: ${J(t.ticketStatus)}, town: ${J(t.town)}, type: ${J(t.type || "Festival")}, emoji: ${J(t.emoji || "🎪")}, date: ${J(t.dateStart)}, dateEnd: ${J(t.dateEnd)}, photo: "/events/${slug}.jpg", desc: ${J(t.desc)}, mapHint: ${J(t.mapHint)}, website: ${J(t.website)}, verified: ${J(stamp)}, color: ${J(t.color || "#8E24AA")}, tags: ${JSON.stringify(Array.isArray(t.tags) ? t.tags.slice(0, 3) : [])}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Atmosphere", t.atmosphere], ["Who It's For", t.whoItsFor], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/events/${slug}.jpg\n// 3) VERIFY dates, station, town/region and ticket info before committing. Empty date fields mean the research couldn't confirm them.`;
       } else if (sType === "free") {
         const nextId = Math.max(0, ...freeEntrance.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag)}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")}, ticketsGlance: ${J(t.ticketsGlance)}, extraCosts: ${J(t.extraCosts)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, bookingNote: ${J(t.bookingNote)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY the website URL and that entry is genuinely free before committing.`;
+        code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag)}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")}, ticketsGlance: ${J(t.ticketsGlance)}, extraCosts: ${J(t.extraCosts)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, bookingNote: ${J(t.bookingNote)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY the website URL and that entry is free before committing.`;
       } else if (sType === "booking") {
         const nextId = Math.max(0, ...craftItems.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const craftItemsFallback = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, what: ${JSON.stringify(Array.isArray(t.what) ? t.what : [t.what].filter(Boolean))}, rating: ${t.rating ? Number(t.rating).toFixed(1) : "null"}, location: ${J(t.location)}, price: ${J(t.price)}, priceNote: ${J(t.priceNote)}, travelTime: ${J(t.travelTime)}, bookingType: ${J(t.bookingType || "contact")}, popularityTag: ${J(t.popularityTag || "")}, transportWarning: ${t.transportWarning ? "true" : "false"}, emoji: ${J(t.emoji || "🔨")}, photo: "/craft/${slug}.jpg", color: ${J(t.color || "#8E6B1F")}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  desc: ${J(t.desc)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/craft/${slug}.jpg (or remove the photo field)\n// 3) rating is left null unless the research found a real one — leave it as null rather than inventing a number.\n// 4) VERIFY price, booking method, and that it still operates before committing.`;
@@ -6660,7 +6708,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           decide("nearestStation", {
             winner: `the measured journey ("${measuredStop}")`,
             loser: `the nearest transit point by distance ("${frozenGeo.station}")`,
-            rule: "The arrival point is where the route actually ends, not the closest thing on the map carrying a transit type. A ferry slip can win a radius search and no itinerary uses it.",
+            rule: "The arrival point is where the route ends, not the closest thing on the map carrying a transit type. A ferry slip can win a radius search and no itinerary uses it.",
             value: stop,
           });
         }
@@ -6668,7 +6716,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           note("Nearest arrival point", {
             provider: "google", detail: "the last transit leg of the measured journey",
             outcome: "ok", used: true,
-            got: `${stop}, where the ${transitParts?.legs?.[transitParts.legs.length - 1]?.vehicle || "service"} from ${transitParts?.legs?.[transitParts.legs.length - 1]?.from || "the interchange"} actually sets a traveller down`,
+            got: `${stop}, where the ${transitParts?.legs?.[transitParts.legs.length - 1]?.vehicle || "service"} from ${transitParts?.legs?.[transitParts.legs.length - 1]?.from || "the interchange"} sets a traveller down`,
           });
         }
       }
@@ -6892,7 +6940,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
               provider: "fetch",
               detail: "the page whose own text carries the figure in this draft",
               outcome: "empty", used: false,
-              got: "no page that was actually read states this figure, so there is no page to show a reader",
+              got: "no page that was read states this figure, so there is no page to show a reader",
             });
           }
         }
@@ -7820,14 +7868,14 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // said it and the writer copied it faithfully", which are different
         // bugs with different fixes.
         const notesForCheck = structureResult?.text
-          ? `\n\nAND THE ORGANISED NOTES THE WRITER ACTUALLY READ. The writer never saw the raw research above; it saw only this compression of it. A claim that is in these notes was NOT invented by the writer even if the raw research does not obviously support it: say so plainly, because the fix for that is a different one.\n${String(structureResult.text).slice(0, 12000)}`
+          ? `\n\nAND THE ORGANISED NOTES THE WRITER READ. The writer never saw the raw research above; it saw only this compression of it. A claim that is in these notes was NOT invented by the writer even if the raw research does not obviously support it: say so plainly, because the fix for that is a different one.\n${String(structureResult.text).slice(0, 12000)}`
           : "";
         // Two groups, because a judgement and a report are not checked the same
         // way. See utils/checkScope.js for the fourteen-flag draft that made
         // this necessary.
         const checkSplit = splitForCheck(writtenFields(t));
         const inventedCheck = await askPerplexity(
-          `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — genuine signs of invention, not just paraphrasing.\n${INVENTED_CHECK_FORMAT}\n${CHECK_SCOPE_BLOCK}\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(sType, { ...researchWhere(), name: t?.name || name })}\n\nResearch it was written from:\n${checkResearch.text}${notesForCheck}\n\nFinished draft, REPORTED FIELDS (check these as normal):\n${JSON.stringify(checkSplit.report)}\n\nFinished draft, CHARACTERISATION FIELDS (CONTRADICTED only, never UNVERIFIED unless you are quoting a specific figure inside one):\n${JSON.stringify(checkSplit.characterisation)}`
+          `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — real signs of invention, not just paraphrasing.\n${INVENTED_CHECK_FORMAT}\n${CHECK_SCOPE_BLOCK}\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(sType, { ...researchWhere(), name: t?.name || name })}\n\nResearch it was written from:\n${checkResearch.text}${notesForCheck}\n\nFinished draft, REPORTED FIELDS (check these as normal):\n${JSON.stringify(checkSplit.report)}\n\nFinished draft, CHARACTERISATION FIELDS (CONTRADICTED only, never UNVERIFIED unless you are quoting a specific figure inside one):\n${JSON.stringify(checkSplit.characterisation)}`
         );
         // ── A FAILED LAST GATE LOOKED EXACTLY LIKE A CLEAN PASS ──────
         // Studio audit, 12 Aug, open item 1. askPerplexity NEVER THROWS: it
@@ -8458,10 +8506,10 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
     const used = [...usedFactSubjects()].slice(0, 60).join(", ");
     setFactStage("Researching");
     const researchPrompt = subject
-      ? `Find ONE genuinely interesting, specific, verifiable fact about ${subject} in Denmark. Prefer something a well-informed traveler would not already know. Give the fact plainly, and give the single best source URL that confirms it. If you cannot confirm anything specific and interesting, say exactly "NOTHING CONFIRMED".`
-      : `Pick ONE real, specific, verifiable fact about Denmark that an ordinary international traveler would find genuinely interesting. It can be about history, food, nature, design, language, daily life, or A CULTURAL NORM: an unwritten rule of behaviour a visitor would not know and could get wrong. Janteloven, cycle-lane etiquette, how tipping actually works, why nobody makes small talk on the bus, what hygge is used to mean in practice rather than in marketing, Sunday opening, splitting the bill, taking your shoes off indoors.
+      ? `Find ONE interesting, specific, verifiable fact about ${subject} in Denmark. Prefer something a well-informed traveler would not already know. Give the fact plainly, and give the single best source URL that confirms it. If you cannot confirm anything specific and interesting, say exactly "NOTHING CONFIRMED".`
+      : `Pick ONE real, specific, verifiable fact about Denmark that an ordinary international traveler would find interesting. It can be about history, food, nature, design, language, daily life, or A CULTURAL NORM: an unwritten rule of behaviour a visitor would not know and could get wrong. Janteloven, cycle-lane etiquette, how tipping works, why nobody makes small talk on the bus, what hygge is used to mean in practice rather than in marketing, Sunday opening, splitting the bill, taking your shoes off indoors.
 
-CULTURAL NORMS NEED MORE CARE THAN OTHER FACTS, NOT LESS. They are the easiest thing on this list to state confidently and wrongly, because the popular version is usually a flattened stereotype. Two rules: name the real origin where there is one (Janteloven is a set of rules from Aksel Sandemose's 1933 novel En flygtning krydser sit spor, satirising a fictional town, and Danes argue about how much it still applies, so it must never be presented as an official code Danes follow), and describe what people actually DO rather than what a listicle says they are like. If the honest version is "this is contested", that IS the interesting fact, and it is more useful to a traveler than a tidy one.
+CULTURAL NORMS NEED MORE CARE THAN OTHER FACTS, NOT LESS. They are the easiest thing on this list to state confidently and wrongly, because the popular version is usually a flattened stereotype. Two rules: name the real origin where there is one (Janteloven is a set of rules from Aksel Sandemose's 1933 novel En flygtning krydser sit spor, satirising a fictional town, and Danes argue about how much it still applies, so it must never be presented as an official code Danes follow), and describe what people DO rather than what a listicle says they are like. If the honest version is "this is contested", that IS the interesting fact, and it is more useful to a traveler than a tidy one.
 
 Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the most obvious tourist facts (the Little Mermaid statue, LEGO, "happiest country"). State the subject, the fact, and the single best source URL that confirms it. If you cannot confirm one, say exactly "NOTHING CONFIRMED".`;
     let research;
@@ -8738,8 +8786,8 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
   // worth writing, and picking queues those names into the normal draft flow
   // above (same generateArea pipeline, just auto-run one at a time).
   const DISCOVER_TYPE_LABEL = {
-    town: "small Danish towns genuinely worth a detour — real, lesser-known places, not the famous cities everyone already covers",
-    festival: "festivals, markets, or one-off events actually happening in Denmark",
+    town: "small Danish towns worth a detour — real, lesser-known places, not the famous cities everyone already covers",
+    festival: "festivals, markets, or one-off events happening in Denmark",
     free: "free-entrance attractions in Denmark",
     food: "individual restaurants or food spots in Denmark",
     foodStreet: "food streets or food markets (multiple vendors in one place) in Denmark",
@@ -8807,7 +8855,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       // in generateArea(), instead of a single try dying on one flaky response.
       const planResult = await withRetry(
         () => askOpenAI(
-          `You're helping a Danish travel guide find genuinely new candidates to research next: ${typeLabel}. Generate 5 diverse, SPECIFIC search queries (not generic categories) that would actually surface real, named candidates — vary the angle: one aimed at forum/Reddit-style discussion, one at "hidden gem" or "underrated" roundup articles, one at local/regional tourism sources, one at recent listings, one broad. ${extraFraming || ""}${discoverNote}\n\n${discoverAim}\n\nRespond with ONLY a JSON array of 5 search query strings, nothing else.`,
+          `You're helping a Danish travel guide find new candidates to research next: ${typeLabel}. Generate 5 diverse, SPECIFIC search queries (not generic categories) that would surface real, named candidates — vary the angle: one aimed at forum/Reddit-style discussion, one at "hidden gem" or "underrated" roundup articles, one at local/regional tourism sources, one at recent listings, one broad. ${extraFraming || ""}${discoverNote}\n\n${discoverAim}\n\nRespond with ONLY a JSON array of 5 search query strings, nothing else.`,
           1400
         ),
         r => !!r.error,
@@ -8868,15 +8916,15 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       const existingList = existing.length ? existing.join("; ") : "(nothing yet)";
       const synthResult = await withRetry(
         () => askOpenAI(
-          `From the raw search results below, extract real, SPECIFICALLY NAMED ${typeLabel} — genuine candidates worth someone researching and writing a full guide entry about next. Only include something if it is actually named in the search results below — never invent a plausible-sounding name. Skip anything vague or generic (a category, not a specific named place).
+          `From the raw search results below, extract real, SPECIFICALLY NAMED ${typeLabel} — real candidates worth someone researching and writing a full guide entry about next. Only include something if it is named in the search results below — never invent a plausible-sounding name. Skip anything vague or generic (a category, not a specific named place).
 
 DO NOT include anything already on this existing list (match loosely — different spelling/capitalization of the same real place still counts as already covered): ${existingList}
 
 SKIP ANY EVENT WHOSE EDITION HAS ALREADY FINISHED. Today's date is in the prompt context and most search results about an annual festival describe the edition that just ended, which is of no use to somebody planning a trip. If the only dates you can find for something have already passed, leave it out rather than offering it.
 
-For each real candidate found, give its exact name, the town/region it's in (empty string if genuinely unclear), and a one-sentence hook — a specific, concrete reason from the search results this is worth including (not a generic reason like "popular" or "worth visiting"). Aim for 8-15 if the results genuinely support that many; return fewer if that's honestly all that's there — never pad the list with weak or vague entries just to hit a number.
+For each real candidate found, give its exact name, the town/region it's in (empty string if unclear), and a one-sentence hook — a specific, concrete reason from the search results this is worth including (not a generic reason like "popular" or "worth visiting"). Aim for 8-15 if the results support that many; return fewer if that's honestly all that's there — never pad the list with weak or vague entries just to hit a number.
 
-For each one also give WHEN it runs, in its own words from the search results: a month, a date range, or an empty string if the results genuinely do not say. This is read by code to check the month a search was aimed at, so give the month by name ("early December", "28 August to 6 September 2026") rather than a season or a vague phrase, and leave it empty rather than guessing.
+For each one also give WHEN it runs, in its own words from the search results: a month, a date range, or an empty string if the results do not say. This is read by code to check the month a search was aimed at, so give the month by name ("early December", "28 August to 6 September 2026") rather than a season or a vague phrase, and leave it empty rather than guessing.
 
 Respond with ONLY a JSON array: [{"name": "...", "region": "...", "when": "...", "hook": "..."}]
 
@@ -10603,11 +10651,11 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
 
 Look at the event's OWN website and its official ticket seller first, then the organiser's social pages, then a listing site. Danish festival pages often state dates as "11.06.27-12.06.27", which is day.month.year, or as "3.-7. juni 2027".
 
-BE CAREFUL OF TWO THINGS. A festival page carries its own history, so make sure the dates you report are the NEXT edition and not last year's recap. And if the next edition genuinely has not been announced, say so: that is a real answer and it is far better than a guess, because this date is printed for travellers booking flights.
+BE CAREFUL OF TWO THINGS. A festival page carries its own history, so make sure the dates you report are the NEXT edition and not last year's recap. And if the next edition has not been announced, say so: that is a real answer and it is far better than a guess, because this date is printed for travellers booking flights.
 
 Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "YYYY-MM-DD or empty", "dateEndChanged": "YYYY-MM-DD or empty", "ticketStatusChanged": "", "notes": "one short sentence naming WHERE the date came from, or saying the next edition is not announced yet"}.
 ${researchRules("festival", ev)}`
-          : `Using real, current web search, check the current real status of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. Currently on file: date ${ev.date || "unknown"}${ev.ticketInfo ? `, ticket info "${ev.ticketInfo}"` : ""}${ev.ticketStatus ? `, ticket status "${ev.ticketStatus}"` : ""}. Check: (1) is it still genuinely scheduled to happen, or was it cancelled/postponed, (2) has the date actually changed from what's on file, (3) is ticket availability different from what's on file (now sold out, now on sale, now limited). A MULTI-DAY EVENT HAS TWO DATES AND THIS ANSWER HAS A FIELD FOR EACH: a page saying the event runs 7 to 8 November is dateChanged 2026-11-07 AND dateEndChanged 2026-11-08, never one end of the run squeezed into dateChanged on its own, because a day the event already runs on reads as the event moving. Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "dateEndChanged": "", "ticketStatusChanged": "", "notes": ""} — dateChanged is the new real date if it genuinely changed from what's on file, else empty string; ticketStatusChanged is the new real status ONLY if genuinely different from what's on file, else empty string; notes is one short sentence explaining what changed, ONLY if something in this response is non-empty/non-default, else empty string. If nothing has changed, all fields should be empty/true/default and notes empty.\n${researchRules("festival", ev)}`;
+          : `Using real, current web search, check the current real status of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. Currently on file: date ${ev.date || "unknown"}${ev.ticketInfo ? `, ticket info "${ev.ticketInfo}"` : ""}${ev.ticketStatus ? `, ticket status "${ev.ticketStatus}"` : ""}. Check: (1) is it still scheduled to happen, or was it cancelled/postponed, (2) has the date changed from what's on file, (3) is ticket availability different from what's on file (now sold out, now on sale, now limited). A MULTI-DAY EVENT HAS TWO DATES AND THIS ANSWER HAS A FIELD FOR EACH: a page saying the event runs 7 to 8 November is dateChanged 2026-11-07 AND dateEndChanged 2026-11-08, never one end of the run squeezed into dateChanged on its own, because a day the event already runs on reads as the event moving. Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "dateEndChanged": "", "ticketStatusChanged": "", "notes": ""} — dateChanged is the new real date if it changed from what's on file, else empty string; ticketStatusChanged is the new real status ONLY if different from what's on file, else empty string; notes is one short sentence explaining what changed, ONLY if something in this response is non-empty/non-default, else empty string. If nothing has changed, all fields should be empty/true/default and notes empty.\n${researchRules("festival", ev)}`;
         try {
           const result = await askPerplexity(prompt);
           if (result.error) {
@@ -10755,7 +10803,7 @@ ${researchRules("festival", ev)}`
     if (!raw) return;
     setManualPricePolishing(fieldName);
     try {
-      const result = await askClaude(`Lightly polish this short price/cost note into Gemlyx's plain, direct voice — keep every number, currency, and fact EXACTLY as given, change only phrasing if it genuinely needs it. If it already reads fine as-is, return it completely unchanged. Respond with ONLY the final text, no quotes, no explanation.\n\nText: "${raw}"`, 100);
+      const result = await askClaude(`Lightly polish this short price/cost note into Gemlyx's plain, direct voice — keep every number, currency, and fact EXACTLY as given, change only phrasing if it needs it. If it already reads fine as-is, return it completely unchanged. Respond with ONLY the final text, no quotes, no explanation.\n\nText: "${raw}"`, 100);
       const polished = result.text?.replace(/^["']|["']$/g, "");
       if (polished) setManualPriceInputs(prev => ({ ...prev, [fieldName]: polished }));
     } catch (err) { console.error("Polish failed:", err); }
@@ -10818,7 +10866,7 @@ ${researchRules("festival", ev)}`
           model: "gpt-5.6-sol",
           messages: [{
             role: "user",
-            content: `Read this draft travel-guide content and find sentences that genuinely read as generic AI writing — not because they use an obvious cliché word, but because of tone, rhythm, or structure: unnecessary hedging ("it could be argued", "some might say"), suspiciously tidy three-item lists, over-smooth even-toned phrasing with no real edge or specificity, sentences that could describe any place rather than THIS one. Be selective — only flag genuine problems, not every sentence, and don't invent issues if the writing is actually fine. For each real problem, quote the EXACT sentence as it appears in the text (verbatim, so it can be found) and give a short reason.\n\nRespond with ONLY a JSON array, no other text: [{"sentence": "exact sentence from the text", "reason": "short reason"}] — return [] if nothing genuine stands out.\n\nDraft:\n${studioDraftText}`
+            content: `Read this draft travel-guide content and find sentences that read as generic AI writing — not because they use an obvious cliché word, but because of tone, rhythm, or structure: unnecessary hedging ("it could be argued", "some might say"), suspiciously tidy three-item lists, over-smooth even-toned phrasing with no real edge or specificity, sentences that could describe any place rather than THIS one. Be selective — only flag real problems, not every sentence, and don't invent issues if the writing is fine. For each real problem, quote the EXACT sentence as it appears in the text (verbatim, so it can be found) and give a short reason.\n\nRespond with ONLY a JSON array, no other text: [{"sentence": "exact sentence from the text", "reason": "short reason"}] — return [] if nothing real stands out.\n\nDraft:\n${studioDraftText}`
           }],
           // Same rejected-parameter bug as scanSource above: gpt-5.6-sol refuses
           // max_tokens. This one failed SILENTLY: the catch below only logs to
@@ -10834,7 +10882,7 @@ ${researchRules("festival", ev)}`
       const results = JSON.parse(raw);
       const newFlags = (Array.isArray(results) ? results : [])
         .map(r => ({ phrase: r.reason, match: r.sentence, index: studioDraftText.indexOf(r.sentence), source: "ai" }))
-        .filter(f => f.index !== -1); // only keep ones we can actually locate verbatim in the text
+        .filter(f => f.index !== -1); // only keep ones we can locate verbatim in the text
       setAiTellFlags(prev => [...prev.filter(f => f.source !== "ai"), ...newFlags].sort((a, b) => a.index - b.index));
     } catch (err) { console.error("AI voice scan failed:", err); }
     setAiVoiceScanLoading(false);
@@ -10868,9 +10916,9 @@ ${researchRules("festival", ev)}`
       const original = studioDraftText.slice(start, end).trim();
       const issueDescription = flag.source === "ai" ? `it reads as generic AI writing (${flag.phrase})` : `it uses the generic AI-sounding phrase "${flag.match}" or any similar cliché filler`;
       const avoidNote = avoidList.length > 0
-        ? ` Give a GENUINELY DIFFERENT rewrite than ${avoidList.length > 1 ? "any of these you already tried" : "this one you already tried"} — vary the actual wording and sentence structure, not just swap one word: ${avoidList.map(a => `"${a}"`).join(" / ")}.`
+        ? ` Give a DIFFERENT rewrite than ${avoidList.length > 1 ? "any of these you already tried" : "this one you already tried"} — vary the actual wording and sentence structure, not just swap one word: ${avoidList.map(a => `"${a}"`).join(" / ")}.`
         : "";
-      const prompt = `Rewrite ONLY this one sentence so ${issueDescription} no longer applies. Keep every real fact, name, price, and date exactly as given — change wording only, never content. This is a fragment from inside a JSON string field — respond with PLAIN TEXT only, no quote marks around your answer, no JSON syntax, nothing but the rewritten words themselves, since your answer gets inserted directly back into the surrounding JSON. Write direct, concrete, confident sentences — the way a knowledgeable local would actually talk, not smooth marketing copy. Avoid tidy "not just X but Y" constructions, avoid hedging phrases, avoid symmetrical list-like phrasing.${avoidNote}\n\nText: "${original}"`;
+      const prompt = `Rewrite ONLY this one sentence so ${issueDescription} no longer applies. Keep every real fact, name, price, and date exactly as given — change wording only, never content. This is a fragment from inside a JSON string field — respond with PLAIN TEXT only, no quote marks around your answer, no JSON syntax, nothing but the rewritten words themselves, since your answer gets inserted directly back into the surrounding JSON. Write direct, concrete, confident sentences — the way a knowledgeable local would talk, not smooth marketing copy. Avoid tidy "not just X but Y" constructions, avoid hedging phrases, avoid symmetrical list-like phrasing.${avoidNote}\n\nText: "${original}"`;
       const result = await askClaude(prompt, 200);
       let suggestion = result.text;
       // Belt-and-suspenders: strip any wrapping quotes the model added anyway,
@@ -11475,7 +11523,7 @@ ${researchRules("festival", ev)}`
           // underneath it. The gate's own comment twenty lines up says a gate
           // whose instructions cannot be followed is a wall, and "fill in a
           // date nobody has announced" is exactly that instruction.
-          + (wait.ok ? ` If the dates genuinely are not out yet, you do not have to lose the research: there is a button under this message to keep it under "No confirmed date yet".` : "")
+          + (wait.ok ? ` If the dates are not out yet, you do not have to lose the research: there is a button under this message to keep it under "No confirmed date yet".` : "")
         );
         return;
       }
@@ -11856,8 +11904,8 @@ ${researchRules("festival", ev)}`
           context = ((sData.answer || "") + " " + (sData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 5).join(" ")).trim();
         } catch { /* search down, Claude will fall back to safe wording */ }
         const enrichPrompt = `A traveler visits these stops in Denmark in this exact order: ${numbered}. Using ONLY the provided search context plus well-established Danish geography/transit knowledge, respond with ONLY strict JSON:
-{"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One specific sentence — name an actual area/neighbourhood to stay in if the context supports it (e.g. 'Stay near Koge harbour for an easy morning ride out'), not a generic 'stay overnight in [town]' with no reason given. CRITICAL: the place you suggest MUST be realistically close to where this day's stops actually are — never suggest a town in a different region or a different island just because it has good general transport links; proximity to THIS day's actual activities always wins over generic transit convenience. Only default to day-trip-from-Copenhagen phrasing if that is genuinely the better call for this specific day. RELOCATION DAYS ARE A SPECIFIC CASE, GET THIS RIGHT: if this day's OWN stops end with genuinely leaving for a new town (a departure/travel leg to somewhere the traveler will actually be based from for the following day(s)), the accommodation for THIS day must reflect where they'll ACTUALLY be sleeping that night — the destination they're traveling to, not the town they started the day in. Never write something like "stay near central Copenhagen" for a day whose last stop is "Departure to Aarhus" — that's recommending accommodation in a city they've already left by evening. Say where they'll really be. ACCOMMODATION TYPE, grounded in the real prices in the search context (never invent a specific price, only use ones actually present in context) and the traveler's stated daily budget: central Copenhagen is expensive — a tight budget there realistically means a hostel or budget guesthouse, not a hotel; the same budget in a smaller town elsewhere in Denmark often comfortably covers a real hotel, since prices outside the capital are typically lower. Weave the TYPE (hostel/hotel/guesthouse) into this sentence when the budget context makes one clearly more realistic than the other; if the budget is generous or genuinely unclear, don't force a type. ONE TRIP, ONE KIND OF TRAVELER — and if a day genuinely departs from that, the sentence has to say why IN THE SENTENCE. Oliver, 9 Aug 2026, on a real guide: \"It suggests hostels, but then gives a specific hotel??? Odd.\" Day 1 said book a hostel near Norreport, Day 3 said a comfortable hotel base in Odense, and on one budget BOTH were correct, because Copenhagen costs far more per night than Odense does. The reader could not know that, because neither sentence said it. Each day is written by its own separate call that cannot see the others, so YOU are the only place this can be caught: if the type you are about to write differs from what the same budget would buy in the capital, name the reason in the same breath (\"your nightly budget goes much further here than in Copenhagen, so a real hotel in the centre is comfortably in range\"). An unexplained jump between hostel and hotel does not read as good local knowledge, it reads as the guide contradicting itself. And the type in this sentence MUST match recommendedStay below: never write hostel here and return a hotel there.", "stayArea": "Just the specific area/neighbourhood/town name from the accommodation sentence above, 2-5 words, no extra description — e.g. 'Koge harbour' or 'central Odense' — used to build a real search link, so it must be an actual, findable place name, never invented.", "recommendedStay": "A REAL, SPECIFIC hotel or hostel name — ONLY if one is explicitly present in the search context, exactly as named there. This is the same never-guess rule as everything else here: if the search context does not name a specific real property, leave this an empty string and let the traveler search themselves — do NOT invent a plausible-sounding hotel name, do NOT reuse a generic chain name unless the context specifically confirms one exists in this area. An empty string is the correct, expected answer most of the time; only fill this when genuinely supported."}
-Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommend somewhere that contradicts it, and never tell them to economise when they have said they are not counting. A real guide he read offered "a budget-friendly hostel-style option if watching costs" to a family who had just said they had plenty of money. If the honest answer happens to be a cheaper place anyway, give a reason that is about the place and not about their wallet. ` : `THEY HAVE SAID NOTHING ABOUT MONEY, SO YOU KNOW NOTHING ABOUT THEIR BUDGET. Do not describe it, do not guess at it, and do not write a sentence in the second person about what they can or cannot afford. "Your tight daily budget", "on a modest budget" and "out of reach for you" are all claims about a person who has not spoken. The paragraph above tells you what a tight budget buys in Copenhagen; that is background about the city, not a fact about them. Recommend an area for a reason about the PLACE, and if price is genuinely the point, say what the place costs rather than what they can afford. `}always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no real map data): use realistic speeds — walking ~5 km/h (roughly 12 min/km), cycling ~15 km/h, city driving ~30 km/h even accounting for a short trip. Never guess something like "1 min by car" for two stops that aren't genuinely at the same address — sharing a city name is NOT the same as being adjacent (a campsite on the edge of a city and a museum in its center are commonly several km apart even though both say "Aarhus"). If you're not confident of the real distance between two specific stops, say "Check the route" rather than guessing a number that could be wrong by an order of magnitude. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is actually the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). Genuinely vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg genuinely can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't actually work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.`;
+{"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One specific sentence — name an actual area/neighbourhood to stay in if the context supports it (e.g. 'Stay near Koge harbour for an easy morning ride out'), not a generic 'stay overnight in [town]' with no reason given. CRITICAL: the place you suggest MUST be realistically close to where this day's stops are — never suggest a town in a different region or a different island just because it has good general transport links; proximity to THIS day's actual activities always wins over generic transit convenience. Only default to day-trip-from-Copenhagen phrasing if that is the better call for this specific day. RELOCATION DAYS ARE A SPECIFIC CASE, GET THIS RIGHT: if this day's OWN stops end with leaving for a new town (a departure/travel leg to somewhere the traveler will be based from for the following day(s)), the accommodation for THIS day must reflect where they'll be sleeping that night — the destination they're traveling to, not the town they started the day in. Never write something like "stay near central Copenhagen" for a day whose last stop is "Departure to Aarhus" — that's recommending accommodation in a city they've already left by evening. Say where they'll really be. ACCOMMODATION TYPE, grounded in the real prices in the search context (never invent a specific price, only use ones present in context) and the traveler's stated daily budget: central Copenhagen is expensive — a tight budget there realistically means a hostel or budget guesthouse, not a hotel; the same budget in a smaller town elsewhere in Denmark often comfortably covers a real hotel, since prices outside the capital are typically lower. Weave the TYPE (hostel/hotel/guesthouse) into this sentence when the budget context makes one clearly more realistic than the other; if the budget is generous or unclear, don't force a type. ONE TRIP, ONE KIND OF TRAVELER — and if a day departs from that, the sentence has to say why IN THE SENTENCE. Oliver, 9 Aug 2026, on a real guide: \"It suggests hostels, but then gives a specific hotel??? Odd.\" Day 1 said book a hostel near Norreport, Day 3 said a comfortable hotel base in Odense, and on one budget BOTH were correct, because Copenhagen costs far more per night than Odense does. The reader could not know that, because neither sentence said it. Each day is written by its own separate call that cannot see the others, so YOU are the only place this can be caught: if the type you are about to write differs from what the same budget would buy in the capital, name the reason in the same breath (\"your nightly budget goes much further here than in Copenhagen, so a real hotel in the centre is comfortably in range\"). An unexplained jump between hostel and hotel does not read as good local knowledge, it reads as the guide contradicting itself. And the type in this sentence MUST match recommendedStay below: never write hostel here and return a hotel there.", "stayArea": "Just the specific area/neighbourhood/town name from the accommodation sentence above, 2-5 words, no extra description — e.g. 'Koge harbour' or 'central Odense' — used to build a real search link, so it must be an actual, findable place name, never invented.", "recommendedStay": "A REAL, SPECIFIC hotel or hostel name — ONLY if one is explicitly present in the search context, exactly as named there. This is the same never-guess rule as everything else here: if the search context does not name a specific real property, leave this an empty string and let the traveler search themselves — do NOT invent a plausible-sounding hotel name, do NOT reuse a generic chain name unless the context specifically confirms one exists in this area. An empty string is the correct, expected answer most of the time; only fill this when supported."}
+Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommend somewhere that contradicts it, and never tell them to economise when they have said they are not counting. A real guide he read offered "a budget-friendly hostel-style option if watching costs" to a family who had just said they had plenty of money. If the honest answer happens to be a cheaper place anyway, give a reason that is about the place and not about their wallet. ` : `THEY HAVE SAID NOTHING ABOUT MONEY, SO YOU KNOW NOTHING ABOUT THEIR BUDGET. Do not describe it, do not guess at it, and do not write a sentence in the second person about what they can or cannot afford. "Your tight daily budget", "on a modest budget" and "out of reach for you" are all claims about a person who has not spoken. The paragraph above tells you what a tight budget buys in Copenhagen; that is background about the city, not a fact about them. Recommend an area for a reason about the PLACE, and if price is the point, say what the place costs rather than what they can afford. `}always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no real map data): use realistic speeds — walking ~5 km/h (roughly 12 min/km), cycling ~15 km/h, city driving ~30 km/h even accounting for a short trip. Never guess something like "1 min by car" for two stops that aren't at the same address — sharing a city name is NOT the same as being adjacent (a campsite on the edge of a city and a museum in its center are commonly several km apart even though both say "Aarhus"). If you're not confident of the real distance between two specific stops, say "Check the route" rather than guessing a number that could be wrong by an order of magnitude. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.`;
         // RETRIED (Oliver, again: "no accommodation recommendations (Booking)"):
         // this single call is the only source of the Where to stay card and the
         // per-leg how-texts, and it previously got exactly one attempt — one
@@ -12492,7 +12540,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   // Resolve a guide stop name to real coordinates (content data first, then town list), or null.
   const [geocodedCoords, setGeocodedCoords] = useState({}); // name -> {lat,lon}, filled in once per guide
   const [exactDurations, setExactDurations] = useState({}); // "origin|dest|mode" -> {durationText, durationMinutes}
-  const [noRouteFound, setNoRouteFound] = useState({}); // "origin|dest|mode" -> true, when Google genuinely found nothing (e.g. islands needing ferry+train+taxi combos no single mode covers)
+  const [noRouteFound, setNoRouteFound] = useState({}); // "origin|dest|mode" -> true, when Google found nothing (e.g. islands needing ferry+train+taxi combos no single mode covers)
   // Real Google-matched travel time (not a straight-line estimate) for every leg in a
   // guide, fetched once before it's shown. Needs /api/directions.js + GOOGLE_MAPS_KEY —
   // if either is missing, this silently no-ops and legs fall back to the km estimate,
@@ -13508,7 +13556,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       let planProblems = [];
       try {
         const plannerRes = await askOpenAI(
-          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name actually mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nA NIGHT OUT IS AT MOST ${MAX_BARS_A_NIGHT} BARS AND ${MAX_CLUBS_A_NIGHT} CLUB, PER DAY, AND THE CLUB IS OPTIONAL. Nobody follows an itinerary once the night has started, so a day carrying four bars is a day where two of them will never be reached and the whole plan reads as padding. Pick the one or two worth STARTING at and leave the rest out. This is a ceiling and not a target: most days need no bar at all.\n\nUse only real place names actually mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.${beenBlock}\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a genuinely different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.${chosenEventsBlock}${chosenExtrasBlock}\n\nConversation:\n${convoText}`,
+          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nA NIGHT OUT IS AT MOST ${MAX_BARS_A_NIGHT} BARS AND ${MAX_CLUBS_A_NIGHT} CLUB, PER DAY, AND THE CLUB IS OPTIONAL. Nobody follows an itinerary once the night has started, so a day carrying four bars is a day where two of them will never be reached and the whole plan reads as padding. Pick the one or two worth STARTING at and leave the rest out. This is a ceiling and not a target: most days need no bar at all.\n\nUse only real place names mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.${beenBlock}\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.${chosenEventsBlock}${chosenExtrasBlock}\n\nConversation:\n${convoText}`,
           1200
         );
         if (!plannerRes.error && plannerRes.text) {
@@ -13594,7 +13642,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
                   `This itinerary skeleton has specific, checkable problems. Fix them and return the corrected skeleton.\n\nPROBLEMS:\n${planProblemsForPrompt(verdict.problems)}\n\nHOW TO FIX EACH KIND:\n- A day with too few stops: add real places in or near that day's town, from the conversation, never invented.\n- The same place on two days: that is where they are STAYING. Keep it once, and give the other day its own places in that town or nearby.\n- Too few different places overall: the trip is thinner than the number of days it claims. Add real ones from the conversation.\n- A day that covers too much ground: move a stop to a neighbouring day, or drop the one that forces the long haul. A day that is mostly transit is a day the trip did not have.\n- A crowded arrival day: they land, queue at passport control, collect bags, cross the city and check in before any of it. Keep the two best things and move the rest to a later day. Do not compensate by overfilling day two.
 - A place closed on the day it is planned for: move it to a day it is open, or drop it. Never leave it where it is with a note.
 - A place planned for an hour it is shut: change its arrivalTime to one inside its opening hours. A club that opens at 23:00 belongs at 23:00 or later, and the bar you were going to visit afterwards goes BEFORE it, not after. Do not compress the rest of the day to make room; move or drop something instead.
-- A place they have already been to: swap it for a different real place in the same town, from the conversation. Do not simply delete it and leave the day one stop shorter, and do not move it to another day.\n\nSame JSON shape, nothing else: {"days": [{"day": 1, "stops": [{"name": "...", "town": "...", "arrivalTime": "..."}]}]}. Only real place names from the conversation.\n\nCurrent skeleton:\n${JSON.stringify(skeleton)}\n\nConversation:\n${convoText}`,
+- A place they have already been to: swap it for a different real place in the same town, from the conversation. Do not delete it and leave the day one stop shorter, and do not move it to another day.\n\nSame JSON shape, nothing else: {"days": [{"day": 1, "stops": [{"name": "...", "town": "...", "arrivalTime": "..."}]}]}. Only real place names from the conversation.\n\nCurrent skeleton:\n${JSON.stringify(skeleton)}\n\nConversation:\n${convoText}`,
                   1200
                 );
                 if (!fixRes.error && fixRes.text) {
@@ -13754,28 +13802,28 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
         // search. Only the label is, and it now names what is being checked
         // instead of announcing that we are unsure.
         buildStage("Checking hours, prices and dates", 42);
-        const preCheck = await askPerplexity(`This is a Denmark trip-planning conversation. Using real, current web search, verify the real place names mentioned actually exist, and find any current opening hours, prices, or dates relevant to the plan. Be concise — short facts only.\n${researchRules()}\n\n${convoText.slice(0, 3000)}`);
+        const preCheck = await askPerplexity(`This is a Denmark trip-planning conversation. Using real, current web search, verify the real place names mentioned exist, and find any current opening hours, prices, or dates relevant to the plan. Be concise — short facts only.\n${researchRules()}\n\n${convoText.slice(0, 3000)}`);
         if (!preCheck.error && preCheck.text) guideGrounding = preCheck.text;
       }
       buildStage("Structuring your itinerary", 50);
       const guideSystemPrompt = `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
-{"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will actually cost overall, given what's been discussed (transport, stays, food). ACTIVELY NAME REAL CHEAPER OPTIONS, DON'T WAIT UNTIL SOMETHING IS EXPENSIVE — but name only ones that genuinely serve THIS route. FROZEN COACH-LINE FACT (verified Aug 2026, do not generalise past it): Kombardo Expressen and Flixbus are LONG-DISTANCE coach lines. They run the big crossings and city-to-city corridors — Copenhagen to Aarhus, Aalborg, Odense and the rest of Jutland and Funen, over the Great Belt. They do NOT run internal short-haul commuter routes inside a single island or region: for anything like Faxe, Roskilde, Koge or Helsingor to Copenhagen, the real answer is a regional DSB train or the S-train, never a coach line. So: if the plan contains a genuine long-distance crossing between regions, name Kombardo Expressen or Flixbus (exact spelling, Kombardo EXPRESSEN, never 'Expresbus') as the real budget alternative to a full-fare train on THAT leg. If the whole trip stays within one region or island, do not mention them at all — recommend DSB Orange billetter (discount advance-purchase train tickets) for expensive train legs instead, which applies everywhere. If you are not confident a coach line actually serves a specific route, leave it out and point at kombardoexpressen.dk or flixbus.dk to check rather than asserting it. Never quote just the expensive default fare with no real alternative named.", "transportTip": "REQUIRED, non-empty, whenever this trip starts from Copenhagen Airport (given explicitly or assumed by default) — one practical, positively-framed sentence about getting from the airport into the city, e.g. suggesting a Copenhagen Card for unlimited transport plus free museum entry, or simply buying a ticket via the official Rejsebillet app or the DOT/DSB app before boarding the Metro. Never phrase this as a fine-threat. FROZEN TRANSPORT FACT (checked 10 Aug 2026 against rejsekort.dk): the physical Rejsekort card is discontinued, so never send a visitor to buy one. The Rejsekort APP is a different thing and is NOT resident-only: signing up needs an email, a name, a birthdate, a phone number and a payment card, and rejsekort.dk requires MitID or a CPR number only for pensioner and disabled fare types. So do not tell anyone they cannot use it. The reason to steer a short visit elsewhere is check-in and check-out: forgetting to check OUT is the single most common tourist fine, and a fixed ticket has nothing to forget. Recommend the Rejsebillet app, the DOT or DSB apps, or the Copenhagen Card as the simpler default, and give THAT as the reason. What is not confirmed is whether a foreign phone number and a foreign card work in the Rejsekort app in practice, so never assert either way. If the trip starts somewhere else entirely (a different airport, a specific town), give the equivalent real practical transport tip for THAT starting point instead, or leave this empty if genuinely nothing specific applies. IF ANY REAL PORTION OF THE TRIP IS SPENT INSIDE COPENHAGEN ITSELF: lean against a rental car for that portion specifically — parking is scarce and genuinely expensive there, and the Metro/S-train/bus network plus biking already cover the city well, so say so plainly rather than defaulting to 'rent a car.' A car becomes genuinely worth it once the trip actually leaves the capital for other regions — frame it that way rather than as a blanket anti-car statement.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever actually matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "town": "REQUIRED — the real specific town/city this stop is actually in, e.g. 'Copenhagen', 'Ebeltoft', 'Aarhus'. This matters even for well-known names: several Danish towns each have their own street generically called 'Strøget' (it's the generic Danish word for a pedestrian shopping street, not unique to Copenhagen), so a bare place name alone is genuinely ambiguous — this field is what lets the place actually get looked up in the right town instead of a wrong same-named one elsewhere in Denmark.", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like 'charming', 'colorful houses', 'cozy streets', 'steeped in history', 'quaint', 'vibrant', 'bustling', 'nestled', 'picturesque' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
-CRITICAL — DON'T ASSUME A COPENHAGEN START: never default Day 1 to Copenhagen just because it's the best-known city — actually look at what was said. If the traveler mentioned camping/a tent, a specific other town, a specific airport (Billund is Jutland's real international airport and implies a totally different starting region than Copenhagen/Kastrup), or anything else that implies a different starting point, build the trip from THAT point instead. If nothing in the conversation implies a specific starting point at all, don't silently pick one — say so plainly in essentials.keepInMind (e.g. "Built assuming you're starting from Copenhagen/Kastrup — say if you're flying into Billund or elsewhere instead") rather than guessing without flagging it.
+{"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will cost overall, given what's been discussed (transport, stays, food). ACTIVELY NAME REAL CHEAPER OPTIONS, DON'T WAIT UNTIL SOMETHING IS EXPENSIVE — but name only ones that serve THIS route. FROZEN COACH-LINE FACT (verified Aug 2026, do not generalise past it): Kombardo Expressen and Flixbus are LONG-DISTANCE coach lines. They run the big crossings and city-to-city corridors — Copenhagen to Aarhus, Aalborg, Odense and the rest of Jutland and Funen, over the Great Belt. They do NOT run internal short-haul commuter routes inside a single island or region: for anything like Faxe, Roskilde, Koge or Helsingor to Copenhagen, the real answer is a regional DSB train or the S-train, never a coach line. So: if the plan contains a real long-distance crossing between regions, name Kombardo Expressen or Flixbus (exact spelling, Kombardo EXPRESSEN, never 'Expresbus') as the real budget alternative to a full-fare train on THAT leg. If the whole trip stays within one region or island, do not mention them at all — recommend DSB Orange billetter (discount advance-purchase train tickets) for expensive train legs instead, which applies everywhere. If you are not confident a coach line serves a specific route, leave it out and point at kombardoexpressen.dk or flixbus.dk to check rather than asserting it. Never quote just the expensive default fare with no real alternative named.", "transportTip": "REQUIRED, non-empty, whenever this trip starts from Copenhagen Airport (given explicitly or assumed by default) — one practical, positively-framed sentence about getting from the airport into the city, e.g. suggesting a Copenhagen Card for unlimited transport plus free museum entry, or buying a ticket via the official Rejsebillet app or the DOT/DSB app before boarding the Metro. Never phrase this as a fine-threat. FROZEN TRANSPORT FACT (checked 10 Aug 2026 against rejsekort.dk): the physical Rejsekort card is discontinued, so never send a visitor to buy one. The Rejsekort APP is a different thing and is NOT resident-only: signing up needs an email, a name, a birthdate, a phone number and a payment card, and rejsekort.dk requires MitID or a CPR number only for pensioner and disabled fare types. So do not tell anyone they cannot use it. The reason to steer a short visit elsewhere is check-in and check-out: forgetting to check OUT is the single most common tourist fine, and a fixed ticket has nothing to forget. Recommend the Rejsebillet app, the DOT or DSB apps, or the Copenhagen Card as the simpler default, and give THAT as the reason. What is not confirmed is whether a foreign phone number and a foreign card work in the Rejsekort app in practice, so never assert either way. If the trip starts somewhere else entirely (a different airport, a specific town), give the equivalent real practical transport tip for THAT starting point instead, or leave this empty if nothing specific applies. IF ANY REAL PORTION OF THE TRIP IS SPENT INSIDE COPENHAGEN ITSELF: lean against a rental car for that portion specifically — parking is scarce and expensive there, and the Metro/S-train/bus network plus biking already cover the city well, so say so plainly rather than defaulting to 'rent a car.' A car becomes worth it once the trip leaves the capital for other regions — frame it that way rather than as a blanket anti-car statement.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "town": "REQUIRED — the real specific town/city this stop is in, e.g. 'Copenhagen', 'Ebeltoft', 'Aarhus'. This matters even for well-known names: several Danish towns each have their own street generically called 'Strøget' (it's the generic Danish word for a pedestrian shopping street, not unique to Copenhagen), so a bare place name alone is ambiguous — this field is what lets the place get looked up in the right town instead of a wrong same-named one elsewhere in Denmark.", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to do there. Generic filler like 'charming', 'colorful houses', 'cozy streets', 'steeped in history', 'quaint', 'vibrant', 'bustling', 'nestled', 'picturesque' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
+CRITICAL — DON'T ASSUME A COPENHAGEN START: never default Day 1 to Copenhagen just because it's the best-known city — look at what was said. If the traveler mentioned camping/a tent, a specific other town, a specific airport (Billund is Jutland's real international airport and implies a totally different starting region than Copenhagen/Kastrup), or anything else that implies a different starting point, build the trip from THAT point instead. If nothing in the conversation implies a specific starting point at all, don't silently pick one — say so plainly in essentials.keepInMind (e.g. "Built assuming you're starting from Copenhagen/Kastrup — say if you're flying into Billund or elsewhere instead") rather than guessing without flagging it.
 CRITICAL: every stop's "name" must be a real place findable on Google Maps — an official attraction, venue, street or town name (e.g. "Ebeltoft Old Town", "Den Gamle By", "Faaborg Havn"). NEVER invent a poetic label like "Crooked House Village" or "Ebeltoft Bars" — if the plan described an area loosely, use the town or street name instead.
 CRITICAL: NEVER state a single bare ticket price in a stop's note (e.g. "tickets cost 230 DKK") — most attractions have tiered pricing (adult/child/student/senior) and one number without that context is misleading. Instead, if a real price range is known, state the range AND explain its practical financial reality (e.g. "150-250 DKK per plate, and a full meal usually needs two or three plates, so budget for a real lunch spend" — not just the number alone, and not a vague qualitative dodge like "a bit of a splurge" either). If no real range is known, say "check current prices online."
 CRITICAL — NO MARKETING VERBS: phrases like "soak in the vibrant scene", "embrace the vibe", "experience the magic", "indulge in" are banned outright — they carry zero real information about the place.
-CRITICAL — NO REPETITIVE DEFINITIONS: don't name what something is and then immediately re-praise it with a generic adjective right next to itself (e.g. "enjoy a delicious smørrebrød, famous for this traditional Danish open-faced sandwich" defines the same thing twice with no new information). Say what it actually is in physical terms once — for food specifically, describe the real physical components (what's actually on/in it) instead of calling it "delicious" or "traditional".
+CRITICAL — NO REPETITIVE DEFINITIONS: don't name what something is and then immediately re-praise it with a generic adjective right next to itself (e.g. "enjoy a delicious smørrebrød, famous for this traditional Danish open-faced sandwich" defines the same thing twice with no new information). Say what it is in physical terms once — for food specifically, describe the real physical components (what's on/in it) instead of calling it "delicious" or "traditional".
 CRITICAL — CADENCE: vary sentence length within each note — a short blunt statement next to a longer one reads as human; two same-length sentences in a row (e.g. "The restaurant is well-regarded and has been a staple in Copenhagen for over 100 years") reads as flat, generated filler.
 CRITICAL: capture EVERY distinct place the plan mentions for each day as its OWN stop — sights, museums, food spots, bars and evening/nightlife included. A full day is usually 2-5 stops (morning sight, afternoon sight, food, evening). Never collapse a day to a single stop if the plan mentioned more, and never bury an evening venue inside another stop's note — give it its own stop in order.
-CRITICAL: make each day's arrivalTime sequence internally consistent — each stop's arrivalTime should follow realistically from the previous stop's arrivalTime + its suggestedStay + a sensible travel gap between them, using well-established Danish geography. Don't just space stops out evenly by habit; a genuinely quick stop should be followed soon after, a long museum visit should push the next arrivalTime later. If a day has too many stops to fit in a reasonable day (roughly 9am-9pm), that's a signal to trim rather than compress every stay time unrealistically.
-CRITICAL — NEVER REPEAT THE SAME PLACE TWICE ACROSS THE WHOLE TRIP: every stop name across every single day must be genuinely distinct — once a place has appeared as a stop on one day, it never appears again as a stop on any other day of this same plan (e.g. if Amalienborg is a stop on Day 1, it must not also appear as a stop on Day 3). If the traveler wants to revisit somewhere, that's a choice for THEM to make later, not something to build into the itinerary by default.
-CRITICAL — THE 20 MINUTE WALKING RULE, NON-NEGOTIABLE: never plan two consecutive stops so far apart that walking between them would take more than 20 minutes on foot (roughly 1.5 km). Either place stops within a genuine short walk of each other, or state the leg plainly as public transport, bike, or car in the note. A traveler handed a 45 minute walk between two stops reads it as the plan being broken, and they are right.
-CRITICAL — TRIP LENGTH MUST GOVERN GEOGRAPHIC SPREAD, DROP OUTLIERS RATHER THAN CRAM: before building anything, sanity check the places discussed against the number of days actually available. Denmark is small but not seamless — an island like Samsø or Ærø needs a ferry, the far south-west (Tønder, Møgeltønder) is hours from Copenhagen, and Zealand to Jutland is a long crossing. If the conversation named places that genuinely cannot be strung together in the days available without absurd travel (multiple hours in transit on a 2-3 day trip, or a single leg over roughly 4 hours), DO NOT build the punishing route anyway. Instead build the coherent trip around whichever places genuinely fit together, and say plainly in essentials.keepInMind which named places were left out and why (e.g. "Left Møgeltønder out — it is a 4+ hour trip from Samsø and would have eaten most of your three days in transit; worth its own trip"). Honest scoping is the correct behavior here, silently building a 16 hour travel day is not.
-CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stops that are genuinely close together rather than needlessly zigzagging back and forth across a city or region — minimize backtracking using real, well-established Danish geography. If a day includes one long-distance journey (e.g. a day trip to a distant town, or a genuinely long intercity leg) alongside more local stops, that long journey should always be the FIRST thing done that day, not scheduled for the afternoon or evening — most travelers want the big travel chunk out of the way early, then time to actually explore once they arrive, not a long haul tacked onto the end of an already-full day.
-CRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE ROUTE, NOT JUST EACH DAY INTERNALLY: this applies across the whole trip, not just within one day — Copenhagen/Zealand and Jutland are genuinely different regions connected only by a long bridge/ferry crossing or a flight, never a short hop. Don't send the trip deeper into one region for several days and then jump straight to the other with no bridging day (e.g. Day 1-2 further into Jutland, Day 3 suddenly Copenhagen). If a planning skeleton is provided below, its day-to-day order already accounts for this — follow it. If you're structuring the trip yourself (no skeleton, or it's missing this), order the days to move in one general direction across the country and minimize total region-crossings over the whole trip.
-CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a genuine buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
-CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a genuine buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, genuinely adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything genuinely inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${chosenEventsBlock}${chosenExtrasBlock}${beenBlock}${essentialsFacts}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's genuinely missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
+CRITICAL: make each day's arrivalTime sequence internally consistent — each stop's arrivalTime should follow realistically from the previous stop's arrivalTime + its suggestedStay + a sensible travel gap between them, using well-established Danish geography. Don't just space stops out evenly by habit; a quick stop should be followed soon after, a long museum visit should push the next arrivalTime later. If a day has too many stops to fit in a reasonable day (roughly 9am-9pm), that's a signal to trim rather than compress every stay time unrealistically.
+CRITICAL — NEVER REPEAT THE SAME PLACE TWICE ACROSS THE WHOLE TRIP: every stop name across every single day must be distinct — once a place has appeared as a stop on one day, it never appears again as a stop on any other day of this same plan (e.g. if Amalienborg is a stop on Day 1, it must not also appear as a stop on Day 3). If the traveler wants to revisit somewhere, that's a choice for THEM to make later, not something to build into the itinerary by default.
+CRITICAL — THE 20 MINUTE WALKING RULE, NON-NEGOTIABLE: never plan two consecutive stops so far apart that walking between them would take more than 20 minutes on foot (roughly 1.5 km). Either place stops within a real short walk of each other, or state the leg plainly as public transport, bike, or car in the note. A traveler handed a 45 minute walk between two stops reads it as the plan being broken, and they are right.
+CRITICAL — TRIP LENGTH MUST GOVERN GEOGRAPHIC SPREAD, DROP OUTLIERS RATHER THAN CRAM: before building anything, sanity check the places discussed against the number of days available. Denmark is small but not seamless — an island like Samsø or Ærø needs a ferry, the far south-west (Tønder, Møgeltønder) is hours from Copenhagen, and Zealand to Jutland is a long crossing. If the conversation named places that cannot be strung together in the days available without absurd travel (multiple hours in transit on a 2-3 day trip, or a single leg over roughly 4 hours), DO NOT build the punishing route anyway. Instead build the coherent trip around whichever places fit together, and say plainly in essentials.keepInMind which named places were left out and why (e.g. "Left Møgeltønder out — it is a 4+ hour trip from Samsø and would have eaten most of your three days in transit; worth its own trip"). Honest scoping is the correct behavior here, silently building a 16 hour travel day is not.
+CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stops that are close together rather than needlessly zigzagging back and forth across a city or region — minimize backtracking using real, well-established Danish geography. If a day includes one long-distance journey (e.g. a day trip to a distant town, or a long intercity leg) alongside more local stops, that long journey should always be the FIRST thing done that day, not scheduled for the afternoon or evening — most travelers want the big travel chunk out of the way early, then time to explore once they arrive, not a long haul tacked onto the end of an already-full day.
+CRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE ROUTE, NOT JUST EACH DAY INTERNALLY: this applies across the whole trip, not just within one day — Copenhagen/Zealand and Jutland are different regions connected only by a long bridge/ferry crossing or a flight, never a short hop. Don't send the trip deeper into one region for several days and then jump straight to the other with no bridging day (e.g. Day 1-2 further into Jutland, Day 3 suddenly Copenhagen). If a planning skeleton is provided below, its day-to-day order already accounts for this — follow it. If you're structuring the trip yourself (no skeleton, or it's missing this), order the days to move in one general direction across the country and minimize total region-crossings over the whole trip.
+CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a real buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
+CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a real buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't mentioned just to fill a day.` : ""} Use only real place names mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${chosenEventsBlock}${chosenExtrasBlock}${beenBlock}${essentialsFacts}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
       // Guide-building is genuine multi-step reasoning (timing, geography, avoiding
       // duplicates, family-mode adjustments) — this is the one call in Detour worth
       // Opus's extra reasoning depth, and it already has a loading screen the person
@@ -13800,7 +13848,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       if (requestedDays && (!parsed.days || parsed.days.length < requestedDays)) {
         buildStage("Finishing the remaining days", 70);
         const retryResult = await askClaude(
-          `Turn the trip plan discussed in this conversation into strict JSON. The "days" array MUST contain EXACTLY ${requestedDays} entries — your last attempt returned only ${parsed.days?.length || 0}, which is wrong. Same shape as before: {"title": "...", "essentials": {"budgetReality": "...", "transportTip": "...", "keepInMind": "..."}, "days": [{"day": 1, "title": "...", "stops": [{"name": "...", "town": "...", "arrivalTime": "...", "suggestedStay": "...", "note": "..."}]}]}. Split every place discussed across all ${requestedDays} days in a sensible order — repeat a base town for a slower day if genuinely too few places were discussed, but never invent one that wasn't mentioned. Use only real place names actually mentioned in the conversation. Respond with ONLY the raw JSON object, no markdown code fences, nothing else.${guideLangBlock}\n\nConversation:\n${convoText}`,
+          `Turn the trip plan discussed in this conversation into strict JSON. The "days" array MUST contain EXACTLY ${requestedDays} entries — your last attempt returned only ${parsed.days?.length || 0}, which is wrong. Same shape as before: {"title": "...", "essentials": {"budgetReality": "...", "transportTip": "...", "keepInMind": "..."}, "days": [{"day": 1, "title": "...", "stops": [{"name": "...", "town": "...", "arrivalTime": "...", "suggestedStay": "...", "note": "..."}]}]}. Split every place discussed across all ${requestedDays} days in a sensible order — repeat a base town for a slower day if too few places were discussed, but never invent one that wasn't mentioned. Use only real place names mentioned in the conversation. Respond with ONLY the raw JSON object, no markdown code fences, nothing else.${guideLangBlock}\n\nConversation:\n${convoText}`,
           6000,
           "claude-opus-4-8",
           true // expectJson — same prose-reply protection as the main build call
@@ -13855,7 +13903,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         const proseFields = collectGuideProseFields(parsed);
         if (proseFields.length > 0) {
           const scanRes = await askOpenAI(
-            `Read this list of short travel-guide text fields (each with an id) and find any that genuinely read as generic AI writing — hedging, suspiciously tidy phrasing, marketing verbs ("soak in", "embrace the vibe", "indulge in"), or vague filler ("charming", "picturesque", "hidden gem", "nestled") with nothing specific right next to it backing it up. Be selective — only flag genuine problems, not every field, and don't invent issues if the writing is actually fine. For each real problem, return its id and a short reason.\n\nRespond with ONLY a JSON array, no other text, no markdown: [{"id": "the exact id given", "reason": "short reason"}] — return [] if nothing genuine stands out.\n\nFields:\n${JSON.stringify(proseFields.map(f => ({ id: f.id, text: f.text })))}`,
+            `Read this list of short travel-guide text fields (each with an id) and find any that read as generic AI writing — hedging, suspiciously tidy phrasing, marketing verbs ("soak in", "embrace the vibe", "indulge in"), or vague filler ("charming", "picturesque", "hidden gem", "nestled") with nothing specific right next to it backing it up. Be selective — only flag real problems, not every field, and don't invent issues if the writing is fine. For each real problem, return its id and a short reason.\n\nRespond with ONLY a JSON array, no other text, no markdown: [{"id": "the exact id given", "reason": "short reason"}] — return [] if nothing real stands out.\n\nFields:\n${JSON.stringify(proseFields.map(f => ({ id: f.id, text: f.text })))}`,
             900
           );
           if (!scanRes.error && scanRes.text) {
@@ -13893,7 +13941,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         const proseFields2 = collectGuideProseFields(parsed); // re-collect — the polish pass above may have rewritten some
         const stopNames = (parsed.days || []).flatMap(d => (d.stops || []).map(s => `${s.name}${s.town ? ` (${s.town})` : ""}`));
         const factCheckRes = await askPerplexity(
-          `Using real, current web search, fact-check this finished Denmark travel guide for genuine factual errors — wrong opening hours, wrong prices, a place that doesn't actually exist, or any claim that's simply incorrect. Don't flag stylistic choices, vague-but-true statements, or anything that's already appropriately hedged (e.g. "check current prices online") — only real factual problems.\n${researchRules()}\n\nPlaces in this guide: ${stopNames.join(", ")}\n\nText fields to check (each with an id):\n${JSON.stringify(proseFields2.map(f => ({ id: f.id, text: f.text })))}\n\nRespond with ONLY a JSON array, no other text, no markdown: [{"id": "the exact id given", "issue": "what's factually wrong and the correct fact, if you know it"}] — return [] if nothing is genuinely wrong.`
+          `Using real, current web search, fact-check this finished Denmark travel guide for real factual errors — wrong opening hours, wrong prices, a place that doesn't exist, or any claim that's incorrect. Don't flag stylistic choices, vague-but-true statements, or anything that's already appropriately hedged (e.g. "check current prices online") — only real factual problems.\n${researchRules()}\n\nPlaces in this guide: ${stopNames.join(", ")}\n\nText fields to check (each with an id):\n${JSON.stringify(proseFields2.map(f => ({ id: f.id, text: f.text })))}\n\nRespond with ONLY a JSON array, no other text, no markdown: [{"id": "the exact id given", "issue": "what's factually wrong and the correct fact, if you know it"}] — return [] if nothing is wrong.`
         );
         if (!factCheckRes.error && factCheckRes.text) {
           let issues = [];
@@ -14204,7 +14252,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       if (broken.length > 0) {
         console.warn("Title promises something the itinerary does not contain:", broken);
         const retitle = await askClaude(
-          `Rewrite this Denmark trip title. It currently promises ${broken.join(" and ")}, and this trip contains none of that, which makes the title a false claim before the reader has read a word.\n\nThe trip actually visits: ${finalStopNames.join(", ")}.\n\nWrite one short, warm title, under nine words, naming or evoking only things genuinely on that list. No colon-subtitle unless it earns it. Never use an em dash or an en dash. Reply with the title and nothing else.\n\n${keepLanguageOf("the current title below")}\n\nCurrent title: ${parsed.title}`,
+          `Rewrite this Denmark trip title. It currently promises ${broken.join(" and ")}, and this trip contains none of that, which makes the title a false claim before the reader has read a word.\n\nThe trip visits: ${finalStopNames.join(", ")}.\n\nWrite one short, warm title, under nine words, naming or evoking only things on that list. No colon-subtitle unless it earns it. Never use an em dash or an en dash. Reply with the title and nothing else.\n\n${keepLanguageOf("the current title below")}\n\nCurrent title: ${parsed.title}`,
           80
         );
         if (!retitle.error && retitle.text) {
@@ -15164,13 +15212,13 @@ If the conversation only covers a single day or a few stops with no explicit day
       const ready = flyEl && cornerIconEl && from.width > 0 && to.width > 0;
       if (!ready) {
         if (attemptsLeft > 0) { retryTimer = setTimeout(() => attemptFlight(attemptsLeft - 1), 120); return; }
-        setIntroFlightDone(true); // genuinely never became ready — settle instantly rather than hang forever
+        setIntroFlightDone(true); // never became ready — settle instantly rather than hang forever
         return;
       }
       const scale = to.width / from.width;
       const dx = (to.left + to.width / 2) - (from.left + from.width / 2);
       const dy = (to.top + to.height / 2) - (from.top + from.height / 2);
-      flyEl.style.animation = "none"; // detach the pop-in keyframe hold so the inline transform below actually takes effect
+      flyEl.style.animation = "none"; // detach the pop-in keyframe hold so the inline transform below takes effect
       // BUG FIX (Oliver, 4th report: "still no flying" — even after the
       // flightStarted guard above): .gxi-mark's base CSS rule is `opacity: 0`,
       // with the gxiPop animation's "forwards" fill the ONLY thing holding it
@@ -15189,7 +15237,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       // ever got a clean run to expose it.
       flyEl.style.opacity = "1";
       flyEl.style.transformOrigin = "50% 50%";
-      flyEl.getBoundingClientRect(); // force reflow before changing the transform, so the transition below actually plays
+      flyEl.getBoundingClientRect(); // force reflow before changing the transform, so the transition below plays
       // BUG FIX (Oliver: "it does fly up.. but it doesn't settle. It needs to
       // settle in [...] like an ad or presentation where the logo settles in
       // after presenting"): two real things were missing, not just one. (1)
@@ -15290,7 +15338,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         } else startFlight();
       }, 2600);
     } else {
-      spinDoneTimer = setTimeout(startFlight, 2000); // gem element genuinely not found — fall back to the old fixed delay
+      spinDoneTimer = setTimeout(startFlight, 2000); // gem element not found — fall back to the old fixed delay
     }
     return () => {
       cancelled = true;
@@ -16255,16 +16303,16 @@ ROAD TRIPS: ${tripList}
 CAMPING & SHELTERS: ${campList}
 FOOD SPOTS (Local & Major): ${foodList}
 NIGHTLIFE (note whether local/Danish or international crowd): ${nightlifeList}
-FREE ENTRANCE ATTRACTIONS (genuinely free, no ticket needed): ${attractionsList}
+FREE ENTRANCE ATTRACTIONS (free, no ticket needed): ${attractionsList}
 HANDMADE CANDY & CRAFT SHOPS (walk-in, watch it made): ${handmadeList}
 UPCOMING LOCAL EVENTS: ${upcomingLocal}
 UPCOMING MAJOR EVENTS: ${upcomingMajor}
 UPCOMING VIKING EVENTS (markets, festivals, battle reenactments): ${upcomingViking}
 HIDDEN GEM TOWNS (this is Gemlyx's actual core differentiator — real, lesser-known towns worth a detour, not the famous cities everyone already knows): ${townsList}
 
-ACTIVELY USE THE HIDDEN GEM TOWNS LIST, DON'T JUST DEFAULT TO FAMOUS ATTRACTIONS: when building a multi-day plan, deliberately pull at least one real town from the list above rather than filling every day with only the most famous, most obvious sights — genuinely working a hidden gem into the plan (not just mentioning it exists) is exactly what makes a Gemlyx-built trip different from a generic one. If someone's request sounds like they'd actually prefer a lighter, town-hopping style trip (cycling or driving around and seeing real places, not a packed sightseeing schedule), lean into that — don't force a dense day of attractions onto someone who'd rather just wander through a few real towns.
+ACTIVELY USE THE HIDDEN GEM TOWNS LIST, DON'T JUST DEFAULT TO FAMOUS ATTRACTIONS: when building a multi-day plan, deliberately pull at least one real town from the list above rather than filling every day with only the most famous, most obvious sights — working a hidden gem into the plan (not just mentioning it exists) is exactly what makes a Gemlyx-built trip different from a generic one. If someone's request sounds like they'd prefer a lighter, town-hopping style trip (cycling or driving around and seeing real places, not a packed sightseeing schedule), lean into that — don't force a dense day of attractions onto someone who'd rather just wander through a few real towns.
 
-If asked for a plan or itinerary, structure it day by day using only the above, and factor in the current season. ACTIVELY CROSS-REFERENCE EVENTS AGAINST THE TRAVELER'S DATES: if they've told you when they're visiting (or roughly when — "next week", "in August"), check the UPCOMING EVENTS lists above for anything whose real date range genuinely overlaps with their trip, and proactively mention it as part of the plan rather than waiting to be asked — a real festival happening during someone's actual visit is exactly the kind of specific, useful detail worth surfacing unprompted. Don't force an event in in if nothing genuinely overlaps; a fabricated sense of good timing is worse than no mention at all. If you do suggest an event, ALWAYS pass along its real ticket situation from the [tickets: ...] note next to it — if it says SOLD OUT, say so plainly and don't suggest attending (mention it as a "happening nearby" fact instead, not a plan to join); if it says tickets are limited or sell out fast, tell them to book now, before the trip, not "when they arrive" — that's the single most common way someone misses something they specifically traveled for. FROZEN FACT, CORRECTED 21 Aug 2026 (VisitDenmark overnight-stay figures via The Local): DO NOT SAY OR IMPLY THAT MOST TOURISTS ONLY SEE COPENHAGEN. This prompt asserted it for weeks and it is false. Germany is by far the largest source of visitors, 13.2 million overnight stays, and they go to the Jutland coasts rather than the capital: Vesterhavet 5 million, Nordvestkysten 2.3 million, South Jutland 1.6 million. Across all visitors, 80 percent of overnight stays are coastal and nature and only 11 percent are the major cities. Around two thirds of Norwegian visits are outside Copenhagen. It IS true of long-haul visitors and of some European city breaks: 77 percent of American stays are in the capital, 63 percent of Dutch and roughly half of Swedish. So never open with the claim as a general fact about tourists, and never tell somebody they are missing the real Denmark before knowing where they are going: a German family heading for a west-coast holiday house has already found it, and being told otherwise is both wrong and patronising. Gemlyx's mission is unchanged and its reason is narrower: when a traveller's OWN brief points only at Copenhagen and they have more than 2 days, suggest at least one destination outside it, because that is the trip that misses most, not because most trips do. If asked about transport, always mention that the physical Rejsekort card was discontinued (28 May 2026) and the current fine for an invalid ticket is 750 DKK — the most common tourist mistakes are forgetting to check out, and assuming an installed app means a purchased ticket. FROZEN TRANSPORT FACT (checked 10 Aug 2026, rejsekort.dk + rejsebillet.dk): never recommend a PHYSICAL Rejsekort, because the card is discontinued. Do NOT claim the Rejsekort app is unavailable to visitors: its own terms ask only for an email, a name, a birthdate, a phone number and a payment card, and reserve MitID and CPR for pensioner and disabled fare types. Steer a short trip to a fixed ticket for the real reason instead, which is that the app is check-in and check-out and forgetting to check out is the most common tourist fine. Visitors buy tickets in the official Rejsebillet app (single tickets and passes for all of Denmark, from Rejsekort & Rejseplan A/S, paid in advance) or the DOT/DSB apps; the Copenhagen Card works as before (activate once, show on request). If unsure about any ticket mechanic, name the official app and point at it rather than describing mechanics.
+If asked for a plan or itinerary, structure it day by day using only the above, and factor in the current season. ACTIVELY CROSS-REFERENCE EVENTS AGAINST THE TRAVELER'S DATES: if they've told you when they're visiting (or roughly when — "next week", "in August"), check the UPCOMING EVENTS lists above for anything whose real date range overlaps with their trip, and proactively mention it as part of the plan rather than waiting to be asked — a real festival happening during someone's actual visit is exactly the kind of specific, useful detail worth surfacing unprompted. Don't force an event in in if nothing overlaps; a fabricated sense of good timing is worse than no mention at all. If you do suggest an event, ALWAYS pass along its real ticket situation from the [tickets: ...] note next to it — if it says SOLD OUT, say so plainly and don't suggest attending (mention it as a "happening nearby" fact instead, not a plan to join); if it says tickets are limited or sell out fast, tell them to book now, before the trip, not "when they arrive" — that's the single most common way someone misses something they specifically traveled for. FROZEN FACT, CORRECTED 21 Aug 2026 (VisitDenmark overnight-stay figures via The Local): DO NOT SAY OR IMPLY THAT MOST TOURISTS ONLY SEE COPENHAGEN. This prompt asserted it for weeks and it is false. Germany is by far the largest source of visitors, 13.2 million overnight stays, and they go to the Jutland coasts rather than the capital: Vesterhavet 5 million, Nordvestkysten 2.3 million, South Jutland 1.6 million. Across all visitors, 80 percent of overnight stays are coastal and nature and only 11 percent are the major cities. Around two thirds of Norwegian visits are outside Copenhagen. It IS true of long-haul visitors and of some European city breaks: 77 percent of American stays are in the capital, 63 percent of Dutch and roughly half of Swedish. So never open with the claim as a general fact about tourists, and never tell somebody they are missing the real Denmark before knowing where they are going: a German family heading for a west-coast holiday house has already found it, and being told otherwise is both wrong and patronising. Gemlyx's mission is unchanged and its reason is narrower: when a traveller's OWN brief points only at Copenhagen and they have more than 2 days, suggest at least one destination outside it, because that is the trip that misses most, not because most trips do. If asked about transport, always mention that the physical Rejsekort card was discontinued (28 May 2026) and the current fine for an invalid ticket is 750 DKK — the most common tourist mistakes are forgetting to check out, and assuming an installed app means a purchased ticket. FROZEN TRANSPORT FACT (checked 10 Aug 2026, rejsekort.dk + rejsebillet.dk): never recommend a PHYSICAL Rejsekort, because the card is discontinued. Do NOT claim the Rejsekort app is unavailable to visitors: its own terms ask only for an email, a name, a birthdate, a phone number and a payment card, and reserve MitID and CPR for pensioner and disabled fare types. Steer a short trip to a fixed ticket for the real reason instead, which is that the app is check-in and check-out and forgetting to check out is the most common tourist fine. Visitors buy tickets in the official Rejsebillet app (single tickets and passes for all of Denmark, from Rejsekort & Rejseplan A/S, paid in advance) or the DOT/DSB apps; the Copenhagen Card works as before (activate once, show on request). If unsure about any ticket mechanic, name the official app and point at it rather than describing mechanics.
 
 You also have a web_search tool. Use it whenever someone asks about something that changes over time and isn't in the lists above — current opening hours, whether a specific event is still on, ticket availability, or anything at a museum/castle/attraction not already listed here. Don't use it for things already covered in your lists above.
 
@@ -16286,7 +16334,7 @@ DO NOT COMPLIMENT THEIR CHOICE. "Great pick", "excellent choice", "you'll love i
 GIVE BEFORE YOU ASK. Every turn puts one real thing on the table before its question: a fact about the place they named, an opinion about it, or a warning worth having. One thing, not three, and off the block below when there is one. A conversation where one side only asks is an intake form, and it puts the whole weight of the trip on somebody who came here so they would not have to carry it. This is also what makes a short answer workable: a traveller who types four words at a time is normal, and a turn that gives something is still a real turn when their half is thin.
 ${heldBlock}${nightBlock}
 ── THE TRIP BRIEF, AS MEASURED RATHER THAN AS YOU FEEL IT ──
-This block is computed from what the traveller has actually typed and from the form they filled in. It is not your impression of the conversation and it overrides your impression of the conversation. Never say you have everything you need unless this block says so, and never say a traveller has already told you something that is not listed as known here.
+This block is computed from what the traveller has typed and from the form they filled in. It is not your impression of the conversation and it overrides your impression of the conversation. Never say you have everything you need unless this block says so, and never say a traveller has already told you something that is not listed as known here.
 
 ${briefBlock(brief, conflicts)}
 
@@ -16861,7 +16909,7 @@ ${languageBlock()}`;
           <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginTop: 11 }}>
             {/* These three used to check for "Can't miss out" / "Worth it for longer stays" /
                 "Recommended" — an older tier vocabulary. The Studio festival prompt has
-                actually been asking for "Can't miss out / Highly Recommended / Worth
+                been asking for "Can't miss out / Highly Recommended / Worth
                 Considering / Best If You're Already Nearby" for a while, so only the first
                 of the three checks below ever matched anything; "Highly Recommended" and
                 "Best If You're Already Nearby" silently showed no badge at all, and the
@@ -17413,7 +17461,7 @@ ${languageBlock()}`;
                     net catches only replies that broke the format.
 
                     It is kept, because a badly formatted plan is still a plan
-                    and still needs a way out. What actually fixed his case is
+                    and still needs a way out. What fixed his case is
                     two changes elsewhere: isReadyToBuild now tolerates a marker
                     the model mangled while writing in another language, and a
                     withheld marker now says what it is waiting for instead of
@@ -17680,7 +17728,7 @@ ${languageBlock()}`;
                         Oliver, 17 Aug 2026. He asked once, it did not get built,
                         and the cost showed up the same night: diagnosing "you
                         already answered everything I needed" took a pasted
-                        transcript and ten screenshots, and the fact that actually
+                        transcript and ten screenshots, and the fact that
                         explained it — that his answer's reply had FAILED and been
                         stripped from the history — was in none of them. It had to
                         be inferred.
@@ -17743,7 +17791,7 @@ ${languageBlock()}`;
                           forever and never says so. */}
                       {sourceProbe && (
                         <div style={{ fontSize: 11.5, marginBottom: 9, lineHeight: 1.5, color: sourceProbe.state === "empty" ? "#FFB347" : C.muted }}>
-                          {sourceProbe.state === "checking" && `Checking that ${sourceProbe.domain} is a site the search can actually reach...`}
+                          {sourceProbe.state === "checking" && `Checking that ${sourceProbe.domain} is a site the search can reach...`}
                           {sourceProbe.state === "found" && `${sourceProbe.domain} checks out, the search reached it.`}
                           {sourceProbe.state === "failed" && `Could not check ${sourceProbe.domain} just now. It is added either way.`}
                           {sourceProbe.state === "empty" && (
@@ -18329,7 +18377,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               })()}
                               {kindEditId === row.id && (() => {
                                 const pl = row.payload || {};
-                                const changed = hasKindChange(pl, kindDraft);
+                                const changed = hasKindChange(pl, kindDraft) || hasScopeChange(pl, scopeDraft);
                                 return (
                                   <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px", marginBottom: 10 }}>
                                     <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 5 }}>Which list</div>
@@ -18339,6 +18387,21 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                       {ESSENTIAL_KINDS.map(k => <option key={k} value={k}>{ESSENTIAL_KIND_LABEL[k]}</option>)}
                                     </select>
                                     <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8, lineHeight: 1.55 }}>{KIND_RULE}</div>
+                                    {/* ── AND WHERE IT APPLIES ────────────────
+                                        Odense Letbane is one city's light rail
+                                        and FynBus is Funen's bus, and both sat
+                                        on the national list because no field
+                                        could say otherwise. Empty is national,
+                                        which is where every published row is
+                                        now, so nothing moves until this is
+                                        typed into. */}
+                                    <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", margin: "14px 0 5px" }}>Where it applies</div>
+                                    <input value={scopeDraft} onChange={e => setScopeDraft(e.target.value)}
+                                      placeholder="e.g. Odense, or Funen, or Ærø — empty means all of Denmark"
+                                      style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 12, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", width: "100%", boxSizing: "border-box" }} />
+                                    <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8, lineHeight: 1.55 }}>
+                                      A place name and nothing else. A town, an island, a kommune or a part of the country: the row then shows on that town's blog page, and on every town inside a bigger area. A city's own light rail is that city; a regional bus is the island or the part of the country it serves. Leave it empty for anything that works everywhere, which is most of this list.
+                                    </div>
                                     {!kindStated(pl) && (
                                       <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.55, marginTop: 8 }}>
                                         ⚠ Nobody has placed this one, so it is showing under Essentials by default rather than because anyone decided it belongs there.
@@ -18380,7 +18443,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                       </div>
                                     )}
 
-                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8 }}>
                                       <div>
                                         <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 5 }}>What it is</div>
                                         <select value={placeDraft.placeKind} onChange={e => setPlaceDraft(d => ({ ...d, placeKind: e.target.value }))} style={{ ...fld, cursor: "pointer" }}>
@@ -18398,10 +18461,23 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                         <input value={placeDraft.dayTripFrom} onChange={e => setPlaceDraft(d => ({ ...d, dayTripFrom: e.target.value }))}
                                           placeholder="e.g. Copenhagen" style={fld} />
                                       </div>
+                                      {/* ── THE ISLAND, BECAUSE THE MAP CANNOT SEE IT ──
+                                          The kommune table places the islands that
+                                          are their own kommune. Sejerø shares
+                                          Kalundborg Kommune with a stretch of
+                                          Zealand mainland, so the filter calls it
+                                          Zealand and a reader looking for the small
+                                          islands never finds it. Typed once here
+                                          and it is on the chip for good. */}
+                                      <div>
+                                        <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 5 }}>Island</div>
+                                        <input value={placeDraft.island} onChange={e => setPlaceDraft(d => ({ ...d, island: e.target.value }))}
+                                          placeholder="e.g. Sejerø" style={fld} />
+                                      </div>
                                     </div>
 
                                     <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8, lineHeight: 1.55 }}>
-                                      <b>Inside</b> is for somewhere that is part of a bigger place, like a district or a canal. It collapses on a route, so Copenhagen and one of its districts count as one stop. <b>Sleep in</b> is for somewhere that is genuinely its own place but has no beds, so a route counts it separately. Most towns need neither.
+                                      <b>Inside</b> is for somewhere that is part of a bigger place, like a district or a canal. It collapses on a route, so Copenhagen and one of its districts count as one stop. <b>Sleep in</b> is for somewhere that is its own place but has no beds, so a route counts it separately. Most towns need neither. <b>Island</b> is the island this place sits on, or is: Ærøskøbing is on Ærø, Sejerø is Sejerø. Leave it empty on the mainland, and empty for Ærø, Samsø, Fanø, Læsø, Langeland, Mors and Bornholm, which the kommune already answers.
                                     </div>
 
                                     {/* The checks run on what the fields say NOW,
@@ -18486,7 +18562,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                             Nothing usable found. Commons had no freely licensed photo for that search, or every match was non-commercial, no-derivatives, or had no nameable author. Try a different wording.
                                           </div>
                                         )}
-                                        {/* ── WHICH LOOKUPS ACTUALLY ANSWERED ──────────
+                                        {/* ── WHICH LOOKUPS ANSWERED ──────────
                                             A search that falls back to its worst source and
                                             returns seven confident-looking results is the
                                             failure this panel kept hiding. */}
@@ -18765,7 +18841,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                               Copy this trace
                             </button>
-                            {/* THE ONE HE ACTUALLY NEEDED. When a draft is called
+                            {/* THE ONE HE NEEDED. When a draft is called
                                 out afterwards, the run in question is several
                                 drafts back and he does not yet know which. */}
                             {logs.length > 1 && (
@@ -19023,7 +19099,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             {queueDrafting ? ` The queue is separately still working on ${queueDrafting}, which is why the progress bar keeps moving. That run stays out of the editor, so opening this now is safe.` : ""}
                             {/* THE REFUSAL BELONGS ON THE SCREEN. It lived in a
                                 title attribute, which needs a hover and never
-                                appears on a touch screen, so the button simply
+                                appears on a touch screen, so the button
                                 did nothing while the line above it said Open
                                 was harmless. */}
                             {manualDraftRunning ? " Open is held while a draft you started by hand is running, because that run writes into the editor and would land on top of this one." : ""}
@@ -19221,7 +19297,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         appears on towns. This fills them in once. It only ever
                         ADDS: a row that already has coordinates is skipped, so
                         it cannot overwrite a verified pin with a geocode. */}
-                    {/* ── WHAT MY AFFILIATES ACTUALLY REACH ─────────
+                    {/* ── WHAT MY AFFILIATES REACH ─────────
                         Oliver, 26 Aug 2026: "perhaps make a studio section for
                         my affiliates.. that looks through what my affiliates
                         connect to?" He asked because nothing could answer it.
@@ -19649,7 +19725,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: photoFixState ? 10 : 0 }}>
                         <div>
                           <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>🖼 Repair missing photos</div>
-                          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Checks whether every published entry's photo actually loads, and finds a freely licensed one on Wikimedia for the ones that do not, credit included. A photo that already works is never touched. Up to {PHOTO_FIX_BATCH_CAP} per run.</div>
+                          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Checks whether every published entry's photo loads, and finds a freely licensed one on Wikimedia for the ones that do not, credit included. A photo that already works is never touched. Up to {PHOTO_FIX_BATCH_CAP} per run.</div>
                         </div>
                         <button onClick={backfillPhotos} disabled={photoFixState?.running}
                           style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
@@ -19874,7 +19950,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                         summarised. Every value carries its own
                                         provenance: see sweeps.js, rule four. */}
                                     <div style={{ fontSize: 10.8, color: C.muted, marginTop: 3, lineHeight: 1.55 }}>{p.why}</div>
-                                    {/* And what the card would actually read.
+                                    {/* And what the card would read.
                                         Showing the outcome rather than
                                         describing it: what you review is what
                                         you publish. */}
@@ -20144,7 +20220,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       if (matches.length === 0 || typedHasCity) return null;
                       return (
                         <div style={{ background: "#3D2A0A", border: "1px solid #FFB347", borderRadius: 10, padding: "10px 12px", marginBottom: 10, fontSize: 12, color: "#FFB347", lineHeight: 1.6 }}>
-                          Did you mean one of these already-published entries? A name like this can genuinely exist in more than one town — if this is a different one, add the city to the name (e.g. "{typed} Aarhus") so it's clearly distinct.
+                          Did you mean one of these already-published entries? A name like this can exist in more than one town — if this is a different one, add the city to the name (e.g. "{typed} Aarhus") so it's clearly distinct.
                           <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 3 }}>
                             {matches.slice(0, 5).map((m, i) => (
                               <div key={i} style={{ color: "#FFD9A0" }}>• {m.name}{m.location ? ` — ${m.location}` : m.town ? ` — ${m.town}` : m.region ? ` — ${m.region}` : m.city ? ` — ${m.city}` : ""}</div>
@@ -20236,7 +20312,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{studioInventedWarning}</div>
                           </div>
                         )}
-                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 5 }}>✏️ EDIT BEFORE PUBLISHING — this is what actually gets saved</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 5 }}>✏️ EDIT BEFORE PUBLISHING — this is what gets saved</div>
                         <div style={{ fontSize: 9.5, color: googlePrecheckRan ? "#8AB4F8" : C.muted, marginBottom: 8 }}>
                           {googlePrecheckRan ? "✦ Written with a Perplexity cross-check folded in before drafting" : "Perplexity pre-check didn't run (no key set, or the call failed) — Tavily research only"}
                         </div>
@@ -20315,7 +20391,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             thing this editor has never done.
 
                             See uploadDraftPhotos for why the Media panel next
-                            door could not simply be reused: every action in it
+                            door could not be reused: every action in it
                             PATCHes a row by id, and a draft has no id. */}
                         {(() => {
                           const parsedDraft = (() => { try { return JSON.parse(studioDraftText) || {}; } catch { return studioDraft || {}; } })();
@@ -20390,7 +20466,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                     Nothing usable found. Commons had no freely licensed photo for that search, or every match was non-commercial, no-derivatives, or had no nameable author. Try a different wording.
                                   </div>
                                 )}
-                                {/* ── WHICH LOOKUPS ACTUALLY ANSWERED ──────────
+                                {/* ── WHICH LOOKUPS ANSWERED ──────────
                                     The same warning the published panel carries.
                                     A search that matched no article and no
                                     category has fallen through to the blind text
@@ -20557,7 +20633,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             and what a reader would open. So this prints BOTH
                             addresses: the plain agent URL that goes in the
                             database, and the tracked one the Book tickets
-                            button actually opens, as a link to press.
+                            button opens, as a link to press.
 
                             Every refusal in utils/ticketLink.js still applies
                             here, including the country. A pasted link is more
@@ -20848,10 +20924,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           <ul style={{ margin: 0, paddingLeft: 16, fontSize: 10.5, color: C.light, lineHeight: 1.7 }}>
                             <li><b>Dates</b> — could be fabricated, from the wrong year, or already in the past. Verify against the event's own site.</li>
                             <li><b>Town/region attached to a station or address</b> — the station name itself can be right while the town is wrong (Denmark has similarly-named places in different regions).</li>
-                            {studioType === "festival" && <li><b>Major vs. Local scale</b> — a judgment call the AI made; double-check it matches how well-known this actually is.</li>}
-                            {studioType === "town" && <li><b>Map coordinates (lat/lon)</b> — check the pin would actually land on the right town.</li>}
+                            {studioType === "festival" && <li><b>Major vs. Local scale</b> — a judgment call the AI made; double-check it matches how well-known this is.</li>}
+                            {studioType === "town" && <li><b>Map coordinates (lat/lon)</b> — check the pin would land on the right town.</li>}
                             {(studioType === "food" || studioType === "foodStreet" || studioType === "night" || studioType === "booking") && <li><b>Prices and opening details</b> — can go stale fast; verify the place still operates as described.</li>}
-                            <li><b>Named sub-venues/stages</b> (e.g. a specific stage or room name) — the AI has invented a plausible-sounding fake name before. Verify any specific venue name actually exists.</li>
+                            <li><b>Named sub-venues/stages</b> (e.g. a specific stage or room name) — the AI has invented a plausible-sounding fake name before. Verify any specific venue name exists.</li>
                             <li><b>Prices</b> — check the currency and the actual number. A converted price is a guess, not a fact.</li>
                             <li><b>Specific named details</b> in the description (a shop, dish, or landmark) — can be invented if the search results were thin. If in doubt, search the name yourself.</li>
                           </ul>
@@ -21327,7 +21403,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   at Road Trips, which has nothing in it. A visitor scrolled
                   through eight screens of stock photography to reach the same
                   links that were already one tap away.
-                  What replaced them is the two things that are actually true
+                  What replaced them is the two things that are true
                   right now and cannot be known from a menu: what is happening
                   in Denmark soon, and what is near the person reading. Both are
                   built from published rows, so this section grows by itself
@@ -21576,7 +21652,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   </div>
                 );
               })()}
-              {/* NEAR YOU. Only for someone actually standing in Denmark:
+              {/* NEAR YOU. Only for someone standing in Denmark:
                   isInDenmark already gates nearYou, and a distance shown to
                   someone browsing from abroad before they have booked is noise.
                   No prompt to turn location on here either, because the strip
@@ -21635,7 +21711,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     dash before "the rest of the country") were on the landing
                     page of his own product. */}
                 <div style={{ fontSize: "clamp(24px, 4vw, 30px)", fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 14, lineHeight: 1.25, maxWidth: 560, marginLeft: "auto", marginRight: "auto" }}>Four days is enough for more than one city.</div>
-                <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.75, maxWidth: 480, margin: "0 auto 22px" }}>Aarhus is about three hours from Copenhagen by train. Seeing only the capital is a choice, not a distance problem. Gemlyx builds the other trip: real towns, routes measured rather than guessed, and what is genuinely on while you are there.</div>
+                <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.75, maxWidth: 480, margin: "0 auto 22px" }}>Aarhus is about three hours from Copenhagen by train. Seeing only the capital is a choice, not a distance problem. Gemlyx builds the other trip: real towns, routes measured rather than guessed, and what is on while you are there.</div>
                 <button onClick={() => { setDetourTab("roadtrip"); goTab("ai"); }}
                   style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", borderRadius: 100, padding: "12px 24px", fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 4px 16px rgba(226,59,78,0.26)" }}>
                   See a Road Trip →
@@ -21920,8 +21996,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               { key: "island", label: "Island", primary: true,
                 options: [
                   { value: "All", label: "All" },
-                  ...[...new Set(combined.map(i => i._island).filter(Boolean))]
-                    .sort(daCompare)
+                  // Same helper the towns page reads, so the two island rows
+                  // cannot drift apart on what "present" or what order means.
+                  ...islandsPresent(combined, i => i._island)
                     .map(v => ({ value: v, label: ISLAND_LABEL[v] || v })),
                 ],
                 test: (i, v) => i._island === v },
@@ -21975,7 +22052,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Attractions</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Everything worth doing that isn't a town, a bar, or a meal: genuinely free places and things worth booking ahead, side by side so you can actually compare them.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Everything worth doing that isn't a town, a bar, or a meal: free places and things worth booking ahead, side by side so you can compare them.</div>
               </div>
 
               {/* ── SEARCH AND SORT, ALWAYS. FILTERS, ONLY WHEN THE
@@ -22074,7 +22151,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <div style={{ fontSize: 11, color: C.muted, marginBottom: 12, paddingLeft: 2 }}>{filtered.length} place{filtered.length !== 1 ? "s" : ""}{craftSort === "near" && isInDenmark(userCoords) ? " · nearest first" : ""}</div>
                   {/* Same photo-forward card structure as the Towns tab — a real
                       photo up top instead of a small icon buried in a text row,
-                      so a place actually looks like something worth seeing. */}
+                      so a place looks like something worth seeing. */}
                   <div className="towns-grid">
                     {filtered.map(item => (
                       <div key={`${item._kind}-${item.id}`} onClick={() => item._kind === "free" ? setFreeDetail(item) : setCraftDetail(item)} style={{ cursor: "pointer" }}>
@@ -22131,7 +22208,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             /* "Walk in" is about BOOKING and stays true of a
                                place that charges at the gate. The 🆓 in front
                                of it is a price claim, so it is spent only where
-                               the row has actually said the door is free.
+                               the row has said the door is free.
                                ── AND THE BOOKING HALF SAID IT UNCONDITIONALLY ──
                                Oliver, 1 Sep 2026: "What do we do about the
                                'free' and 'walk in no booking?" The else-branch
@@ -22255,7 +22332,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Food</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>From a 1965 hot dog cart to Copenhagen's biggest food market: the everyday spots locals actually eat at, and the bigger names worth the crowd.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>From a 1965 hot dog cart to Copenhagen's biggest food market: the everyday spots locals eat at, and the bigger names worth the crowd.</div>
               </div>
 
               {/* ── ONE ROW OF DROPDOWNS, LIKE EVERY OTHER LIST ──
@@ -22417,7 +22494,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       NO ROW, NO LINK, unchanged: Nightpay is a Studio row whose
                       kind is his to set, and tabForEssential returns nothing
                       when it is not published anywhere. The tip still shows,
-                      the name is simply plain text, which is the same graceful
+                      the name is plain text, which is the same graceful
                       fallback as before rather than a link to a page that
                       cannot explain itself. */}
                   <b style={{ color: C.gold }}>Tip:</b> ask if the bars take{" "}
@@ -22443,7 +22520,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <PageHero src="/tuborg.jpg" emoji="🍺" color="#E23B4E" />
 
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>Pick a town</div>
-                  {/* Genuinely empty is a real state and worth saying out loud.
+                  {/* empty is a real state and worth saying out loud.
                       The old wording named only spots, which read as "nothing is
                       published" to somebody who had just published a town. */}
                   {townList.length === 0 && (
@@ -22689,7 +22766,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
                       showVenueStyleFacet decides whether it appears at all, and
                       it has two gates: it must be able to classify half the
-                      rows, and at least two styles must actually be present. On
+                      rows, and at least two styles must be present. On
                       today's six venues five read casual and Hive reads as
                       nothing, so this renders NOTHING until somebody states
                       venueStyle on Hive — a filter whose only option is the
@@ -22743,10 +22820,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
 {/* Oliver, 7 Aug: "on hidden towns, it shouldn't be called 'hidden' anymore."
                     Right, and it had stopped being true. The page carries major
-                    cities, towns that are genuinely off the usual route, and
+                    cities, towns that are off the usual route, and
                     everything between, so a title claiming they are all hidden
                     was overselling half of them and quietly making the word
-                    meaningless for the ones it actually fits. Hidden is now a
+                    meaningless for the ones it fits. Hidden is now a
                     FILTER, applied to the entries that earn it, rather than a
                     label stamped across the whole page. */}
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Towns</div>
@@ -22761,7 +22838,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   guidebooks skip", so folding well-known cities into that
                   same grid (even badged) undersells both: the hidden towns
                   look less special, and the cities look like an afterthought
-                  instead of the real, common part of a trip they actually
+                  instead of the real, common part of a trip they
                   are. */}
               {towns.some(t => t.isMajorCity && !isArea(t) && townMatches(t)) && (
                 <div style={{ marginBottom: 28 }}>
@@ -22839,9 +22916,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 // could send you to an empty grid without warning. Counted with
                 // every OTHER filter applied and never with itself, same rule as
                 // the other two.
-                const nWithKind = (k) => towns.filter(t => base(t) && townSizeOk(t) && townThemeOk(t) && (!k || tierOf(t)?.id === k)).length;
-                const nWithTheme = (th) => towns.filter(t => base(t) && townKindOk(t) && townSizeOk(t) && hasTheme(t, th)).length;
-                const nWithSize = (z) => towns.filter(t => base(t) && townKindOk(t) && townThemeOk(t) && (!z || placeKindOf(t) === z)).length;
+                const nWithKind = (k) => towns.filter(t => base(t) && townSizeOk(t) && townThemeOk(t) && townIslandOk(t) && (!k || tierOf(t)?.id === k)).length;
+                const nWithTheme = (th) => towns.filter(t => base(t) && townKindOk(t) && townSizeOk(t) && townIslandOk(t) && hasTheme(t, th)).length;
+                const nWithSize = (z) => towns.filter(t => base(t) && townKindOk(t) && townThemeOk(t) && townIslandOk(t) && (!z || placeKindOf(t) === z)).length;
+                // ISLAND IS AN AXIS LIKE THE OTHERS, so it goes into all three
+                // counts above as well as having its own. A count that ignores a
+                // live filter promises a number the grid will not deliver.
+                const nWithIsland = (v) => towns.filter(t => base(t) && townKindOk(t) && townSizeOk(t) && townThemeOk(t) && (!v || islandOfTown(t) === v)).length;
+                const islands = islandsPresent(towns, islandOfTown);
                 const kinds = ["city", "town", "village", "area"].filter(k => towns.some(t => placeKindOf(t) === k));
                 const themeList = themesPresent(towns);
                 const Row = ({ title, children }) => (
@@ -22874,6 +22956,19 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         ))}
                       </Row>
                     )}
+                    {/* ── AND WHICH ISLAND ──────────────────────────
+                        Nothing on this page could answer "what have you got on
+                        the small islands", which is a real question about a
+                        country with four hundred of them. Only islands with
+                        something published on them appear, so the row is short
+                        and every chip leads somewhere. */}
+                    {islands.length > 0 && (
+                      <Row title="Island">
+                        {[{ id: null, label: "Anywhere" }, ...islands.map(v => ({ id: v, label: ISLAND_LABEL[v] || v, n: nWithIsland(v) }))].map(k => (
+                          <Pill key={k.label} label={k.id ? `${k.label} (${k.n})` : k.label} active={townIsland === k.id} onClick={() => setTownIsland(townIsland === k.id ? null : k.id)} />
+                        ))}
+                      </Row>
+                    )}
                     {activeTownFilters > 0 && (
                       <button onClick={clearTownFilters}
                         style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
@@ -22884,7 +22979,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 );
               })()}
 
-              {/* What is actually being shown, in one line, whenever anything is
+              {/* What is being shown, in one line, whenever anything is
                   narrowed. Same predicates as the grids, so it can never disagree. */}
               {activeTownFilters > 0 && (
                 <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 12, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -22956,7 +23051,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   published content — while no longer competing.
 
                   Grouped by partOf rather than by region, so the heading says
-                  the thing a person is actually looking for. Nothing is
+                  the thing a person is looking for. Nothing is
                   hardcoded: the day nobody is marked as inside anywhere, this
                   renders nothing at all. */}
               {(() => {
@@ -23217,7 +23312,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <div style={{ marginBottom: 20, display: detourTab === "sightseeing" ? "block" : "none" }}>
                 {/* Redesign pass: the intake used to be ~10 fields stacked in one long
                     wall, all visible at once. Now it's one card — dates + starting point
-                    up front (the inputs that genuinely shape the plan), and everything
+                    up front (the inputs that shape the plan), and everything
                     else folded behind a "fine-tune" toggle so the page reads calm. */}
                 <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px 16px" }}>
                   <div style={{ fontSize: 16, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 4 }}>When are you coming?</div>
@@ -23311,7 +23406,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       where you SLEEP, which this form never asks about. That
                       mismatch is what made it read as awkward, not camping
                       itself. Camper van stays, because it is a vehicle and a
-                      real answer here, and one that genuinely changes routing:
+                      real answer here, and one that changes routing:
                       it needs a car ferry for an island crossing and campsite
                       overnight parking rather than hotels.
 
@@ -23372,7 +23467,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       if (intakeTravelers.trim()) parts.push(`Who's traveling: ${intakeTravelers.trim()}`);
                       if (intakeIncludeSaved && savedPlaces.length > 0) parts.push(`Also include these saved places: ${savedPlaces.map(p => p.town ? `${p.name} (${p.town})` : p.name).join(", ")}`);
                       if (intakeFamilyMode) parts.push(`Traveling with kids, family-friendly plan`);
-                      if (intakeIncludeEvents) parts.push(`Include real events happening during the trip dates, if any genuinely fit`);
+                      if (intakeIncludeEvents) parts.push(`Include real events happening during the trip dates, if any fit`);
                       if (intakeTransport.length) parts.push(`Getting around: ${intakeTransport.map(t => t.replace(/^\S+\s/, "")).join(", ")}`);
                       sendAI(parts.join(" | "), { hidden: true });
                       setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "end" }), 100);
@@ -23408,7 +23503,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               categories: "some things are essentials while others are tips."
               He is right, and the categories were never the problem — two items
               a heading is not a structure, it is the same list with more
-              furniture. What was actually in there is two documents: sort this
+              furniture. What was in there is two documents: sort this
               out or you will be fined and stranded, and this will make the trip
               better.
 
@@ -23499,7 +23594,30 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                         <span style={{ fontSize: 22 }}>{item.emoji}</span>
                         <div>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{item.name}</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+                            {item.name}
+                            {/* ── AND WHERE IT APPLIES, WHEN IT IS NOT EVERYWHERE ──
+                                Oliver, 11 Sep 2026: "we need to input
+                                'essentials' on the blog pages. So essentials or
+                                tips for Odense."
+
+                                Odense Letbane and FynBus Tourist read exactly
+                                like Rejsekort and MobilePay on this page, and
+                                two of the four only work in one corner of the
+                                country. The chip says which, and the row now
+                                also shows on the pages of the towns it covers.
+
+                                NOTHING IS HIDDEN FROM THIS PAGE. A local row
+                                still sits in its category here, because a filter
+                                that quietly removes an entry from every view is
+                                the blank-page failure this project has shipped
+                                once already. It is labelled, not moved. */}
+                            {!isNational(item) && (
+                              <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: C.light, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "2px 8px" }}>
+                                📍 {scopeOf(item)}
+                              </span>
+                            )}
+                          </div>
                           <div style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{item.price}</div>
                         </div>
                       </div>
@@ -24010,7 +24128,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                motion along with everything else. */
             /* A sweep alone was invisible here: the corner mark is 19px tall,
                and a gradient crossing 19 pixels is not a flash, it is a rumour.
-               So the landing is three things at once, which is what actually
+               So the landing is three things at once, which is what
                reads as light catching the metal: the mark brightens hard for a
                moment, a warm bloom expands out of it and fades, and the sweep
                crosses the wordmark. The bloom is what makes it visible at this
@@ -24108,7 +24226,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             /* OPENING SPLASH, corner-flight version (restored per Oliver: darkness,
                the compass spins while the background fades in behind it, then it
                flies and settles into the actual corner logo's spot, and ONLY once
-               it's actually settled does the Enter Denmark card appear — Oliver was
+               it's settled does the Enter Denmark card appear — Oliver was
                explicit this needed to be the real sequence, not two things fading
                in independently on their own fixed timers, which is what a prior
                pass shipped and which could drift out of sync with the real flight
@@ -24123,10 +24241,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                guessed CSS offset. gxa-topbar (holding the real corner logo) and
                gxa-choose (the Enter Denmark card) both now read the SAME
                introFlightDone boolean for their opacity — the corner logo appears
-               the instant the flight actually lands, the card follows a beat later
+               the instant the flight lands, the card follows a beat later
                (0.35s transition-delay baked into .gxa-choose above), so there's
                never a moment with two logos both sitting in the corner, and the
-               card never appears before the logo has actually settled. */
+               card never appears before the logo has settled. */
             /* 7th-flight-report fix (see the splashGo effect): every intro
                animation stays PAUSED until React has confirmed two real painted
                frames (.gx-go added), so load-time jank can't silently eat the
@@ -24247,7 +24365,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <div className="gxa-archlight" style={{ left: `${LANDING_ART.arch[0]}%`, top: `${LANDING_ART.arch[1]}%`, width: `${LANDING_ART.arch[2]}%`, aspectRatio: "1.2", background: "radial-gradient(circle, rgba(255,214,140,0.4) 0%, rgba(255,190,110,0.14) 50%, transparent 72%)" }} />
               {/* The doorway light, dark until you step through it. Centred on
                   the arch opening of whichever painting is on screen, so it
-                  opens where the path actually is and not in the middle of a
+                  opens where the path is and not in the middle of a
                   tree. */}
               <div className="gxa-portal" style={{ "--gx-ax": `${LANDING_ART.arch[0] + LANDING_ART.arch[2] / 2}%`, "--gx-ay": `${LANDING_ART.arch[1] + LANDING_ART.arch[2] * 0.42}%` }} />
               {LANDING_ART.shrooms.map(([x, y, s], i) => (
@@ -24269,7 +24387,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
           {/* top bar: brand left, Log in / Sign up right — opacity now reads
               introFlightDone directly instead of a fixed CSS delay, so this only
-              ever appears the instant the flying compass actually lands here. */}
+              ever appears the instant the flying compass lands here. */}
           <div className="gxa-topbar" style={{ position: "absolute", top: 0, left: 0, right: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "calc(14px + env(safe-area-inset-top)) 18px 0", pointerEvents: "none", opacity: introFlightDone ? 1 : 0 }}>
             <span ref={cornerMarkRef} className={`gxa-brand${introFlightDone ? " gxa-lit" : ""}`} style={{ pointerEvents: "auto", filter: "drop-shadow(0 1px 8px rgba(8,8,4,0.7))" }}><GemlyxLogo size={19} color="#F0EFE6" /></span>
             <div style={{ display: "flex", alignItems: "center", gap: 8, pointerEvents: "auto" }}>
@@ -24324,7 +24442,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           {/* the explorer — country cards, each with its own photo and line */}
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "70px 20px 84px", pointerEvents: "none" }}>
             {/* Opacity reads introFlightDone, not a fixed CSS delay — per Oliver:
-                the compass has to actually finish traveling and settle into the
+                the compass has to finish traveling and settle into the
                 corner FIRST, and only then should this card appear (the 0.35s
                 transition-delay on .gxa-choose gives it a beat after the logo
                 lands rather than popping in on the exact same frame). Also not
@@ -24534,8 +24652,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           menu dropdown below that. Superseded the note that used to sit here
           about there being one nav surface for every screen size: that was true
           while the only surface was the dropdown, and a phone and a desktop
-          genuinely do want different ones. Both still render the same
-          NAV_ITEMS, which is the part that actually stops them drifting. */}
+          do want different ones. Both still render the same
+          NAV_ITEMS, which is the part that stops them drifting. */}
       </div>
 
       {/* ── DROPDOWN MENU ──────────────────────────────────── */}
@@ -24719,7 +24837,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           were leftovers from a shop the app is no longer: Fashion, Accessories,
           Bags, a permanent/seasonal/popup toggle and a 50 to 5000 DKK price
           slider. Deleted rather than repaired, because the real filters live on
-          the pages they belong to, where they are actually reachable. The one
+          the pages they belong to, where they are reachable. The one
           live control it held, bookableOnly, already has its own pill on the
           Attractions page and is untouched. */}
 
@@ -25267,7 +25385,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
       {/* ── PHOTO CREDITS ──────────────────────────────────
           Every image the app has on file, with its photographer, source and
           licence. Built from public/image-credits.json, which is written when a
-          photo is downloaded, so this page cannot drift from what was actually
+          photo is downloaded, so this page cannot drift from what was
           used. Images whose licence legally requires the credit are listed
           first and marked, so a missing one is obvious at a glance rather than
           buried in an alphabetical list. */}
@@ -25561,17 +25679,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <span style={{ fontSize: 11, fontWeight: 700, color: "#FFB347", letterSpacing: 1, textTransform: "uppercase" }}>No car or bike? Read this</span>
                 </div>
                 {/* ── A BOOLEAN IS NOT A SENTENCE ──────────────────
-                    The prompt asks for `true only if it's genuinely hard to
+                    The prompt asks for `true only if it's hard to
                     reach without a car`, shapeForLive stores `!!t.transportWarning`,
                     and this printed the value. React renders nothing for `true`,
                     so every hard-to-reach workshop showed an amber box headed
                     "NO CAR OR BIKE? READ THIS" with nothing under it. The
                     sentence a reader needs is in nearestStation and travelTime,
-                    which are the fields that actually hold one. */}
+                    which are the fields that hold one. */}
                 <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>
                   {craftDetail.nearestStation
                     ? `Nearest public transport: ${craftDetail.nearestStation}.${craftDetail.travelTime ? ` ${craftDetail.travelTime} from Copenhagen.` : ""}`
-                    : "This one is genuinely awkward to reach without your own transport. Check the route before you commit to the day."}
+                    : "This one is awkward to reach without your own transport. Check the route before you commit to the day."}
                 </div>
               </div>
             )}
@@ -25742,7 +25860,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   </button>
                 </div>
               </div>
-              {/* The same heart as the row, on the screen somebody is actually
+              {/* The same heart as the row, on the screen somebody is
                   reading when they decide they want it. Both write to the one
                   saved list, so the Saved tab and the road-trip planner see it. */}
               <button onClick={() => toggleSavePlace("product", selectedProduct, selectedProduct.city)}

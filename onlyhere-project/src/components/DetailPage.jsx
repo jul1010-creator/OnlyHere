@@ -38,6 +38,13 @@ import { t as uiT, DEFAULT_UI_LANGUAGE } from "../utils/uiLanguage";
 import { entryWord, bookLabel } from "../utils/entryWords";
 import { readableOn } from "../utils/readableColor";
 import { events, majorEvents, vikingEvents } from "../data/events";
+// ── THE ESSENTIALS THAT BELONG TO ONE PLACE ─────────────────────────
+// Read straight from the data module, the way the events above are: liveContent
+// pushes the published rows into that same array, so this sees whatever Studio
+// has published without a prop being threaded through App.jsx for it.
+import { essentials } from "../data/essentials";
+import { essentialsForPlace } from "../utils/essentialPlace";
+import { kindOf as essentialKindOf, linksOf } from "../utils/essentialKind";
 import { freeEntrance } from "../data/freeEntrance";
 import { foodSpots } from "../data/food";
 import { nightlifeSpots } from "../data/nightlife";
@@ -415,7 +422,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
         </div>
       </div>
       {/* Credit for the hero image, immediately under the photo it belongs to,
-          which is what CC BY and CC BY-SA actually ask for. Renders nothing when
+          which is what CC BY and CC BY-SA ask for. Renders nothing when
           the image has no credit on file, so it costs nothing on the many photos
           that need none. */}
       {/* __photoCredit is set when the hero came from Wikimedia Commons rather
@@ -482,7 +489,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             </div>
             <div style={{ fontSize: 11.5, color: C.muted, marginTop: 7, lineHeight: 1.5 }}>
               {/* What being marked MEANS, because a tick with no consequence is
-                  a tick nobody presses twice. It says the thing that actually
+                  a tick nobody presses twice. It says the thing that
                   happens, and it says the town rule out loud rather than
                   letting somebody find it by marking Copenhagen and watching
                   their trip stay the same. */}
@@ -556,7 +563,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           <div style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               {/* A finished edition still has a real page, because the link
-                  can be shared or bookmarked and the entry is genuinely about
+                  can be shared or bookmarked and the entry is about
                   a real festival. What it must not do is wear the same live
                   gold as one happening next week. Skanderborg Festival ended
                   on 9 Aug and this line was gold on 12 Aug. */}
@@ -734,6 +741,69 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                 </div>
               );
             })()}
+            {/* ── AND THE ESSENTIALS THAT ONLY APPLY HERE ────────────
+                Oliver, 11 Sep 2026: "we need to input 'essentials' on the blog
+                pages. So essentials or tips for Odense. Could be put into the
+                Odense Blog."
+
+                Odense Letbane and FynBus Tourist were both sitting on the
+                national list, between Rejsekort and MobilePay, because an
+                essential row had no field that could say where it applied. See
+                utils/essentialPlace.js for why the field is a SCOPE and not a
+                town: FynBus is Funen's bus and belongs on four town pages.
+
+                NOTHING RENDERS UNTIL A ROW IS PLACED. Every published row is
+                national today, so this block is invisible on every town page
+                until somebody types a place into the Studio box, and it stays
+                invisible on the towns nothing has been written for. */}
+            {(() => {
+              const here = essentialsForPlace(essentials, item);
+              if (!here.length) return null;
+              return (
+                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 18px", marginBottom: 18 }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 }}>
+                    {uiT("entry.localEssentials", lang).replace("{town}", item.name)}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>{uiT("entry.localEssentialsNote", lang)}</div>
+                  {here.map((row, i) => {
+                    // linksOf, not row.link: a merged row carries `links` and
+                    // two operators, and reading the singular field on one of
+                    // those renders a card with no way out of it.
+                    const links = linksOf(row);
+                    return (
+                      <div key={row.name} style={{ display: "flex", gap: 11, alignItems: "flex-start", paddingTop: i ? 11 : 0, marginTop: i ? 11 : 0, borderTop: i ? `1px solid ${C.border}` : "none" }}>
+                        <span style={{ fontSize: 19, lineHeight: 1.3, flexShrink: 0 }}>{row.emoji || "✨"}</span>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: C.text, display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+                            {row.name}
+                            {/* WHICH OF THE TWO LISTS, said on the card. An
+                                essential is something that costs money or
+                                strands you and a tip only makes the trip
+                                better, and a reader deciding what to do before
+                                a flight needs to know which one this is. */}
+                            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: essentialKindOf(row) === "tip" ? C.muted : C.gold, border: `1px solid ${essentialKindOf(row) === "tip" ? C.border : C.gold}`, borderRadius: 100, padding: "1px 7px" }}>
+                              {essentialKindOf(row) === "tip" ? "Tip" : "Essential"}
+                            </span>
+                          </div>
+                          {row.desc && <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginTop: 4 }}>{row.desc}</div>}
+                          {row.price && <div style={{ fontSize: 11.5, color: C.muted, marginTop: 4 }}>{row.price}</div>}
+                          {links.length > 0 && (
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 7 }}>
+                              {links.map(l => (
+                                <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer"
+                                  style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, textDecoration: "none", border: `1px solid ${C.border}`, borderRadius: 100, padding: "5px 11px" }}>
+                                  {l.label || uiT("entry.website", lang)} →
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
             {/* ── AND NO HOTEL LINKS HERE, ONLY IN THE GUIDE ─────────
                 Oliver, 10 Sep 2026, looking at the three of them on the
                 Copenhagen page: "Remove the hotel links. No reason to have
@@ -782,7 +852,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
 
                 Four event cards is most of a screen, and it sits between the
                 At a Glance card and the first sentence about what the place
-                actually is. Somebody reading a town page is deciding whether
+                is. Somebody reading a town page is deciding whether
                 to go at all; what is on in five weeks is a question they ask
                 second, if they ask it. The count is on the row so it is still
                 answerable without opening it, which is the difference between
@@ -920,7 +990,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             had none, because the night schema had no price field at all: not
             what a beer costs in a bar, not what a ticket costs at a venue that
             sells them. AtAGlanceCard drops a row whose value is empty, so a
-            venue whose research genuinely had no figure looks exactly as it
+            venue whose research had no figure looks exactly as it
             did before, and the ones that did stop hiding it. */}
         {kind === "nightlife" && (
           <AtAGlanceCard lang={lang} rows={[
@@ -940,7 +1010,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             stack full width in document order, so on a wide screen every photo
             was a full-bleed interruption. At 760px and up an image now floats to
             an alternating side at 44% and the prose wraps around it, which is
-            how an article actually reads. Below that width nothing changes: on a
+            how an article reads. Below that width nothing changes: on a
             phone a floated image would squeeze the text into an unreadable
             column. The float is cleared after the body so the next section
             cannot ride up beside a tall photo. */}
@@ -949,7 +1019,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             Three photographs, one tall and two collapsed into overlapping
             slivers of caption text at odd offsets down the left edge.
 
-            Nothing was overlapping. Two of the three images had simply never
+            Nothing was overlapping. Two of the three images had never
             loaded: they carry loading="lazy", they were below the fold, and an
             <img> that has not loaded, has no width or height attribute and no
             CSS aspect ratio reports a height of ZERO. So each unloaded figure
@@ -1121,7 +1191,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             rule, including why an attraction is measured from its own town. */}
         {showsJourneyForKind(kind) && <JourneyCard item={item} kind={kind} />}
 
-        {/* Where this actually is, and what else is around it. Renders only
+        {/* Where this is, and what else is around it. Renders only
             when the entry carries real coordinates; TOWN_COORDS is the fallback
             for towns published before __lat/__lon was stored. Coordinates are
             now written for every content type, so entries drafted from PASS 73
@@ -1289,7 +1359,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           );
         })()}
 
-        {/* ── AND A TICKET, WHERE ONE ACTUALLY EXISTS ────────────────
+        {/* ── AND A TICKET, WHERE ONE EXISTS ────────────────
             Oliver, 15 Aug 2026: "if I add on a Copenhagen attraction, then
             it'll automatically put in the affiliate."
 
@@ -1304,7 +1374,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             preview screen the same morning, "don't put up a bunch of random
             attractions just to have something", except this one asks a reader
             for money. shapeForLive refuses to store anything that is not a
-            bookable Tiqets page, so an empty field means there genuinely is
+            bookable Tiqets page, so an empty field means there is
             not one.
 
             The stored value is the PLAIN Tiqets URL and the tracking is added
