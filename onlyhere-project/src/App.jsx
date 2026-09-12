@@ -168,6 +168,7 @@ import { alertKey, describeWeatherChange, unseenAlerts, seenAlerts, markAlertSee
 import { placesNamedIn, cardsByMessage, rejectedIn } from "./utils/chatPlaces";
 import { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, MAP_CLASS, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS } from "./utils/chatRail";
 import { ChatMiniMap } from "./components/ChatMiniMap";
+import { readMapBeats, beatsDue, beatTarget, MAP_DIRECTION_RULE } from "./utils/mapDirections";
 import { briefProgress, progressLine, briefPercent, percentLine } from "./utils/briefPanel";
 import { EXAMPLE_GUIDE, EXAMPLE_GUIDE_PATH, hasExampleGuide } from "./data/exampleGuide";
 import { ChatPlaceCards } from "./components/ChatPlaceCards";
@@ -14795,6 +14796,29 @@ If the conversation only covers a single day or a few stops with no explicit day
   // components/TypewriterText.jsx. Only the newest assistant reply streams in;
   // everything before it just renders in full, instantly, on every re-render.
   const [chatRevealedUpTo, setChatRevealedUpTo] = useState(0);
+  // ── WHERE THE REPLY HAS ASKED THE MAP TO LOOK ────────────────────
+  //
+  // Oliver, 12 Sep 2026: the reply moves the camera from inside its own
+  // sentences. utils/mapDirections.js reads the markers, TypewriterText says
+  // which word is on screen, and this is the one value the map watches.
+  //
+  // A REF FOR THE COUNTERS AND STATE FOR THE TARGET, which is not an accident.
+  // The count of beats already played is read and written inside a reveal tick
+  // that fires many times a second; making it state would re-render the whole
+  // panel on every tick. The target is state because the map is a child and has
+  // to see it change.
+  const [mapFocus, setMapFocus] = useState(null);
+  const playedBeatsRef = useRef(0);
+  // Which reply the counter belongs to. Without this, reply two's first beat is
+  // compared against reply one's total and every move in it is skipped.
+  const beatOwnerRef = useRef(-1);
+  const focusSeqRef = useRef(0);
+  // What the map currently has pins for. See where it is written, far below.
+  const pinsRef = useRef([]);
+  // Two beats can name the same place, and an effect keyed on the coordinates
+  // would collapse them into one and never make the second move. A counter
+  // cannot collide with itself.
+  const nextFocusSeq = () => { focusSeqRef.current += 1; return focusSeqRef.current; };
   // PASS 27, per Oliver: the "Random guide" test button used to call
   // generateGuide() directly, skipping the new "here's what's coming up"
   // preview screen and the event-match card entirely (since it never went
@@ -16353,6 +16377,8 @@ WHAT "BUILDING THE PLAN" MEANS IN THIS CHAT REPLY, THIS IS A HARD FORMAT RULE: w
 
 WRITE THE MARKER EXACTLY AS PRINTED, NEVER TRANSLATED. It is a machine string, not a sentence. When the rest of your reply is in Danish, German or any other language, the marker stays [[GEMLYX_READY_TO_BUILD]] in ASCII with its brackets. Do not translate it, do not paraphrase it into "Den er klar" or "It's ready" or any equivalent, and do not replace it with a closing line of your own. A translated marker is not a marker, and the traveller gets no button.
 
+${MAP_DIRECTION_RULE}
+
 AND NEVER NAME A BUTTON. You do not know what is on the traveller's screen or what language it is labelled in. If somebody says nothing appeared, nothing popped up, or asks where the guide is, do NOT tell them to press a button by name. Tell them what you are still waiting for and ask for it. If you believe you have everything, say that you are building it and include the marker. Quoting an English button name at somebody reading Danish is how this went wrong on 22 August 2026.
 
 NARROW DOWN A BROAD INTEREST, DON'T JUST ACCEPT THE FIRST BROAD CATEGORY: a broad answer like "nature" or "history" still fits dozens of very different places in Denmark, and defaulting to the same handful of famous spots for every "nature" answer is exactly how everyone ends up at the same places. If someone gives a broad category and you have room for one more question before committing to a full plan, ask ONE specific, real follow-up that changes the plan. For example, for "nature": "coastal walks, forest and lakes, or the wilder Wadden Sea/island side?"; for "history": "Viking-era sites, WWII history, or old market towns?"; for "food": "casual local spots or something worth planning a splurge around?" Skip this if they've already been specific, or if they've made clear they just want you to pick for them. Don't turn a simple "surprise me" into another round of questions.
@@ -17315,7 +17341,23 @@ ${languageBlock()}`;
                     {shownMsgs.map((m) => {
                       const isLatestAssistant = m.role === "assistant" && m.idx === aiMessages.length - 1;
                       const streaming = isLatestAssistant && m.idx > chatRevealedUpTo;
-                      const assistantText = m.role === "assistant" ? stripMarkdown(stripReadyMarker(m.text)) : m.text;
+                      // Reset as a new reply starts streaming. See beatOwnerRef.
+                      if (streaming && beatOwnerRef.current !== m.idx) {
+                        beatOwnerRef.current = m.idx;
+                        playedBeatsRef.current = 0;
+                      }
+                      // ── AND THE CAMERA MARKERS COME OUT LAST ──────
+                      //
+                      // readMapBeats runs on the string that BECOMES the
+                      // bubble, after stripMarkdown and stripReadyMarker, and
+                      // that order is the whole correctness of the timing: a
+                      // beat carries the number of words before it, and any
+                      // strip that ran afterwards would move the words out from
+                      // under it. The drift would grow with the length of the
+                      // reply, so a short one would look fine.
+                      const readable = m.role === "assistant" ? stripMarkdown(stripReadyMarker(m.text)) : m.text;
+                      const withBeats = m.role === "assistant" ? readMapBeats(readable) : null;
+                      const assistantText = withBeats ? withBeats.clean : readable;
                       return (
                       <div key={m.idx} className="gemlyx-msg-in" style={{ display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
                         {m.role === "assistant" && (
@@ -17336,7 +17378,24 @@ ${languageBlock()}`;
                         <div className={MSG_ROW_CLASS} style={{ justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
                         <div style={{ maxWidth: "82%", borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap", background: m.role === "user" ? C.accent : C.bg, color: "#fff", border: m.role === "user" ? "none" : `1px solid ${C.border}`, borderLeft: m.role === "user" ? "none" : `2px solid ${C.gold}` }}>
                           {m.role === "assistant"
-                            ? <TypewriterText text={assistantText} active={streaming} onDone={() => setChatRevealedUpTo(prev => Math.max(prev, m.idx))} />
+                            ? <TypewriterText text={assistantText} active={streaming}
+                                onWord={streaming && withBeats?.beats.length ? (n) => {
+                                  // ONLY WHILE STREAMING. An old reply scrolled
+                                  // back into view re-renders and reports its
+                                  // full word count, and replaying its camera
+                                  // moves would yank the map away from whatever
+                                  // the conversation is about now.
+                                  const { beat, played } = beatsDue(withBeats.beats, n, playedBeatsRef.current);
+                                  if (!beat) return;
+                                  playedBeatsRef.current = played;
+                                  const target = beatTarget(beat, pinsRef.current);
+                                  // No pin, no move. beatTarget declines rather
+                                  // than guessing, and a map that confidently
+                                  // centres on the wrong town is worse than one
+                                  // that stayed still.
+                                  if (target) setMapFocus({ ...target, seq: nextFocusSeq() });
+                                } : undefined}
+                                onDone={() => setChatRevealedUpTo(prev => Math.max(prev, m.idx))} />
                             : m.text}
                         </div>
                         {/* ── AND A PICTURE OF WHAT IT JUST NAMED ──────────
@@ -17427,9 +17486,19 @@ ${languageBlock()}`;
                         rejectsFor: (text, m) => rejectedIn(clean(text), townPool, { own: m?.role === "user" }),
                         coordsFor: placeCoords,
                       });
+                      // ── AND THE BUBBLE ABOVE NEEDS THESE PINS ────────
+                      // A camera beat names a place and beatTarget turns that
+                      // into a coordinate by looking it up among the pins. The
+                      // bubble that fires the beat is rendered BEFORE this
+                      // block, so it cannot read `onMap` directly, and moving
+                      // either block to fix a single read would be a far bigger
+                      // change than the read is worth. The beat fires during a
+                      // reveal tick, which is always after a render, so by then
+                      // this has run and the ref holds the current pins.
+                      pinsRef.current = onMap.pins;
                       return (
                         <div className={MAP_CLASS}>
-                          <ChatMiniMap pins={onMap.pins} dropped={onMap.dropped} C={C} onOpen={(p) => openStopDetail(p, { windowed: true })} lang={readerLanguage()} sayWhatFor={enoughToRecommend(liveIntakeBrief)} />
+                          <ChatMiniMap focus={mapFocus} pins={onMap.pins} dropped={onMap.dropped} C={C} onOpen={(p) => openStopDetail(p, { windowed: true })} lang={readerLanguage()} sayWhatFor={enoughToRecommend(liveIntakeBrief)} />
                         </div>
                       );
                     })()}

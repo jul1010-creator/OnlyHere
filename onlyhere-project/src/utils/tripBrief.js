@@ -44,7 +44,7 @@
 // repeating: the app suggests things, so one sentence back from it reading
 // "Copenhagen has excellent museums" would otherwise become evidence that the
 // traveller asked for museums.
-import { arrivalDateIn, departureDateIn, dayCountIn, monthOnlyIn, latestRelativeAnswer, daysBetween, MAX_TRIP_DAYS } from "./tripEvents";
+import { arrivalDateIn, dateRangeIn, departureDateIn, dayCountIn, monthOnlyIn, latestRelativeAnswer, daysBetween, MAX_TRIP_DAYS } from "./tripEvents";
 import { PARTY_BARE, PARTY_POSSESSIVE, PARTY_POSSESSIVES, PARTY_COUNT, TRAVEL_VERBS, FROM_WORDS, TRANSPORT_PREPS, VEHICLE_WORDS, TRANSPORT_VERBS, PUBLIC_TRANSPORT, alt, LETTER } from "./travellerWords";
 import { dayStart } from "./calendarDay";
 import { travelModeKey, withoutNonModes } from "./routeOrder";
@@ -149,6 +149,14 @@ const readWhen = (text, turns, intakeArrival, intakeDeparture, today) => {
   const from = dayStart(intakeArrival);
   const to = dayStart(intakeDeparture);
   if (from) return { value: from, precision: "day", source: "intake", end: to || null };
+  // ── A RANGE ANSWERS THIS SLOT AND THE NEXT ONE ──────────────
+  // Oliver, 12 Sep 2026, stuck: "I'm here the 14th till 17th" left `when` null,
+  // so he was asked again and the brief could not finish. See dateRangeIn in
+  // utils/tripEvents.js. Asked FIRST and kept whole, because the end is a fact
+  // he stated and `end: null` on the line below threw it away even on the forms
+  // that did parse.
+  const spokenRange = dateRangeIn(text, today);
+  if (spokenRange) return { value: spokenRange.start, precision: "day", source: "said", end: spokenRange.end };
   const spokenDay = arrivalDateIn(text, today);
   if (spokenDay) return { value: spokenDay, precision: "day", source: "said", end: null };
   const month = monthOnlyIn(text, today);
@@ -206,12 +214,35 @@ const readDays = (text, intakeArrival, intakeDeparture, today = new Date(), turn
   // now wins where before it was ignored. Both rules are wrong on that sentence
   // and only one of them is wrong on a correction, which is the common case and
   // the one that reaches the builder.
+  // ── AND A STATED RANGE IS AN ANSWER TO THIS SLOT TOO ────────
+  //
+  // Oliver, 12 Sep 2026. He said "2 days" early, then "I'm here the 14th till
+  // 17th", which is four. The brief held 2, because the count loop below runs
+  // first and returns, so a range could never be reached on a conversation that
+  // had ever named a number.
+  //
+  // THE RULE IS THE ONE THIS SLOT ALREADY HAS, applied across both kinds of
+  // answer rather than only within one. The comment above is about exactly this:
+  // he said nine, was corrected to six, and the brief kept nine, because a
+  // correction was unreachable by construction. A first "2 days" outranking a
+  // later pair of real dates is the same fault with the two readers swapped.
+  //
+  // WHICHEVER CAME LAST, by turn index. Not "dates always win": somebody who
+  // gives dates and then says "actually just 2 days" has corrected themselves,
+  // and the count is the correction. Within ONE turn the dates win, because two
+  // stated endpoints are a harder fact than a number in the same breath.
   const said = Array.isArray(turns) && turns.length ? turns : [String(text || "")];
-  let raw = null;
-  for (const turn of said) {
-    const n = dayCountIn(turn, { cap: Infinity });
-    if (n) raw = n;
+  let raw = null, rawAt = -1, span = null, spanAt = -1;
+  for (let i = 0; i < said.length; i += 1) {
+    const n = dayCountIn(said[i], { cap: Infinity });
+    if (n) { raw = n; rawAt = i; }
+    const r = dateRangeIn(said[i], today);
+    if (r) {
+      const len = Math.round((r.end - r.start) / 86400000) + 1;
+      if (len > 0 && len <= MAX_TRIP_DAYS) { span = len; spanAt = i; }
+    }
   }
+  if (span !== null && spanAt >= rawAt) return { value: span, source: "said" };
   if (raw) {
     const value = Math.min(raw, MAX_TRIP_DAYS);
     return raw > value
@@ -227,6 +258,12 @@ const readDays = (text, intakeArrival, intakeDeparture, today = new Date(), turn
   // Counted INCLUSIVELY, the way a person counts a trip: in on the 8th, out on
   // the 12th, and they will tell you that is five days. daysBetween does the same
   // for the intake pickers above, so the two paths cannot disagree.
+  // A range that lost the last-wins comparison above still answers this slot
+  // when no count was ever spoken at all, which is the ordinary case: "I'm here
+  // the 14th till 17th" and nothing else. departureDateIn below cannot reach it,
+  // because that one needs a leaving word ("out of Aalborg on the 12th") and a
+  // range has none.
+  if (span !== null) return { value: span, source: "said" };
   const start = arrivalDateIn(text, today);
   const end = start ? departureDateIn(text, start) : null;
   if (start && end) {

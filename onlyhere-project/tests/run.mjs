@@ -161,6 +161,7 @@ writeFileSync(entry, `
   export { writeInLanguage } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { guideLanguage, languageOfProse, ruledOutLanguages, briefSentences, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS, MARKER_FLOOR, MARKER_MARGIN } from ${JSON.stringify(join(root, "src/utils/travellerLanguage.js"))};
   export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, LABEL_CLASS, LABEL_SIDES, LABEL_GAP, labelBox, labelSides } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
+  export { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE } from ${JSON.stringify(join(root, "src/utils/mapDirections.js"))};
   export { costLines, byUrgency, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
@@ -228,7 +229,7 @@ writeFileSync(entry, `
   export { latestRelativeAnswer, departureDateIn } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { launderedAbsence } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { contradictedAbsence, sentences } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
-  export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dayCountIn, relativeDayIn, relativeAnswerIn, daysBetween, describePicks, monthOnlyIn, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
+  export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dateRangeIn, dayCountIn, relativeDayIn, relativeAnswerIn, daysBetween, describePicks, monthOnlyIn, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED, isRegionCrossing } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { mergeForecasts, agreementNote, SPREAD_DISAGREES_C, weatherIsStale, weatherChanges, WEATHER_STALE_HOURS, dayWeather } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
@@ -9165,6 +9166,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // slot carries it and the model is told to say it.
   const { readBrief, briefBlock } = M;
   const TODAY = new Date(2026, 7, 14);        // 14 August 2026, fixed
+  const { dateRangeIn } = M;
   const ev = (name, date, dateEnd, extra = {}) => ({ name, town: "Copenhagen", date, dateEnd, ...extra });
   const POOL = [
     ev("Copenhagen Light Festival", "2027-02-02", "2027-02-25", { tier: "Highly Recommended", type: "Culture", tags: ["light", "art"] }),
@@ -9359,6 +9361,36 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     const longer = ["4 days I think", "no wait, we can do 8 days"];
     is("and a correction upward lands too",
        readBrief({ travellerText: longer.join("\n"), travellerTurns: longer, today: new Date("2026-09-10T09:00:00Z") }).known.days?.value, 8);
+
+    // ── AND THE STUCK CONVERSATION OF 12 SEP ──────────────
+    //
+    // His own turns, from the report he exported at 00:36. He had been asked
+    // for dates and answered with them, and `when` stayed null, so the next
+    // reply asked again and the brief could not complete. Two assertions,
+    // because two separate things were wrong and fixing either alone leaves him
+    // stuck or leaves the guide wrong.
+    {
+      const STUCK = ["I'm coming from Oslo flying into Copenhagen", "2 days", "nightlife",
+                     "public transport", "for fuck sakes mate.. I'm here the 14th till 17th."];
+      const b = readBrief({ travellerText: STUCK.join("\n"), travellerTurns: STUCK, today: new Date(2026, 8, 12) });
+      ok("the dates he gave are no longer missing", !(b.missing || []).includes("when"));
+      ok("and nothing asks him for them again", !(b.unanswered || []).includes("when"));
+      is("the arrival is the day he arrives", b.known.when?.value?.getDate() ?? null, 14);
+      is("and the end he stated is kept rather than thrown away", b.known.when?.end?.getDate() ?? null, 17);
+      // He said "2 days" at turn 2 and then gave dates spanning four at turn 5.
+      // The same last-wins rule the block above is about, applied across the two
+      // kinds of answer instead of only within one: a first remembered number
+      // must not outrank a later pair of real dates.
+      is("and the length comes from the dates, not the earlier guess", b.known.days?.value, 4);
+    }
+    // THE OTHER DIRECTION, so this is last-wins and not dates-always-win.
+    // Somebody who gives dates and then shortens the trip has corrected
+    // themselves, and the count is the correction.
+    {
+      const CORRECTED = ["I'm here the 14th till 17th", "actually just 2 days"];
+      is("a count after a range is a correction and wins",
+         readBrief({ travellerText: CORRECTED.join("\n"), travellerTurns: CORRECTED, today: new Date(2026, 8, 12) }).known.days?.value, 2);
+    }
     // PER TURN, not per match. Inside one sentence dayCountIn's own first-match
     // rule still stands, so a split trip is read exactly as it was before
     // rather than quietly becoming the second half.
@@ -9431,6 +9463,94 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("a month still ahead means this year",
     arrivalDateIn("2nd of December", TODAY)?.getFullYear() ?? null, 2026);
   is("no date, no guess", arrivalDateIn("sometime in the spring", TODAY), null);
+
+  // ── A TRIP IS A RANGE, AND NOTHING COULD READ ONE ────────────
+  //
+  // Oliver, 12 Sep 2026, stuck in his own Detour chat after answering the
+  // dates question: "for fuck sakes mate.. I'm here the 14th till 17th." His
+  // exported report has askedAndUnanswered ["when"].
+  //
+  // TWO BUGS, ONE CAUSE. The bare form read as nothing, so the brief asked
+  // again and could never finish. And the form WITH a month read as the wrong
+  // end: DATE_RE wants a day beside a month name, and in "14th till 17th of
+  // September" only the second number has one, so every such trip arrived on
+  // its own departure day. The first is loud, the second is silent.
+  {
+    const SEP12 = new Date(2026, 8, 12);    // the night he hit it
+    const dd = (x) => (x ? `${x.getDate()}/${x.getMonth() + 1}/${x.getFullYear()}` : null);
+
+    is("his own message reads as a range", dd(dateRangeIn("for fuck sakes mate.. I'm here the 14th till 17th.", SEP12)?.start), "14/9/2026");
+    is("and it knows when he leaves", dd(dateRangeIn("for fuck sakes mate.. I'm here the 14th till 17th.", SEP12)?.end), "17/9/2026");
+    // THE SILENT ONE. This form parsed before and parsed to the wrong day.
+    is("a month at the end does not make the last day the arrival",
+       dd(arrivalDateIn("I'm here the 14th till 17th of September", SEP12)), "14/9/2026");
+    is("nor when written with a hyphen", dd(arrivalDateIn("14-17 September", SEP12)), "14/9/2026");
+    is("nor when the month leads", dd(arrivalDateIn("September 14 to 17", SEP12)), "14/9/2026");
+    is("from and until read the same way", dd(arrivalDateIn("from the 14th until the 17th", SEP12)), "14/9/2026");
+    // A range may cross a month, and only when both months are written down.
+    is("two full dates can cross a month", dd(dateRangeIn("14 September to 2 October", SEP12)?.end), "2/10/2026");
+    is("and the arrival is still the first of them", dd(dateRangeIn("14 September to 2 October", SEP12)?.start), "14/9/2026");
+
+    // ── THE MONTH IT PICKS WHEN NOBODY WROTE ONE ────────────
+    // The nearest one that has not gone, which is how a person reads it. This
+    // is NOT the numeric-date guess tripEvents refuses: "5/6" has two readings
+    // and this has one, with only the month missing.
+    is("a bare range takes this month when the start is ahead",
+       dd(dateRangeIn("the 14th till 17th", SEP12)?.start), "14/9/2026");
+    is("and next month when it has gone",
+       dd(dateRangeIn("the 14th till 17th", new Date(2026, 8, 20))?.start), "14/10/2026");
+    is("and the year rolls with it",
+       dd(dateRangeIn("the 3rd till the 6th", new Date(2026, 11, 20))?.start), "3/1/2027");
+
+    // ── AND MOST NUMBER RANGES ARE NOT DATES AT ALL ───────────
+    // Reading one of these as a trip would be worse than reading nothing. Every
+    // string here is real copy from this app or from a Gemlyx reply.
+    for (const notADate of [
+      "figure 400 to 600 DKK a day for food and drinks",
+      "2-3 days is enough",
+      "it covers 80-plus bars and clubs",
+      "between 14 to 17 people",
+      "we are 2 to 3 adults",
+      "the walk is 15 to 20 minutes",
+      "ride pass 199-349 DKK adult",
+      "open 10 to 17",
+    ]) {
+      is(`not a date: ${notADate.slice(0, 34)}`, dateRangeIn(notADate, SEP12), null);
+    }
+    // ── AND THE ONES THE UNIT GUARD ITSELF HAS TO CATCH ────────
+    //
+    // Every string above is refused by the SHAPE of the pattern: a bare range
+    // needs "the" or "from" in front, or an ordinal on each end, and none of
+    // them has one. So deleting NOT_A_DATE_AFTER changed no answer and the
+    // mutant survived, which is the mutation run earning its keep: the guard
+    // was load-bearing and nothing was holding it.
+    //
+    // These are date-SHAPED and are still not dates. Both numbers are under 31,
+    // so dayOk cannot refuse them either, and the unit word is the only thing
+    // standing between "from 2 to 3 days" and a trip in the first week of the
+    // month.
+    for (const shapedButNot of [
+      "from 2 to 3 days",
+      "the walk is from 15 to 20 minutes",
+      "we are from 2 to 3 adults",
+      "the 2nd to the 3rd day",
+      "from 10 to 17 hours",
+      "the 6th to the 8th people",
+    ]) {
+      is(`shape alone is not enough: ${shapedButNot.slice(0, 30)}`, dateRangeIn(shapedButNot, SEP12), null);
+    }
+    // And the same shape WITHOUT a unit word is a trip, or the guard would be
+    // refusing the thing it exists to let through.
+    is("the same shape with no unit word still reads", dd(dateRangeIn("from 2 to 3", SEP12)?.start), "2/10/2026");
+    is("and so does an ordinal pair", dd(dateRangeIn("the 2nd to the 3rd", SEP12)?.start), "2/10/2026");
+
+    // Backwards is somebody writing something else, and inventing a month
+    // boundary to make it parse would be the invention this file refuses.
+    is("a backwards range is not a trip", dateRangeIn("the 17th till the 14th", SEP12), null);
+    // And the single-date reader is untouched by any of this.
+    is("one date is still one date", dd(arrivalDateIn("September 14th", SEP12)), "14/9/2026");
+    is("and a bare month still has no day", dateRangeIn("in December", SEP12), null);
+  }
 
   // THE SENTENCE UNDER THE HEADING, since a checkbox that stops responding
   // without saying why reads as broken.
@@ -43184,7 +43304,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // over a 380px map on the turn that names the most places and knows least.
     const chatMap = readFileSync(join(root, "src/components/ChatMiniMap.jsx"), "utf8");
     ok("the map takes the gate rather than deciding for itself",
-       /sayWhatFor = false \}\) => \{/.test(chatMap));
+       /sayWhatFor = false, focus = null \}\) => \{/.test(chatMap));
     ok("and says nothing about what a place is for until it opens",
        /const picked = sayWhatFor \? distinctThemes\(/.test(chatMap) && /\)\) : \{\};/.test(chatMap));
     ok("and the app opens it from the brief rather than from the pins",
@@ -46619,7 +46739,111 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // rules is longer than the rules, and a window measured in characters would
   // be measuring the prose.
   const chatCode = stripComments(chatMap);
-  ok("the map is rendered under the rail", /<ChatMiniMap pins=\{onMap\.pins\}/.test(appR));
+  ok("the map is rendered under the rail", /<ChatMiniMap focus=\{mapFocus\} pins=\{onMap\.pins\}/.test(appR));
+
+// ── THE REPLY DRIVES THE CAMERA ─────────────────────────────────────
+//
+// Oliver, 12 Sep 2026, in a document he wrote titled "how I want the map to
+// function". His example, with the brackets where he put them:
+//
+//   Gemlyx: "Arh, [zoom in] Copenhagen has alot to offer such as bla bla bla.."
+//   Gemlyx: "Interesting! [zoom out], well for your specific taste, I can
+//            recommend Aarhus [zoom in] because bla bla bla"
+//
+// INSIDE the sentences. That is the feature: the map moves on the word where
+// the subject changes, not at the end of the reply.
+{
+  const { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE } = M;
+  const REPLY = "Arh, [[MAP_IN:Copenhagen]] Copenhagen has a lot to offer. Interesting! [[MAP_OUT]] For your taste I can recommend [[MAP_IN:Aarhus]] Aarhus, because it is quieter.";
+  const r = readMapBeats(REPLY);
+
+  // A MARKER REACHING THE BUBBLE IS WORSE THAN NO FEATURE.
+  ok("no marker survives into the text a reader sees", !/\[\[MAP/.test(r.clean));
+  is("and the sentence reads as if none had been written",
+     r.clean, "Arh, Copenhagen has a lot to offer. Interesting! For your taste I can recommend Aarhus, because it is quieter.");
+  ok("no double space is left where one was removed", !/ {2}/.test(r.clean));
+  is("three directions are read", r.beats.length, 3);
+  is("in the order they were written", r.beats.map(b => b.kind).join(","), "in,out,in");
+
+  // ── THE WORD EACH ONE LANDS ON ────────────────────────────────────
+  // This is the whole timing, and it is measured against the CLEAN text,
+  // because that is what the reveal walks. A beat counted against the original
+  // would drift by the length of every marker before it.
+  const words = r.clean.split(/(\s+)/).filter(t => /\S/.test(t));
+  is("the Copenhagen zoom fires as the word Copenhagen arrives", words[r.beats[0].atWord], "Copenhagen");
+  is("the pull-back fires as the subject widens", words[r.beats[1].atWord], "For");
+  is("and the Aarhus zoom as Aarhus arrives", words[r.beats[2].atWord], "Aarhus,");
+
+  // TypewriterText counts words as `text.split(/(\s+)/)` filtered to the tokens
+  // holding a non-space. If these two ever disagree, every beat fires at the
+  // wrong moment and the error grows with the length of the reply.
+  const twSrc = readFileSync(join(root, "src/components/TypewriterText.jsx"), "utf8");
+  ok("the reveal and the parser count words the same way",
+     /tokens\.filter\(t => \/\\S\/\.test\(t\)\)\.length/.test(twSrc));
+  ok("and the reveal reports how far it has got", /onWordRef\.current\?\.\(n\)/.test(twSrc));
+
+  // ── PLAYED ONCE, IN ORDER, AND NEVER REPLAYED ─────────────────────
+  let played = 0;
+  const fired = [];
+  for (let n = 0; n <= words.length; n += 1) {
+    const d = beatsDue(r.beats, n, played);
+    if (d.played !== played) { fired.push(`${d.beat.kind}:${d.beat.place}`); played = d.played; }
+  }
+  is("each direction fires exactly once, in order", fired.join(" "), "in:Copenhagen out: in:Aarhus");
+  is("and nothing is owed once they have all played", beatsDue(r.beats, 999, played).beat, null);
+  // Three due in one tick is a flicker, not three moves. The count still walks
+  // past all of them, so none is replayed later.
+  {
+    const burst = beatsDue(r.beats, 999, 0);
+    is("a burst collapses to the last one", burst.beat.place, "Aarhus");
+    is("and the count still passes all of them", burst.played, 3);
+  }
+
+  // ── A BEAT WITH NOWHERE TO GO DOES NOTHING ────────────────────────
+  // beatTarget can only ever decline. Flying to a guess would put the map
+  // confidently on the wrong town, which is worse than leaving it where it was.
+  const pins = [{ name: "Copenhagen", lat: 55.68, lon: 12.57 }, { name: "Aarhus", lat: 56.15, lon: 10.2 }];
+  is("a pinned place resolves to its own coordinate", beatTarget({ kind: "in", place: "Copenhagen" }, pins)?.lat, 55.68);
+  is("a place with no pin moves nothing", beatTarget({ kind: "in", place: "Skagen" }, pins), null);
+  is("a pin with no coordinate moves nothing", beatTarget({ kind: "in", place: "X" }, [{ name: "X" }]), null);
+  is("and out needs no pin at all", beatTarget({ kind: "out" }, [])?.kind, "out");
+
+  // ── WHAT A HALF-WRITTEN MARKER DOES ───────────────────────────────
+  is("an IN with no place is dropped rather than guessed at", readMapBeats("a [[MAP_IN:]] b").beats.length, 0);
+  ok("and its brackets still do not reach the reader", !/\[\[MAP/.test(readMapBeats("a [[MAP_IN:]] b").clean));
+  // An unclosed marker must not swallow the rest of the reply into a place name.
+  is("an unclosed marker is left alone", readMapBeats("a [[MAP_IN:Copenhagen and then everything else").beats.length, 0);
+  is("a reply with no markers is returned untouched", readMapBeats("Just a normal reply.").clean, "Just a normal reply.");
+  is("and reports no directions", readMapBeats("Just a normal reply.").beats.length, 0);
+  // A model that emits forty markers must not be able to shake the map.
+  is("the number of moves is capped",
+     readMapBeats(Array(MAP_BEAT_CAP + 6).fill("[[MAP_OUT]] x").join(" ")).beats.length, MAP_BEAT_CAP);
+
+  // ── THE PROMPT AND THE PARSER HAVE TO AGREE ───────────────────────
+  // A prompt describing a syntax the parser does not read is a field that goes
+  // nowhere, which is the failure this codebase has paid for four times.
+  ok("the prompt teaches the exact markers the parser reads",
+     MAP_DIRECTION_RULE.includes("[[MAP_IN:") && MAP_DIRECTION_RULE.includes("[[MAP_OUT]]"));
+  ok("and it is the prompt the chat actually sends", /\$\{MAP_DIRECTION_RULE\}/.test(appR));
+  // Same rule READY_MARKER needed, for the same reason: a model replying in
+  // Danish will translate anything that looks like a word.
+  ok("and it says the marker is never translated", /NEVER TRANSLATED/.test(MAP_DIRECTION_RULE));
+  ok("and that the traveller must never be told about them", /never mention them/.test(MAP_DIRECTION_RULE));
+  ok("no dash is taught to the model in it", !/[\u2013\u2014]/.test(MAP_DIRECTION_RULE));
+
+  // ── AND ONLY THE STREAMING REPLY DRIVES IT ────────────────────────
+  // An old reply scrolled back into view re-renders and reports its full word
+  // count. Replaying its camera moves would yank the map off whatever the
+  // conversation is about now.
+  ok("an old reply is not wired to the camera", /onWord=\{streaming && withBeats\?\.beats\.length \?/.test(appR));
+  // The counter belongs to one reply, or reply two's first beat is measured
+  // against reply one's total and every move in it is skipped.
+  ok("and the played counter resets per reply", /beatOwnerRef\.current !== m\.idx/.test(appR));
+  // The markers come out AFTER every other strip, so the words the beat counted
+  // are the words the reveal walks.
+  ok("the markers are read off the final text, not the raw one",
+     /const readable = m\.role === "assistant" \? stripMarkdown\(stripReadyMarker\(m\.text\)\) : m\.text;\s*\n\s*const withBeats = m\.role === "assistant" \? readMapBeats\(readable\) : null;/.test(appR));
+}
   ok("fed by mapPlaces and not by the card's reading", /const onMap = mapPlaces\(\{[\s\S]{0,400}?coordsFor: placeCoords,/.test(appR));
   // placeCoords, not a fresh `__lat ?? lat` read. Six copies of that question
   // have been found in this codebase and five of them were wrong.
@@ -46955,34 +47179,40 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // "The map should start from up, and then zoom down to Copenhagen with a
   // Copenhagen image/description, popping up. And then the rest should come up
   // too afterwards."
-  // ── AND WHERE IT OPENS MOVED OUT A STEP ──────────────────────────
+  // ── AND WHERE IT OPENS CAME BACK A STEP ──────────────────
   //
-  // Oliver, 8 Sep 2026, on a lone Billund pin: "it still makes people question
-  // 'Where is Billund located?'" One pin lands on the country now, so opening
-  // ON the country would be a flight from Denmark to Denmark. It opens one
-  // frame further out and the descent survives.
-  ok("the map opens above the country, not on a pin", /\.fitBounds\(NORTHERN_EUROPE, \{ padding: \[6, 6\] \}\)/.test(chatCode));
-  ok("and that frame is bounds rather than a zoom number", /const NORTHERN_EUROPE = \[\[52\.4, 2\.5\], \[60\.8, 21\.0\]\];/.test(chatCode));
-  // It has to CONTAIN the country, or the first flight starts off the map.
+  // It opened on NORTHERN_EUROPE for one reason: the 8 Sep rule landed a lone
+  // pin on DENMARK, so opening on the country would have been a flight from
+  // Denmark to Denmark. That rule is gone and so is the wider frame.
+  //
+  // Oliver, 12 Sep 2026, on a map captioned Copenhagen that ran from Stockholm
+  // to Berlin: "Have the map default as a map of Denmark from start. And when
+  // towns or islands get pointed out, you zoom into them."
+  //
+  // ASSERTED AS A RELATION, not against a copy of the numbers. The frame is
+  // checked against the country it has to hold, so nudging it is an edit here
+  // and not a puzzle.
   {
     // A LONGITUDE CAN BE NEGATIVE, and the first version of this pattern could
     // not match one. A frame reaching west of Greenwich made the match null and
     // the whole suite died on the next line, which reports as a mutation
     // surviving: a crashed run has no failures in it to count.
-    const box3 = /const NORTHERN_EUROPE = \[\[(-?[\d.]+), (-?[\d.]+)\], \[(-?[\d.]+), (-?[\d.]+)\]\];/;
     const dk3 = /const DENMARK = \[\[(-?[\d.]+), (-?[\d.]+)\], \[(-?[\d.]+), (-?[\d.]+)\]\];/;
-    const boxM = chatCode.match(box3);
     const dkM = chatCode.match(dk3);
-    ok("both frames are readable as four numbers", !!boxM && !!dkM);
-    const box = (boxM || []).slice(1).map(Number);
+    ok("the opening frame is readable as four numbers", !!dkM);
     const dk = (dkM || []).slice(1).map(Number);
-    ok("the opening frame contains Denmark",
-       box.length === 4 && dk.length === 4 && box[0] < dk[0] && box[1] < dk[1] && box[2] > dk[2] && box[3] > dk[3]);
-    // And not so far out that Denmark is a smudge and the flight is a title
-    // sequence. Under about four times the country's span either way.
-    ok("and is not so far out that Denmark is a smudge",
-       box.length === 4 && dk.length === 4
-       && (box[2] - box[0]) < (dk[2] - dk[0]) * 4 && (box[3] - box[1]) < (dk[3] - dk[1]) * 4);
+    // Skagen at the top, Gedser at the bottom, Blåvands Huk in the west and
+    // Bornholm's longitude in the east. A frame that cuts one of them off is a
+    // map of Denmark with a piece of Denmark missing.
+    ok("and it holds the country from Gedser up to Skagen",
+       dk.length === 4 && dk[0] <= 54.6 && dk[2] >= 57.7);
+    ok("and from the North Sea coast east past Bornholm",
+       dk.length === 4 && dk[1] <= 8.1 && dk[3] >= 15.2);
+    // Not so tight that the first flight starts with the destination already
+    // filling the screen, and not so wide that Denmark is a smudge in it.
+    ok("and is a country frame rather than a continent",
+       dk.length === 4 && (dk[2] - dk[0]) < 8 && (dk[3] - dk[1]) < 16);
+    ok("the wider frame it used to open on is gone", !/NORTHERN_EUROPE\s*=/.test(chatCode));
   }
   // Bounds rather than a hand-picked zoom, because the column is a clamped
   // proportion and a number right at 380px is wrong at 240.
@@ -47007,10 +47237,35 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the wrapper is a column so the caption sits under the map",
      /flexDirection: "column", minHeight: 0, height: "100%"/.test(chatCode));
 
-  ok("a single pin is framed by the country rather than by itself",
-     /list\.length > 1\s*\n?\s*\? L\.latLngBounds\(list\.map\(p => \[p\.lat, p\.lon\]\)\)\.pad\(0\.35\)\s*\n?\s*: L\.latLngBounds\(DENMARK\)/.test(chatCode));
+  // ── AND THE COUNTRY IS THE FRAME IT LEAVES, NOT THE ONE IT LANDS ON ──
+  //
+  // The 8 Sep fix for Billund pinned a lone pin to the whole country, which
+  // deleted the arrival: the map already opens on the country, so a single pin
+  // flew from Denmark to Denmark and never zoomed at all.
+  //
+  // Oliver, 12 Sep 2026, on that map showing Copenhagen from Stockholm to
+  // Berlin: "if the conversation starts with a map of Denmark, and you THEN
+  // zoom in, then people know where it is. The issue becomes when the map
+  // appears zoomed into a field, rather than 'Map of Denmark' -> 'Zoom into
+  // destination'." So the country is the STARTING frame and the place is the
+  // destination, and the journey between them is what answers "where is this".
+  ok("the map opens on Denmark", /\}\)\.fitBounds\(DENMARK, \{ padding: \[6, 6\] \}\);/.test(chatCode));
+  ok("and a lone pin is framed by itself, so the flight has somewhere to go",
+     /const lone = list\.length <= 1;[\s\S]{0,260}?const bounds = lone\s*\n?\s*\? L\.latLngBounds\(list\.map\(p => \[p\.lat, p\.lon\]\)\)\s*\n?\s*: L\.latLngBounds\(list\.map\(p => \[p\.lat, p\.lon\]\)\)\.pad\(0\.35\)/.test(chatCode));
+  // ── AND THE TWO BRANCHES DO NOT SHARE ONE MAXZOOM ────────────────
+  // A zero-size bounds ignores its own padding and lands exactly on the cap, so
+  // the cap IS the framing for a lone pin and merely a ceiling for a cluster.
+  // At 55.7 degrees zoom 10 is about 86 m/px: a 490px map is 42 km across, so
+  // "a picture of Copenhagen" was Copenhagen, Malmö and half of Zealand.
+  ok("a lone pin gets a closer cap than a cluster", /const LONE_PIN_ZOOM = FOCUS_ZOOM, CLUSTER_ZOOM = 10;/.test(chatCode));
+  // ONE NUMBER, TWO CALLERS. The pins ask for this closeness when there is one
+  // of them, and a reply asks for it by name when it says [[MAP_IN:...]]. A
+  // second copy is how the two start disagreeing about what "close" is.
+  ok("and that cap is shared with the reply-driven camera", /const FOCUS_ZOOM = 12;/.test(chatCode));
+  ok("the focus effect uses it too", /map\.flyTo\(\[focus\.lat, focus\.lon\], FOCUS_ZOOM/.test(chatCode));
+  ok("and which one is used follows which branch it took", /const closest = lone \? LONE_PIN_ZOOM : CLUSTER_ZOOM;/.test(chatCode));
   ok("the first set flies and the rest pan",
-     /const first = !flownRef\.current;[\s\S]{0,520}?flyToBounds\(bounds, \{ maxZoom: 10, duration: first \? 1\.9 : 0\.9 \}\)/.test(chatCode));
+     /const first = !flownRef\.current;[\s\S]{0,720}?flyToBounds\(bounds, \{ maxZoom: closest, duration: first \? 1\.9 : 0\.9 \}\)/.test(chatCode));
   // A title sequence on every reply is not a map. The flag has to be set, or
   // every new place re-flies from altitude.
   ok("and the flight happens once", /flownRef\.current = true;/.test(chatCode));
@@ -47018,7 +47273,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ends up looking at the same map.
   ok("reduced motion is honoured", /prefers-reduced-motion: reduce/.test(chatCode));
   ok("and it lands in the same place without animating",
-     /if \(still\) map\.fitBounds\(bounds, \{ maxZoom: 10, animate: false \}\);/.test(chatCode));
+     /if \(still\) map\.fitBounds\(bounds, \{ maxZoom: closest, animate: false \}\);/.test(chatCode));
   // ── THE CARD OPENS WHEN IT LANDS, NOT BEFORE ───────────────────
   // Opening it first would drag the card across the screen for two seconds and
   // open it on the wrong side, because sideFor measures where the pins are at

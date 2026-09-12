@@ -120,7 +120,154 @@ const DATE_RE = new RegExp(
     `|(${MONTH_PATTERN})${SP}+(\\d{1,2})(?:st|nd|rd|th|\\.)?` +
   `)(?![${LETTER}])`, "i");
 
+// \u2500\u2500 A TRIP IS A RANGE, AND NOTHING HERE COULD READ ONE \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+//
+// Oliver, 12 Sep 2026, stuck in his own Detour chat. He had been asked for his
+// dates and answered "for fuck sakes mate.. I'm here the 14th till 17th." The
+// brief\u2019s `when` slot stayed null, so Gemlyx asked again, and the conversation
+// could not finish. His exported report: stillMissing ["party","stay"],
+// askedAndUnanswered ["when"].
+//
+// TWO BUGS, ONE CAUSE, and the second is worse than the one he hit.
+//
+//   "I'm here the 14th till 17th"              -> null
+//   "I'm here the 14th till 17th of September" -> 17 September
+//   "14-17 September"                          -> 17 September
+//
+// DATE_RE looks for one day number sitting beside one month name, and `.match`
+// with no /g returns the FIRST place that pattern fits. In a range written with
+// the month at the end, "14" is followed by "-17", which is not a month, so the
+// only number that can match is the SECOND one. Every such trip was read as
+// arriving on its own departure day. The first bug is loud and asks again; this
+// one is silent and dates the whole guide to the day he goes home.
+//
+// So the reader learns what a range is. The START is the arrival, the END is the
+// departure, and the length falls out of the two instead of being asked for
+// separately.
+//
+// \u2500\u2500 AND A BARE RANGE HAS TO PICK ITS OWN MONTH \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+//
+// "the 14th till 17th" names no month, and a person reading it on the 12th
+// knows exactly what it means. The rule is the one already written above for a
+// lone date and for a bare month: the nearest one that has not gone. If the
+// start day is still ahead this month it is this month, otherwise next, and the
+// year rolls with it.
+//
+// THIS IS NOT THE NUMERIC-DATE GUESS THIS FILE REFUSES. The comment above
+// DATE_RE refuses "5/6" because it is 5 June to a Dane and 6 May to an American,
+// and the two readings are both plausible. "the 14th till 17th" has no second
+// reading: both numbers are days, in the same month, in that order. What is
+// missing is which month, and that is inferred from today rather than guessed
+// between two candidates.
+//
+// \u2500\u2500 AND A NUMBER RANGE IS USUALLY NOT A DATE AT ALL \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+//
+// "400 to 600 DKK a day", "2-3 days", "80-plus bars", "between 14 to 17 people".
+// Reading any of those as a trip would be worse than reading nothing, so the
+// bare form demands date-shaped writing: an ordinal on at least one end, or a
+// leading "the" or "from", and NEVER a unit word after it. A month on either
+// end says date by itself and needs no such proof.
+const RANGE_JOIN = "(?:\\s*(?:to|till|til|until|through|thru|-|\\u2013|\\u2014)\\s*|\\s+(?:to|till|til|until|through|thru)\\s+)";
+// What a number range means when it is not a trip. If one of these follows, the
+// numbers were never days.
+const NOT_A_DATE_AFTER = /^\s*(?:days?|nights?|d\u00f8gn|dage|n\u00e6tter|weeks?|uger?|hours?|timer?|minutes?|min|people|persons?|adults?|kids?|children|b\u00f8rn|voksne|pax|kr|kroner|dkk|eur|euros?|usd|%|percent|procent|km|kilometers?|kilometres?|m|miles?|degrees?|grader|bars?|stops?|places?|plus)\b/i;
+const ORDINAL = "(?:st|nd|rd|th|\\.)";
+// day + month, month + day, or a bare day, at either end of the join.
+const R_BOTH_THEN_MONTH = new RegExp(
+  `(?:^|[^${LETTER}\\d])(?:the${SP}+|from${SP}+|on${SP}+)?(\\d{1,2})${ORDINAL}?${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+|den${SP}+|de${SP}+)?(${MONTH_PATTERN})(?![${LETTER}])`, "i");
+const R_MONTH_THEN_BOTH = new RegExp(
+  `(?:^|[^${LETTER}])(${MONTH_PATTERN})${SP}+(\\d{1,2})${ORDINAL}?${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?(?![${LETTER}\\d])`, "i");
+const R_BARE = new RegExp(
+  `(?:^|[^${LETTER}\\d])(?:the${SP}+|from${SP}+|on${SP}+)(\\d{1,2})${ORDINAL}?${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?(?![${LETTER}\\d])`, "i");
+const R_BARE_ORDINALS = new RegExp(
+  `(?:^|[^${LETTER}\\d])(\\d{1,2})${ORDINAL}${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}(?![${LETTER}\\d])`, "i");
+
+const dayOk = (n) => Number.isFinite(n) && n >= 1 && n <= 31;
+
+// Two full dates, one on each side, which is the only form that can legitimately
+// cross a month: "14 September to 2 October".
+const R_TWO_FULL = new RegExp(
+  `(?:^|[^${LETTER}\\d])(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+)?(${MONTH_PATTERN})${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+)?(${MONTH_PATTERN})(?![${LETTER}])`, "i");
+// And the same thing written the other way round, which is how a booking
+// confirmation prints it: "Sep 28 - Oct 3". Found by testing rather than by
+// reading, which is why it is here and not in the pattern above.
+const R_TWO_FULL_MD = new RegExp(
+  `(?:^|[^${LETTER}])(${MONTH_PATTERN})${SP}+(\\d{1,2})${ORDINAL}?${RANGE_JOIN}(${MONTH_PATTERN})${SP}+(\\d{1,2})${ORDINAL}?(?![${LETTER}\\d])`, "i");
+
+export const dateRangeIn = (text, today = new Date()) => {
+  const s = String(text || "");
+  if (!s.trim()) return null;
+  const floor = new Date(today.toDateString());
+  const rollFrom = (monthIdx, day) => {
+    let d = new Date(today.getFullYear(), monthIdx, day);
+    if (d < floor) d = new Date(today.getFullYear() + 1, monthIdx, day);
+    return d;
+  };
+  const tailFrom = (m) => s.slice(m.index + m[0].length);
+
+  // Two full dates first: it is the only form that says its own months, so it
+  // must not be flattened into one month by a looser pattern below. Both
+  // orderings, because "14 September to 2 October" and "Sep 28 - Oct 3" are the
+  // same sentence to a reader.
+  for (const [re, order] of [[R_TWO_FULL, "dmdm"], [R_TWO_FULL_MD, "mdmd"]]) {
+    const two = s.match(re);
+    if (!two) continue;
+    const d1 = parseInt(order === "dmdm" ? two[1] : two[2], 10);
+    const d2 = parseInt(order === "dmdm" ? two[3] : two[4], 10);
+    const m1 = MONTH_NAMES[(order === "dmdm" ? two[2] : two[1]).toLowerCase()];
+    const m2 = MONTH_NAMES[(order === "dmdm" ? two[4] : two[3]).toLowerCase()];
+    if (!dayOk(d1) || !dayOk(d2) || m1 === undefined || m2 === undefined) continue;
+    const start = rollFrom(m1, d1);
+    let end = new Date(start.getFullYear(), m2, d2);
+    // A December start and a January end is a year boundary, not an error.
+    if (end < start) end = new Date(start.getFullYear() + 1, m2, d2);
+    return { start, end, precision: "day", monthStated: true };
+  }
+
+  for (const [re, order] of [[R_BOTH_THEN_MONTH, "ddm"], [R_MONTH_THEN_BOTH, "mdd"]]) {
+    const m = s.match(re);
+    if (!m) continue;
+    const d1 = parseInt(order === "ddm" ? m[1] : m[2], 10);
+    const d2 = parseInt(order === "ddm" ? m[2] : m[3], 10);
+    const monthIdx = MONTH_NAMES[(order === "ddm" ? m[3] : m[1]).toLowerCase()];
+    if (!dayOk(d1) || !dayOk(d2) || monthIdx === undefined) continue;
+    // Backwards is not a trip. "the 17th to the 14th" is somebody writing
+    // something else, and inventing a month boundary to make it parse would be
+    // the invention this file exists to refuse.
+    if (d2 < d1) continue;
+    const start = rollFrom(monthIdx, d1);
+    return { start, end: new Date(start.getFullYear(), monthIdx, d2), precision: "day", monthStated: true };
+  }
+
+  // Bare, so it has to look like a date and not like a quantity.
+  for (const re of [R_BARE, R_BARE_ORDINALS]) {
+    const m = s.match(re);
+    if (!m) continue;
+    if (NOT_A_DATE_AFTER.test(tailFrom(m))) continue;
+    const d1 = parseInt(m[1], 10), d2 = parseInt(m[2], 10);
+    if (!dayOk(d1) || !dayOk(d2) || d2 < d1) continue;
+    // The nearest month that still holds the start, which is how a person reads
+    // it. Said on the 12th, "the 14th till 17th" is this month; said on the
+    // 20th, it is next.
+    let monthIdx = today.getMonth(), year = today.getFullYear();
+    if (d1 < today.getDate()) {
+      monthIdx += 1;
+      if (monthIdx > 11) { monthIdx = 0; year += 1; }
+    }
+    const start = new Date(year, monthIdx, d1);
+    return { start, end: new Date(year, monthIdx, d2), precision: "day", monthStated: false };
+  }
+  return null;
+};
+
 export const arrivalDateIn = (text, today = new Date()) => {
+  // THE RANGE FIRST, because its start is the arrival and DATE_RE below would
+  // return its end. See dateRangeIn: this is the whole of the 12 Sep fix, and
+  // putting it here rather than in each caller is deliberate. Six callers read
+  // an arrival through this function, and a parallel path that some of them
+  // forget is the hand-copied list this codebase has paid for four times.
+  const range = dateRangeIn(text, today);
+  if (range) return range.start;
   const m = String(text || "").match(DATE_RE);
   if (!m) return null;
   const day = parseInt(m[1] || m[4], 10);
@@ -393,6 +540,16 @@ export const tripWindow = ({ arrival, departure, convoText, convoTurns, today = 
   const end = dayStart(departure);
   if (start && end && end.getTime() >= start.getTime()) {
     return { start, end, days: daysBetween(start, end), dated: true, source: "intake" };
+  }
+  // ── A STATED RANGE BEATS A COUNTED ONE ──────────────────
+  // Both ends said out loud, so neither is derived from the other. Before
+  // 12 Sep this function could only build a window from one date plus a spoken
+  // day count, and a traveller who gave two dates and no count got the lone
+  // date branch below: a window one day wide, on what was often their
+  // departure. See dateRangeIn.
+  const stated = dateRangeIn(convoText, today);
+  if (stated) {
+    return { start: stated.start, end: stated.end, days: daysBetween(stated.start, stated.end), dated: true, source: "conversation" };
   }
   const spoken = dayCountIn(convoText);
   const from = dayStart(arrivalDateIn(convoText, today));

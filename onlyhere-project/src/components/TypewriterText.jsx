@@ -63,7 +63,17 @@ const injectFade = () => {
   document.head.appendChild(el);
 };
 
-export const TypewriterText = ({ text, active, onDone }) => {
+// ── AND SOMETHING ELSE WANTS TO KNOW HOW FAR IT HAS GOT ─────────────
+//
+// Oliver, 12 Sep 2026, on the map beside the chat: the reply moves the camera
+// from inside its own sentences, so a camera move belongs to a WORD rather than
+// to a reply. See utils/mapDirections.js. This component is the only thing that
+// knows which word is on screen, so it reports, and it decides nothing.
+//
+// `onWord` and not a ref handed in, because the caller needs this at the moment
+// it changes and a ref would make it poll. Optional, so every other caller of
+// this component behaves exactly as it did.
+export const TypewriterText = ({ text, active, onDone, onWord }) => {
   // Split into word + whitespace tokens (whitespace kept as its own tokens so
   // the original spacing/newlines survive exactly — bubbles use pre-wrap).
   const tokens = useMemo(() => (text || "").split(/(\s+)/), [text]);
@@ -71,6 +81,8 @@ export const TypewriterText = ({ text, active, onDone }) => {
   const [shownWords, setShownWords] = useState(active ? 0 : wordCount);
   const doneFiredRef = useRef(false);
   const prevTextRef = useRef(text || "");
+  const onWordRef = useRef(onWord);
+  onWordRef.current = onWord;
   const shownWordsRef = useRef(active ? 0 : wordCount);
 
   useEffect(() => {
@@ -80,6 +92,7 @@ export const TypewriterText = ({ text, active, onDone }) => {
       prevTextRef.current = text || "";
       shownWordsRef.current = wordCount;
       setShownWords(wordCount);
+      onWordRef.current?.(wordCount);
       return;
     }
     // STUTTER FIX (Oliver: "it starts and stops and starts and stops, and then
@@ -111,6 +124,7 @@ export const TypewriterText = ({ text, active, onDone }) => {
       const n = Math.ceil(progress);
       shownWordsRef.current = n;
       setShownWords(n);
+      onWordRef.current?.(n);
       if (n >= wordCount) {
         clearInterval(id);
         if (!doneFiredRef.current) { doneFiredRef.current = true; onDone?.(); }

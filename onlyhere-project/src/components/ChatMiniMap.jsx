@@ -39,22 +39,26 @@ import { t as uiT } from "../utils/uiLanguage";
 // one both get the country instead of one of them getting Jutland.
 const DENMARK = [[54.5, 8.0], [57.8, 15.3]];
 
-// ── AND WHERE DENMARK IS, WHICH IS THE OUTER VERSION OF THE SAME ────
+// How close the map gets to ONE place, whether the pins asked for it or the
+// reply did. At 55.7 degrees this is about 21 metres a pixel, so a 490 pixel
+// map is roughly 10 km across: a city with its water and its shape, a small
+// town with the country around it. Named at module scope because two callers
+// need the same number and a second copy is how they start disagreeing.
+const FOCUS_ZOOM = 12;
+
+// ── THERE WAS A WIDER FRAME HERE AND IT HAS GONE ───────────────
 //
-// Oliver, 8 Sep 2026: "it still makes people question 'Where is Billund
-// located?'" A single pin now lands on the country rather than on a field, and
-// that took the descent out of the opening move: flying from Denmark to Denmark
-// is not a flight.
+// NORTHERN_EUROPE, southern Norway to the top of Germany, existed for exactly
+// one reason: on 8 Sep a lone pin was made to land on DENMARK, which turned the
+// opening move into a flight from Denmark to Denmark, so the map had to open
+// one step further out for there to be any descent left.
 //
-// So the map opens one step further out, on southern Norway, southern Sweden
-// and the top of Germany, and the first pin flies from there down to Denmark.
-// The animation he asked for is intact and it now carries a second answer for a
-// reader who has never had reason to know where Denmark is either.
-//
-// Not the whole of Europe: at that scale Denmark is a smudge and the flight is
-// a title sequence. This is the smallest frame with a recognisable neighbour in
-// every direction.
-const NORTHERN_EUROPE = [[52.4, 2.5], [60.8, 21.0]];
+// Both halves are undone together, because the second only ever propped up the
+// first. A lone pin flies to its place again (see the flight below), so the
+// country is a real starting frame rather than a destination, and the wider box
+// would now only push Denmark into the middle of four other countries. Oliver,
+// 12 Sep 2026, looking at precisely that: "Have the map default as a map of
+// Denmark from start."
 
 // The pin's own colour, named once. Oliver, 8 Sep 2026, asked for the shape
 // everyone knows and then, shown it in the site's gold, said "red". Gold is
@@ -62,7 +66,7 @@ const NORTHERN_EUROPE = [[52.4, 2.5], [60.8, 21.0]];
 // reads as furniture; red is the one colour nothing else here uses.
 const PIN_RED = "#E8232A";
 
-export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, height = 220, sayWhatFor = false }) => {
+export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, height = 220, sayWhatFor = false, focus = null }) => {
   // ── THE READER'S LANGUAGE, ONCE ─────────────────────────────────
   //
   // `lang` is readerLanguage()'s OBJECT, not a two letter code. Handing the
@@ -182,10 +186,20 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       scrollWheelZoom: false,
       dragging: true,
       attributionControl: false,
-    // One step out from the country, which is where every one of these starts.
+    // ── IT OPENS ON DENMARK ──────────────────────────────────────
+    //
+    // Oliver, 12 Sep 2026: "Have the map default as a map of Denmark from
+    // start. And when towns or islands get pointed out, you zoom into them."
+    //
+    // It opened one step further out than that, on NORTHERN_EUROPE, and the
+    // screenshot that prompted this shows what that costs: a map captioned
+    // Copenhagen running from Stockholm to Berlin, with Denmark a small shape
+    // in the middle of four other countries. A map of Denmark is the frame this
+    // app is about, and it is the frame the zoom then departs from.
+    //
     // Bounds rather than a fixed zoom, so it frames the same thing at 240
     // pixels wide and at 380, instead of being right at one of them.
-    }).fitBounds(NORTHERN_EUROPE, { padding: [6, 6] });
+    }).fitBounds(DENMARK, { padding: [6, 6] });
     addTileLayer(L, map);
     L.control.zoom({ position: "bottomright" }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);
@@ -433,37 +447,70 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // the move that says where in Denmark this is. Every set after it is a
     // shorter eased pan: the country has been established by then, and
     // re-flying from altitude on every reply is a title sequence, not a map.
-    // ── ONE PIN IS A QUESTION, NOT AN ANSWER ─────────────────────
+    // ── ONE PIN IS A QUESTION, AND THE FLIGHT IS THE ANSWER ──────
     //
     // Oliver, 8 Sep 2026: "this map demonstration also shows a poor
     // presentation of Billund. Great, we got it animated, but it still makes
     // people question 'Where is Billund located?'"
     //
-    // He is right and the cause is arithmetic. One pin makes a bounds of zero
-    // size, pad() multiplies zero by 0.35 and gets zero, and fitBounds on a
-    // point goes as close as it is allowed. maxZoom 10 was the only thing
-    // stopping it, so a lone town landed on fifteen kilometres of farmland with
-    // Grindsted in the corner: a picture that answers "what is near Billund"
-    // to somebody who asked "where IS Billund".
+    // The cause was arithmetic. One pin makes a bounds of zero size, pad()
+    // multiplies zero by 0.35 and gets zero, and fitBounds on a point goes as
+    // close as it is allowed. maxZoom 10 was the only thing stopping it, so a
+    // lone town landed on fifteen kilometres of farmland with Grindsted in the
+    // corner.
     //
-    // A map of one place is a map of where that place is. So a single pin gets
-    // the country, which is the frame the map already opens on, and the flight
-    // becomes a pin arriving on Denmark rather than a dive into a field.
+    // THE FIX THAT DAY WENT ONE STEP TOO FAR. It pinned a single pin to the
+    // WHOLE COUNTRY, which deleted the arrival rather than framing it: the map
+    // opens on northern Europe and a lone pin then flew from the country to the
+    // country, so there was no zoom at all.
+    //
+    // Oliver, 12 Sep 2026, on that same map showing Copenhagen from Stockholm
+    // to Berlin: "why doesn't it zoom more into Copenhagen? It knows it's just
+    // Copenhagen now." And then the rule, which is his: "if the conversation
+    // starts with a map of Denmark, and you THEN zoom in, then people know
+    // where it is. The issue becomes when the map appears zoomed into a field,
+    // rather than 'Map of Denmark' -> 'Zoom into destination'."
+    //
+    // So the country context was never supposed to be the DESTINATION. It is
+    // the STARTING frame, and it is one: the map is built with
+    // fitBounds(DENMARK) before a pin exists. Watching it travel from
+    // there to the place is what answers "where is Billund", and it answers it
+    // better than a static country view, because it shows the relation and then
+    // shows the place.
     //
     // TWO OR MORE FIT TO THE PINS, unchanged. By then the question has changed:
     // the reader knows where Denmark is and wants to know how far Ribe is from
-    // Aarhus, and that answer is the one this map was built for.
-    const bounds = list.length > 1
-      ? L.latLngBounds(list.map(p => [p.lat, p.lon])).pad(0.35)
-      : L.latLngBounds(DENMARK);
+    // Aarhus.
+    //
+    // ── AND A LONE PIN NEEDS A CLOSER MAXZOOM THAN A CLUSTER ─────
+    //
+    // Both branches shared maxZoom 10 and only the cluster branch was ever
+    // framed by it. A zero-size bounds ignores its own padding and lands
+    // exactly on the cap, and at this latitude zoom 10 is about 86 metres a
+    // pixel: a 490 pixel map is roughly 42 km across, so "a picture of
+    // Copenhagen" came out as Copenhagen, Malmö and half of Zealand. That is
+    // the same not-a-picture-of-the-place failure as the Billund field, at the
+    // other end of the scale.
+    //
+    // 12 is about 10 km across here, which holds a city with its water and its
+    // shape, and holds a small town with the country around it. Named rather
+    // than written into both calls, because the two branches answer different
+    // questions and a single number quietly serving both is what produced this.
+    const LONE_PIN_ZOOM = FOCUS_ZOOM, CLUSTER_ZOOM = 10;
+    const lone = list.length <= 1;
+    const bounds = lone
+      ? L.latLngBounds(list.map(p => [p.lat, p.lon]))
+      : L.latLngBounds(list.map(p => [p.lat, p.lon])).pad(0.35);
+    const closest = lone ? LONE_PIN_ZOOM : CLUSTER_ZOOM;
     const first = !flownRef.current;
     flownRef.current = true;
-    // Somebody who has asked their system for less movement gets none. The map
-    // still ends up in the same place, which is the half carrying the meaning.
+    // Somebody who has asked their system for less movement gets none. They
+    // land where everyone else lands, which is the half carrying the meaning:
+    // giving them the country instead would be giving them less, not gentler.
     const still = typeof window !== "undefined" && typeof window.matchMedia === "function"
       && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (still) map.fitBounds(bounds, { maxZoom: 10, animate: false });
-    else map.flyToBounds(bounds, { maxZoom: 10, duration: first ? 1.9 : 0.9 });
+    if (still) map.fitBounds(bounds, { maxZoom: closest, animate: false });
+    else map.flyToBounds(bounds, { maxZoom: closest, duration: first ? 1.9 : 0.9 });
     // ── AND THE CARD OPENS ITSELF WHEN IT LANDS ──────────────────
     //
     // "with a Copenhagen image/description, popping up." Opening it before the
@@ -542,6 +589,47 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // pinKey, not `pins`: by value, for the reason above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pinKey]);
+
+  // ── AND THE REPLY CAN MOVE IT WHILE IT TALKS ──────────────────────
+  //
+  // Oliver, 12 Sep 2026, on how he wants this to work: "Arh, [zoom in]
+  // Copenhagen has alot to offer... Interesting! [zoom out], well for your
+  // specific taste, I can recommend Aarhus [zoom in] because bla bla bla."
+  //
+  // The brackets are inside his sentences, so the move belongs to a word rather
+  // than to a reply. utils/mapDirections.js reads the markers out of the text
+  // and the caller fires one as the reveal reaches it; this effect is the half
+  // that flies, and it knows nothing about text.
+  //
+  // KEYED ON seq AND NOT ON THE TARGET. Two beats naming the same place is a
+  // real sequence ("Copenhagen... and back to Copenhagen"), and a key made of
+  // the coordinates would collapse them into one and the second move would
+  // never happen. seq is a counter the caller bumps per beat.
+  //
+  // SEPARATE FROM THE PIN FLIGHT ABOVE, which frames whatever is on the map
+  // when the pins change. These two can both want the camera in the same
+  // second, and the reply wins: it is the thing the traveller is reading.
+  const focusSeq = focus ? focus.seq : null;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focus || focusSeq == null) return;
+    const still = typeof window !== "undefined" && typeof window.matchMedia === "function"
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Out is the country, which is the frame the map opens on, so a pull-back
+    // lands exactly where it started rather than at some middle distance nobody
+    // chose. In is the place at the same closeness a lone pin gets, so a zoom
+    // the reply asked for and a zoom the pins asked for look like one map.
+    if (focus.kind === "out") {
+      const b = L.latLngBounds(DENMARK);
+      if (still) map.fitBounds(b, { padding: [6, 6], animate: false });
+      else map.flyToBounds(b, { padding: [6, 6], duration: 1.1 });
+      return;
+    }
+    if (!Number.isFinite(focus.lat) || !Number.isFinite(focus.lon)) return;
+    if (still) map.setView([focus.lat, focus.lon], FOCUS_ZOOM, { animate: false });
+    else map.flyTo([focus.lat, focus.lon], FOCUS_ZOOM, { duration: 1.1 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusSeq]);
 
   useEffect(() => () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } }, []);
 
