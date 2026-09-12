@@ -179,21 +179,41 @@ export const beatTarget = (beat, pins) => {
   return { kind: "in", name: String(hit.place?.name || hit.key || ""), lat: Number(hit.lat), lon: Number(hit.lon) };
 };
 
+// ── AND IT IS A SLIDESHOW, NOT A SUMMARY ────────────────────────────
+//
+// Oliver, 12 Sep 2026: "I want you to prompt the AI as if the map is a diashow
+// directed by the AI."
+//
+// The rule below already had the mechanics and the wrong STANCE. It read
+// "most replies need none, some need one", which describes a map that catches
+// up with the conversation. What he is asking for is a map that is being
+// presented: the picture changes because Gemlyx changed it, on the word it
+// meant to, and the reply ends on the thing it wants them looking at.
+//
+// Nothing about the markers, the ceiling or the translation rule changes. What
+// changes is what the model thinks the map is for.
+//
 // ── THE RULE, WRITTEN ONCE, FOR THE PROMPT THAT HAS TO TEACH IT ─────
 //
 // Said in one place because the system prompt and this parser have to agree
 // about what the markers are, and a prompt that describes a syntax the parser
 // does not read is the failure this codebase calls a field that goes nowhere.
 // App.jsx interpolates this rather than restating it.
-export const MAP_DIRECTION_RULE = `MOVING THE MAP WHILE YOU TALK. A map sits beside this conversation showing the places that have come up. You move it by writing a marker INSIDE your reply, at the exact point the map should move:
+export const MAP_DIRECTION_RULE = `DIRECTING THE MAP. A map sits beside this conversation and YOU ARE RUNNING IT, the way somebody talking over a slideshow runs the slides. It is not a summary that catches up afterwards and it is not the app's job to work out: the picture shows what you are talking about because you put it there, at the moment you started talking about it.
 
-  [[MAP_IN:Copenhagen]]   fly to that place and hold on it
+You move it by writing a marker INSIDE your reply, at the exact word the picture should change:
+
+  [[MAP_IN:Copenhagen]]   fly down to that place and hold there
   [[MAP_OUT]]             pull back to the whole of Denmark
 
-Write them where the subject changes, not at the end. "Arh, [[MAP_IN:Copenhagen]] Copenhagen has a lot going on." moves the map as you start talking about Copenhagen. "Interesting! [[MAP_OUT]] For your taste I would look at [[MAP_IN:Aarhus]] Aarhus, because..." pulls back while you consider the question and closes in as you answer it.
+THE SHAPE OF A GOOD RUN. Wide for the shape of the trip, close for the place you are describing, wide again the moment you start weighing one place against another. "Arh, [[MAP_IN:Copenhagen]] Copenhagen has a lot going on." lands the camera as the sentence starts. "Interesting! [[MAP_OUT]] For your taste I would look at [[MAP_IN:Aarhus]] Aarhus, because..." pulls back while you think and closes in as you answer. Markers go INSIDE the sentences and never collected at the end: where one sits in the sentence is the whole of the timing.
 
-WHEN TO USE THEM. Zoom IN when you start talking about one place in particular. Zoom OUT when the conversation stops being about one place: comparing two, weighing a choice, planning a route across the country. If your reply is not about anywhere in particular, use neither. Most replies need none, some need one, and a reply with more than two is a reply that cannot settle.
+PACE IT LIKE SLIDES, NOT LIKE A TRAILER. At most one move per paragraph, and never two markers with nothing between them. A picture nobody had time to look at is worse than one that did not move. Two moves in a reply is a good reply, three is a lot, and six is a hard ceiling that exists to stop the map shaking rather than as a target. A reply about nowhere in particular leaves the map where it is, and that is a decision rather than a missed cue.
 
-ONLY PLACES ALREADY ON THE MAP. The marker names a place, and the map can only move to one it has a pin for. Naming somewhere that is not there does nothing at all, so do not use a marker to introduce a place, use it when you are talking about one the conversation has already established.
+END ON WHAT MATTERS. The last move is the one they sit looking at while they type their answer, so finish on the place your reply is really about. If you have just asked them something about one town, the map should be on that town while they read the question.
+
+ONLY PLACES THE MAP CAN REACH. It can fly to a place Gemlyx publishes and holds a checked coordinate for, and nowhere else. A marker naming anything else does nothing at all, so use one to SHOW a place, never to introduce somewhere the map has no pin for.
+
+NEVER MENTION THE MAP. You are running the slideshow, not narrating it. No "as you can see on the map", no "the map shows", no "look to the right". They can see it. Say the thing about the place and let the picture carry its half of the sentence.
 
 WRITE THE MARKER EXACTLY AS PRINTED, NEVER TRANSLATED. It is a machine string, not a sentence. When the rest of your reply is in Danish, German or any other language, the markers stay [[MAP_IN:...]] and [[MAP_OUT]] in ASCII with their brackets, and the place name inside stays as the map spells it. Do not translate them, do not add spaces inside the brackets, and never mention them or explain them to the traveller: they are removed before anyone reads your reply.`;

@@ -223,6 +223,55 @@ export const rejectedIn = (text, pools, { own = false } = {}) => {
   return out;
 };
 
+// ── AND A CORRECTION TAKES THE WRONG ONE OFF ────────────────────────
+//
+// Oliver, 12 Sep 2026, 22:32, a screenshot with no words on it. Gemlyx had
+// assumed Copenhagen, he wrote:
+//
+//   "No, it's actually Billund I'm flying into.."
+//
+// Billund was pinned. Copenhagen stayed pinned, and its card stayed on screen,
+// beside the sentence saying he was not flying there.
+//
+// Every reader added tonight looks for a REFUSAL, and this is not one. He names
+// the right place and says nothing at all about the wrong one, because the wrong
+// one is in Gemlyx's previous turn and he is contradicting it. That is how
+// people correct things: you say the true thing, not the false one.
+//
+// ── SO THE REFERENT COMES FROM THE TURN BEING CORRECTED ─────────────
+//
+// This does NOT break the rule that the brief is never read from Gemlyx's own
+// replies. That rule is about EVIDENCE: a suggestion of Gemlyx's is not the
+// traveller saying they want it. Here the reply is not evidence of anything, it
+// is the thing the sentence points at, the same job the previous sentence does
+// for "we don't want to go there" in exclusions.js.
+//
+// ── ONE IN, ONE OUT, AND AMBIGUITY YIELDS NOTHING ───────────────────
+//
+// The correction has to name exactly ONE place, and the turn it corrects has to
+// have introduced exactly one of the same kind. A reply that named four towns is
+// not a thing that can be corrected by naming one, and guessing which of the
+// four he meant is how a pin the traveller wanted disappears.
+//
+// It also only fires on a turn that OPENS with a contradiction. "Actually I'd
+// like Odense too" is an addition and reads identically to a correction from the
+// middle of a sentence, so the anchor is the first few words and nothing else.
+const CORRECTS = new RegExp(
+  `^[\\s"'(]*(?:${["no", "nope", "nah", "not quite", "sorry", "my mistake", "my bad", "i meant",
+    "i mean", "correction", "wrong", "nej", "nope nope", "nee", "nein", "undskyld", "jeg mente",
+    "beklager", "det var", "falsch", "sorry sorry"].join("|")})\\b`, "i");
+
+export const correctedTo = (text, pools) => {
+  const said = String(text || "");
+  if (!said.trim() || !CORRECTS.test(said)) return null;
+  const rows = Array.isArray(pools) ? pools : [];
+  const named = rows.filter(p => p?.name && mentionsPlace(said, p.name) && !isRejectedPlace(said, p.name));
+  // Exactly one, by name: two pools can hold the same place and that is one
+  // place, not two.
+  const keys = [...new Set(named.map(p => String(p.name).trim().toLowerCase()))];
+  return keys.length === 1 ? keys[0] : null;
+};
+
 // ── WHICH REPLY EACH PICTURE BELONGS TO ─────────────────────────────
 //
 // Oliver, 10 Sep 2026: "It was good it mentioned Copenhagen with a picture at

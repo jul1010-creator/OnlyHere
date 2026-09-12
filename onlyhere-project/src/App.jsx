@@ -139,7 +139,7 @@ import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow, removeLive
 import { isRecording, startRecording, stopRecording, record, recordedEvents, recordingText, recordingFileName, safeUrl } from "./utils/studioRecorder";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
-import { journeyParts, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, closedButPlanned, arrivalStop, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
+import { journeyParts, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, islandLegProblems, closedButPlanned, arrivalStop, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
 import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS, urlsIn, dropAppliedClaims } from "./utils/correction";
 import { branchesOf, branchCandidates, branchFromCandidate, mergeBranches, branchLabel, branchLine, coordForTown, MAX_BRANCHES } from "./utils/branches";
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance, staleUncertainties, describeStale } from "./utils/glanceExtract";
@@ -165,7 +165,7 @@ import { currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLang
 import { LanguageChoice } from "./components/LanguagePicker";
 import { NavStrip } from "./components/NavStrip";
 import { alertKey, describeWeatherChange, unseenAlerts, seenAlerts, markAlertSeen, readAlerts, markAlertsRead, unreadAlerts, tripLine, alertCountLine } from "./utils/weatherAlerts";
-import { placesNamedIn, cardsByMessage, rejectedIn } from "./utils/chatPlaces";
+import { placesNamedIn, cardsByMessage, rejectedIn, correctedTo } from "./utils/chatPlaces";
 import { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, MAP_CLASS, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS } from "./utils/chatRail";
 import { ChatMiniMap } from "./components/ChatMiniMap";
 import { readMapBeats, beatsDue, beatTarget, MAP_DIRECTION_RULE } from "./utils/mapDirections";
@@ -13475,7 +13475,26 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // The intake form is safe on the traveller-only text: it posts its answers
       // as a user turn (sendAI(parts.join(" | "), { hidden: true })), so
       // "Exact trip length: 7 days" is the traveller's own message.
-      const requestedDays = dayCountIn(saidByTravellerForGuide);
+      // ── AND THE DAY COUNT IS THE BRIEF'S, NOT A SECOND READING ──
+      //
+      // Oliver, 12 Sep 2026, on a guide built from an eight day conversation:
+      // "only 3 days? Where is the rest of the guide?"
+      //
+      // He had written "I'm going in 3 days, and I'll be in Denmark for 7 days
+      // total" and then "From the 15th till the 22nd..". The BRIEF read eight,
+      // correctly: it takes the last turn that names a number, prefers a stated
+      // range, and knows that "in 3 days" is when somebody lands rather than how
+      // long they stay. This line read the joined text with dayCountIn, which
+      // returns the FIRST match and stops, so it read three — the arrival.
+      //
+      // Then it told the planner "the traveler explicitly wants exactly 3 days"
+      // three separate times, and got a three day guide for an eight day trip.
+      //
+      // Two readers of one question, disagreeing, and the wrong one building the
+      // guide. That is this codebase's signature bug, and every rule the brief
+      // has learned about day counts since August was sitting one function away.
+      // See the definition below nowForDates: it is the same readBrief the stay
+      // and the booked nights already use.
       // Real arrival date, if mentioned — without this, weather was silently wrong for
       // any trip not starting today: fetchGuideWeather just indexed into "the forecast
       // starting now", so a trip planned today for next month showed THIS week's weather
@@ -13506,6 +13525,18 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // single sample of a month, and datePrecision "month" is what stops that
       // arbitrary day ever being shown to anybody as the trip's date.
       const nowForDates = new Date();
+      // ONE brief for this build, read from the traveller's own turns. `days`,
+      // `stay`, `stayWhen` and `party` all come out of it, so nothing in this
+      // function can disagree with anything else in it about what was said.
+      // The turns are split back out because readDays is a PER TURN rule: a
+      // later correction has to be able to outrank an earlier number, and a
+      // joined string has no turns to order.
+      const guideBrief = readBrief({
+        travellerText: saidByTravellerForGuide,
+        travellerTurns: String(saidByTravellerForGuide || "").split("\n").filter(x => x.trim()),
+        today: nowForDates,
+      });
+      const requestedDays = guideBrief.known.days?.value || null;
       let arrivalDate = null;
       // "day" when they named one, "month" when they named only a month, null
       // when they said nothing datelike at all. Carried rather than inferred
@@ -13627,7 +13658,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // TRAVELLER'S OWN TURNS, the same text and the same readers the day count,
       // the arrival date and the transport mode come from, so a hotel named in
       // the chat and a hotel named in the plan cannot be different hotels.
-      const stayKnown = readBrief({ travellerText: saidByTravellerForGuide, today: nowForDates }).known;
+      const stayKnown = guideBrief.known;
       const bookedName = namedStayIn(saidByTravellerForGuide);
       const bookedNights = bookedDayNumbers(stayKnown.stayWhen, requestedDays || 0);
       const bookedStayBlock = (stayKnown.stay?.value !== "booked" && !bookedName) ? "" : (() => {
@@ -14358,6 +14389,26 @@ If the conversation only covers a single day or a few stops with no explicit day
           used: !invented.length,
         });
         planProblems = [...planProblems, ...invented];
+
+        // ── AND THE ISLAND YOU CANNOT DRIVE TO ─────────────────────
+        //
+        // Oliver's Limfjord guide, raised again on 12 Sep 2026 because the last
+        // pass did not fix it: Samsø drawn on the mainland, its leg reading "3h
+        // 34m by car", and the stop itself telling the reader to take the ferry.
+        // The coordinate is in Supabase and cannot be checked from here. The
+        // LEG can, and a route that drives onto an island with no bridge is
+        // wrong whatever the coordinate says.
+        const islands = islandLegProblems(exactFound);
+        note("Every leg that lands on an island, against how it is planned to get there", {
+          detail: `${Object.keys(exactFound || {}).length} measured legs`,
+          outcome: islands.length ? "empty" : "ok",
+          got: islands.length ? islands.join(" ") : "no leg drives onto an island with no bridge to it",
+          why: islands.length
+            ? "A guide that measures a car journey to a ferry-only island has two halves disagreeing on one page, and the reader has no way to tell which to believe."
+            : "",
+          used: !islands.length,
+        });
+        planProblems = [...planProblems, ...islands];
 
         // ── AND THE DAY THAT OPENED 294 KM FROM WHERE IT SLEPT ─────
         //
@@ -17688,12 +17739,20 @@ ${languageBlock()}`;
                       // and bars are a bigger change to the same map and he has
                       // not asked for them; see SPOT_PIN_ZOOM in chatRail.js
                       // for the rule this all hangs off.
+                      // ── AND A CORRECTION TAKES THE WRONG PIN OFF ──
+                      // Oliver, 12 Sep 2026: Gemlyx assumed Copenhagen, he
+                      // wrote "No, it's actually Billund I'm flying into.." and
+                      // both pins stayed. Every refusal reader here looks for
+                      // the WRONG place being named; a correction names the
+                      // RIGHT one, because the wrong one is in the reply it is
+                      // correcting. See correctedTo in utils/chatPlaces.js.
                       const townPool = pools.filter(p => p?._src === "town");
                       const spotPool = pools.filter(p => p?._src === "free");
                       const walk = (pool) => mapPlaces({
                         messages: convo,
                         placesFor: (text) => placesNamedIn(clean(text), pool, { needsPhoto: false, cap: 6 }),
                         rejectsFor: (text, m) => rejectedIn(clean(text), pool, { own: m?.role === "user" }),
+                        correctsFor: (text) => correctedTo(clean(text), pool),
                         coordsFor: placeCoords,
                       });
                       const onTowns = walk(townPool);

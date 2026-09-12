@@ -155,7 +155,7 @@ writeFileSync(entry, `
   export { instagramTarget, isEmbeddablePost } from ${JSON.stringify(join(root, "src/components/InstagramEmbed.jsx"))};
   export { EXAMPLE_GUIDE, EXAMPLE_GUIDE_PATH, EXAMPLE_GUIDE_NOTE, exampleGuideProblems, hasExampleGuide } from ${JSON.stringify(join(root, "src/data/exampleGuide.js"))};
   export { decodePastedText, looksPercentEncoded } from ${JSON.stringify(join(root, "src/utils/pastedText.js"))};
-  export { placesNamedIn, rejectedIn, CHAT_PLACE_CAP } from ${JSON.stringify(join(root, "src/utils/chatPlaces.js"))};
+  export { placesNamedIn, rejectedIn, correctedTo, CHAT_PLACE_CAP } from ${JSON.stringify(join(root, "src/utils/chatPlaces.js"))};
   export { isOwnRoute, RETURN_PARAM, captureRedirectSession, startGoogleSignIn } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
   export { GOOGLE_SIGN_IN } from ${JSON.stringify(join(root, "src/config.js"))};
   export { writeInLanguage } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
@@ -217,7 +217,7 @@ writeFileSync(entry, `
   export { ENTRY_POINTS, arrivalPoint as arrivalPointRaw, destinationPoint, destinationsNamed, tripAnchor } from ${JSON.stringify(join(root, "src/utils/arrival.js"))};
   export { tripAnchorFor, eventReachBand, eventPoint, placePoint, tripPoints, CONSIDER_CAP } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { beyondHorizon, isMajorEvent, EVENT_HORIZON_MONTHS, MANY_EVENTS_IN_A_TOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
-  export { vehicleMismatches, guideRides, journeyCensus, censusNote } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
+  export { vehicleMismatches, guideRides, journeyCensus, censusNote, islandLegProblems, NO_FIXED_LINK_ISLANDS } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { SWAP_REASONS, reasonById, swapCandidates, swapAnswer, candidateLine, swappedStop, swapNote, swapIsAllowed, swapBlockedNote } from ${JSON.stringify(join(root, "src/utils/stopSwap.js"))};
   export { newStreamState, readStreamEvent, visibleText, streamContent, streamContentForApi, streamDiagnosis, streamTrace } from ${JSON.stringify(join(root, "src/utils/streamRead.js"))};
   export { guideWithSwap, alreadyRuledOut } from ${JSON.stringify(join(root, "src/utils/stopSwap.js"))};
@@ -33416,6 +33416,41 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // was on the table, which is the pairing this field makes checkable.
     is("so a bare number reads as the length", r.brief.slots.find(x => x.key === "days")?.value, 7);
   }
+  // ── AND THE ISLAND YOU CANNOT DRIVE TO ───────────────
+  //
+  // Oliver's Limfjord guide, raised twice: Samsø drawn on the mainland, its leg
+  // reading "3h 34m by car", and the stop itself telling the reader to take the
+  // ferry. Two halves of one guide, each saying the other is wrong.
+  //
+  // The coordinate lives in Supabase and cannot be reached from a build. The LEG
+  // can be checked without it, and a route that drives onto an island with no
+  // fixed link is wrong whatever the coordinate says.
+  {
+    const { islandLegProblems, NO_FIXED_LINK_ISLANDS } = M;
+    const drive = { "Aarhus|Samsø|driving": { durationMinutes: 214, modeUsed: "driving" } };
+    const found = islandLegProblems(drive);
+    is("THE BUG: a car leg onto Samsø is a plan problem", found.length, 1);
+    ok("and it says which leg", /Samsø/.test(found[0]));
+    ok("and why it cannot be driven", /ferry/.test(found[0]));
+    // Transit legs reach the islands by ferry, which is the right answer and
+    // must not be flagged.
+    is("a transit leg is how you actually get there",
+       islandLegProblems({ "Aarhus|Samsø|transit": { durationMinutes: 150, modeUsed: "transit" } }), []);
+    // ── AND A SHORTER LIST THAN THE ONE NEXT DOOR ──────────
+    // planGate's ISLAND_KOMMUNE_NAMES answers a different question and holds
+    // Langeland and Mors, both of which have had road bridges for decades.
+    // Reusing it here would flag every correct drive to Rudkøbing.
+    is("an island with a bridge is not one of these", [
+       islandLegProblems({ "Odense|Langeland|driving": { durationMinutes: 80, modeUsed: "driving" } }),
+       islandLegProblems({ "Viborg|Mors|driving": { durationMinutes: 70, modeUsed: "driving" } }),
+    ], [[], []]);
+    ok("and the list says so itself",
+       !NO_FIXED_LINK_ISLANDS.includes("langeland") && !NO_FIXED_LINK_ISLANDS.includes("mors"));
+    // A town name that merely opens with an island's letters is not the island.
+    is("a mainland town is not an island",
+       islandLegProblems({ "Aarhus|Fanoegade|driving": { durationMinutes: 20, modeUsed: "driving" } }), []);
+    is("and nothing measured is nothing to say", islandLegProblems(null), []);
+  }
   is("a junk turn does not throw", turnReport(null, 0).role, "user");
   is("and neither does a junk list", briefTimeline(null).length, 0);
 
@@ -39629,8 +39664,39 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and no date reader is left on convoText",
      !/arrivalDateIn\(convoText|convoText\.match\(dateRe\)/.test(appD));
   // The same for the length, which was still on both halves until 23 Aug.
+  // ── AND IT IS THE BRIEF'S LENGTH, NOT A SECOND READING ──────────
+  //
+  // Oliver, 12 Sep 2026, on a guide built from an eight day conversation:
+  // "only 3 days? Where is the rest of the guide?"
+  //
+  // He had written "I'm going in 3 days, and I'll be in Denmark for 7 days
+  // total" and then "From the 15th till the 22nd..". The brief read eight,
+  // correctly. This line read the same text with a bare dayCountIn, which
+  // returns the FIRST match and stops, so it read three: the arrival. Then it
+  // told the planner "the traveler explicitly wants exactly 3 days", three
+  // times over.
+  //
+  // The rule the old assertion protected is unchanged and still asserted above:
+  // the length comes from HIS turns and never from Gemlyx's. What changes is
+  // that there is now one reading of it rather than two.
   ok("and the trip length comes from his turns too",
-     /dayCountIn\(saidByTravellerForGuide\)/.test(appD));
+     /travellerText: saidByTravellerForGuide,/.test(appD));
+  ok("through the brief, so the guide and the chat cannot disagree",
+     /const requestedDays = guideBrief\.known\.days\?\.value/.test(appD));
+  ok("and the turns are split back out, because last-wins is a per-turn rule",
+     /travellerTurns: String\(saidByTravellerForGuide \|\| ""\)\.split/.test(appD));
+  ok("and no bare day-count reader is left on the guide path",
+     !/dayCountIn\(saidByTravellerForGuide\)|dayCountIn\(convoText/.test(appD));
+  // The shape that produced his three day guide, end to end through readBrief.
+  {
+    const { readBrief } = M;
+    const his = ["I'm coming from Finland and flying into Denmark",
+                 "No, it's actually Billund I'm flying into..",
+                 "I'm going in 3 days, and I'll be in Denmark for 7 days total.",
+                 "From the 15th till the 22nd.."];
+    is("THE BUG: his own conversation is eight days, not three",
+       readBrief({ travellerTurns: his, travellerText: his.join("\n"), today: new Date(2026, 8, 12) }).known.days?.value, 8);
+  }
 
   // A BARE MONTH IS NOT NOTHING. His call: build, and stop pretending. Without
   // this branch the fix above would be worse than the bug, because arrivalDate
@@ -47540,6 +47606,70 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is("and the ones left off are counted", capped.dropped, 1);
     is("nothing dropped is nothing said", run(trip).dropped, 0);
     ok("the cap is a real number", Number.isFinite(MAP_PIN_CAP) && MAP_PIN_CAP >= 4 && MAP_PIN_CAP <= 30);
+    // ── AND A CORRECTION TAKES THE WRONG PIN OFF ─────────────────
+    //
+    // Oliver, 12 Sep 2026 at 22:32, a screenshot with no words on it. Gemlyx had
+    // assumed Copenhagen. He wrote "No, it's actually Billund I'm flying into.."
+    // Billund was pinned, Copenhagen stayed pinned, and its card stayed on
+    // screen beside the sentence saying he was not flying there.
+    //
+    // Every refusal reader in this project looks for the WRONG place being
+    // named. A correction names the RIGHT one and says nothing about the wrong
+    // one, because the wrong one is in the reply being corrected. That is how
+    // people correct things.
+    {
+      const corrects = (t) => {
+        if (!/^\s*(?:no|nope|sorry|i meant)\b/i.test(t)) return null;
+        const hit = pools.filter(p => new RegExp(`\\b${p.name}\\b`, "i").test(t));
+        return hit.length === 1 ? hit[0].name.toLowerCase() : null;
+      };
+      const withFix = (messages) => mapPlaces({ messages, placesFor: named, rejectsFor: turned, correctsFor: corrects, coordsFor: coords });
+      is("THE BUG: the place being corrected comes off", names(withFix([
+        { role: "assistant", text: "Ribe is right there, Denmark's oldest town." },
+        { role: "user", text: "No, it's Skagen I'm going to" },
+      ])), ["Skagen"]);
+      // ONE IN, ONE OUT. A reply that named two towns cannot be corrected by
+      // naming one, and guessing which is how a pin somebody wanted disappears.
+      is("but two in the reply is ambiguous, so nothing is guessed", names(withFix([
+        { role: "assistant", text: "Ribe and Aarhus are the two obvious bases." },
+        { role: "user", text: "No, it's Skagen I'm going to" },
+      ])), ["Ribe", "Aarhus", "Skagen"]);
+      // Only a REPLY can be corrected, and only the newest one, which is the
+      // rule askedBeforeTurns already follows for the brief.
+      is("and a reply two back is not the one being corrected", names(withFix([
+        { role: "assistant", text: "Ribe is right there." },
+        { role: "user", text: "ok" },
+        { role: "assistant", text: "Aarhus is the other one worth a night." },
+        { role: "user", text: "No, it's Skagen I'm going to" },
+      ])), ["Ribe", "Skagen"]);
+      // An addition reads identically to a correction from the middle of a
+      // sentence, so the anchor is the first few words and nothing else.
+      is("an addition is not a correction", names(withFix([
+        { role: "assistant", text: "Ribe is right there." },
+        { role: "user", text: "I'd like Skagen as well" },
+      ])), ["Ribe", "Skagen"]);
+      is("and a correction naming no place changes nothing", names(withFix([
+        { role: "assistant", text: "Ribe is right there." },
+        { role: "user", text: "No, that's not right" },
+      ])), ["Ribe"]);
+      // A map with no corrector behaves exactly as it did, so this is opt-in.
+      is("and a map that passes no corrector is unchanged", names(run([
+        { role: "assistant", text: "Ribe is right there." },
+        { role: "user", text: "No, it's Skagen I'm going to" },
+      ])), ["Ribe", "Skagen"]);
+    }
+    // The reader itself, against the sentence he typed.
+    {
+      const { correctedTo } = M;
+      const towns = [{ name: "Copenhagen" }, { name: "Billund" }, { name: "Odense" }];
+      is("his own sentence names the place he corrected TO",
+         correctedTo("No, it's actually Billund I'm flying into..", towns), "billund");
+      is("two named places is not one correction",
+         correctedTo("No, Billund and Odense", towns), null);
+      is("and a sentence that does not open with a contradiction is not one",
+         correctedTo("I'd like Billund", towns), null);
+      is("nor is an empty one", correctedTo("", towns), null);
+    }
     is("no finder, no pins", mapPlaces({ messages: trip }), { pins: [], dropped: 0 });
     is("no resolver, no pins", mapPlaces({ messages: trip, placesFor: named }), { pins: [], dropped: 0 });
 

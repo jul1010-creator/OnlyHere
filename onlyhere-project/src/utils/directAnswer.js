@@ -325,7 +325,20 @@ export const transportAnswer = (turn) => {
   // A mode or nothing, exactly as the sentence reader decides it. "we have no
   // car" scrubs to a sentence with no mode in it, and not-a-mode is not an
   // answer to this question.
-  return mode ? { value: String(turn).trim(), mode } : null;
+  // ── AND THE VALUE IS AN ANSWER, NOT WHATEVER THEY TYPED ────
+  //
+  // Oliver's transcript of 12 Sep 2026, 22:43. Gemlyx had already written the
+  // route by train twice, then asked how he was getting around, and he replied
+  // "Didn't you just tell me train?" The slot filled with that sentence, word
+  // for word, and the brief block then handed the writer "how they get around:
+  // Didn't you just tell me train?"
+  //
+  // The raw turn is kept because it is better than a flattened one: "car and
+  // bike" says more than "car". A question is not that. So the sentence stands
+  // when it reads as an answer, and the mode speaks for itself when it does
+  // not. `mode` was right all along in both cases; only the label was wrong.
+  const answerShaped = !/\?/.test(t) && t.trim().split(/\s+/).length <= 12;
+  return mode ? { value: answerShaped ? t.trim() : mode, mode } : null;
 };
 
 // ── WHETHER THERE IS A BED BOOKED ───────────────────────────────────

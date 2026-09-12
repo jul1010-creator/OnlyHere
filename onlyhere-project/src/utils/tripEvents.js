@@ -590,6 +590,21 @@ const ANSWER_FILLER = new RegExp(
   // in in 2 days and we're staying 5 days" answers both, and rejecting the turn
   // threw the five away.
   `|stay|stays|staying|stayed|bliver|bor|blive` +
+  // ── AND THE SCAFFOLDING OF AN ORDINARY SENTENCE ─────────
+  //
+  // Oliver, 12 Sep 2026 at 22:43: "I'm going in 3 days, and I'll be in Denmark
+  // for 7 days total." Read as a THREE day trip with no dates at all. Both
+  // halves wrong from one cause: the turn was rejected as an answer over the
+  // words "be" and "total", so "in 3 days" was never taken out before the
+  // length was counted, and the arrival was never read either.
+  //
+  // These are not interests, subjects or objections. They are the words a
+  // sentence is built out of, and the words for the trip itself. A rule that
+  // lets a destination through and trips on "be" is not narrow, it is
+  // arbitrary. Every rejection this guard exists for still fails on its own
+  // content word: "talk", "market", "confirm", "check", "like".
+  `|be|is|am|are|was|were|been|will|would|shall|going|gonna|got|have|has|had` +
+  `|total|altogether|trip|holiday|vacation|tur|ferie|rejse|reise|urlaub|vakantie` +
   `|${CONTRACTION_TAIL}|${RE_ASSERTION}` +
   `|${ARRIVAL_VERBS.filter(w => !w.includes(" ")).join("|")}` +
   `|${TRAVEL_VERBS.filter(w => !w.includes(" ")).join("|")})$`, "i");

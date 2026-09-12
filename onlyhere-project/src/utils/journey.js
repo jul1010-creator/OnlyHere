@@ -796,6 +796,54 @@ export const guideRides = (legs) => {
   return out;
 };
 
+// ── AND YOU CANNOT DRIVE TO AN ISLAND WITH NO BRIDGE ────────
+//
+// Oliver's Limfjord guide, and he raised it again on 12 Sep 2026 because the
+// last pass did not fix it: Samsø is drawn on the mainland and the leg to it
+// reads "3h 34m by car", while the stop itself tells the reader to take the
+// ferry. Two halves of one guide, each stating the other is wrong.
+//
+// The coordinate lives in Supabase and cannot be checked from a build, but the
+// LEG can be checked without it, which is the whole point of this gate: a route
+// that drives onto an island with no fixed link is wrong whatever the
+// coordinate says, and the wrongness is visible in the guide's own measurements.
+//
+// ── A SHORTER LIST THAN THE ONE NEXT DOOR, ON PURPOSE ────────
+//
+// planGate's ISLAND_KOMMUNE_NAMES exists to answer a different question (does
+// this island's name own a town name that starts with it) and holds Langeland
+// and Mors, both of which have had road bridges for decades. Reusing it here
+// would flag every correct drive to Rudkøbing and Nykøbing Mors, and a check
+// that cries wolf is a check somebody turns off inside a week.
+//
+// These five have no fixed link at all. Bornholm can also be flown to, which is
+// why the test is "no ferry and no flight" rather than "no ferry".
+export const NO_FIXED_LINK_ISLANDS = ["ærø", "aerø", "aeroe", "samsø", "samsoe", "samso", "fanø", "fanoe", "læsø", "laesoe", "bornholm"];
+const foldIsland = (s) => String(s || "").toLowerCase().replace(/\u00f8/g, "o").replace(/\u00e6/g, "ae").replace(/\u00e5/g, "aa");
+const namesIsland = (place) => {
+  const hay = foldIsland(place);
+  if (!hay.trim()) return "";
+  return NO_FIXED_LINK_ISLANDS.map(foldIsland).find(i => new RegExp(`(?:^|[^a-z])${i}s?(?![a-z])`).test(hay)) || "";
+};
+
+export const islandLegProblems = (legs) => {
+  const out = [];
+  const rides = guideRides(legs);
+  for (const leg of legMinutesIn(legs)) {
+    const island = namesIsland(leg.to) || namesIsland(leg.from);
+    if (!island) continue;
+    // A ferry or a flight anywhere in this leg's own rides settles it. Matched
+    // per leg rather than across the guide, or one ferry on Day 2 would excuse a
+    // drive to a different island on Day 7.
+    const legRides = rides.filter(r => foldIsland(r.from) === foldIsland(leg.from) || foldIsland(r.to) === foldIsland(leg.to));
+    const crosses = legRides.some(r => /ferry|f\u00e6rge|faerge|flight|fly/i.test(`${r.vehicle} ${r.line}`))
+      || /ferry|f\u00e6rge|faerge|transit/i.test(leg.mode);
+    if (crosses) continue;
+    out.push(`The leg to ${leg.to || island} is planned as ${leg.mode || "a road journey"} and ${leg.to || island} is on an island with no bridge to it. Whatever the coordinate says, this route cannot be driven: it needs the ferry, and the time it takes is the sailing plus the wait.`);
+  }
+  return out.filter((x, i, a) => a.indexOf(x) === i);
+};
+
 export const guideLogisticsProblems = (fields, legs) => {
   const measured = legMinutesIn(legs);
   const minutes = measured.map(l => l.mins);

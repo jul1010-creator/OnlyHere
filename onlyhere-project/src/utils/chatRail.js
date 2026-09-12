@@ -166,18 +166,41 @@ export const MAP_PIN_CAP = 12;
 // coordsFor in particular must be placeCoords and not a fresh `__lat ?? lat`
 // read. Six copies of that read have been found in this codebase and five of
 // them were wrong; a seventh written here would be the same bug in a new file.
-export const mapPlaces = ({ messages = [], placesFor, rejectsFor, coordsFor, cap = MAP_PIN_CAP } = {}) => {
+export const mapPlaces = ({ messages = [], placesFor, rejectsFor, correctsFor, coordsFor, cap = MAP_PIN_CAP } = {}) => {
   const none = { pins: [], dropped: 0 };
   if (typeof placesFor !== "function" || typeof coordsFor !== "function") return none;
   const list = Array.isArray(messages) ? messages : [];
   const order = [];
   const byKey = new Map();
   let newest = new Set();
+  // What the last reply introduced, so a correction has something to point at.
+  // See correctedTo in chatPlaces.js: "No, it's actually Billund I'm flying
+  // into" names the right place and says nothing about the wrong one, because
+  // the wrong one is in the turn it is correcting.
+  let lastAssistantAdded = [];
   for (const m of list) {
     if (!m || m.isError) continue;
     const text = String(m.text || "");
     if (!text.trim()) continue;
     const here = new Set();
+    // BEFORE the additions, so the correction lands on the pin that is already
+    // there rather than on the one this turn is about to add.
+    if (m.role === "user" && typeof correctsFor === "function") {
+      const to = correctsFor(text, m);
+      if (to) {
+        const replaced = lastAssistantAdded.filter(k => k !== to);
+        // One in, one out. A reply that named four towns cannot be corrected by
+        // naming one, and guessing which of the four is how a pin somebody
+        // wanted disappears.
+        if (replaced.length === 1) {
+          const at = order.indexOf(replaced[0]);
+          if (at >= 0) order.splice(at, 1);
+          byKey.delete(replaced[0]);
+          here.delete(replaced[0]);
+        }
+      }
+    }
+    const added = [];
     for (const p of (placesFor(text, m) || [])) {
       const key = String(p?.name || "").trim().toLowerCase();
       if (!key) continue;
@@ -189,9 +212,14 @@ export const mapPlaces = ({ messages = [], placesFor, rejectsFor, coordsFor, cap
       const at = coordsFor(p);
       if (!at) continue;
       here.add(key);
+      added.push(key);
       if (!byKey.has(key)) order.push(key);
       byKey.set(key, { key, place: p, lat: at.lat, lon: at.lon });
     }
+    // Only a REPLY can be corrected, and only the newest one: a question two
+    // replies old was answered or dropped, which is the rule askedBeforeTurns
+    // already follows for the brief.
+    if (m.role === "assistant") lastAssistantAdded = added;
     // AFTER the additions, so a turn that both names and turns down the same
     // place lands on the refusal. placesNamedIn already skips it, and agreeing
     // twice is cheaper than depending on that from over here.
