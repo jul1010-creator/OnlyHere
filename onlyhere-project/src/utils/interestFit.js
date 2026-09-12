@@ -168,7 +168,12 @@ const onlyLogistics = (hay, word) => {
 // "our party" and "the party is 2 adults and 2 kids" are how people answer the
 // question about WHO IS COMING. Read as an interest, the most family-shaped
 // sentence in the brief asks for a bar crawl.
-const PARTY_AS_PEOPLE = /\b(?:a|our|the|my|your|this|whole|entire|rest of the|remaining)\s+party\b|\bparty\s+of\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b|\bparty\s+(?:is|are|size|will be|consists)\b/i;
+// A review caught the first version scrubbing "the party scene in Copenhagen"
+// as well, which then swapped the whole nightlife inventory out of the prompt
+// and would have flagged the bars they asked for. A bare "the party" is the
+// noun about going out; "party" meaning PEOPLE always says so, with a number
+// after it or a verb of being.
+const PARTY_AS_PEOPLE = /\bparty\s+of\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|us)\b|\b(?:our|my|the|this|whole|entire|remaining)\s+party\s+(?:is|are|was|were|will be|consists|includes|has|numbers)\b|\bparty\s+size\b/gi;
 
 export const briefThemes = (text, interests = []) => {
   const raw = [String(text || ""), ...(Array.isArray(interests) ? interests : [])].join(" ");
@@ -536,18 +541,31 @@ export const nightlifeWanted = ({ convoText = "", interests = [], hasKids = fals
 // bar as a STOP is a plan, and the difference is the whole finding. Reads the
 // stop's own kind field first and its words only as the fallback, the same
 // order interestFit uses everywhere: a row with tags is judged by its tags.
-const NIGHT_KIND = /\b(?:bar|bars|pub|pubs|club|clubs|nightclub|nightlife|cocktail|brewery|taproom|beer\s*hall|night\s*street)\b/i;
-const nightStop = (stop) => {
-  const kind = fold([stop?._src, stop?.kind, stop?.type, stop?.category].filter(Boolean).join(" "));
-  if (kind && /night|bar|pub|club/.test(kind)) return true;
-  return NIGHT_KIND.test(String(stop?.what || stop?.desc || "")) || NIGHT_KIND.test(String(stop?.name || ""));
-};
+// ── AND A GOLF CLUB IS NOT A NIGHT OUT ──────────────────────────────
+//
+// A review caught the first version flagging "Copenhagen Golf Club" and
+// "Carlsberg Brewery" as night-out stops on a family guide. A guide stop is
+// {name, town, arrivalTime, suggestedStay, note} and carries none of the kind
+// fields that version tested, so it fell back to matching the NAME, where
+// "club" and "brewery" are ordinary words.
+//
+// So the name is never enough on its own. What settles it is either the
+// published NIGHTLIFE ROWS, which the caller already has and which is the only
+// thing that actually knows a bar from a golf club, or the stop's own note,
+// which is where a night out describes itself.
+const NIGHT_PROSE = /\b(?:nightlife|night out|bar crawl|pub crawl|bar hop\w*|clubbing|cocktails?|taproom|last orders|until late|till late|dance ?floor|dj set)\b/i;
+const NIGHT_NAME = /\bnightclub\b|\bnight ?club\b/i;
+const foldName = (s) => String(s || "").trim().toLowerCase();
 
-export const nightlifeNotAsked = (days, { convoText = "", interests = [], hasKids = false } = {}) => {
+export const nightlifeNotAsked = (days, { convoText = "", interests = [], hasKids = false, venues = [] } = {}) => {
   if (nightlifeWanted({ convoText, interests, hasKids })) return [];
+  const published = new Set((Array.isArray(venues) ? venues : []).map(foldName).filter(Boolean));
+  const isNight = (stop) => published.has(foldName(stop?.name))
+    || NIGHT_NAME.test(String(stop?.name || ""))
+    || NIGHT_PROSE.test(String(stop?.note || stop?.what || stop?.desc || ""));
   const planned = (Array.isArray(days) ? days : [])
     .flatMap(d => (Array.isArray(d?.stops) ? d.stops : []))
-    .filter(nightStop)
+    .filter(isNight)
     .map(sp => String(sp?.name || "").trim())
     .filter(Boolean);
   if (!planned.length) return [];

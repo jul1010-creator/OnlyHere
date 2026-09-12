@@ -60,7 +60,7 @@
 // It does not make this module win against tripBrief.js; see above.
 import { SPELLED_NUMBERS, NUMBER_TOKEN, VEHICLE_WORDS, TRANSPORT_VERBS,
          PUBLIC_TRANSPORT, YES_WORDS, NO_WORDS, PARTNER_WORDS, WITH_WORDS, ME_WORDS,
-         PARTY_POSSESSIVES, alt, LETTER } from "./travellerWords";
+         PARTY_POSSESSIVES, alt, LETTER, straighten } from "./travellerWords";
 import { travelModeKey, withoutNonModes } from "./routeOrder";
 import { MAX_TRIP_DAYS } from "./tripEvents";
 import { KOMMUNER, K } from "../data/kommuner";
@@ -86,7 +86,12 @@ const REFUSAL = new RegExp([
   "\\b(?:ved (?:det )?ikke|aner det ikke|ikke besluttet|er lige glad|du bestemmer|keine ahnung|wei[sß] nicht|noch nicht entschieden|geen idee|weet ik niet|vet inte)\\b",
 ].join("|"), "i");
 
-export const isRefusal = (turn) => REFUSAL.test(lower(turn));
+// STRAIGHTENED FIRST. Every entry above spells the apostrophe as `'?`, which
+// reads "dont" and "don't" and misses "don’t", the one an iPhone types. That
+// blindness was measured across this codebase on 12 Sep and fixed everywhere a
+// traveller's words are read; this reader was the one that got away, and it sits
+// under five other readers that return null on a refusal.
+export const isRefusal = (turn) => REFUSAL.test(straighten(lower(turn)));
 
 // ── THE PLACES A TRIP CAN START ─────────────────────────────────────
 //
@@ -225,7 +230,18 @@ const NIGHTS = new RegExp(`${NUM_EDGE}\\s+\\b(?:nights?|n(?:æ|ae)tter|n(?:ä|ae
 const capped = (n) => Math.min(n, MAX_TRIP_DAYS);
 // A number with its unit, allowing one word between them ("5 full days"). Global
 // so a rejected candidate cannot hide a real answer later in the sentence.
-const DAYS_UNIT = new RegExp(`(?:^|[^${LETTER}\\d])(${NUMBER_TOKEN})\\s+(?:[a-zæøå]+\\s+)?(?:days?|dage|dagen|tage|dagar)\\b`, "i");
+// ── AND THE WORD IN THE GAP MAY NOT BE A QUANTITY ───────────────
+//
+// The gap exists for "5 full days" and "3 hele dage", where the word between the
+// number and the unit changes nothing. Measured 12 Sep: "et par dage" came back
+// as 1 DAY, and so did "vi er her et par dage", because `et` is the Danish
+// numeral and `par` walked straight through the gap. English was safe by
+// accident, since "a couple of days" has no number token in it at all.
+//
+// A wrong length is worse than none. None can be asked for again, which is what
+// `days` being a hard slot now guarantees; a 1 sizes the whole guide in silence.
+const QUANTITY_WORD = "par|paar|couple|few|stykker";
+const DAYS_UNIT = new RegExp(`(?:^|[^${LETTER}\\d])(${NUMBER_TOKEN})\\s+(?:(?!(?:${QUANTITY_WORD})\\s)[a-zæøå]+\\s+)?(?:days?|dage|dagen|tage|dagar)\\b`, "i");
 const WHOLE_NUMBER = new RegExp(`^(?:${NUMBER_TOKEN})$`, "i");
 
 export const daysAnswer = (turn, { cap = MAX_TRIP_DAYS } = {}) => {
@@ -613,6 +629,27 @@ export const directAnswers = (turns, answering) => {
         const v = only === "days" ? daysAnswer(turn) : null;
         const rawDays = only === "days" ? daysAnswer(turn, { cap: Infinity }) : null;
         if (v) out.days = rawDays && rawDays > v ? { value: v, source: "said", askedFor: rawDays } : { value: v, source: "said" };
+        // ── AND HANDING THE CHOICE OVER IS AN ANSWER ───────────
+        //
+        // `days` became hard on 12 Sep, after a transcript where it was asked
+        // once, side-stepped, and then filled in out loud by the model: "I'll
+        // plan for around 4 days between the two towns since you haven't said
+        // otherwise." A hard slot cannot be side-stepped, which is the point of
+        // making it one. But a hard slot with no honest way to answer it is a
+        // loop, and how long a trip is is the one question a traveller can
+        // truthfully not know the answer to yet.
+        //
+        // So it has two answers: a number, or handing the choice to Gemlyx.
+        // `isRefusal` is the vocabulary for the second one and already covers
+        // six languages, "not sure", "haven't decided", "up to you", "ved ikke",
+        // "du bestemmer", "keine ahnung", "vet inte". Reused rather than copied,
+        // because two lists of the same words is how they drift apart.
+        //
+        // ONLY AFTER daysAnswer HAS COME BACK EMPTY, so "not sure, maybe five?"
+        // is five and never this.
+        else if (only === "days" && isRefusal(turn)) {
+          out.days = { value: "open, Gemlyx picks the length", source: "said", open: true };
+        }
       } else if (key === "interests") {
         const v = only === "interests" ? openToAnything(turn) : null;
         if (v) out.interests = { value: v, source: "said" };

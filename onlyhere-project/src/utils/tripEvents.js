@@ -187,6 +187,15 @@ const RANGE_JOIN = "(?:\\s*(?:to|till|til|until|through|thru|-|\\u2013|\\u2014)\
 // numbers were never days.
 const NOT_A_DATE_AFTER = /^\s*(?:days?|nights?|d\u00f8gn|dage|n\u00e6tter|weeks?|uger?|hours?|timer?|minutes?|min|people|persons?|adults?|kids?|children|b\u00f8rn|voksne|pax|kr|kroner|dkk|eur|euros?|usd|%|percent|procent|km|kilometers?|kilometres?|m|miles?|degrees?|grader|bars?|stops?|places?|plus)\b/i;
 const ORDINAL = "(?:st|nd|rd|th|\\.)";
+// \u2500\u2500 AND A FULL STOP IS NOT AN ORDINAL \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// ORDINAL carries "\\." because Danish writes "15. maj", and that is right where
+// a month follows. It is wrong as the proof that a bare number is a DATE: a
+// review found "I'm at work today till 5." reading as a 24 day trip, because
+// the sentence ended. Every fixture written for that guard passed only because
+// none of them had a final period. The relative-range branch below needs a real
+// ordinal or a leading "the", which is what a date is written with and what a
+// clock never is.
+const REAL_ORDINAL = "(?:st|nd|rd|th)";
 // day + month, month + day, or a bare day, at either end of the join.
 const R_BOTH_THEN_MONTH = new RegExp(
   `(?:^|[^${LETTER}\\d])(?:the${SP}+|from${SP}+|on${SP}+)?(\\d{1,2})${ORDINAL}?${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+|den${SP}+|de${SP}+)?(${MONTH_PATTERN_ABBR})(?![${LETTER}])`, "i");
@@ -320,7 +329,7 @@ export const dateRangeIn = (text, today = new Date()) => {
   // demands date-shaped writing. An ordinal, or a leading "the". A clock never
   // has either, and "the 20th" has both.
   const mixed = s.match(new RegExp(
-    `(?:^|[^${LETTER}])(?:from${SP}+)?(${REL_ALT})${RANGE_JOIN}(?:the${SP}+(\\d{1,2})${ORDINAL}?|(\\d{1,2})${ORDINAL})(?![${LETTER}\\d])`, "i"));
+    `(?:^|[^${LETTER}])(?:from${SP}+)?(${REL_ALT})${RANGE_JOIN}(?:the${SP}+(\\d{1,2})${ORDINAL}?|(\\d{1,2})${REAL_ORDINAL})(?![${LETTER}\\d])`, "i"));
   if (mixed && !NOT_A_DATE_AFTER.test(tailFrom(mixed))) {
     const off = REL_TABLE[mixed[1].toLowerCase().replace(/\s+/g, " ")];
     const d2 = parseInt(mixed[2] ?? mixed[3], 10);

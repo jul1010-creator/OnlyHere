@@ -105,7 +105,26 @@ export const briefTimeline = (messages, { intake = {}, asked = [], today = new D
   list.forEach((m, i) => {
     if (m?.role === "assistant") return;
     said.push(String(m?.text ?? ""));
-    const askedByNow = list.slice(0, i).some(x => x?.role === "assistant") ? asked : [];
+    // ── AND WHAT HAD BEEN ASKED BY THEN, NOT BY THE END ──────────
+    //
+    // Oliver's 21:24 export, afterTurn 1: every blocking slot listed as declined
+    // after one "Hi babes", because this line handed the WHOLE conversation's
+    // asked list to every row from the first assistant turn onward. The cost is
+    // not cosmetic. `declined` is what `missing` is not, `missing` is what
+    // `ready` is not, so the timeline reported ready: true four turns before the
+    // app would have, on a conversation where the length, the transport and the
+    // hotel had not been raised yet. A timeline is the thing somebody debugs
+    // from, and this one manufactured a bug that was not in the app.
+    //
+    // Each assistant turn already records the slots its brief block told it to
+    // ask, so the answer is in the transcript itself. The end-of-conversation
+    // list stays as the fallback for an older export whose turns do not carry
+    // one, which is the only case the old line was right about.
+    const before = list.slice(0, i);
+    const carried = list.some(x => x?.role === "assistant" && Array.isArray(x?.asked) && x.asked.length);
+    const askedByNow = carried
+      ? before.filter(x => x?.role === "assistant").flatMap(x => (Array.isArray(x?.asked) ? x.asked : []))
+      : (before.some(x => x?.role === "assistant") ? asked : []);
     // ── AND READ THE WAY THE APP READS IT ───────────────────────────
     // This passed neither the turns nor what each of them was answering, so
     // every row of the timeline reproduced the OLD reading. On Oliver's own

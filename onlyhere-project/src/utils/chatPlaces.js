@@ -256,14 +256,26 @@ export const rejectedIn = (text, pools, { own = false } = {}) => {
 // It also only fires on a turn that OPENS with a contradiction. "Actually I'd
 // like Odense too" is an addition and reads identically to a correction from the
 // middle of a sentence, so the anchor is the first few words and nothing else.
+// A contradiction is a STANDALONE negation, which is what makes it one. "No,
+// it's Billund" corrects something. "No rush", "No problem" and "Sorry for the
+// slow reply" are ordinary openers, and a review caught all three taking a pin
+// off a place the traveller had said nothing against, which is the direction
+// this file calls worse than missing one.
+//
+// So the negation has to stand on its own, closed by punctuation, and "sorry"
+// has to be an apology on its own rather than the start of "sorry for". And the
+// turn has to actually REPLACE something: name the right one in a frame that
+// puts it in the wrong one's place.
 const CORRECTS = new RegExp(
-  `^[\\s"'(]*(?:${["no", "nope", "nah", "not quite", "sorry", "my mistake", "my bad", "i meant",
-    "i mean", "correction", "wrong", "nej", "nope nope", "nee", "nein", "undskyld", "jeg mente",
-    "beklager", "det var", "falsch", "sorry sorry"].join("|")})\\b`, "i");
+  `^[\\s"'(]*(?:(?:${["no", "nope", "nah", "nej", "nee", "nein", "sorry", "my mistake", "my bad", "wrong", "undskyld", "beklager"].join("|")})\\s*[,.!:;\\u2013-]+` +
+  `|(?:${["i meant", "i mean", "correction", "jeg mente", "det var ikke"].join("|")})\\b)`, "i");
+// The frame that puts the new place where the old one was. Without it "No, we
+// loved Ribe" is agreement with a place name in it.
+const REPLACES = /\b(?:it'?s|it is|that'?s|that is|we'?re|we are|i'?m|i am|we'?ll|we will|going|flying|sailing|driving|landing|arriving|starting|det er|vi skal|vi rejser|jeg rejser|not)\b/i;
 
 export const correctedTo = (text, pools) => {
   const said = String(text || "");
-  if (!said.trim() || !CORRECTS.test(said)) return null;
+  if (!said.trim() || !CORRECTS.test(said) || !REPLACES.test(said)) return null;
   const rows = Array.isArray(pools) ? pools : [];
   const named = rows.filter(p => p?.name && mentionsPlace(said, p.name) && !isRejectedPlace(said, p.name));
   // Exactly one, by name: two pools can hold the same place and that is one

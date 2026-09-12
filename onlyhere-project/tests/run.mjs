@@ -6975,7 +6975,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
       // The lists themselves.
       "src/utils/helpers.js": 5,
       // NO_TRANSPORT reads "driving is genuinely the only" out of MODEL output.
-      "src/App.jsx": 1,
+      // The other five are the chat prompt's ban, one apiece, for the reason
+      // studioContent.js gets ten: a rulebook has to name what it forbids. The
+      // assertion further down holds them to one each and checks the sentence
+      // they sit in, so this total cannot quietly absorb a sixth use.
+      "src/App.jsx": 6,
       "src/utils/entryAudit.js": 1,
       // CORRECTION_LEAD reads "actually" at the start of a traveller's message.
       "src/utils/directAnswer.js": 1,
@@ -9983,10 +9987,30 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // "real" is NOT in this list and is deliberately left alone, 40 uses and
   // counting. In this app "real places" and "a real starting point" draw a line
   // against invented ones, and that distinction is the product.
+  // ── AND ONE EACH IS ALLOWED, FOR THE SAME REASON THE DASH GETS ONE ─
+  //
+  // 12 Sep 2026. The prompt carried none of these words and the model still
+  // wrote "you can genuinely watch the currents collide in the water" at turn 6
+  // of Oliver's own transcript. Every block that joins a chat request was
+  // measured against the same five words and every hit was in a comment, which
+  // is never sent, so nothing was modelling it. Absence had done all it could,
+  // and the word came out anyway.
+  //
+  // So the prompt now BANS them by name, which is the thing the studio voice has
+  // done since August, and a ban has to spell what it forbids. That is the exact
+  // trade the em dash assertion above already makes twenty lines up: one use,
+  // and it is the rule naming the character.
+  //
+  // ONE, AND IN THE BAN. Held to one apiece rather than loosened to "a few",
+  // because the argument this whole block rests on is that a model reads its
+  // instructions as a sample of the register. A word cited once inside a
+  // prohibition is not register. A word used twice is.
   for (const word of ["genuine", "genuinely", "actually", "truly", "simply"]) {
-    is(`the prompt does not model "${word}" at the model`,
-       (sysPrompt.match(new RegExp(`\\b${word}\\b`, "gi")) || []).length, 0);
+    is(`the prompt uses "${word}" once, and only to forbid it`,
+       (sysPrompt.match(new RegExp(`\\b${word}\\b`, "gi")) || []).length, 1);
   }
+  ok("and that one use is the ban itself",
+     /NEVER WRITE THESE FILLER WORDS, THEY ARE HARD BANNED IN YOUR REPLIES: "actually", "really", "quite", "truly", "genuinely", "genuine", "simply", "of course"/.test(sysPrompt));
   // ── AND THE OTHER PROMPT, WHICH THIS SWEEP MISSED FIRST TIME ─────
   //
   // The loop above pins App.jsx's Detour prompt, which was rewritten on 8 Sep
@@ -20815,17 +20839,34 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
     // kids?" His interests slot was empty the whole conversation and correctly
     // so. Gemlyx raised nightlife itself and then planned around its own
     // suggestion.
-    const withBars = [{ stops: [{ name: "Lindholm Høje", _src: "free" }, { name: "Jomfru Ane Gade", _src: "nightStreet" }] }];
-    const found = nightlifeNotAsked(withBars, { convoText: "a week in Aalborg with the kids", hasKids: true });
+    // ── AND A NAME ALONE CANNOT SAY IT ──────────────────────────
+    // A review caught the first version flagging "Copenhagen Golf Club" and
+    // "Carlsberg Brewery" on a family guide: a guide stop carries a name and a
+    // note and none of the kind fields that version tested, so it fell back to
+    // the name, where "club" and "brewery" are ordinary words. What settles it
+    // is the PUBLISHED nightlife rows, which the caller has, or the stop's own
+    // note, where a night out describes itself.
+    const VENUES = ["Jomfru Ane Gade", "Studenterhuset"];
+    const withBars = [{ stops: [{ name: "Lindholm Høje" }, { name: "Jomfru Ane Gade" }] }];
+    const found = nightlifeNotAsked(withBars, { convoText: "a week in Aalborg with the kids", hasKids: true, venues: VENUES });
     is("a night-out stop nobody asked for is a plan problem", found.length, 1);
     ok("and it names the stop", /Jomfru Ane Gade/.test(found[0]));
     ok("and says children settle it", /children/.test(found[0]));
     is("nothing is reported when they asked for it",
-       nightlifeNotAsked(withBars, { convoText: "a week in Aalborg, one big night out" }), []);
+       nightlifeNotAsked(withBars, { convoText: "a week in Aalborg, one big night out", venues: VENUES }), []);
+    is("and an ordinary place whose name contains a nightlife word is not one", [
+       nightlifeNotAsked([{ stops: [{ name: "Copenhagen Golf Club" }] }], { convoText: "a week with the kids", hasKids: true, venues: VENUES }),
+       nightlifeNotAsked([{ stops: [{ name: "Carlsberg Brewery" }] }], { convoText: "a week with the kids", hasKids: true, venues: VENUES }),
+    ], [[], []]);
+    // The note is where a night out describes itself, and it is the field the
+    // first version never read.
+    is("but a stop whose note is about a night out is",
+       nightlifeNotAsked([{ stops: [{ name: "Somewhere", note: "worth staying for last orders and a bar crawl after" }] }],
+                         { convoText: "a week with the kids", hasKids: true }).length, 1);
     // A DAY THAT MENTIONS A BAR IS A SENTENCE. A bar as a STOP is a plan, and
     // the difference is the whole finding.
     is("and a stop that is not a night out is not one",
-       nightlifeNotAsked([{ stops: [{ name: "Lindholm Høje", _src: "free" }] }], { convoText: "history week" }), []);
+       nightlifeNotAsked([{ stops: [{ name: "Lindholm Høje" }] }], { convoText: "history week", venues: VENUES }), []);
     is("nor does an empty plan throw", nightlifeNotAsked(null, { convoText: "" }), []);
   }
   ok("and saysWord is the reason", !saysWord("we have a designated driver", "design"));
@@ -29782,14 +29823,22 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // more thing'.. constantly, despite it still needing 5 more stages of
     // information." His screen said "2 of 7 — 5 still to go" directly under a
     // sentence promising the build was one answer away.
-    ok("a thin brief says how many are left", /still to go, and this is the first:/.test(en));
+    // ── AND IT DOES NOT PROMISE A QUESTION PER UNKNOWN ────────────
+    //
+    // "Two things still to go, and this is the first" was measured on a brief
+    // where one of the two was a declined soft slot that would never be asked
+    // again. The count is right and is shared with the progress bar; the promise
+    // about the rest of the conversation was not.
+    ok("a thin brief says how many are left", /things I still don't know\./.test(en));
+    ok("and it does not promise a question for each of them", !/this is the first/.test(en));
+    ok("and the count still opens a sentence properly", /^[A-Z]/.test(en));
     ok("and does not promise a build that is five answers away", !/One thing first/.test(en));
-    ok("and a Danish reader is asked in Danish", /ting mangler jeg endnu/.test(da));
-    ok("with no English sentence left in it", !/still to go/.test(da));
+    ok("and a Danish reader is asked in Danish", /ting ved jeg stadig ikke\./.test(da));
+    ok("with no English sentence left in it", !/I still don't know/.test(da));
     // A tag with no region has to hit the same branch, or half of Denmark's
     // browsers get the English one.
-    ok("bare da counts as Danish", /mangler jeg endnu/.test(buildBlockedNote(short, { tag: "da", name: "Danish" })));
-    ok("and an unrelated language does not", !/mangler jeg endnu/.test(buildBlockedNote(short, { tag: "de-DE", name: "German" })));
+    ok("bare da counts as Danish", /ved jeg stadig ikke/.test(buildBlockedNote(short, { tag: "da", name: "Danish" })));
+    ok("and an unrelated language does not", !/ved jeg stadig ikke/.test(buildBlockedNote(short, { tag: "de-DE", name: "German" })));
     // The promise is kept where it is TRUE, which is the whole point of
     // counting. One slot left, and the sentence is the one it always was.
     {
@@ -29820,7 +29869,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // spoken in between tells them they were not heard.
   {
     const WHEN = new Date("2026-08-23T09:00:00Z");
-    const thin = { travellerText: "I want to see Jutland", today: WHEN };
+    // A LENGTH IN THE TEXT, because `days` became hard on 12 Sep and sorts
+    // ahead of `when`. Without one the stuck slot is the length and this block
+    // stops testing what it was written for, which is the RE-ASK wording on a
+    // slot that was asked and missed.
+    const thin = { travellerText: "I want to see Jutland for 5 days", today: WHEN };
     const firstTime = buildBlockedNote(readBrief(thin));
     const askedAlready = readBrief({ ...thin, asked: ["origin", "days", "when"] });
     const secondTime = buildBlockedNote(askedAlready);
@@ -29834,7 +29887,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // A slot with nothing written for the second time keeps the first sentence:
     // the point is admitting the miss, not novelty for its own sake.
     ok("a slot with no second wording keeps the first",
-       /and this is the first:/.test(buildBlockedNote(readBrief({ ...thin, asked: ["origin"] }))));
+       /things I still don't know\. This is the one I need/.test(buildBlockedNote(readBrief({ ...thin, asked: ["origin"] }))));
   }
   // Both HARD slots, because those are the two that can block a build forever,
   // and a note that repeats on one of them is the loop again.
@@ -31346,6 +31399,27 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("but the brief still knows it is only a month", askedAlready.vague.includes("when"));
   // And the block says so, so the reply does not speak as though it knew.
   const askedBlock = briefBlock(askedAlready);
+  // ── AND AN UNKNOWN START MAY NOT BE FILLED IN FOR THEM ─────
+  //
+  // Oliver, 12 Sep 2026: "So I said I went to Aalborg. It instantly assumed I
+  // took the plane to Copenhagen and it was stuck in the data as I was in
+  // Copenhagen." The reply, at turn 4, before he had been asked: "I'll plan you
+  // both starting from Copenhagen Airport unless you're setting off from
+  // somewhere else." He was sailing in from Norway.
+  //
+  // The prompt forbade it twice already and the model did it anyway, so the rule
+  // moves into the block as a fact about this conversation rather than as prose
+  // to weigh.
+  {
+    const noStart = readBrief({ travellerText: "we want a week somewhere quiet", today: AUG });
+    const blk = briefBlock(noStart);
+    ok("an unknown start says there is no default", /THEY HAVE NOT SAID WHERE THEY START, SO THERE IS NO DEFAULT/.test(blk));
+    ok("and names the one it must not reach for", /Copenhagen Airport/.test(blk));
+    // And it goes away once they have answered, or every reply carries a rule
+    // about a question nobody has.
+    const started = readBrief({ travellerText: "we're sailing from Norway and into Skagen", today: AUG });
+    ok("and a stated start drops the line", !/THERE IS NO DEFAULT/.test(briefBlock(started)));
+  }
   ok("the block names them as unanswered", /ALREADY ASKED AND NOT ANSWERED/.test(askedBlock));
   ok("and tells it to state its assumption out loud", /say out loud what you are assuming/.test(askedBlock));
   ok("and does not list them as still missing", !/STILL MISSING/.test(askedBlock));
@@ -33848,8 +33922,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // recommended somewhere else to sleep.
   const stayApp = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the writer is told about the booking", /\$\{bookedStayBlock\}/.test(stayApp));
+  // The rule is unchanged and the reading is now shared: one readBrief per
+  // build, feeding days, stay, stayWhen and party, so nothing in the function
+  // can disagree with anything else in it about what was said.
   ok("read off the traveller's own turns, like the day count and the arrival date",
-     /readBrief\(\{ travellerText: saidByTravellerForGuide, today: nowForDates \}\)/.test(stayApp));
+     /travellerText: saidByTravellerForGuide,/.test(stayApp));
+  ok("and there is one brief per build rather than one per question",
+     /const stayKnown = guideBrief\.known;/.test(stayApp));
   ok("and the per-day accommodation call is told which nights are already slept in",
      /THIS NIGHT IS ALREADY BOOKED/.test(stayApp));
   ok("which is the call that has to return nothing rather than recommend",
@@ -39338,7 +39417,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // he answered a different question; `declined` recorded the slot as asked, and
 // asked-and-unanswered stopped blocking.
 {
-  const { readBrief, briefReady, nextAsks, briefBlock, HARD_SLOTS } = M;
+  const { readBrief, briefReady, nextAsks, briefBlock, buildBlockedNote, HARD_SLOTS } = M;
   const AUG = new Date(2026, 7, 21);
   // His actual turns, minus the dates he never gave.
   const said = [
@@ -39356,7 +39435,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // poor design" is the 17 Aug sentence this whole file was built from, and the
   // slot it names was the one slot of the three that a single question
   // satisfied.
-  is("the three hard slots are dates, party and what kind of trip", HARD_SLOTS.join(","), "when,party,interests");
+  // ── AND THE FOURTH, LATER THE SAME NIGHT ────────────────────────
+  //
+  // Oliver's 21:24 transcript, turn 14: "I'll plan for around 4 days between the
+  // two towns since you haven't said otherwise." Nobody had said four. `days`
+  // was blocking and not hard, so being asked once satisfied it, `missing`
+  // emptied, `ready` went true, and a guide could be built with no length at
+  // all. Asked how it should behave, he said the same thing he said about
+  // interests: hard, like dates and party.
+  is("the four hard slots are the length, dates, party and what kind of trip",
+     HARD_SLOTS.join(","), "days,when,party,interests");
   // The door has a handle: handing the choice over is an ANSWER, so a traveller
   // who wants Gemlyx to choose says so once rather than meeting a door.
   {
@@ -39368,6 +39456,78 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("\"you pick\" answers the interests question", !!b.known.interests);
     ok("and says out loud that Gemlyx is the one choosing", /Gemlyx chooses/.test(b.known.interests.value));
     ok("so the brief is ready rather than stuck at a door", b.ready);
+  }
+  // ── AND THE LENGTH HAS THE SAME HANDLE ──────────────────────────
+  //
+  // A hard slot with no honest way to answer it is a loop, and how long a trip
+  // is is the one question a traveller can truthfully not know yet. The
+  // vocabulary is `isRefusal`, reused rather than copied, so the six languages
+  // it already covers come with it.
+  {
+    // A SINGLE ARRIVAL DATE, not a range. "the 14th to the 17th" is a length as
+    // well as a date, readBrief reads four days out of it, and this block would
+    // have been testing a brief that already knew the answer.
+    const base = ["flying into Billund", "arriving on the 14th of September", "me and my wife", "history", "by train", "no hotel yet"];
+    const stuck = readBrief({ travellerTurns: base, travellerText: base.join("\n"), today: AUG,
+      asked: ["origin", "days", "when", "party", "interests", "transport", "stay"] });
+    ok("a length asked and side-stepped blocks the build", !stuck.ready);
+    ok("and is reported unanswered rather than declined", (stuck.unanswered || []).includes("days"));
+    ok("and comes back round to be asked again", nextAsks(stuck).map(s => s.key).includes("days"));
+    ok("and the note says which answer is missing", /how many days/i.test(buildBlockedNote(stuck)));
+    // ONE RULE, NOT TWO. The ASKED, NOT ANSWERED block already forbids assuming
+    // a value, so the never-asked rule must stay out of this state.
+    const blk = briefBlock(stuck, []);
+    ok("the model is told once, by the hard-slot block", /ASKED, NOT ANSWERED, AND STILL REQUIRED/.test(blk));
+    ok("and not a second time by the never-asked rule", !/HOW LONG THE TRIP IS/.test(blk));
+
+    for (const shrug of ["not sure yet", "we haven't decided", "we haven\u2019t decided", "up to you",
+                         "du bestemmer", "ved ikke endnu", "keine ahnung", "vet inte"]) {
+      const turns = [...base, shrug];
+      const b2 = readBrief({ travellerTurns: turns, travellerText: turns.join("\n"), today: AUG,
+        answering: [[], [], [], [], [], [], ["days"]],
+        asked: ["origin", "days", "when", "party", "interests", "transport", "stay"] });
+      ok(`"${shrug}" hands the length to Gemlyx`, b2.known.days?.open === true);
+      ok(`and "${shrug}" unblocks the build`, b2.ready);
+      ok(`and "${shrug}" is told to say the number out loud`,
+         /THEY HAVE LEFT THE LENGTH TO YOU/.test(briefBlock(b2, [])));
+      ok(`and "${shrug}" prints no numeric length line`, !/THAT IS THE ONLY LENGTH/.test(briefBlock(b2, [])));
+    }
+    // The curly apostrophe is in that list on purpose. `isRefusal` matched
+    // against a raw lowercase string until 12 Sep, and REFUSAL spells every
+    // contraction as `'?`, which reads "dont" and "don't" and misses the one an
+    // iPhone types.
+
+    // A NUMBER STILL WINS. The handle is only reached once daysAnswer has come
+    // back empty, so a shrug with a number in it is the number.
+    for (const [answer, want] of [["not sure, maybe 5 days", 5], ["dunno, a week", 7]]) {
+      const turns = [...base, answer];
+      const b3 = readBrief({ travellerTurns: turns, travellerText: turns.join("\n"), today: AUG,
+        answering: [[], [], [], [], [], [], ["days"]],
+        asked: ["origin", "days", "when", "party", "interests", "transport", "stay"] });
+      is(`"${answer}" reads as a length`, b3.known.days?.value, want);
+    }
+  }
+  // ── AND A QUANTITY WORD IS NOT A QUANTITY ───────────────────────
+  //
+  // Measured 12 Sep: "et par dage" came back as 1 DAY, and so did "vi er her et
+  // par dage". `et` is the Danish numeral and `par` walked through the one-word
+  // gap that exists for "5 full days". English was safe by accident, since "a
+  // couple of days" carries no number token at all.
+  //
+  // NOTHING is the right answer here, not two. A wrong length sizes the whole
+  // guide in silence; a missing one is asked for again, which is what `days`
+  // being hard now guarantees.
+  {
+    const lenOf = (turn) => {
+      const b = readBrief({ travellerTurns: [turn], travellerText: turn, today: AUG,
+        answering: [["days"]], asked: ["days"] });
+      return typeof b.known.days?.value === "number" ? b.known.days.value : null;
+    };
+    is("et par dage is not one day", lenOf("et par dage"), null);
+    is("nor in a sentence", lenOf("vi er her et par dage"), null);
+    is("and the gap it walked through still works", lenOf("3 hele dage"), 3);
+    is("in English too", lenOf("5 full days"), 5);
+    is("and a plain length is untouched", lenOf("3 dage"), 3);
   }
 
   const asked = readBrief({ travellerText: said, today: AUG, asked: ["when", "party"] });
@@ -39682,7 +39842,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and the trip length comes from his turns too",
      /travellerText: saidByTravellerForGuide,/.test(appD));
   ok("through the brief, so the guide and the chat cannot disagree",
-     /const requestedDays = guideBrief\.known\.days\?\.value/.test(appD));
+     /const requestedDays = typeof guideBrief\.known\.days\?\.value === "number"/.test(appD));
+  // ── AND A NUMBER OR NOTHING ─────────────────────────────────────
+  // A length the traveller hands to Gemlyx ("not sure yet", "up to you") sits in
+  // that slot as a SENTENCE, and every use of requestedDays below drops it
+  // straight into a prompt: "the days array must have exactly ${requestedDays}
+  // entries". `|| null` would have passed the sentence through.
+  ok("and a handed-over length cannot reach the builder as a number",
+     /: null;/.test((appD.match(/const requestedDays = [^\n]*/) || [""])[0]));
   ok("and the turns are split back out, because last-wins is a per-turn rule",
      /travellerTurns: String\(saidByTravellerForGuide \|\| ""\)\.split/.test(appD));
   ok("and no bare day-count reader is left on the guide path",

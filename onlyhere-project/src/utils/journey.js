@@ -820,26 +820,53 @@ export const guideRides = (legs) => {
 // why the test is "no ferry and no flight" rather than "no ferry".
 export const NO_FIXED_LINK_ISLANDS = ["ærø", "aerø", "aeroe", "samsø", "samsoe", "samso", "fanø", "fanoe", "læsø", "laesoe", "bornholm"];
 const foldIsland = (s) => String(s || "").toLowerCase().replace(/\u00f8/g, "o").replace(/\u00e6/g, "ae").replace(/\u00e5/g, "aa");
+// ── AND THE ENDPOINT HAS TO BE THE ISLAND, NOT A PLACE ON IT ────────
+//
+// The first version matched the island's name anywhere in the endpoint, so
+// "Hammershus to Bornholms Kunstmuseum" — a car journey between two places that
+// are both ON Bornholm — read as driving onto the island. There is no way to
+// know from a name that Hammershus is on Bornholm, and inventing one would be
+// the guess this gate exists to replace.
+//
+// So the endpoint has to BE the island, with at most a genitive s. A leg from
+// the mainland names the island or the port nine times out of ten, and the
+// tenth is a miss rather than a false alarm, which is the direction this
+// codebase chooses every time.
 const namesIsland = (place) => {
-  const hay = foldIsland(place);
-  if (!hay.trim()) return "";
-  return NO_FIXED_LINK_ISLANDS.map(foldIsland).find(i => new RegExp(`(?:^|[^a-z])${i}s?(?![a-z])`).test(hay)) || "";
+  const hay = foldIsland(place).trim();
+  if (!hay) return "";
+  return NO_FIXED_LINK_ISLANDS.map(foldIsland).find(i => new RegExp(`^${i}s?$`).test(hay)) || "";
 };
 
 export const islandLegProblems = (legs) => {
   const out = [];
-  const rides = guideRides(legs);
   for (const leg of legMinutesIn(legs)) {
-    const island = namesIsland(leg.to) || namesIsland(leg.from);
+    const at = namesIsland(leg.to), from = namesIsland(leg.from);
+    // BOTH ENDS ON THE SAME ISLAND IS A DRIVE AROUND IT. "Samsø Labyrinten to
+    // Samsø Kirke" is a correct car journey and flagging it would be the check
+    // crying wolf on the very guide it is meant to protect. Found by a review
+    // before this shipped.
+    if (at && from && at === from) continue;
+    const island = at || from;
     if (!island) continue;
-    // A ferry or a flight anywhere in this leg's own rides settles it. Matched
-    // per leg rather than across the guide, or one ferry on Day 2 would excuse a
-    // drive to a different island on Day 7.
-    const legRides = rides.filter(r => foldIsland(r.from) === foldIsland(leg.from) || foldIsland(r.to) === foldIsland(leg.to));
-    const crosses = legRides.some(r => /ferry|f\u00e6rge|faerge|flight|fly/i.test(`${r.vehicle} ${r.line}`))
-      || /ferry|f\u00e6rge|faerge|transit/i.test(leg.mode);
-    if (crosses) continue;
-    out.push(`The leg to ${leg.to || island} is planned as ${leg.mode || "a road journey"} and ${leg.to || island} is on an island with no bridge to it. Whatever the coordinate says, this route cannot be driven: it needs the ferry, and the time it takes is the sailing plus the wait.`);
+    // THE END THAT IS ON THE ISLAND, not whichever end the sentence reads first.
+    // The first version named `leg.to` either way, so a leg OFF the island said
+    // "Aarhus is on an island with no bridge to it".
+    const crossing = at ? (leg.to || island) : (leg.from || island);
+    // ── AND THE TEST IS THE MODE, WHICH IS ALL THERE IS ──────────────
+    //
+    // The first version claimed to look for a ferry among the leg's own rides.
+    // It could not: journeyParts keeps transit steps only, so a driving route
+    // has no rides at all to look in, and the ride endpoints are stop names
+    // ("Kalundborg Havn") that never equal the leg endpoints ("Kalundborg").
+    // The check reduced to the mode while the comment described something else,
+    // which is the field-that-goes-nowhere this codebase keeps finding.
+    //
+    // The mode is the honest test and it is enough: a transit route to one of
+    // these islands IS the ferry, and a driving one is what prints "by car"
+    // beside a stop telling the reader to sail.
+    if (/transit|ferry|f\u00e6rge|faerge|flight|fly/i.test(leg.mode)) continue;
+    out.push(`The leg to ${crossing} is planned as ${leg.mode || "a road journey"} and ${crossing} is on an island with no bridge to it. Whatever the coordinate says, this route cannot be driven: it needs the ferry, and the time it takes is the sailing plus the wait.`);
   }
   return out.filter((x, i, a) => a.indexOf(x) === i);
 };

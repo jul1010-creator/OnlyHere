@@ -281,7 +281,13 @@ export const NEXT_WEEK = [
   "next week", "næste uge", "naeste uge", "nächste woche", "naechste woche",
   "volgende week", "nästa vecka", "neste uke", "la prossima settimana",
 ];
-export const IN_N_DAYS = ["in", "om", "i", "over", "binnen", "fra", "tra"];
+// \u2500\u2500 AND DANISH "i" IS NOT THE DANISH FOR "in" HERE \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// Danish marks a future point with "om": "om 3 dage" is in three days. "i 3
+// dage" is FOR three days, the length of the stay, and it is the commonest way
+// a Dane says it. With "i" on this list "Vi bliver i 3 dage" read as an arrival
+// three days from now AND lost the day count, in the app's primary language.
+// Found by a review on 12 Sep 2026. Swedish and Norwegian use "om" too.
+export const IN_N_DAYS = ["in", "om", "over", "binnen", "fra", "tra"];
 
 // ── AND THE VERBS FOR THE OTHER END OF THE JOURNEY ──────────────────
 //

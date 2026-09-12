@@ -5,8 +5,11 @@ live site, the "one more thing" complaint, and then the 18:22 report and the
 preview screenshot. All of it turned out to be three bugs wearing six faces.
 
 Everything below is ON YOUR PC, suite green in both timezones, build clean.
-**15,647 → 15,716 passing.** Eight files: seven in `src/utils/`, plus
-`tests/run.mjs`.
+**15,647 → 15,762 passing.** Fifteen files: thirteen in `src/utils/`, plus
+`src/App.jsx` and `tests/run.mjs`.
+
+Sections 1 to 7 were written before the grocery run. Sections 8 to 12 are
+everything after it, including your 21:24 transcript.
 
 ---
 
@@ -237,17 +240,177 @@ is a sentence; a bar as a stop is a plan, and that is the difference it reads.
 
 ---
 
+## 8. The map is a slideshow now, and the AI directs it
+
+Your words: "I want you to prompt the AI as if the map is a diashow directed by
+the AI." Plus the Aalborg note: "it shouldn't zoom into Aalborg instantly here.
+Zoom in if Gemlyx wants to explain/show something (which it still doesn't do)."
+
+`MAP_DIRECTION_RULE` in `mapDirections.js` is rewritten from the ground up
+around that. The old rule said when a marker was legal. The new one says what
+the run of slides is FOR, in seven sections:
+
+* **A NAME IS NOT A REASON TO ZOOM.** This is the Aalborg fix. Saying the word
+  "Aalborg" no longer earns a camera move. A move is earned by having something
+  to show once you get there.
+* **THE SHAPE OF A GOOD RUN** and **PACE IT LIKE SLIDES.** One thought per
+  slide, and a slide holds while the sentence about it is still being written.
+* **END ON WHAT MATTERS.** The last camera position is what stays on his screen
+  after the reply stops, so it is chosen rather than left where the last
+  sentence happened to land.
+* **NEVER MENTION THE MAP.** A slideshow narrator does not say "as you can see
+  on the map".
+* **ONLY PLACES THE MAP CAN REACH**, and **WRITE THE MARKER EXACTLY AS
+  PRINTED**, both kept from the old rule because both were load-bearing.
+
+On the coordinate sweep you offered: the chat map draws towns (`_src: "town"`)
+and attractions (`_src: "free"`, which is what the Attractions tab publishes),
+and it silently drops any pin with no coordinate. So whether the attractions you
+want zoomed carry lat/lon is a Supabase question I cannot reach from here.
+**Studio → Manage Published already runs `coordAudit`/`describeCoordAudit`** and
+will tell you in one screen. Run that before sending me a sweep, because if the
+audit is clean the sweep is not the missing piece.
+
+---
+
+## 9. "only 3 days? Where is the rest of the guide?"
+
+Two readers of one question, which is this codebase's signature bug and the
+third time it has turned up in two days.
+
+The brief read your conversation and got 8 days. The guide BUILDER did not use
+the brief at all. It called `dayCountIn` on the same text, which takes the first
+match it finds, and the first number-shaped thing in that conversation was not
+the trip length. So the chat knew 8 and the thing that sized the document knew 3,
+and nothing anywhere compared them.
+
+There is now **one `guideBrief` per build** in `App.jsx`, read once, and
+`requestedDays` comes off it. The builder, the retry prompt that fires when the
+model returns too few days, and the stay-night mapping all read that single
+number.
+
+---
+
+## 10. Samsø drawn on the mainland
+
+You said: "this was from earlier, but the other chat never fixed it."
+
+`journey.js` gained `NO_FIXED_LINK_ISLANDS` (Ærø, Samsø, Fanø, Læsø, Bornholm)
+and `islandLegProblems`, which raises a plan problem when a leg lands on one of
+those with a road mode. It skips legs where both ends are on the same island, it
+names the island END rather than the mainland one, and it says nothing when the
+mode is already a ferry or a flight.
+
+The endpoint has to BE the island, with at most a genitive s. A leg from the
+mainland names the island or the port nine times out of ten, and the tenth is a
+miss rather than a false alarm, which is the direction this codebase chooses
+every time.
+
+---
+
+## 11. The review you asked for, and the nine things it found
+
+You said "Call in Fable as a sub-agent", then "Because it seems you struggle."
+
+**Fable is not available as a sub-agent in this session.** I said so rather than
+quietly substituting something and calling it Fable. What I ran instead was an
+adversarial reviewer against the whole night's diff, twice.
+
+The first pass found 8 defects. The second found 9 more, and **seven of the nine
+were mine, written that same night.** Worth having in writing:
+
+1. A full stop was being read as an ordinal, which defeated the guard meant to
+   stop a clock time parsing as a date range.
+2. Danish `i N dage` lost both the trip length and invented a date.
+3. `islandLegProblems` fired on legs BETWEEN two points on the same island.
+4. It also named the wrong end of the leg.
+5. And claimed to have checked a ferry it had no way to check.
+6. `correctedTo` dropped every pin on the map when you typed "No rush", "No
+   problem" or "Sorry for the slow reply".
+7. `PARTY_AS_PEOPLE` scrubbed the words "the party scene" out of a turn.
+8. `nightStop` flagged Copenhagen Golf Club as nightlife.
+9. Two counters disagreeing inside one prompt, which is the exact bug section 3
+   exists to fix, reproduced inside the fix for it.
+
+All nine are fixed and each has its own assertion. I also nearly reported the
+arrival reader as broken and it was not: I had measured it without passing the
+town resolver. My first read of that was wrong and I told you so at the time.
+
+---
+
+## 12. Your 21:24 transcript, four more
+
+Two of the four were already fixed before you sent it, by sections 3 and 7, and
+had not reached the site yet. Turn 4 announced "I'll plan you both starting from
+Copenhagen Airport unless you're setting off from somewhere else" while you were
+sailing in from Norway; turn 12 opened with "One thing before I map the route
+properly" with three things still open. Both are in the build going up now.
+
+The other two were new.
+
+**A trip length can no longer be assumed out loud.** Turn 14: "I'll plan for
+around 4 days between the two towns since you haven't said otherwise." Nobody
+said four. The prompt had told it to, because `days` sat in the
+already-asked-and-not-answered list, whose instruction is "say out loud what you
+are assuming". For every other slot that is the right instruction. For this one
+it is not, because **the builder reads the conversation back**, finds "around 4
+days", and sizes the guide to it. That is section 9's bug arriving by a second
+road. `days` is out of that list and has its own rule: no number, no "around N
+days", no length offered for you to correct. Ask, or say nothing.
+
+It is NOT a hard slot. A hard slot asked and side-stepped blocks the build for
+good, and a traveller can honestly not know their length yet. What is banned is
+stating a number nobody gave.
+
+**And the length you gave is not re-described.** Turn 16: "That's a full week",
+about a trip the brief holds as five days. It added the sailing day and rounded
+up, and you had two trip lengths in one reply, one of them from the machine about
+to build the thing. When the length is known the block now prints it and forbids
+converting it into a week, a fortnight or any other span.
+
+**Your report was lying to you, too.** `briefTimeline` handed the WHOLE
+conversation's asked-list to every row from the first assistant turn onward. On
+this export that made turn 1, one "Hi babes" in, show all seven blocking slots as
+declined, and it reported `ready: true` at turn 11, four turns before the app
+would have. A timeline is the thing somebody debugs from, and this one was
+manufacturing a bug that was not in the app. Each assistant turn already records
+what its brief block told it to ask, so it reads that instead. The corrected
+timeline flips ready at turn 15, which is where the app flips it.
+
+**And "genuinely" is now banned in chat.** Turn 6: "you can genuinely watch the
+currents collide in the water." I measured every block that joins a chat request
+against the five words you have named, and every hit was in a code comment, which
+is never sent. Nothing was modelling it; the word came out anyway. So the chat
+prompt now bans them by name, the way the studio rulebook has since August, and
+the suite holds the prompt to exactly one use of each, inside the ban sentence,
+the same trade it already makes for the em dash.
+
+---
+
 ## Still open, in the order I would take them
+
+**The promise gate is the big one and it is not built.** The chat promised you a
+"fantasyfestival" and the preview dropped it. The chat said it would skip Jomfru
+Ane Gade and the guide listed bars there. Nothing anywhere compares what the chat
+PROMISED against what the plan contains, and both of those were promises made in
+writing and broken in the same session. I also think "Fanden festival" was
+invented outright. This is the next thing I would build.
+
+After that:
 
 1. **"I've already been to Aarhus" still rules nothing out.** Left alone on
    purpose: your own town rule from 6 Sep says a town keeps its place and its
    stops change, so this belongs to `beenThere`, not to exclusions.
-3. **A bare "the 14th" still reads as nothing** when it is the whole answer.
+2. **A bare "the 14th" still reads as nothing** when it is the whole answer.
    "the 14th to the 17th" works, "arriving on the 14th" does not. Narrow, and I
    would do it through `answering` rather than by loosening the date pattern.
-4. Everything still open from the 12 Sep night handoff: Samsø on the mainland,
-   Day 8 in Danish, Næstved Food Festival's dates, Ny Vestergade as a stop,
-   photos on the route map cards, a map of each day's stops.
+3. **The Nightpay paragraph at turn 16** is a long pitch for a paid subscription
+   app, unprompted, off the back of "maybe a drink at night". It is a published
+   entry and it is true, so I have not touched it, but it reads as selling and
+   it is the last thing in the reply before the offer to build. Your call.
+4. Everything still open from the 12 Sep night handoff: Day 8 in Danish,
+   Næstved Food Festival's dates, Ny Vestergade as a stop, photos on the route
+   map cards, and a map of each day's stops.
 
 ## One thing I noticed and left alone
 

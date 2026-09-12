@@ -76,9 +76,23 @@ export const BRIEF_SLOTS = [
   { key: "origin", label: "where they start", tier: "blocking",
     ask: "Where are you flying into, or starting from?",
     askDa: "Hvor rejser du fra?" },
-  { key: "days", label: "how long", tier: "blocking",
+  // ── HARD, AS OF 12 SEP ───────────────────────────────
+  //
+  // It was blocking and not hard, so asking it once satisfied it: a traveller
+  // who answered a different question sent it to `declined`, `missing` emptied,
+  // `ready` went true, and a guide could be built with no length at all. The
+  // model filled the hole out loud ("I'll plan for around 4 days") and the
+  // builder read that number back out of the conversation and sized the whole
+  // document to it. Oliver chose hard, with dates and party.
+  //
+  // A side-step now keeps it blocking and it is asked again. A real refusal
+  // fills it as an open length, in directAnswer.js, so this cannot become the
+  // loop that would make it worse than what it replaced.
+  { key: "days", label: "how long", tier: "blocking", hard: true,
     ask: "How many days have you got?",
-    askDa: "Hvor mange dage har du?" },
+    askDa: "Hvor mange dage har du?",
+    reask: "I still need the length before I can build anything: how many days are you here for?",
+    reaskDa: "Jeg mangler stadig længden, før jeg kan bygge noget: hvor mange dage er I her?" },
   { key: "when", label: "when", tier: "blocking", hard: true,
     ask: "Which dates? Even roughly is fine, it decides which events are on while you are here.",
     askDa: "Hvilke datoer rejser du? Cirka er fint, det afgør hvilke begivenheder der er noget af mens du er der.",
@@ -305,8 +319,14 @@ const readDays = (text, intakeArrival, intakeDeparture, today = new Date(), turn
   // number cannot answer both slots, and the decision is made in exactly one
   // place rather than in two that can disagree.
   //
-  // It removes ONLY what was matched. "I fly in in 2 days and we're staying 5"
-  // still reads five, which a blanket skip of the turn would have lost.
+  // It removes ONLY what was matched, so a turn that answers both keeps both:
+  // "we fly in in 2 days and we're staying 5 days" reads five.
+  //
+  // WHAT IT DOES NOT REACH, stated rather than claimed away: the second number
+  // has to carry its own day word. "we're staying 5" and "staying for 5 nights"
+  // both leave a residue the answer test rejects, nothing is removed, and the
+  // ARRIVAL number is read as the length. A review found the first version of
+  // this comment asserting otherwise.
   // And a sentence where "in 3 days" really is a length — "we want to see
   // Denmark in 3 days" — names no travelling, so relativeAnswerIn returns
   // nothing, nothing is removed, and the count stands.
@@ -1225,11 +1245,13 @@ export const nextAsks = (brief, { limit = MAX_ASKS_AT_ONCE } = {}) => {
 // minus what is known — rather than from a second reckoning that could disagree
 // with the number on screen. One left keeps the promise, because then it is
 // true. More than one says how many.
-const stillOpenCount = (brief) => BLOCKING_SLOTS.filter(k => !brief?.known?.[k]).length;
 const SPELLED = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight"];
 const spelled = (n) => SPELLED[n] || String(n);
 const SPELLED_DA = ["ingen", "én", "to", "tre", "fire", "fem", "seks", "syv", "otte"];
 const spelledDa = (n) => SPELLED_DA[n] || String(n);
+// Both spelled lists are lowercase, which was invisible while the count sat
+// mid-sentence and is not now that it opens one.
+const sentence = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 
 export const buildBlockedNote = (brief, lang = null) => {
   const next = nextAsks(brief)[0];
@@ -1240,12 +1262,20 @@ export const buildBlockedNote = (brief, lang = null) => {
   if (base === "da" && next.askDa) {
     if (again && next.reaskDa) return next.reaskDa;
     return left > 1
-      ? `${spelledDa(left)} ting mangler jeg endnu, og det her er den første: ${next.askDa}`
+      ? sentence(`${spelledDa(left)} ting ved jeg stadig ikke. Den her mangler jeg, før jeg kan bygge: ${next.askDa}`)
       : `Lige en ting mere, så bygger jeg den: ${next.askDa}`;
   }
   if (again && next.reask) return next.reask;
+  // ── AND THE COUNT IS OF WHAT IS UNKNOWN, NOT OF QUESTIONS COMING ──
+  //
+  // "Two things still to go, and this is the first" was printed on a brief where
+  // one of the two was a declined soft slot that will never be asked again. The
+  // traveller was promised a second question and got one. The number itself is
+  // right and is the same one the progress bar and the prompt rule use, so it
+  // stays; what goes is the clause that turned a count of unknowns into a
+  // promise about the rest of the conversation.
   return left > 1
-    ? `${spelled(left)} things still to go, and this is the first: ${next.ask}`
+    ? sentence(`${spelled(left)} things I still don't know. This is the one I need before I can build: ${next.ask}`)
     : `One thing first, and then I can build it: ${next.ask}`;
 };
 
@@ -1257,6 +1287,10 @@ export const buildBlockedNote = (brief, lang = null) => {
 // and a night out. They arrive as data rather than being computed here, so this
 // file does not have to import the checks that read it back. See
 // utils/briefConflicts.js.
+// How many blocking slots are still open, counted from the same list the
+// progress bar counts, so the note, the prompt rule and the bar agree.
+const stillOpenCount = (brief) => BLOCKING_SLOTS.filter(k => !brief?.known?.[k]).length;
+
 export const briefBlock = (brief, conflicts = []) => {
   if (!brief) return "";
   const lines = [];
@@ -1275,16 +1309,67 @@ export const briefBlock = (brief, conflicts = []) => {
   if (brief.cappedDays) {
     lines.push(`THEY SAID ${brief.cappedDays} DAYS AND THE PLAN COVERS ${MAX_TRIP_DAYS}. Say so plainly, once, in the same reply you first use the length: you are planning their first ${MAX_TRIP_DAYS} days and the rest is theirs. Never repeat their number back as though the whole trip were planned, and never write "${brief.cappedDays} days" about what you have built.`);
   }
+  // ── AND THE LENGTH THEY GAVE IS NOT RE-DESCRIBED ────────────────
+  //
+  // Same transcript, turn 16: "That's a full week", written about a trip this
+  // brief holds as five days. Nothing in the conversation said week. The model
+  // added the sailing day to the five, rounded up, and handed the traveller two
+  // different trip lengths in one reply, one of them from the machine that was
+  // about to build the thing. A span is not a summary of a number, it is a
+  // second number, and a second number is the bug this file keeps finding.
+  // A NUMBER, not whatever is in the slot. A length handed over to Gemlyx sits
+  // here as a sentence, and this line would have printed "THE TRIP IS open,
+  // Gemlyx picks the length DAYS".
+  if (typeof brief.known?.days?.value === "number") {
+    lines.push(`THE TRIP IS ${brief.known.days.value} DAYS AND THAT IS THE ONLY LENGTH. Use the number. Never restate it as "a week", "a fortnight", "about ten days" or any other span, and never add a travel day to it to reach a rounder one. If they say something later that changes the length, take their new number, not your arithmetic on the old one.`);
+  }
   // Asked, and they did not answer. Named so it is not asked again, and named as
   // an assumption so the reply does not speak as if it knew.
   // The hard ones are pulled out first: they are asked and unanswered too, and
   // the line above tells the model to assume, which is the one thing it must not
   // do with these.
   const hardOpen = BRIEF_SLOTS.filter(s => (brief.unanswered || []).includes(s.key));
-  const declinedSlots = BRIEF_SLOTS.filter(s => (brief.declined || []).includes(s.key) && !(brief.unanswered || []).includes(s.key));
+  // ── AND A TRIP LENGTH IS NEVER ASSUMED OUT LOUD ─────────────────
+  //
+  // Oliver, 12 Sep 2026, turn 14 of his own transcript: "I'll plan for around
+  // 4 days between the two towns since you haven't said otherwise." Nobody had
+  // said four. He had answered the length question at turn 4 by answering a
+  // different one, which is the case the line below is worst at: it tells the
+  // model to say out loud what it is assuming, and a day count is the one slot
+  // where saying it out loud MAKES it true. The builder reads this same
+  // conversation back, finds "around 4 days", and sizes the guide to it. That
+  // is the whole path from a guessed number to "only 3 days? Where is the rest
+  // of the guide?".
+  //
+  // So `days` comes out of the assume-out-loud list and gets its own rule. It
+  // does NOT become a hard slot: a hard slot asked and side-stepped blocks the
+  // build for good, and a traveller can honestly not know their length yet.
+  // What is banned is stating a number nobody gave, which costs nothing when
+  // they do not know and everything when the builder reads it.
+  // NOT while it is in `unanswered`. `days` is hard now, so asked-and-unfilled
+  // is printed by the ASKED, NOT ANSWERED block above, which already says not to
+  // assume a value. Two lines telling the model the same thing is the bug this
+  // file keeps finding, so this one covers only the state that block does not:
+  // never asked, and therefore never yet forbidden.
+  const daysOpen = !brief.known?.days
+    && !(brief.unanswered || []).includes("days")
+    && ((brief.missing || []).includes("days") || (brief.declined || []).includes("days"));
+  const declinedSlots = BRIEF_SLOTS.filter(s => (brief.declined || []).includes(s.key) && !(brief.unanswered || []).includes(s.key) && s.key !== "days");
   if (declinedSlots.length) {
     lines.push("ALREADY ASKED AND NOT ANSWERED. Do not ask about these again. If one of them changes what you would plan, say out loud what you are assuming:");
     declinedSlots.forEach(s => lines.push(`  ${s.label}`));
+  }
+  // ── AND A LENGTH THEY HANDED OVER IS SAID OUT LOUD ────────────
+  //
+  // The one case where naming a number nobody gave is right, because they asked
+  // for it. It has to be SAID, in the reply, in plain words: the builder reads
+  // this conversation back to size the guide, so a number the model only thought
+  // is a number the builder cannot find.
+  if (brief.known?.days?.open) {
+    lines.push("THEY HAVE LEFT THE LENGTH TO YOU. Choose one, write the number in this reply in plain words, and use that same number when you build. Do not leave it unsaid and do not change it later.");
+  }
+  if (daysOpen) {
+    lines.push('THEY HAVE NOT SAID HOW LONG THE TRIP IS, SO THERE IS NO LENGTH TO PLAN TO. Do not name a count of days, do not write "around N days", do not size a route to a number you picked, and do not offer one for them to correct. A day count you say out loud becomes the guide\'s length, because the builder reads this conversation back. Ask for it, or say nothing at all about how long the trip is.');
   }
   // ── AND THESE TWO ARE NOT ASSUMED, EVER ───────────────────────────
   // "I never said the dates to it. Despite it asking me. It assumed October. It
@@ -1352,7 +1437,30 @@ export const briefBlock = (brief, conflicts = []) => {
   // brief: it was introducing a beer walk. Every turn opening the same way reads
   // as an interview with a fixed number of rounds, which is the intake form he
   // has objected to three times.
-  lines.push(`NEVER OPEN WITH "ONE MORE THING", "ONE THING FIRST", "ONE QUICK CHECK", "JUST ONE MORE" OR ANY COUNTED VARIANT OF THEM, and never end a reply with one either. There are ${asks.length ? (brief.missing || []).length + (brief.unanswered || []).length : 0} things still open, so counting down to one is not true, and the traveller reads the same opener every turn as a form with a fixed number of rounds. Say the thing, then ask the question, with no counter in front of either.`);
+  // THE SAME COUNT THE NOTE AND THE PROGRESS BAR USE. The first version added a
+  // second reckoning here (missing + unanswered), and a review caught the two
+  // landing on the model's screen in one turn saying seven and six. A counting
+  // rule that cannot count is worse than no rule, and two readers of one
+  // question is the bug this whole night keeps finding.
+  lines.push(`NEVER OPEN WITH "ONE MORE THING", "ONE THING FIRST", "ONE QUICK CHECK", "JUST ONE MORE" OR ANY COUNTED VARIANT OF THEM, and never end a reply with one either. There are ${stillOpenCount(brief)} things still open, so counting down to one is not true, and the traveller reads the same opener every turn as a form with a fixed number of rounds. Say the thing, then ask the question, with no counter in front of either.`);
+  // ── AND AN UNKNOWN START MAY NOT BE FILLED IN FOR THEM ─────
+  //
+  // Oliver, 12 Sep 2026: "So I said I went to Aalborg. It instantly assumed I
+  // took the plane to Copenhagen and it was stuck in the data as I was in
+  // Copenhagen." The reply, at turn 4, before he had been asked anything about
+  // it: "I'll plan you both starting from Copenhagen Airport unless you're
+  // setting off from somewhere else." He was sailing in from Norway.
+  //
+  // The prompt already forbids this twice over: NEVER ANNOUNCE AN ASSUMPTION FOR
+  // APPROVAL says that exact sentence is a checkbox with a paragraph around it,
+  // and the Copenhagen Airport default is scoped in writing to the tick-box
+  // flow. The model read the default anyway and announced it anyway. So it moves
+  // out of the prompt's prose and into the block, where it is a fact about THIS
+  // conversation rather than a rule to be weighed: nobody has said, so there is
+  // nothing to assume.
+  if ((brief.missing || []).includes("origin") || (brief.declined || []).includes("origin")) {
+    lines.push("THEY HAVE NOT SAID WHERE THEY START, SO THERE IS NO DEFAULT. Do not name Copenhagen Airport or anywhere else as where they are landing, do not plan from one, and do not offer an assumption for them to correct. The Copenhagen Airport default belongs to the tick-box form and to nothing else. Ask, or say nothing about it.");
+  }
   lines.push("ASK, DO NOT LECTURE. No preamble, no restating what they told you, no explaining why you need the answer, and no volunteering prices or opening dates nobody asked for. Give one real thing first, then ask, then stop. The one real thing is about a PLACE they named, not a price band and not a budget: volunteering money at somebody who has not raised it is the lecture this rule exists to stop, and it does not become a gift by being first.");
   // ── AND DO NOT DECIDE THE THING YOU ARE ABOUT TO ASK ABOUT ────────
   //

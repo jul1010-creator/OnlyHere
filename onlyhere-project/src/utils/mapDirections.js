@@ -193,6 +193,20 @@ export const beatTarget = (beat, pins) => {
 // Nothing about the markers, the ceiling or the translation rule changes. What
 // changes is what the model thinks the map is for.
 //
+// ── AND A SLIDESHOW IS NOT A TOUR OF EVERY NAME SAID ─────────
+//
+// Same evening, on a transcript where the reply zoomed to Aalborg the moment he
+// typed the word: "it shouldn't zoom into Aalborg instantly here. Zoom in if
+// Gemlyx wants to explain/show something (which it still doesn't do..)."
+//
+// Both halves are right and the second explains the first. Flying down to a
+// town on its first mention shows one pin on an empty city view, which is less
+// than the country map it replaced. A zoom has to be earned by having something
+// to show at that zoom, and today there usually is not: the chat map draws towns
+// and free-entry attractions, and everything else Gemlyx names — a paid museum,
+// an event, a restaurant — has no pin to arrive at. So the rule tells it to stay
+// wide until it is walking somebody through the inside of a place.
+//
 // ── THE RULE, WRITTEN ONCE, FOR THE PROMPT THAT HAS TO TEACH IT ─────
 //
 // Said in one place because the system prompt and this parser have to agree
@@ -206,9 +220,11 @@ You move it by writing a marker INSIDE your reply, at the exact word the picture
   [[MAP_IN:Copenhagen]]   fly down to that place and hold there
   [[MAP_OUT]]             pull back to the whole of Denmark
 
-THE SHAPE OF A GOOD RUN. Wide for the shape of the trip, close for the place you are describing, wide again the moment you start weighing one place against another. "Arh, [[MAP_IN:Copenhagen]] Copenhagen has a lot going on." lands the camera as the sentence starts. "Interesting! [[MAP_OUT]] For your taste I would look at [[MAP_IN:Aarhus]] Aarhus, because..." pulls back while you think and closes in as you answer. Markers go INSIDE the sentences and never collected at the end: where one sits in the sentence is the whole of the timing.
+A NAME IS NOT A REASON TO ZOOM. The first time a place comes up, leave the map wide. Flying down to a town the moment somebody says its name gives them a close view of one pin with nothing around it, which is less than they had a second earlier. Zoom in when you are about to SHOW them something inside that place: which stops are where, why one end of it is different from the other, what sits next to what. If all you are doing is saying one line about a town and then asking your question, the map stays where it is.
 
-PACE IT LIKE SLIDES, NOT LIKE A TRAILER. At most one move per paragraph, and never two markers with nothing between them. A picture nobody had time to look at is worse than one that did not move. Two moves in a reply is a good reply, three is a lot, and six is a hard ceiling that exists to stop the map shaking rather than as a target. A reply about nowhere in particular leaves the map where it is, and that is a decision rather than a missed cue.
+THE SHAPE OF A GOOD RUN. Wide is the normal state and not a failure: wide is the trip taking shape, which is what they are watching. Close for the place you are walking them through, wide again the moment you start weighing one place against another. "Arh, [[MAP_IN:Copenhagen]] Copenhagen has a lot going on." lands the camera as the sentence starts. "Interesting! [[MAP_OUT]] For your taste I would look at [[MAP_IN:Aarhus]] Aarhus, because..." pulls back while you think and closes in as you answer. Markers go INSIDE the sentences and never collected at the end: where one sits in the sentence is the whole of the timing.
+
+PACE IT LIKE SLIDES, NOT LIKE A TRAILER. At most one move per paragraph, and never two markers with nothing between them. Most early replies need no move at all: there is nothing to show inside a town yet, because nothing inside it has been decided. A picture nobody had time to look at is worse than one that did not move. Two moves in a reply is a good reply, three is a lot, and six is a hard ceiling that exists to stop the map shaking rather than as a target. A reply about nowhere in particular leaves the map where it is, and that is a decision rather than a missed cue.
 
 END ON WHAT MATTERS. The last move is the one they sit looking at while they type their answer, so finish on the place your reply is really about. If you have just asked them something about one town, the map should be on that town while they read the question.
 
