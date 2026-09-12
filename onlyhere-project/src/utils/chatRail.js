@@ -230,6 +230,37 @@ export const mapPlaces = ({ messages = [], placesFor, rejectsFor, coordsFor, cap
   };
 };
 
+// ── AND THE THINGS TOO SMALL TO DRAW ON A MAP OF A COUNTRY ──────────
+//
+// Oliver, 12 Sep 2026: "Attractions? It's naming alot of attractions, but not
+// showing them on the map.. that has to be done."
+//
+// The map showed towns and nothing else, and the reason was his too, from
+// 8 September: "we only need to have the towns popping up on the map. No need
+// to have it popping up two places." Both are right, and they are right about
+// different maps. That rule was written when this was a map of DENMARK, where a
+// bar or a bakery is a dot inside a town it is already showing. Since then the
+// map flies down to whatever the conversation is about, and on a ten-kilometre
+// view of Copenhagen the town pin is the thing saying nothing while the five
+// places the reply just named are missing.
+//
+// This is the third rule of Oliver's this week whose premise moved under it —
+// the lone-pin-equals-the-country rule and the card that opened itself were the
+// other two, both written for a country map and both wrong once it zoomed.
+//
+// SO THE PIN EXISTS AT EVERY ZOOM AND IS ONLY DRAWN CLOSE UP, which is what he
+// chose when asked: "Only when zoomed in." Not a different set of pins per
+// zoom, because the camera beats fly to a pin by name and a place that stops
+// existing when the map pulls back would be a beat with nowhere to go.
+//
+// 11, between CLUSTER_ZOOM (10, two or more towns framed together) and
+// FOCUS_ZOOM (12, where a zoom-in beat lands). So a map comparing two towns
+// stays a map of two towns, and a map that has settled on one place shows what
+// is in it.
+export const SPOT_PIN_ZOOM = 11;
+export const isSpotPin = (pin) => String(pin?.place?._src || "") !== "town";
+export const spotsShowAt = (zoom) => Number.isFinite(Number(zoom)) && Number(zoom) >= SPOT_PIN_ZOOM;
+
 export const MAP_CLASS = "chat-rail-map";
 
 // The whole of the side column, which is what he picked on 8 Sep: "The

@@ -145,19 +145,38 @@ export const beatsDue = (beats, shownWords, playedCount) => {
 // and a map that confidently centres on the wrong town is worse than one that
 // stayed where it was. Same one-sided discipline ticketUrlSaysElsewhere states:
 // this can only ever decline.
+// ── AND IT READS THE PIN'S OWN KEY, NOT A NAME IT HOPED FOR ────────
+//
+// The first version of this read `pin.name`, and a pin has no such field. A pin
+// is what mapPlaces builds, `{ key, place, lat, lon, latest }`, with the name
+// inside `place` and `key` already holding it lowercased and trimmed, because
+// that is what mapPlaces keys its own map on.
+//
+// So every IN beat resolved to null and the zoom-in half of this feature did
+// nothing at all, while the OUT half worked, because OUT touches no pins. It
+// shipped that way.
+//
+// THE TESTS PASSED, and that is the part worth writing down. They built their
+// own pins as `{ name, lat, lon }`, so the assertion and the code agreed with
+// each other and both disagreed with the app. A mutation run cannot catch that
+// either: mutate the code and the matching test still fails, exactly as it
+// should, on a shape neither of them shares with reality. The test below is
+// built by CALLING mapPlaces rather than by writing a pin out by hand, which is
+// the only version of this that can go stale and say so.
 export const beatTarget = (beat, pins) => {
   if (!beat) return null;
   if (beat.kind === "out") return { kind: "out" };
   const list = Array.isArray(pins) ? pins : [];
   const want = String(beat.place || "").trim().toLowerCase();
   if (!want) return null;
-  const hit = list.find(p => String(p?.name || "").trim().toLowerCase() === want)
+  const nameOf = (p) => String(p?.key || p?.place?.name || "").trim().toLowerCase();
+  const hit = list.find(p => nameOf(p) === want)
     || list.find(p => {
-      const n = String(p?.name || "").trim().toLowerCase();
+      const n = nameOf(p);
       return n && (n.includes(want) || want.includes(n));
     });
   if (!hit || !Number.isFinite(Number(hit.lat)) || !Number.isFinite(Number(hit.lon))) return null;
-  return { kind: "in", name: String(hit.name || ""), lat: Number(hit.lat), lon: Number(hit.lon) };
+  return { kind: "in", name: String(hit.place?.name || hit.key || ""), lat: Number(hit.lat), lon: Number(hit.lon) };
 };
 
 // ── THE RULE, WRITTEN ONCE, FOR THE PROMPT THAT HAS TO TEACH IT ─────

@@ -478,6 +478,44 @@ const SPLIT_PARTICLE_AFTER = /^\s*(?:over|ud|fra|weg|aus|uit)\b/i;
 const REJECT_WINDOW_BEFORE = 44;
 const REJECT_WINDOW_AFTER = 90;
 
+// ── AND LOSING A COMPARISON IS A REFUSAL ──────────────────
+//
+// Oliver, 12 Sep 2026, on a reply with a photograph of Tivoli under it: "it
+// shows that it wants me to go to the museum, but puts in Tivoli at the chat."
+//
+// The sentence, as it shipped:
+//
+//   "...a Children's Museum ... better for a group of kids than standing in a
+//    Tivoli queue on day one."
+//
+// Tivoli is the thing being argued AGAINST, and the card under the reply was a
+// picture of Tivoli. The card did not merely fail to help, it recommended the
+// one place the sentence had just told him to skip.
+//
+// REJECT_BEFORE already holds "rather than" and "instead of", and both work.
+// What it cannot see is the comparative form, which is how anybody actually
+// writes this: the refusal is carried by "better ... than" as a pair, with the
+// two halves separated by however much sentence the writer felt like. A window
+// of 44 characters cannot hold "better for a group of kids than standing in a",
+// and widening it would not help, because the distance is unbounded.
+//
+// So this reads the SENTENCE rather than a window, and it reads it in one
+// direction only: after "than" is the loser. "Tivoli is better than most parks"
+// has the comparative AFTER the name, so the slice before Tivoli holds nothing
+// and Tivoli keeps its card, which is right.
+//
+// "beats" is the same verdict with no "than" in it, and it sits immediately
+// against the name, so it is a separate and much tighter pattern.
+const COMPARATIVE_LOSER = /\b(?:better|nicer|cheaper|quieter|calmer|easier|smarter|saner|lovelier|prettier|quicker|faster|preferable|worth\s+more|more\s+(?!than\b)[a-z\u00e0-\u00ff]+)\b[^.!?]*?\bthan\b[^.!?]{0,40}$/i;
+const BEATEN_BY = /\b(?:beats|beat|trumps|outclasses|wins\s+over|win\s+over)\s+(?:the\s+|a\s+|an\s+)?$/i;
+
+// Back to the start of the sentence the name sits in, so the comparative can be
+// any distance away inside it and no distance at all outside it.
+const sentenceBefore = (hay, i) => {
+  const cut = Math.max(hay.lastIndexOf(".", i - 1), hay.lastIndexOf("!", i - 1), hay.lastIndexOf("?", i - 1), hay.lastIndexOf("\n", i - 1));
+  return hay.slice(cut + 1, i);
+};
+
 export const isRejectedPlace = (convoText, name) => {
   const text = String(convoText || "");
   let found = 0, rejected = 0;
@@ -487,7 +525,9 @@ export const isRejectedPlace = (convoText, name) => {
       found++;
       const before = hay.slice(Math.max(0, i - REJECT_WINDOW_BEFORE), i);
       const after = hay.slice(i + len, i + len + REJECT_WINDOW_AFTER);
+      const sentence = sentenceBefore(hay, i);
       if (REJECT_BEFORE.test(before) || REJECT_AFTER.test(after)
+          || COMPARATIVE_LOSER.test(sentence) || BEATEN_BY.test(sentence)
           || (SPLIT_VERB_BEFORE.test(before) && SPLIT_PARTICLE_AFTER.test(after))) rejected++;
     }
   }

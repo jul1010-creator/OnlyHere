@@ -22,7 +22,32 @@
 // His words for the difference: "Then instead it's just into that specific
 // day." So the seed names the day and the town, and an answer lands where the
 // gap is rather than on the trip as a whole.
-export const ADD_IN_QUESTION = "What are you interested in here?";
+// ── AND IT READ AS A SURVEY ABOUT THE GUIDE ─────────────────────────
+//
+// Oliver, 12 Sep 2026, looking at it on his own trip: "I think this reads too
+// much like a 'how is the guide looking'. Make it absolutely clear that you can
+// add something. Like on the review."
+//
+// He is right, and the reason is in the grammar. "What are you interested in
+// here?" is a question about the READER. Every other door in this product is a
+// verb about the TRIP — the preview screen he is comparing it to says "Add
+// attractions", and nobody has ever wondered what that button does. A question
+// invites an opinion; an instruction invites an action, and an action is what
+// this panel is for.
+//
+// The day number goes in the title rather than being left to the chips,
+// because the other half of his ask, from 10 September, was "instead it's just
+// into that specific day" — a panel that says day 4 is a panel about day 4.
+// Dropped rather than faked when it is unknown, the same rule addInSeed uses:
+// "day 0" is worse than no day at all.
+export const addInTitle = (dayNo = null) => {
+  const n = Number(dayNo);
+  return Number.isFinite(n) && n > 0 ? `Add a stop to day ${n}` : "Add a stop to this day";
+};
+
+// And what happens after they pick one, in one line, because the chips alone do
+// not say that Gemlyx will go and look.
+export const ADD_IN_SUB = "Pick what it is short of. We show what is near, and Gemlyx can look for the rest.";
 
 // Three, and they are the three a day can be short of. Not a taxonomy: towns,
 // events and workshops are all things a day already has or does not need, and a
@@ -33,6 +58,19 @@ export const ADD_IN_CATS = [
   { key: "food", label: "Somewhere to eat", ask: "Where should I eat" },
   { key: "nightlife", label: "A drink after", ask: "Where should I go for a drink" },
 ];
+
+// ── AND THE SAME THREE, SPELLED AGAIN ON THE PREVIEW SCREEN ─────────
+//
+// GuidePreviewScreen.jsx holds ADD_LABEL — the same three keys, free, food and
+// nightlife, with its own wording. That is the second copy, and this repo's
+// signature bug is a hand-written list copied and only some copies fixed: the
+// "Free to enter" label was fixed twice before anybody found the third site.
+//
+// NOT MERGED TONIGHT, deliberately, and written down instead of silently left.
+// The two are worded differently because they sit in different sentences, and
+// pulling one into the other would change copy on a screen Oliver did not ask
+// about while he is asleep. The note is here so the next person merging them
+// knows there are exactly two.
 
 // ── ONLY WHAT THE DAY IS MISSING ────────────────────────────────────
 //

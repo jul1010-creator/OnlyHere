@@ -626,6 +626,92 @@ export const sameMode = (a, b) => {
 // measurement actually gives you.
 export const EATS_THE_DAY_MINUTES = 240;
 
+// ── AND THEN DAY 10 OPENED AT EIGHT, 294 KM AWAY ────────────────────
+//
+// Off Oliver's live guide, 11 Sep 2026. Day 9 ends at Jutland, 15:00. The
+// transfer card into Day 10 is the one this file draws:
+//
+//   ⚠ Getting to Day 10: About 294 km to Copenhagen, 4h 30m by car. That is
+//     most of a day of travelling, so this is the day rather than a transfer
+//     inside it.
+//
+// Day 10's first stop is Paper Island, in Copenhagen, at 08:00.
+//
+// EVERY PART OF THAT IS ALREADY COMPUTED. The distance, the duration, the
+// judgement that the journey IS the day, and the clock time the next day opens
+// at. Nothing compared the last two, so the guide told the reader the travel
+// would eat the day and then scheduled the day as though it would not — on the
+// same card, one line apart.
+//
+// Same shape as closedButPlanned in journey.js and freeButPriced in
+// moneyClaims.js: two fields, each correct, and no gate that reads both.
+//
+// ── THE RULE, AND WHY IT IS NOT "IS THERE ENOUGH TIME" ──────────────
+//
+// A night sits between the two days, so in raw hours almost anything fits: they
+// could leave at four in the morning. That is not a plan, it is an alibi, and a
+// gate built on it would pass 08:00 in Copenhagen after a 15:00 finish in
+// Jutland, which is the case this exists for.
+//
+// So the question is when the journey can REALISTICALLY start. Eight in the
+// morning, on a holiday, after a night in a hotel they have to check out of.
+// Anything earlier is a thing a traveller might choose and never a thing a
+// guide should assume on their behalf.
+export const OVERNIGHT_START_HOUR = 8;
+
+// A clock time as minutes past midnight, or null. Deliberately strict: a stop
+// with no time, or a time in some other shape, is a stop this gate says nothing
+// about rather than one it guesses at.
+const clockMinutes = (hhmm) => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || "").trim());
+  if (!m) return null;
+  const h = Number(m[1]), min = Number(m[2]);
+  if (!(h >= 0 && h <= 23 && min >= 0 && min <= 59)) return null;
+  return h * 60 + min;
+};
+
+const spokenClock = (mins) => `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+
+// ── WHAT IT ANSWERS ─────────────────────────────────────────────────
+//
+// "" when there is nothing wrong, and one sentence naming both times when there
+// is. One-sided, the same discipline ticketUrlSaysElsewhere states: this can
+// only ever object, never approve.
+//
+// `measuredMinutes` is the Directions figure when the pair was routed, which is
+// what the card beside it prints. Without one the straight line stands in, at
+// the mode's own pace, and it is the SAME number describeOvernightMove would
+// have shown — a gate quoting a different figure from the sentence next to it
+// is a gate nobody believes twice.
+export const dayStartsBeforeItCanArrive = ({ move = null, measuredMinutes = null, endedAt = "", startsAt = "", dayNo = null } = {}) => {
+  if (!move || !move.km) return "";
+  const opens = clockMinutes(startsAt);
+  if (opens == null) return "";
+  const measured = Number(measuredMinutes);
+  const minutes = Number.isFinite(measured) && measured > 0
+    ? measured
+    : Math.round((straightLineHours(move.km, move.mode) || 0) * 60);
+  if (!minutes) return "";
+  // Only a journey big enough to BE the day. A ninety minute hop before the
+  // first stop is an ordinary morning and flagging it would put a warning on
+  // most multi-town trips, which is how a gate gets switched off.
+  if (minutes < EATS_THE_DAY_MINUTES) return "";
+  const earliest = OVERNIGHT_START_HOUR * 60 + minutes;
+  if (opens >= earliest) return "";
+  const where = move.toName ? ` in ${move.toName}` : "";
+  const from = move.fromName ? ` from ${move.fromName}` : "";
+  const ended = clockMinutes(endedAt);
+  // The plainest version of the same fact, when it is available: the next day
+  // opens EARLIER on the clock than the day before it finished, with most of a
+  // day of travelling in between. Nobody has to be talked into that one.
+  const backwards = ended != null && opens < ended
+    ? ` The day before ends at ${spokenClock(ended)}, so this starts earlier in the day than the one it follows.`
+    : "";
+  const d = Number(dayNo);
+  const which = Number.isFinite(d) && d > 0 ? `Day ${d}` : "The next day";
+  return `${which} opens at ${spokenClock(opens)}${where}, and getting there${from} is about ${Math.round(minutes / 60 * 10) / 10} hours.${backwards} Leaving at ${spokenClock(OVERNIGHT_START_HOUR * 60)} the earliest they can be there is ${spokenClock(Math.min(earliest, 23 * 60 + 59))}. Either start this day later, or put the journey on the day before it.`;
+};
+
 const OVER_A_DAY_MODES = ["walk", "bike", "tent"];
 
 // TWICE a comfortable day, not one. The first version used MODE_DAY_KM straight

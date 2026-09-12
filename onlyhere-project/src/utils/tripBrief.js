@@ -94,12 +94,43 @@ export const BRIEF_SLOTS = [
   { key: "stay", label: "whether a hotel is booked", tier: "blocking",
     ask: "Have you booked somewhere to stay already? If you have, the whole plan should sit around it.",
     askDa: "Har du allerede booket et sted at bo? Hvis du har, bygger jeg hele planen op omkring det." },
+  // ── AND A BOOKING WITH NO DATES IS NOT A FIXED POINT ──────────────
+  //
+  // Oliver, 12 Sep 2026, on his own ten-day guide: "It didn't ask what date I
+  // booked it for. It just assumed it was the first day."
+  //
+  // He had written "We have booked a stay at \" 25hours Hotel Paper Island\"".
+  // The stay slot filled with the word booked, which is everything that slot has
+  // ever held, and the guide then checked him in on Day 1 at 16:00, recommended
+  // somewhere different to sleep on Days 2 through 9, and still told him in WHAT
+  // YOU PAY that he had "10 nights in the plan with no bed booked yet".
+  //
+  // The slot above already promises the right thing — "If you have, the whole
+  // plan should sit around it" — and a plan cannot sit around a point with no
+  // date on it. So this is the second half of that question, and it is asked
+  // ONLY when there is a booking to ask about: `needs` is what makes a slot
+  // conditional, and every slot without one applies to every trip, exactly as
+  // before.
+  { key: "stayWhen", label: "which nights the booking covers", tier: "blocking",
+    needs: (known) => known?.stay?.value === "booked",
+    ask: "Which nights does that booking cover? The whole trip, or only part of it?",
+    askDa: "Hvilke nætter dækker den booking? Hele turen, eller kun en del af den?" },
   { key: "budget", label: "budget", tier: "optional",
     ask: "Roughly what are you happy to spend a day?",
     askDa: "Hvad vil du cirka bruge om dagen?" },
 ];
 
-export const BLOCKING_SLOTS = BRIEF_SLOTS.filter(s => s.tier === "blocking").map(s => s.key);
+// ── EVERY TRIP NEEDS THESE, WHICH IS NOT THE SAME LIST ──────────────
+//
+// A conditional slot is blocking for the trips it applies to and does not
+// exist for the rest, so it cannot be in the denominator of "how much of the
+// brief is filled". With it counted, a traveller who has booked nothing was
+// told they were six sevenths of the way through a seven-slot brief and shown
+// 75% of an eight-slot one, for a question they were never going to be asked.
+//
+// So this stays the UNCONDITIONAL set, unchanged, and readBrief works out what
+// actually applies to the trip in front of it.
+export const BLOCKING_SLOTS = BRIEF_SLOTS.filter(s => s.tier === "blocking" && !s.needs).map(s => s.key);
 
 // ── AND TWO OF THEM ARE NOT SATISFIED BY HAVING BEEN ASKED ───────────
 //
@@ -407,7 +438,29 @@ const BOOKED_RE = new RegExp(
   + `|\\b(?:${SLEEPS})\\s+(?:is|are)\\s+(?:already\\s+)?(?:booked|sorted|reserved)\\b`
   + `|\\b(?:${SLEEPS})\\s+(?:booked|reserved|sorted)\\b`
   + `|\\b(?:book(?:ed)?|reserved|got|have)\\s+(?:[\\wÆØÅæøå'’-]+\\s+){0,4}(?:${SLEEPS})\\s+(?:booked|reserved|sorted)\\b`
-  + `|\\bstaying (?:at|in) (?:the|a|an)\\b`, "i");
+  + `|\\bstaying (?:at|in) (?:the|a|an)\\b`
+  // ── AND THE SENTENCE THAT STARTED ALL OF THIS FILLED NOTHING ─────
+  //
+  // Oliver, 12 Sep 2026, first message of the conversation that produced the
+  // ten-day guide: "We have booked a stay at \" 25hours Hotel Paper Island\"".
+  //
+  // Not one branch above it matched. "stay" is not in SLEEPS on its own — the
+  // list has "somewhere to stay" — and the name sits behind a quote mark, so
+  // even the four-word-name branch added on 26 August could not reach it. The
+  // most structural fact in the brief, written in the plainest possible words,
+  // read as nothing at all, and every downstream failure he reported that night
+  // followed from it.
+  //
+  // Two more branches, both narrow. A COMPLETED booking verb with "a stay" or a
+  // count of nights after it; and a completed booking verb anywhere in a
+  // sentence that also names a property, which namedStayIn already identifies
+  // by the same two signals the interests reader uses to throw it away.
+  //
+  // COMPLETED forms only, never a bare "book": "I want to book somewhere like
+  // the Admiral Hotel" is a sentence about an intention, and reading it as a
+  // booking is the false positive this slot cannot afford.
+  + `|\\b(?:book(?:ed)?|reserved)\\s+(?:a\\s+|our\\s+|the\\s+|my\\s+)?(?:stay|\\d+\\s+nights?|nights?)\\b`, "i");
+const BOOKED_DONE = /\b(?:booked|reserved|sorted|staying)\b/i;
 const NOT_BOOKED_RE = /\b(?:not (?:booked|yet)|nothing booked|no hotel|haven'?t booked|need (?:a hotel|somewhere)|looking for (?:a hotel|somewhere)|open to suggestions on (?:hotels?|where to stay))\b/i;
 const readStay = (text, intakeStayBooked) => {
   if (intakeStayBooked === true) return { value: "booked", source: "intake" };
@@ -416,7 +469,190 @@ const readStay = (text, intakeStayBooked) => {
   // Not-booked is tested FIRST: "haven't booked" contains "booked".
   if (NOT_BOOKED_RE.test(s)) return { value: "not booked", source: "said" };
   if (BOOKED_RE.test(s)) return { value: "booked", source: "said" };
+  // A completed booking verb and a named property in the same text. The name is
+  // found by namedStayIn, which is the same reader that takes it OUT of the
+  // interests slot, so a run of words is a hotel in both directions or in
+  // neither. Last, because it is the widest.
+  if (BOOKED_DONE.test(s) && namedStayIn(s)) return { value: "booked", source: "said" };
   return null;
+};
+
+// ── WHICH NIGHTS THE BOOKING COVERS ─────────────────────────────────
+//
+// Three shapes, and no fourth. A traveller answering "which nights does that
+// booking cover?" says the whole trip, says the first or last few, or gives the
+// dates. Anything else stays UNREAD and the slot stays open, which is the point:
+// the failure being fixed here is an assumption, so a reader that guesses when
+// it is unsure is the same bug wearing a different hat.
+//
+// "for 3 nights" is deliberately NOT read. It says how many and not which, and
+// a three-night booking on a ten-day trip could start on any of eight days.
+// Reading it as the first three is precisely what Gemlyx already did.
+//
+// ── AND IT HAS TO BE THE SENTENCE ABOUT THE HOTEL ───────────────────
+//
+// "The whole trip is about food" contains every word WHOLE_TRIP looks for, and
+// filling a blocking slot off it would be this file's oldest bug — "spa" out of
+// "Spain", "island" out of "Paper Island". So a span is only read out of a
+// sentence that is also about somewhere to sleep, unless the traveller is
+// answering this exact question, where the whole sentence is the answer.
+const WORD_COUNT = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+const countOf = (s) => {
+  const t = String(s || "").trim().toLowerCase();
+  if (WORD_COUNT[t]) return WORD_COUNT[t];
+  const n = parseInt(t, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+const WHOLE_TRIP = /\b(?:whole|entire|full)\s+(?:trip|stay|time|holiday|visit|week|thing)\b|\ball\s+(?:of\s+)?(?:the\s+)?(?:trip|stay|time|nights)\b|\ball\s+\d+\s+nights\b|\bevery\s+night\b|\bhele\s+(?:turen|tiden|opholdet)\b/i;
+const FIRST_RUN = /\bfirst\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+nights?\b|\b(first)\s+night\b/i;
+const LAST_RUN = /\blast\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+nights?\b|\b(last)\s+night\b/i;
+// A booking word, a place to sleep, or the act of arriving at one. Wider than
+// BOOKED_RE on purpose: that one has to decide whether a booking EXISTS, which
+// is a claim; this one only has to decide whether a sentence is on the subject.
+const BOOKING_TALK = new RegExp(`\\b(?:book(?:ed|ing)?|reserved|reservation|check[\\s-]?in|checking\\s+in|nights?|${SLEEPS})\\b`, "i");
+
+// A DIRECT ANSWER DROPS THE NOUN. Asked "which nights does that booking cover?"
+// a person replies "the whole trip", "just the first two", "all of it" — and
+// "the first two" has no "nights" in it because the question supplied it. The
+// bare forms are reachable ONLY from a direct answer, because "the first two"
+// in open prose is about anything at all.
+const WHOLE_TRIP_BARE = /\ball\s+of\s+(?:it|them)\b|\bthe\s+lot\b|\bevery\s+one\b|\bthe\s+whole\s+lot\b/i;
+const FIRST_BARE = /\bfirst\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
+const LAST_BARE = /\blast\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
+
+const spanIn = (sentence, direct = false) => {
+  if (WHOLE_TRIP.test(sentence) || (direct && WHOLE_TRIP_BARE.test(sentence))) return { value: "the whole trip", all: true, nights: null };
+  const f = FIRST_RUN.exec(sentence) || (direct ? FIRST_BARE.exec(sentence) : null);
+  if (f) {
+    const n = f[2] ? 1 : countOf(f[1]);
+    if (n) return { value: n === 1 ? "the first night" : `the first ${n} nights`, all: false, nights: Array.from({ length: n }, (_, i) => i + 1) };
+  }
+  const l = LAST_RUN.exec(sentence) || (direct ? LAST_BARE.exec(sentence) : null);
+  if (l) {
+    const n = l[2] ? 1 : countOf(l[1]);
+    // Counted BACK from the end of the trip, which nothing here knows yet, so it
+    // is carried as a count and resolved by bookedDayNumbers against the real
+    // day count. A trip whose length changes later must not keep the old nights.
+    if (n) return { value: n === 1 ? "the last night" : `the last ${n} nights`, all: false, nights: null, fromEnd: n };
+  }
+  return null;
+};
+
+// ── AND A DANE SAYS WHICH NIGHTS BY NAMING THE DAYS ─────────────────
+//
+// From the intake brief the suite has run since 10 September: "We've already
+// booked Hotel Phønix in Aalborg for the Saturday and Sunday nights, so those
+// two are fixed." That is a person telling you exactly which nights, in the way
+// people actually tell you, and it is worthless to a plan until it is day
+// numbers.
+//
+// It needs the arrival date, so it lives here rather than in spanIn, which is
+// the half that works without one.
+//
+// THE WEEKDAY MUST BE WEARING THE WORD "NIGHT". A sentence can hold both a
+// booking and a flight — "we booked the hotel, we land Thursday" — and reading
+// the arrival as a booked night would be worse than reading nothing. So the run
+// of weekday names has to END in "night" or "nights", which is how somebody
+// says which nights and is not how they say when they land.
+const DAY_WORD = "(?:mon|tues|wednes|thurs|fri|satur|sun)day";
+// DOUBLE backslashes, because this is a TEMPLATE LITERAL: \\s reaches the
+// regex as \s, while a single \b would reach it as an actual backspace and
+// the pattern would then require one. BOOKING_TALK above is written the same
+// way for the same reason.
+const NIGHT_RUN = new RegExp(`(${DAY_WORD}(?:\\s*(?:,|and|&|to|until|till|[-\u2013\u2014])\\s*${DAY_WORD})*)\\s+nights?\\b`, "i");
+const WEEK = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+// A range word rather than a list word means every night between the two, which
+// is what "Friday to Sunday nights" means and "Friday and Sunday nights" does
+// not.
+const RANGE_WORD = /\b(?:to|until|till)\b|[-\u2013\u2014]/i;
+
+const weekdayNights = (sentence, arrival) => {
+  const m = NIGHT_RUN.exec(sentence);
+  if (!m || !arrival) return null;
+  const run = m[1];
+  const names = (run.match(new RegExp(DAY_WORD, "gi")) || []).map(x => x.toLowerCase());
+  if (!names.length) return null;
+  // The FIRST occurrence of each weekday on or after the arrival day. Inside a
+  // week every weekday happens once, so this is unambiguous for any trip and is
+  // the only sane reading of a longer one: somebody saying "the Saturday" on a
+  // sixteen-day trip means the one coming, not the second.
+  const start = new Date(arrival.getFullYear(), arrival.getMonth(), arrival.getDate());
+  const dayFor = (name) => {
+    const want = WEEK.indexOf(name);
+    if (want < 0) return null;
+    const shift = (want - start.getDay() + 7) % 7;
+    return shift + 1;
+  };
+  let nights = names.map(dayFor).filter(n => n != null);
+  if (!nights.length) return null;
+  if (nights.length > 1 && RANGE_WORD.test(run)) {
+    const lo = Math.min(...nights), hi = Math.max(...nights);
+    nights = [];
+    for (let d = lo; d <= hi; d += 1) nights.push(d);
+  }
+  nights = [...new Set(nights)].sort((a, b) => a - b);
+  const label = names.map(n => n[0].toUpperCase() + n.slice(1)).join(RANGE_WORD.test(run) ? " to " : " and ");
+  return { value: `the ${label} night${nights.length === 1 ? "" : "s"}`, all: false, nights };
+};
+
+export const readStayNights = (text, { arrival = null, today = new Date(), direct = false } = {}) => {
+  const s = String(text || "");
+  if (!s.trim()) return null;
+  // A direct answer to this question is an answer whatever it looks like, so the
+  // on-the-subject guard is dropped for it and the sentence is read whole.
+  const parts = direct ? [s] : s.split(/(?<=[.!?\n])\s+/);
+  // ── LAST WINS, WHICH IS readDays' RULE AND FOR ITS REASON ─────────
+  //
+  // "We booked the whole trip. Actually we only booked the first two nights."
+  // A reader that returns the first hit answers with the sentence the traveller
+  // has just corrected, and readDays in this file learned the same lesson in
+  // August: a correction is the single thing a traveller most needs to land,
+  // and the earlier answer is the one they are trying to get rid of.
+  let hit = null;
+  for (const sentence of parts) {
+    if (!direct && !BOOKING_TALK.test(sentence)) continue;
+    const span = spanIn(sentence, direct);
+    if (span) { hit = { ...span, source: "said" }; continue; }
+    // Named days of the week, which is how somebody tells you which nights they
+    // have without ever writing a date.
+    const named = weekdayNights(sentence, arrival);
+    if (named) { hit = { ...named, source: "said" }; continue; }
+    // The dates themselves. dateRangeIn is the same reader the `when` slot uses,
+    // so "the 14th till 17th" means the same thing in both questions.
+    const range = arrival ? dateRangeIn(sentence, today) : null;
+    if (range?.start) {
+      const from = daysBetween(arrival, range.start);
+      const to = range.end ? daysBetween(arrival, range.end) : from;
+      // daysBetween is INCLUSIVE — daysBetween(x, x) is 1 — so it already
+      // answers "which day of the trip is this", and the first draft added one
+      // on top. "Booked from the 14th till the 16th" on a trip arriving the
+      // 14th came back as nights 2 to 4. The suite caught it.
+      if (from != null && to != null && from >= 1 && to >= from && to - from < MAX_TRIP_DAYS) {
+        const nights = [];
+        for (let d = from; d <= to; d += 1) nights.push(d);
+        hit = { value: nights.length === 1 ? `night ${nights[0]}` : `nights ${nights[0]} to ${nights[nights.length - 1]}`, all: false, nights, source: "said" };
+      }
+    }
+  }
+  return hit;
+};
+
+// ── AND THE DAY NUMBERS, ONCE THE TRIP HAS A LENGTH ─────────────────
+//
+// "The whole trip" and "the last two nights" are both answers that only become
+// day numbers when the number of days is final, and the number of days moves:
+// it is a blocking slot of its own, and the traveller can change it in the next
+// sentence. So the slot stores what they SAID and this resolves it, at the
+// point of use, against the plan that actually exists.
+export const bookedDayNumbers = (stayWhen, dayCount) => {
+  const n = Math.max(0, Math.floor(Number(dayCount) || 0));
+  if (!stayWhen || !n) return [];
+  if (stayWhen.all) return Array.from({ length: n }, (_, i) => i + 1);
+  if (stayWhen.fromEnd) {
+    const take = Math.min(stayWhen.fromEnd, n);
+    return Array.from({ length: take }, (_, i) => n - take + i + 1);
+  }
+  return (Array.isArray(stayWhen.nights) ? stayWhen.nights : []).filter(d => d >= 1 && d <= n);
 };
 
 // Interests. The intake tick boxes, or a theme word in their own turns. The
@@ -490,10 +726,87 @@ const REFUSED_AFTER = new RegExp(
 export const withoutRefused = (text) =>
   String(text || "").replace(REFUSED_AFTER, " ").replace(NOT_WANTED, " ");
 
+// ── AND A WORD INSIDE A HOTEL NAME IS NOT AN INTEREST ──────────
+//
+// Oliver, 12 Sep 2026: "it also went bananas with 'islands'." He never asked for
+// islands. He said:
+//
+//   We have booked a stay at " 25hours Hotel Paper Island"
+//
+// "Island" is in INTEREST_WORDS, it matched as a whole word, and the blocking
+// interests slot filled with "island". The chat then wrote "Given you mentioned
+// wanting an island-focused trip", the preview picked Ærøskøbing, and the finished
+// guide came out titled "Copenhagen, Kids & the Islands: Ten Days Across
+// Zealand". A ten day trip was rebuilt around the name of his hotel.
+//
+// His own diagnosis, in the document he sent: "I think it misunderstood that the
+// hotel was an actual hotel."
+//
+// THE COMMENT ABOVE THIS FUNCTION IS ABOUT THE SAME CLASS OF BUG, fixed on
+// 18 Aug: "spa" out of "Spain", "bar" out of "Barcelona". That one was a prefix
+// and was fixed by anchoring the end of the word. This one IS a whole word, and
+// no amount of anchoring reaches it, because the word is real and the sentence
+// is simply not about it.
+//
+// WHAT SEPARATES THEM IS THAT A NAME IS A NAME. Two signals, and both are the
+// traveller's own writing rather than a guess:
+//
+//   QUOTES.  He typed them. Somebody quoting a phrase is naming a thing, not
+//     describing what they like. Anything in quotes is out.
+//   A CAPITALISED RUN HOLDING A LODGING WORD.  "25hours Hotel Paper Island" is
+//     a proper noun with "Hotel" inside it. "Staying at the Island Hotel" is
+//     the same shape. "I want to see the islands" is not a run at all and is
+//     untouched, which is the case this must not break.
+//
+// STRIPPED BEFORE THE LOWERCASE, which is why this function no longer lowercases
+// on its first line: capitalisation is the evidence, and the old order threw it
+// away before anything could read it.
+const LODGING_WORD = /\b(?:hotel|hostel|motel|inn|apartments?|aparthotel|b&b|bed\s*&\s*breakfast|guesthouse|airbnb|resort|kro|vandrerhjem|badehotel|pension|camping|cabin|hytte)\b/i;
+// A run of names: tokens that start with a capital or a digit, joined by spaces
+// and the small words a property name carries. Two tokens minimum, so a single
+// capitalised word at the start of a sentence is never a "name".
+const NAME_RUN = /\b(?:[A-Z\u00c0-\u00de][\w\u00c0-\u00ff&'.-]*|\d+[a-z]*)(?:\s+(?:of|the|by|at|on|og|paa|p\u00e5)\s+|\s+)(?:[A-Z\u00c0-\u00de][\w\u00c0-\u00ff&'.-]*|\d+[a-z]*)(?:(?:\s+(?:of|the|by|at|on|og|paa|p\u00e5)\s+|\s+)(?:[A-Z\u00c0-\u00de][\w\u00c0-\u00ff&'.-]*|\d+[a-z]*))*/g;
+
+export const withoutNamedStay = (text) => {
+  // Quotes first, straight and curly, single and double. A quoted phrase is a
+  // name being reported, whatever it happens to contain.
+  let s = String(text || "").replace(/["\u201c\u201d\u00ab\u00bb][^"\u201c\u201d\u00ab\u00bb\n]{0,120}["\u201c\u201d\u00ab\u00bb]/g, " ")
+    .replace(/[\u2018\u2019][^\u2018\u2019\n]{0,120}[\u2018\u2019]/g, " ");
+  // Then any capitalised run that carries a lodging word. Only the run goes, so
+  // the rest of the sentence still speaks for itself.
+  s = s.replace(NAME_RUN, (run) => (LODGING_WORD.test(run) ? " " : run));
+  return s;
+};
+
+// ── AND THE SAME TWO SIGNALS, READ FORWARDS ─────────────────────────
+//
+// withoutNamedStay throws the name away because the interests reader must not
+// see it. Everything downstream of the booking wants the opposite: the guide
+// writer has to be told what they booked by name, or it recommends somewhere
+// else on top of it. One definition of "this run of words is a property name",
+// read in both directions, rather than two lists that drift.
+//
+// The quoted branch is checked for a lodging word too. He typed
+// `" 25hours Hotel Paper Island"`, and quotes alone would also return the title
+// of a festival or a dish — a quoted phrase is a name being reported, and only
+// some names are somewhere to sleep.
+export const namedStayIn = (text) => {
+  const s = String(text || "");
+  const quoted = s.match(/["\u201c\u201d\u00ab\u00bb]([^"\u201c\u201d\u00ab\u00bb\n]{0,120})["\u201c\u201d\u00ab\u00bb]/g) || [];
+  for (const q of quoted) {
+    const inner = q.slice(1, -1).trim();
+    if (inner && LODGING_WORD.test(inner)) return inner;
+  }
+  NAME_RUN.lastIndex = 0;
+  const runs = s.match(NAME_RUN) || [];
+  const hit = runs.find(r => LODGING_WORD.test(r));
+  return hit ? hit.trim() : "";
+};
+
 const readInterests = (text, intakeInterest) => {
   const ticked = (Array.isArray(intakeInterest) ? intakeInterest : []).map(clean).filter(Boolean);
   if (ticked.length) return { value: ticked.join(", "), source: "intake" };
-  const s = withoutRefused(String(text || "").toLowerCase());
+  const s = withoutRefused(withoutNamedStay(String(text || "")).toLowerCase());
   // ── AND A PREFIX IS NOT A WORD ─────────────────────────────────────
   // Found 18 Aug 2026 by an adversarial review. This anchored the START of a word
   // and not the end, so "We are coming from Spain" filled the blocking interests
@@ -623,6 +936,11 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   set("interests", readInterests(t, intake.interest));
   set("transport", readTransport(t, intake.transport));
   set("stay", readStay(t, intake.stayBooked));
+  // AFTER the stay slot and BEFORE the direct-answer pass, so a name and a span
+  // written in the same sentence as the booking are both read from the sentence
+  // first and a bare answer can only fill what the sentence left empty. Same
+  // rule, same reason, as every other slot here.
+  set("stayWhen", readStayNights(t, { arrival: known.when?.value || null, today }));
   set("budget", readBudget(t, intake.budgetText));
 
   // ── AND THEN WHAT THEY SAID WHEN THEY WERE ASKED ──────────────────
@@ -660,8 +978,41 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
     if (!held || held.value === ACKNOWLEDGED_VALUE) known[key] = res;
   }
 
+  // ── AND THE BARE ANSWER TO THE NIGHTS QUESTION ────────────────────
+  //
+  // "The whole trip." "Just the first two." Neither carries a booking word or a
+  // place to sleep, so the sentence reader above cannot see them, and they are
+  // answers only because of the question in front of them — which is the entire
+  // argument directAnswer.js makes for every other slot.
+  //
+  // Read HERE rather than there because the reader lives in this file, and
+  // directAnswer.js is imported BY this file: putting it on the other side of
+  // that line would be a cycle. Same rule as the rest of the direct pass — it
+  // fills an empty slot and never overrules a sentence.
+  if (!known.stayWhen) {
+    const asks = Array.isArray(answering) ? answering : [];
+    // LAST ANSWER WINS, which is directAnswers' own rule two blocks up: it
+    // walks every turn and a later one overwrites an earlier one, because a
+    // correction is the thing a traveller most needs to land. An inner "first
+    // answer wins" guard stood here and a mutation run found it did nothing at
+    // all — the `if (!known.stayWhen)` above already stops a direct answer
+    // beating a sentence, so the two were redundant and the redundant one was
+    // the one pointing the wrong way.
+    turns.forEach((turn, i) => {
+      const keys = Array.isArray(asks[i]) ? asks[i] : [];
+      if (keys.length !== 1 || keys[0] !== "stayWhen") return;
+      const v = readStayNights(turn, { arrival: known.when?.value || null, today, direct: true });
+      if (v) known.stayWhen = v;
+    });
+  }
   const wasAsked = new Set((Array.isArray(asked) ? asked : []).map(clean).filter(Boolean));
-  const unfilled = BRIEF_SLOTS.filter(s => s.tier === "blocking" && !known[s.key]).map(s => s.key);
+  // A slot with a `needs` predicate only applies to some trips. Nobody is asked
+  // which nights their booking covers when they have not booked anything, and
+  // nothing is blocked by an unanswered question that was never worth asking.
+  const unfilled = BRIEF_SLOTS
+    .filter(s => s.tier === "blocking" && !known[s.key])
+    .filter(s => (typeof s.needs === "function" ? !!s.needs(known) : true))
+    .map(s => s.key);
   const declined = unfilled.filter(k => wasAsked.has(k));
   const missing = unfilled.filter(k => !wasAsked.has(k));
   // Known, and not precisely enough. Only `when` can be vague today, and it is

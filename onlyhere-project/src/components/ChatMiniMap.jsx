@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import L from "leaflet";
 import { addTileLayer } from "../utils/mapTiles";
 import { ChatPlaceCards, showablePhoto } from "./ChatPlaceCards";
-import { POPUP_CLASS, RAIL_BREAKPOINT_PX, LABEL_CLASS, labelSides } from "../utils/chatRail";
+import { POPUP_CLASS, RAIL_BREAKPOINT_PX, LABEL_CLASS, labelSides, isSpotPin, spotsShowAt } from "../utils/chatRail";
 import { distinctThemes, THEME_LABEL } from "../utils/placeThemes";
 import { entryWord } from "../utils/entryWords";
 import { t as uiT } from "../utils/uiLanguage";
@@ -81,6 +81,15 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   const holderRef = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);
+  // ── AND A SECOND LAYER FOR THE THINGS INSIDE THE TOWNS ────────────
+  //
+  // Attraction pins are built exactly like town pins and live on their own
+  // layer group, which is added to the map and taken off it as the zoom
+  // crosses SPOT_PIN_ZOOM. A layer rather than a filter on `list`, because the
+  // markers, their labels, their cards and their hover bindings are all built
+  // once per pin change: rebuilding that set on every zoom tick would rebuild
+  // the card the reader is pointing at, under their cursor.
+  const spotLayerRef = useRef(null);
   // The container listener is added per pin-redraw and has to come off with it,
   // or a conversation of twenty replies leaves twenty of them on one element.
   const cleanRef = useRef(null);
@@ -203,22 +212,28 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     addTileLayer(L, map);
     L.control.zoom({ position: "bottomright" }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);
+    // Not added here. The map opens on the whole of Denmark, where by
+    // definition no attraction is worth drawing, and the zoom watcher below
+    // puts it on the moment the view is close enough.
+    spotLayerRef.current = L.layerGroup();
     mapRef.current = map;
     // Leaflet measures its container the instant L.map() runs, and this one
     // mounts inside a panel whose layout is still settling. Same settle problem
     // the guide map and the place map both hit.
     requestAnimationFrame(() => map.invalidateSize());
     const t = setTimeout(() => map.invalidateSize(), 400);
-    return () => { clearTimeout(t); map.remove(); mapRef.current = null; layerRef.current = null; };
+    return () => { clearTimeout(t); map.remove(); mapRef.current = null; layerRef.current = null; spotLayerRef.current = null; };
   }, [any]);
 
   // ── PINS ─────────────────────────────────────────────────────────
   useEffect(() => {
     const map = mapRef.current;
     const layer = layerRef.current;
-    if (!map || !layer) return;
+    const spotLayer = spotLayerRef.current;
+    if (!map || !layer || !spotLayer) return;
     if (cleanRef.current) { cleanRef.current(); cleanRef.current = null; }
     layer.clearLayers();
+    spotLayer.clearLayers();
     // The hosts go with the markers. Leaving them would keep React rendering
     // cards into divs that are no longer attached to anything.
     if (!list.length) { setHosts([]); return; }
@@ -289,7 +304,7 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
         title: p.place?.name || "",
         keyboard: false,
         zIndexOffset: p.latest ? 1000 : 0,
-      }).addTo(layer);
+      }).addTo(isSpotPin(p) ? spotLayer : layer);
       // ── AND WHAT IT IS FOR, WITHOUT ANYBODY HAVING TO TAP ───────
       //
       // Oliver, 9 Sep 2026, on a reply that had offered him three cities with
@@ -530,16 +545,27 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // reply introduced, and falling back to the most recent card on the map.
     // Reversed, because several pins can be `latest` and the last of them is
     // the one the sentence ended on.
-    const carded = list.filter(p => markersRef.current.get(p.key)?.getPopup());
-    const newest = [...carded].reverse().find(p => p.latest) || carded[carded.length - 1];
-    const landed = () => {
-      const marker = newest && markersRef.current.get(newest.key);
-      // Through the same handler a hover uses, so the card that opens itself
-      // and the card you point at are chosen the same way. A second path here
-      // is how the two would start disagreeing about which side to open on.
-      if (marker?.getPopup()) marker.fire("mouseover");
-      layOut();
-    };
+    // ── AND THEN IT STOPPED OPENING ITSELF ───────────────────────
+    //
+    // Oliver, 12 Sep 2026: "Can the photo on the map not automatically pop up?
+    // Just keep the name of the place. And if I put my mouse on it, then it
+    // shows."
+    //
+    // It was asked for in the first place ("with a Copenhagen image/description,
+    // popping up"), and it was right when the map held one pin on a country.
+    // The map changed underneath it twice tonight: it now zooms to the place, so
+    // there is something to look AT, and a card is a photograph the size of half
+    // the panel sitting on top of it. In his screenshot the Faxe card covers
+    // Roskilde, the coast and its own pin.
+    //
+    // The labels stay. Every pin still carries its name and its theme, so the
+    // map still says what is on it; the picture is now something he asks for by
+    // pointing at it. Every marker already has the hover binding, so this is a
+    // deletion rather than a feature: nothing new had to be built for the mouse.
+    //
+    // layOut still runs on landing, because the labels have to be placed
+    // whether or not anything opens.
+    const landed = () => { layOut(); };
     if (still) landed(); else map.once("moveend", landed);
     // ── WHERE EACH LABEL GOES, MEASURED RATHER THAN GUESSED ──────
     //
@@ -578,12 +604,33 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // Once when the flight ends, and again whenever the view moves, because
     // every side above was chosen from container pixels and a pan moves them.
     map.on("moveend zoomend", layOut);
+    // ── AND THE ATTRACTIONS COME AND GO WITH THE ZOOM ────────────
+    //
+    // The rule and the number are in chatRail.js, next to the two zooms they
+    // sit between. Run once here as well as on the event, because the flight
+    // that lands on a place fires zoomend before this effect's first paint on
+    // some paths and a pin that only appears on the NEXT pan is a pin nobody
+    // sees.
+    //
+    // layOut is called after, not instead: a label whose marker has just been
+    // put on the map has no element until it is, and the sides are chosen from
+    // the elements that are actually there.
+    const spots = () => {
+      const on = spotsShowAt(map.getZoom());
+      const has = map.hasLayer(spotLayer);
+      if (on === has) return;
+      if (on) spotLayer.addTo(map); else map.removeLayer(spotLayer);
+      layOut();
+    };
+    map.on("zoomend", spots);
+    spots();
 
     const shut = () => map.closePopup();
     map.getContainer().addEventListener("mouseleave", shut);
     cleanRef.current = () => {
       map.getContainer().removeEventListener("mouseleave", shut);
       map.off("moveend zoomend", layOut);
+      map.off("zoomend", spots);
     };
     requestAnimationFrame(() => map.invalidateSize());
     // pinKey, not `pins`: by value, for the reason above.
@@ -619,15 +666,27 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // lands exactly where it started rather than at some middle distance nobody
     // chose. In is the place at the same closeness a lone pin gets, so a zoom
     // the reply asked for and a zoom the pins asked for look like one map.
+    // ── AND OUT IS SLOWER THAN IN ────────────────────────────────
+    //
+    // Oliver, 12 Sep 2026: "when it zooms out, make it a little slower."
+    //
+    // They were both 1.1 seconds and they are not the same move. Zooming IN is
+    // an arrival: the traveller already knows where it is going, because the
+    // sentence just named it, and dawdling is a title sequence. Zooming OUT is
+    // the map giving back the country, and pulling away covers far more ground
+    // in the same time, so an equal duration reads as a lurch rather than as a
+    // camera. The slower one is also the one that has something to say: watching
+    // Copenhagen shrink into Denmark is the frame he wants the reader to read.
+    const OUT_SECONDS = 1.9, IN_SECONDS = 1.1;
     if (focus.kind === "out") {
       const b = L.latLngBounds(DENMARK);
       if (still) map.fitBounds(b, { padding: [6, 6], animate: false });
-      else map.flyToBounds(b, { padding: [6, 6], duration: 1.1 });
+      else map.flyToBounds(b, { padding: [6, 6], duration: OUT_SECONDS });
       return;
     }
     if (!Number.isFinite(focus.lat) || !Number.isFinite(focus.lon)) return;
     if (still) map.setView([focus.lat, focus.lon], FOCUS_ZOOM, { animate: false });
-    else map.flyTo([focus.lat, focus.lon], FOCUS_ZOOM, { duration: 1.1 });
+    else map.flyTo([focus.lat, focus.lon], FOCUS_ZOOM, { duration: IN_SECONDS });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusSeq]);
 

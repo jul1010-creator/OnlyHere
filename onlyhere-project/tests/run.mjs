@@ -160,12 +160,13 @@ writeFileSync(entry, `
   export { GOOGLE_SIGN_IN } from ${JSON.stringify(join(root, "src/config.js"))};
   export { writeInLanguage } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { guideLanguage, languageOfProse, ruledOutLanguages, briefSentences, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS, MARKER_FLOOR, MARKER_MARGIN } from ${JSON.stringify(join(root, "src/utils/travellerLanguage.js"))};
-  export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, LABEL_CLASS, LABEL_SIDES, LABEL_GAP, labelBox, labelSides } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
+  export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, LABEL_CLASS, LABEL_SIDES, LABEL_GAP, labelBox, labelSides, SPOT_PIN_ZOOM, isSpotPin, spotsShowAt } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
   export { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE } from ${JSON.stringify(join(root, "src/utils/mapDirections.js"))};
   export { costLines, byUrgency, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
+  export { freeButPriced, moneyProblems, LODGING_FLOOR_DKK } from ${JSON.stringify(join(root, "src/utils/moneyClaims.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
-  export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, briefBlock, buildBlockedNote, MAX_ASKS_AT_ONCE, enoughToRecommend, ACKNOWLEDGED_VALUE } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
+  export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, briefBlock, buildBlockedNote, MAX_ASKS_AT_ONCE, enoughToRecommend, ACKNOWLEDGED_VALUE, namedStayIn, readStayNights, bookedDayNumbers } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { GREETING, openingThread, withTestBrief, withoutTestBrief, threadIsSound, TEST_BRIEF } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { CHAT_REPORT_KIND, CHAT_REPORT_VERSION, buildChatReport, chatReportFilename, turnReport, briefTimeline, intakeReport } from ${JSON.stringify(join(root, "src/utils/chatReport.js"))};
   export { RIGHTS_HOLDER, copyrightLine, GUIDE_RIGHTS_SHORT, GUIDE_RIGHTS_FULL, TDM_RESERVATION } from ${JSON.stringify(join(root, "src/utils/rights.js"))};
@@ -221,7 +222,7 @@ writeFileSync(entry, `
   export { newStreamState, readStreamEvent, visibleText, streamContent, streamContentForApi, streamDiagnosis, streamTrace } from ${JSON.stringify(join(root, "src/utils/streamRead.js"))};
   export { guideWithSwap, alreadyRuledOut } from ${JSON.stringify(join(root, "src/utils/stopSwap.js"))};
   export { factCheckCopy } from ${JSON.stringify(join(root, "src/utils/factCheckCopy.js"))};
-  export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn, travelModeKey, modeReachKm, MODE_DAY_KM, preferReachable, preferPassing, overnightMove, describeOvernightMove, spokenDuration, beyondModeRange, BEYOND_DAY_FACTOR, sameMode, howForReader, EATS_THE_DAY_MINUTES } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
+  export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn, travelModeKey, modeReachKm, MODE_DAY_KM, preferReachable, preferPassing, overnightMove, describeOvernightMove, spokenDuration, beyondModeRange, BEYOND_DAY_FACTOR, sameMode, howForReader, EATS_THE_DAY_MINUTES, dayStartsBeforeItCanArrive, OVERNIGHT_START_HOUR } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { LANGUAGES, MONTH_INDEX, PARTY_BARE, PARTY_POSSESSIVE, YES_WORDS, NO_WORDS, alt, LETTER } from ${JSON.stringify(join(root, "src/utils/travellerWords.js"))};
   export { auditRow, auditRows, auditLinks, auditSummary, auditNote, programmeState, ticketDestination, tourDestination, linkPatch, TICKET, TOUR } from ${JSON.stringify(join(root, "src/utils/affiliateAudit.js"))};
   export { problemText, problemList, problemHeading, PROBLEM_NOTE } from ${JSON.stringify(join(root, "src/utils/planProblems.js"))};
@@ -239,7 +240,7 @@ writeFileSync(entry, `
   export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget, placeFromText, candidateFitsTarget, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { checkPlan, planProblemsForPrompt, titlePromises, MAX_DAY_KM, dayCeilingKm } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { isPremium, PAID_PLANS } from ${JSON.stringify(join(root, "src/utils/premium.js"))};
-  export { ADD_IN_QUESTION, ADD_IN_CATS, addInOffers, addInSeed, addInKindOf, addInNear } from ${JSON.stringify(join(root, "src/utils/addIn.js"))};
+  export { addInTitle, ADD_IN_SUB, ADD_IN_CATS, addInOffers, addInSeed, addInKindOf, addInNear } from ${JSON.stringify(join(root, "src/utils/addIn.js"))};
   export { toggleBeen, markMany, isBeen, canBeMarked, beenNote, withoutBeen, excludedBeen, knownBeen, beenRecord, sameEntry, isContextKind, dayVisitRows, BEEN_CAP, BEEN_KINDS } from ${JSON.stringify(join(root, "src/utils/beenThere.js"))};
   export { cleanBeen, mergeBeen, missingBeenColumn } from ${JSON.stringify(join(root, "src/utils/beenSync.js"))};
   export { isOwnSiteFor, urlNames, isKommuneHost, isTownWord, ownershipWords, subjectIsEvent, EVENT_SUBJECT_TYPES, isTourismHost, KOMMUNE_HOSTS } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
@@ -7984,6 +7985,143 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const shutApp = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the gate runs on the built guide", /closedButPlanned\(collectGuideProseFields\(parsed\), stopNames\)/.test(shutApp));
   ok("its findings block the guide like every other plan problem", /planProblems = \[\.\.\.planProblems, \.\.\.shut\]/.test(shutApp));
+
+  // ── AND IT CONTRADICTED ITSELF ABOUT MONEY, ON ONE PAGE ──────────
+  //
+  // Off Oliver's live guide, gemlyxtravel.com/guide/4spg73sj883, 11 Sep 2026.
+  // Day 3's note calls the National Museum "free to enter". WHAT YOU PAY, on
+  // the same page, charges 150 kr for it. NOTHING IN THE APP WAS WRONG: the row
+  // holds a real figure read off a real page on a real date, and the ledger
+  // printed it correctly. The writer wrote a sentence, and no gate reads two
+  // fields at once. See utils/moneyClaims.js.
+  const { freeButPriced, moneyProblems, LODGING_FLOOR_DKK } = M;
+  // Built the way the ledger's own rows are: a __priceSource with a figure on
+  // it is what readPrice trusts and what CostsBlock prints under the name.
+  const pricedRow = (name, price) => ({
+    name,
+    ticketStatus: "available",
+    __priceSource: { price, host: "natmus.dk", at: "2026-09-01T10:00:00.000Z" },
+  });
+  const guideOf = (note, stopName = "National Museum") => ({
+    days: [{ day: 3, stops: [{ name: stopName, note }] }],
+  });
+  const rowsOf = (row) => (n) => (n === row.name ? row : null);
+  const natmus = pricedRow("National Museum", "150 DKK");
+  const freeClaim = freeButPriced(guideOf("Give it two hours. The National Museum is free to enter and the Viking rooms alone are worth the walk."), rowsOf(natmus));
+  ok("a stop the guide calls free while its own costs list charges is caught", freeClaim.length === 1);
+  ok("and the finding names the day, the stop and the figure",
+     /day 3/.test(freeClaim[0]) && /National Museum/.test(freeClaim[0]) && /150 DKK/.test(freeClaim[0]));
+  // THE HALF THAT DECIDES WHETHER THIS SURVIVES A WEEK, same argument as the
+  // closure gate above. Every one of these sentences is a real sentence a guide
+  // writes about a place that charges at the door.
+  is("a sentence that prices it in the same breath is not a contradiction",
+     freeButPriced(guideOf("Entry is free for under-18s and 150 DKK otherwise."), rowsOf(natmus)), []);
+  is("free for children is not a claim the place is free",
+     freeButPriced(guideOf("Children under 18 get in free."), rowsOf(natmus)), []);
+  is("free coffee is not free entry",
+     freeButPriced(guideOf("The cafe does free refills and the cloakroom is free too."), rowsOf(natmus)), []);
+  is("a free thing OUTSIDE the door is not a claim about the door",
+     freeButPriced(guideOf("The courtyard behind it is free to wander at any hour."), rowsOf(natmus)), []);
+  // THE OTHER DIRECTION. A place the ledger prints as Free cannot contradict a
+  // sentence saying free, and this is the case that would have made the gate
+  // fire on the one kind of stop it must never fire on.
+  is("a stop the ledger itself calls free is left alone",
+     freeButPriced(guideOf("Free to enter, and open until six."), rowsOf({ ...natmus, ticketStatus: "free" })), []);
+  is("a stop the app holds no price for at all is left alone",
+     freeButPriced(guideOf("Free to enter, and open until six."), rowsOf({ name: "National Museum" })), []);
+  is("a stop that is not in the database is left alone",
+     freeButPriced(guideOf("Free to enter."), () => null), []);
+  is("a stop with no note has nothing to contradict",
+     freeButPriced({ days: [{ day: 3, stops: [{ name: "National Museum" }] }] }, rowsOf(natmus)), []);
+  // ONE LINE PER STOP. A note that says it twice is one mistake.
+  is("a note that claims it twice is one finding",
+     freeButPriced(guideOf("Free to enter. Really, entry is free."), rowsOf(natmus)).length, 1);
+  // AND THE SECOND REASON, which is quieter and still wrong: the ledger has no
+  // measured figure, and the place's own ticket line names one. Reported
+  // differently because the reader meets it on a different page.
+  const ticketLineOnly = freeButPriced(
+    guideOf("It is free to walk into, which is the surprise of the day.", "Faxe Kalkbrud"),
+    rowsOf({ name: "Faxe Kalkbrud", ticketsGlance: "120 DKK adults" }));
+  ok("a free claim against the place's own ticket line is caught too", ticketLineOnly.length === 1);
+  ok("and it says which of the two it is disagreeing with", /ticket line/.test(ticketLineOnly[0]));
+  ok("while the ledger case names the costs list instead", /costs list/.test(freeClaim[0]));
+  // Danish, because the research is Danish and a note written for a Danish
+  // reader has to be checkable too. Same rule SAYS_FREE carries.
+  ok("a Danish free claim is read",
+     freeButPriced(guideOf("Der er gratis adgang hele året."), rowsOf(natmus)).length === 1);
+
+  // ── A NUMBER WITH NO CURRENCY ON IT IS NOT A PRICE ───────────────
+  //
+  // Day 5 of the same guide: "hostels here run around 20-30 per night". In
+  // kroner that is two pounds. entryPrice.js refuses to READ a bare number as a
+  // price; this refuses to SHIP one.
+  const bare = moneyProblems([{ id: "days.4.stops.0.note", text: "Sleeping is cheap here, hostels run around 20-30 per night." }]);
+  ok("a price with no currency on it is caught", bare.length === 1);
+  ok("and the finding says how far apart the two readings are", /seven and a half/.test(bare[0]));
+  is("the same sentence with a currency is fine",
+     moneyProblems([{ id: "f", text: "Sleeping is cheap here, hostels run around 200-300 DKK per night." }]), []);
+  // THAT ONE ALSO PASSES FOR A WEAKER REASON THAN IT LOOKS, found by the same
+  // mutation run: "200-300 DKK per night" puts the currency BETWEEN the figure
+  // and "per night", so the per-unit pattern never matches it and the currency
+  // guard is never consulted. Removing the guard left it green.
+  //
+  // This is the sentence the guard is actually for — a compound one, where the
+  // second half has a bare figure and the first half already said what the
+  // money is. A reader can finish it, and flagging it would be pedantry.
+  is("a currency anywhere in the sentence settles the figure beside it",
+     moneyProblems([{ id: "f", text: "Entry is 95 DKK and a locker is 20 per person." }]), []);
+  ok("and the same sentence with the currency taken out is read",
+     moneyProblems([{ id: "f", text: "Entry is 95 and a locker is 20 per person." }]).length === 1);
+  // THE SENTENCES THIS MUST NOT TOUCH, and every one of them is in a real
+  // guide. A cost-verb test flags the first two; anchoring on the per-unit
+  // phrase is what keeps them.
+  is("a duration is not a price", moneyProblems([{ id: "f", text: "The tour runs about 90 minutes and costs nothing." }]), []);
+  is("opening hours are not a price", moneyProblems([{ id: "f", text: "It is open 10 to 17 and entry is cheap." }]), []);
+  is("a walk is not a price", moneyProblems([{ id: "f", text: "It is a 20 minute walk and the ticket is cheap." }]), []);
+  // And the per-unit phrase alone is not enough either: the sentence has to be
+  // about money.
+  is("a per-unit figure in a sentence about nothing financial is left alone",
+     moneyProblems([{ id: "f", text: "Plan on 2 museums a day and you will not burn out." }]), []);
+  // THAT ONE PASSES FOR A WEAKER REASON THAN IT LOOKS, which a mutation run
+  // found: "2 museums a day" never reaches the money guard at all, because the
+  // per-unit phrase has to sit immediately after the figure and "museums" is in
+  // the way. Removing the money guard entirely left it green.
+  //
+  // This is the sentence that actually needs it — a real line about a real
+  // ferry, where the figure IS welded to "per day" and nothing about it is a
+  // price. Flagging "the ferry sails 4 per day" as a price with no currency is
+  // the kind of false line that gets a check switched off.
+  is("a timetable is not a price, even with the figure welded to per day",
+     moneyProblems([{ id: "f", text: "The ferry sails 4 per day in summer." }]), []);
+  ok("and the same shape with a money word in it IS read",
+     moneyProblems([{ id: "f", text: "The dorm beds go for 4 per day in summer." }]).length === 1);
+
+  // ── AND A PRICE NOBODY HAS EVER PAID ─────────────────────────────
+  // Day 9: "hotels start around 44 DKK per night".
+  const silly = moneyProblems([{ id: "days.8.stops.0.note", text: "Hotels here start around 44 DKK per night." }]);
+  ok("a bed in Denmark at 44 kroner a night is caught", silly.length === 1);
+  ok("and it says to take the figure out rather than correct it", /rather than correct it/.test(silly[0]));
+  is("a real hostel price is left alone",
+     moneyProblems([{ id: "f", text: "Hostels here start around 250 DKK per night." }]), []);
+  // THE FLOOR IS 100 AND NOT 200 ON PURPOSE: a campsite pitch is about 120, so
+  // a floor set where a hostel bed actually starts would flag an honest
+  // sentence about camping. This file would rather miss a bad figure than print
+  // a bad flag.
+  is("a campsite cabin just above the floor is left alone",
+     moneyProblems([{ id: "f", text: "A cabin at the campsite is 120 kr per night." }]), []);
+  ok("and the floor is the number that decides it", LODGING_FLOOR_DKK === 100);
+  // A figure per night with no bed in the sentence is not a bed. "90 kr a
+  // night" for parking is a real thing to write.
+  is("a cheap per-night figure about something other than a bed is left alone",
+     moneyProblems([{ id: "f", text: "Parking at the harbour is 90 kr per night." }]), []);
+  // Both halves of the file run off the same collection the closure gate reads,
+  // so the build report can ask all three questions off one pass.
+  ok("and it is wired, on the finished guide",
+     /moneyProblems\(collectGuideProseFields\(parsed\)\)/.test(shutApp));
+  ok("as is the free-claim half, which needs the rows as well as the prose",
+     /freeButPriced\(parsed, lookupRealPlace\)/.test(shutApp));
+  ok("and both block the guide like every other plan problem",
+     /planProblems = \[\.\.\.planProblems, \.\.\.money\]/.test(shutApp));
 
   // ── AND THE TWO HONEST SENTENCES SURVIVE ─────────────────────────
   // "The museum takes about an hour" is not a route claim, and a gate that
@@ -29616,7 +29754,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("including the enrichment pass",
      /EVERY PRICE YOU WRITE IS IN DKK[\s\S]{0,400}\$\{langBlock\}/.test(appL));
   ok("and it is handed the same one the writer used, not its own",
-     /enrichGuideDays\(parsed\.days, travelMode, mixedModes, budgetSays, guideLangBlock\)/.test(appL));
+     /enrichGuideDays\(parsed\.days, travelMode, mixedModes, budgetSays, guideLangBlock, bookedNights, bookedName\)/.test(appL));
   // The wrapper that read the browser and nothing else is gone, not merely unused.
   ok("nothing reaches for the navigator-only wrapper any more",
      !/guideLanguageBlock/.test(stripComments(appL)) &&
@@ -30762,7 +30900,27 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
       // ── AND THE OTHER DOOR LANDS IN THE BOX, NOT IN A SEND ──────
       const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
-      ok("the guide asks the question at the foot of a day", /\{ADD_IN_QUESTION\}/.test(gp));
+      // ── AND IT READ AS A SURVEY ABOUT THE GUIDE ───────────
+      //
+      // Oliver, 12 Sep 2026: "I think this reads too much like a 'how is the
+      // guide looking'. Make it absolutely clear that you can add something.
+      // Like on the review."
+      //
+      // "What are you interested in here?" asks about the READER. Every other
+      // door in the product is a verb about the TRIP, and the preview screen he
+      // is comparing it to says "Add attractions".
+      ok("the panel tells them they can add, rather than asking how it looks",
+         /^Add a stop to day 4$/.test(M.addInTitle(4)));
+      ok("and it names the day, which is the half from 10 September",
+         M.addInTitle(4).includes("day 4"));
+      is("a day with no number is still an invitation", M.addInTitle(null), "Add a stop to this day");
+      is("and day zero is never printed", M.addInTitle(0), "Add a stop to this day");
+      ok("nothing in it reads as a question about the guide",
+         !/\?|interested|looking/i.test(M.addInTitle(4) + " " + M.ADD_IN_SUB));
+      ok("the guide puts that title at the foot of a day", /\{addInTitle\(dayNo\)\}/.test(gp));
+      ok("with the line that says Gemlyx will go and look", /\{ADD_IN_SUB\}/.test(gp));
+      ok("and the door at the bottom says what it does, not only where it goes",
+         /Ask Gemlyx to add one to day \{dayNo\}/.test(gp));
       ok("and only about what the day is short of", /addInOffers\(day, \{ kindOf: addInKind \}\)/.test(gp));
       ok("and hands the question over naming the day",
          /navigate\("\/", \{ state: \{ detourAsk: addInSeed\(cat, \{ town, dayNo \}\) \} \}\)/.test(gp));
@@ -30895,8 +31053,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // broken guide put 92 km between two days for a man on a bicycle and then
   // recommended a hotel with easy BUS access to the next stop. A fixture called
   // "everything known" has to include how they get around.
+  // ── AND "BOOKED" ALONE IS NO LONGER EVERYTHING KNOWN ─────────────
+  // Oliver, 12 Sep 2026: "It didn't ask what date I booked it for. It just
+  // assumed it was the first day." A booking is a fixed point and a fixed point
+  // needs a date, so a fixture called "everything known" has to say which
+  // nights, the same way it had to learn to say how they get around in August.
   const full = readBrief({
-    travellerText: HIS_CHAT + "\nWe are into food and design, hotel is booked already, arriving 3 December, and we've got a car",
+    travellerText: HIS_CHAT + "\nWe are into food and design, hotel is booked already for the whole trip, arriving 3 December, and we've got a car",
     today: AUG,
   });
   ok("with everything known it is ready", briefReady(full));
@@ -30913,7 +31076,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("a ticked interest counts", fromForm.known.interests?.source === "intake");
   ok("and the form's dates are precise", fromForm.known.when?.precision === "day");
   is("and the length comes from them", fromForm.known.days?.value, 7);
-  ok("nothing blocking is left", briefReady(fromForm));
+  // ── EXCEPT THE ONE THE FORM HAS NO FIELD FOR ────────────────────
+  // The form can say a hotel is booked and has nowhere to say which nights, so
+  // that is the one question the conversation opens with — which is exactly the
+  // question Oliver found missing on 12 September. Everything else the form
+  // touches is settled without anybody being asked anything.
+  is("the form leaves exactly one question, and it is which nights", fromForm.missing, ["stayWhen"]);
+  ok("and nothing else blocking is left",
+     fromForm.missing.filter(k => k !== "stayWhen").length === 0 && !(fromForm.unanswered || []).length);
+  ok("asked once, it is ready", briefReady(readBrief({ travellerText: "hello", intake: { interest: ["food", "design"], transport: ["🚗 Car"], stayBooked: true, startPoint: "Billund", travelers: "2 adults", arrival: "2026-12-03", departure: "2026-12-09" }, asked: ["stayWhen"], today: AUG })));
   // Every blocking slot has to be readable from somewhere, or the bucket can
   // never fill and the chat asks forever.
   BLOCKING_SLOTS.forEach(k => ok(`the ${k} slot is fillable`, !!fromForm.known[k] || k === "budget"));
@@ -32437,6 +32608,91 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   const SKAGEN = { lat: 57.7211, lon: 10.5836 };
   const NEARBY = { lat: 57.10, lon: 9.95 };
 
+  // ── AND THEN DAY 10 OPENED AT EIGHT, 294 KM AWAY ────────────────
+  //
+  // Off Oliver's live guide, 11 Sep 2026. Day 9 ends at Jutland, 15:00. The
+  // transfer card into Day 10, drawn by describeOvernightMove above, reads
+  // "About 294 km to Copenhagen, 4h 30m by car. That is most of a day of
+  // travelling, so this is the day rather than a transfer inside it." Day 10's
+  // first stop is Paper Island, in Copenhagen, at 08:00.
+  //
+  // Every number in that was already computed and nothing compared the last
+  // two, so one card said the journey would eat the day and the line beneath it
+  // scheduled the day as though it would not.
+  {
+    const { dayStartsBeforeItCanArrive, OVERNIGHT_START_HOUR } = M;
+    // Western Jutland rather than the middle of it: his Day 9 transfer measured
+    // 294 km, and a point in central Jutland is only about 200 in a straight
+    // line, which is under the bar and would have made the unmeasured half of
+    // this block pass for the wrong reason. The suite caught that.
+    const JUTLAND = { lat: 56.09, lon: 8.24 };
+    const CPH = { lat: 55.6761, lon: 12.5683 };
+    const his = overnightMove({ from: JUTLAND, to: CPH, fromName: "Jutland", toName: "Copenhagen", days: 10, mode: "car" });
+    const said = (startsAt, endedAt = "15:00", measuredMinutes = 270) =>
+      dayStartsBeforeItCanArrive({ move: his, measuredMinutes, endedAt, startsAt, dayNo: 10 });
+    ok("his own day 10 is caught", !!said("08:00"));
+    ok("and it names the day and both clocks", /Day 10/.test(said("08:00")) && /08:00/.test(said("08:00")) && /15:00/.test(said("08:00")));
+    // THE PLAINEST FORM OF THE SAME FACT, and the one nobody has to be talked
+    // into: the next day opens EARLIER on the clock than the day before it
+    // finished, with most of a day of travelling in between.
+    ok("it says the day starts earlier than the one it follows", /earlier in the day than the one it follows/.test(said("08:00")));
+    ok("and it says the two ways out", /start this day later, or put the journey on the day before/.test(said("08:00")));
+    // A day that starts late enough is fine. 08:00 + 4h30 is 12:30.
+    is("a day that opens after they could have got there is not a problem", said("13:00"), "");
+    is("and the boundary itself passes", said("12:30"), "");
+    ok("a minute before it does not", !!said("12:29"));
+    // ── THE HALF THAT DECIDES WHETHER IT SURVIVES A WEEK ────────
+    // An ordinary morning hop before the first stop is most multi-town trips,
+    // and a warning on every one of them is a warning nobody reads.
+    is("a ninety minute transfer is an ordinary morning",
+       dayStartsBeforeItCanArrive({ move: his, measuredMinutes: 90, endedAt: "17:00", startsAt: "09:00", dayNo: 3 }), "");
+    is("nor does it object with no journey at all",
+       dayStartsBeforeItCanArrive({ move: null, startsAt: "08:00" }), "");
+    // A stop with no clock is a stop this gate says nothing about, rather than
+    // one it guesses at. Same one-sided discipline as ticketUrlSaysElsewhere:
+    // it can only ever object.
+    is("no clock, no claim", said(""), "");
+    is("and a time in some other shape is not read", said("morning"), "");
+    // 08:75 rather than 25:00, which a mutation run found passing for the wrong
+    // reason: an unchecked 25:00 reads as 1500 minutes, which is LATER than the
+    // earliest arrival and so comes back clean anyway. An impossible MINUTE is
+    // the one that reads as early, and it is the one that would have produced a
+    // confident warning from a number nobody wrote.
+    is("nor is one whose minutes are impossible", said("08:75"), "");
+    is("nor an impossible hour", said("25:00"), "");
+    // ANCHORED AT BOTH ENDS, which a mutation run found nothing testing. A
+    // loose read finds the FIRST time in a string, and the first time in a
+    // string is not always the one the field is about: "opens 07:30, we arrive
+    // 14:00" would be judged as a 07:30 start and warned about, off a number
+    // nobody wrote as an arrival.
+    is("a time inside a sentence is not the field's own time",
+       said("opens 07:30, we arrive 14:00"), "");
+    is("nor is the start of a range", said("08:00-10:00"), "");
+    // And when the pair was never routed, the straight line stands in — the
+    // SAME figure describeOvernightMove would print beside it.
+    ok("an unmeasured journey is still judged, at the mode's own pace",
+       !!dayStartsBeforeItCanArrive({ move: his, measuredMinutes: null, endedAt: "15:00", startsAt: "08:00", dayNo: 10 }));
+    ok("and the hour it assumes they leave is a real one",
+       OVERNIGHT_START_HOUR >= 6 && OVERNIGHT_START_HOUR <= 10);
+    // A night sits between the two days, so in raw hours almost anything fits:
+    // they could leave at four in the morning. That is an alibi rather than a
+    // plan, and a gate built on it would pass exactly this guide.
+    ok("the gate is not built on how many hours a night holds",
+       !!dayStartsBeforeItCanArrive({ move: his, measuredMinutes: 270, endedAt: "15:00", startsAt: "07:00", dayNo: 10 }));
+
+    // And it is wired, on the finished guide, beside the other two checks that
+    // need to read two fields at once.
+    const contApp = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the gate walks the transfers between days", /dayStartsBeforeItCanArrive\(\{/.test(contApp));
+    ok("using the measured figure the card beside it prints",
+       /measuredMinutes: measured\?\.durationMinutes/.test(contApp));
+    ok("and the clocks of the two stops it sits between",
+       /endedAt: last\.arrivalTime/.test(contApp) && /startsAt: first\.arrivalTime/.test(contApp));
+    ok("two days in the same town are not a journey", /fromT\.toLowerCase\(\) === toT\.toLowerCase\(\)\) continue;/.test(contApp));
+    ok("and its findings block the guide like every other plan problem",
+       /planProblems = \[\.\.\.planProblems, \.\.\.continuity\]/.test(contApp));
+  }
+
   // ── HIS TRIP, MEASURED ──────────────────────────────────────────
   const move = overnightMove({ from: AALBORG, to: SKAGEN, fromName: "Aalborg", toName: "Skagen", days: 2, mode: "bike" });
   ok("the journey between two days exists at all", !!move);
@@ -32993,6 +33249,29 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("a booked hotel is", stayOf("we have booked a hotel"), "booked");
   is("and an apartment", stayOf("we booked an apartment"), "booked");
   is("and staying at a named place", stayOf("staying at the Radisson"), "booked");
+  // ── AND THE SENTENCE THAT STARTED THE WHOLE 12 SEPTEMBER NIGHT ──
+  //
+  // Oliver's opening message: "We have booked a stay at \" 25hours Hotel Paper
+  // Island\"". Not one branch matched it. "stay" was not in SLEEPS on its own,
+  // and the name sat behind a quote mark, so even the four-word-name branch
+  // added on 26 August could not reach it. The most structural fact in the
+  // brief, in the plainest possible words, read as nothing — and every failure
+  // he reported that night followed from it.
+  is("the sentence he actually wrote is a booking",
+     stayOf('We have booked a stay at " 25hours Hotel Paper Island"'), "booked");
+  is("and without the quotes he happened to type",
+     stayOf("We have booked a stay at 25hours Hotel Paper Island"), "booked");
+  is("a count of nights is a booking too", stayOf("we booked 3 nights"), "booked");
+  // AND THE FALSE POSITIVE THAT WOULD COST THE MOST. A completed booking verb
+  // is required, never a bare "book": a sentence about an intention read as a
+  // booking anchors the whole plan on a hotel nobody has.
+  is("wanting to book somewhere is not having booked it",
+     stayOf("I want to book somewhere like the Admiral Hotel"), undefined);
+  is("nor is asking about one", stayOf("should we book the Admiral Hotel?"), undefined);
+  // And the not-booked reader still wins, which is the ordering this pair of
+  // patterns has always needed.
+  is("cancelling still reads as not booked",
+     stayOf("we cancelled the lodge, nothing booked now"), "not booked");
   is("not booked still reads as not booked", stayOf("we haven't booked anything yet"), "not booked");
 
   // ── 4. A NEGATED MODE IS NOT A MODE ─────────────────────────────
@@ -33073,6 +33352,218 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("while a real spa is", !!interestsOf("we want a spa day"));
   ok("and eating is still food", !!interestsOf("we love eating out"));
   ok("and castles still count in the plural", !!interestsOf("we want to see castles"));
+
+  // ── AND A HOTEL NAME IS NOT A TRIP THEME ─────────────────
+  //
+  // Oliver, 12 Sep 2026: "it also went bananas with 'islands'." He had said:
+  //
+  //   We have booked a stay at " 25hours Hotel Paper Island"
+  //
+  // "island" is in INTEREST_WORDS and matched as a whole word, so the blocking
+  // interests slot filled with "island", the chat replied "Given you mentioned
+  // wanting an island-focused trip", the preview picked Ærøskøbing, and the
+  // finished guide was titled "Copenhagen, Kids & the Islands: Ten Days Across
+  // Zealand". Ten days rebuilt around the name of his hotel.
+  //
+  // The two tests directly above are the SAME class fixed on 18 Aug, and they
+  // could not have caught this: "spa" inside "Spain" is a prefix, and this is a
+  // whole word in a sentence that is simply not about it.
+  is("his own hotel does not make the trip about islands",
+     interestsOf('We have booked a stay at " 25hours Hotel Paper Island"'), undefined);
+  is("nor without the quotes he happened to type",
+     interestsOf("We have booked a stay at 25hours Hotel Paper Island"), undefined);
+  is("nor when the lodging word comes last",
+     interestsOf("staying at the Island Hotel"), undefined);
+  // The same shape with a different interest word inside it, so this is a rule
+  // and not a patch for one hotel.
+  is("a hotel called Bar Central is not a night out",
+     interestsOf("we booked Hotel Bar Central"), undefined);
+  is("and a Museum Hotel is not a history trip",
+     interestsOf("our booking is at the Museum Hotel"), undefined);
+  // ── AND THE REAL INTEREST STILL READS ──────────────────
+  // A gate that refused every one of these would be worse than the bug: it would
+  // empty a blocking slot the whole conversation is built on.
+  ok("somebody who wants islands still gets islands", !!interestsOf("I want to see the islands"));
+  ok("even in the same breath as their hotel",
+     !!interestsOf('We booked " Hotel Paper Island" but we really want islands and hiking'));
+  ok("a lowercase hotel word does not eat the sentence",
+     !!interestsOf("we are staying in a hotel and we love food"));
+  ok("and a capitalised town is not a name to strip",
+     !!interestsOf("We are in Copenhagen and want history"));
+
+  // ── AND A BOOKING WITH NO DATES IS NOT A FIXED POINT ─────
+  //
+  // Oliver, 12 Sep 2026, on the guide built from that same sentence: "It didn't
+  // ask what date I booked it for. It just assumed it was the first day."
+  //
+  // The stay slot held the word "booked" and nothing else, which is everything
+  // it has ever held. The guide checked him in on Day 1 at 16:00, wrote a
+  // different place to sleep into Days 2 through 9, and WHAT YOU PAY told him he
+  // had "10 nights in the plan with no bed booked yet".
+  const { namedStayIn, readStayNights, bookedDayNumbers } = M;
+  is("the hotel he named is read back out",
+     namedStayIn('We have booked a stay at " 25hours Hotel Paper Island"'), "25hours Hotel Paper Island");
+  is("and without the quotes he happened to type",
+     namedStayIn("We have booked a stay at 25hours Hotel Paper Island"), "25hours Hotel Paper Island");
+  is("a quoted thing that is not somewhere to sleep is not a hotel",
+     namedStayIn('we want to see "Den Lille Havfrue"'), "");
+  is("and a sentence with no name in it has none", namedStayIn("we booked a hotel"), "");
+  // withoutNamedStay and namedStayIn are one definition read in two directions,
+  // so what one removes is what the other returns.
+  ok("the name the interests reader throws away is the name this one keeps",
+     !M.readBrief({ travellerText: 'We booked " Hotel Paper Island"' }).known.interests
+     && namedStayIn('We booked " Hotel Paper Island"') === "Hotel Paper Island");
+
+  // WHICH NIGHTS. Three shapes and no fourth, because a reader that guesses when
+  // it is unsure is the bug being fixed here wearing a different hat.
+  const nights = (t, opts) => readStayNights(t, opts);
+  is("the whole trip is an answer",
+     nights("We booked the hotel for the whole trip").value, "the whole trip");
+  ok("and it is carried as all rather than as a list",
+     nights("We booked the hotel for the whole trip").all === true);
+  is("the first few nights is an answer",
+     nights("We have a hotel booked for the first two nights").value, "the first 2 nights");
+  is("and it names the days", nights("We have a hotel booked for the first two nights").nights, [1, 2]);
+  is("one night reads in the singular",
+     nights("the hotel is booked for the first night").value, "the first night");
+  // The last N is carried as a COUNT, because nothing at this point knows how
+  // long the trip is and the trip can still get longer.
+  ok("the last few nights is counted back from an end nobody knows yet",
+     nights("we booked a room for the last two nights").fromEnd === 2
+     && nights("we booked a room for the last two nights").nights === null);
+  // AND THE ONE THAT IS DELIBERATELY NOT READ. "For 3 nights" says how many and
+  // not which, and reading it as the first three is exactly what Gemlyx did.
+  is("a count with no position is not an answer",
+     nights("we booked a hotel for 3 nights"), null);
+  // ── AND THE BARE FORMS ARE ONLY EVER AN ANSWER ─────────────────
+  //
+  // "The first two" is an answer when it follows "which nights does that
+  // booking cover?" and is about anything at all in open prose. A mutation run
+  // found nothing testing that, and the sentence below is what it costs: a
+  // booking sentence that happens to say "the first two days", read as two
+  // booked nights, and the plan built round it.
+  is("the first two of something else in a booking sentence is not two nights",
+     nights("we booked the hotel and the first two days are already planned"), null);
+  is("nor the last two", nights("we booked a room, the last two days are free"), null);
+  ok("while the same words answering the question are read",
+     nights("the first two", { direct: true })?.nights?.length === 2);
+  // THE GUARD THAT KEEPS THIS ALIVE. Every word WHOLE_TRIP looks for appears in
+  // ordinary sentences that are not about a booking at all, and filling a
+  // blocking slot off one of those is this file's oldest bug.
+  is("a trip that is about food is not a hotel that covers the trip",
+     nights("The whole trip is about food"), null);
+  is("nor is a whole day at a museum",
+     nights("We want the entire time in Copenhagen"), null);
+  // The dates themselves, through dateRangeIn — the same reader the `when` slot
+  // uses, so "the 14th till 17th" means one thing in both questions.
+  const ARRIVE = new Date(2026, 8, 14);
+  is("dates are turned into day numbers against the arrival",
+     nights("the hotel is booked from the 14th till the 16th", { arrival: ARRIVE, today: new Date(2026, 8, 1) }).nights, [1, 2, 3]);
+
+  // ── AND A PERSON SAYS WHICH NIGHTS BY NAMING THE DAYS ────
+  //
+  // From the intake brief this suite has run since 10 September: "We've already
+  // booked Hotel Phønix in Aalborg for the Saturday and Sunday nights, so those
+  // two are fixed." That is somebody telling you exactly which nights, in the
+  // way people actually tell you, and it is worth nothing to a plan until it is
+  // day numbers. The trip arrives Thursday 8 October, so Saturday is day 3.
+  const THU = new Date(2026, 9, 8);
+  is("named nights become day numbers",
+     nights("We've already booked Hotel Phønix in Aalborg for the Saturday and Sunday nights, so those two are fixed.", { arrival: THU }).nights, [3, 4]);
+  is("and the finding says them back in the traveller's own words",
+     nights("booked for the Saturday and Sunday nights", { arrival: THU }).value, "the Saturday and Sunday nights");
+  is("a range of named nights fills in the middle",
+     nights("we booked a room for the Friday to Sunday nights", { arrival: THU }).nights, [2, 3, 4]);
+  // THE GUARD THAT KEEPS THIS ALIVE. One sentence can hold a booking and a
+  // flight, and reading the arrival as a booked night is worse than reading
+  // nothing. The weekday has to be wearing the word "night".
+  is("a day they land on is not a night they booked",
+     nights("we booked the hotel, we land Thursday", { arrival: THU }), null);
+  is("and with no arrival there is nothing to count from",
+     nights("booked for the Saturday and Sunday nights"), null);
+  // Last wins here too. A mutation run found the weekday half of the reader
+  // still returning the first hit while the span half had been fixed, which is
+  // this repo's signature bug in miniature: one rule, two sites, one of them
+  // changed.
+  is("a corrected set of named nights beats the one it corrects",
+     nights("We booked it for the Friday night. Actually it is the Saturday and Sunday nights.", { arrival: THU }).nights, [3, 4]);
+
+  // AND THE DAY NUMBERS, once the trip has a length.
+  is("the whole trip becomes every day", bookedDayNumbers({ all: true }, 4), [1, 2, 3, 4]);
+  is("the last two become the last two", bookedDayNumbers({ fromEnd: 2 }, 10), [9, 10]);
+  is("a booking longer than the trip is clamped to the trip", bookedDayNumbers({ fromEnd: 9 }, 3), [1, 2, 3]);
+  is("a night beyond the end of the plan is dropped", bookedDayNumbers({ nights: [1, 2, 9] }, 3), [1, 2]);
+  is("and no trip length means no days", bookedDayNumbers({ all: true }, 0), []);
+
+  // ── AND THE SLOT ONLY EXISTS WHEN THERE IS A BOOKING ─────
+  //
+  // Nobody is asked which nights their booking covers when they have not booked
+  // anything. `needs` is what makes a slot conditional, and every slot without
+  // one applies to every trip exactly as before.
+  const askedOf = (text) => M.nextAsks(M.readBrief({ travellerText: text })).map(s => s.key);
+  ok("a traveller with no booking is never asked which nights it covers",
+     !askedOf("flying into Copenhagen for 5 days in October with my wife, we like food, we have a car, nothing booked").includes("stayWhen"));
+  ok("and one who has booked is",
+     M.readBrief({ travellerText: 'flying into Copenhagen on 14 September for 5 days with my wife, we like food, we have a car, we booked " Hotel Paper Island"' }).missing.includes("stayWhen"));
+  ok("answered in the same breath, it is not asked at all",
+     !M.readBrief({ travellerText: 'flying into Copenhagen on 14 September for 5 days with my wife, we like food, we have a car, we booked " Hotel Paper Island" for the whole trip' }).missing.includes("stayWhen"));
+  // A bare answer to the question is an answer. "The whole trip" carries no
+  // booking word and no place to sleep, and is an answer because of what was
+  // asked in front of it.
+  const bare = M.readBrief({
+    travellerTurns: ["we booked a hotel", "just the first two"],
+    travellerText: "we booked a hotel\njust the first two",
+    answering: [null, ["stayWhen"]],
+  });
+  is("a bare answer to the nights question is read", bare.known.stayWhen?.nights, [1, 2]);
+  // And it fills a hole rather than overruling a sentence, like every other
+  // direct answer in this file.
+  const both = M.readBrief({
+    travellerTurns: ['we booked " Hotel Paper Island" for the whole trip', "the first two"],
+    travellerText: 'we booked " Hotel Paper Island" for the whole trip\nthe first two',
+    answering: [null, ["stayWhen"]],
+  });
+  is("a direct answer never overrules what the sentence already said", both.known.stayWhen?.value, "the whole trip");
+  // But a LATER direct answer beats an earlier one, which is directAnswers' own
+  // rule and the one that matters most: a correction is the thing a traveller
+  // needs to land. "Actually, just the first two" has to win.
+  // Neither of these two answers is readable as prose — "the first two" has no
+  // "nights" in it and is only an answer because of the question in front of it
+  // — so this exercises the direct pass and nothing else.
+  const corrected = M.readBrief({
+    travellerTurns: ["we booked a hotel", "the first two", "make it the first three"],
+    travellerText: "we booked a hotel\nthe first two\nmake it the first three",
+    answering: [null, ["stayWhen"], ["stayWhen"]],
+  });
+  is("and a correction beats the answer before it", corrected.known.stayWhen?.nights, [1, 2, 3]);
+  // The same rule in the sentence reader, which readDays learned in August: a
+  // reader that returns the FIRST hit answers with the sentence the traveller
+  // has just corrected.
+  is("a corrected sentence beats the one it corrects",
+     nights("We booked the hotel for the whole trip. Actually we only booked the first two nights.").nights, [1, 2]);
+  is("and the uncorrected one still reads",
+     nights("We booked the hotel for the whole trip.").value, "the whole trip");
+  // Asked once and not answered stops blocking, the same as every other slot —
+  // a question the traveller ignores must not become a door they cannot pass.
+  ok("asked and unanswered, it stops blocking",
+     M.readBrief({ travellerText: 'flying into Copenhagen on 14 September for 5 days with my wife, we like food, we have a car, we booked " Hotel Paper Island"', asked: ["stayWhen"] }).ready);
+
+  // ── AND ALL OF IT REACHES THE GUIDE ──────────────────────
+  // The brief has held "whether a hotel is booked" since 17 August and nothing
+  // downstream of the chat ever read it, which is why eight days of that guide
+  // recommended somewhere else to sleep.
+  const stayApp = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the writer is told about the booking", /\$\{bookedStayBlock\}/.test(stayApp));
+  ok("read off the traveller's own turns, like the day count and the arrival date",
+     /readBrief\(\{ travellerText: saidByTravellerForGuide, today: nowForDates \}\)/.test(stayApp));
+  ok("and the per-day accommodation call is told which nights are already slept in",
+     /THIS NIGHT IS ALREADY BOOKED/.test(stayApp));
+  ok("which is the call that has to return nothing rather than recommend",
+     /enrichGuideDays\(parsed\.days, travelMode, mixedModes, budgetSays, guideLangBlock, bookedNights, bookedName\)/.test(stayApp));
+  // AND THE HALF THAT IS THE WHOLE POINT: told nothing, it must say so rather
+  // than put a check-in on day 1.
+  ok("a booking with no dates makes the writer say so instead of deciding",
+     /NOBODY HAS ASKED WHICH NIGHTS/.test(stayApp) && /DO NOT DECIDE/.test(stayApp));
 
   // ── 12. THE NUMBER NAMED AFTER THE INCIDENT REPORTED ZERO FOR IT ─
   // The first version judged every ready-claim against the FINAL brief, so a marker
@@ -36374,6 +36865,43 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("X instead of Y", isRejectedPlace("Hive instead of Old Irish Pub.", "Old Irish Pub"));
   ok("a verdict landing just after the name", isRejectedPlace("Old Irish Pub is a tourist trap.", "Old Irish Pub"));
   ok("and the one he actually got", isRejectedPlace("clear of Old Irish Pub, that's stag-do territory, not what you want", "Old Irish Pub"));
+
+  // ── AND LOSING A COMPARISON IS A REFUSAL ────────────────────────
+  //
+  // Oliver, 12 Sep 2026, on a reply with a photograph of Tivoli under it: "it
+  // shows that it wants me to go to the museum, but puts in Tivoli at the
+  // chat." The card did not merely fail to help. It recommended, with a
+  // picture, the one place the sentence had just told him to skip.
+  //
+  // His reply, exactly as it shipped. Note how far "better" sits from the name:
+  // twenty-six characters of sentence and then "than standing in a". REJECT_BEFORE
+  // ends in `$` and looks back 44 characters, so it could never see the pair,
+  // and widening the window would not have helped because the distance between
+  // a comparative and its loser is unbounded.
+  {
+    const HIS = "That's a proper crew. The National Museum has a Children's Museum tucked inside where kids can sail a small Viking ship, poke around a mock bazaar, and cook in a mock medieval kitchen, better for a group of kids than standing in a Tivoli queue on day one.";
+    ok("the reply that put a Tivoli photo under a museum recommendation", isRejectedPlace(HIS, "Tivoli"));
+    ok("and the place it actually recommends is not turned down", !isRejectedPlace(HIS, "National Museum"));
+  }
+  ok("X is nicer than Y", isRejectedPlace("The museum is nicer than Tivoli.", "Tivoli"));
+  ok("X beats Y", isRejectedPlace("Nyhavn beats Tivoli for a first evening.", "Tivoli"));
+  ok("more interesting than Y", isRejectedPlace("Faxe Kalkbrud is more interesting than Tivoli for kids.", "Tivoli"));
+  // ── AND ONLY IN ONE DIRECTION ───────────────────────────────────
+  // After "than" is the loser. A comparative that comes AFTER the name is the
+  // name WINNING, and reading it as a refusal would delete the recommendation
+  // it is part of.
+  ok("a place that wins its comparison keeps its card",
+     !isRejectedPlace("Tivoli is better than most parks in Europe.", "Tivoli"));
+  ok("and a comparative in a later clause does not reach back",
+     !isRejectedPlace("Tivoli, and the museum is better than nothing.", "Tivoli"));
+  // A SENTENCE, not a window: the comparative may be any distance away inside
+  // the sentence and no distance at all outside it.
+  ok("a comparative in the previous sentence does not reach",
+     !isRejectedPlace("The museum is better than I expected. Tivoli is open late.", "Tivoli"));
+  // "more than" is a quantity, not a verdict, and it is the one phrase that
+  // would otherwise make every distance into a rejection.
+  ok("more than is a measurement and not a comparison",
+     !isRejectedPlace("It is more than a ten minute walk from Tivoli.", "Tivoli"));
 
   // ── AND IT MUST NOT SWING THE OTHER WAY ─────────────────────────
   ok("a plain recommendation is untouched", !isRejectedPlace("Hive in Indre By is the better fit.", "Hive"));
@@ -46530,6 +47058,86 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is("no finder, no pins", mapPlaces({ messages: trip }), { pins: [], dropped: 0 });
     is("no resolver, no pins", mapPlaces({ messages: trip, placesFor: named }), { pins: [], dropped: 0 });
 
+    // ── AND THE ATTRACTIONS IT WAS NAMING AND NOT SHOWING ──────────
+    //
+    // Oliver, 12 Sep 2026: "Attractions? It's naming alot of attractions, but
+    // not showing them on the map.. that has to be done." Asked when, he chose
+    // "Only when zoomed in", which is the half that keeps his 8 September rule
+    // alive: "we only need to have the towns popping up on the map" was written
+    // about a map of DENMARK, where a museum is a dot inside a town already on
+    // the screen. It stopped being right the night the map learned to fly down.
+    const { SPOT_PIN_ZOOM, isSpotPin, spotsShowAt } = M;
+    ok("a town is drawn at every zoom", !isSpotPin({ place: { _src: "town" } }));
+    ok("an attraction is not", isSpotPin({ place: { _src: "free" } }));
+    ok("and so is anything else the map is handed", isSpotPin({ place: {} }) && isSpotPin(null));
+    ok("nothing small is drawn on a map of the country", !spotsShowAt(6) && !spotsShowAt(9));
+    ok("nor on one framing two towns together", !spotsShowAt(10));
+    ok("and everything is drawn once it has settled on one place", spotsShowAt(12) && spotsShowAt(14));
+    ok("a missing zoom draws nothing rather than everything", !spotsShowAt(null) && !spotsShowAt(undefined));
+    // THE NUMBER SITS BETWEEN THE TWO IT HAS TO SIT BETWEEN, and both of those
+    // live in ChatMiniMap. Read out of the source rather than restated here,
+    // because a copy of either number is a copy that can go stale.
+    {
+      const mini = readFileSync(join(root, "src/components/ChatMiniMap.jsx"), "utf8");
+      const focus = Number(/const FOCUS_ZOOM = (\d+)/.exec(mini)?.[1]);
+      const cluster = Number(/CLUSTER_ZOOM = (\d+)/.exec(mini)?.[1]);
+      ok("both zooms it sits between were found", Number.isFinite(focus) && Number.isFinite(cluster));
+      ok("a map comparing two towns stays a map of two towns", SPOT_PIN_ZOOM > cluster);
+      ok("and a map that has flown to one place shows what is in it", SPOT_PIN_ZOOM <= focus);
+      // The layer, not a filter on the pin list: the markers, their labels,
+      // their cards and their hover bindings are built once per pin change, and
+      // rebuilding that set on a zoom tick would rebuild the card under the
+      // reader's cursor.
+      ok("the attractions live on their own layer", /spotLayerRef/.test(mini));
+      ok("which is not on the map when it opens on the country",
+         /spotLayerRef\.current = L\.layerGroup\(\);/.test(mini) && !/spotLayerRef\.current = L\.layerGroup\(\)\.addTo/.test(mini));
+      ok("and a pin goes to the layer its kind belongs on",
+         /addTo\(isSpotPin\(p\) \? spotLayer : layer\)/.test(mini));
+      ok("the zoom decides which layers are on", /spotsShowAt\(map\.getZoom\(\)\)/.test(mini));
+      // BOTH DIRECTIONS. A mutation run found nothing testing the second half:
+      // a layer that goes on and never comes off leaves every attraction pinned
+      // on the map of Denmark, which is the 8 September complaint back again.
+      ok("and it comes off again when the map pulls back",
+         /if \(on\) spotLayer\.addTo\(map\); else map\.removeLayer\(spotLayer\);/.test(mini));
+      ok("and it is asked once on landing as well as on every zoom",
+         /map\.on\("zoomend", spots\);\n\s*spots\(\);/.test(mini));
+      ok("and taken off again when the map is torn down", /map\.off\("zoomend", spots\)/.test(mini));
+    }
+    // ── TWO WALKS, BECAUSE ONE POOL WOULD EAT THE TOWNS ────────────
+    //
+    // mapPlaces drops the OLDEST over the cap. Five attractions named in the
+    // last reply would therefore push out the town they are flying into, which
+    // is the one pin the map cannot do without. Each kind gets its own budget.
+    {
+      const T = { name: "Aarhus", lat: 56.15, lon: 10.2, _src: "town" };
+      const A = ["Aros", "Den Gamle By", "Moesgaard"].map((name, i) => ({ name, lat: 56.1 + i / 100, lon: 10.2, _src: "free" }));
+      const both = [T, ...A];
+      const msgs = [{ role: "assistant", text: "Aarhus" }, { role: "assistant", text: "Aros Den Gamle By Moesgaard" }];
+      const find = (pool) => (text) => pool.filter(p => text.includes(p.name));
+      const at = (p) => ({ lat: p.lat, lon: p.lon });
+      const mixed = mapPlaces({ messages: msgs, placesFor: find(both), coordsFor: at, cap: 3 });
+      ok("one pool at a tight cap loses the town",
+         !mixed.pins.some(p => p.place.name === "Aarhus"));
+      const towns = mapPlaces({ messages: msgs, placesFor: find([T]), coordsFor: at, cap: 3 });
+      const spots = mapPlaces({ messages: msgs, placesFor: find(A), coordsFor: at, cap: 3 });
+      const split = [...towns.pins, ...spots.pins];
+      ok("two walks keep it", split.some(p => p.place.name === "Aarhus"));
+      is("and still carry every attraction", split.filter(p => isSpotPin(p)).length, 3);
+      // Towns first, so a shared coordinate draws the town under the attraction
+      // and the label layout gives the town the pick of the sides.
+      is("with the town ahead of them", split[0].place.name, "Aarhus");
+    }
+    // And it is wired, on both halves.
+    {
+      const appS = readFileSync(join(root, "src/App.jsx"), "utf8");
+      ok("the chat map walks the attractions as well as the towns",
+         /const spotPool = pools\.filter\(p => p\?\._src === "free"\)/.test(appS));
+      ok("as two walks rather than one pool", /const onTowns = walk\(townPool\);\n\s*const onSpots = walk\(spotPool\);/.test(appS));
+      ok("merged with the towns first", /pins: \[\.\.\.onTowns\.pins, \.\.\.onSpots\.pins\]/.test(appS));
+      ok("and what was left off is still counted honestly",
+         /dropped: onTowns\.dropped \+ onSpots\.dropped/.test(appS));
+    }
+
     // ── THE CARD RULE THAT MUST NOT LEAK ONTO THE MAP ──────────────
     //
     // Every rule in placesNamedIn was written for a CARD. Two of them are
@@ -46753,7 +47361,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // INSIDE the sentences. That is the feature: the map moves on the word where
 // the subject changes, not at the end of the reply.
 {
-  const { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE } = M;
+  const { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE, mapPlaces } = M;
   const REPLY = "Arh, [[MAP_IN:Copenhagen]] Copenhagen has a lot to offer. Interesting! [[MAP_OUT]] For your taste I can recommend [[MAP_IN:Aarhus]] Aarhus, because it is quieter.";
   const r = readMapBeats(REPLY);
 
@@ -46802,10 +47410,32 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── A BEAT WITH NOWHERE TO GO DOES NOTHING ────────────────────────
   // beatTarget can only ever decline. Flying to a guess would put the map
   // confidently on the wrong town, which is worse than leaving it where it was.
-  const pins = [{ name: "Copenhagen", lat: 55.68, lon: 12.57 }, { name: "Aarhus", lat: 56.15, lon: 10.2 }];
+  // ── PINS BUILT BY mapPlaces, NEVER WRITTEN OUT BY HAND ────────────
+  //
+  // The first version of this test wrote `{ name, lat, lon }`, which is not
+  // what a pin is. A pin is `{ key, place, lat, lon, latest }` with the name
+  // inside `place`, so beatTarget read a field that does not exist, every zoom
+  // returned null, and the feature shipped doing nothing. The test agreed with
+  // the code and both disagreed with the app, which is the one failure a
+  // mutation run cannot see.
+  //
+  // So the pins come out of the real function. If mapPlaces ever changes shape,
+  // this fails here rather than silently in a chat.
+  const pool = [
+    { name: "Copenhagen", _src: "town", __lat: 55.68, __lon: 12.57 },
+    { name: "Aarhus", _src: "town", __lat: 56.15, __lon: 10.2 },
+  ];
+  const pins = mapPlaces({
+    messages: [{ role: "assistant", text: "Copenhagen and Aarhus are both worth it." }],
+    placesFor: (t) => pool.filter(p => t.toLowerCase().includes(p.name.toLowerCase())),
+    coordsFor: (p) => ({ lat: p.__lat, lon: p.__lon }),
+  }).pins;
+  is("mapPlaces really produced two pins", pins.length, 2);
+  ok("and a pin carries its name where the app puts it", !!pins[0].place?.name && pins[0].name === undefined);
   is("a pinned place resolves to its own coordinate", beatTarget({ kind: "in", place: "Copenhagen" }, pins)?.lat, 55.68);
+  is("and comes back with the name spelled as the pin spells it", beatTarget({ kind: "in", place: "copenhagen" }, pins)?.name, "Copenhagen");
   is("a place with no pin moves nothing", beatTarget({ kind: "in", place: "Skagen" }, pins), null);
-  is("a pin with no coordinate moves nothing", beatTarget({ kind: "in", place: "X" }, [{ name: "X" }]), null);
+  is("a pin with no coordinate moves nothing", beatTarget({ kind: "in", place: "X" }, [{ key: "x", place: { name: "X" } }]), null);
   is("and out needs no pin at all", beatTarget({ kind: "out" }, [])?.kind, "out");
 
   // ── WHAT A HALF-WRITTEN MARKER DOES ───────────────────────────────
@@ -46844,25 +47474,34 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the markers are read off the final text, not the raw one",
      /const readable = m\.role === "assistant" \? stripMarkdown\(stripReadyMarker\(m\.text\)\) : m\.text;\s*\n\s*const withBeats = m\.role === "assistant" \? readMapBeats\(readable\) : null;/.test(appR));
 }
-  ok("fed by mapPlaces and not by the card's reading", /const onMap = mapPlaces\(\{[\s\S]{0,400}?coordsFor: placeCoords,/.test(appR));
+  ok("fed by mapPlaces and not by the card's reading", /const walk = \(pool\) => mapPlaces\(\{[\s\S]{0,400}?coordsFor: placeCoords,/.test(appR));
   // placeCoords, not a fresh `__lat ?? lat` read. Six copies of that question
   // have been found in this codebase and five of them were wrong.
   is("and nothing in the map component resolves a coordinate itself",
      (chatCode.match(/__lat|__lon/g) || []).length, 0);
-  ok("the map's pins drop the card's photo rule", /placesFor: \(text\) => placesNamedIn\(clean\(text\), townPool, \{ needsPhoto: false/.test(appR));
-  // ── AND THE MAP PINS TOWNS ONLY ─────────────────────────────────
+  ok("the map's pins drop the card's photo rule", /placesFor: \(text\) => placesNamedIn\(clean\(text\), pool, \{ needsPhoto: false/.test(appR));
+  // ── AND THE MAP PINS TOWNS, AND WHAT IS INSIDE THEM ─────────────
   // Oliver, 8 Sep 2026: "we only need to have the towns popping up on the map.
   // No need to have it popping up two places." A town is the unit a person
   // plans a trip in; a bar pinned at country scale is a dot on a town it is
   // already inside.
   //
-  // Filtered on the POOL, so the cap counts towns rather than being spent on
-  // rows that are about to be dropped, and so the unpin reader is asked about
-  // the same set the pin reader is.
-  ok("the map is fed towns and nothing else",
+  // AND 12 SEPTEMBER: "Attractions? It's naming alot of attractions, but not
+  // showing them on the map.. that has to be done." Both are right, about
+  // different maps: his first rule was written when this was a map of Denmark,
+  // and the map has since learned to fly down to one place. So the attractions
+  // are pinned and drawn only close up — "Only when zoomed in", his words —
+  // and the country view is exactly what it was. See SPOT_PIN_ZOOM.
+  //
+  // Filtered on the POOL, so each kind's cap counts its own rows rather than
+  // being spent on ones that are about to be dropped, and so the unpin reader
+  // is asked about the same set the pin reader is.
+  ok("the map is fed towns",
      /const townPool = pools\.filter\(p => p\?\._src === "town"\);/.test(appR));
+  ok("and the attractions he was being told about",
+     /const spotPool = pools\.filter\(p => p\?\._src === "free"\);/.test(appR));
   ok("and the unpin reader is asked about the same set",
-     /rejectsFor: \(text, m\) => rejectedIn\(clean\(text\), townPool, \{ own: m\?\.role === "user" \}\)/.test(appR));
+     /rejectsFor: \(text, m\) => rejectedIn\(clean\(text\), pool, \{ own: m\?\.role === "user" \}\)/.test(appR));
   // The CARD still sees everything: a restaurant or a bar is exactly what a
   // card is for, and it is the map that cannot say anything useful about one.
   // Two assertions here were the same string twice, which is a test that can
@@ -47160,7 +47799,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the map asks whether it is on screen at all", /min-width: \$\{RAIL_BREAKPOINT_PX\}px/.test(chatCode));
   // The same constant the CSS uses, so the query and the rule cannot drift.
   ok("and it uses the CSS's own breakpoint rather than a number",
-     chatCode.includes('import { POPUP_CLASS, RAIL_BREAKPOINT_PX, LABEL_CLASS, labelSides } from "../utils/chatRail"'));
+     /import \{[^}]*\bRAIL_BREAKPOINT_PX\b[^}]*\} from "\.\.\/utils\/chatRail"/.test(chatCode));
   // Subscribed, because windows get resized and tablets get rotated.
   ok("and it listens for the width changing", /mq\.addEventListener\("change", onChange\)/.test(chatCode));
   ok("and stops listening when it goes", /mq\.removeEventListener\("change", onChange\)/.test(chatCode));
@@ -47274,22 +47913,36 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("reduced motion is honoured", /prefers-reduced-motion: reduce/.test(chatCode));
   ok("and it lands in the same place without animating",
      /if \(still\) map\.fitBounds\(bounds, \{ maxZoom: closest, animate: false \}\);/.test(chatCode));
-  // ── THE CARD OPENS WHEN IT LANDS, NOT BEFORE ───────────────────
-  // Opening it first would drag the card across the screen for two seconds and
-  // open it on the wrong side, because sideFor measures where the pins are at
-  // the moment it runs.
-  ok("the card waits for the flight to finish", /map\.once\("moveend", landed\)/.test(chatCode));
-  ok("and opens through the same handler a hover uses", /marker\.fire\("mouseover"\)/.test(chatCode));
-  // ── AND IT IS THE NEWEST CARD, NOT THE NEWEST PIN ──────────────
-  // Found in the browser: a third pin arrived, nothing popped up, and the card
-  // already open closed itself. The newest place had no photograph, so no card
-  // was ever bound to it, and a pin with no card takes the open one down by
-  // design. A reply naming somewhere with no picture is not a reason to show
-  // nothing.
-  ok("only pins that have a card are candidates",
-     /const carded = list\.filter\(p => markersRef\.current\.get\(p\.key\)\?\.getPopup\(\)\);/.test(chatCode));
-  ok("and the last of this reply's wins, falling back to the last on the map",
-     /const newest = \[\.\.\.carded\]\.reverse\(\)\.find\(p => p\.latest\) \|\| carded\[carded\.length - 1\];/.test(chatCode));
+  // ── AND THEN IT STOPPED OPENING ITSELF ─────────────────────────
+  //
+  // Oliver, 12 Sep 2026: "Can the photo on the map not automatically pop up?
+  // Just keep the name of the place. And if I put my mouse on it, then it
+  // shows."
+  //
+  // He asked for the pop-up in the first place, and it was right when the map
+  // held one pin on a country. The map changed under it twice tonight: it zooms
+  // to the place now, so there is something to look AT, and the card is a
+  // photograph the size of half the panel sitting on top of it. In his
+  // screenshot the Faxe card covers Roskilde, the coast, and its own pin.
+  ok("nothing opens itself when the flight lands", !/marker\.fire\("mouseover"\)/.test(chatCode));
+  ok("and no card is picked out to be opened", !/const carded = list\.filter/.test(chatCode));
+  // THE LABELS STAY. The map still has to say what is on it, and the labels are
+  // the half that does that; only the picture waits to be asked for.
+  ok("every pin still carries its name", /<span class="pin-name">/.test(chatCode));
+  // The layout still runs on landing, or the labels sit where they were before
+  // the camera moved.
+  ok("the labels are still placed when the flight ends", /map\.once\("moveend", landed\)/.test(chatCode));
+  ok("and landing does the layout", /const landed = \(\) => \{ layOut\(\); \};/.test(chatCode));
+  // Nothing new was built for the mouse: the binding was already there, so this
+  // is a deletion. If that binding ever goes, the picture becomes unreachable.
+  ok("pointing at a pin still opens its card", /mouseover/.test(chatCode));
+
+  // ── AND PULLING BACK TAKES LONGER THAN CLOSING IN ──────────────
+  // Oliver, same message: "when it zooms out, make it a little slower." They
+  // were both 1.1 seconds and they are not the same move. Pulling away covers
+  // far more ground in the same time, so an equal duration reads as a lurch.
+  ok("the two directions have their own durations", /const OUT_SECONDS = 1\.9, IN_SECONDS = 1\.1;/.test(chatCode));
+  ok("and out is the slower of them", /duration: OUT_SECONDS/.test(chatCode) && /duration: IN_SECONDS/.test(chatCode));
 
   // ── AND THE CARD ITSELF STILL SAYS WHAT IT HAS TO ────────────────
   //
@@ -49974,6 +50627,74 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   if (existsSync(join(root, "api"))) gather(join(root, "api"));
   ok("the whole tree was read", bodies.size > 100);
 
+  // ── AND NOT ONE BYTE OF IT IS A CONTROL CHARACTER ────────────────
+  //
+  // 12 Sep 2026, 04:00. Three regexes in tripBrief.js shipped with a literal
+  // BACKSPACE, 0x08, where every \b word boundary should have been:
+  //
+  //   const FIRST_BARE = /<0x08>first\s+(\d+|one|two|...)<0x08>/i;
+  //
+  // A patch script built the line inside a Python string, Python read \b as the
+  // backspace escape it is, and the byte went into the source. It LOOKS right in
+  // every editor, greps as though the \b were simply missing, prints from
+  // String(regex) as a plain /first\s+.../ with nothing visibly wrong, and
+  // matches nothing at all: the pattern now requires an actual backspace either
+  // side of the word. The feature it belonged to silently did nothing.
+  //
+  // Every escape a JavaScript regex uses is a Python escape too. \s, \d and \w
+  // survive by luck (Python leaves unknown escapes alone); \b, \f, \v, \t, \n,
+  // \r and \0 do not. So this is not one typo, it is a mechanism, and every
+  // patch script written against this repo is one escaping level away from it.
+  //
+  // Tabs, newlines and carriage returns are ordinary whitespace and are allowed.
+  // Nothing else in the C0 range belongs in a source file.
+  {
+    const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/;
+    const dirty = [];
+    for (const [path, body] of bodies) {
+      const m = CONTROL.exec(body);
+      if (!m) continue;
+      const upTo = body.slice(0, m.index);
+      dirty.push(`${path}:${upTo.split("\n").length} holds 0x${m[0].charCodeAt(0).toString(16).padStart(2, "0")}`);
+    }
+    is("no source file holds a control character", dirty, []);
+
+    // ── AND THE SAME TRAP ONE LEVEL DOWN, WHICH BYTES CANNOT SEE ──
+    //
+    // A regex built from a TEMPLATE LITERAL needs its escapes doubled:
+    //
+    //   new RegExp(`\\bstaying\\b`)   correct
+    //   new RegExp(`\bstaying\b`)    a pattern that requires a BACKSPACE
+    //
+    // The second one is two perfectly ordinary characters in the file, so the
+    // control-character check above cannot see it; the backspace only appears
+    // when the template literal is evaluated. Three lines shipped like that on
+    // 12 Sep and the check above caught none of them. `\\s` and `\\d` are the
+    // same mistake with a milder symptom: they reach the regex as a plain "s"
+    // and "d", so the pattern quietly matches the wrong thing instead of
+    // nothing.
+    //
+    // Only b, f, n, r, t, v and 0 are real string escapes, and those are the
+    // ones that change meaning. A lone backslash before any OTHER letter is
+    // legal and harmless in a template literal, so it is left alone.
+    {
+      const TEMPLATE_RE = /new RegExp\(`([^`]*)`/g;
+      const bad = [];
+      for (const [path, body] of bodies) {
+        for (const m of body.matchAll(TEMPLATE_RE)) {
+          const inner = m[1];
+          // Strip the doubled ones first, then anything still carrying a single
+          // backslash before a string escape is the bug.
+          const left = inner.split("\\").join("");
+          const hit = /\\[bfnrtv0]/.exec(left);
+          if (!hit) continue;
+          bad.push(`${path}:${body.slice(0, m.index).split("\n").length} has a single-backslash ${hit[0]} inside new RegExp(\`...\`)`);
+        }
+      }
+      is("no regex built from a template literal has a half-escaped escape", bad, []);
+    }
+  }
+
   // api/ is part of the app. Three linkPreview functions are called only from
   // the serverless handlers, and reading src/ alone reported them as dead.
   ok("and the serverless handlers with it", [...bodies.keys()].some(k => k.startsWith("api/")));
@@ -51401,8 +52122,20 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // The state the whole bug lived in: `declined` swallows a slot so `missing`
     // is empty so `ready` is true. Ready is still true here, and now it is true
     // because the brief is actually full.
+    // ── AND ONE QUESTION IS LEFT, WHICH IS THE POINT OF 12 SEPTEMBER ─
+    //
+    // "The lodge billund we got" says a bed exists and not which nights it
+    // covers, and a booking with no dates is not a fixed point. Before tonight
+    // the brief called that finished and the writer invented day 1.
+    //
+    // The original assertion here is preserved in the line below it: `ready`
+    // going true on FACTS rather than on silence is what this whole fixture is
+    // about, and it does, the moment the one honest question has been put.
+    is("one question is left, and it is which nights the lodge covers", b.missing, ["stayWhen"]);
+    ok("and nothing in this conversation was swallowed as a refusal",
+       Object.keys(b.known).length >= 7 && !b.declined.length);
     ok("and the brief is ready on facts rather than on silence",
-       b.ready && Object.keys(b.known).length >= 7);
+       hisBrief({ asked: ["origin", "days", "when", "party", "interests", "transport", "stay", "stayWhen"] }).ready);
   }
 
   // ── AND EIGHT CHILDREN ARE EIGHT CHILDREN ─────────────────────────
@@ -51751,7 +52484,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
          /DO NOT FIT TOGETHER/.test(mixed) && !/STILL MISSING/.test(mixed));
       // A full brief with nothing conflicting still gets the original ending, or
       // every finished conversation would end in a question.
-      const calm = briefBlockC(b, []);
+      // asked, including the nights question added on 12 September, so nothing is
+      // outstanding and the block reaches its closing line.
+      const calm = briefBlockC(hisBrief({ asked: ["origin", "days", "when", "party", "interests", "transport", "stay", "stayWhen"] }), []);
       ok("a brief with no conflict still closes the way it always did",
          /YOU HAVE EVERYTHING YOU NEED/.test(calm) && !/DO NOT FIT TOGETHER/.test(calm));
     }

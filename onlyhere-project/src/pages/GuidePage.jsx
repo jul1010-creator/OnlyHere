@@ -28,7 +28,7 @@ import { ensureLiveContentLoaded } from "../utils/liveContent";
 import { guideTours } from "../utils/tourSweep";
 import { previewPools } from "../utils/previewMatch";
 import { placedLibrary, nearbyPublished, describeLocation } from "../utils/nearbyPlaces";
-import { ADD_IN_QUESTION, addInOffers, addInSeed, addInKindOf, addInNear } from "../utils/addIn";
+import { addInTitle, ADD_IN_SUB, addInOffers, addInSeed, addInKindOf, addInNear } from "../utils/addIn";
 import { bikeRentalFits } from "../utils/affiliates";
 import { travelModeKey } from "../utils/routeOrder";
 import { BAJABIKES_RENTAL_SLUG } from "../config";
@@ -2369,7 +2369,8 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               const anchor = stops.map(s => resolveStopCoords(s, guide)).find(p => p && Number.isFinite(p.lat));
               return (
                 <div style={{ marginTop: 18, background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "12px 14px" }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text, marginBottom: 8 }}>{ADD_IN_QUESTION}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>{addInTitle(dayNo)}</div>
+                  <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.55, margin: "3px 0 9px" }}>{ADD_IN_SUB}</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {offers.map(cat => {
                       const key = `${dayIdx}:${cat.key}`;
@@ -2407,7 +2408,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                             "instead it's just into that specific day". */}
                         <button onClick={() => navigate("/", { state: { detourAsk: addInSeed(cat, { town, dayNo }) } })}
                           style={{ marginTop: 8, background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                          Ask Gemlyx about day {dayNo}
+                          Ask Gemlyx to add one to day {dayNo}
                         </button>
                       </div>
                     );
