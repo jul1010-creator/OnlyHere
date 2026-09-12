@@ -71,6 +71,19 @@ export const turnReport = (m, i) => ({
   // Whether this reply claimed the trip was ready to build. Read off the raw text,
   // because the rendered bubble has the marker stripped out of it.
   claimedReady: m?.role === "assistant" ? isReadyToBuild(m?.text) : false,
+  // ── AND WHICH SLOT THIS TURN WAS ABOUT ────────────────────────────
+  //
+  // 12 Sep 2026. His 18:22 report showed `days` empty and `declined: ["days"]`
+  // on a conversation where he had plainly answered "7" to "How many days are
+  // you here for?". Whether the answer was missed or was never matched to the
+  // question turns entirely on what that assistant turn recorded itself as
+  // asking — and the report did not carry it, so the one question it existed to
+  // answer could not be answered from it.
+  //
+  // On an assistant turn this is what the brief block TOLD it to ask, recorded
+  // when the reply was sent rather than parsed back out of the words, so a
+  // paraphrased question still names its slot.
+  asked: m?.role === "assistant" && Array.isArray(m?.asked) ? m.asked : [],
 });
 
 // ── THE BRIEF AS IT STOOD AT EACH OF HIS TURNS ───────────────────────
@@ -248,6 +261,15 @@ export const buildChatReport = ({
     },
     intake: intakeReport(intake),
     briefTimeline: briefTimeline(list, { intake, asked, today }),
+    // The same array the brief is read with, printed beside the turns, so
+    // "he answered it and it did not land" can be told apart from "nothing knew
+    // that turn was an answer" without guessing.
+    //
+    // ONE ENTRY PER TRAVELLER TURN, in order, skipping failed ones — the same
+    // shape readBrief is handed, not one entry per message. Said here because a
+    // reader lining it up against `turns` below would be off by every assistant
+    // reply.
+    answering,
     turns: list.map(turnReport),
   };
 };

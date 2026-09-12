@@ -180,7 +180,7 @@ import { travelModeKey, withoutNonModes, overnightMove, dayStartsBeforeItCanArri
 import { buildChatReport, chatReportFilename } from "./utils/chatReport";
 import { openingThread, withTestBrief, withoutTestBrief, loadThread, saveThread, clearThread } from "./utils/chatThread";
 import { downloadReport } from "./utils/previewReport";
-import { briefThemes , essentialsForTrip, essentialsBlock, reservedEssential, fitsBrief, preferenceRowState, PREF_READY, PREF_NO_ACCOUNT } from "./utils/interestFit";
+import { briefThemes , essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, fitsBrief, preferenceRowState, PREF_READY, PREF_NO_ACCOUNT } from "./utils/interestFit";
 import { partnerDisclosure, linkLabel, affiliateHref } from "./utils/affiliates";
 import { sweepPlan, describeSweepPlan, ticketProposal, describeTicketFindings, affiliateWriteFor, agentLabel, FOUND as AFF_FOUND, RESWEEP_DAYS } from "./utils/affiliateSweep";
 import { wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO } from "./utils/wegotripMatch";
@@ -14331,6 +14331,34 @@ If the conversation only covers a single day or a few stops with no explicit day
         });
         planProblems = [...planProblems, ...money];
 
+        // ── AND THE THEME NOBODY ASKED FOR ─────────────────────────
+        //
+        // Oliver, 12 Sep 2026, on a family week that came back themed on
+        // nightlife: "No attractions, but a shit ton of night life for a family
+        // trip with kids?" His interests slot was empty the whole conversation
+        // and correctly so. Gemlyx raised nightlife itself, built on it for four
+        // turns, and planned around its own suggestion.
+        //
+        // The rule exists twice already for what gets SHOWN (a card is for
+        // something Gemlyx introduced; the brief is never read from Gemlyx's own
+        // replies) and nowhere for what gets PLANNED, which is the copy of it
+        // that reaches somebody as a finished week.
+        const invented = nightlifeNotAsked(parsed.days, {
+          convoText: saidByTravellerForGuide,
+          interests: intakeInterest,
+          hasKids: !!readBrief({ travellerText: saidByTravellerForGuide, today: nowForDates }).known?.party?.hasKids,
+        });
+        note("The plan's own theme, against what the traveller asked for", {
+          detail: `${stopNames.length} planned stops, read against the interests in the brief`,
+          outcome: invented.length ? "empty" : "ok",
+          got: invented.length ? invented.join(" ") : "nothing is planned that the traveller did not ask for",
+          why: invented.length
+            ? "Gemlyx suggests things, so a theme it raised itself is not evidence of what the traveller wants. The preview screen and the brief both already refuse to read Gemlyx's own replies as the traveller's ask; this is the same rule applied to the plan."
+            : "",
+          used: !invented.length,
+        });
+        planProblems = [...planProblems, ...invented];
+
         // ── AND THE DAY THAT OPENED 294 KM FROM WHERE IT SLEPT ─────
         //
         // From the same live guide. Day 9 ends at Jutland, 15:00. The transfer
@@ -16491,6 +16519,32 @@ If the conversation only covers a single day or a few stops with no explicit day
       // competing with it. Empty when nightlife is not on the table, and empty
       // when nothing published matches, so nothing is ever named that is not
       // there.
+      // ── AND THE LIST OF BARS IS NOT SHOWN TO EVERYBODY ────────────
+      //
+      // Oliver, 12 Sep 2026, on four of his own transcripts from that day: "the
+      // AI seems to push a lot for nightlife." Counted across all four, Gemlyx
+      // raised it FIRST in four out of four, and in two of them the only thing
+      // the traveller ever said about it was no. One of those four was a trip
+      // with one adult and seven children.
+      //
+      // This line is why. The whole published nightlife inventory went into the
+      // prompt every turn, beside the towns and the food, whoever it was
+      // talking to — and a named list of bars in front of you is a suggestion.
+      // Every other list here is somewhere you can take anyone.
+      //
+      // So it goes in when a night out is on the table, which is the same rule
+      // the Nightpay tip below already follows, through the same function. See
+      // nightlifeWanted in utils/interestFit.js for the children half of it,
+      // which is his: "kids should be a quick assumption that nightlife should
+      // not be included."
+      const wantsNight = nightlifeWanted({
+        convoText: travellerTurns.join("\n"),
+        interests: intakeInterest,
+        hasKids: !!brief.known?.party?.hasKids,
+      });
+      const nightBlockList = wantsNight
+        ? `NIGHTLIFE (note whether local/Danish or international crowd): ${nightlifeList}`
+        : "NIGHTLIFE: not on the table for this trip. They have not asked for a night out, so do not raise one, do not name bars or clubs, and do not offer it as an option. If they ask, it is theirs to have.";
       const nightTip = reservedEssential(essentials, { convoText: travellerTurns.join("\n"), interests: intakeInterest });
       const nightBlock = !nightTip ? "" : `\n── AND THE ONE THING A NIGHT OUT HERE NEEDS ──\nThey have said nightlife is part of this trip, so tell them about this once, in your own words, at whatever point in the conversation it is useful rather than all at once. It is a published Gemlyx entry, quoted here as written: state it, never embellish it, and never invent a second app like it.\n\n${essentialsBlock([nightTip])}\n`;
 
@@ -16532,7 +16586,7 @@ TOWNS: ${townList}
 ROAD TRIPS: ${tripList}
 CAMPING & SHELTERS: ${campList}
 FOOD SPOTS (Local & Major): ${foodList}
-NIGHTLIFE (note whether local/Danish or international crowd): ${nightlifeList}
+${nightBlockList}
 FREE ENTRANCE ATTRACTIONS (free, no ticket needed): ${attractionsList}
 HANDMADE CANDY & CRAFT SHOPS (walk-in, watch it made): ${handmadeList}
 UPCOMING LOCAL EVENTS: ${upcomingLocal}

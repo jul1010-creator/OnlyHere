@@ -207,7 +207,7 @@ writeFileSync(entry, `
   export { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK, CHARACTERISATION_FIELDS, REPORT_FIELDS } from ${JSON.stringify(join(root, "src/utils/checkScope.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
-  export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, reservedEssential, RESERVED_THEME, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
+  export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, RESERVED_THEME, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { cardLine, cardLineSource, sentencesOf, isOriginSentence, CARD_LINE_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
   export { buildPreviewReport, rowReport, passOf, reportFilename, REPORT_KIND } from ${JSON.stringify(join(root, "src/utils/previewReport.js"))};
   export { OBSERVED_MIN, learnedIsEmpty, seenFromTrip, observeTrip, settledObservations, observedForPrompt } from ${JSON.stringify(join(root, "src/utils/profileLearning.js"))};
@@ -6979,8 +6979,12 @@ is("missing licence does not require credit", creditIsRequired({}), false);
       "src/utils/entryAudit.js": 1,
       // CORRECTION_LEAD reads "actually" at the start of a traveller's message.
       "src/utils/directAnswer.js": 1,
-      // A stop word: a traveller types it, so the parser has to know it.
-      "src/utils/exclusions.js": 1,
+      // Stop words: a traveller types them, so the parser has to know them.
+      // "I don't really want to go to Aarhus" and "I don't actually want to go
+      // there" are refusals whose intensifier was eating the word budget of the
+      // pattern that reads them, so the words are removed before matching.
+      // Reading them is the opposite of writing them.
+      "src/utils/exclusions.js": 3,
     };
     const WORDS = /\b(actually|genuinely|truly|simply|genuine)\b/gi;
     const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap(e => {
@@ -9688,6 +9692,108 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // And the single-date reader is untouched by any of this.
     is("one date is still one date", dd(arrivalDateIn("September 14th", SEP12)), "14/9/2026");
     is("and a bare month still has no day", dateRangeIn("in December", SEP12), null);
+
+    // ── AND A RANGE CAN START WITHOUT A NUMBER ─────────────────
+    //
+    // Oliver, 12 Sep 2026 at 19:18, on the live site. Gemlyx's own reply opened
+    // "Tomorrow through the 20th keeps you clear of Oktoberfest in Aalborg" and
+    // closed with "One thing first, and then I can build it: Which dates?",
+    // progress bar on 1 of 7.
+    //
+    // The model read it. Nothing else could: every range pattern wants a DIGIT
+    // on the left of the join, and relativeAnswerIn refuses a turn that also
+    // states a date, which "the 20th" is. A relative start with a dated end
+    // fell down the crack between the two readers.
+    is("a relative start with a dated end is a range", [
+       dd(dateRangeIn("tomorrow through the 20th", SEP12)?.start),
+       dd(dateRangeIn("tomorrow through the 20th", SEP12)?.end),
+    ], ["13/9/2026", "20/9/2026"]);
+    is("and the ways people write it", [
+       dd(dateRangeIn("from tomorrow until the 20th", SEP12)?.end),
+       dd(dateRangeIn("tomorrow till the 20th", SEP12)?.end),
+       dd(dateRangeIn("today to the 20th", SEP12)?.end),
+    ], ["20/9/2026", "20/9/2026", "20/9/2026"]);
+    // The end rolls, the way a person reads it: said on the 30th, "tomorrow to
+    // the 3rd" ends next month rather than three days before it starts.
+    is("an end that has already gone is next month",
+       dd(dateRangeIn("tomorrow to the 3rd", new Date(2026, 8, 30))?.end), "3/10/2026");
+    // And the guard the numeric forms already have applies to this one, or
+    // "tomorrow to 6 people" becomes a trip.
+    is("a unit word after it means it was never a date",
+       dateRangeIn("tomorrow to 6 people", SEP12), null);
+    // ── AND A CLOCK IS NOT A DATE ──────────────────────────────
+    //
+    // Found by an adversarial review before this shipped. Without a shape test
+    // on the end, "I'm at work today till 5" was a 24-day trip and "we're out
+    // tonight until 11" a 30-day one. tripWindow runs this over the WHOLE
+    // transcript, Gemlyx's replies included, so "Experimentarium is open today
+    // until 17" in a reply set the trip window.
+    //
+    // The rule is the one R_BARE already states: the bare shape has to be
+    // written like a date. An ordinal, or a leading "the". A clock has neither.
+    is("a time of day is not the end of a trip", [
+       dateRangeIn("I'm at work today till 5, can we talk after", SEP12),
+       dateRangeIn("We're out tonight until 11", SEP12),
+       dateRangeIn("Museet har åbent i dag til 17", SEP12),
+    ], [null, null, null]);
+
+    // ── AND THE MONTH IN THE MIDDLE ────────────────────────────
+    //
+    // Oliver, 12 Sep 2026 at 18:22: "It's from the 13th of september till the
+    // 20th....." The two orderings already here cover the month at the end and
+    // the month at the front — a booking confirmation's two shapes — and not
+    // the one a person types. His brief came out of that conversation with no
+    // trip length at all.
+    is("the month can sit on the first date", [
+       dd(dateRangeIn("It's from the 13th of september till the 20th.....", SEP12)?.start),
+       dd(dateRangeIn("It's from the 13th of september till the 20th.....", SEP12)?.end),
+    ], ["13/9/2026", "20/9/2026"]);
+    is("and a length falls out of it",
+       readBrief({ travellerTurns: ["It's from the 13th of september till the 20th....."],
+                   travellerText: "It's from the 13th of september till the 20th.....",
+                   today: SEP12 }).known.days?.value, 8);
+
+    // ── AND THE SHORT FORM OF A MONTH ──────────────────────────
+    //
+    // Measured 12 Sep 2026: "14 Sep" read as no date at all, and so did every
+    // abbreviated month in every language in the table. The sharpest version is
+    // in this file's own source: the range pattern written for a booking
+    // confirmation is annotated "Sep 28 - Oct 3", an example it could not match.
+    is("an abbreviated month is still a month", [
+       dd(arrivalDateIn("14 Sep", SEP12)),
+       dd(arrivalDateIn("3 Oct", SEP12)),
+       dd(arrivalDateIn("15. okt", SEP12)),
+    ], ["14/9/2026", "3/10/2026", "15/10/2026"]);
+    is("and the confirmation shape in the comment above finally parses", [
+       dd(dateRangeIn("Sep 28 - Oct 3", SEP12)?.start),
+       dd(dateRangeIn("Sep 28 - Oct 3", SEP12)?.end),
+    ], ["28/9/2026", "3/10/2026"]);
+    // AND A BARE ONE IS NOT A MONTH. Jan is one of the commonest male first
+    // names in Denmark, Germany and the Netherlands, and a trip read as January
+    // from it is the wrong season for the whole guide. The day number is what
+    // makes the short form safe, so the reader without one keeps full names.
+    const { monthOnlyIn: bareMonth } = M;
+    // ── AND THE ONES THAT ARE ALSO WORDS ───────────────────────
+    //
+    // Found by an adversarial review before this shipped. "jul" is the English
+    // short form of July and the Danish word for Christmas, and this is a
+    // Danish app: "vi holder jul 24. december" read as 24 July 2027, seven
+    // months and a year wrong, on a sentence that spells December out. "des" is
+    // the German genitive article. Neither is on the list.
+    is("Christmas is not July",
+       dd(arrivalDateIn("Vi er 4 voksne, og vi holder jul 24. december i Aarhus", SEP12)), "24/12/2026");
+    // And a short form that is also a first name may only follow its day
+    // number, where "14 jan" has nothing else it could mean. Jan is among the
+    // commonest male names in Denmark, Germany and the Netherlands.
+    is("Jan the person is not January", arrivalDateIn("hej Jan 3 af os kommer", SEP12), null);
+    is("but 14 jan is still a date", dd(arrivalDateIn("we land 14 jan", SEP12)), "14/1/2027");
+    is("and a full month keeps both orders", dd(arrivalDateIn("May 3", SEP12)), "3/5/2027");
+    is("but a bare short form is a name, not a month", [
+       bareMonth("Jan is coming with us", SEP12),
+       bareMonth("Mar and I are travelling", SEP12),
+    ], [null, null]);
+    is("and a bare full month still reads",
+       dd(bareMonth("we are thinking october", SEP12)?.start), "1/10/2026");
   }
 
   // THE SENTENCE UNDER THE HEADING, since a checkbox that stops responding
@@ -20659,6 +20765,69 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // "designated" contains "design". Every matcher in this codebase has been
   // broken by exactly this and every one was found on a screenshot.
   is("a designated driver has not asked for design", briefThemes("We have a designated driver each night."), null);
+
+  // ── AND "A PARTY OF FOUR" IS NOT A NIGHT OUT ────────────────────
+  // `party` and `parties` are in the nightlife vocabulary, and "a party of
+  // four" is how people answer the question about who is coming. Read as an
+  // interest, the most family-shaped sentence in the brief asks for a bar
+  // crawl.
+  is("a party of four is people, not partying", [
+     !!briefThemes("We're a party of four, two adults and two kids")?.has("nightlife"),
+     !!briefThemes("our party is 2 adults and 2 children")?.has("nightlife"),
+     briefThemes("a party of four"),
+  ], [false, false, null]);
+  // And the sentence still says what it does say: those are children, and the
+  // family theme is read off them exactly as before.
+  ok("while the family in it still reads",
+     !!briefThemes("We're a party of four, two adults and two kids")?.has("family"));
+  ok("but partying is still partying", !!briefThemes("we want a night out and some partying")?.has("nightlife"));
+
+  // ── AND WHO THE LIST OF BARS IS SHOWN TO ────────────────────────
+  //
+  // Oliver, 12 Sep 2026, on four of his own transcripts from one day: "the AI
+  // seems to push a lot for nightlife." Counted across all four, Gemlyx raised
+  // it FIRST in four out of four, and in two of them the only thing the
+  // traveller ever said about it was no. One of the four was a trip with one
+  // adult and seven children.
+  //
+  // The cause was the prompt: the whole published nightlife inventory went in
+  // every turn, beside the towns and the food, whoever it was talking to.
+  {
+    const { nightlifeWanted, nightlifeNotAsked } = M;
+    ok("nobody asked, so no list", !nightlifeWanted({ convoText: "four days in Aalborg with the kids, we like history" }));
+    ok("they asked, so they get it", nightlifeWanted({ convoText: "four days in Aalborg, and one proper night out" }));
+    // His rule: "kids should be a quick assumption that nightlife should not be
+    // included." A theme word is not a request when there are children: the
+    // vocabulary holds "beer" and "live music", and a beer by the harbour while
+    // the kids run about is not a bar crawl.
+    ok("a passing drink word is not a request when there are kids",
+       !nightlifeWanted({ convoText: "a beer by the harbour while the kids run about", hasKids: true }));
+    // And a parent who asks for it outright still gets it. That is their trip,
+    // and briefConflicts raises it with them rather than this deciding for them.
+    ok("but a parent who asks outright still gets it",
+       nightlifeWanted({ convoText: "kids are with the grandparents one evening, we want a night out", hasKids: true }));
+    ok("and without kids a theme word is enough",
+       nightlifeWanted({ convoText: "we'd like a brewery or two" }));
+
+    // ── AND THE PLAN MAY NOT CARRY A THEME NOBODY ASKED FOR ───────
+    //
+    // "No attractions, but a shit ton of night life for a family trip with
+    // kids?" His interests slot was empty the whole conversation and correctly
+    // so. Gemlyx raised nightlife itself and then planned around its own
+    // suggestion.
+    const withBars = [{ stops: [{ name: "Lindholm Høje", _src: "free" }, { name: "Jomfru Ane Gade", _src: "nightStreet" }] }];
+    const found = nightlifeNotAsked(withBars, { convoText: "a week in Aalborg with the kids", hasKids: true });
+    is("a night-out stop nobody asked for is a plan problem", found.length, 1);
+    ok("and it names the stop", /Jomfru Ane Gade/.test(found[0]));
+    ok("and says children settle it", /children/.test(found[0]));
+    is("nothing is reported when they asked for it",
+       nightlifeNotAsked(withBars, { convoText: "a week in Aalborg, one big night out" }), []);
+    // A DAY THAT MENTIONS A BAR IS A SENTENCE. A bar as a STOP is a plan, and
+    // the difference is the whole finding.
+    is("and a stop that is not a night out is not one",
+       nightlifeNotAsked([{ stops: [{ name: "Lindholm Høje", _src: "free" }] }], { convoText: "history week" }), []);
+    is("nor does an empty plan throw", nightlifeNotAsked(null, { convoText: "" }), []);
+  }
   ok("and saysWord is the reason", !saysWord("we have a designated driver", "design"));
   // A value in the vocabulary that no brief can reach is a filter that excludes
   // in silence.
@@ -29607,18 +29776,73 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const en = buildBlockedNote(short);
     const da = buildBlockedNote(short, { tag: "da-DK", name: "Danish" });
     ok("there is something to ask on a brief this thin", !!en);
-    ok("English is unchanged for everybody else", /One thing first, and then I can build it:/.test(en));
-    ok("and a Danish reader is asked in Danish", /^Lige en ting mere, så bygger jeg den: /.test(da));
-    ok("with no English sentence left in it", !/One thing first/.test(da));
+    // ── AND IT COUNTS, BECAUSE "ONE THING" HAS TO BE ONE THING ────
+    //
+    // Oliver, 12 Sep 2026: "it's annoying that it says 'one more thing.. one
+    // more thing'.. constantly, despite it still needing 5 more stages of
+    // information." His screen said "2 of 7 — 5 still to go" directly under a
+    // sentence promising the build was one answer away.
+    ok("a thin brief says how many are left", /still to go, and this is the first:/.test(en));
+    ok("and does not promise a build that is five answers away", !/One thing first/.test(en));
+    ok("and a Danish reader is asked in Danish", /ting mangler jeg endnu/.test(da));
+    ok("with no English sentence left in it", !/still to go/.test(da));
     // A tag with no region has to hit the same branch, or half of Denmark's
     // browsers get the English one.
-    ok("bare da counts as Danish", /Lige en ting mere/.test(buildBlockedNote(short, { tag: "da", name: "Danish" })));
-    ok("and an unrelated language does not", !/Lige en ting mere/.test(buildBlockedNote(short, { tag: "de-DE", name: "German" })));
+    ok("bare da counts as Danish", /mangler jeg endnu/.test(buildBlockedNote(short, { tag: "da", name: "Danish" })));
+    ok("and an unrelated language does not", !/mangler jeg endnu/.test(buildBlockedNote(short, { tag: "de-DE", name: "German" })));
+    // The promise is kept where it is TRUE, which is the whole point of
+    // counting. One slot left, and the sentence is the one it always was.
+    {
+      const nearly = readBrief({
+        travellerTurns: ["flying into Billund", "the 14th to the 17th", "me and my wife", "history", "by train"],
+        travellerText: "flying into Billund\nthe 14th to the 17th\nme and my wife\nhistory\nby train",
+        today: new Date("2026-08-23T09:00:00Z"),
+      });
+      ok("one slot left keeps the promise", /^One thing first, and then I can build it: /.test(buildBlockedNote(nearly)));
+      ok("and in Danish", /^Lige en ting mere, så bygger jeg den: /.test(buildBlockedNote(nearly, { tag: "da-DK", name: "Danish" })));
+    }
   }
   // Every slot that can block a build has to have the Danish, or the note falls
   // back to English on precisely the slot that is holding somebody up.
   is("every blocking slot carries its Danish ask",
      BLOCKING_SLOTS.filter(k => !(BRIEF_SLOTS.find(s2 => s2.key === k) || {}).askDa), []);
+
+  // ── AND THE SECOND TIME IT MAY NOT BE THE SAME SENTENCE ─────────
+  //
+  // Oliver's transcript of 12 Sep 2026: four replies in a row, each ending with
+  // the identical "One thing first, and then I can build it: Which dates? Even
+  // roughly is fine..." He answered every time. His fourth reply was "I said in
+  // 2 days!!!" and his fifth was "for fuck sakes mate.."
+  //
+  // The parsers that could not read those answers are fixed elsewhere in this
+  // suite, and a parser will miss something else eventually. What must not
+  // survive that is the LOOP: the same words repeating at somebody who has
+  // spoken in between tells them they were not heard.
+  {
+    const WHEN = new Date("2026-08-23T09:00:00Z");
+    const thin = { travellerText: "I want to see Jutland", today: WHEN };
+    const firstTime = buildBlockedNote(readBrief(thin));
+    const askedAlready = readBrief({ ...thin, asked: ["origin", "days", "when"] });
+    const secondTime = buildBlockedNote(askedAlready);
+    ok("the slot it is stuck on has been asked already", (askedAlready.declined || []).includes("when"));
+    ok("so the second note is not the first one again", !!secondTime && secondTime !== firstTime);
+    ok("and it says the answer did not land rather than asking cold",
+       /still have not got your dates/.test(secondTime));
+    ok("with the shape of one that will", /14 September/.test(secondTime));
+    ok("and the Danish reader gets Danish for it too",
+       /^Jeg har stadig ikke dine datoer/.test(buildBlockedNote(askedAlready, { tag: "da-DK", name: "Danish" })));
+    // A slot with nothing written for the second time keeps the first sentence:
+    // the point is admitting the miss, not novelty for its own sake.
+    ok("a slot with no second wording keeps the first",
+       /and this is the first:/.test(buildBlockedNote(readBrief({ ...thin, asked: ["origin"] }))));
+  }
+  // Both HARD slots, because those are the two that can block a build forever,
+  // and a note that repeats on one of them is the loop again.
+  is("every hard slot carries a second wording in both languages",
+     M.HARD_SLOTS.filter(k => {
+       const slot = BRIEF_SLOTS.find(s2 => s2.key === k) || {};
+       return !slot.reask || !slot.reaskDa;
+     }), []);
 
   // ── THE INSTRUCTION ABOUT DANISH IS IN DANISH ───────────────────
   {
@@ -31100,10 +31324,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   //
   // What he actually said the obligation was: "then it is Gemlyx' responsibility
   // to ASK." So asked-and-unanswered is its own state.
-  const askedAlready = readBrief({ travellerText: HIS_CHAT, today: AUG, asked: ["interests", "stay", "transport", "when"] });
+  // ── AND THE HARD ONES ARE THE EXCEPTION TO IT ───────────────────
+  //
+  // `interests` joined `when` and `party` as HARD on 12 Sep 2026, on Oliver's
+  // decision, so it is no longer one of the slots this rule is about. See
+  // BRIEF_SLOTS for what a family week with an empty interests slot cost him.
+  // The soft slots below behave exactly as they always did.
+  const askedAlready = readBrief({ travellerText: HIS_CHAT + "\nwe're into food and design", today: AUG, asked: ["interests", "stay", "transport", "when"] });
   ok("a slot asked about stops blocking", askedAlready.ready);
   is("and is not asked again", nextAsks(askedAlready).length, 0);
-  is("it is reported as unanswered rather than unknown", askedAlready.declined.slice().sort(), ["interests", "stay", "transport"]);
+  is("it is reported as unanswered rather than unknown", askedAlready.declined.slice().sort(), ["stay", "transport"]);
   ok("nothing asked is still listed as missing",
      !askedAlready.missing.some(k => ["interests", "stay", "transport"].includes(k)));
   // ── ASKED ONCE, BUT STILL A MONTH ───────────────────────────────
@@ -33157,6 +33387,35 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("with no turns", empty.summary.turns, 0);
   ok("and nothing invented about readiness", empty.summary.readyClaimsWhileIncomplete === 0);
   is("nothing at all is safe", buildChatReport().kind, CHAT_REPORT_KIND);
+  // ── AND WHICH QUESTION EACH TURN WAS ANSWERING ──────────────────
+  //
+  // 12 Sep 2026. His 18:22 report showed `days` empty and "days" in
+  // askedAndUnanswered, on a conversation where he had answered "7" to "How
+  // many days are you here for?". Whether the answer was missed, or was never
+  // matched to the question in the first place, turns entirely on what that
+  // assistant turn recorded itself as asking — and the report did not carry it,
+  // so the one question it exists to answer could not be answered from it.
+  {
+    const thread = [
+      { role: "assistant", text: "Where are you flying into?", asked: ["origin"] },
+      { role: "user", text: "Billund" },
+      { role: "assistant", text: "How many days are you here for?", asked: ["days"] },
+      { role: "user", text: "7" },
+    ];
+    const r = buildChatReport({ messages: thread, today: new Date("2026-09-12T09:00:00Z") });
+    is("an assistant turn says which slot it asked for",
+       r.turns.filter(t => t.role === "assistant").map(t => t.asked), [["origin"], ["days"]]);
+    is("a traveller turn carries no ask of its own",
+       r.turns.filter(t => t.role === "user").map(t => t.asked), [[], []]);
+    // One entry per traveller turn, not per message, which is the shape
+    // readBrief is handed. Said out loud because a reader lining it up against
+    // `turns` would be off by every reply.
+    is("and the report says what each traveller turn was answering",
+       r.answering, [["origin"], ["days"]]);
+    // The end of the same thread: a bare number IS an answer when one question
+    // was on the table, which is the pairing this field makes checkable.
+    is("so a bare number reads as the length", r.brief.slots.find(x => x.key === "days")?.value, 7);
+  }
   is("a junk turn does not throw", turnReport(null, 0).role, "user");
   is("and neither does a junk list", briefTimeline(null).length, 0);
 
@@ -38315,6 +38574,69 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is(`and prose still does not: ${t}`, relativeAnswerIn(t, NOW), null);
   }
 
+  // ── AND A SENTENCE ABOUT TRAVELLING IS AN ANSWER ────────────────
+  //
+  // Oliver's transcript of 12 Sep 2026, four replies closing with the identical
+  // "One thing first, and then I can build it: Which dates?", ending in "for
+  // fuck sakes mate".
+  //
+  // He HAD answered. Turn 4 was "I'm flying into Denmark in 2 days" — a date
+  // carrying its own number, in a sentence that says it is about flying
+  // somewhere — and the stoplist rejected it, because what is left after taking
+  // out "in 2 days" is "i m flying into denmark", and "into" and "denmark" were
+  // not on it. Nor could they be: the destination is a different word each time.
+  //
+  // So a travel or arrival verb is read as a positive signal rather than as a
+  // permitted noise, and the stoplist stays as the fallback for bare answers.
+  for (const t of ["I'm flying into Denmark in 2 days", "we land tomorrow", "I'm coming today",
+                   "vi lander i morgen", "jeg rejser i dag"]) {
+    ok(`a sentence about travelling is an answer: ${t}`, !!relativeAnswerIn(t, NOW));
+  }
+  // The verb does the work, not the time word, which is what keeps the guard
+  // honest: neither of these names travelling and neither may fill a hard slot.
+  for (const t of ["I'll confirm in 2 days", "we want to see Denmark in 3 days", "let me know tomorrow"]) {
+    is(`and one about anything else still does not: ${t}`, relativeAnswerIn(t, NOW), null);
+  }
+  // A competing date in the same turn outranks a time word, or "we fly on 14
+  // September, I'll confirm tomorrow" arrives tomorrow.
+  is("a stated date in the same turn beats the time word",
+     relativeAnswerIn("we fly in on 14 September, I'll confirm tomorrow", NOW), null);
+  // Two latent ones, found while measuring the above and both one character
+  // wide. The residue is split on non-word characters, so "I'm" arrives as
+  // ["i","m"] and failed on the orphaned "m"; and somebody repeating an answer
+  // is still answering it, which is the turn Oliver actually typed.
+  ok("a contraction does not disqualify a sentence", !!relativeAnswerIn("I'm here today", NOW));
+  ok("and repeating an answer is still answering", !!relativeAnswerIn("I said in 2 days!!!", NOW));
+
+  // ── AND "IN 2 DAYS" IS NOT HOW LONG THEY STAY ───────────────────
+  //
+  // The same sentence, the other slot. He said "3 days" and then "I'm flying
+  // into Denmark in 2 days", and the brief came out holding TWO days: nobody
+  // had shortened the trip, but a number followed by a day word is a length to
+  // dayCountIn whatever word comes before it. A silent one-day-short guide.
+  {
+    const TURNS = ["I'm going to be there for 3 days", "I'm flying into Denmark in 2 days"];
+    const b = readBrief({ travellerTurns: TURNS, travellerText: TURNS.join("\n"), today: NOW });
+    is("an arrival does not overwrite the length", b.known.days?.value, 3);
+    ok("and it still fills the date", !!b.known.when);
+  }
+  // Removed only where it was READ as an arrival, so a turn that says both
+  // keeps both, and a turn where "in 3 days" really is a length keeps it.
+  {
+    const BOTH = ["we fly in in 2 days and we're staying 5 days"];
+    is("a turn that says both keeps both",
+       readBrief({ travellerTurns: BOTH, travellerText: BOTH[0], today: NOW }).known.days?.value, 5);
+    const LENGTH = ["we want to see Denmark in 3 days"];
+    is("and a length that merely looks like an arrival is still a length",
+       readBrief({ travellerTurns: LENGTH, travellerText: LENGTH[0], today: NOW }).known.days?.value, 3);
+    // The phrase comes back lowercased from the matcher, so a plain string
+    // replace would silently do nothing on a turn that begins with it, and the
+    // length would be overwritten again with nothing on screen saying so.
+    const CAPS = ["I'm going to be there for 3 days", "In 2 days I fly into Denmark"];
+    is("and a capitalised one at the start of a turn is caught too",
+       readBrief({ travellerTurns: CAPS, travellerText: CAPS.join("\n"), today: NOW }).known.days?.value, 3);
+  }
+
   // ── HIS FATHER'S CONVERSATION, END TO END ───────────────────────
   // Everything he said, in Danish, in the order he said it. This is the case
   // the whole two days of work exists for.
@@ -38991,7 +39313,27 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     "Public transport",
   ].join("\n");
 
-  is("the two hard slots are dates and party", HARD_SLOTS.join(","), "when,party");
+  // ── AND THE THIRD, ADDED 12 SEP 2026 ────────────────────────────
+  //
+  // Oliver, asked how far to take it after a family week came back themed on
+  // nightlife that Gemlyx had suggested itself: hard, like dates and party.
+  // "It didn't know what kind of trip we were looking for. Which is extremely
+  // poor design" is the 17 Aug sentence this whole file was built from, and the
+  // slot it names was the one slot of the three that a single question
+  // satisfied.
+  is("the three hard slots are dates, party and what kind of trip", HARD_SLOTS.join(","), "when,party,interests");
+  // The door has a handle: handing the choice over is an ANSWER, so a traveller
+  // who wants Gemlyx to choose says so once rather than meeting a door.
+  {
+    const theirs = ["flying into Billund", "the 14th to the 17th", "me and my wife", "you pick", "by train", "no hotel yet"];
+    const b = readBrief({
+      travellerTurns: theirs, travellerText: theirs.join("\n"), today: AUG,
+      answering: [[], [], [], ["interests"], [], []],
+    });
+    ok("\"you pick\" answers the interests question", !!b.known.interests);
+    ok("and says out loud that Gemlyx is the one choosing", /Gemlyx chooses/.test(b.known.interests.value));
+    ok("so the brief is ready rather than stuck at a door", b.ready);
+  }
 
   const asked = readBrief({ travellerText: said, today: AUG, asked: ["when", "party"] });
   ok("neither was actually answered", !asked.known.when && !asked.known.party);
@@ -43785,6 +44127,149 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // sentence short of the town.
   is("and a sentence whose only capital is an article does not stop the search",
      readExclusions("We went to Ribe. The weather was awful. We don't want to go there again."), ["Ribe"]);
+
+  // ── "I'M NOT GOING TO AARHUS" ────────────────────────────────────
+  //
+  // Oliver, 12 Sep 2026, on the chat map: it "fails to delete markers when you
+  // say things like 'I'm not going to Aarhus' or 'I don't want to go to
+  // Aarhus'."
+  //
+  // Measured before fixing. The second sentence worked. The first read as
+  // NOTHING, in both readers of "did they rule this out": every pattern above
+  // wants a "don't", a skip verb, a bare "no" at a sentence start, or a capital
+  // directly after "not", and previewMatch's REJECT_BEFORE wants the refusal
+  // hard against the name. "not going to" is none of those, because the verb is
+  // in the way.
+  //
+  // The map pins from the traveller's own turns, so the pin was not merely
+  // kept: it was ADDED by the sentence refusing it.
+  const { isRejectedPlace: rejectsPlace } = M;
+  is("THE BUG: the plainest way there is to say it", readExclusions("I'm not going to Aarhus"), ["Aarhus"]);
+  ok("and the card reader agrees, so the pin is never added either", rejectsPlace("I'm not going to Aarhus", "Aarhus"));
+  is("and the shapes around it", [
+     readExclusions("I am not going to Aarhus.")[0],
+     readExclusions("we're not going to Aarhus")[0],
+     readExclusions("We are not coming to Skagen")[0],
+     readExclusions("not stopping in Ribe")[0],
+     readExclusions("we're not going back to Ribe")[0],
+  ], ["Aarhus", "Aarhus", "Skagen", "Ribe", "Ribe"]);
+  // ── BUT HOW IS NOT WHETHER ───────────────────────────────────────
+  // The first version had driving, flying and sailing on the verb list, so
+  // "We're not flying into Billund, we're driving" ruled out the airport they
+  // are landing at. A mode of transport is a thing you change about a place you
+  // are still going to.
+  is("a mode of transport is not a refusal", [
+     readExclusions("We're not flying into Billund, we're driving"),
+     readExclusions("We're not driving to Skagen, we'll take the train"),
+  ], [[], []]);
+  // ── AND AN INTENSIFIER IS NOT ONE OF THE WORDS ───────────────────
+  //
+  // Oliver, 12 Sep 2026 at 18:22: "I don't rally want to go to Aarhus
+  // actually.. I want to go to Aalborg". Aarhus stayed in the guide and stayed
+  // on the map. The typo is not the reason: the correctly spelled sentence
+  // missed too, because the pattern allows three words between "don't" and
+  // "to", and "really want to go" is four.
+  is("an intensifier does not spend the word budget", [
+     readExclusions("I don't really want to go to Aarhus")[0],
+     readExclusions("I don't rally want to go to Aarhus actually.. I want to go to Aalborg")[0],
+  ], ["Aarhus", "Aarhus"]);
+  // WHEN, not whether. Reading either of these as a refusal drops the city they
+  // are flying into, which is the expensive half of "a false exclusion is worse
+  // than a missed one".
+  is("but an ordering word after it says when, not whether", [
+     readExclusions("I'm not going to Copenhagen first, the hotel comes first"),
+     readExclusions("I'm not going to Copenhagen Airport first"),
+     readExclusions("We're not going to Skagen until the Friday"),
+  ], [[], [], []]);
+  is("and a lowercase word after 'not going to' names no place",
+     readExclusions("I'm not going to lie, Ribe looks lovely"), []);
+  is("nor does the country",
+     readExclusions("We're not going to Denmark in winter"), []);
+  // The words a person reaches for once there is a map beside the chat. None of
+  // them existed in a reader written before the map did.
+  // The two name-first shapes consult the GAZETTEER, because "Take Mum out for
+  // dinner in Copenhagen" is ordinary English about an ordinary person and
+  // every sentence of that shape would otherwise rule her out.
+  const GAZ = { known: ["Aarhus", "Copenhagen", "Ribe", "Skagen"] };
+  is("and the words people use at a map", [
+     readExclusions("Take Aarhus off", GAZ)[0],
+     readExclusions("Aarhus is out.", GAZ)[0],
+     readExclusions("remove Aarhus")[0],
+     readExclusions("don't include Aarhus")[0],
+  ], ["Aarhus", "Aarhus", "Aarhus", "Aarhus"]);
+  is("but a person is not a town", [
+     readExclusions("Take Mum out for dinner in Copenhagen", GAZ),
+     readExclusions("We'll take Emma out for dinner while we're there", GAZ),
+  ], [[], []]);
+  // NAME is greedy and capitalised, so with no literal in front of it the
+  // sentence-start pattern swallowed the conjunction and the note under it read
+  // "Leaving out And Skagen, as you asked."
+  is("and a conjunction is not part of the name", [
+     readExclusions("And Skagen is out", GAZ)[0],
+     readExclusions("We loved Ribe. But Aarhus is out.", GAZ)[0],
+  ], ["Skagen", "Aarhus"]);
+  is("with no gazetteer, these two say nothing at all",
+     readExclusions("Take Aarhus off"), []);
+  is("but 'out of the way' is a reason rather than a refusal",
+     readExclusions("Aarhus is out of the way but worth it"), []);
+  // "after all" is the refusal itself, not a condition on one, and it sits in
+  // the same three letters as the ordering word above it.
+  is("and 'after all' is the refusal rather than a condition on it",
+     readExclusions("I'm not going to Aarhus after all"), ["Aarhus"]);
+  is("while 'after Friday' is still a condition",
+     readExclusions("I'm not going to Aarhus after Friday"), []);
+
+  // ── AND THE APOSTROPHE A PHONE TYPES ─────────────────────────────
+  //
+  // The same sentence twice, differing in one character: U+2019, which every
+  // iPhone, every Android keyboard and Word substitute as you type. This
+  // codebase has never spelled it — previewMatch.js holds 75 straight
+  // apostrophes and no curly one, beenThere.js 11 and none — so every "don't",
+  // "won't" and "I've" in every traveller-facing pattern here was unreachable
+  // from a phone, which is most travellers.
+  //
+  // Normalised at each reader's entry rather than in seventy-five patterns,
+  // which is why this is a BEHAVIOURAL guard: a straight-only pattern added
+  // downstream of the fold is still safe, and one added upstream is not.
+  is("THE MECHANISM: a curly apostrophe reads the same as a straight one",
+     readExclusions("I don\u2019t want to go to Aarhus"), readExclusions("I don't want to go to Aarhus"));
+  is("and so do the refusals that point back at a name",
+     readExclusions("I\u2019ve been to Ribe already, so I don\u2019t want to go there."), ["Ribe"]);
+  is("and the idioms that invert",
+     readExclusions("Tivoli is a must for us. Obviously we don\u2019t want to skip it."), []);
+  // Measured on the shipped code: the straight one read as a rejection and the
+  // curly one did not, which is the whole bug in two strings.
+  ok("and the card reader folds it too",
+     rejectsPlace("Don\u2019t go to Old Irish Pub.", "Old Irish Pub"));
+  ok("as it always did for the straight one",
+     rejectsPlace("Don't go to Old Irish Pub.", "Old Irish Pub"));
+  // Not mine, and found while measuring the above: the bare `no` in
+  // REJECT_BEFORE sits two words from the name with only "to" between, so the
+  // shipped code read a sentence agreeing to a place as refusing it.
+  ok("and saying yes is not saying no", !rejectsPlace("Not going to say no to Tivoli.", "Tivoli"));
+  // BUT THE PLAIN FORM STILL COUNTS. The guard needs the negation, or it cancels
+  // the sentence it was written to leave alone — the opposite mistake, made
+  // while fixing the first.
+  ok("while saying no is still saying no", rejectsPlace("Say no to Tivoli please.", "Tivoli"));
+  // ── AND ONE ANSWER TO "DID THEY RULE IT OUT" ────────────────────
+  //
+  // The first version of the tail guard was written out twice, here and in
+  // exclusions.js, under a comment claiming the two lists were the same. They
+  // were already one entry apart, so this sentence kept Legoland in the guide
+  // and took its pin off the map at the same time. One definition, imported.
+  {
+    const BOTH_WAYS = "We are not going to Legoland to begin with, we start in Ribe";
+    is("both readers agree about an ordering word",
+       [readExclusions(BOTH_WAYS), rejectsPlace(BOTH_WAYS, "Legoland")], [[], false]);
+  }
+  // And the same for the apostrophe: two folders with different character sets
+  // is the same bug in a different alphabet.
+  {
+    const ACUTE = "We don´t want to go to Aarhus";
+    is("and about an acute apostrophe",
+       [readExclusions(ACUTE, { known: ["Aarhus"] }), rejectsPlace("We don´t go to Aarhus", "Aarhus")],
+       [["Aarhus"], true]);
+  }
 
   // ── ENOUGH TO SAY WHAT A PLACE IS FOR ────────────────────────────
   //

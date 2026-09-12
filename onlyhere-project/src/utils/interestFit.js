@@ -163,8 +163,16 @@ const onlyLogistics = (hay, word) => {
   }
 };
 
+// ── "A PARTY OF FOUR" IS NOT A NIGHT OUT ────────────────────────────
+// `party` and `parties` are in the nightlife vocabulary, and "a party of four",
+// "our party" and "the party is 2 adults and 2 kids" are how people answer the
+// question about WHO IS COMING. Read as an interest, the most family-shaped
+// sentence in the brief asks for a bar crawl.
+const PARTY_AS_PEOPLE = /\b(?:a|our|the|my|your|this|whole|entire|rest of the|remaining)\s+party\b|\bparty\s+of\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b|\bparty\s+(?:is|are|size|will be|consists)\b/i;
+
 export const briefThemes = (text, interests = []) => {
-  const hay = fold([String(text || ""), ...(Array.isArray(interests) ? interests : [])].join(" "));
+  const raw = [String(text || ""), ...(Array.isArray(interests) ? interests : [])].join(" ");
+  const hay = fold(raw.replace(PARTY_AS_PEOPLE, " "));
   if (!hay.trim()) return null;
   const want = new Set();
   for (const [theme, words] of Object.entries(THEME_WORDS)) {
@@ -458,6 +466,95 @@ export const reservedEssential = (rows, { convoText = "", interests = [] } = {})
   if (!briefThemes(convoText, interests)) return null;
   const picked = essentialsForTrip(rows, { convoText, interests, limit: 1 });
   return picked.find(p => p?.themes?.includes(RESERVED_THEME)) || null;
+};
+
+// ── WHETHER A NIGHT OUT BELONGS IN THIS TRIP AT ALL ─────────────────
+//
+// Oliver, 12 Sep 2026, on four of his own Detour transcripts from one day:
+// "the AI seems to push a lot for nightlife."
+//
+// Measured across all four, counting nightlife words on each side:
+//
+//   00:36   Gemlyx 18, traveller 1     Gemlyx raised it first (turn 8)
+//   02:54   Gemlyx  4, traveller 0     party: ONE ADULT AND SEVEN CHILDREN
+//   17:17   Gemlyx 10, traveller 0     Gemlyx raised it first (turn 10)
+//   18:22   Gemlyx 18, traveller 1     the traveller's one mention is a REFUSAL
+//
+// Gemlyx raised it first in four conversations out of four, and in two of them
+// the only thing the traveller ever said about it was no. The cause is not the
+// model's taste: the chat prompt hands it the whole published NIGHTLIFE
+// inventory every turn, beside the towns and the food, whoever it is talking to.
+// A named list of bars in front of you is a suggestion.
+//
+// So the list goes in when a night out is on the table and not otherwise, which
+// is the rule reservedEssential above already follows for the Nightpay tip.
+//
+// ── AND CHILDREN SETTLE IT ──────────────────────────────────────────
+//
+// Oliver, same message: "kids should be a quick assumption that nightlife
+// should not be included." A traveller with children who has NOT asked for a
+// night out is not an unknown case to be filled in helpfully, and the 02:54
+// transcript is what that costs: seven children and a bar recommendation.
+//
+// A parent who asks anyway still gets it, because that is their trip and they
+// said so — and utils/briefConflicts.js already raises it with them, which is
+// the rule Oliver set on 5 Sep: "if I tell the AI that I got kids with me, and
+// I also tell it I wanna go drinking, then the AI gotta solve it somehow."
+// With children, a theme word is not enough. The nightlife vocabulary holds
+// "beer", "wine" and "live music", and "a beer by the harbour while the kids
+// run about" is not a request for a bar crawl. So a parent has to have said the
+// thing itself, and a parent who has said it still gets it: that is their trip.
+const EXPLICIT_NIGHT = ["nightlife", "night out", "nights out", "bar crawl", "pub crawl",
+  "bar hop", "bar hopping", "clubbing", "go out", "going out", "night life", "bars", "clubs",
+  "byen", "i byen", "bytur", "natteliv", "nachtleben", "uitgaan", "uteliv"];
+
+export const nightlifeWanted = ({ convoText = "", interests = [], hasKids = false } = {}) => {
+  if (!briefThemes(convoText, interests)?.has("nightlife")) return false;
+  if (!hasKids) return true;
+  const hay = fold([String(convoText || ""), ...(Array.isArray(interests) ? interests : [])].join(" "));
+  return EXPLICIT_NIGHT.some(w => saysWord(hay, fold(w)));
+};
+
+// ── AND THE GUIDE MAY NOT PLAN A THEME NOBODY ASKED FOR ─────────────
+//
+// Oliver, 12 Sep 2026, on a preview built from a conversation about a family
+// week with children: "No attractions, but a shit ton of night life for a
+// family trip with kids?"
+//
+// His interests slot was empty for the whole conversation and correctly so: he
+// never asked for nightlife. GEMLYX raised it at turn 12, built on it for four
+// turns, and the plan came out of its own suggestion rather than his brief.
+//
+// This project already states that rule in two places — a card is for something
+// Gemlyx INTRODUCED, and the brief may never be read from Gemlyx's own replies
+// — and both are about what gets SHOWN. Nothing said it about what gets PLANNED,
+// which is the one that reaches the traveller as a finished week.
+//
+// Asked whether to gate the build on it, he chose to gate it.
+//
+// NAMED STOPS, not prose. A day that mentions a bar is a sentence; a day with a
+// bar as a STOP is a plan, and the difference is the whole finding. Reads the
+// stop's own kind field first and its words only as the fallback, the same
+// order interestFit uses everywhere: a row with tags is judged by its tags.
+const NIGHT_KIND = /\b(?:bar|bars|pub|pubs|club|clubs|nightclub|nightlife|cocktail|brewery|taproom|beer\s*hall|night\s*street)\b/i;
+const nightStop = (stop) => {
+  const kind = fold([stop?._src, stop?.kind, stop?.type, stop?.category].filter(Boolean).join(" "));
+  if (kind && /night|bar|pub|club/.test(kind)) return true;
+  return NIGHT_KIND.test(String(stop?.what || stop?.desc || "")) || NIGHT_KIND.test(String(stop?.name || ""));
+};
+
+export const nightlifeNotAsked = (days, { convoText = "", interests = [], hasKids = false } = {}) => {
+  if (nightlifeWanted({ convoText, interests, hasKids })) return [];
+  const planned = (Array.isArray(days) ? days : [])
+    .flatMap(d => (Array.isArray(d?.stops) ? d.stops : []))
+    .filter(nightStop)
+    .map(sp => String(sp?.name || "").trim())
+    .filter(Boolean);
+  if (!planned.length) return [];
+  const names = planned.filter((x, i, a) => a.indexOf(x) === i).slice(0, 6);
+  return [`The plan has ${names.length === 1 ? "a night-out stop" : `${names.length} night-out stops`} (${names.join(", ")}) and nobody asked for one.` +
+    (hasKids ? " There are children on this trip and no request for a night out, so this is the one case that is settled before it is weighed." : "") +
+    " A theme Gemlyx suggested itself is not a theme the traveller asked for."];
 };
 
 // ── AS FROZEN FACTS, IN THE ROW'S OWN WORDS ──────────────────────────

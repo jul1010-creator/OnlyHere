@@ -534,6 +534,38 @@ export const partyLine = (p) => {
 // Returns one entry per slot that a direct answer settled, latest answer winning.
 // A slot with no entry is simply not spoken for here, and the sentence readers
 // keep whatever they found.
+// ── "YOU PICK" IS AN ANSWER ─────────────────────────────────────────
+//
+// The interests slot became HARD on 12 Sep 2026, so nothing builds until it is
+// answered — which is right, and which needs a way through for the traveller
+// who genuinely wants Gemlyx to choose. The chat prompt has held that rule for
+// weeks ("WHEN SOMEBODY IS PLAINLY UNSURE, DECIDE FOR THEM... A local friend
+// does not answer 'I'm not sure' with another question"), and nothing in the
+// brief could hear it, so the model was told to decide and the gate would have
+// kept asking.
+//
+// Handing the choice over is a DECISION. It is recorded as one, in words the
+// writer can act on, so the guide knows it is choosing rather than guessing.
+//
+// Only where interests was the question asked, like every other reader here:
+// "anything" and "whatever" turn up in ordinary sentences about everything else.
+const OPEN_TO_ANYTHING = new RegExp(
+  `(?:^|[^${LETTER}])(?:` + [
+    "you pick", "you choose", "you decide", "your pick", "your choice", "you know best",
+    "whatever you think", "whatever you reckon", "whatever you suggest", "whatever's best",
+    "whatever is best", "up to you", "surprise me", "surprise us", "dealer's choice",
+    "open to anything", "open to everything", "open for anything", "anything really",
+    "anything goes", "no preference", "not fussed", "not fussy", "don't mind", "dont mind",
+    "do not mind", "no strong feelings", "i'm easy", "im easy", "we're easy", "were easy",
+    "du bestemmer", "i bestemmer", "du vaelger", "du vælger", "det er op til dig",
+    "lige meget", "det er lige meget", "ingen praeferencer", "ingen præferencer",
+    "du entscheidest", "such dir was aus", "egal", "ist mir egal",
+    "jij kiest", "maakt niet uit", "om det samma", "du bestemmer selv",
+  ].join("|") + `)(?![${LETTER}])`, "i");
+
+export const openToAnything = (turn) =>
+  OPEN_TO_ANYTHING.test(String(turn || "")) ? "open to anything, Gemlyx chooses" : null;
+
 export const directAnswers = (turns, answering) => {
   const out = {};
   const list = Array.isArray(turns) ? turns : [];
@@ -568,6 +600,9 @@ export const directAnswers = (turns, answering) => {
         const v = only === "days" ? daysAnswer(turn) : null;
         const rawDays = only === "days" ? daysAnswer(turn, { cap: Infinity }) : null;
         if (v) out.days = rawDays && rawDays > v ? { value: v, source: "said", askedFor: rawDays } : { value: v, source: "said" };
+      } else if (key === "interests") {
+        const v = only === "interests" ? openToAnything(turn) : null;
+        if (v) out.interests = { value: v, source: "said" };
       } else if (key === "transport") {
         const v = transportAnswer(turn);
         if (v) out.transport = { value: v.value, mode: v.mode, source: "said" };

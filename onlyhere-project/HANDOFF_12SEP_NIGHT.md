@@ -7,9 +7,12 @@ left it out.
 Everything below is ON YOUR PC, suite green, build clean, and every mutant
 killed. **15,501 → 15,647 passing.**
 
-One thing I could not do: this session has no shell on your machine, so I could
-not run `git commit` for you. The files are written into your working tree and
-verified byte for byte; the commit is yours to make.
+Committed and pushed by Oliver on the morning of 12 Sep, so all of it is live.
+
+The five new findings all land in `_planProblems`, which renders above the guide
+in Studio and is stripped on save, so they are Oliver's to read and never reach
+a traveller. The one change a traveller WILL notice is the new question: anyone
+who says they have booked somewhere is now asked which nights it covers.
 
 ---
 

@@ -1,3 +1,4 @@
+import { straighten } from "./travellerWords";
 // ── "I TYPE COPENHAGEN, BUT COPENHAGEN IN DANISH IS KØBENHAVN" ──────
 //
 // Oliver, 8 Aug 2026, immediately after asking whether his source list was
@@ -40,7 +41,16 @@
 // pages use both. Searching "Aarhus" in the Studio search bar could not find a
 // place filed as "Århus", and vice versa. The Danish letters are now replaced
 // BEFORE decomposition, so the rule reaches them.
-export const fold = (s) => String(s ?? "").toLowerCase()
+// ── AND THE APOSTROPHE IS AN ACCIDENT TOO ───────────────────────────
+// Same argument as the diacritics two lines down, and found on 12 Sep 2026 when
+// "I don't want to go to Aarhus" typed on a phone read as nothing: every
+// pattern downstream of this is written with a straight apostrophe, and a phone
+// types U+2019. `hay` from foundAt is the string isRejectedPlace tests its
+// windows against, so folding it here fixes that reader as well as this one.
+// THROUGH straighten, not a second copy of its character set. The first version
+// listed four of the six characters here and six there, so "We don´t go to
+// Aarhus" was a refusal to one reader and not to the other.
+export const fold = (s) => straighten(s).toLowerCase()
   .replace(/ø/g, "o").replace(/æ/g, "ae").replace(/å/g, "aa")
   .normalize("NFD").replace(/[̀-ͯ]/g, "")
   .replace(/\s+/g, " ").trim();

@@ -55,6 +55,75 @@ export const MONTH_PATTERN = Object.keys(MONTH_INDEX)
   .sort((a, b) => b.length - a.length)
   .join("|");
 
+// ── AND THE SHORT FORMS, WHICH ARE MOST OF HOW DATES ARE WRITTEN ────
+//
+// Measured 12 Sep 2026: "14 Sep" read as no date at all, and so did "Jan 5",
+// "3 Oct" and every abbreviated month in every language above. The table held
+// full names only.
+//
+// The sharpest version of it is in this file's own comments: the range pattern
+// for a booking confirmation is annotated "which is how a booking confirmation
+// prints it: 'Sep 28 - Oct 3'" — an example it could never have matched.
+//
+// ── AND THEY ARE DELIBERATELY NOT ALLOWED TO STAND ALONE ────────────
+//
+// Jan is one of the commonest male first names in Denmark, Germany and the
+// Netherlands. Mar, Mai and Max are names, "dec" ends words, and a bare
+// three-letter token is inside a great many longer ones. So this list is for
+// patterns where a DAY NUMBER sits against the month and settles it, and the
+// bare-month reader keeps the full names: "Jan is coming with us" must never
+// become January, which is the trip built for the wrong season all over again.
+// May is left empty on purpose: "may", "maj", "mai" and "mei" are three letters
+// already and are in the full table above.
+export const MONTH_ABBR = {
+  0:  ["jan"],
+  1:  ["feb", "febr"],
+  2:  ["mar", "mrz", "mär"],
+  3:  ["apr"],
+  4:  [],
+  5:  ["jun"],
+  // July has no entry. "jul" is Christmas in Danish, Swedish and Norwegian, and
+  // this is a Danish app: "vi holder jul 24. december" read as 24 July 2027 —
+  // seven months and a year wrong, on a sentence that spells December out.
+  6:  [],
+  7:  ["aug"],
+  8:  ["sep", "sept"],
+  9:  ["oct", "okt", "ott"],
+  10: ["nov"],
+  // "des" is left out for the same reason one level down: it is the German
+  // genitive article, so "Anfang des 3 Monats" became 3 December.
+  11: ["dec", "dez", "dic"],
+};
+// Which entries are short forms rather than full names, so the trailing-only
+// rule below can tell "maj" (a real Danish month name) from "jan" (a short form
+// that happens to be one).
+const MONTH_ABBR_WORDS = new Set(Object.values(MONTH_ABBR).flat());
+export const MONTH_INDEX_ABBR = Object.fromEntries(
+  Object.entries(MONTHS).concat(Object.entries(MONTH_ABBR))
+    .flatMap(([i, names]) => names.map(n => [n, Number(i)]))
+);
+export const MONTH_PATTERN_ABBR = Object.keys(MONTH_INDEX_ABBR)
+  .sort((a, b) => b.length - a.length)
+  .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+  .join("|");
+
+// ── AND NOT ALL OF THEM MAY COME FIRST ──────────────────────────────
+//
+// "Sep 28 - Oct 3" needs the month-then-day order. "Jan 3 af os kommer" is
+// three of us and a man called Jan, and it read as 3 January 2027.
+//
+// The difference is not the pattern, it is the word: a short form that is also
+// a common first name may only appear AFTER its day number, where "14 jan" has
+// nothing else it could mean. Jan is among the commonest male names in Denmark,
+// Germany and the Netherlands; Mar and Mai are names too. The full month names
+// keep both orders, so "May 3" is untouched.
+const NAME_LIKE_MONTHS = new Set(["jan", "mar", "mai", "maj", "mei", "may"]);
+export const MONTH_PATTERN_ABBR_TRAILING = Object.keys(MONTH_INDEX_ABBR)
+  .filter(w => !(NAME_LIKE_MONTHS.has(w) && MONTH_ABBR_WORDS.has(w)))
+  .sort((a, b) => b.length - a.length)
+  .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+  .join("|");
+
 // ── HOW LONG ────────────────────────────────────────────────────────
 // PLAIN WORDS, NOT PATTERNS. These go through `alt`, which escapes regex
 // characters, so a "days?" shorthand became the literal string "days?" and
@@ -214,6 +283,35 @@ export const NEXT_WEEK = [
 ];
 export const IN_N_DAYS = ["in", "om", "i", "over", "binnen", "fra", "tra"];
 
+// ── AND THE VERBS FOR THE OTHER END OF THE JOURNEY ──────────────────
+//
+// TRAVEL_VERBS below is about LEAVING: travel, go, fly, drive, rejser, fahren.
+// Every one of them is a verb you apply to yourself before you set off, and the
+// list has no word for getting there.
+//
+// 12 Sep 2026, measured on relativeAnswerIn: "we land tomorrow" and "I'm coming
+// today" both read as NOT an answer about dates, while "I arrive tomorrow"
+// read as one — because `arrive` had been added by hand to one stoplist in
+// tripEvents.js and `land` and `come` had not. That is this repo's signature
+// bug in a five-word sentence, and the fix is the list rather than a sixth
+// hand-patch of the stoplist.
+//
+// Separate from TRAVEL_VERBS rather than merged into it, because readOrigin
+// treats the two differently on purpose: "flying from Oslo" says where they
+// START and "landing in Billund" says where they ARRIVE, and one list would
+// make those the same sentence.
+export const ARRIVAL_VERBS = [
+  // English
+  "arrive", "arrives", "arriving", "arrival", "land", "lands", "landing", "landed",
+  "come", "comes", "coming", "get in", "getting in", "fly in", "flying in", "touch down",
+  // Danish and Norwegian
+  "ankommer", "ankomme", "ankomst", "kommer", "komme", "lander", "lande",
+  // Swedish
+  "anländer", "anlander", "landar",
+  // German and Dutch
+  "ankommen", "ankommt", "kommt", "landet", "aankomen", "aankomst", "landen",
+];
+
 // ── LEAVING, AND THE VERBS AN ANSWER IS ALLOWED TO CONTAIN ──────────
 //
 // Oliver, 23 Aug 2026, six photographs. Replayed through readBrief his six
@@ -329,6 +427,41 @@ export const NO_WORDS = [
   "nei", "ikke ennå",
   "no", "non ancora", "aspetta",
 ];
+
+// ── THE APOSTROPHE THE PHONE TYPES, NOT THE ONE WE WROTE ────────────
+//
+// Oliver, 12 Sep 2026: "the map fails to delete markers when you say things
+// like 'I'm not going to Aarhus' or 'I don't want to go to Aarhus'."
+//
+// Measured before fixing, against the shipped readers:
+//
+//   "I don't want to go to Aarhus"   read, and the pin came off
+//   "I don't want to go to Aarhus"   read nothing at all, and the pin stayed
+//
+// The two strings differ in one character. The second carries U+2019, the
+// apostrophe every iPhone, every Android keyboard and Word substitute as you
+// type, and the one this codebase has never once spelled: previewMatch.js holds
+// 75 straight apostrophes and no curly one, beenThere.js 11 and none, and the
+// files that read what a traveller wrote are the whole of that list.
+//
+// So a phone is not a minority case, it is most of them, and every "don't",
+// "won't", "isn't" and "I've" in every traveller-facing pattern in this project
+// has been quietly unreachable from a phone since the day it was written.
+//
+// ── NORMALISE AT THE DOOR, NOT IN SEVENTY-FIVE PATTERNS ─────────────
+//
+// Spelling both apostrophes in every pattern is the hand-copied list this repo
+// has already paid for four times, and the next pattern anybody adds would be
+// straight-only again. One call at each reader's entry, and everything written
+// downstream of it is safe by construction.
+//
+// The reverse direction (curly to straight) rather than the other way round,
+// because straight is what the patterns already say. Grave and acute accents
+// come too: they are what a keyboard set to a different layout produces for the
+// same keystroke. Double quotes are folded for the same reason — the stay reader
+// missed 25hours Hotel Paper Island last night partly for sitting behind one.
+export const straighten = (s) =>
+  String(s ?? "").replace(/[‘’‛ʼ´`]/g, "'").replace(/[“”‟]/g, '"');
 
 // One escaped alternation from a list, longest first, for building a pattern.
 export const alt = (words) =>

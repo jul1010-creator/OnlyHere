@@ -1,5 +1,5 @@
 import { fold, variantsOf, matchVariantsOf, samePlaceName, containsName, foundAt } from "./danishNames";
-import { readExclusions, isExcluded } from "./exclusions";
+import { readExclusions, isExcluded, ORDERING_AFTER } from "./exclusions";
 import { townOfLocation } from "./nightlife";
 import { canonicalRegion, regionPart, regionOf, REGION_NAMES } from "./regions";
 import { tierOf, THEME_LABEL } from "./placeThemes";
@@ -516,6 +516,49 @@ const sentenceBefore = (hay, i) => {
   return hay.slice(cut + 1, i);
 };
 
+// ── "NOT GOING TO X" IS A REFUSAL AND NOTHING ABOVE CAN SEE IT ──────
+//
+// Oliver, 12 Sep 2026, on the chat map: it "fails to delete markers when you
+// say things like 'I'm not going to Aarhus'."
+//
+// Every entry in REJECT_BEFORE has to end hard against the name, bar a "to" or
+// a "the", so its bare `not` reaches "not Ribe" and never "not going to Ribe" —
+// the verb is in the way. The pin was therefore ADDED by the sentence refusing
+// it, because the map pins from the traveller's turns as well as Gemlyx's.
+//
+// ── ITS OWN CHECK, BECAUSE IT NEEDS A TAIL GUARD ────────────────────
+//
+// "I'm not going to Copenhagen first" says when, not whether, and reading it as
+// a refusal drops the card and the pin for the city they are flying into.
+// Nothing in REJECT_BEFORE has ever had to care, because nothing in it can
+// reach that sentence, so the guard belongs to this pattern rather than to all
+// of them. Same list and same reasoning as ORDERING_AFTER in exclusions.js,
+// which answers this question for the guide builder.
+// The same verb list as NOT_GOING in exclusions.js and for the same reason:
+// driving, flying and sailing say HOW, and how is a thing you can change
+// about a place you are still going to.
+const NOT_TRAVELLING_BEFORE = /\bnot\s+(?:going|heading|coming|travelling|traveling|stopping|visiting)(?:\s+back)?(?:\s+(?:up|down|out|over|across))?\s+(?:to|into|in|near)\s+(?:the\s+)?$/i;
+// Ordering ("first") or a condition ("until spring") says WHEN. Both leave the
+// place on the trip, so both leave the pin on the map.
+// IMPORTED, not restated. The first version wrote the list out again here with
+// a comment claiming it was "the same list and the same reasoning as
+// ORDERING_AFTER in exclusions.js", and it was already one entry short: "We are
+// not going to Legoland to begin with" kept the place in the guide and took its
+// pin off the map. Two answers to one question is this codebase's signature bug
+// and it had reproduced itself inside the fix for it.
+// ── AND SAYING YES IS NOT SAYING NO ─────────────────────────────────
+// Found while measuring the above, and it is not mine: "Not going to say no to
+// Tivoli" reads as a rejection of Tivoli on the SHIPPED code, because the bare
+// `no` in REJECT_BEFORE sits two words from the name with only "to" between.
+// The sentence means the opposite, and the cost is the card and the pin for
+// somewhere the traveller just agreed to.
+// Anchored hard against the name, so it can only ever cancel the `no` that
+// caused it.
+// A NEGATION IS REQUIRED. Without one this cancelled the plain form too, so
+// "Say no to Tivoli please" stopped reading as a refusal — the opposite
+// mistake, made while fixing the first.
+const SAY_NO_BEFORE = /\b(?:not|never|n[o']t|cannot)\s+(?:going\s+to\s+|gonna\s+)?say(?:ing|s)?\s+no\s+to\s+(?:the\s+)?$/i;
+
 export const isRejectedPlace = (convoText, name) => {
   const text = String(convoText || "");
   let found = 0, rejected = 0;
@@ -526,7 +569,8 @@ export const isRejectedPlace = (convoText, name) => {
       const before = hay.slice(Math.max(0, i - REJECT_WINDOW_BEFORE), i);
       const after = hay.slice(i + len, i + len + REJECT_WINDOW_AFTER);
       const sentence = sentenceBefore(hay, i);
-      if (REJECT_BEFORE.test(before) || REJECT_AFTER.test(after)
+      if ((REJECT_BEFORE.test(before) && !SAY_NO_BEFORE.test(before)) || REJECT_AFTER.test(after)
+          || (NOT_TRAVELLING_BEFORE.test(before) && !ORDERING_AFTER.test(after))
           || COMPARATIVE_LOSER.test(sentence) || BEATEN_BY.test(sentence)
           || (SPLIT_VERB_BEFORE.test(before) && SPLIT_PARTICLE_AFTER.test(after))) rejected++;
     }

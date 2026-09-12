@@ -1,3 +1,5 @@
+import { straighten } from "./travellerWords";
+
 // ── A "NO" IS A CONSTRAINT AND NOBODY WAS READING IT ────────────────
 //
 // Oliver, 26 Aug 2026, looking at the preview screen for his own test brief:
@@ -32,7 +34,13 @@
 // So this matches the SHAPES people use to rule a place out, and takes the
 // proper noun out of them — never a bare "no" anywhere near a capital letter.
 
-const clean = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
+// EVERY apostrophe folded to the one the patterns below are written with. See
+// straighten in travellerWords.js for what was measured: the curly apostrophe a
+// phone types made "I don't want to go to Aarhus" read as nothing at all.
+// Here rather than in readExclusions alone, because isExcluded compares an
+// extracted name against a database row and both sides have to fold the same
+// way or "Harry's Place" stops matching itself.
+const clean = (v) => straighten(v).replace(/\s+/g, " ").trim();
 
 // A Danish/English place name as written: capitalised, possibly hyphenated or
 // multi-word, possibly carrying æøå. Stops at a lowercase word so "Legoland. He's"
@@ -58,9 +66,13 @@ const PATTERNS = [
   // "don't send us to X", "please don't take us to X"
   new RegExp(`\\b(?:${anyOf(["don't", "dont", "do not"])}|${anyOf(["no need to", "rather not", "would rather not", "please no"])})\\s+(?:\\w+\\s+){0,3}(?:to|into|near)\\s+(${NAME})`, "g"),
   // "we don't want X", "we're not interested in X"
-  new RegExp(`\\b(?:${anyOf(["don't want", "dont want", "do not want", "no interest in", "not interested in", "not keen on", "had enough of", "sick of", "tired of"])})\\s+(?:\\w+\\s+){0,2}(${NAME})`, "g"),
+  new RegExp(`\\b(?:${anyOf(["don't want", "dont want", "do not want", "don't include", "dont include", "do not include", "no interest in", "not interested in", "not keen on", "had enough of", "sick of", "tired of"])})\\s+(?:\\w+\\s+){0,2}(${NAME})`, "g"),
   // "skip X", "avoid X", "leave out X", "nothing in X"
-  new RegExp(`\\b(?:${anyOf(["skip", "avoid", "leave out", "leave off", "steer clear of", "stay away from", "keep away from"])})\\s+(?:[Tt]he\\s+)?(${NAME})`, "g"),
+  // ── AND THE WORDS PEOPLE USE AT A MAP ───────────────────────────
+  // "remove Aarhus", "take out Ribe". Nobody said these to a chat before there
+  // was a map beside it; now the map is the thing they are editing, and the verb
+  // they reach for is the one they would use on a list.
+  new RegExp(`\\b(?:${anyOf(["skip", "avoid", "leave out", "leave off", "steer clear of", "stay away from", "keep away from", "remove", "take out"])})\\s+(?:[Tt]he\\s+)?(${NAME})`, "g"),
   // "no X" only where X is a named place AND the sentence is about the trip.
   // Deliberately requires "please"/"and"/"but" or a sentence start, so "no car"
   // and "no budget" cannot reach it — those name no place.
@@ -69,6 +81,82 @@ const PATTERNS = [
   new RegExp(`\\b[Nn]ot\\s+(${NAME})\\b`, "g"),
   // Danish: "ikke til X", "undgå X", "spring X over", "vi vil ikke til X"
   new RegExp(`\\b(?:[Ii]kke\\s+(?:til|i|ind\\s+til)|[Uu]ndg[åa]|[Ss]pring)\\s+(?:\\w+\\s+){0,2}(${NAME})`, "g"),
+];
+
+// ── AND THE PLAINEST SENTENCE THERE IS ──────────────────────────────
+//
+// Oliver, 12 Sep 2026: the map "fails to delete markers when you say things
+// like 'I'm not going to Aarhus'."
+//
+// Six patterns above, and none of them could see it. The first wants a "don't",
+// the second a "don't want", the third a skip verb, the fourth a bare "no" at a
+// sentence start, the fifth a capital directly after "not" — "not going" is
+// lowercase — and the sixth is Danish. previewMatch's REJECT_BEFORE missed it
+// too, for its own reason: it requires the refusal to sit hard against the name
+// and "going" is in the way.
+//
+// So the single most ordinary way in English to say you are not going somewhere
+// was invisible to both readers of "did they rule this out", and the pin it
+// names was not merely kept — it was ADDED, by the very sentence refusing it,
+// because the map pins from the traveller's turns as well as Gemlyx's.
+//
+// ── ITS OWN LOOP, BECAUSE IT NEEDS ITS OWN GUARD ────────────────────
+//
+// "I'm not going to Copenhagen first" is not a refusal, it is an order of
+// events, and the six above have never had to care because none of them can
+// reach that sentence. Reading it as an exclusion would drop the city the
+// traveller is flying into, which is the expensive half of "a false exclusion
+// is worse than a missed one".
+//
+// The guard is on the TAIL rather than inside the pattern on purpose: a
+// lookahead there lets NAME backtrack to a shorter name to satisfy it, so
+// "not going to Copenhagen Airport first" would quietly exclude "Copenhagen"
+// instead of nothing. Checked after the match, against the whole run, it cannot.
+//
+// "this time" and "this trip" are deliberately NOT on that list. "Not going to
+// Ribe this trip" IS this trip's exclusion, and this trip is the only one being
+// planned. Nor is "after all", which is the refusal rather than a condition on
+// it.
+// ── AND A MODE OF TRANSPORT IS NOT A REFUSAL ────────────────────────
+// Found by an adversarial review before this shipped. "We're not flying into
+// Billund, we're driving" ruled out Billund — the airport they are landing at —
+// because `flying` was on the verb list. `driving`, `flying` and `sailing` say
+// HOW, and how is a thing you can change about a place you are still going to.
+// Only the verbs that mean going at all.
+const NOT_GOING = new RegExp(
+  `\\b[Nn]ot\\s+(?:${anyOf(["going", "heading", "coming", "travelling", "traveling", "stopping", "visiting"])})` +
+  `\\s+(?:back\\s+)?(?:up\\s+|down\\s+|out\\s+|over\\s+|across\\s+)?(?:to|into|in|near)\\s+(${NAME})`, "g");
+// An ordering word ("first") or a condition ("until spring") after the name says
+// WHEN, not whether. A short run before it rather than a hard anchor, because
+// the name can carry a word the gazetteer does not: "not going to Copenhagen
+// Airport first". Bounded, and it cannot cross a full stop.
+export const ORDERING_AFTER = /^[^.!?]{0,24}?\b(?:first|firstly|straight|straightaway|right away|yet|initially|to begin with|at first|until|till|unless|before|after(?!\s+all))\b/i;
+
+// ── AND THE TWO THAT PUT THE NAME FIRST ─────────────────────────────
+// "Take Aarhus off", "Aarhus is out". Both are somebody editing a list they can
+// see, which is what the map made possible. Every pattern above puts the verb
+// first, so neither could be reached by widening one of them.
+// "out of" is excluded because "Aarhus is out of the way" is a reason, not a
+// refusal, and the difference is two characters.
+// ── AND THESE TWO MUST KNOW IT IS A PLACE ──────────────────────────
+//
+// Found by an adversarial review before this shipped. "Take Mum out for dinner
+// in Copenhagen" ruled out Mum, and every sentence of that shape would have
+// ruled out a person. The verb-first patterns above can afford not to care,
+// because "skip Mum" is not a sentence anybody writes; these two are ordinary
+// English about ordinary people.
+//
+// So they are the only patterns in this file that consult the GAZETTEER, and
+// with no gazetteer they do nothing at all. The map and the preview both have
+// one for free, and a silent no is the right answer where there is nothing to
+// check against.
+//
+// The conjunction is consumed rather than left for NAME, which is greedy and
+// capitalised: "And Skagen is out" was reading as an exclusion of "And Skagen",
+// and the note under it said "Leaving out And Skagen, as you asked."
+const NAME_FIRST = [
+  new RegExp(`\\b(?:[Tt]ake|[Tt]aking|[Ll]eave|[Ll]eaving|[Cc]ross|[Kk]nock)\\s+(${NAME})\\s+(?:off|out)\\b(?!\\s+(?:for|to|with))`, "g"),
+  new RegExp(`(?:^|[.;!?]\\s+|,\\s+)(?:[Bb]ut\\s+|[Aa]nd\\s+|[Ss]o\\s+|[Tt]hen\\s+)*(${NAME})\\s+(?:is|are)\\s+out\\b(?!\\s+of)`, "g"),
 ];
 
 // Words that are capitalised in ordinary prose and are never a place somebody
@@ -281,8 +369,23 @@ const NOT_COMING = /\b(?:is\s?n[o']t|are\s?n[o']t|wo\s?n[o']t\s+be|not)\s+(?:com
 // Reads the TRAVELLER's turns only. A place Gemlyx mentioned and they did not
 // object to is not an exclusion, and reading the whole transcript is how the
 // arrival anchor once resolved to Copenhagen Airport on an Aalborg brief.
+// ── AND AN ADVERB IS NOT ONE OF THE WORDS ───────────────────────────
+//
+// Oliver, 12 Sep 2026 at 18:22: "I don't rally want to go to Aarhus actually..
+// I want to go to Aalborg". Aarhus stayed in the guide, and so did the pin.
+//
+// The typo is not the reason. "I don't really want to go to Aarhus", spelled
+// correctly, missed too: the first pattern allows three words between the
+// "don't" and the "to", and "really want to go" is four. An intensifier is the
+// commonest word there is in a sentence like this and it was spending the whole
+// budget.
+//
+// Removed rather than counted, and only where it sits directly after a
+// negation, so it cannot change any sentence that is not already a refusal.
+const INTENSIFIER_AFTER_NO = /\b(don't|dont|do not|not|won't|wont|can't|cant|never|no)\s+(?:really|rally|actually|particularly|especially|honestly|truly|quite|even|much|just|super|overly)\s+/gi;
+
 export const readExclusions = (travellerText, { known = [] } = {}) => {
-  const t = clean(travellerText);
+  const t = clean(travellerText).replace(INTENSIFIER_AFTER_NO, "$1 ");
   if (!t) return [];
   const out = [];
   const gazetteer = new Set((Array.isArray(known) ? known : []).map(x => clean(x).toLowerCase()).filter(Boolean));
@@ -297,6 +400,32 @@ export const readExclusions = (travellerText, { known = [] } = {}) => {
       // One word and two letters is not a place name, it is an initial.
       if (name.length < 3) continue;
       if (!out.some(x => x.toLowerCase() === low)) out.push(name);
+    }
+  }
+  // "I'm not going to Aarhus". Separate because of the tail guard above.
+  NOT_GOING.lastIndex = 0;
+  let g;
+  while ((g = NOT_GOING.exec(t)) !== null) {
+    if (ORDERING_AFTER.test(t.slice(g.index + g[0].length))) continue;
+    const name = trimTail(g[1]);
+    if (!name || name.length < 3) continue;
+    const low = name.toLowerCase();
+    if (NOT_A_PLACE.has(low)) continue;
+    if (!out.some(x => x.toLowerCase() === low)) out.push(name);
+  }
+  // "Take Aarhus off", "Aarhus is out". Gazetteer-gated, so a person is never
+  // mistaken for a town.
+  if (gazetteer.size) {
+    for (const re of NAME_FIRST) {
+      re.lastIndex = 0;
+      let n;
+      while ((n = re.exec(t)) !== null) {
+        const name = trimTail(n[1]);
+        if (!name || name.length < 3) continue;
+        const low = name.toLowerCase();
+        if (NOT_A_PLACE.has(low) || !gazetteer.has(low)) continue;
+        if (!out.some(x => x.toLowerCase() === low)) out.push(name);
+      }
     }
   }
   for (const re of ANAPHORS) {

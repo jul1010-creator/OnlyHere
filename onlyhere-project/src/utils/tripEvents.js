@@ -1,6 +1,6 @@
 import { tierOf } from "./placeThemes";
 // ── ONE VOCABULARY, SIX LANGUAGES, READ BY EVERY PARSER BELOW ───────
-import { MONTH_INDEX, MONTH_PATTERN, DAY_WORDS, WEEK_WORDS, ONE_WEEK, RELATIVE_DAYS, THIS_WEEKEND, NEXT_WEEK, IN_N_DAYS, TRAVEL_VERBS, SPELLED_NUMBERS, NUMBER_TOKEN, alt, LETTER } from "./travellerWords";
+import { MONTH_INDEX, MONTH_PATTERN, MONTH_INDEX_ABBR, MONTH_PATTERN_ABBR, MONTH_PATTERN_ABBR_TRAILING, DAY_WORDS, WEEK_WORDS, ONE_WEEK, RELATIVE_DAYS, THIS_WEEKEND, NEXT_WEEK, IN_N_DAYS, TRAVEL_VERBS, ARRIVAL_VERBS, SPELLED_NUMBERS, NUMBER_TOKEN, alt, LETTER } from "./travellerWords";
 // The band vocabulary, imported rather than restated. A copy of "2 means
 // comfortable" in this file is a number that has to be kept in step with
 // another file by hand, which is the drift this codebase keeps finding.
@@ -97,7 +97,13 @@ export const daysBetween = (start, end) => {
 // top six inbound markets are European while the sixth is the United States.
 // Guessing costs a guide built for the wrong month; not guessing costs one more
 // question, which Gemlyx now asks out loud, beside a date picker.
-const MONTH_NAMES = MONTH_INDEX;
+// The lookup for patterns that carry a day number beside the month, which is
+// every pattern in this file bar monthOnlyIn. Abbreviations are safe here and
+// nowhere else: see MONTH_ABBR in travellerWords.js for why a bare "Jan" may
+// never be January.
+const MONTH_NAMES = MONTH_INDEX_ABBR;
+// Kept for monthOnlyIn, the one reader with no digit to settle it.
+const MONTH_NAMES_FULL = MONTH_INDEX;
 // ── AND A DATE MAY NOT BE BUILT OUT OF TWO MESSAGES ─────────────────
 //
 // Found 5 Sep 2026 by an adversarial review. readBrief hands these readers the
@@ -116,8 +122,8 @@ const MONTH_NAMES = MONTH_INDEX;
 const SP = "[^\\S\\n]";
 const DATE_RE = new RegExp(
   `(?:^|[^${LETTER}])(?:` +
-    `(?:d\\.${SP}*)?(\\d{1,2})(?:st|nd|rd|th|\\.)?${SP}*(?:of${SP}+|den${SP}+|de${SP}+)?(${MONTH_PATTERN})` +
-    `|(${MONTH_PATTERN})${SP}+(\\d{1,2})(?:st|nd|rd|th|\\.)?` +
+    `(?:d\\.${SP}*)?(\\d{1,2})(?:st|nd|rd|th|\\.)?${SP}*(?:of${SP}+|den${SP}+|de${SP}+)?(${MONTH_PATTERN_ABBR})` +
+    `|(${MONTH_PATTERN_ABBR_TRAILING})${SP}+(\\d{1,2})(?:st|nd|rd|th|\\.)?` +
   `)(?![${LETTER}])`, "i");
 
 // \u2500\u2500 A TRIP IS A RANGE, AND NOTHING HERE COULD READ ONE \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -167,6 +173,15 @@ const DATE_RE = new RegExp(
 // bare form demands date-shaped writing: an ordinal on at least one end, or a
 // leading "the" or "from", and NEVER a unit word after it. A month on either
 // end says date by itself and needs no such proof.
+// Flattened to phrase -> offset and read longest first, or "i overmorgen" is
+// read as the "i morgen" inside it and they arrive a day early.
+// Up here rather than beside relativeDayIn, because dateRangeIn below needs it
+// too: "tomorrow through the 20th" is a range whose start is one of these.
+const REL_TABLE = Object.fromEntries(
+  Object.entries(RELATIVE_DAYS).flatMap(([off, list]) => list.map(w => [w, Number(off)]))
+);
+const REL_ALT = Object.keys(REL_TABLE).sort((a, b) => b.length - a.length).map(k => k.replace(/ /g, "\\s+")).join("|");
+
 const RANGE_JOIN = "(?:\\s*(?:to|till|til|until|through|thru|-|\\u2013|\\u2014)\\s*|\\s+(?:to|till|til|until|through|thru)\\s+)";
 // What a number range means when it is not a trip. If one of these follows, the
 // numbers were never days.
@@ -174,9 +189,21 @@ const NOT_A_DATE_AFTER = /^\s*(?:days?|nights?|d\u00f8gn|dage|n\u00e6tter|weeks?
 const ORDINAL = "(?:st|nd|rd|th|\\.)";
 // day + month, month + day, or a bare day, at either end of the join.
 const R_BOTH_THEN_MONTH = new RegExp(
-  `(?:^|[^${LETTER}\\d])(?:the${SP}+|from${SP}+|on${SP}+)?(\\d{1,2})${ORDINAL}?${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+|den${SP}+|de${SP}+)?(${MONTH_PATTERN})(?![${LETTER}])`, "i");
+  `(?:^|[^${LETTER}\\d])(?:the${SP}+|from${SP}+|on${SP}+)?(\\d{1,2})${ORDINAL}?${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+|den${SP}+|de${SP}+)?(${MONTH_PATTERN_ABBR})(?![${LETTER}])`, "i");
 const R_MONTH_THEN_BOTH = new RegExp(
-  `(?:^|[^${LETTER}])(${MONTH_PATTERN})${SP}+(\\d{1,2})${ORDINAL}?${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?(?![${LETTER}\\d])`, "i");
+  `(?:^|[^${LETTER}])(${MONTH_PATTERN_ABBR_TRAILING})${SP}+(\\d{1,2})${ORDINAL}?${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?(?![${LETTER}\\d])`, "i");
+// ── AND THE MONTH IN THE MIDDLE, WHICH IS HOW HE WROTE IT ─────────
+//
+// Oliver, 12 Sep 2026 at 18:22: "It's from the 13th of september till the
+// 20th....." — a range, written the way an English sentence puts it, with the
+// month attached to the FIRST date instead of the last.
+//
+// The two above cover the month at the end ("14th till 17th of September") and
+// the month at the front ("Sep 28 - Oct 3"). Between them they had the two
+// orderings a booking confirmation uses and not the one a person types. His
+// brief came out of that conversation with no trip length at all.
+const R_DAY_MONTH_THEN_DAY = new RegExp(
+  `(?:^|[^${LETTER}\\d])(?:the${SP}+|from${SP}+|on${SP}+)?(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+|den${SP}+|de${SP}+)?(${MONTH_PATTERN_ABBR})${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?(?![${LETTER}\\d])`, "i");
 const R_BARE = new RegExp(
   `(?:^|[^${LETTER}\\d])(?:the${SP}+|from${SP}+|on${SP}+)(\\d{1,2})${ORDINAL}?${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?(?![${LETTER}\\d])`, "i");
 const R_BARE_ORDINALS = new RegExp(
@@ -187,12 +214,12 @@ const dayOk = (n) => Number.isFinite(n) && n >= 1 && n <= 31;
 // Two full dates, one on each side, which is the only form that can legitimately
 // cross a month: "14 September to 2 October".
 const R_TWO_FULL = new RegExp(
-  `(?:^|[^${LETTER}\\d])(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+)?(${MONTH_PATTERN})${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+)?(${MONTH_PATTERN})(?![${LETTER}])`, "i");
+  `(?:^|[^${LETTER}\\d])(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+)?(${MONTH_PATTERN_ABBR})${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+)?(${MONTH_PATTERN_ABBR})(?![${LETTER}])`, "i");
 // And the same thing written the other way round, which is how a booking
 // confirmation prints it: "Sep 28 - Oct 3". Found by testing rather than by
 // reading, which is why it is here and not in the pattern above.
 const R_TWO_FULL_MD = new RegExp(
-  `(?:^|[^${LETTER}])(${MONTH_PATTERN})${SP}+(\\d{1,2})${ORDINAL}?${RANGE_JOIN}(${MONTH_PATTERN})${SP}+(\\d{1,2})${ORDINAL}?(?![${LETTER}\\d])`, "i");
+  `(?:^|[^${LETTER}])(${MONTH_PATTERN_ABBR_TRAILING})${SP}+(\\d{1,2})${ORDINAL}?${RANGE_JOIN}(${MONTH_PATTERN_ABBR})${SP}+(\\d{1,2})${ORDINAL}?(?![${LETTER}\\d])`, "i");
 
 export const dateRangeIn = (text, today = new Date()) => {
   const s = String(text || "");
@@ -224,12 +251,12 @@ export const dateRangeIn = (text, today = new Date()) => {
     return { start, end, precision: "day", monthStated: true };
   }
 
-  for (const [re, order] of [[R_BOTH_THEN_MONTH, "ddm"], [R_MONTH_THEN_BOTH, "mdd"]]) {
+  for (const [re, order] of [[R_BOTH_THEN_MONTH, "ddm"], [R_MONTH_THEN_BOTH, "mdd"], [R_DAY_MONTH_THEN_DAY, "dmd"]]) {
     const m = s.match(re);
     if (!m) continue;
-    const d1 = parseInt(order === "ddm" ? m[1] : m[2], 10);
+    const d1 = parseInt(order === "mdd" ? m[2] : m[1], 10);
     const d2 = parseInt(order === "ddm" ? m[2] : m[3], 10);
-    const monthIdx = MONTH_NAMES[(order === "ddm" ? m[3] : m[1]).toLowerCase()];
+    const monthIdx = MONTH_NAMES[(order === "ddm" ? m[3] : order === "mdd" ? m[1] : m[2]).toLowerCase()];
     if (!dayOk(d1) || !dayOk(d2) || monthIdx === undefined) continue;
     // Backwards is not a trip. "the 17th to the 14th" is somebody writing
     // something else, and inventing a month boundary to make it parse would be
@@ -256,6 +283,53 @@ export const dateRangeIn = (text, today = new Date()) => {
     }
     const start = new Date(year, monthIdx, d1);
     return { start, end: new Date(year, monthIdx, d2), precision: "day", monthStated: false };
+  }
+
+  // ── AND A RANGE CAN START WITHOUT A NUMBER ────────────────────────
+  //
+  // Oliver, 12 Sep 2026, 19:18, on the live site. Gemlyx's own reply read
+  // "Tomorrow through the 20th keeps you clear of Oktoberfest in Aalborg" and
+  // the same reply closed with "One thing first, and then I can build it: Which
+  // dates?", with the progress bar on 1 of 7.
+  //
+  // The model understood it perfectly. Nothing else could: every pattern above
+  // needs a DIGIT on the left of the join, and latestRelativeAnswer refuses a
+  // turn that also states a date, which "the 20th" is. So a relative start with
+  // a dated end fell down the crack between the two readers — and it is one of
+  // the most ordinary ways there is to answer "which dates".
+  //
+  // Here rather than in readWhen, for the reason the comment at the top of
+  // arrivalDateIn gives: six callers read an arrival through these functions and
+  // a parallel path that some of them forget is the hand-copied list this
+  // codebase has paid for four times.
+  //
+  // The end rolls to the next month when the number has already gone, which is
+  // how a person reads it: said on the 30th, "tomorrow to the 3rd" ends in
+  // October. NOT_A_DATE_AFTER still applies, so "tomorrow to 6 people" is not a
+  // trip, and the start has to be a relative day word rather than any word at
+  // all, so there is no bare-number guessing here.
+  // ── AND THE END HAS TO BE WRITTEN AS A DATE ───────────────────────
+  //
+  // Found by an adversarial review before this shipped. Without it, "I'm at
+  // work today till 5" was a 24-day trip, "we're out tonight until 11" a
+  // 30-day one, and "Museet har åbent i dag til 17" five days — and tripWindow
+  // runs this over the WHOLE transcript, Gemlyx's own replies included, so an
+  // opening-hours sentence in a reply set the trip window.
+  //
+  // The same rule R_BARE already states for the numeric forms: the bare shape
+  // demands date-shaped writing. An ordinal, or a leading "the". A clock never
+  // has either, and "the 20th" has both.
+  const mixed = s.match(new RegExp(
+    `(?:^|[^${LETTER}])(?:from${SP}+)?(${REL_ALT})${RANGE_JOIN}(?:the${SP}+(\\d{1,2})${ORDINAL}?|(\\d{1,2})${ORDINAL})(?![${LETTER}\\d])`, "i"));
+  if (mixed && !NOT_A_DATE_AFTER.test(tailFrom(mixed))) {
+    const off = REL_TABLE[mixed[1].toLowerCase().replace(/\s+/g, " ")];
+    const d2 = parseInt(mixed[2] ?? mixed[3], 10);
+    if (off !== undefined && dayOk(d2)) {
+      const start = new Date(floor.getFullYear(), floor.getMonth(), floor.getDate() + off);
+      let end = new Date(start.getFullYear(), start.getMonth(), d2);
+      if (end < start) end = new Date(start.getFullYear(), start.getMonth() + 1, d2);
+      return { start, end, precision: "day", monthStated: false };
+    }
   }
   return null;
 };
@@ -307,9 +381,12 @@ export const monthOnlyIn = (text, today = new Date()) => {
   // The day-and-month form is handled above and must win, or "12 December"
   // would be flattened into the whole of December by this function.
   if (DATE_RE.test(s)) return null;
+  // FULL NAMES ONLY, here and nowhere else. This is the one reader with no day
+  // number beside the month to settle it, and "Jan is coming with us" becoming
+  // January is a trip planned for the wrong season. See MONTH_ABBR.
   const m = s.match(new RegExp(`\\b(${MONTH_PATTERN})\\b`, "i"));
   if (!m) return null;
-  const monthIdx = MONTH_NAMES[m[1].toLowerCase()];
+  const monthIdx = MONTH_NAMES_FULL[m[1].toLowerCase()];
   if (monthIdx === undefined) return null;
   const now = dayStart(today) || new Date(today.getFullYear(), today.getMonth(), 1);
   let year = now.getFullYear();
@@ -421,10 +498,6 @@ export const dayCountIn = (text, { cap = MAX_TRIP_DAYS } = {}) => {
 // From travellerWords.js, so adding a language is one list entry. Flattened to
 // phrase -> offset and read longest first, or "i overmorgen" is read as the
 // "i morgen" inside it and they arrive a day early.
-const REL_TABLE = Object.fromEntries(
-  Object.entries(RELATIVE_DAYS).flatMap(([off, list]) => list.map(w => [w, Number(off)]))
-);
-
 export const relativeDayIn = (text, today = new Date()) => {
   const s = String(text || "").toLowerCase();
   const base = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -489,12 +562,94 @@ export const relativeDayIn = (text, today = new Date()) => {
 // "talk" is not a travel verb and never will be. What changes is that the verbs
 // somebody actually uses to say when they are leaving no longer disqualify the
 // sentence they are leaving in.
+// ── AND A CONTRACTION LEAVES A LETTER BEHIND ────────────────────────
+// The split below breaks on anything that is not a word character, so "I'm"
+// arrives here as ["i", "m"] and "we've" as ["we", "ve"]. Neither tail was on
+// this list, which means ANY sentence carrying a contraction failed the test on
+// a single orphaned letter: measured 12 Sep 2026, "coming today" and "I'm
+// coming today" disagreed, and the only difference was the "m".
+const CONTRACTION_TAIL = "m|re|ve|ll|s|d|t";
+// Somebody repeating an answer is still answering it. "I said in 2 days!!!" is
+// the turn Oliver typed when Gemlyx asked him a third time, and it read as
+// nothing, because "said" was not on this list.
+const RE_ASSERTION = "said|say|saying|told|already|again|mentioned|literally|just|sagde|sagt|jo|altså|alts";
 const ANSWER_FILLER = new RegExp(
   `^(?:and|og|men|but|vi|we|i|jeg|du|man|ich|wir|ik|wij|je|jag|han|hun|hij|zij|to|til|for|on|om|about|ca|omkring|ish` +
-  `|arrive|arrives|arriving|arrival|ankommer|ankomst|kommer|komme` +
   `|start|starts|starting|starter|please|thanks|tak|ja|yes|yep|ok|okay` +
   `|the|a|an|den|det|er|is|it` +
+  // Where they will be, which is half of what a date answer says: "I'm here
+  // today", "we're there from the 14th", "back then". None of them narrows
+  // anything, and all of them were disqualifying a perfectly plain answer.
+  `|here|there|back|then|now|herovre|derovre|hjemme` +
+  // The words that point at the destination without naming it. The NAME itself
+  // can never be on a list — see below — but "into", "over" and "from" can, and
+  // leaving them off meant "flying into Denmark" had two unknowns rather than
+  // the one the rule allows.
+  `|into|in|at|from|over|via|home|hjem|ud|op|ned|naar|nach|aus` +
+  // And how long they are there, which sits in the same breath as when: "we fly
+  // in in 2 days and we're staying 5 days" answers both, and rejecting the turn
+  // threw the five away.
+  `|stay|stays|staying|stayed|bliver|bor|blive` +
+  `|${CONTRACTION_TAIL}|${RE_ASSERTION}` +
+  `|${ARRIVAL_VERBS.filter(w => !w.includes(" ")).join("|")}` +
   `|${TRAVEL_VERBS.filter(w => !w.includes(" ")).join("|")})$`, "i");
+
+// ── AND THE ONE WORD A STOPLIST CAN NEVER HOLD ──────────────────────
+//
+// Oliver, 12 Sep 2026. His own transcript, seven turns, and Gemlyx closing all
+// four of its replies with the identical sentence "One thing first, and then I
+// can build it: Which dates?" — ending in "for fuck sakes mate".
+//
+// He had answered. Turn 4 was "I'm flying into Denmark in 2 days", which is a
+// date, carries its own number, and says in as many words that it is about
+// flying somewhere. The test above rejected it, because after taking out "in 2
+// days" what is left is "i m flying into denmark", and "into" and "denmark" are
+// not on a stoplist — nor could they be, because the destination is a different
+// word every time.
+//
+// The stoplist can hold every word a person uses to say WHEN. It can never hold
+// the word for WHERE, because the destination is a different word every time,
+// and that single word is all that stood between this sentence and the answer
+// inside it.
+//
+// So the residue is allowed exactly one kind of unknown word: a proper noun.
+// Denmark, Billund, Nørresundby — a place is capitalised, and nothing else in a
+// sentence of this shape is.
+//
+// ── AND NOT THE FIRST WORD, WHICH IS CAPITALISED BY GRAMMAR ─────────
+//
+// "Talk tomorrow!" opens with a capital because every sentence does, and
+// counting it would let the exact sentence this guard was written to reject
+// back in. So the capital only counts away from a sentence start, where it
+// means something. That also keeps "we want to see Denmark in 3 days" out: it
+// has a proper noun, but "want" and "see" are two more unknowns beside it, and
+// the allowance is for the destination alone.
+//
+// Deliberately NOT a list of travel verbs. That was the first version and it was
+// far too loose: TRAVEL_VERBS holds "going", so "I'm going to check with my wife
+// tomorrow" became an arrival date, and "leave" and "come" did the same for "I'll
+// leave it until tomorrow" and "can we come back to this tomorrow". A wrong date
+// is the most expensive thing this file can produce.
+//
+// A COMPETING DATE STILL OUTRANKS IT. "We fly in on 14 September, I'll confirm
+// tomorrow" is not tomorrow, and the month and the written date are read by the
+// callers above this one.
+const STATES_A_DATE = (text) => DATE_RE.test(text) || new RegExp(`(?:^|[^${LETTER}])(?:${MONTH_PATTERN})(?![${LETTER}])`, "i").test(text);
+// Capitalised, and not at the start of the turn or of a sentence inside it.
+const properNounsIn = (raw) => {
+  const out = new Set();
+  const re = new RegExp(`([^${LETTER}]|^)\\s*([A-ZÆØÅÄÖÜ][${LETTER}]{2,})`, "g");
+  let m;
+  while ((m = re.exec(raw)) !== null) {
+    const lead = raw.slice(0, m.index + m[1].length).trim();
+    // Nothing before it, or a full stop before it, means grammar put the
+    // capital there rather than the writer.
+    if (!lead || /[.!?]$/.test(lead)) continue;
+    out.add(m[2].toLowerCase());
+  }
+  return out;
+};
+const MAX_PROPER_WORDS = 3;      // "Nørresundby", "Copenhagen Airport", "Sankt Hans Torv"
 
 export const relativeAnswerIn = (turn, today = new Date()) => {
   const raw = String(turn || "");
@@ -504,7 +659,12 @@ export const relativeAnswerIn = (turn, today = new Date()) => {
   rest = rest.replace(/\b\d{1,2}\s*(?:-|–|to)?\s*(?:days?|dage?|weeks?|uger?)\b/gi, " ");
   rest = rest.replace(/(?:^|[^\wÆØÅæøå])(?:én|en|hele|den ene|a|an|one)\s+(?:hel\s+)?(?:uge[nr]?|week)\b/gi, " ");
   const words = rest.split(/[^\wÆØÅæøåéèü]+/).filter(Boolean);
-  return words.some(w => !ANSWER_FILLER.test(w)) ? null : rel;
+  const unknown = words.filter(w => !ANSWER_FILLER.test(w));
+  if (!unknown.length) return rel;
+  if (STATES_A_DATE(rest)) return null;
+  const proper = properNounsIn(raw);
+  if (unknown.length > MAX_PROPER_WORDS) return null;
+  return unknown.every(w => proper.has(w)) ? rel : null;
 };
 
 // ── LATEST ANSWER WINS, AND BOTH READERS USE THIS ONE ───────────────

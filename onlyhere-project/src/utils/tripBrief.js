@@ -44,7 +44,7 @@
 // repeating: the app suggests things, so one sentence back from it reading
 // "Copenhagen has excellent museums" would otherwise become evidence that the
 // traveller asked for museums.
-import { arrivalDateIn, dateRangeIn, departureDateIn, dayCountIn, monthOnlyIn, latestRelativeAnswer, daysBetween, MAX_TRIP_DAYS } from "./tripEvents";
+import { arrivalDateIn, dateRangeIn, departureDateIn, dayCountIn, monthOnlyIn, latestRelativeAnswer, relativeAnswerIn, daysBetween, MAX_TRIP_DAYS } from "./tripEvents";
 import { PARTY_BARE, PARTY_POSSESSIVE, PARTY_POSSESSIVES, PARTY_COUNT, TRAVEL_VERBS, FROM_WORDS, TRANSPORT_PREPS, VEHICLE_WORDS, TRANSPORT_VERBS, PUBLIC_TRANSPORT, alt, LETTER } from "./travellerWords";
 import { dayStart } from "./calendarDay";
 import { travelModeKey, withoutNonModes } from "./routeOrder";
@@ -81,13 +81,41 @@ export const BRIEF_SLOTS = [
     askDa: "Hvor mange dage har du?" },
   { key: "when", label: "when", tier: "blocking", hard: true,
     ask: "Which dates? Even roughly is fine, it decides which events are on while you are here.",
-    askDa: "Hvilke datoer rejser du? Cirka er fint, det afgør hvilke begivenheder der er noget af mens du er der." },
+    askDa: "Hvilke datoer rejser du? Cirka er fint, det afgør hvilke begivenheder der er noget af mens du er der.",
+    reask: "I still have not got your dates in a form I can plan from. A day and a month does it: \"14 September\", or \"the 14th to the 17th\".",
+    reaskDa: "Jeg har stadig ikke dine datoer i en form jeg kan planlægge ud fra. En dag og en måned er nok: \"14. september\", eller \"den 14. til den 17.\"." },
   { key: "party", label: "who is coming", tier: "blocking", hard: true,
     ask: "Who is coming? Ages of any kids matter more than you would think.",
-    askDa: "Hvem skal med? Børns alder betyder mere for planen, end man skulle tro." },
-  { key: "interests", label: "what kind of trip", tier: "blocking",
+    askDa: "Hvem skal med? Børns alder betyder mere for planen, end man skulle tro.",
+    reask: "I still do not have who is coming. Just the number of adults and the ages of any children.",
+    reaskDa: "Jeg mangler stadig, hvem der skal med. Bare antal voksne og alderen på eventuelle børn." },
+  // ── AND THE THIRD ONE, WHICH IS WHY THIS FILE EXISTS ──────────────
+  //
+  // Oliver, 17 Aug 2026, the sentence this whole bucket was built from: "it
+  // wrote a damn lot, and it didn't even know what I was interested in... It
+  // didn't know what kind of trip we were looking for. Which is extremely poor
+  // design."
+  //
+  // It was blocking and not HARD, so being asked once satisfied it and the build
+  // went ahead on nothing. 12 Sep 2026 is what that costs: a family week with
+  // children, an empty interests slot, and a preview themed on nightlife —
+  // which GEMLYX had suggested, four turns earlier, and then planned around.
+  // "No attractions, but a shit ton of night life for a family trip with kids?"
+  //
+  // Asked what to do about it he chose the same bar as dates and party: hard,
+  // nothing builds until it is answered. A plan with no idea what kind of trip
+  // it is will invent one, and an invented one is what he was looking at.
+  //
+  // THE DOOR HAS A HANDLE ON IT, which is the half that makes hard safe here.
+  // "You pick" is an ANSWER, not silence, and directAnswer.js reads it as one,
+  // so the traveller who wants Gemlyx to choose says so once and moves on. That
+  // is the prompt's own rule about deciding for people who are unsure, made
+  // reachable instead of blocked.
+  { key: "interests", label: "what kind of trip", tier: "blocking", hard: true,
     ask: "What kind of trip is this? Food, history, design, nature, nightlife, or something else entirely.",
-    askDa: "Hvad er det for en tur? Mad, historie, design, natur, natteliv eller noget helt andet." },
+    askDa: "Hvad er det for en tur? Mad, historie, design, natur, natteliv eller noget helt andet.",
+    reask: "I still do not know what kind of trip this is, and it decides the whole plan. Name one thing you are after, or say \"you pick\" and I will choose.",
+    reaskDa: "Jeg ved stadig ikke, hvad det er for en tur, og det afgør hele planen. Nævn én ting, du er ude efter, eller sig \"du bestemmer\", så vælger jeg." },
   { key: "transport", label: "how they get around", tier: "blocking",
     ask: "How are you getting around once you're here? Car, bike, trains and buses, or a mix of them.",
     askDa: "Hvordan kommer du rundt undervejs? Bil, cykel, tog og bus, eller en blanding." },
@@ -262,10 +290,37 @@ const readDays = (text, intakeArrival, intakeDeparture, today = new Date(), turn
   // gives dates and then says "actually just 2 days" has corrected themselves,
   // and the count is the correction. Within ONE turn the dates win, because two
   // stated endpoints are a harder fact than a number in the same breath.
+  // ── AND "IN 2 DAYS" IS WHEN THEY LAND, NOT HOW LONG THEY STAY ─────
+  //
+  // Oliver, 12 Sep 2026. He said "3 days" at turn 5 and "I'm flying into
+  // Denmark in 2 days" at turn 7, and the brief came out of that conversation
+  // holding TWO days. Nobody had shortened the trip. dayCountIn sees a number
+  // followed by a day word and cannot tell "for 2 days" from "in 2 days", so
+  // an answer about WHEN quietly overwrote the answer about HOW LONG, and the
+  // guide would have been built a day short with nothing on screen saying so.
+  //
+  // The discriminator is not a new one: relativeAnswerIn has already decided
+  // whether this turn is an arrival, and when it is, it says which words it
+  // read. Those words are taken out before the count is looked for, so the same
+  // number cannot answer both slots, and the decision is made in exactly one
+  // place rather than in two that can disagree.
+  //
+  // It removes ONLY what was matched. "I fly in in 2 days and we're staying 5"
+  // still reads five, which a blanket skip of the turn would have lost.
+  // And a sentence where "in 3 days" really is a length — "we want to see
+  // Denmark in 3 days" — names no travelling, so relativeAnswerIn returns
+  // nothing, nothing is removed, and the count stands.
   const said = Array.isArray(turns) && turns.length ? turns : [String(text || "")];
   let raw = null, rawAt = -1, span = null, spanAt = -1;
   for (let i = 0; i < said.length; i += 1) {
-    const n = dayCountIn(said[i], { cap: Infinity });
+    const arrival = relativeAnswerIn(said[i], today);
+    // CASE-INSENSITIVELY. relativeDayIn matches on a lowercased copy, so
+    // `matched` comes back lowercase and a plain String.replace would miss
+    // "In 2 days" at the start of a sentence and silently do nothing.
+    const forCount = arrival && arrival.matched
+      ? String(said[i]).replace(new RegExp(arrival.matched.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), " ")
+      : said[i];
+    const n = dayCountIn(forCount, { cap: Infinity });
     if (n) { raw = n; rawAt = i; }
     const r = dateRangeIn(said[i], today);
     if (r) {
@@ -1127,14 +1182,71 @@ export const nextAsks = (brief, { limit = MAX_ASKS_AT_ONCE } = {}) => {
 // the slot, and English everywhere else. The rest of the languages are still on
 // the same list as the other hardcoded strings, and English and honest still
 // beats silent.
+// ── AND THE SECOND TIME IT MAY NOT BE THE SAME SENTENCE ─────────────
+//
+// Oliver's transcript of 12 Sep 2026, four replies in a row, each ending:
+//
+//   "One thing first, and then I can build it: Which dates? Even roughly is
+//    fine, it decides which events are on while you are here."
+//
+// Word for word, four times, because this function is deterministic and had no
+// idea it had ever been called before. He answered every time. His fourth reply
+// was "I said in 2 days!!!" and his fifth was "for fuck sakes mate.. I'm here
+// the 14th till 17th."
+//
+// The parsers that could not read those answers are fixed above, and they will
+// miss something else eventually, because a parser always does. What must not
+// survive that is the LOOP: an identical sentence repeating at a traveller who
+// has spoken in between tells them they have not been heard, which is the one
+// thing a conversation cannot come back from.
+//
+// `declined` is exactly this state and the brief has always computed it:
+// unfilled AND already asked. So the second time the wording changes, says
+// plainly that the answer did not land, and gives the shape of one that will —
+// which is the honest version of what happened, and the only one the traveller
+// can act on.
+//
+// A slot with no `reask` keeps the first sentence: the point is not novelty,
+// it is admitting the miss, and inventing a variation here for every slot would
+// be copy nobody wrote. The two HARD slots have one, because those are the two
+// that can block a build forever.
+// ── AND "ONE THING" HAS TO BE ONE THING ─────────────────────────────
+//
+// Oliver, 12 Sep 2026: "it's annoying that it says 'one more thing.. one more
+// thing'.. constantly, despite it still needing 5 more stages of information."
+//
+// The screen he is looking at says "2 of 7 — 5 still to go" directly underneath
+// a sentence promising the build is one answer away. The sentence was written
+// for the end of a brief and gets used at the start of one, so it is not a
+// figure of speech that has worn thin, it is a false statement about how much
+// longer this will take, printed beside the number that contradicts it.
+//
+// So it counts, from the SAME list the progress bar counts — BLOCKING_SLOTS
+// minus what is known — rather than from a second reckoning that could disagree
+// with the number on screen. One left keeps the promise, because then it is
+// true. More than one says how many.
+const stillOpenCount = (brief) => BLOCKING_SLOTS.filter(k => !brief?.known?.[k]).length;
+const SPELLED = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight"];
+const spelled = (n) => SPELLED[n] || String(n);
+const SPELLED_DA = ["ingen", "én", "to", "tre", "fire", "fem", "seks", "syv", "otte"];
+const spelledDa = (n) => SPELLED_DA[n] || String(n);
+
 export const buildBlockedNote = (brief, lang = null) => {
   const next = nextAsks(brief)[0];
   if (!next) return "";
+  const again = (brief?.declined || []).includes(next.key);
+  const left = stillOpenCount(brief);
   const base = String(lang?.tag || "").split("-")[0].toLowerCase();
   if (base === "da" && next.askDa) {
-    return `Lige en ting mere, så bygger jeg den: ${next.askDa}`;
+    if (again && next.reaskDa) return next.reaskDa;
+    return left > 1
+      ? `${spelledDa(left)} ting mangler jeg endnu, og det her er den første: ${next.askDa}`
+      : `Lige en ting mere, så bygger jeg den: ${next.askDa}`;
   }
-  return `One thing first, and then I can build it: ${next.ask}`;
+  if (again && next.reask) return next.reask;
+  return left > 1
+    ? `${spelled(left)} things still to go, and this is the first: ${next.ask}`
+    : `One thing first, and then I can build it: ${next.ask}`;
 };
 
 // ── THE BLOCK THE MODEL SEES ────────────────────────────────────────
@@ -1229,6 +1341,18 @@ export const briefBlock = (brief, conflicts = []) => {
   // Oliver read back on 21 August, and no ban on preamble fixes it, because the
   // problem is what the turn is FOR rather than how it is padded. See the turn
   // shape block in the chat prompt: one thing given, then one thing asked.
+  // ── AND NOT "ONE MORE THING" ──────────────────────────────────────
+  //
+  // Oliver, 12 Sep 2026: "it's annoying that it says 'one more thing.. one more
+  // thing'.. constantly, despite it still needing 5 more stages of information."
+  //
+  // Two separate sentences on his screen were saying it. buildBlockedNote's is
+  // fixed above by counting. This one is the model's own — "One more thing on
+  // Aalborg if it appeals" — and it is worse, because it is not even about the
+  // brief: it was introducing a beer walk. Every turn opening the same way reads
+  // as an interview with a fixed number of rounds, which is the intake form he
+  // has objected to three times.
+  lines.push(`NEVER OPEN WITH "ONE MORE THING", "ONE THING FIRST", "ONE QUICK CHECK", "JUST ONE MORE" OR ANY COUNTED VARIANT OF THEM, and never end a reply with one either. There are ${asks.length ? (brief.missing || []).length + (brief.unanswered || []).length : 0} things still open, so counting down to one is not true, and the traveller reads the same opener every turn as a form with a fixed number of rounds. Say the thing, then ask the question, with no counter in front of either.`);
   lines.push("ASK, DO NOT LECTURE. No preamble, no restating what they told you, no explaining why you need the answer, and no volunteering prices or opening dates nobody asked for. Give one real thing first, then ask, then stop. The one real thing is about a PLACE they named, not a price band and not a budget: volunteering money at somebody who has not raised it is the lecture this rule exists to stop, and it does not become a gift by being first.");
   // ── AND DO NOT DECIDE THE THING YOU ARE ABOUT TO ASK ABOUT ────────
   //
