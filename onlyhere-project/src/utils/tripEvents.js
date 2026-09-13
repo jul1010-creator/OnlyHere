@@ -182,7 +182,26 @@ const REL_TABLE = Object.fromEntries(
 );
 const REL_ALT = Object.keys(REL_TABLE).sort((a, b) => b.length - a.length).map(k => k.replace(/ /g, "\\s+")).join("|");
 
-const RANGE_JOIN = "(?:\\s*(?:to|till|til|until|through|thru|-|\\u2013|\\u2014)\\s*|\\s+(?:to|till|til|until|through|thru)\\s+)";
+// ── IN SIX LANGUAGES, LIKE EVERY OTHER LIST IN THIS PROJECT ─────
+// English and the Danish "til" only, until a Fable review on 12 Sep ran the
+// German and Dutch forms: "vom 14. bis 17. September" and "14 t/m 17 september"
+// both lost the range and came back as the 17th, which is the DEPARTURE date
+// read as the arrival. A trip starting three days late, with no length.
+const RANGE_JOIN = "(?:\\s*(?:to|till|til|until|through|thru|bis|tot|t/m|-|\\u2013|\\u2014)\\s*|\\s+(?:to|till|til|until|through|thru|bis|tot|t/m|frem til|fram till)\\s+)";
+// ── AND THE LITTLE WORD IN FRONT OF A DATE ─────────────────
+//
+// "the" and "from" were spelled into five patterns each and "den" into none, so
+// "fra den 14. til den 17. september" could not be read while "fra 14. til 17.
+// september" could. Worse than a miss: the Danish re-ask this app appends when
+// it has asked for the dates once and not got them offers "den 14. til den 17."
+// as its own worked example, so a Dane who followed the instruction on screen
+// was told again that the answer did not land.
+//
+// One definition of each, used by every pattern below, because five hand-copied
+// spellings of the same three words is how "den" came to be missing from all of
+// them at once.
+const LEAD = `(?:(?:the|from|on|fra|frem${SP}+til|vom|von|van|fr(?:å|a)n|den)${SP}+)`;
+const ART = `(?:(?:the|den|de|der)${SP}+)?`;
 // What a number range means when it is not a trip. If one of these follows, the
 // numbers were never days.
 const NOT_A_DATE_AFTER = /^\s*(?:days?|nights?|d\u00f8gn|dage|n\u00e6tter|weeks?|uger?|hours?|timer?|minutes?|min|people|persons?|adults?|kids?|children|b\u00f8rn|voksne|pax|kr|kroner|dkk|eur|euros?|usd|%|percent|procent|km|kilometers?|kilometres?|m|miles?|degrees?|grader|bars?|stops?|places?|plus)\b/i;
@@ -198,9 +217,9 @@ const ORDINAL = "(?:st|nd|rd|th|\\.)";
 const REAL_ORDINAL = "(?:st|nd|rd|th)";
 // day + month, month + day, or a bare day, at either end of the join.
 const R_BOTH_THEN_MONTH = new RegExp(
-  `(?:^|[^${LETTER}\\d])(?:the${SP}+|from${SP}+|on${SP}+)?(\\d{1,2})${ORDINAL}?${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+|den${SP}+|de${SP}+)?(${MONTH_PATTERN_ABBR})(?![${LETTER}])`, "i");
+  `(?:^|[^${LETTER}\\d])${LEAD}?(\\d{1,2})${ORDINAL}?${RANGE_JOIN}${ART}(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+|den${SP}+|de${SP}+)?(${MONTH_PATTERN_ABBR})(?![${LETTER}])`, "i");
 const R_MONTH_THEN_BOTH = new RegExp(
-  `(?:^|[^${LETTER}])(${MONTH_PATTERN_ABBR_TRAILING})${SP}+(\\d{1,2})${ORDINAL}?${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?(?![${LETTER}\\d])`, "i");
+  `(?:^|[^${LETTER}])(${MONTH_PATTERN_ABBR_TRAILING})${SP}+(\\d{1,2})${ORDINAL}?${RANGE_JOIN}${ART}(\\d{1,2})${ORDINAL}?(?![${LETTER}\\d])`, "i");
 // ── AND THE MONTH IN THE MIDDLE, WHICH IS HOW HE WROTE IT ─────────
 //
 // Oliver, 12 Sep 2026 at 18:22: "It's from the 13th of september till the
@@ -212,18 +231,18 @@ const R_MONTH_THEN_BOTH = new RegExp(
 // orderings a booking confirmation uses and not the one a person types. His
 // brief came out of that conversation with no trip length at all.
 const R_DAY_MONTH_THEN_DAY = new RegExp(
-  `(?:^|[^${LETTER}\\d])(?:the${SP}+|from${SP}+|on${SP}+)?(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+|den${SP}+|de${SP}+)?(${MONTH_PATTERN_ABBR})${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?(?![${LETTER}\\d])`, "i");
+  `(?:^|[^${LETTER}\\d])${LEAD}?(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+|den${SP}+|de${SP}+)?(${MONTH_PATTERN_ABBR})${RANGE_JOIN}${ART}(\\d{1,2})${ORDINAL}?(?![${LETTER}\\d])`, "i");
 const R_BARE = new RegExp(
-  `(?:^|[^${LETTER}\\d])(?:the${SP}+|from${SP}+|on${SP}+)(\\d{1,2})${ORDINAL}?${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?(?![${LETTER}\\d])`, "i");
+  `(?:^|[^${LETTER}\\d])${LEAD}(\\d{1,2})${ORDINAL}?${RANGE_JOIN}${ART}(\\d{1,2})${ORDINAL}?(?![${LETTER}\\d])`, "i");
 const R_BARE_ORDINALS = new RegExp(
-  `(?:^|[^${LETTER}\\d])(\\d{1,2})${ORDINAL}${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}(?![${LETTER}\\d])`, "i");
+  `(?:^|[^${LETTER}\\d])(\\d{1,2})${ORDINAL}${RANGE_JOIN}${ART}(\\d{1,2})${ORDINAL}(?![${LETTER}\\d])`, "i");
 
 const dayOk = (n) => Number.isFinite(n) && n >= 1 && n <= 31;
 
 // Two full dates, one on each side, which is the only form that can legitimately
 // cross a month: "14 September to 2 October".
 const R_TWO_FULL = new RegExp(
-  `(?:^|[^${LETTER}\\d])(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+)?(${MONTH_PATTERN_ABBR})${RANGE_JOIN}(?:the${SP}+)?(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+)?(${MONTH_PATTERN_ABBR})(?![${LETTER}])`, "i");
+  `(?:^|[^${LETTER}\\d])(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+)?(${MONTH_PATTERN_ABBR})${RANGE_JOIN}${ART}(\\d{1,2})${ORDINAL}?${SP}*(?:of${SP}+)?(${MONTH_PATTERN_ABBR})(?![${LETTER}])`, "i");
 // And the same thing written the other way round, which is how a booking
 // confirmation prints it: "Sep 28 - Oct 3". Found by testing rather than by
 // reading, which is why it is here and not in the pattern above.
@@ -720,6 +739,32 @@ export const latestRelativeAnswer = (turns, today = new Date()) => {
 // so is the point: `dated` false means we do not know when they are here, and
 // nothing downstream may pretend otherwise.
 export const tripWindow = ({ arrival, departure, convoText, convoTurns, today = new Date() } = {}) => {
+  // ── THE DATES COME FROM THEIR TURNS, NOT FROM OURS ──────────
+  //
+  // Both callers hand this function `convoText`, which is BOTH halves of the
+  // conversation with a role prefix on every line, and both of them carry a
+  // comment saying that reading a date out of the app's own words is the
+  // mistake to avoid. It was reading them anyway. Measured by a Fable review on
+  // 12 Sep against three of Oliver's real exports:
+  //
+  //   20:43  window 14..17 Sep, from the code-appended re-ask for the dates,
+  //          whose own example text is 'the 14th to the 17th'. The app read its
+  //          own worked example back as the trip. The brief said 15..22 Sep.
+  //          That window excludes 19 and 20 September, which is where the
+  //          festival he asked about and did not get on the preview sat.
+  //   21:24  window 21..24 Sep, four days, taken from Gemlyx's own "I'll plan
+  //          for around 4 days". The traveller had said five.
+  //   02:54  window 15..25 Sep, from an echo Gemlyx got wrong and the traveller
+  //          corrected to 14..24 in the next turn.
+  //
+  // `convoTurns` is already the traveller's turns as an array at both call
+  // sites, passed in August so a relative answer like "i dag" could be read.
+  // Every other read in here is pointed at the same words now. `convoText`
+  // stays a parameter because a caller with no turns to give is still better
+  // served by a date than by nothing.
+  const said = Array.isArray(convoTurns) && convoTurns.length
+    ? convoTurns.filter(x => String(x || "").trim()).join("\n")
+    : convoText;
   const start = dayStart(arrival);
   const end = dayStart(departure);
   if (start && end && end.getTime() >= start.getTime()) {
@@ -731,12 +776,12 @@ export const tripWindow = ({ arrival, departure, convoText, convoTurns, today = 
   // day count, and a traveller who gave two dates and no count got the lone
   // date branch below: a window one day wide, on what was often their
   // departure. See dateRangeIn.
-  const stated = dateRangeIn(convoText, today);
+  const stated = dateRangeIn(said, today);
   if (stated) {
     return { start: stated.start, end: stated.end, days: daysBetween(stated.start, stated.end), dated: true, source: "conversation" };
   }
-  const spoken = dayCountIn(convoText);
-  const from = dayStart(arrivalDateIn(convoText, today));
+  const spoken = dayCountIn(said);
+  const from = dayStart(arrivalDateIn(said, today));
   if (from && spoken) {
     const to = new Date(from.getTime() + (spoken - 1) * MS_DAY);
     return { start: from, end: to, days: spoken, dated: true, source: "conversation" };
@@ -748,7 +793,7 @@ export const tripWindow = ({ arrival, departure, convoText, convoTurns, today = 
   // spoke, NOT the length of the month: those are two different facts and
   // conflating them would hand a seven day trip the event budget of a
   // thirty-one day one. precision says how much of this to trust.
-  const month = monthOnlyIn(convoText, today);
+  const month = monthOnlyIn(said, today);
   if (month) {
     return { start: month.start, end: month.end, days: spoken || null, dated: true, source: "conversation", precision: "month" };
   }

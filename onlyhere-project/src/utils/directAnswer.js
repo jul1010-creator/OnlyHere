@@ -60,7 +60,7 @@
 // It does not make this module win against tripBrief.js; see above.
 import { SPELLED_NUMBERS, NUMBER_TOKEN, VEHICLE_WORDS, TRANSPORT_VERBS,
          PUBLIC_TRANSPORT, YES_WORDS, NO_WORDS, PARTNER_WORDS, WITH_WORDS, ME_WORDS,
-         PARTY_POSSESSIVES, alt, LETTER, straighten } from "./travellerWords";
+         PARTY_POSSESSIVES, DAY_WORDS, NAMES_A_CHILD, alt, LETTER, straighten } from "./travellerWords";
 import { travelModeKey, withoutNonModes } from "./routeOrder";
 import { MAX_TRIP_DAYS } from "./tripEvents";
 import { KOMMUNER, K } from "../data/kommuner";
@@ -86,12 +86,21 @@ const REFUSAL = new RegExp([
   "\\b(?:ved (?:det )?ikke|aner det ikke|ikke besluttet|er lige glad|du bestemmer|keine ahnung|wei[sß] nicht|noch nicht entschieden|geen idee|weet ik niet|vet inte)\\b",
 ].join("|"), "i");
 
-// STRAIGHTENED FIRST. Every entry above spells the apostrophe as `'?`, which
-// reads "dont" and "don't" and misses "don’t", the one an iPhone types. That
-// blindness was measured across this codebase on 12 Sep and fixed everywhere a
-// traveller's words are read; this reader was the one that got away, and it sits
-// under five other readers that return null on a refusal.
-export const isRefusal = (turn) => REFUSAL.test(straighten(lower(turn)));
+// ── AND IT IS NOT STRAIGHTENED, WHICH IS DELIBERATE ─────────────
+//
+// It was, for about an hour on 12 Sep, on the reasoning that every other reader
+// of a traveller's words had been fixed for the curly apostrophe that night and
+// this one had been missed. A Fable review measured what that did. Group two of
+// REFUSAL matches ANYWHERE in the turn, and five readers below discard the whole
+// turn on a hit, so a sentence that answers AND hedges was already being thrown
+// away: "2 adults and 2 kids, don't know the exact ages yet" lost the headcount.
+// Straightening did not create that. It extended it from the apostrophe nobody
+// types to the one every phone types.
+//
+// So this stays as it was until the real bug is fixed, which is that a trailing
+// hedge is not a refusal of the answer in front of it. Readers that need the
+// curly form straighten it themselves; `lengthLeftToGemlyx` below does.
+export const isRefusal = (turn) => REFUSAL.test(lower(turn));
 
 // ── THE PLACES A TRIP CAN START ─────────────────────────────────────
 //
@@ -241,8 +250,20 @@ const capped = (n) => Math.min(n, MAX_TRIP_DAYS);
 // A wrong length is worse than none. None can be asked for again, which is what
 // `days` being a hard slot now guarantees; a 1 sizes the whole guide in silence.
 const QUANTITY_WORD = "par|paar|couple|few|stykker";
-const DAYS_UNIT = new RegExp(`(?:^|[^${LETTER}\\d])(${NUMBER_TOKEN})\\s+(?:(?!(?:${QUANTITY_WORD})\\s)[a-zæøå]+\\s+)?(?:days?|dage|dagen|tage|dagar)\\b`, "i");
+// ── AND ONE LIST OF DAY WORDS, NOT TWO ─────────────────────
+// This spelled its own out while dayCountIn in tripEvents.js reads DAY_WORDS,
+// so the two disagreed by exactly the words nobody had added twice. Norwegian
+// "dager" was the one that showed: "5 dager" read as a length in one reader and
+// as nothing in the other, and after 12 Sep "nothing" is a blocked build.
+const DAYS_UNIT = new RegExp(`(?:^|[^${LETTER}\\d])(${NUMBER_TOKEN})\\s+(?:(?!(?:${QUANTITY_WORD})\\s)[a-zæøå]+\\s+)?(?:${alt(DAY_WORDS)})(?![${LETTER}])`, "i");
 const WHOLE_NUMBER = new RegExp(`^(?:${NUMBER_TOKEN})$`, "i");
+// "3 or 4" as the whole answer to "how many days have you got?". The larger one,
+// because the question is about what they HAVE: planning four and letting them
+// drop one is recoverable, planning three when they had four loses a day with
+// nothing on screen saying so.
+const HEDGE_WORD = "maybe|probably|perhaps|possibly|about|around|roughly|say|m(?:å|aa)ske|nok|ca\\.?|cirka|omkring|vielleicht|etwa|ungef(?:ä|ae)hr|misschien|ongeveer|kanske|ungef(?:ä|ae)r";
+const HEDGED_NUMBER = new RegExp(`(?:^|[^${LETTER}])(?:${HEDGE_WORD})\\s+(${NUMBER_TOKEN})(?![${LETTER}])`, "i");
+const WHOLE_RANGE = new RegExp(`^(${NUMBER_TOKEN})\\s*(?:or|-|–|to|til|eller|oder|of|eller)\\s*(${NUMBER_TOKEN})$`, "i");
 
 export const daysAnswer = (turn, { cap = MAX_TRIP_DAYS } = {}) => {
   // The parameter, not the module constant: a caller passing cap: Infinity is
@@ -250,7 +271,19 @@ export const daysAnswer = (turn, { cap = MAX_TRIP_DAYS } = {}) => {
   // "you told me 20 and I plan 14" rather than silently planning 14.
   const lid = (n) => Math.min(n, cap);
   const t = withoutCorrectionLead(String(turn ?? ""));
-  if (isRefusal(t)) return null;
+  // ── A HEDGE IS NOT A REFUSAL WHEN IT CARRIES A NUMBER ─────────
+  //
+  // `if (isRefusal(t)) return null;` stood here and was measured by a Fable
+  // review on 12 Sep: "not sure, maybe 5", "haven't decided, probably 6" and
+  // "not sure, maybe five?" all came back empty, because REFUSAL matches "not
+  // sure" anywhere in the turn and this returned before any number was looked
+  // for. Before `days` was hard that cost a wrong length; after it, a blocked
+  // build on a turn where the traveller had answered.
+  //
+  // The guard is gone rather than reordered, because nothing below can turn a
+  // bare refusal into a number: every reader wants a unit word, a week word, a
+  // night word, an explicit hedge in front of the figure, or the WHOLE turn to
+  // be a number or a range. "up to you" and "no idea" still read as nothing.
   if (WEEKENDISH.test(t)) return 4;
   if (HALF_FIRST.test(t)) return lid(11);
   const nights = NIGHTS.exec(t);
@@ -286,7 +319,21 @@ export const daysAnswer = (turn, { cap = MAX_TRIP_DAYS } = {}) => {
     const n = numOfWord(unit[1]);
     return Number.isFinite(n) && n >= 1 ? lid(n) : null;
   }
+  // A figure behind a hedge word. Narrow on purpose: the hedge has to sit
+  // immediately in front of the number, so a stray figure elsewhere in the
+  // sentence is still not a length.
+  const hedged = HEDGED_NUMBER.exec(t);
+  if (hedged) {
+    const n = numOfWord(hedged[1]);
+    if (Number.isFinite(n) && n >= 1) return lid(n);
+  }
   const bare = t.trim().replace(/[.!?,]+$/, "");
+  const range = WHOLE_RANGE.exec(bare);
+  if (range) {
+    const a = numOfWord(range[1]), b = numOfWord(range[2]);
+    const pick = Math.max(Number.isFinite(a) ? a : 0, Number.isFinite(b) ? b : 0);
+    if (pick >= 1) return lid(pick);
+  }
   const n = WHOLE_NUMBER.test(bare) ? numOfWord(bare) : null;
   return Number.isFinite(n) && n >= 1 ? lid(n) : null;
 };
@@ -378,6 +425,17 @@ const STAY_NO = new RegExp([
   `^(?:${alt(NO_WORDS)})\\b`,
   "\\b(?:not (?:yet|booked|sorted)|no(?:t|thing)? booked|haven'?t booked|have not|still looking|looking for|searching for|need (?:a|an|to|somewhere)|nothing yet|need(?: to)? (?:book|find)|not sorted|to be (?:booked|sorted)|open to suggestions)\\b",
   "\\b(?:ikke booket|ikke endnu|mangler|har ikke|s(?:ø|oe)ger|leder efter|suchen|noch nicht)\\b",
+  // ── AND THE BARE NO, WHICH IS HOW PEOPLE ANSWER A YES OR NO ───
+  //
+  // Real turns from Oliver's own exports, each one the answer to "have you
+  // booked somewhere to stay?": "I don't, no.", "I haven't", "We haven't yet",
+  // "nono, we're in Aalborg for 5 days". Every one read as nothing, so the slot
+  // went to `declined` and the block told the model to assume.
+  //
+  // The anchored list above only catches a turn that OPENS with a no word, and
+  // three of those four do not.
+  "^\\s*n+o+(?:no)*\\b",
+  "\\b(?:i|we)\\s+(?:don'?t|haven'?t|do not|have not)\\b",
 ].join("|"), "i");
 const STAY_YES = new RegExp([
   `^(?:${alt(YES_WORDS)})\\b`,
@@ -436,7 +494,8 @@ const firstNum = (re, text) => {
 // A word for a child with no number in front of it. Kept apart from KID_WORD,
 // which is the counted form, because "our son" and "2 kids" are different facts
 // and only one of them has an arithmetic.
-const NAMES_A_CHILD = /\b(?:kids?|child|children|toddlers?|bab(?:y|ies)|teens?|teenagers?|son|daughter|grandkids?|grandchildren|b(?:ø|o)rn|barnet|kinder|sohn|tochter)\b|\b(?:1[0-7]|[1-9])\s*(?:year|yr|år|jahre)s?[- ]?old\b/i;
+// One definition, in travellerWords.js. This file had its own and so did
+// briefConflicts.js, and they disagreed about families and about "barn".
 const SOLO = /\b(?:alone|just me|only me|solo|by myself|on my own|alene|kun mig|allein(?:e)?|alleen|ensam|da solo)\b/i;
 // ── "I'M WITH MY HUSBAND" WAS NOT A COUPLE ──────────────────────────
 //
@@ -590,10 +649,111 @@ const OPEN_TO_ANYTHING = new RegExp(
     "lige meget", "det er lige meget", "ingen praeferencer", "ingen præferencer",
     "du entscheidest", "such dir was aus", "egal", "ist mir egal",
     "jij kiest", "maakt niet uit", "om det samma", "du bestemmer selv",
+    // ── AND "SOME OF EACH", WHICH IS AN ANSWER AND NOT A SHRUG ───
+    //
+    // Found 12 Sep by a Fable review, reading the app's own question back: the
+    // system prompt asks "Food, history, nightlife, nature, something else
+    // entirely?" and the two most natural replies to a list like that are "a
+    // mix of both" and "a bit of everything". Neither named a theme word, so
+    // neither could be read, and with `interests` hard that is a locked door
+    // behind a question the app wrote itself.
+    "a mix of both", "a mix of everything", "mix of both", "a bit of everything",
+    "bit of everything", "some of everything", "a little of everything",
+    "all of it", "all of the above", "everything really",
+    "lidt af det hele", "lidt af hvert", "en blanding", "b(?:\u00e5|aa)de og",
+    "von allem etwas", "eine mischung", "alles ein bisschen",
+    "een mix", "van alles wat", "een beetje van alles",
+    "lite av varje", "en blandning",
   ].join("|") + `)(?![${LETTER}])`, "i");
 
 export const openToAnything = (turn) =>
   OPEN_TO_ANYTHING.test(String(turn || "")) ? "open to anything, Gemlyx chooses" : null;
+
+// ── AND THE LENGTH HAS THE SAME HANDLE, WITH TWO GUARDS ───────────
+//
+// `days` became a hard slot on 12 Sep, so a side-step keeps blocking the build.
+// A hard slot with no honest way to answer it is a loop, and how long a trip is
+// is the one question a traveller can truthfully not know yet. So there are two
+// ways to answer it: a number, or handing the choice over.
+//
+// The first version of this reused `isRefusal`. A Fable review measured what
+// that let through, as the reply to "How many days have you got?":
+//
+//   "Any tips for Aarhus?"      -> the length is now Gemlyx's to pick
+//   "why do you need that?"     -> same
+//   "not sure, maybe 5"         -> same, and the 5 is thrown away
+//
+// REFUSAL anchors `^any|^anything|^open|^whatever` and matches deflections
+// anywhere, which is right for five readers that return null on a hit and wrong
+// for one that fills a slot. A question is not a handover and a hedge carrying a
+// number is not one either. Hence the two guards below, before any matching.
+//
+// THE VOCABULARY IS THE ONE INTERESTS ALREADY USES, plus the shapes that are
+// about a length rather than a preference. Two lists of the same words is how
+// they drift apart, and this file had grown exactly that.
+// NOT NUMBER_TOKEN, which was the first attempt and disqualified "up to you":
+// Danish `to` is 2 and sits inside every English sentence carrying the word,
+// which is the trap daysAnswer's own comment describes twenty lines up. The
+// articles go with it, because `a`, `en`, `et`, `een`, `ein` and `one` are how
+// the handover phrases are spelled in the first place.
+//
+// What is left is the spelled numbers that are not also ordinary words in one of
+// the six languages, plus any digit. Over-disqualifying is the safe direction:
+// it costs one more question, where a false handover costs an invented length.
+const UNAMBIGUOUS_NUMBER = new RegExp(`(?:^|[^${LETTER}])(?:` + [
+  "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+  "eleven", "twelve", "thirteen", "fourteen",
+  "zwei", "drei", "vier", "f(?:ü|u)nf", "sechs", "sieben", "acht", "neun", "zehn",
+  "twee", "drie", "vijf", "zes", "zeven", "negen", "tien",
+  "tv(?:å|a)", "fyra", "fem", "sju", "(?:å|a)tta", "nio", "tio",
+  "tre", "fire", "seks", "syv", "otte", "ti",
+].join("|") + `)(?![${LETTER}])`, "i");
+const NUMBERISH = (t) => /\d/.test(t) || UNAMBIGUOUS_NUMBER.test(t);
+// Not knowing, in the six languages travellerWords covers. "det ved jeg ikke" is
+// the ordinary Danish for it and the first version missed it, which mattered
+// more than the rest put together: the person it blocked was a Danish speaker.
+const UNSURE_LENGTH = new RegExp(`(?:^|[^${LETTER}])(?:` + [
+  "not sure", "unsure", "no idea", "not decided", "undecided", "still deciding",
+  "haven't decided", "havent decided", "have not decided", "haven't figured",
+  "don't know yet", "dont know yet", "do not know yet", "don't know", "dont know",
+  "we'll see", "well see", "up in the air", "open ended", "tbd", "to be decided",
+  "ved (?:det )?ikke", "det ved jeg ikke", "ikke sikker", "ingen anelse", "ikke besluttet",
+  "ikke bestemt", "ikke afgjort", "vi ser",
+  "vet ikke", "vet inte", "inte s(?:ä|a)ker", "ingen aning", "inte best(?:ä|a)mt",
+  "nicht sicher", "keine ahnung", "wei(?:ß|ss) (?:ich )?nicht", "ich wei(?:ß|ss) es nicht",
+  "noch nicht entschieden", "noch nicht sicher",
+  "weet ik niet", "weet ik nog niet", "weet niet", "nog niet zeker", "nog niet besloten",
+].join("|") + `)(?![${LETTER}])`, "i");
+// A length given as a handful rather than a number. These are real answers and
+// they used to read as nothing, which after 12 Sep is a blocked build rather
+// than a wrong number. They are NOT turned into a figure here: "a few days" is
+// not three, and inventing one quietly is the whole thing this night was about.
+// They hand the choice over WITH the traveller's own words attached, so the
+// block can tell the model to pick something that matches and say it out loud.
+const VAGUE_LENGTH = new RegExp(`(?:^|[^${LETTER}])(?:` + [
+  "a couple of days", "a couple days", "a few days", "a handful of days",
+  "the weekend", "just the weekend", "a weekend", "over the weekend",
+  "et par dage", "nogle f(?:å|aa) dage", "en weekend", "i weekenden",
+  "ein paar tage", "einige tage", "ein wochenende",
+  "een paar dagen", "een weekend",
+  "ett par dagar", "n(?:å|a)gra dagar", "en helg",
+].join("|") + `)(?![${LETTER}])`, "i");
+
+export const lengthLeftToGemlyx = (turn) => {
+  const t = straighten(String(turn ?? "")).trim();
+  if (!t) return null;
+  // A QUESTION IS NOT AN ANSWER. "Any tips for Aarhus?" opens with a word this
+  // vocabulary owns and is not about the length at all.
+  if (t.includes("?")) return null;
+  const vague = VAGUE_LENGTH.exec(t);
+  // A NUMBER IN THE TURN IS THE ANSWER, not this. Checked after the vague list
+  // so "a couple of days" is not disqualified by the "a" inside it, and before
+  // everything else so "not sure, maybe 5" never reaches the handover at all.
+  if (!vague && NUMBERISH(t)) return null;
+  if (vague) return vague[0].replace(new RegExp(`^[^${LETTER}]+`), "");
+  if (UNSURE_LENGTH.test(t) || OPEN_TO_ANYTHING.test(t)) return "they have not decided";
+  return null;
+};
 
 export const directAnswers = (turns, answering) => {
   const out = {};
@@ -647,8 +807,14 @@ export const directAnswers = (turns, answering) => {
         //
         // ONLY AFTER daysAnswer HAS COME BACK EMPTY, so "not sure, maybe five?"
         // is five and never this.
-        else if (only === "days" && isRefusal(turn)) {
-          out.days = { value: "open, Gemlyx picks the length", source: "said", open: true };
+        else if (only === "days") {
+          const open = lengthLeftToGemlyx(turn);
+          // NO COMMA IN THE VALUE. briefPanel renders the known slots as one
+          // sentence joined by commas, so "open, Gemlyx picks the length" split
+          // itself into two list items and the traveller read "2 adults,
+          // driving, 14 September, open, Gemlyx picks the length, in and out of
+          // Billund."
+          if (open) out.days = { value: "a length Gemlyx picks", said: open, source: "said", open: true };
         }
       } else if (key === "interests") {
         const v = only === "interests" ? openToAnything(turn) : null;

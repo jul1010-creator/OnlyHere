@@ -45,7 +45,7 @@
 // "Copenhagen has excellent museums" would otherwise become evidence that the
 // traveller asked for museums.
 import { arrivalDateIn, dateRangeIn, departureDateIn, dayCountIn, monthOnlyIn, latestRelativeAnswer, relativeAnswerIn, daysBetween, MAX_TRIP_DAYS } from "./tripEvents";
-import { PARTY_BARE, PARTY_POSSESSIVE, PARTY_POSSESSIVES, PARTY_COUNT, TRAVEL_VERBS, FROM_WORDS, TRANSPORT_PREPS, VEHICLE_WORDS, TRANSPORT_VERBS, PUBLIC_TRANSPORT, alt, LETTER } from "./travellerWords";
+import { PARTY_BARE, PARTY_POSSESSIVE, PARTY_POSSESSIVES, PARTY_COUNT, TRAVEL_VERBS, FROM_WORDS, TRANSPORT_PREPS, VEHICLE_WORDS, TRANSPORT_VERBS, PUBLIC_TRANSPORT, alt, LETTER, INTEREST_ALL_WORDS, INTEREST_WORD_TERM, NAMES_A_CHILD } from "./travellerWords";
 import { dayStart } from "./calendarDay";
 import { travelModeKey, withoutNonModes } from "./routeOrder";
 import { directAnswers } from "./directAnswer";
@@ -464,10 +464,25 @@ const PARTY_RE = new RegExp(
     `|(?:${alt(PARTY_POSSESSIVES)})\\s+(?:${alt(PARTY_POSSESSIVE)})` +
     `|(?:${PARTY_COUNT.join("|")})` +
   `)(?![${LETTER}])`, "i");
+// ── AND IT SAYS WHETHER THERE ARE CHILDREN ─────────────────
+//
+// `hasKids` gates the nightlife inventory out of the prompt and flags a night
+// out nobody asked for, and until 12 Sep the ONLY writer of it was the direct
+// answer path in directAnswer.js. So it was true for "2 adults and 2 kids"
+// typed straight under "who is coming?", and false for the same words said in
+// a sentence, false for the intake form's family tick-box, and false for the
+// intake form's own "2 adults and 2 kids" field. Measured by a Fable review:
+// all three gave hasKids false and then planned a night out.
+//
+// A REFUSAL IS SCRUBBED FIRST, for the same reason readInterests scrubs one:
+// "no kids this time" says there are none.
 const readParty = (text, intakeTravelers, familyMode) => {
-  if (has(intakeTravelers)) return { value: clean(intakeTravelers), source: "intake" };
-  if (familyMode) return { value: "family", source: "intake" };
-  return PARTY_RE.test(String(text || "")) ? { value: ACKNOWLEDGED_VALUE, source: "said" } : null;
+  const kidsIn = (v) => NAMES_A_CHILD.test(withoutRefused(String(v || "")));
+  if (has(intakeTravelers)) return { value: clean(intakeTravelers), source: "intake", hasKids: kidsIn(intakeTravelers) };
+  if (familyMode) return { value: "family", source: "intake", hasKids: true };
+  return PARTY_RE.test(String(text || ""))
+    ? { value: ACKNOWLEDGED_VALUE, source: "said", hasKids: kidsIn(text) }
+    : null;
 };
 
 // ── THE ONE THAT WAS NEVER ASKED AT ALL ─────────────────────────────
@@ -493,7 +508,10 @@ const readParty = (text, intakeTravelers, familyMode) => {
 // an answer about accommodation, and not-an-answer is the honest state: the gate
 // asks once and then stops (see `asked`), so a false positive costs a wrong plan
 // while a miss costs one short question.
-const SLEEPS = "hotel|hostel|room|rooms|place|places|apartment|flat|airbnb|bnb|b&b|guesthouse|guest house|kro|inn|cabin|cottage|campsite|camping spot|somewhere to stay|accommodation|lodging";
+// "lodge" was in directAnswer.js's list and not in this one, so "The lodge
+// billund we got" was read by the direct path and invisible to the sentence
+// path. Same word, two lists, one of them short.
+const SLEEPS = "hotel|hostel|room|rooms|place|places|apartment|flat|airbnb|bnb|b&b|guesthouse|guest house|kro|inn|lodge|cabin|cottage|campsite|camping spot|sommerhus|ferienwohnung|værelse|vaerelse|zimmer|kamer|somewhere to stay|accommodation|lodging";
 // ── AND A HOTEL NAMES ITSELF BEFORE IT IS BOOKED ────────────────────
 //
 // 26 Aug 2026. "We have 71 Nyhavn Hotel booked for the first two nights" filled
@@ -536,11 +554,37 @@ const BOOKED_RE = new RegExp(
   // booking is the false positive this slot cannot afford.
   + `|\\b(?:book(?:ed)?|reserved)\\s+(?:a\\s+|our\\s+|the\\s+|my\\s+)?(?:stay|\\d+\\s+nights?|nights?)\\b`, "i");
 const BOOKED_DONE = /\b(?:booked|reserved|sorted|staying)\b/i;
-const NOT_BOOKED_RE = /\b(?:not (?:booked|yet)|nothing booked|no hotel|haven'?t booked|need (?:a hotel|somewhere)|looking for (?:a hotel|somewhere)|open to suggestions on (?:hotels?|where to stay))\b/i;
+const NOT_BOOKED_RE = /\b(?:not (?:booked|yet|decided|sorted)|nothing booked|no hotel|haven'?t (?:booked|decided|sorted|got)|have not (?:booked|decided)|still (?:looking|deciding)|in mind|need (?:a hotel|somewhere)|looking for (?:a hotel|somewhere)|open to suggestions on (?:hotels?|where to stay)|ikke booket|ikke bestemt|noch nicht gebucht|nog niet geboekt)\b/i;
+// ── A BOOKING IN THE OTHER FIVE LANGUAGES ──────────────────
+// "Vi har booket et hotel", "Wir haben ein Hotel gebucht" and "We hebben een
+// hotel geboekt" all read as nothing until 12 Sep, on a BLOCKING slot, so a
+// Danish traveller with a hotel was asked whether they had one and then planned
+// around not having one. The verbs here are unambiguous, so a word for the place
+// anywhere in the same sentence is enough.
+const BOOKED_ELSEWHERE = new RegExp(`\\b(?:booket|reserveret|gebucht|reserviert|geboekt|gereserveerd|bokat|bokad|reservert)\\b`, "i");
+// A completed booking verb with a proper noun behind it: "we booked the
+// Radisson", "vi har booket Hotel Phoenix". namedStayIn cannot see these,
+// because it wants a lodging word inside the name and a hotel is usually just
+// its own name.
+const BOOKED_PROPER = /\b(?:booked|reserved|booket|reserveret|gebucht|geboekt|bokat)\s+(?:the\s+|a\s+|an\s+|our\s+|my\s+|et\s+|en\s+|ein\s+|een\s+)?[A-ZÆØÅ]/;
+// ── AND A QUESTION BOOKS NOTHING ──────────────────────
+//
+// "Do you have a hotel to recommend?" and "Have you got a hotel tip for Aarhus?"
+// both read as a BOOKED hotel, because `have ... hotel` is one of the shapes
+// above and this reader was handed the whole conversation as one string. The
+// direct-answer reader in directAnswer.js has guarded this since it was written;
+// this one never did, and the cost is a guide that suppresses every word about
+// where to stay for somebody who was asking exactly that.
+//
+// Split rather than tested at the end, because the text here is every traveller
+// turn joined together and the question is usually not the last thing in it.
+const SENTENCES = /[^.!?\n]+[.!?]*/g;
+const withoutQuestions = (text) =>
+  (String(text || "").match(SENTENCES) || []).filter(x => !/\?\s*$/.test(x.trim())).join(" ");
 const readStay = (text, intakeStayBooked) => {
   if (intakeStayBooked === true) return { value: "booked", source: "intake" };
   if (intakeStayBooked === false) return { value: "not booked", source: "intake" };
-  const s = String(text || "");
+  const s = withoutQuestions(text);
   // Not-booked is tested FIRST: "haven't booked" contains "booked".
   if (NOT_BOOKED_RE.test(s)) return { value: "not booked", source: "said" };
   if (BOOKED_RE.test(s)) return { value: "booked", source: "said" };
@@ -549,6 +593,8 @@ const readStay = (text, intakeStayBooked) => {
   // interests slot, so a run of words is a hotel in both directions or in
   // neither. Last, because it is the widest.
   if (BOOKED_DONE.test(s) && namedStayIn(s)) return { value: "booked", source: "said" };
+  if (BOOKED_ELSEWHERE.test(s) && new RegExp(`\\b(?:${SLEEPS})\\b`, "i").test(s)) return { value: "booked", source: "said" };
+  if (BOOKED_PROPER.test(s)) return { value: "booked", source: "said" };
   return null;
 };
 
@@ -750,13 +796,15 @@ export const bookedDayNumbers = (stayWhen, dayCount) => {
 // bicycle" is a sentence about HOW SOMEBODY GETS AROUND, and letting it fill the
 // interests slot means a trip whose shape nobody ever stated reads as specified.
 // Transport has its own slot below, and its own reader.
-const INTEREST_WORDS = [
-  "food", "eat", "restaurant", "history", "historic", "viking", "museum", "design",
-  "architecture", "nature", "hiking", "beach", "island", "nightlife", "bar",
-  "beer", "art", "shopping", "castle", "christmas market",
-  "relax", "quiet", "photography", "music", "festival", "hygge", "spa",
-  "hidden gem", "off the beaten", "local spot", "surf", "wildlife", "birdwatch",
-];
+// ── THE LIST MOVED, AND WHY ─────────────────────────────
+// It was thirty-odd English words sitting in this file. `interests` became HARD
+// on 12 Sep, so a word this list did not hold stopped being a missed theme and
+// became a build nobody could start, and the list held no Danish, German, Dutch,
+// Swedish or Norwegian at all. It lives in travellerWords.js now, beside every
+// other thing a traveller might type, keyed by the English term the rest of the
+// app reads. See the comment there for what the Danish question could not read
+// back.
+const INTEREST_WORDS = INTEREST_ALL_WORDS;
 // ── AND A THEME THEY DO NOT WANT IS NOT A THEME ─────────────────────
 //
 // Found 5 Sep 2026 by an adversarial review. "I don't want to do museums or
@@ -776,6 +824,16 @@ const INTEREST_WORDS = [
 // answer.
 const NOT_WANTED = new RegExp(
   "\\b(?:no|not|don'?t|doesn'?t|won'?t|can'?t|never|hate|hates|hating|avoid|skip|forget|rather not|not into|no interest in|ikke|hader|nicht|kein(?:e|en)?|hasse|geen|haat)\\b" +
+  // ── AND "DO NOT MIND" IS NOT A REFUSAL ───────────────────
+  //
+  // It is the opposite: it is somebody saying yes without enthusiasm. Found
+  // 12 Sep, when this scrub was wired into the second reader of interests and a
+  // brief saying "we do not mind paying for one or two good meals" came back
+  // with no food in it. The negation swallowed the clause that was the answer.
+  //
+  // Same for "no objection to". The pattern is a negation followed by a word
+  // that turns it back into an agreement, and there are only a few of them.
+  "(?!\\s+(?:mind|minds|minding|object|objects|objecting|objection))" +
   // ── AND IT STOPS AT A COMMA ─────────────────────────────────────
   // Found 5 Sep by an adversarial review. Running to the full stop swallowed the
   // answer in "No problem, we love food and history" and "Skip Copenhagen, we
@@ -891,7 +949,33 @@ const readInterests = (text, intakeInterest) => {
   //
   // An ordinary English suffix is still the same interest ("eat"/"eating",
   // "castle"/"castles"), so those are allowed and nothing else is.
-  const found = INTEREST_WORDS.filter(w => new RegExp(`\\b${w}(?:s|es|ing|ed)?\\b`, "i").test(s));
+  // EDGED, not \b. JavaScript's word boundary is ASCII only, so `\b\u00f8l\b` and
+  // `\bsev\u00e6rdigheder\b` never match the words they are written for: the boundary
+  // sits between two characters it does not think are letters. Every other
+  // multilingual reader in this project already uses the LETTER class for this,
+  // and the interests reader was the one still on \b.
+  //
+  // THE ENGLISH SUFFIXES STAY AND NOTHING IS ADDED. Plurals and definite forms
+  // in the other five languages are listed as their own entries rather than
+  // generated, because a generated Danish suffix turns "art" into "arter" and
+  // "slot" into "slots" and there is no way to tell which of those a sentence
+  // meant. A listed word is a decision somebody made; a generated one is a
+  // guess, and this slot has been filled by a guess twice.
+  // IN THE ORDER THEY SAID THEM, which is neither the order of the word list nor
+  // the order this loop happens to walk. The list is sorted longest first so a
+  // two-word term is read before a one-word one inside it, and reporting in that
+  // order turned "food and history" into "history, food": true, and not what
+  // they wrote. What a traveller puts first is usually what they care about
+  // most, and the guide prompt reads this string top to bottom.
+  const at = new Map();
+  for (const w of INTEREST_WORDS) {
+    const term = INTEREST_WORD_TERM.get(w) || w;
+    const pat = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const m = new RegExp(`(?:^|[^${LETTER}])(?:${pat})(?:s|es|ing|ed)?(?![${LETTER}])`, "i").exec(s);
+    if (!m) continue;
+    if (!at.has(term) || m.index < at.get(term)) at.set(term, m.index);
+  }
+  const found = [...at.entries()].sort((a, b) => a[1] - b[1]).map(([term]) => term);
   return found.length ? { value: found.slice(0, 6).join(", "), source: "said" } : null;
 };
 
@@ -1126,7 +1210,18 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   // cap, and so a screen can print "15 days, planned as 14" rather than 14.
   const cappedDays = known.days?.askedFor || null;
   const party = known.party;
-  const childrenAlone = !!party && party.hasKids && party.adults == null;
+  // ── AND ONLY WHERE SOMEBODY COUNTED ────────────────────
+  //
+  // "children travelling on their own" is a reading of a COUNT: the direct
+  // answer reader worked out how many adults and how many children and came back
+  // with children and no adults. A party read out of a sentence has no count by
+  // construction, so the moment readParty started reporting `hasKids` on 12 Sep
+  // every ordinary family sentence ("me, my wife and the kids") began reporting
+  // itself as unaccompanied children and asking for the adult headcount.
+  //
+  // `adults` is present on the counted reading and absent on the other, which is
+  // the difference itself rather than a flag describing it.
+  const childrenAlone = !!party && party.hasKids && "adults" in party && party.adults == null;
   const vague = [
     ...(known.when?.precision === "month" ? ["when"] : []),
     ...(childrenAlone ? ["party"] : []),
@@ -1168,9 +1263,26 @@ export const nextAsks = (brief, { limit = MAX_ASKS_AT_ONCE } = {}) => {
   // Hard slots that were asked and not answered go LAST, so they are raised once
   // everything else is settled rather than blocking the conversation at the point
   // the traveller changed the subject.
-  const pick = [...brief.missing, ...(brief.vagueToAsk || []), ...(brief.unanswered || [])].filter((k, i, a) => a.indexOf(k) === i);
+  // ── AND THE SORT USED TO UNDO THE SENTENCE ABOVE IT ──────────
+  //
+  // `pick` put the unanswered ones last and then a single sort by slot order
+  // shuffled them back in among the rest, so the comment has described the
+  // opposite of the behaviour since it was written. Nobody noticed while `when`
+  // sat third in the list. `days` is first, and hard since 12 Sep, so a
+  // traveller who answered a different question got the length asked again on
+  // every turn ahead of five things nobody had raised yet.
+  //
+  // TWO SORTED GROUPS, each in slot order. Everything nobody has been asked
+  // comes first; a question they have already had once comes back when there is
+  // nothing new left to ask, which is what "come back to it once, plainly" in
+  // the block means.
+  const fresh = [...brief.missing, ...(brief.vagueToAsk || [])].filter((k, i, a) => a.indexOf(k) === i);
+  const again = (brief.unanswered || []).filter(k => !fresh.includes(k));
+  const pick = [
+    ...fresh.sort((a, b) => order.indexOf(a) - order.indexOf(b)),
+    ...again.sort((a, b) => order.indexOf(a) - order.indexOf(b)),
+  ];
   return pick
-    .sort((a, b) => order.indexOf(a) - order.indexOf(b))
     .slice(0, Math.max(0, limit))
     .map(k => BRIEF_SLOTS.find(s => s.key === k))
     .filter(Boolean);
@@ -1289,7 +1401,29 @@ export const buildBlockedNote = (brief, lang = null) => {
 // utils/briefConflicts.js.
 // How many blocking slots are still open, counted from the same list the
 // progress bar counts, so the note, the prompt rule and the bar agree.
-const stillOpenCount = (brief) => BLOCKING_SLOTS.filter(k => !brief?.known?.[k]).length;
+// ── AND A SLOT THAT ONLY APPLIES SOMETIMES STILL COUNTS ────────
+//
+// BLOCKING_SLOTS drops every slot carrying a `needs` predicate, because nobody
+// is asked which nights their booking covers when they have not booked
+// anything. That is right for the LIST and wrong for the COUNT: once somebody
+// says they have booked, `stayWhen` is a real open question, and this counted it
+// as nothing. Measured by a Fable review on 12 Sep on a brief with a booking and
+// no nights: the block printed "There are 0 things still open" directly above
+// "STILL MISSING: which nights does that booking cover?", and the bar beside it
+// said 7 of 7 and 99% with no reason given.
+//
+// One definition, exported, so the prompt line, the blocked-build note and the
+// progress bar cannot drift apart. They have twice.
+export const openBlocking = (brief) => BRIEF_SLOTS
+  .filter(s => s.tier === "blocking" && !brief?.known?.[s.key])
+  .filter(s => (typeof s.needs === "function" ? !!s.needs(brief?.known || {}) : true))
+  .map(s => s.key);
+// And the denominator moves with it, or the bar reads 8 of 7.
+export const blockingTotal = (brief) => BRIEF_SLOTS
+  .filter(s => s.tier === "blocking")
+  .filter(s => (typeof s.needs === "function" ? !!s.needs(brief?.known || {}) : true))
+  .length;
+const stillOpenCount = (brief) => openBlocking(brief).length;
 
 export const briefBlock = (brief, conflicts = []) => {
   if (!brief) return "";
@@ -1342,19 +1476,24 @@ export const briefBlock = (brief, conflicts = []) => {
   // of the guide?".
   //
   // So `days` comes out of the assume-out-loud list and gets its own rule. It
-  // does NOT become a hard slot: a hard slot asked and side-stepped blocks the
-  // build for good, and a traveller can honestly not know their length yet.
-  // What is banned is stating a number nobody gave, which costs nothing when
-  // they do not know and everything when the builder reads it.
+  // IS a hard slot, as of later the same night. The first version of this note
+  // argued the opposite, on the grounds that a hard slot asked and side-stepped
+  // blocks the build for good. That was true and the conclusion was wrong: not
+  // blocking meant a guide was built with no length at all, which is worse. The
+  // deadlock is answered by a handle on the door (directAnswer.js), not by
+  // leaving the door open.
   // NOT while it is in `unanswered`. `days` is hard now, so asked-and-unfilled
   // is printed by the ASKED, NOT ANSWERED block above, which already says not to
   // assume a value. Two lines telling the model the same thing is the bug this
   // file keeps finding, so this one covers only the state that block does not:
   // never asked, and therefore never yet forbidden.
-  const daysOpen = !brief.known?.days
-    && !(brief.unanswered || []).includes("days")
-    && ((brief.missing || []).includes("days") || (brief.declined || []).includes("days"));
-  const declinedSlots = BRIEF_SLOTS.filter(s => (brief.declined || []).includes(s.key) && !(brief.unanswered || []).includes(s.key) && s.key !== "days");
+  // `missing` IS the whole state. For a hard slot, unknown-and-asked lands in
+  // `unanswered` (the block above owns it) and unknown-and-not-asked lands in
+  // `missing`, so the `declined` half of the first version could never be true
+  // while the `unanswered` guard held. Dead logic in a prompt builder reads as a
+  // third case that does not exist.
+  const daysOpen = !brief.known?.days && (brief.missing || []).includes("days");
+  const declinedSlots = BRIEF_SLOTS.filter(s => (brief.declined || []).includes(s.key) && !(brief.unanswered || []).includes(s.key));
   if (declinedSlots.length) {
     lines.push("ALREADY ASKED AND NOT ANSWERED. Do not ask about these again. If one of them changes what you would plan, say out loud what you are assuming:");
     declinedSlots.forEach(s => lines.push(`  ${s.label}`));
@@ -1366,7 +1505,18 @@ export const briefBlock = (brief, conflicts = []) => {
   // this conversation back to size the guide, so a number the model only thought
   // is a number the builder cannot find.
   if (brief.known?.days?.open) {
-    lines.push("THEY HAVE LEFT THE LENGTH TO YOU. Choose one, write the number in this reply in plain words, and use that same number when you build. Do not leave it unsaid and do not change it later.");
+    const said = brief.known.days.said;
+    const theirs = said && said !== "they have not decided"
+      ? ` They put it as "${said}", so pick a length that matches that and not a longer one.`
+      : "";
+    // ONCE, like the capped-days rule above it. The first version printed this
+    // on every turn after the handover, including the turn that says everything
+    // is known, which is how a rule stops being read.
+    // AND DATES OUTRANK IT. `days` sorts before `when`, so the ordinary order is
+    // handover first and dates second, and a range like "the 14th to the 17th"
+    // is a length. Without this the block flips to "THE TRIP IS 4 DAYS" a turn
+    // after telling the model its own number was final.
+    lines.push(`THEY HAVE LEFT THE LENGTH TO YOU.${theirs} Choose one and write the number in plain words, once, the first time you use it. If they later give dates that fix the length, their dates win and you say so rather than keeping your number.`);
   }
   if (daysOpen) {
     lines.push('THEY HAVE NOT SAID HOW LONG THE TRIP IS, SO THERE IS NO LENGTH TO PLAN TO. Do not name a count of days, do not write "around N days", do not size a route to a number you picked, and do not offer one for them to correct. A day count you say out loud becomes the guide\'s length, because the builder reads this conversation back. Ask for it, or say nothing at all about how long the trip is.');
@@ -1376,8 +1526,19 @@ export const briefBlock = (brief, conflicts = []) => {
   // cannot make a build without dates." The guide that came out of that carried
   // a weather forecast for every day and an event dated 9 October.
   if (hardOpen.length) {
+    // ── THE LABEL, NOT THE QUESTION ───────────────────────
+    //
+    // This printed `s.ask` and so did STILL MISSING further down, so a hard slot
+    // that had been side-stepped put the identical sentence in front of the
+    // model twice in one block, once under "come back to it ONCE, plainly" and
+    // once under "ask for THIS ONE and nothing else in this reply". Two
+    // instructions about one question, disagreeing about urgency. Measured by a
+    // Fable review on 12 Sep, on the 21:24 transcript, where it would have asked
+    // "How many days have you got?" at five consecutive turns.
+    //
+    // One place asks, and it is the one whose whole job is to say what to ask.
     lines.push("ASKED, NOT ANSWERED, AND STILL REQUIRED. Nothing can be built until you have these, so do not assume a value, do not pick a likely one, and never say you are ready to build:");
-    hardOpen.forEach(s => lines.push(`  ${s.label}: ${s.ask}`));
+    hardOpen.forEach(s => lines.push(`  ${s.label}`));
     lines.push("They changed the subject rather than refusing, so this is not a decline. Answer whatever they did ask, then come back to it once, plainly.");
   }
   // ── AND A CONFLICT IS RAISED EVEN WHEN NOTHING IS MISSING ─────────
@@ -1442,7 +1603,8 @@ export const briefBlock = (brief, conflicts = []) => {
   // landing on the model's screen in one turn saying seven and six. A counting
   // rule that cannot count is worse than no rule, and two readers of one
   // question is the bug this whole night keeps finding.
-  lines.push(`NEVER OPEN WITH "ONE MORE THING", "ONE THING FIRST", "ONE QUICK CHECK", "JUST ONE MORE" OR ANY COUNTED VARIANT OF THEM, and never end a reply with one either. There are ${stillOpenCount(brief)} things still open, so counting down to one is not true, and the traveller reads the same opener every turn as a form with a fixed number of rounds. Say the thing, then ask the question, with no counter in front of either.`);
+  const openNow = stillOpenCount(brief);
+  lines.push(`NEVER OPEN WITH "ONE MORE THING", "ONE THING FIRST", "ONE QUICK CHECK", "JUST ONE MORE" OR ANY COUNTED VARIANT OF THEM, and never end a reply with one either. There ${openNow === 1 ? "is 1 thing" : `are ${openNow} things`} still open, so counting down to one is not true, and the traveller reads the same opener every turn as a form with a fixed number of rounds. Say the thing, then ask the question, with no counter in front of either.`);
   // ── AND AN UNKNOWN START MAY NOT BE FILLED IN FOR THEM ─────
   //
   // Oliver, 12 Sep 2026: "So I said I went to Aalborg. It instantly assumed I

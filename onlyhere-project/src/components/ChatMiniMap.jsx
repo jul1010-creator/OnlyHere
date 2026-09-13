@@ -6,6 +6,7 @@ import { ChatPlaceCards, showablePhoto } from "./ChatPlaceCards";
 import { POPUP_CLASS, RAIL_BREAKPOINT_PX, LABEL_CLASS, labelSides, isSpotPin, spotsShowAt } from "../utils/chatRail";
 import { distinctThemes, THEME_LABEL } from "../utils/placeThemes";
 import { entryWord } from "../utils/entryWords";
+import { makeCamera } from "../utils/mapDirections";
 import { t as uiT } from "../utils/uiLanguage";
 
 // ── THE MAP UNDER THE CHAT ──────────────────────────────────────────
@@ -45,6 +46,26 @@ const DENMARK = [[54.5, 8.0], [57.8, 15.3]];
 // town with the country around it. Named at module scope because two callers
 // need the same number and a second copy is how they start disagreeing.
 const FOCUS_ZOOM = 12;
+// How close two or more pins are framed when the pins ask for a frame. At this
+// latitude zoom 10 is about 86 metres a pixel, so a 490 pixel map is roughly
+// 42 km across: two towns and the road between them, never one town's streets.
+const CLUSTER_ZOOM = 10;
+// ── HOW LONG EACH MOVE TAKES, NAMED ONCE ──────────────────────────
+//
+// Oliver, 12 Sep 2026: "when it zooms out, make it a little slower."
+//
+// They were both 1.1 seconds and they are not the same move. Zooming IN is an
+// arrival: the traveller already knows where it is going, because the sentence
+// just named it, and dawdling is a title sequence. Zooming OUT is the map giving
+// back the country, and pulling away covers far more ground in the same time,
+// so an equal duration reads as a lurch rather than as a camera. The slower one
+// is also the one with something to say: watching Copenhagen shrink into
+// Denmark is the frame he wants the reader to read.
+//
+// FIT is the app's own move, the eased pan that opens the picture up to include
+// a pin that has appeared off it. Shorter than either, because nothing in the
+// sentence announced it.
+const OUT_SECONDS = 1.9, IN_SECONDS = 1.1, FIT_SECONDS = 0.9;
 
 // ── THERE WAS A WIDER FRAME HERE AND IT HAS GONE ───────────────
 //
@@ -54,11 +75,11 @@ const FOCUS_ZOOM = 12;
 // one step further out for there to be any descent left.
 //
 // Both halves are undone together, because the second only ever propped up the
-// first. A lone pin flies to its place again (see the flight below), so the
-// country is a real starting frame rather than a destination, and the wider box
-// would now only push Denmark into the middle of four other countries. Oliver,
-// 12 Sep 2026, looking at precisely that: "Have the map default as a map of
-// Denmark from start."
+// first. The country is a real starting frame rather than a destination, the
+// reply's own [[MAP_IN]] is the descent from it (see the flight block in the
+// pin effect for how that moved), and the wider box would now only push Denmark
+// into the middle of four other countries. Oliver, 12 Sep 2026, looking at
+// precisely that: "Have the map default as a map of Denmark from start."
 
 // The pin's own colour, named once. Oliver, 8 Sep 2026, asked for the shape
 // everyone knows and then, shown it in the site's gold, said "red". Gold is
@@ -115,7 +136,21 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   // pin lands on the country now and the opening moved out a step to keep the
   // descent. Two or more still land on the pins, because by then the question
   // is how far apart they are.
-  const flownRef = useRef(false);
+  //
+  // AND ON 12 SEP THE DESCENT BECAME THE REPLY'S TO MAKE. The pins no longer
+  // fly anywhere on their own; see the flight block in the pin effect.
+  // ── THE CAMERA, ONE MOVE AT A TIME ───────────────────────────────
+  //
+  // Every move goes through here, the reply's and the app's alike, because
+  // Leaflet's flyTo cancels the flight before it and two callers with their own
+  // flyTo were cancelling each other. The rules (a move that arrives while one
+  // is playing waits its turn; the reply's move outranks the app's; the pins
+  // ask for a frame only when the picture has lost one) and the clock that runs
+  // them are makeCamera in utils/mapDirections.js, where the suite drives them
+  // with fake timers. This component hands it the Leaflet calls and the picture
+  // and decides nothing. Built with the map, below, because it needs one.
+  const camRef = useRef(null);
+  const pinsNowRef = useRef([]);
   const markersRef = useRef(new Map());
   // ── THE POPUP IS A REAL CARD, PORTALLED IN ──────────────────────
   //
@@ -184,6 +219,48 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   // what this column is for without a sentence explaining it.
   const shown = wide;
 
+  // ── THE MOVES THEMSELVES ─────────────────────────────────────────
+  //
+  // Out is the country, which is the frame the map opens on, so a pull-back
+  // lands exactly where it started rather than at some middle distance nobody
+  // chose. In is the place at FOCUS_ZOOM, one number for "close" so a zoom the
+  // reply asked for and a zoom the pins asked for look like one map. A fit is
+  // whatever frameFor said the pins had lost: the country again, or the pins
+  // framed together.
+  //
+  // Somebody who has asked their system for less movement gets none. They land
+  // where everyone else lands, which is the half carrying the meaning: giving
+  // them the country instead would be giving them less, not gentler. Returns
+  // how long the move takes, which is what the camera's clock runs on, and 0
+  // for a move that was instant.
+  const applyMove = (map, move) => {
+    const still = typeof window !== "undefined" && typeof window.matchMedia === "function"
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (move.kind === "in") {
+      if (still) { map.setView([move.lat, move.lon], FOCUS_ZOOM, { animate: false }); return 0; }
+      map.flyTo([move.lat, move.lon], FOCUS_ZOOM, { duration: IN_SECONDS });
+      return IN_SECONDS;
+    }
+    const wide = move.kind === "out" || move.frame !== "cluster";
+    const b = wide
+      ? L.latLngBounds(DENMARK)
+      : L.latLngBounds(pinsNowRef.current.map(p => [p.lat, p.lon])).pad(0.35);
+    const opts = wide ? { padding: [6, 6] } : { maxZoom: CLUSTER_ZOOM };
+    const seconds = move.kind === "out" ? OUT_SECONDS : FIT_SECONDS;
+    if (still) { map.fitBounds(b, { ...opts, animate: false }); return 0; }
+    map.flyToBounds(b, { ...opts, duration: seconds });
+    return seconds;
+  };
+  // The picture as the map shows it now, read only when the camera is idle.
+  const pictureOf = (map) => {
+    const b = map.getBounds();
+    return {
+      pins: pinsNowRef.current,
+      view: { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() },
+      country: { south: DENMARK[0][0], west: DENMARK[0][1], north: DENMARK[1][0], east: DENMARK[1][1] },
+    };
+  };
+
   // ── MOUNT ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!shown || !holderRef.current || mapRef.current) return;
@@ -217,12 +294,18 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // puts it on the moment the view is close enough.
     spotLayerRef.current = L.layerGroup();
     mapRef.current = map;
+    camRef.current = makeCamera({ play: (move) => applyMove(map, move), picture: () => pictureOf(map) });
     // Leaflet measures its container the instant L.map() runs, and this one
     // mounts inside a panel whose layout is still settling. Same settle problem
     // the guide map and the place map both hit.
     requestAnimationFrame(() => map.invalidateSize());
     const t = setTimeout(() => map.invalidateSize(), 400);
-    return () => { clearTimeout(t); map.remove(); mapRef.current = null; layerRef.current = null; spotLayerRef.current = null; };
+    return () => {
+      clearTimeout(t);
+      camRef.current?.stop();
+      camRef.current = null;
+      map.remove(); mapRef.current = null; layerRef.current = null; spotLayerRef.current = null;
+    };
   }, [any]);
 
   // ── PINS ─────────────────────────────────────────────────────────
@@ -236,7 +319,10 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     spotLayer.clearLayers();
     // The hosts go with the markers. Leaving them would keep React rendering
     // cards into divs that are no longer attached to anything.
-    if (!list.length) { setHosts([]); return; }
+    pinsNowRef.current = list;
+    // No pins is still a picture the camera can be wrong about: a refusal that
+    // took the last pin off leaves it close on a town nobody is going to.
+    if (!list.length) { setHosts([]); camRef.current?.pins(list); return; }
     // Derived at the top of the component now, because the caption under the
     // map needs it too and was rendering English while these labels were
     // already translated. See uiCode there for why it is `lang.tag` and not
@@ -451,122 +537,40 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // Set once per pin change, not per render: the effect below it does not
     // re-run on this, because its dep is pinKey and pinKey has not moved.
     setHosts(made);
-    // ── THE FLIGHT DOWN, AND WHY ONLY THE FIRST ONE FLIES ────────
+    // ── THE FLIGHT DOWN, AND WHO DECIDES THERE IS ONE ────────────
     //
-    // Refit whenever the pins change and NOT otherwise, which is what makes
-    // this readable: a new place appears and the map opens up to include it,
-    // and a pan the person made themselves survives every keystroke in between.
-    // maxZoom 10 so a single pin does not land on a street plan of one square.
+    // Three versions of this block, each written to a rule of Oliver's that the
+    // next one moved under. 6 Sep: one pin landed on a tight crop of Copenhagen
+    // and he said "the map should start from up, and then zoom down". 8 Sep,
+    // Billund: a lone pin was pinned to the whole country so nobody would ask
+    // "where is Billund located?", which deleted the arrival. 12 Sep, midday:
+    // "why doesn't it zoom more into Copenhagen? It knows it's just Copenhagen
+    // now", and a lone pin flew to FOCUS_ZOOM on its own.
     //
-    // The FIRST set flies, from the country down to the place, because that is
-    // the move that says where in Denmark this is. Every set after it is a
-    // shorter eased pan: the country has been established by then, and
-    // re-flying from altitude on every reply is a title sequence, not a map.
-    // ── ONE PIN IS A QUESTION, AND THE FLIGHT IS THE ANSWER ──────
+    // 12 Sep, evening, on a transcript where his own message put the camera on
+    // a street plan of Aalborg before Gemlyx had said a word: "it shouldn't
+    // zoom into Aalborg instantly here. Zoom in if Gemlyx wants to explain/show
+    // something (which it still doesn't do..)."
     //
-    // Oliver, 8 Sep 2026: "this map demonstration also shows a poor
-    // presentation of Billund. Great, we got it animated, but it still makes
-    // people question 'Where is Billund located?'"
+    // That is the rule the others were reaching for. The reply now runs the
+    // camera (see the beats below), so a lone pin that zoomed by itself was a
+    // second answer to "how close should the map be", and it always got there
+    // first: the pin exists the moment a town is named, and the reply's own
+    // [[MAP_IN]] then flew to where the map already was, or worse, a refit on
+    // the next pin cancelled the flight the reply had just made. The country
+    // is still the frame the map opens on, and "Map of Denmark, then zoom into
+    // destination" still happens, only the zoom is now the reply's move.
     //
-    // The cause was arithmetic. One pin makes a bounds of zero size, pad()
-    // multiplies zero by 0.35 and gets zero, and fitBounds on a point goes as
-    // close as it is allowed. maxZoom 10 was the only thing stopping it, so a
-    // lone town landed on fifteen kilometres of farmland with Grindsted in the
-    // corner.
+    // So the pins ask for a frame in two cases only, and frameFor in
+    // utils/mapDirections.js says which: a place just added is off the
+    // picture, or no pin is left on it. Both are the picture having lost
+    // something. A new pin on a country view is already shown, and the map
+    // stays wide until the reply flies down to show something inside it.
     //
-    // THE FIX THAT DAY WENT ONE STEP TOO FAR. It pinned a single pin to the
-    // WHOLE COUNTRY, which deleted the arrival rather than framing it: the map
-    // opens on northern Europe and a lone pin then flew from the country to the
-    // country, so there was no zoom at all.
-    //
-    // Oliver, 12 Sep 2026, on that same map showing Copenhagen from Stockholm
-    // to Berlin: "why doesn't it zoom more into Copenhagen? It knows it's just
-    // Copenhagen now." And then the rule, which is his: "if the conversation
-    // starts with a map of Denmark, and you THEN zoom in, then people know
-    // where it is. The issue becomes when the map appears zoomed into a field,
-    // rather than 'Map of Denmark' -> 'Zoom into destination'."
-    //
-    // So the country context was never supposed to be the DESTINATION. It is
-    // the STARTING frame, and it is one: the map is built with
-    // fitBounds(DENMARK) before a pin exists. Watching it travel from
-    // there to the place is what answers "where is Billund", and it answers it
-    // better than a static country view, because it shows the relation and then
-    // shows the place.
-    //
-    // TWO OR MORE FIT TO THE PINS, unchanged. By then the question has changed:
-    // the reader knows where Denmark is and wants to know how far Ribe is from
-    // Aarhus.
-    //
-    // ── AND A LONE PIN NEEDS A CLOSER MAXZOOM THAN A CLUSTER ─────
-    //
-    // Both branches shared maxZoom 10 and only the cluster branch was ever
-    // framed by it. A zero-size bounds ignores its own padding and lands
-    // exactly on the cap, and at this latitude zoom 10 is about 86 metres a
-    // pixel: a 490 pixel map is roughly 42 km across, so "a picture of
-    // Copenhagen" came out as Copenhagen, Malmö and half of Zealand. That is
-    // the same not-a-picture-of-the-place failure as the Billund field, at the
-    // other end of the scale.
-    //
-    // 12 is about 10 km across here, which holds a city with its water and its
-    // shape, and holds a small town with the country around it. Named rather
-    // than written into both calls, because the two branches answer different
-    // questions and a single number quietly serving both is what produced this.
-    const LONE_PIN_ZOOM = FOCUS_ZOOM, CLUSTER_ZOOM = 10;
-    const lone = list.length <= 1;
-    const bounds = lone
-      ? L.latLngBounds(list.map(p => [p.lat, p.lon]))
-      : L.latLngBounds(list.map(p => [p.lat, p.lon])).pad(0.35);
-    const closest = lone ? LONE_PIN_ZOOM : CLUSTER_ZOOM;
-    const first = !flownRef.current;
-    flownRef.current = true;
-    // Somebody who has asked their system for less movement gets none. They
-    // land where everyone else lands, which is the half carrying the meaning:
-    // giving them the country instead would be giving them less, not gentler.
-    const still = typeof window !== "undefined" && typeof window.matchMedia === "function"
-      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (still) map.fitBounds(bounds, { maxZoom: closest, animate: false });
-    else map.flyToBounds(bounds, { maxZoom: closest, duration: first ? 1.9 : 0.9 });
-    // ── AND THE CARD OPENS ITSELF WHEN IT LANDS ──────────────────
-    //
-    // "with a Copenhagen image/description, popping up." Opening it before the
-    // flight would drag the card across the screen for two seconds AND open it
-    // on the wrong side, because sideFor measures where the pins are at the
-    // moment it runs. So it waits for moveend, which fires once at the end of
-    // the flight, and once is why this is `once` rather than `on`.
-    // ── WHICH CARD OPENS, AND WHY IT IS NOT SIMPLY THE NEWEST ────
-    //
-    // Caught in the browser: the third pin arrived, nothing popped up, and the
-    // card that WAS open closed itself. The newest place had no photograph, so
-    // no card was ever bound to it, and a pin with no card takes the open one
-    // down on hover by design.
-    //
-    // A reply naming somewhere with no picture is not a reason to show nothing.
-    // So: the newest pin that actually HAS a card, preferring the ones this
-    // reply introduced, and falling back to the most recent card on the map.
-    // Reversed, because several pins can be `latest` and the last of them is
-    // the one the sentence ended on.
-    // ── AND THEN IT STOPPED OPENING ITSELF ───────────────────────
-    //
-    // Oliver, 12 Sep 2026: "Can the photo on the map not automatically pop up?
-    // Just keep the name of the place. And if I put my mouse on it, then it
-    // shows."
-    //
-    // It was asked for in the first place ("with a Copenhagen image/description,
-    // popping up"), and it was right when the map held one pin on a country.
-    // The map changed underneath it twice tonight: it now zooms to the place, so
-    // there is something to look AT, and a card is a photograph the size of half
-    // the panel sitting on top of it. In his screenshot the Faxe card covers
-    // Roskilde, the coast and its own pin.
-    //
-    // The labels stay. Every pin still carries its name and its theme, so the
-    // map still says what is on it; the picture is now something he asks for by
-    // pointing at it. Every marker already has the hover binding, so this is a
-    // deletion rather than a feature: nothing new had to be built for the mouse.
-    //
-    // layOut still runs on landing, because the labels have to be placed
-    // whether or not anything opens.
-    const landed = () => { layOut(); };
-    if (still) landed(); else map.once("moveend", landed);
+    // Asked when the camera is idle, and remembered until it is when a move is
+    // playing, so the picture read is one the traveller will see. makeCamera
+    // works out which pins are new against what they were last time.
+    camRef.current?.pins(list);
     // ── WHERE EACH LABEL GOES, MEASURED RATHER THAN GUESSED ──────
     //
     // The sizes are read off the rendered elements: a name wraps differently in
@@ -624,6 +628,10 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     };
     map.on("zoomend", spots);
     spots();
+    // Now rather than on a landing that may never come: a pin added inside the
+    // picture moves no camera, and its label still has to be placed. Every
+    // move that does happen re-runs this from the moveend listener above.
+    layOut();
 
     const shut = () => map.closePopup();
     map.getContainer().addEventListener("mouseleave", shut);
@@ -653,44 +661,30 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   // the coordinates would collapse them into one and the second move would
   // never happen. seq is a counter the caller bumps per beat.
   //
-  // SEPARATE FROM THE PIN FLIGHT ABOVE, which frames whatever is on the map
-  // when the pins change. These two can both want the camera in the same
-  // second, and the reply wins: it is the thing the traveller is reading.
+  // THROUGH THE SAME QUEUE AS THE PINS' MOVES, which is where the animation
+  // was broken. This used to call flyTo directly, and so did the pin effect, and
+  // Leaflet's flyTo cancels the flight before it: his own example, an OUT and
+  // an IN eight words apart, played as a quarter of a second of pulling back
+  // and then the dive, because the reveal reaches eight words in well under a
+  // second and the pull-back takes 1.9. Now the OUT lands, holds, and THEN the
+  // IN plays. And the reply still wins over the app: a fit that is playing is
+  // interrupted by a beat, and a fit never displaces one.
   const focusSeq = focus ? focus.seq : null;
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !focus || focusSeq == null) return;
-    const still = typeof window !== "undefined" && typeof window.matchMedia === "function"
-      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    // Out is the country, which is the frame the map opens on, so a pull-back
-    // lands exactly where it started rather than at some middle distance nobody
-    // chose. In is the place at the same closeness a lone pin gets, so a zoom
-    // the reply asked for and a zoom the pins asked for look like one map.
-    // ── AND OUT IS SLOWER THAN IN ────────────────────────────────
-    //
-    // Oliver, 12 Sep 2026: "when it zooms out, make it a little slower."
-    //
-    // They were both 1.1 seconds and they are not the same move. Zooming IN is
-    // an arrival: the traveller already knows where it is going, because the
-    // sentence just named it, and dawdling is a title sequence. Zooming OUT is
-    // the map giving back the country, and pulling away covers far more ground
-    // in the same time, so an equal duration reads as a lurch rather than as a
-    // camera. The slower one is also the one that has something to say: watching
-    // Copenhagen shrink into Denmark is the frame he wants the reader to read.
-    const OUT_SECONDS = 1.9, IN_SECONDS = 1.1;
-    if (focus.kind === "out") {
-      const b = L.latLngBounds(DENMARK);
-      if (still) map.fitBounds(b, { padding: [6, 6], animate: false });
-      else map.flyToBounds(b, { padding: [6, 6], duration: OUT_SECONDS });
-      return;
-    }
+    const cam = camRef.current;
+    if (!cam) return;
+    if (focus.kind === "out") { cam.arrive({ kind: "out" }); return; }
     if (!Number.isFinite(focus.lat) || !Number.isFinite(focus.lon)) return;
-    if (still) map.setView([focus.lat, focus.lon], FOCUS_ZOOM, { animate: false });
-    else map.flyTo([focus.lat, focus.lon], FOCUS_ZOOM, { duration: IN_SECONDS });
+    cam.arrive({ kind: "in", lat: focus.lat, lon: focus.lon });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusSeq]);
 
-  useEffect(() => () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } }, []);
+  useEffect(() => () => {
+    camRef.current?.stop();
+    if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+  }, []);
 
   // A map nobody can see explains nothing at all. Narrow screens get the
   // inline cards instead and no map at all, which is what `wide` is.

@@ -161,7 +161,7 @@ writeFileSync(entry, `
   export { writeInLanguage } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { guideLanguage, languageOfProse, ruledOutLanguages, briefSentences, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS, MARKER_FLOOR, MARKER_MARGIN } from ${JSON.stringify(join(root, "src/utils/travellerLanguage.js"))};
   export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, LABEL_CLASS, LABEL_SIDES, LABEL_GAP, labelBox, labelSides, SPOT_PIN_ZOOM, isSpotPin, spotsShowAt } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
-  export { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE } from ${JSON.stringify(join(root, "src/utils/mapDirections.js"))};
+  export { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE, cameraArrive, cameraLanded, frameFor, SLIDE_HOLD_MS, makeCamera } from ${JSON.stringify(join(root, "src/utils/mapDirections.js"))};
   export { costLines, byUrgency, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { freeButPriced, moneyProblems, LODGING_FLOOR_DKK } from ${JSON.stringify(join(root, "src/utils/moneyClaims.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
@@ -6983,6 +6983,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
       "src/utils/entryAudit.js": 1,
       // CORRECTION_LEAD reads "actually" at the start of a traveller's message.
       "src/utils/directAnswer.js": 1,
+      // CORRECTS_QUIETLY reads it in the same place for the map's pins: "Well,
+      // I'm actually flying into Billund" is a correction that never says no,
+      // and it left Copenhagen pinned through a whole chat on 12 Sep. Reading
+      // the word is the opposite of writing it, as the entry above says.
+      "src/utils/chatPlaces.js": 1,
       // Stop words: a traveller types them, so the parser has to know them.
       // "I don't really want to go to Aarhus" and "I don't actually want to go
       // there" are refusals whose intensifier was eating the word budget of the
@@ -9326,6 +9331,70 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 
   // THE ONE FROM THE REPORT. Four days in March, one festival named. The other
   // four are in this town and in this pool and none of them is on that week.
+  // ── AND THE WINDOW IS READ FROM THEIR TURNS, NOT FROM OURS ────────
+  //
+  // Both callers hand tripWindow the whole conversation with a role prefix on
+  // every line, and both carry a comment saying that reading a date out of the
+  // app's own words is the mistake to avoid. It read them anyway. Measured by a
+  // Fable review on 12 Sep against three of Oliver's real exports; the worst was
+  // the 20:43 one, where the window came back as 14 to 17 September, taken from
+  // the code-appended re-ask for the dates, whose own worked example reads 'the
+  // 14th to the 17th'. The app read its own example back as the trip, and that
+  // window excludes 19 and 20 September, where the festival he asked about and
+  // did not get on the preview sat.
+  {
+    const TODAY = new Date("2026-09-12T12:00:00Z");
+    // Gemlyx's half says one thing, the traveller's says another. The role
+    // prefixes are what the callers really pass.
+    const full = [
+      "assistant: A day and a month does it: \"14 September\", or \"the 14th to the 17th\"",
+      "user: From the 20th till the 27th of September",
+    ].join("\n");
+    const mine = ["From the 20th till the 27th of September"];
+    const w = tripWindow({ convoText: full, convoTurns: mine, today: TODAY });
+    is("the window starts where the traveller said", w?.start?.getDate(), 20);
+    is("and ends where the traveller said", w?.end?.getDate(), 27);
+    is("and is as long as the traveller said", w?.days, 8);
+    // And with nothing of theirs to read, the old behaviour stands rather than
+    // returning nothing at all: a caller with no turns to give is still better
+    // served by a date than by none.
+    const fallback = tripWindow({ convoText: "we are there from the 3rd to the 6th of October", today: TODAY });
+    is("a caller with no turns still gets a window", fallback?.start?.getDate(), 3);
+  }
+
+  // ── AND A RANGE WRITTEN IN ANY OF THE SIX LANGUAGES IS A RANGE ────
+  //
+  // Measured by a Fable review on 12 Sep. "fra den 14. til den 17. september",
+  // "vom 14. bis 17. September" and "14 t/m 17 september" all lost the range and
+  // came back as the 17th alone: the DEPARTURE read as the arrival, a trip
+  // starting three days late with no length at all.
+  //
+  // Two causes, both a hand-copied list. The join had English and the Danish
+  // "til" and not "bis", "tot" or "t/m". And the little word in front of a date
+  // was spelled "the" and "from" in five patterns and "den" in none, so "fra 14.
+  // til 17." worked and "fra den 14. til den 17." did not.
+  //
+  // The second one had teeth: the Danish re-ask this app appends when it has
+  // asked for the dates once and not got them offers "den 14. til den 17." as
+  // its own worked example. A Dane who typed exactly what the screen told them
+  // to was told again that the answer did not land.
+  {
+    const TODAY2 = new Date("2026-09-12T12:00:00Z");
+    const span = (s) => {
+      const r = dateRangeIn(s, TODAY2);
+      return r ? `${r.start.getDate()}-${r.end.getDate()}` : null;
+    };
+    const RANGES = ["fra den 14. til den 17. september", "vom 14. bis 17. September",
+                    "14 t/m 17 september", "den 14. til den 17.", "van 14 tot 17 september",
+                    "fr\u00e5n den 14 till den 17 september", "from the 14th to the 17th of September",
+                    "14. til 17. september", "the 14th to the 17th"];
+    is("every spelling of one range reads as that range",
+       RANGES.filter(s => span(s) !== "14-17").map(s => `${s} -> ${span(s)}`), []);
+    // And none of it bought by loosening what a date is. This sentence ends in a
+    // full stop after a clock time, and a full stop is not an ordinal.
+    is("a clock time is still not a trip", span("I am at work today till 5."), null);
+  }
+
   const march = tripWindow({ arrival: "2027-03-12", departure: "2027-03-15" });
   is("four days in March returns the named festival and nothing else",
     names(run({ window: march, named: e => e.name === "Copenhagen Light Festival" })),
@@ -9947,8 +10016,21 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
   const sysStart = appSrc.indexOf("const sysPrompt = `");
   ok("the system prompt was found", sysStart > 0);
-  const sysPrompt = appSrc.slice(sysStart, appSrc.indexOf("MERCHANDISE:", sysStart));
+  // ── THE WHOLE PROMPT, NOT THE FIRST HALF OF IT ──────────────
+  //
+  // This slice stopped at "MERCHANDISE:", roughly halfway, and every assertion
+  // below believed it was reading the prompt. A Fable review pointed at the
+  // other half on 12 Sep: NINE em dashes, in the part of the file that tells the
+  // model how to write, under a rule in the first half forbidding them. Em
+  // dashes are the thing Oliver has raised more times than anything else.
+  //
+  // Ends at the closing backtick of the template literal, so the next block
+  // appended to this prompt is covered the day it is written.
+  const sysEnd = appSrc.indexOf("`;", sysStart);
+  const sysPrompt = appSrc.slice(sysStart, sysEnd > sysStart ? sysEnd : appSrc.indexOf("MERCHANDISE:", sysStart));
   ok("and it is the real thing, not an empty slice", sysPrompt.length > 4000);
+  ok("and it is the WHOLE thing, not the half before MERCHANDISE",
+     sysPrompt.length > (appSrc.indexOf("MERCHANDISE:", sysStart) - sysStart) + 4000);
 
   // ── AND IT PRACTISES WHAT IT PREACHES ────────────────────────────
   //
@@ -20826,6 +20908,53 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
     // the kids run about is not a bar crawl.
     ok("a passing drink word is not a request when there are kids",
        !nightlifeWanted({ convoText: "a beer by the harbour while the kids run about", hasKids: true }));
+
+    // ── AND A REFUSAL OF IT IS NOT A REQUEST FOR IT ────────────
+    //
+    // From Oliver's own 18:22 export, the transcript this whole gate was written
+    // for. A Fable review ran it back through the gate on 12 Sep:
+    //
+    //   "Well, I can't really be doing nightlife when I'm with my kids.."
+    //
+    // The brief's interests slot read nothing from that, correctly. This gate
+    // read NIGHTLIFE, because the reader behind it had no refusal scrub while
+    // the brief's has had one since 5 Sep. So the whole published nightlife
+    // inventory went into the prompt, and the plan gate that flags a night out
+    // nobody asked for returned nothing for a plan carrying Jomfru Ane Gade.
+    // Two readers of one question, and the one without the scrub won.
+    is("a refusal of a night out never opens the list",
+       ["Well, I can't really be doing nightlife when I'm with my kids..",
+        "No nightlife please, we have the kids",
+        "Definitely no bars or clubs",
+        "We are not into nightlife at all"].filter(s => nightlifeWanted({ convoText: s, hasKids: true })), []);
+    is("and it is still opened by somebody asking",
+       ["We want a proper night out", "a bar crawl would be fun",
+        "History, nature, and maybe a drink at night :)"].filter(s => !nightlifeWanted({ convoText: s })), []);
+
+    // ── AND THE CHILDREN HAVE TO BE VISIBLE FROM EVERY PATH ─────
+    //
+    // `hasKids` is what gates all of the above, and until 12 Sep the only writer
+    // of it was the direct answer reader: true for "2 adults and 2 kids" typed
+    // straight under "who is coming?", false for the same words in a sentence,
+    // false for the intake form's family tick-box, and false for the intake
+    // form's own travellers field. Measured by a Fable review; all three of the
+    // false cases then had a night out planned into them.
+    {
+      const T2 = new Date("2026-08-23T09:00:00Z");
+      const party = (o) => M.readBrief({ ...o, today: T2 }).known.party;
+      ok("a family named in a sentence carries children",
+         party({ travellerText: "me, my wife and our 2 kids", travellerTurns: ["me, my wife and our 2 kids"] })?.hasKids === true);
+      ok("so does the intake tick-box",
+         party({ travellerText: "x", intake: { familyMode: true } })?.hasKids === true);
+      ok("and the intake travellers field",
+         party({ travellerText: "x", intake: { travelers: "2 adults and 2 kids" } })?.hasKids === true);
+      ok("two adults are still two adults",
+         party({ travellerText: "just me and my wife", travellerTurns: ["just me and my wife"] })?.hasKids === false);
+      // "no kids this time" says there are none, which is the same scrub the
+      // interests slot has used since 5 Sep.
+      ok("and a refusal is read as a refusal",
+         party({ travellerText: "two of us, no kids this time", travellerTurns: ["two of us, no kids this time"] })?.hasKids === false);
+    }
     // And a parent who asks for it outright still gets it. That is their trip,
     // and briefConflicts raises it with them rather than this deciding for them.
     ok("but a parent who asks outright still gets it",
@@ -29869,13 +29998,20 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // spoken in between tells them they were not heard.
   {
     const WHEN = new Date("2026-08-23T09:00:00Z");
-    // A LENGTH IN THE TEXT, because `days` became hard on 12 Sep and sorts
-    // ahead of `when`. Without one the stuck slot is the length and this block
-    // stops testing what it was written for, which is the RE-ASK wording on a
-    // slot that was asked and missed.
-    const thin = { travellerText: "I want to see Jutland for 5 days", today: WHEN };
+    // EVERYTHING BUT THE DATES, because a slot that was asked and missed now
+    // waits until there is nothing new left to ask. That is what the comment on
+    // nextAsks has always claimed and what it started doing on 12 Sep, once
+    // `days` being both hard and first in the list made the old behaviour
+    // visible: it re-asked the length on every turn ahead of five questions
+    // nobody had been asked at all. So a brief that is stuck on a RE-ASK is one
+    // where the fresh questions are used up, which is the state this block was
+    // written to describe in the first place.
+    const thin = {
+      travellerText: "Flying into Billund for 5 days, me and my wife, history and food, by train, no hotel booked",
+      today: WHEN,
+    };
     const firstTime = buildBlockedNote(readBrief(thin));
-    const askedAlready = readBrief({ ...thin, asked: ["origin", "days", "when"] });
+    const askedAlready = readBrief({ ...thin, asked: ["origin", "days", "when", "party", "interests", "transport", "stay"] });
     const secondTime = buildBlockedNote(askedAlready);
     ok("the slot it is stuck on has been asked already", (askedAlready.declined || []).includes("when"));
     ok("so the second note is not the first one again", !!secondTime && secondTime !== firstTime);
@@ -29886,8 +30022,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
        /^Jeg har stadig ikke dine datoer/.test(buildBlockedNote(askedAlready, { tag: "da-DK", name: "Danish" })));
     // A slot with nothing written for the second time keeps the first sentence:
     // the point is admitting the miss, not novelty for its own sake.
+    // A slot with nothing written for the second time keeps the first sentence.
+    // Read on a brief with fresh questions still open, so the counted opener is
+    // the one being tested rather than a re-ask.
     ok("a slot with no second wording keeps the first",
-       /things I still don't know\. This is the one I need/.test(buildBlockedNote(readBrief({ ...thin, asked: ["origin"] }))));
+       /things I still don't know\. This is the one I need/.test(
+         buildBlockedNote(readBrief({ travellerText: "I want to see Jutland for 5 days", today: WHEN, asked: ["origin"] }))));
   }
   // Both HARD slots, because those are the two that can block a build forever,
   // and a note that repeats on one of them is the loop again.
@@ -33630,6 +33770,41 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("and without the quotes he happened to type",
      stayOf("We have booked a stay at 25hours Hotel Paper Island"), "booked");
   is("a count of nights is a booking too", stayOf("we booked 3 nights"), "booked");
+
+  // ── AND A QUESTION ABOUT A HOTEL BOOKS NOTHING ────────────
+  //
+  // Measured by a Fable review on 12 Sep. "Do you have a hotel to recommend?"
+  // and "Have you got a hotel tip for Aarhus?" both read as a BOOKED hotel,
+  // because "have ... hotel" is one of the shapes above and this reader is
+  // handed every traveller turn joined into one string. `stay` is a blocking
+  // slot, so the question was never asked again, and the guide suppresses every
+  // word about where to stay when it believes there is a booking. Somebody
+  // asking for a hotel recommendation got a guide that would not give one.
+  //
+  // The direct answer reader has guarded this since it was written. This one is
+  // handed a paragraph rather than a turn, so it splits first.
+  is("asking for a hotel is not having one",
+     ["Do you have a hotel to recommend?", "Have you got a hotel tip for Aarhus?",
+      "Can you suggest a hotel?", "Which hotel would you pick?"].filter(s => !!stayOf(s)), []);
+  // And a question in the middle of a paragraph does not take the rest with it.
+  is("a booking beside a question is still a booking",
+     stayOf("Do you have a hotel to recommend? We have booked a hotel for the first night."), "booked");
+  is("a place in mind is not a place booked",
+     stayOf("We have a place in mind but haven't decided"), "not booked");
+
+  // ── AND A BOOKING IN THE OTHER FIVE LANGUAGES ─────────────
+  //
+  // All three of these read as NOTHING on a blocking slot, so a Danish or German
+  // traveller with a hotel booked was asked whether they had one and then had a
+  // week planned around not having one.
+  is("a Danish, German or Dutch booking is a booking",
+     [["Vi har booket et hotel", "booked"], ["Wir haben ein Hotel gebucht", "booked"],
+      ["We hebben een hotel geboekt", "booked"], ["Vi har reserveret et v\u00e6relse", "booked"]]
+       .filter(([s, w]) => stayOf(s) !== w).map(([s]) => `${s} -> ${stayOf(s)}`), []);
+  // A completed booking verb with a proper noun behind it. namedStayIn cannot
+  // see these: it wants a lodging word inside the name, and a hotel is usually
+  // just its own name.
+  is("and a hotel named without the word hotel", stayOf("we booked the Radisson"), "booked");
   // AND THE FALSE POSITIVE THAT WOULD COST THE MOST. A completed booking verb
   // is required, never a bare "book": a sentence about an intention read as a
   // booking anchors the whole plan on a hotel nobody has.
@@ -44236,6 +44411,92 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   is("THE BUG: his brief rules out exactly one place", readExclusions(HIS), ["Legoland"]);
 
+  // ── THE SWEEP OF 12 SEP, AND EVERY SENTENCE IT SAVED ─────────
+  //
+  // A Fable review ran ordinary sentences through this file and found eight ways
+  // it ruled out a place the traveller had asked for. Each one printed "Leaving
+  // out X, as you asked." at somebody who had said the opposite, which is the
+  // failure this file's own rule calls the worse one: a false exclusion is worse
+  // than a missed one.
+  //
+  // Kept as one list because they are one bug wearing eight faces, and because a
+  // regression here is silent: the guide simply comes back without the place.
+  {
+    const GAZ = ["Aarhus", "Aalborg", "Copenhagen", "Odense", "Ribe", "Skagen",
+                 "Billund", "Legoland", "Tivoli", "Vejle", "Als"];
+    const ruled = (s) => readExclusions(s, { known: GAZ });
+    const KEEP = [
+      // "spring" is a Danish verb and an English season, and the verb needs its
+      // particle. Without that the season ruled out the city.
+      "We are coming in spring to Copenhagen",
+      "Spring in Aarhus is lovely",
+      "Spring break in Copenhagen with the kids",
+      // A negation in front of a skip verb reverses it.
+      "Don't skip Tivoli, it's great",
+      "Please don't leave out Tivoli",
+      "Don't remove Aarhus, I still want it",
+      "Never skip Ribe",
+      // "not just X" is a request for MORE than X. It was being scrubbed to
+      // "not X" by the intensifier pass.
+      "Not just Copenhagen, we want to see Jutland too",
+      "It's not just Legoland we're after, the kids want Tivoli too",
+      // Two negations, one of them inside the gap between keyword and name.
+      "I don't really want to skip Aarhus",
+      // The loosest shape in the file, now behind the gazetteer.
+      "Not Sure yet, maybe Aarhus",
+      "Not Yet",
+      "not Peter, he stays home",
+      // The ordering guard held in English and not in Danish.
+      "Vi skal ikke til Aarhus f\u00f8rst, vi starter i Aalborg",
+      "Vi kommer ikke til Aarhus f\u00f8r om aftenen",
+      "We are not going to Aarhus first, we start in Aalborg",
+      "We are not going to Legoland until Friday",
+    ];
+    is("no ordinary sentence rules out a place the traveller asked for",
+       KEEP.filter(s => ruled(s).length).map(s => `${s} -> ${ruled(s)}`), []);
+
+    // And none of that was bought by making the file deaf.
+    const DROP = [
+      ["We do not want to go to Aarhus", "Aarhus"],
+      ["Skip Odense", "Odense"],
+      ["Avoid Tivoli please.", "Tivoli"],
+      ["No Legoland.", "Legoland"],
+      ["I'm not going to Aarhus", "Aarhus"],
+      ["I don't want to go to Aarhus", "Aarhus"],
+      ["Spring over Odense", "Odense"],
+      ["Vi vil ikke til Aarhus", "Aarhus"],
+      ["the real earthworks, not Legoland", "Legoland"],
+      ["Take Aarhus off the list", "Aarhus"],
+      ["Remove Aarhus", "Aarhus"],
+      ["We do not want Copenhagen Zoo", "Copenhagen Zoo"],
+      ["Not interested in Ribe", "Ribe"],
+      ["Leave out Skagen", "Skagen"],
+    ];
+    is("and a real refusal is still read",
+       DROP.filter(([s, want]) => !ruled(s).some(x => x.toLowerCase() === want.toLowerCase()))
+           .map(([s]) => `${s} -> ${ruled(s)}`), []);
+
+    // ── AND THE FILTER RUNS ONE WAY ────────────────────
+    //
+    // `x.includes(f)` was a third test in isExcluded and it ran the rule
+    // backwards: rule out one attraction and every row in its town went with it.
+    // "copenhagen zoo".includes("copenhagen") is true, so skipping the zoo
+    // deleted Tivoli, Nyhavn and the city itself.
+    const rows = [
+      { name: "Tivoli", town: "Copenhagen" },
+      { name: "Copenhagen", town: "Copenhagen" },
+      { name: "Copenhagen Zoo", town: "Copenhagen" },
+      { name: "Legoland Billund Resort", town: "Billund" },
+    ];
+    is("ruling out one attraction does not delete its town",
+       rows.filter(r => isExcluded(r, ["Copenhagen Zoo"])).map(r => r.name), ["Copenhagen Zoo"]);
+    // The two cases it is documented for still hold, both the other way round.
+    is("a name still rules out the longer name inside it",
+       rows.filter(r => isExcluded(r, ["Legoland"])).map(r => r.name), ["Legoland Billund Resort"]);
+    is("and a town still rules out everything in it",
+       rows.filter(r => isExcluded(r, ["Billund"])).map(r => r.name), ["Legoland Billund Resort"]);
+  }
+
   // ── THE SHAPES PEOPLE ACTUALLY USE ───────────────────────────────
   is("don't send us to X", readExclusions("Please don't send us to Legoland."), ["Legoland"]);
   is("skip X", readExclusions("We want to skip Copenhagen entirely."), ["Copenhagen"]);
@@ -45073,6 +45334,39 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // The half that makes it a next step instead of a progress bar.
     ok("a single open slot is named rather than counted", p.last.length > 0);
     ok("and the line says what is still needed", /I still need/.test(progressLine(p)));
+  }
+
+  // ── AND A SLOT THAT ONLY APPLIES SOMETIMES STILL COUNTS ───────────
+  //
+  // BLOCKING_SLOTS drops every slot with a `needs` predicate, because nobody is
+  // asked which nights their booking covers when they have not booked anything.
+  // Right for the list, wrong for the count: the moment somebody says they have
+  // booked, `stayWhen` is a real open question. Measured by a Fable review on
+  // 12 Sep. The bar said 7 of 7 and "99% complete" with no reason given, while
+  // the block on the same screen said "There are 0 things still open" directly
+  // above "STILL MISSING: which nights does that booking cover?".
+  //
+  // Three counters on one screen, and the one the traveller reads was the one
+  // that could not see it.
+  {
+    const said = ["Flying into Billund", "2 adults", "14 September", "driving",
+                  "history and food", "we have booked a hotel"];
+    const b = readBrief({ travellerText: said.join("\n"), travellerTurns: said, today: NOW, intake: {} });
+    ok("the booking was read", b.known.stay?.value === "booked");
+    const p = briefProgress(b);
+    ok("the nights are counted as open", p.open.includes("stayWhen"));
+    is("and the denominator grows with them", p.total, BLOCKING_SLOTS.length + 1);
+    ok("so the bar cannot read complete while something is missing", p.done < p.total);
+    // And the prompt says the same number as the bar.
+    const line = M.briefBlock(b, []).split("\n").find(l => /still open/.test(l)) || "";
+    ok("the prompt counts what the bar counts",
+       line.includes(`are ${p.total - p.done} things still open`));
+    // A count of one is not "1 things".
+    const one = readBrief({ travellerText: ["Flying into Billund", "2 adults", "14 September",
+      "driving", "history and food", "5 days"].join("\n"), travellerTurns: ["Flying into Billund",
+      "2 adults", "14 September", "driving", "history and food", "5 days"], today: NOW, intake: {} });
+    const oneLine = M.briefBlock(one, []).split("\n").find(l => /still open/.test(l)) || "";
+    ok("and one open thing is one thing", /is 1 thing still open/.test(oneLine), oneLine.slice(0, 200));
   }
 
   // ── THE COUNT AND THE BUTTON CANNOT DISAGREE ─────────────────────
@@ -47836,6 +48130,29 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       is("and a sentence that does not open with a contradiction is not one",
          correctedTo("I'd like Billund", towns), null);
       is("nor is an empty one", correctedTo("", towns), null);
+      // ── AND THE CORRECTION THAT NEVER SAYS NO ──────────────────
+      //
+      // 13 Sep 2026, measured on his exported chats from the day before. Two
+      // of them correct the arrival from Copenhagen to Billund. The 20:43 one
+      // opens "No, it's actually Billund" and is caught above. The 18:22 one
+      // opens "Well, I'm actually flying into Billund", and Copenhagen, pinned
+      // by the reply before it, stayed on the map for the rest of the chat.
+      // The contradiction is one word in the middle of the sentence.
+      is("his other sentence corrects without a no",
+         correctedTo("Well, I'm actually flying into Billund", towns), "billund");
+      is("with no opener at all", correctedTo("I'm actually flying into Billund", towns), "billund");
+      is("and as a we", correctedTo("we're actually landing in Billund", towns), "billund");
+      is("and in Danish", correctedTo("Vi flyver faktisk til Billund", towns), "billund");
+      is("and the other Danish form", correctedTo("Det er faktisk Billund vi lander i", towns), "billund");
+      // What keeps it narrow. An addition is not a correction, and neither is a
+      // preference: both are how a pin the traveller wanted disappears.
+      is("an addition is not a correction", correctedTo("I'm actually going to Odense too", towns), null);
+      is("nor with also", correctedTo("I'm actually also going to Odense", towns), null);
+      is("a preference is not a correction", correctedTo("I'm actually more interested in Odense", towns), null);
+      is("the word in the middle of a sentence is not an opener",
+         correctedTo("Copenhagen is fine, I'm actually flying into Billund later in the year too", towns), null);
+      is("a sentence naming no town corrects nothing", correctedTo("I'm actually flying in tomorrow", towns), null);
+      is("two towns is still ambiguous", correctedTo("I'm actually flying into Billund and then Odense", towns), null);
     }
     is("no finder, no pins", mapPlaces({ messages: trip }), { pins: [], dropped: 0 });
     is("no resolver, no pins", mapPlaces({ messages: trip, placesFor: named }), { pins: [], dropped: 0 });
@@ -48143,7 +48460,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // INSIDE the sentences. That is the feature: the map moves on the word where
 // the subject changes, not at the end of the reply.
 {
-  const { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE, mapPlaces } = M;
+  const { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE, mapPlaces, cameraArrive, cameraLanded, frameFor, SLIDE_HOLD_MS } = M;
   const REPLY = "Arh, [[MAP_IN:Copenhagen]] Copenhagen has a lot to offer. Interesting! [[MAP_OUT]] For your taste I can recommend [[MAP_IN:Aarhus]] Aarhus, because it is quieter.";
   const r = readMapBeats(REPLY);
 
@@ -48243,11 +48560,252 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and that the traveller must never be told about them", /never mention them/.test(MAP_DIRECTION_RULE));
   ok("no dash is taught to the model in it", !/[\u2013\u2014]/.test(MAP_DIRECTION_RULE));
 
+  // ── AND THE SLIDESHOW BRIEF, READ AS THE MODEL READS IT ──────────
+  //
+  // 13 Sep 2026. Measured first, on six exported chats from the day before
+  // (five distinct conversations, 54 replies): 7 [[MAP_IN]], 4 [[MAP_OUT]],
+  // every IN on a town already in the conversation, four of them Aalborg in
+  // one chat with no OUT between, and not one zoom that showed anything inside
+  // a town. That was the old rule. The slideshow rewrite that replaced it had
+  // four faults a model would meet before a traveller did, and each is pinned
+  // here so it cannot come back.
+  //
+  // 1. "the place your reply is really about". The prompt bans "really" by name
+  //    six paragraphs earlier, and this block is interpolated into it after the
+  //    ban. The budget test above slices the SOURCE of the template, so an
+  //    interpolated block is invisible to it; this is that test for this block.
+  for (const word of ["actually", "really", "quite", "truly", "genuinely", "genuine", "simply"]) {
+    is(`the map rule does not model "${word}" at the model`,
+       (MAP_DIRECTION_RULE.match(new RegExp(`\\b${word}\\b`, "gi")) || []).length, 0);
+  }
+  // 2. The example zoomed on a first mention with one line about the town,
+  //    which is the move the paragraph above it forbids. An instruction models
+  //    the behaviour it shows more strongly than the behaviour it describes.
+  ok("no example zooms on a town with one line about it",
+     !/\[\[MAP_IN:Copenhagen\]\] Copenhagen has a lot going on/.test(MAP_DIRECTION_RULE));
+  ok("the close-up example starts walking through the inside",
+     /Here is how I would spend a day inside Aarhus: \[\[MAP_IN:Aarhus\]\]/.test(MAP_DIRECTION_RULE));
+  ok("and his own out-then-in example is still taught",
+     /Interesting! \[\[MAP_OUT\]\] For your taste I would go north instead\. \[\[MAP_IN:Aalborg\]\]/.test(MAP_DIRECTION_RULE));
+  // 3. "At most one move per paragraph" sat two sentences after an example
+  //    with an OUT and an IN in one paragraph. Two rules for one question. The
+  //    ceiling the camera can honour is two, because the queue holds one move
+  //    playing and one waiting (see cameraArrive below).
+  ok("the pacing rule and the example agree", !/one move per paragraph/.test(MAP_DIRECTION_RULE)
+     && /never more than two moves in one paragraph/.test(MAP_DIRECTION_RULE));
+  // 4. "A place Gemlyx publishes and holds a checked coordinate for" is a rule
+  //    the model cannot follow: it has no coordinates. It has the lists in the
+  //    same prompt, so the rule names them, and names what a close view draws,
+  //    which is the information the zoom decision needs.
+  ok("the rule names the lists the model can see",
+     /TOWNS and HIDDEN GEM TOWNS lists below/.test(MAP_DIRECTION_RULE) && /FREE ENTRANCE ATTRACTIONS list below/.test(MAP_DIRECTION_RULE));
+  ok("and those list headings exist in the prompt it joins",
+     /\nTOWNS: \$\{townList\}/.test(appR) && /\nHIDDEN GEM TOWNS \(/.test(appR) && /\nFREE ENTRANCE ATTRACTIONS \(/.test(appR));
+  ok("and says what a close view shows", /Flown down to a town, it shows that town and, inside it, a pin for every place from the FREE ENTRANCE ATTRACTIONS list/.test(MAP_DIRECTION_RULE));
+  ok("and that a zoom is earned by naming what is inside", /naming two or three of its free attractions from the list as you go/.test(MAP_DIRECTION_RULE));
+  // A camera sat on Aalborg for twelve turns of his 21:24 transcript, through
+  // a reply summing up a route from Skagen to Germany, because nothing said
+  // that leaving the town means leaving the close view.
+  ok("summing up the route is a reason to pull back", /summing up the whole route/.test(MAP_DIRECTION_RULE));
+  ok("and so is a town leaving the conversation", /pull back with \[\[MAP_OUT\]\]/.test(MAP_DIRECTION_RULE));
+  ok("the last move comes before the question, not after it", /make the move before the question and never after it/.test(MAP_DIRECTION_RULE));
+  ok("and the first mention still stays wide", /A NAME IS NOT A REASON TO ZOOM\. The first time a place comes up, leave the map wide/.test(MAP_DIRECTION_RULE));
+
+  // ── ONE MOVE AT A TIME ───────────────────────────────────────────
+  //
+  // Leaflet's flyTo cancels the flight before it (leaflet-src.js: flyTo calls
+  // _stop, which cancels the animation frame and fires no moveend). The reveal
+  // runs at sixteen to forty words a second, so his example's OUT and IN eight
+  // words apart were a quarter of a second of pulling back, then the dive.
+  {
+    const OUT = { kind: "out" }, IN = { kind: "in", lat: 56.15, lon: 10.2 }, IN2 = { kind: "in", lat: 57.05, lon: 9.92 }, FIT = { kind: "fit", frame: "cluster" };
+    const idle = { playing: null, waiting: null };
+    let r = cameraArrive(idle, OUT);
+    is("an idle camera plays at once", r.play, OUT);
+    r = cameraArrive(r.state, IN);
+    is("a move arriving mid-flight does not play", r.play, null);
+    is("it waits", r.state.waiting, IN);
+    is("and the one playing keeps playing", r.state.playing, OUT);
+    // One slot, not a queue: the newest replaces the one waiting, which is the
+    // rule beatsDue already applies inside one tick, and it keeps the camera at
+    // most one slide behind the words.
+    r = cameraArrive(r.state, IN2);
+    is("a newer move replaces the one waiting", r.state.waiting, IN2);
+    let l = cameraLanded(r.state);
+    is("landing plays what waited", l.play, IN2);
+    is("and clears the slot", l.state.waiting, null);
+    l = cameraLanded(l.state);
+    is("landing with nothing waiting goes idle", l.state.playing, null);
+    is("and plays nothing", l.play, null);
+    // The reply outranks the app: a fit that is playing is interrupted, a fit
+    // never displaces a reply's move, and a fit arriving on top of a reply's
+    // move is dropped rather than played after it.
+    r = cameraArrive(idle, FIT);
+    r = cameraArrive(r.state, IN);
+    is("a beat interrupts a fit that is playing", r.play, IN);
+    is("and nothing is left waiting behind it", r.state.waiting, null);
+    r = cameraArrive(cameraArrive(idle, IN).state, FIT);
+    is("a fit arriving while a beat plays is dropped", r.state.waiting, null);
+    r = cameraArrive(cameraArrive(cameraArrive(idle, OUT).state, IN).state, FIT);
+    is("and one arriving behind a waiting beat is dropped too", r.state.waiting, IN);
+    r = cameraArrive(cameraArrive(idle, FIT).state, FIT);
+    is("a fit behind a fit waits", r.state.waiting, FIT);
+    is("a null move changes nothing", cameraArrive(idle, null).play, null);
+    ok("the hold is long enough to be a slide and short enough to stay with the words", SLIDE_HOLD_MS >= 500 && SLIDE_HOLD_MS <= 1500);
+  }
+
+  // ── THE PINS ASK FOR A FRAME ONLY WHEN THE PICTURE HAS LOST ONE ──
+  //
+  // Oliver, 12 Sep 2026: "it shouldn't zoom into Aalborg instantly here."
+  // The instant zoom was the lone-pin flight, fired by his own message. The
+  // pins no longer choose a closeness at all; they ask for a frame in two
+  // cases, both the picture having lost something.
+  {
+    const country = { south: 54.5, west: 8.0, north: 57.8, east: 15.3 };
+    const onCountry = { south: 54.2, west: 7.0, north: 58.1, east: 16.3 };
+    const onAalborg = { south: 57.0, west: 9.8, north: 57.1, east: 10.05 };
+    const aalborg = { key: "aalborg", lat: 57.048, lon: 9.919 };
+    const skagen = { key: "skagen", lat: 57.72, lon: 10.59 };
+    is("a first pin on the country view moves nothing", frameFor({ pins: [aalborg], added: ["aalborg"], view: onCountry, country }), null);
+    is("nor a fifth", frameFor({ pins: [aalborg, skagen], added: ["skagen"], view: onCountry, country }), null);
+    is("a pin already on the picture moves nothing when the camera is close", frameFor({ pins: [aalborg], added: [], view: onAalborg, country }), null);
+    is("a pin added off the picture opens it up to a cluster", frameFor({ pins: [aalborg, skagen], added: ["skagen"], view: onAalborg, country }), "cluster");
+    // A pin that was off the picture BEFORE this change is not the change's
+    // business: the reply that flew to Aalborg chose to leave Skagen off.
+    is("an old pin off the picture is left there", frameFor({ pins: [aalborg, skagen], added: [], view: onAalborg, country }), null);
+    // A refusal that takes the pin the camera sits on leaves it on nothing.
+    is("a camera left on nothing pulls back, to the country for one pin", frameFor({ pins: [skagen], added: [], view: onAalborg, country }), "country");
+    is("and for none", frameFor({ pins: [], added: [], view: onAalborg, country }), "country");
+    is("but a country view with no pins stays put", frameFor({ pins: [], added: [], view: onCountry, country }), null);
+    is("a lone pin added off the picture goes to the country too, not to a street plan",
+       frameFor({ pins: [skagen], added: ["skagen"], view: onAalborg, country }), "country");
+    // The inset: a pin under the zoom buttons is not shown.
+    const edge = { key: "edge", lat: 57.098, lon: 9.9 };
+    is("a pin at the very edge counts as off the picture", frameFor({ pins: [aalborg, edge], added: ["edge"], view: onAalborg, country }), "cluster");
+    is("added keys are matched folded", frameFor({ pins: [aalborg, skagen], added: ["Skagen "], view: onAalborg, country }), "cluster");
+    is("no view means nothing can be shown, so a pin asks for the country", frameFor({ pins: [aalborg], added: ["aalborg"], view: null, country }), "country");
+    is("a pin with no coordinate is not a pin", frameFor({ pins: [{ key: "x" }], added: ["x"], view: onAalborg, country }), "country");
+  }
+
+  // ── AND THE CLOCK THAT RUNS THEM, DRIVEN WITH A FAKE ONE ─────────
+  //
+  // His own example, played end to end. The reveal fires OUT and then IN a
+  // few hundred milliseconds later; the OUT has to land and hold before the IN
+  // begins, and the pins must not interrupt either.
+  {
+    const country = { south: 54.5, west: 8.0, north: 57.8, east: 15.3 };
+    let view = { south: 54.2, west: 7.0, north: 58.1, east: 16.3 };
+    const aalborg = { key: "aalborg", lat: 57.048, lon: 9.919 };
+    const skagen = { key: "skagen", lat: 57.72, lon: 10.59 };
+    let pins = [];
+    const played = [];
+    // A fake clock: timers are collected and fired by hand.
+    let clock = 0;
+    const timers = [];
+    const setTimer = (fn, ms) => { const t = { at: clock + ms, fn, id: timers.length + 1 }; timers.push(t); return t.id; };
+    const clearTimer = (id) => { const i = timers.findIndex(t => t.id === id); if (i >= 0) timers.splice(i, 1); };
+    const tick = (ms) => {
+      clock += ms;
+      for (;;) {
+        const due = timers.filter(t => t.at <= clock).sort((a, b) => a.at - b.at)[0];
+        if (!due) return;
+        timers.splice(timers.indexOf(due), 1);
+        due.fn();
+      }
+    };
+    const seconds = { in: 1.1, out: 1.9, fit: 0.9 };
+    const cam = M.makeCamera({
+      play: (move) => { played.push(`${move.kind}${move.frame ? ":" + move.frame : ""}@${clock}`); return seconds[move.kind]; },
+      picture: () => ({ pins, view, country }),
+      hold: 800, setTimer, clearTimer,
+    });
+    // His turn 3 names Aalborg. The map is on the country, so nothing moves.
+    pins = [aalborg]; cam.pins(pins);
+    is("a first pin on the country moves nothing", played, []);
+    // The reply's OUT at word one, its IN at word nine, half a second apart.
+    cam.arrive({ kind: "out" });
+    tick(500);
+    cam.arrive({ kind: "in", lat: aalborg.lat, lon: aalborg.lon });
+    is("the out plays at once and the in waits for it", played, ["out@0"]);
+    tick(1400);
+    is("the out is still holding when its flight ends", played, ["out@0"]);
+    tick(800);
+    is("and the in begins after the hold, not on top of the out", played, ["out@0", "in@2700"]);
+    // A town named while the reply's zoom plays: the reply chose the picture.
+    view = { south: 57.0, west: 9.8, north: 57.1, east: 10.05 };
+    pins = [aalborg, skagen]; cam.pins(pins);
+    tick(1900);
+    is("a pin added while the reply's move plays does not pull the camera off it", played, ["out@0", "in@2700"]);
+    is("and the camera is idle again", cam.state.playing, null);
+    // The traveller names somewhere new a reply later, off the picture.
+    const ribe = { key: "ribe", lat: 55.33, lon: 8.77 };
+    pins = [aalborg, skagen, ribe]; cam.pins(pins);
+    is("the next pin off the picture opens it up", played.slice(-1), ["fit:cluster@4600"]);
+    // A beat arriving while that fit plays interrupts it: the reply wins.
+    tick(300);
+    cam.arrive({ kind: "in", lat: ribe.lat, lon: ribe.lon });
+    is("the reply's move interrupts the app's", played.slice(-1), ["in@4900"]);
+    is("and the interrupted fit's clock is cancelled", timers.length, 1);
+    tick(1900);
+    // A refusal takes the pin the camera sits on: the camera is on nothing.
+    view = { south: 55.3, west: 8.7, north: 55.36, east: 8.84 };
+    pins = [aalborg, skagen]; cam.pins(pins);
+    is("a camera left on nothing pulls back", played.slice(-1), ["fit:cluster@6800"]);
+    tick(1700);
+    // Two beats in one tick: the second replaces the first before it plays.
+    cam.arrive({ kind: "out" });
+    cam.arrive({ kind: "in", lat: aalborg.lat, lon: aalborg.lon });
+    cam.arrive({ kind: "in", lat: skagen.lat, lon: skagen.lon });
+    tick(2700);
+    is("the newest waiting move is the one played", played.slice(-2), ["out@8500", "in@11200"]);
+    // Reduced motion: an instant move reports no duration and gets no hold.
+    const quick = [];
+    const q = M.makeCamera({ play: (m) => { quick.push(m.kind); return 0; }, picture: () => ({ pins, view, country }), setTimer, clearTimer });
+    q.arrive({ kind: "out" }); q.arrive({ kind: "in", lat: 1, lon: 1 });
+    tick(0);
+    is("instant moves follow each other with no hold", quick, ["out", "in"]);
+    // stop() is what unmount calls, and a stopped camera's clock never fires.
+    cam.arrive({ kind: "out" });
+    cam.stop();
+    const before = played.length;
+    tick(5000);
+    is("a stopped camera plays nothing more", played.length, before);
+    ok("and its timer is gone", cam.state.timer === null);
+  }
+
   // ── AND ONLY THE STREAMING REPLY DRIVES IT ────────────────────────
   // An old reply scrolled back into view re-renders and reports its full word
   // count. Replaying its camera moves would yank the map off whatever the
   // conversation is about now.
   ok("an old reply is not wired to the camera", /onWord=\{streaming && withBeats\?\.beats\.length \?/.test(appR));
+  // ── AND A REPLY STILL ARRIVING IS STILL STREAMING ────────────────
+  // The reveal can finish before the API has: the bubble shows complete
+  // sentences as they land, a short opener is revealed in under a second, and
+  // the reply then pauses for a search. onDone fired, `streaming` went false,
+  // and the rest of the reply was dumped in with onWord unwired, so a marker
+  // in it never moved the camera. The API's own flag holds the gate open.
+  ok("the stream's own flag keeps the reveal wired until it closes",
+     /const streaming = isLatestAssistant && \(m\.streaming \|\| m\.idx > chatRevealedUpTo\);/.test(appR));
+  ok("and the flag is set while streaming and cleared after",
+     /role: "assistant", text: shown, streaming: true \}/.test(appR) && /text: replyText, streaming: false, asked: askedThisTurn/.test(appR));
+  // ── AND THE PIN AND CARD READERS READ THE CLEAN TEXT ─────────────
+  // "[[MAP_IN:Copenhagen]]" is a mention of Copenhagen to mentionsPlace, and
+  // one outside any question, so a reply that only asked about Copenhagen and
+  // wrote a marker still carded and pinned it. The readers now read the words
+  // the bubble shows, which is the text the camera was already reading.
+  ok("the map's pins read the marker-free text",
+     /const clean = \(text\) => readMapBeats\(stripMarkdown\(stripReadyMarker\(text\)\)\)\.clean;/.test(appR));
+  ok("and so do the cards",
+     /textOf: \(x\) => readMapBeats\(stripMarkdown\(stripReadyMarker\(x\.text\)\)\)\.clean,/.test(appR));
+  // Measured on the real readers: with the marker in, a marker in a statement
+  // before a question that names the town makes the town "introduced".
+  {
+    const asked = "[[MAP_IN:Copenhagen]] Fine. Are you flying into Copenhagen?";
+    const cph = [{ name: "Copenhagen", _src: "town", photo: "x" }];
+    is("read raw, the marker introduces a town the reply only asked about",
+       M.placesNamedIn(asked, cph, { needsPhoto: false }).map(p => p.name), ["Copenhagen"]);
+    is("read clean, it does not", M.placesNamedIn(readMapBeats(asked).clean, cph, { needsPhoto: false }).length, 0);
+  }
   // The counter belongs to one reply, or reply two's first beat is measured
   // against reply one's total and every move in it is skipped.
   ok("and the played counter resets per reply", /beatOwnerRef\.current !== m\.idx/.test(appR));
@@ -48671,30 +49229,73 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // destination'." So the country is the STARTING frame and the place is the
   // destination, and the journey between them is what answers "where is this".
   ok("the map opens on Denmark", /\}\)\.fitBounds\(DENMARK, \{ padding: \[6, 6\] \}\);/.test(chatCode));
-  ok("and a lone pin is framed by itself, so the flight has somewhere to go",
-     /const lone = list\.length <= 1;[\s\S]{0,260}?const bounds = lone\s*\n?\s*\? L\.latLngBounds\(list\.map\(p => \[p\.lat, p\.lon\]\)\)\s*\n?\s*: L\.latLngBounds\(list\.map\(p => \[p\.lat, p\.lon\]\)\)\.pad\(0\.35\)/.test(chatCode));
-  // ── AND THE TWO BRANCHES DO NOT SHARE ONE MAXZOOM ────────────────
-  // A zero-size bounds ignores its own padding and lands exactly on the cap, so
-  // the cap IS the framing for a lone pin and merely a ceiling for a cluster.
-  // At 55.7 degrees zoom 10 is about 86 m/px: a 490px map is 42 km across, so
-  // "a picture of Copenhagen" was Copenhagen, Malmö and half of Zealand.
-  ok("a lone pin gets a closer cap than a cluster", /const LONE_PIN_ZOOM = FOCUS_ZOOM, CLUSTER_ZOOM = 10;/.test(chatCode));
-  // ONE NUMBER, TWO CALLERS. The pins ask for this closeness when there is one
-  // of them, and a reply asks for it by name when it says [[MAP_IN:...]]. A
-  // second copy is how the two start disagreeing about what "close" is.
+  // ── AND THEN THE PINS STOPPED CHOOSING HOW CLOSE ─────────────────
+  //
+  // 13 Sep 2026. The four assertions that stood here pinned a lone pin flying
+  // to FOCUS_ZOOM by itself, a cluster refitting on every pin change, a first
+  // flight of 1.9 seconds and a flownRef to make it happen once. They were
+  // written to Oliver's midday rule ("why doesn't it zoom more into
+  // Copenhagen? It knows it's just Copenhagen now") and the same evening he
+  // looked at what that rule does when his OWN message names the town:
+  //
+  //   "it shouldn't zoom into Aalborg instantly here. Zoom in if Gemlyx wants
+  //    to explain/show something (which it still doesn't do..)."
+  //
+  // The instant zoom was the lone-pin flight: the pin exists the moment he
+  // types the word, so the camera was on a street plan of Aalborg before
+  // Gemlyx had said anything, and the reply's own [[MAP_IN:Aalborg]] then flew
+  // nowhere. Measured on his 21:24 transcript: Aalborg pinned at his turn 3,
+  // the reply's IN at turn 4 landing where the map already was. And the refit
+  // on every pin change was the other half: a reply that flew to Copenhagen and
+  // then named Samsø had its flight cancelled by the fit that Samsø's pin asked
+  // for. Two readers of "how close should the map be", and the pins always got
+  // there first.
+  //
+  // So the assertions are replaced rather than deleted: the RULE they protected
+  // (the country is the frame the map opens on, the place is the destination,
+  // the journey between them answers "where is this") is kept in the two lines
+  // above, and the descent is now the reply's move. The pins ask for a frame
+  // only when the picture has lost something, and that rule is pure, in
+  // frameFor, tested below on numbers.
+  ok("no lone pin flies anywhere on its own", !/LONE_PIN_ZOOM/.test(chatCode) && !/flownRef/.test(chatCode));
+  // The component hands the camera its Leaflet calls and the picture, and
+  // decides nothing: every rule and the clock are in makeCamera, tested below.
+  ok("the camera is built with the map and decides for it",
+     /camRef\.current = makeCamera\(\{ play: \(move\) => applyMove\(map, move\), picture: \(\) => pictureOf\(map\) \}\);/.test(chatCode));
+  is("and the pins are handed to it, with none and with some", (chatCode.match(/camRef\.current\?\.pins\(list\);/g) || []).length, 2);
+  ok("and the reply's moves too",
+     /cam\.arrive\(\{ kind: "out" \}\)/.test(chatCode) && /cam\.arrive\(\{ kind: "in", lat: focus\.lat, lon: focus\.lon \}\)/.test(chatCode));
+  is("nothing else flies the map", (chatCode.match(/map\.flyTo\(/g) || []).length, 1);
+  is("nor fits it", (chatCode.match(/flyToBounds\(/g) || []).length, 1);
+  is("and both live in the one function the camera calls", (chatCode.match(/const applyMove = \(map, move\) => \{[\s\S]*?flyTo\([\s\S]*?flyToBounds\(/g) || []).length, 1);
+  // The country it opens on is the country a fit returns to, read off the one
+  // constant, so the two frames cannot drift apart.
+  ok("a fit to the country reads the same frame the map opened on",
+     /country: \{ south: DENMARK\[0\]\[0\], west: DENMARK\[0\]\[1\], north: DENMARK\[1\]\[0\], east: DENMARK\[1\]\[1\] \}/.test(chatCode));
+  ok("and a cluster fit is padded and capped, as the old refit was",
+     /L\.latLngBounds\(pinsNowRef\.current\.map\(p => \[p\.lat, p\.lon\]\)\)\.pad\(0\.35\)/.test(chatCode) && /maxZoom: CLUSTER_ZOOM/.test(chatCode));
+  ok("a lone pin's frame is the country, not a street plan", /const wide = move\.kind === "out" \|\| move\.frame !== "cluster";/.test(chatCode));
+  ok("and out lands where the map opened", /\}\)\.fitBounds\(DENMARK, \{ padding: \[6, 6\] \}\);/.test(chatCode) && /const opts = wide \? \{ padding: \[6, 6\] \}/.test(chatCode));
+  // ONE NUMBER, TWO CALLERS, still. A reply asks for FOCUS_ZOOM by name when it
+  // says [[MAP_IN:...]], and a second copy is how "close" starts to disagree.
   ok("and that cap is shared with the reply-driven camera", /const FOCUS_ZOOM = 12;/.test(chatCode));
-  ok("the focus effect uses it too", /map\.flyTo\(\[focus\.lat, focus\.lon\], FOCUS_ZOOM/.test(chatCode));
-  ok("and which one is used follows which branch it took", /const closest = lone \? LONE_PIN_ZOOM : CLUSTER_ZOOM;/.test(chatCode));
-  ok("the first set flies and the rest pan",
-     /const first = !flownRef\.current;[\s\S]{0,720}?flyToBounds\(bounds, \{ maxZoom: closest, duration: first \? 1\.9 : 0\.9 \}\)/.test(chatCode));
-  // A title sequence on every reply is not a map. The flag has to be set, or
-  // every new place re-flies from altitude.
-  ok("and the flight happens once", /flownRef\.current = true;/.test(chatCode));
+  ok("the in move uses it", /map\.flyTo\(\[move\.lat, move\.lon\], FOCUS_ZOOM, \{ duration: IN_SECONDS \}\)/.test(chatCode));
+  ok("the cluster zoom is named beside it", /const CLUSTER_ZOOM = 10;/.test(chatCode));
   // Somebody who asked their system for less movement gets none, and still
-  // ends up looking at the same map.
+  // ends up looking at the same map. An instant move reports no duration, so
+  // the camera's clock gives it no hold either.
   ok("reduced motion is honoured", /prefers-reduced-motion: reduce/.test(chatCode));
   ok("and it lands in the same place without animating",
-     /if \(still\) map\.fitBounds\(bounds, \{ maxZoom: closest, animate: false \}\);/.test(chatCode));
+     /if \(still\) \{ map\.setView\(\[move\.lat, move\.lon\], FOCUS_ZOOM, \{ animate: false \}\); return 0; \}/.test(chatCode)
+     && /if \(still\) \{ map\.fitBounds\(b, \{ \.\.\.opts, animate: false \}\); return 0; \}/.test(chatCode));
+  ok("an animated move reports how long it takes", /return IN_SECONDS;/.test(chatCode) && /return seconds;/.test(chatCode));
+  ok("and the camera's clock dies with the map", (chatCode.match(/camRef\.current\?\.stop\(\);/g) || []).length === 2);
+  ok("the next move waits for the hold, never for moveend", !/once\("moveend"/.test(chatCode));
+  // The layout still runs when a move lands, or the labels sit where they were
+  // before the camera moved; and it runs at once for a pin that moved nothing.
+  ok("the labels are placed on every landing", /map\.on\("moveend zoomend", layOut\);/.test(chatCode));
+  ok("and right away for a pin that moved no camera", /spots\(\);\s*\n(?:\s*\/\/[^\n]*\n)*\s*layOut\(\);/.test(chatCode));
+
   // ── AND THEN IT STOPPED OPENING ITSELF ─────────────────────────
   //
   // Oliver, 12 Sep 2026: "Can the photo on the map not automatically pop up?
@@ -48711,10 +49312,6 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // THE LABELS STAY. The map still has to say what is on it, and the labels are
   // the half that does that; only the picture waits to be asked for.
   ok("every pin still carries its name", /<span class="pin-name">/.test(chatCode));
-  // The layout still runs on landing, or the labels sit where they were before
-  // the camera moved.
-  ok("the labels are still placed when the flight ends", /map\.once\("moveend", landed\)/.test(chatCode));
-  ok("and landing does the layout", /const landed = \(\) => \{ layOut\(\); \};/.test(chatCode));
   // Nothing new was built for the mouse: the binding was already there, so this
   // is a deletion. If that binding ever goes, the picture becomes unreachable.
   ok("pointing at a pin still opens its card", /mouseover/.test(chatCode));
@@ -48723,8 +49320,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Oliver, same message: "when it zooms out, make it a little slower." They
   // were both 1.1 seconds and they are not the same move. Pulling away covers
   // far more ground in the same time, so an equal duration reads as a lurch.
-  ok("the two directions have their own durations", /const OUT_SECONDS = 1\.9, IN_SECONDS = 1\.1;/.test(chatCode));
-  ok("and out is the slower of them", /duration: OUT_SECONDS/.test(chatCode) && /duration: IN_SECONDS/.test(chatCode));
+  ok("the three moves have their own durations", /const OUT_SECONDS = 1\.9, IN_SECONDS = 1\.1, FIT_SECONDS = 0\.9;/.test(chatCode));
+  ok("and out is the slower of them", /duration: IN_SECONDS/.test(chatCode) && /seconds = move\.kind === "out" \? OUT_SECONDS : FIT_SECONDS;/.test(chatCode));
 
   // ── AND THE CARD ITSELF STILL SAYS WHAT IT HAS TO ────────────────
   //
@@ -53209,10 +53806,65 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // full stop would throw away the half that was the answer, which is the same
     // bug facing the other way.
     is("but the answer after the but survives", themes("not nature, but food and history"), "food, history");
+    // ── AND IN THE ORDER THEY SAID THEM ─────────────────────────────
+    // This expected "nature, nightlife, beer" for a sentence that says nightlife
+    // first and nature last, which was the order of the word LIST and not of the
+    // answer. Once the list moved to travellerWords.js it was sorted longest
+    // first, so the accident became visible: "food and history" came back as
+    // "history, food". The reader reports first-mentioned first now. What
+    // somebody puts first is usually what they care about most, and the guide
+    // prompt reads this string top to bottom.
     is("and an ordinary answer is untouched",
-       themes("I was thinking of nightlife, a couple of beers, and then some nature"), "nature, nightlife, beer");
+       themes("I was thinking of nightlife, a couple of beers, and then some nature"), "nightlife, beer, nature");
     ok("the scrubber leaves text with nothing refused alone",
        withoutRefused("nature and good food").trim() === "nature and good food");
+
+    // ── AND THE SLOT CAN BE ANSWERED IN THE LANGUAGES THE APP READS ──
+    //
+    // `interests` became HARD on 12 Sep: nothing builds until it is answered. A
+    // Fable review then read the app's own Danish question back to it. `askDa`
+    // offers "Mad, historie, design, natur, natteliv eller noget helt andet",
+    // and of those five only "design" could be read. So a Danish traveller
+    // answered honestly, was told the answer did not land, answered again, and
+    // could never build a guide. Oliver's father uses this in Danish.
+    //
+    // Making the slot hard is what turned a wrong theme into a locked door. The
+    // vocabulary now lives in travellerWords.js beside everything else a
+    // traveller might type, keyed by the English term the rest of the app reads,
+    // so a Danish answer arrives as "food, nature" and not as "mad, natur".
+    const ANSWERS = [
+      ["Mad og natur", "food, nature"], ["Natur", "nature"], ["Historie", "history"],
+      ["Natteliv", "nightlife"], ["Slotte", "castle"], ["Vikinger", "viking"],
+      ["Sev\u00e6rdigheder", "sightseeing"], ["\u00d8l og mad", "beer, food"],
+      ["Essen und Geschichte", "food, history"], ["Natuur", "nature"],
+      ["Mat och historia", "food, history"], ["Uteliv", "nightlife"],
+      // English gaps found in the same sweep. Two of them are offered by the
+      // system prompt's own example question.
+      ["Culture", "culture"], ["Theme parks", "theme park"],
+      ["Sightseeing", "sightseeing"], ["Cycling", "cycling"], ["the outdoors", "nature"],
+    ];
+    is("an honest answer in any of the six languages fills the slot",
+       ANSWERS.filter(([said, want]) => themes(said) !== want).map(([said, want]) => `${said} -> ${themes(said)} (wanted ${want})`), []);
+    // And the handful of shapes that answer a list of options without naming one
+    // of them. "Food, history, nightlife, nature, something else entirely?" is
+    // the app's own question and "a mix of both" is how people reply to it.
+    // Only as the answer to the question, which is what `answering` records.
+    // "a bit of everything" in the middle of a sentence about something else is
+    // not a statement about what kind of trip this is.
+    const answered = (s) => readBrief({ travellerText: s, travellerTurns: [s], answering: [["interests"]],
+      asked: ["interests"], today: T }).known.interests?.value ?? null;
+    is("and so does an answer that takes some of each",
+       ["a mix of both", "a bit of everything", "lidt af det hele", "von allem etwas", "lite av varje"]
+         .filter(s => answered(s) !== "open to anything, Gemlyx chooses"), []);
+    is("but only where that question was the one on the table",
+       ["a mix of both", "a bit of everything"].filter(s => themes(s) !== null), []);
+    // None of it bought by loosening what a theme word is. Each of these filled
+    // this slot once and cost a trip built on it.
+    is("and nothing that is not an answer fills it",
+       ["We are coming from Spain", "we flew home via Barcelona", "25hours Hotel Paper Island",
+        "Just the two of us", "We fly in on the 14th", "2 adults and 2 kids", "Public Transport",
+        "We are driving up tomorrow", "I want a car"].filter(s => themes(s) !== null)
+         .map(s => `${s} -> ${themes(s)}`), []);
   }
 
   // ── "THE AI GOTTA SOLVE IT SOMEHOW" ───────────────────────────────
@@ -53335,8 +53987,23 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // Both spellings, because one passes the variable by shorthand and the other
     // builds the array inline. An assertion that only knew one of them would go
     // green the day somebody tidied the other into the shape it did not expect.
-    is("both readBrief calls are given what each turn was answering",
-       (appD.match(/\banswering[,:]/g) || []).length, 2);
+    // ── AND THE THIRD READ, WHICH IS THE ONE THAT BUILDS ────────────
+    //
+    // Two was right for the bar and the gate and blind to the third: the brief
+    // generateGuide reads to size the document. A Fable review measured it on
+    // 12 Sep, inside the change made to end the three day guide. That call
+    // passed no `answering`, so a bare "7" typed under "How many days have you
+    // got?" filled the chat's brief and not the builder's, requestedDays came
+    // out null, and the "MUST contain exactly N entries" enforcement never
+    // fired. The same bug the one-brief change was for, through a second door.
+    //
+    // THREE, and counted rather than named, so a fourth reader cannot arrive
+    // blind the way the third did.
+    is("all three readBrief calls are given what each turn was answering",
+       (appD.match(/\banswering[,:]/g) || []).length, 3);
+    ok("including the one the guide is built from",
+       /const guideAnswering = overrideConvoText \? \[\] : askedBeforeTurns\(/.test(appD)
+       && /answering: guideAnswering,/.test(appD));
     ok("the live bar reads the thread's own asks",
        /const answering = askedBeforeTurns\(/.test(appD));
     ok("and the message being typed is read against the question still on screen",

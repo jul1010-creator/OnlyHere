@@ -273,9 +273,39 @@ const CORRECTS = new RegExp(
 // loved Ribe" is agreement with a place name in it.
 const REPLACES = /\b(?:it'?s|it is|that'?s|that is|we'?re|we are|i'?m|i am|we'?ll|we will|going|flying|sailing|driving|landing|arriving|starting|det er|vi skal|vi rejser|jeg rejser|not)\b/i;
 
+// ── AND THE ONE THAT CORRECTS WITHOUT SAYING NO ─────────────────────
+//
+// Measured on 13 Sep 2026 across his exported chats from the day before. Two
+// of them correct the arrival airport from Copenhagen to Billund. One opens
+// "No, it's actually Billund I'm flying into.." and the reader above catches
+// it. The other, 18:22, opens:
+//
+//   "Well, I'm actually flying into Billund"
+//
+// and Copenhagen, pinned by the reply before it ("the train from Malmö drops
+// you right in Copenhagen"), stayed on the map for the rest of the chat. No
+// negation anywhere in the sentence, and the contradiction is carried by one
+// word in the middle of it.
+//
+// So a second opener: the sentence starts with "I'm actually" or "we're
+// actually" or "it's actually" (a leading "well" or "oh" allowed), it has a
+// travelling verb in it, and it adds nothing. The verb is what keeps "I'm
+// actually more interested in Odense" out, because that is a preference and
+// not a replacement; "too", "also" and "as well" keep "I'm actually going to
+// Odense too" out, because that is an addition and the comment above says why
+// an addition read as a correction costs a pin the traveller wanted. Danish
+// carries the same word later in the sentence ("vi flyver faktisk til
+// Billund", "det er faktisk Billund"), so its forms are listed with the verb
+// in front.
+const CORRECTS_QUIETLY = /^[\s"'(]*(?:(?:well|oh|ah|hmm|erm|um|okay|ok|so)\s*[,.!]?\s*)?(?:(?:i'?m|i am|we'?re|we are|it'?s|it is|its|that'?s|that is)\s+actually\b|det er faktisk\b|(?:jeg|vi)\s+(?:flyver|lander|kommer|skal|rejser|k\u00f8rer|sejler)\s+faktisk\b)/i;
+const TRAVELS = /\b(?:fly(?:ing)?|go(?:ing)?|sail(?:ing)?|driv(?:e|ing)|land(?:ing)?|arriv(?:e|ing)|start(?:ing)?|heading|coming|travel(?:l)?ing|stay(?:ing)?|flyver|lander|kommer|rejser|k\u00f8rer|sejler|skal)\b/i;
+const ADDS = /\b(?:too|also|as well|ogs\u00e5|desuden|derudover)\b/i;
+const correctsQuietly = (said) => CORRECTS_QUIETLY.test(said) && TRAVELS.test(said) && !ADDS.test(said);
+
 export const correctedTo = (text, pools) => {
   const said = String(text || "");
-  if (!said.trim() || !CORRECTS.test(said) || !REPLACES.test(said)) return null;
+  if (!said.trim()) return null;
+  if (!((CORRECTS.test(said) && REPLACES.test(said)) || correctsQuietly(said))) return null;
   const rows = Array.isArray(pools) ? pools : [];
   const named = rows.filter(p => p?.name && mentionsPlace(said, p.name) && !isRejectedPlace(said, p.name));
   // Exactly one, by name: two pools can hold the same place and that is one

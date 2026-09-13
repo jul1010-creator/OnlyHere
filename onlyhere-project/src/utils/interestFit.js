@@ -34,6 +34,7 @@
 // a person, and it was the one screen that never read it. Fifth time on this
 // screen that the helper already existed and the call did not.
 import { fold } from "./danishNames";
+import { withoutRefused } from "./tripBrief";
 import { themesOf, PLACE_THEMES, THEME_LABEL, tierOf } from "./placeThemes";
 
 // Whole words, folded. Same discipline and the same reason as previewMatch's
@@ -175,8 +176,26 @@ const onlyLogistics = (hay, word) => {
 // after it or a verb of being.
 const PARTY_AS_PEOPLE = /\bparty\s+of\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|us)\b|\b(?:our|my|the|this|whole|entire|remaining)\s+party\s+(?:is|are|was|were|will be|consists|includes|has|numbers)\b|\bparty\s+size\b/gi;
 
+// ── AND A THEME THEY REFUSED IS NOT A THEME, HERE TOO ─────────
+//
+// tripBrief.js has scrubbed refusals out of the interests slot since 5 Sep,
+// because "I don't want to do museums or castles" was filling it with museums
+// and castles. This reader answers the same question for the nightlife gate and
+// had no scrub at all, so the two disagreed on the transcript the gate was
+// written for. Measured by a Fable review on 12 Sep, on his own 18:22 export:
+//
+//   "Well, I can't really be doing nightlife when I'm with my kids.."
+//
+// The brief's interests slot: nothing, correctly. This reader: nightlife. So the
+// whole published nightlife inventory went into the prompt, and the plan gate
+// that flags a night out nobody asked for returned nothing for a plan carrying
+// Jomfru Ane Gade. The sentence refusing it was read as asking for it.
+//
+// ONLY THE FREE TEXT. The interests argument is the intake form's tick-boxes,
+// which are a list of things somebody chose rather than a sentence that can
+// carry a "not".
 export const briefThemes = (text, interests = []) => {
-  const raw = [String(text || ""), ...(Array.isArray(interests) ? interests : [])].join(" ");
+  const raw = [withoutRefused(String(text || "")), ...(Array.isArray(interests) ? interests : [])].join(" ");
   const hay = fold(raw.replace(PARTY_AS_PEOPLE, " "));
   if (!hay.trim()) return null;
   const want = new Set();

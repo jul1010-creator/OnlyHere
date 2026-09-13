@@ -13531,9 +13531,25 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // The turns are split back out because readDays is a PER TURN rule: a
       // later correction has to be able to outrank an earlier number, and a
       // joined string has no turns to order.
+      // ── AND WHAT EACH TURN WAS ANSWERING ──────────────────────────
+      //
+      // Found by a Fable review on 12 Sep, in the change made to fix the three
+      // day guide. This call passed no `answering`, so the DIRECT answer path
+      // never ran on the guide side: a bare "7" typed under "How many days have
+      // you got?" filled the chat's brief and not this one. requestedDays came
+      // out null, the "MUST contain exactly N entries" enforcement never fired,
+      // and a guide was built with no length from a conversation that had one.
+      //
+      // The same bug the one-brief change was for, through a second door: two
+      // readings of one question, one of them blind.
+      //
+      // An override is a composed brief with no assistant turns in it, so there
+      // is nothing for anything to be answering.
+      const guideAnswering = overrideConvoText ? [] : askedBeforeTurns(aiMessages.slice(1));
       const guideBrief = readBrief({
         travellerText: saidByTravellerForGuide,
         travellerTurns: String(saidByTravellerForGuide || "").split("\n").filter(x => x.trim()),
+        answering: guideAnswering,
         today: nowForDates,
       });
       // A NUMBER OR NOTHING. A length the traveller handed to Gemlyx lives in
@@ -16650,13 +16666,13 @@ HANDMADE CANDY & CRAFT SHOPS (walk-in, watch it made): ${handmadeList}
 UPCOMING LOCAL EVENTS: ${upcomingLocal}
 UPCOMING MAJOR EVENTS: ${upcomingMajor}
 UPCOMING VIKING EVENTS (markets, festivals, battle reenactments): ${upcomingViking}
-HIDDEN GEM TOWNS (this is Gemlyx's actual core differentiator — real, lesser-known towns worth a detour, not the famous cities everyone already knows): ${townsList}
+HIDDEN GEM TOWNS (this is Gemlyx's actual core differentiator, real lesser-known towns worth a detour, not the famous cities everyone already knows): ${townsList}
 
-ACTIVELY USE THE HIDDEN GEM TOWNS LIST, DON'T JUST DEFAULT TO FAMOUS ATTRACTIONS: when building a multi-day plan, deliberately pull at least one real town from the list above rather than filling every day with only the most famous, most obvious sights — working a hidden gem into the plan (not just mentioning it exists) is exactly what makes a Gemlyx-built trip different from a generic one. If someone's request sounds like they'd prefer a lighter, town-hopping style trip (cycling or driving around and seeing real places, not a packed sightseeing schedule), lean into that — don't force a dense day of attractions onto someone who'd rather just wander through a few real towns.
+ACTIVELY USE THE HIDDEN GEM TOWNS LIST, DON'T JUST DEFAULT TO FAMOUS ATTRACTIONS: when building a multi-day plan, deliberately pull at least one real town from the list above rather than filling every day with only the most famous, most obvious sights. Working a hidden gem into the plan (not just mentioning it exists) is exactly what makes a Gemlyx-built trip different from a generic one. If someone's request sounds like they'd prefer a lighter, town-hopping style trip (cycling or driving around and seeing real places, not a packed sightseeing schedule), lean into that, and don't force a dense day of attractions onto someone who'd rather just wander through a few real towns.
 
-If asked for a plan or itinerary, structure it day by day using only the above, and factor in the current season. ACTIVELY CROSS-REFERENCE EVENTS AGAINST THE TRAVELER'S DATES: if they've told you when they're visiting (or roughly when — "next week", "in August"), check the UPCOMING EVENTS lists above for anything whose real date range overlaps with their trip, and proactively mention it as part of the plan rather than waiting to be asked — a real festival happening during someone's actual visit is exactly the kind of specific, useful detail worth surfacing unprompted. Don't force an event in in if nothing overlaps; a fabricated sense of good timing is worse than no mention at all. If you do suggest an event, ALWAYS pass along its real ticket situation from the [tickets: ...] note next to it — if it says SOLD OUT, say so plainly and don't suggest attending (mention it as a "happening nearby" fact instead, not a plan to join); if it says tickets are limited or sell out fast, tell them to book now, before the trip, not "when they arrive" — that's the single most common way someone misses something they specifically traveled for. FROZEN FACT, CORRECTED 21 Aug 2026 (VisitDenmark overnight-stay figures via The Local): DO NOT SAY OR IMPLY THAT MOST TOURISTS ONLY SEE COPENHAGEN. This prompt asserted it for weeks and it is false. Germany is by far the largest source of visitors, 13.2 million overnight stays, and they go to the Jutland coasts rather than the capital: Vesterhavet 5 million, Nordvestkysten 2.3 million, South Jutland 1.6 million. Across all visitors, 80 percent of overnight stays are coastal and nature and only 11 percent are the major cities. Around two thirds of Norwegian visits are outside Copenhagen. It IS true of long-haul visitors and of some European city breaks: 77 percent of American stays are in the capital, 63 percent of Dutch and roughly half of Swedish. So never open with the claim as a general fact about tourists, and never tell somebody they are missing the real Denmark before knowing where they are going: a German family heading for a west-coast holiday house has already found it, and being told otherwise is both wrong and patronising. Gemlyx's mission is unchanged and its reason is narrower: when a traveller's OWN brief points only at Copenhagen and they have more than 2 days, suggest at least one destination outside it, because that is the trip that misses most, not because most trips do. If asked about transport, always mention that the physical Rejsekort card was discontinued (28 May 2026) and the current fine for an invalid ticket is 750 DKK — the most common tourist mistakes are forgetting to check out, and assuming an installed app means a purchased ticket. FROZEN TRANSPORT FACT (checked 10 Aug 2026, rejsekort.dk + rejsebillet.dk): never recommend a PHYSICAL Rejsekort, because the card is discontinued. Do NOT claim the Rejsekort app is unavailable to visitors: its own terms ask only for an email, a name, a birthdate, a phone number and a payment card, and reserve MitID and CPR for pensioner and disabled fare types. Steer a short trip to a fixed ticket for the real reason instead, which is that the app is check-in and check-out and forgetting to check out is the most common tourist fine. Visitors buy tickets in the official Rejsebillet app (single tickets and passes for all of Denmark, from Rejsekort & Rejseplan A/S, paid in advance) or the DOT/DSB apps; the Copenhagen Card works as before (activate once, show on request). If unsure about any ticket mechanic, name the official app and point at it rather than describing mechanics.
+If asked for a plan or itinerary, structure it day by day using only the above, and factor in the current season. ACTIVELY CROSS-REFERENCE EVENTS AGAINST THE TRAVELER'S DATES: if they've told you when they're visiting (or roughly when, as in "next week" or "in August"), check the UPCOMING EVENTS lists above for anything whose real date range overlaps with their trip, and proactively mention it as part of the plan rather than waiting to be asked. A real festival happening during someone's actual visit is exactly the kind of specific, useful detail worth surfacing unprompted. Don't force an event in in if nothing overlaps; a fabricated sense of good timing is worse than no mention at all. If you do suggest an event, ALWAYS pass along its real ticket situation from the [tickets: ...] note next to it. If it says SOLD OUT, say so plainly and don't suggest attending (mention it as a "happening nearby" fact instead, not a plan to join); if it says tickets are limited or sell out fast, tell them to book now, before the trip, not "when they arrive". That is the single most common way someone misses something they specifically traveled for. FROZEN FACT, CORRECTED 21 Aug 2026 (VisitDenmark overnight-stay figures via The Local): DO NOT SAY OR IMPLY THAT MOST TOURISTS ONLY SEE COPENHAGEN. This prompt asserted it for weeks and it is false. Germany is by far the largest source of visitors, 13.2 million overnight stays, and they go to the Jutland coasts rather than the capital: Vesterhavet 5 million, Nordvestkysten 2.3 million, South Jutland 1.6 million. Across all visitors, 80 percent of overnight stays are coastal and nature and only 11 percent are the major cities. Around two thirds of Norwegian visits are outside Copenhagen. It IS true of long-haul visitors and of some European city breaks: 77 percent of American stays are in the capital, 63 percent of Dutch and roughly half of Swedish. So never open with the claim as a general fact about tourists, and never tell somebody they are missing the real Denmark before knowing where they are going: a German family heading for a west-coast holiday house has already found it, and being told otherwise is both wrong and patronising. Gemlyx's mission is unchanged and its reason is narrower: when a traveller's OWN brief points only at Copenhagen and they have more than 2 days, suggest at least one destination outside it, because that is the trip that misses most, not because most trips do. If asked about transport, always mention that the physical Rejsekort card was discontinued (28 May 2026) and the current fine for an invalid ticket is 750 DKK. The most common tourist mistakes are forgetting to check out, and assuming an installed app means a purchased ticket. FROZEN TRANSPORT FACT (checked 10 Aug 2026, rejsekort.dk + rejsebillet.dk): never recommend a PHYSICAL Rejsekort, because the card is discontinued. Do NOT claim the Rejsekort app is unavailable to visitors: its own terms ask only for an email, a name, a birthdate, a phone number and a payment card, and reserve MitID and CPR for pensioner and disabled fare types. Steer a short trip to a fixed ticket for the real reason instead, which is that the app is check-in and check-out and forgetting to check out is the most common tourist fine. Visitors buy tickets in the official Rejsebillet app (single tickets and passes for all of Denmark, from Rejsekort & Rejseplan A/S, paid in advance) or the DOT/DSB apps; the Copenhagen Card works as before (activate once, show on request). If unsure about any ticket mechanic, name the official app and point at it rather than describing mechanics.
 
-You also have a web_search tool. Use it whenever someone asks about something that changes over time and isn't in the lists above — current opening hours, whether a specific event is still on, ticket availability, or anything at a museum/castle/attraction not already listed here. Don't use it for things already covered in your lists above.
+You also have a web_search tool. Use it whenever someone asks about something that changes over time and isn't in the lists above, such as current opening hours, whether a specific event is still on, ticket availability, or anything at a museum/castle/attraction not already listed here. Don't use it for things already covered in your lists above.
 
 ${profileForPrompt(userProfile)}${observedForPrompt(userProfile, userProfile?.learned) ? `\n${observedForPrompt(userProfile, userProfile.learned)}` : ""}${travellingNow() ? `\n${travellingNow()}` : ""}
 
@@ -17580,16 +17596,33 @@ ${languageBlock()}`;
                   // turn and any hidden message are not on screen, so a place
                   // named only there was never introduced and keeps its card.
                   const shownMsgs = aiMessages.map((x, i) => ({ ...x, idx: i })).slice(1).filter(x => !x.hidden);
+                  // MARKERS OUT, the words the reader sees. Read with them in,
+                  // "[[MAP_IN:Copenhagen]]" was a mention outside any question,
+                  // so a reply that only ASKED about Copenhagen got its card.
                   const msgCards = cardsByMessage(shownMsgs, pools, {
                     alreadyKnown: theirWords,
-                    textOf: (x) => stripMarkdown(stripReadyMarker(x.text)),
+                    textOf: (x) => readMapBeats(stripMarkdown(stripReadyMarker(x.text))).clean,
                   });
                   return (
                   <>
                   <div className="ai-msgs" style={{ flex: "1 1 auto", minWidth: 0, maxHeight: CHAT_PANEL_HEIGHT, overflowY: "auto", marginBottom: 12, WebkitOverflowScrolling: "touch" }}>
                     {shownMsgs.map((m) => {
                       const isLatestAssistant = m.role === "assistant" && m.idx === aiMessages.length - 1;
-                      const streaming = isLatestAssistant && m.idx > chatRevealedUpTo;
+                      // ── AND A REPLY STILL ARRIVING IS STILL STREAMING ──
+                      //
+                      // The reveal used to be the only judge of this, and it
+                      // can finish before the API has: the bubble shows
+                      // complete sentences as they land, so a short opening
+                      // sentence is fully revealed in under a second and then
+                      // the reply pauses for a search. onDone fired, this went
+                      // false, and everything that landed afterwards was
+                      // dumped into the bubble in one go, with onWord unwired,
+                      // so any [[MAP_IN]] in the rest of the reply never moved
+                      // the camera and the cards appeared under a reply that
+                      // was still growing. The message carries the API's own
+                      // flag for as long as the stream is open; the reveal's
+                      // judgement counts once it has closed.
+                      const streaming = isLatestAssistant && (m.streaming || m.idx > chatRevealedUpTo);
                       // Reset as a new reply starts streaming. See beatOwnerRef.
                       if (streaming && beatOwnerRef.current !== m.idx) {
                         beatOwnerRef.current = m.idx;
@@ -17709,7 +17742,8 @@ ${languageBlock()}`;
                   <div className={RAIL_CLASS}>
                     {(() => {
                       const convo = aiMessages.slice(1);
-                      const clean = (text) => stripMarkdown(stripReadyMarker(text));
+                      // Markers out, for the reason given at msgCards above.
+                      const clean = (text) => readMapBeats(stripMarkdown(stripReadyMarker(text))).clean;
                       // ── THE MAP IS FED DIFFERENTLY FROM THE CARD ──────
                       // No alreadyKnown, so a town the traveller named is
                       // still pinned: they need no INTRODUCING to it and they

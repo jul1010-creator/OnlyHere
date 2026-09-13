@@ -63,7 +63,7 @@
 //
 // That behaviour already exists. It has never been shown to anybody, which is
 // what `willNotAssume` is for.
-import { BRIEF_SLOTS, HARD_SLOTS, BLOCKING_SLOTS } from "./tripBrief";
+import { BRIEF_SLOTS, HARD_SLOTS, BLOCKING_SLOTS, openBlocking, blockingTotal } from "./tripBrief";
 
 const said = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
 
@@ -320,7 +320,11 @@ export const briefLines = (brief) =>
 // stays a count, because listing four things is the wall of questions the whole
 // intake design is trying not to be.
 export const briefProgress = (brief) => {
-  const total = BLOCKING_SLOTS.length;
+  // openBlocking/blockingTotal, not BLOCKING_SLOTS: the list drops every slot
+  // with a `needs` predicate, so a booking with no nights named read as nothing
+  // open and the bar said 7 of 7 while the block underneath asked for the
+  // nights. One definition, in tripBrief.js.
+  const total = blockingTotal(brief);
   const ready = !!brief?.ready;
   // ── AND `unanswered` IS NOT A SECOND SOURCE ─────────────────────
   //
@@ -335,7 +339,7 @@ export const briefProgress = (brief) => {
   // Left as one filter rather than two, because a second reader of the same
   // question that happens to agree today is how two readers come to disagree
   // later — which is the failure this whole file keeps finding elsewhere.
-  const stillOpen = BLOCKING_SLOTS.filter(k => !brief?.known?.[k]);
+  const stillOpen = openBlocking(brief);
   return {
     done: ready ? total : Math.max(0, total - stillOpen.length),
     total,
@@ -400,10 +404,10 @@ export const briefPanel = (brief) => ({
 // the honest reading, and it has the side effect Oliver's example implies: the
 // number moves in steps of about seven rather than fourteen.
 export const briefPercent = (brief) => {
-  const total = BLOCKING_SLOTS.length;
+  const total = blockingTotal(brief);
   if (!total) return 0;
   if (brief?.ready) return 100;
-  const known = BLOCKING_SLOTS.filter(k => brief?.known?.[k]);
+  const known = BRIEF_SLOTS.filter(s => s.tier === "blocking" && brief?.known?.[s.key]).map(s => s.key);
   const vague = known.filter(k => (brief?.vague || []).includes(k));
   const score = known.length - (vague.length * 0.5);
   const pct = Math.round((score / total) * 100);
@@ -418,7 +422,7 @@ export const briefPercent = (brief) => {
 export const percentLine = (brief) => {
   const pct = briefPercent(brief);
   if (brief?.ready) return "Ready to build";
-  const open = BLOCKING_SLOTS.filter(k => !brief?.known?.[k]);
+  const open = openBlocking(brief);
   const last = open.length === 1 ? (slotOf(open[0])?.label || "") : "";
   if (last) return `${pct}% complete — I still need ${last}`;
   // A vague answer is the other thing worth naming, because narrowing it is the

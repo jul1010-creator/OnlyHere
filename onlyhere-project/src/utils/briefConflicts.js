@@ -1,4 +1,5 @@
 import { withoutRefused } from "./tripBrief";
+import { NAMES_A_CHILD } from "./travellerWords";
 // ── TWO THINGS THAT ARE BOTH TRUE AND DO NOT FIT ────────────────────
 //
 // Oliver, 5 Sep 2026, reporting his own guide through the Studio report button:
@@ -51,7 +52,9 @@ const saysAny = (text, words) =>
 // many", or null for "nothing here is about children". Three states, because a
 // party of two adults and a party whose children were never counted are
 // different facts and only one of them is a conflict.
-const NAMES_CHILDREN = /\b(?:kids?|child|children|toddlers?|bab(?:y|ies)|teens?|teenagers?|grandkids?|grandchildren|family|b(?:ø|o)rn|kinder|barn|familie)\b/i;
+// One definition, in travellerWords.js. See the comment there for what the
+// three copies of this disagreed about.
+const NAMES_CHILDREN = NAMES_A_CHILD;
 const kidsIn = (b) => {
   const p = b?.known?.party;
   if (!p) return null;

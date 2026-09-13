@@ -129,7 +129,10 @@ export const MONTH_PATTERN_ABBR_TRAILING = Object.keys(MONTH_INDEX_ABBR)
 // characters, so a "days?" shorthand became the literal string "days?" and
 // "7 days" stopped parsing in English while "7 dagen" carried on working. Every
 // form is spelled out instead.
-export const DAY_WORDS = ["day", "days", "dag", "dage", "dagen", "dagar", "tag", "tage", "giorno", "giorni"];
+// "dager" is Norwegian and was the one gap: "5 dager" read as nothing in a
+// language this app claims to read, which since 12 Sep means a blocked build
+// rather than a wrong number.
+export const DAY_WORDS = ["day", "days", "dag", "dage", "dagen", "dagar", "dager", "tag", "tage", "giorno", "giorni"];
 export const WEEK_WORDS = ["week", "weeks", "uge", "uger", "ugen", "vecka", "veckor", "veckan", "uke", "uker", "woche", "wochen", "weken", "settimana", "settimane"];
 // "a week" in each: en, da/no, de, nl, sv, it.
 export const ONE_WEEK = ["a week", "one week", "en uge", "hele ugen", "eine woche", "een week", "en vecka", "una settimana"];
@@ -480,4 +483,141 @@ export const alt = (words) =>
 // \b is ASCII only in JavaScript, so \bén never matches and \balene\b breaks on
 // a preceding å. This is the same trap that made "én uge" fail on 22 August.
 export const LETTER = "A-Za-zÀ-ÖØ-öø-ÿ";
+// ── WHAT KIND OF TRIP, IN THE LANGUAGES THE APP READS ───────────
+//
+// `interests` became a HARD slot on 12 Sep 2026: nothing builds until it is
+// answered. The list it was read from lived in tripBrief.js and was ENGLISH
+// ONLY, which a Fable review measured the same night with the app's own Danish
+// question in hand. `askDa` offers "Mad, historie, design, natur, natteliv
+// eller noget helt andet", and of those five only "design" could be read back.
+//
+//   "Mad og natur"        -> nothing      "Natur"     -> nothing
+//   "Historie"            -> nothing      "Natteliv"  -> nothing
+//   "Essen und Geschichte" -> nothing     "Natuur"    -> nothing
+//
+// So a Danish traveller answered the question honestly, was told the answer did
+// not land, answered again, and could never build a guide. Oliver's father uses
+// this in Danish. Making the slot hard is what turned a wrong theme into a
+// locked door, and the door was locked for every language but one.
+//
+// KEYED BY THE ENGLISH TERM, which is what the value carries downstream: the
+// brief block, briefThemes, the nightlife gate and the guide prompt all read
+// these words, so a Danish answer has to arrive as "food, nature" rather than
+// as "mad, natur". The key is the canonical term and never appears in a list.
+//
+// English gaps are fixed here too, found in the same sweep: culture, theme
+// parks, sightseeing, cycling and the outdoors all read as nothing, and two of
+// them are in the system prompt's own example question.
+//
+// WHAT IS DELIBERATELY NOT HERE: bare "park" ("we parked the car"), bare "bike"
+// and "cykel" (that is the transport slot's word and this reader runs over the
+// whole conversation), and place names. A hotel called Paper Island filled this
+// slot with "island" on 11 Sep and rebuilt a ten day trip around it; a reader
+// that takes proper nouns would do that again on purpose.
+// ── SOMEBODY UNDER EIGHTEEN IS ON THIS TRIP ─────────────────
+//
+// Spelled three times before 12 Sep: `NAMES_A_CHILD` in directAnswer.js,
+// `NAMES_CHILDREN` in briefConflicts.js, and nothing at all in tripBrief.js,
+// which is the file that reads a party out of a sentence. They differed. The
+// first knew about sons and daughters and ages, the second knew about families
+// and the Danish "barn", and the slot that decides whether a night out is
+// planned for a trip with children read whichever one it happened to reach.
+//
+// FAMILY COUNTS. It is how the intake form spells it and it is how people say
+// it, and where it is wrong the cost is a night out not suggested to two adults,
+// which they can ask for. The other direction is a bar crawl planned around
+// somebody's seven year old.
+export const NAMES_A_CHILD = /(?:^|[^A-Za-z\u00c0-\u00ff])(?:kids?|child|children|toddlers?|bab(?:y|ies)|teens?|teenagers?|son|daughter|grandkids?|grandchildren|famil(?:y|ies)|b(?:\u00f8|o)rn|barn|barnet|kinder|sohn|tochter|familie|gezin|kind(?:eren)?)(?![A-Za-z\u00c0-\u00ff])|(?:^|[^A-Za-z\u00c0-\u00ff])(?:1[0-7]|[1-9])\s*(?:year|yr|\u00e5r|jahre)s?[- ]?old(?![A-Za-z\u00c0-\u00ff])/i;
+
+export const INTEREST_TERMS = {
+  food: ["food", "eat", "restaurant", "cuisine", "dining", "foodie",
+         "mad", "spisesteder", "gastronomi", "smagsoplevelser",
+         "essen", "speisen", "gastronomie", "kulinarisch",
+         "eten", "restaurants",
+         "mat", "restauranger"],
+  history: ["history", "historic", "historical", "heritage",
+            "historie", "historisk", "historiske", "kulturarv",
+            "geschichte", "historisch", "geschichtlich",
+            "geschiedenis", "erfgoed",
+            "historia", "historisk"],
+  viking: ["viking", "vikings", "vikinge", "vikinger", "wikinger", "vikingar"],
+  museum: ["museum", "museums", "museer", "museet", "museen", "musea", "muse\u00e9"],
+  design: ["design", "designs"],
+  architecture: ["architecture", "arkitektur", "architektur", "architectuur"],
+  nature: ["nature", "outdoors", "countryside", "wilderness",
+           "natur", "naturen", "friluftsliv",
+           "natuur",
+           "naturens"],
+  hiking: ["hiking", "hike", "trekking", "vandring", "vandreture", "vandretur",
+           "wandern", "wanderung", "wandelen", "vandra", "fottur"],
+  cycling: ["cycling", "bike ride", "bike rides", "biking", "cykelferie",
+            "cykelture", "cykeltur", "radfahren", "fietsen", "fietstocht", "cykling"],
+  beach: ["beach", "beaches", "seaside", "coast", "coastal",
+          "strand", "strande", "kyst", "kysten",
+          "str\u00e4nde", "kuste", "k\u00fcste", "stranden", "kust",
+          "str\u00e4nder", "kusten"],
+  island: ["island", "islands", "\u00f8er", "\u00f8erne", "insel", "inseln", "eiland", "eilanden", "\u00f6ar"],
+  nightlife: ["nightlife", "night out", "clubbing",
+              "natteliv", "nattelivet", "g\u00e5 i byen", "ud i byen",
+              "nachtleben", "ausgehen",
+              "nachtleven", "uitgaan",
+              "nattliv", "uteliv"],
+  bar: ["bar", "bars", "pub", "pubs", "barer", "v\u00e6rtshus", "kneipe", "kneipen", "kroeg", "krogen"],
+  beer: ["beer", "brewery", "breweries", "craft beer",
+         "\u00f8l", "bryggeri", "bryggerier", "mikrobryggeri",
+         "bier", "brauerei", "brouwerij", "\u00f6l", "bryggeri"],
+  wine: ["wine", "vin", "wein", "wijn"],
+  art: ["art", "gallery", "galleries", "street art",
+        "kunst", "galleri", "gallerier", "kunstmuseum",
+        "galerie", "galerij", "konst", "galleri"],
+  culture: ["culture", "cultural", "kultur", "kulturelle", "kulturliv",
+            "kulturell", "cultuur", "cultureel"],
+  shopping: ["shopping", "shops", "boutiques", "indk\u00f8b", "butikker",
+             "einkaufen", "winkelen", "shoppa"],
+  castle: ["castle", "castles", "palace", "palaces", "manor",
+           "slot", "slotte", "slottet", "herreg\u00e5rd", "borg",
+           "schloss", "schl\u00f6sser", "burg", "kasteel", "kastelen", "slott"],
+  church: ["church", "churches", "cathedral", "abbey",
+           "kirke", "kirker", "domkirke", "katedral",
+           "kirche", "kirchen", "kerk", "kerken", "kyrka", "kyrkor"],
+  "theme park": ["theme park", "theme parks", "amusement park", "amusement parks",
+                 "forlystelsespark", "forlystelsesparker", "tivolier",
+                 "freizeitpark", "vergn\u00fcgungspark", "pretpark", "attractiepark",
+                 "n\u00f6jespark", "tivolipark"],
+  zoo: ["zoo", "zoos", "aquarium", "zoologisk", "dyrepark", "dierentuin", "djurpark"],
+  sightseeing: ["sightseeing", "sights", "landmarks",
+                "sev\u00e6rdigheder", "sev\u00e6rdighederne",
+                "sehensw\u00fcrdigkeiten", "bezienswaardigheden", "sev\u00e4rdheter"],
+  "christmas market": ["christmas market", "christmas markets", "julemarked",
+                       "julemarkeder", "weihnachtsmarkt", "weihnachtsm\u00e4rkte",
+                       "kerstmarkt", "julmarknad"],
+  relax: ["relax", "relaxing", "slow", "unwind", "chill",
+          "afslapning", "slappe af", "rolige dage",
+          "entspannen", "entspannung", "ontspannen", "koppla av", "avslappning"],
+  quiet: ["quiet", "peaceful", "stille", "fredeligt", "ruhig", "rustig", "lugnt"],
+  photography: ["photography", "photo spots", "fotografering", "fotografie", "fotografi"],
+  music: ["music", "live music", "concert", "concerts", "gig",
+          "musik", "koncert", "koncerter", "livemusik",
+          "konzert", "muziek", "concert", "musik", "konsert"],
+  festival: ["festival", "festivals", "festivaler", "festivals", "festivaler"],
+  hygge: ["hygge", "hyggelig", "hyggeligt", "cosy", "cozy", "gem\u00fctlich", "gezellig", "mysigt"],
+  spa: ["spa", "wellness", "kurbad", "badeland", "sauna"],
+  "hidden gem": ["hidden gem", "hidden gems", "off the beaten", "local spot",
+                 "local spots", "skjulte perler", "perler", "lokale steder",
+                 "geheimtipp", "geheimtipps", "verborgen parels", "dolda p\u00e4rlor"],
+  surf: ["surf", "surfing", "surfen", "surfa"],
+  wildlife: ["wildlife", "birdwatching", "birding", "dyreliv", "fugle", "fuglekiggeri",
+             "tierwelt", "vogelbeobachtung", "dieren", "djurliv"],
+};
+// Flattened once, word -> canonical term, longest first so "christmas market"
+// is read before "market" would be if it were ever added.
+export const INTEREST_WORD_TERM = (() => {
+  const out = new Map();
+  Object.entries(INTEREST_TERMS).forEach(([term, words]) => {
+    words.forEach(w => { if (!out.has(w)) out.set(w, term); });
+  });
+  return out;
+})();
+export const INTEREST_ALL_WORDS = [...INTEREST_WORD_TERM.keys()].sort((a, b) => b.length - a.length);
+
 export const edged = (pattern) => new RegExp(`(?:^|[^${LETTER}])(?:${pattern})(?![${LETTER}])`, "i");

@@ -59,14 +59,28 @@ const NAME = "[A-ZÆØÅ][\\wÆØÅæøå'’-]*(?:\\s+[A-ZÆØÅ][\\wÆØÅæø
 //
 // So the first letter of every keyword is spelled both ways and the capital in
 // NAME stays load-bearing.
+// ── AND A FILLER WORD IS NEVER A SKIP VERB ─────────────────
+//
+// The gap between the keyword and the name exists for "don't send US TO Aarhus"
+// and "not interested IN Aarhus". It let a second negation through: after the
+// intensifier scrub, "I don't really want to skip Aarhus" reads as "don't want
+// to skip Aarhus", the gap swallows "to skip", and the sentence asking to KEEP
+// Aarhus ruled it out. Measured by a Fable review on 12 Sep.
+//
+// Lowercase as well, so a capitalised word cannot be eaten as filler: the gap
+// used to take \w+, which turned "We don't want Copenhagen Zoo" into a rule
+// against every zoo in the country and "not interested in Legoland Billund"
+// into a rule against the airport town.
+const FILLER = `(?:(?!(?:skip|avoid|miss|leave|remove|drop)[^a-zæøå])[a-zæøå]+\\s+)`;
+
 const either = (word) => `[${word[0].toUpperCase()}${word[0].toLowerCase()}]${word.slice(1)}`;
 const anyOf = (words) => words.map(either).join("|");
 
 const PATTERNS = [
   // "don't send us to X", "please don't take us to X"
-  new RegExp(`\\b(?:${anyOf(["don't", "dont", "do not"])}|${anyOf(["no need to", "rather not", "would rather not", "please no"])})\\s+(?:\\w+\\s+){0,3}(?:to|into|near)\\s+(${NAME})`, "g"),
+  new RegExp(`\\b(?:${anyOf(["don't", "dont", "do not"])}|${anyOf(["no need to", "rather not", "would rather not", "please no"])})\\s+${FILLER}{0,3}(?:to|into|near)\\s+(${NAME})`, "g"),
   // "we don't want X", "we're not interested in X"
-  new RegExp(`\\b(?:${anyOf(["don't want", "dont want", "do not want", "don't include", "dont include", "do not include", "no interest in", "not interested in", "not keen on", "had enough of", "sick of", "tired of"])})\\s+(?:\\w+\\s+){0,2}(${NAME})`, "g"),
+  new RegExp(`\\b(?:${anyOf(["don't want", "dont want", "do not want", "don't include", "dont include", "do not include", "no interest in", "not interested in", "not keen on", "had enough of", "sick of", "tired of"])})\\s+${FILLER}{0,2}(${NAME})`, "g"),
   // "skip X", "avoid X", "leave out X", "nothing in X"
   // ── AND THE WORDS PEOPLE USE AT A MAP ───────────────────────────
   // "remove Aarhus", "take out Ribe". Nobody said these to a chat before there
@@ -77,10 +91,17 @@ const PATTERNS = [
   // Deliberately requires "please"/"and"/"but" or a sentence start, so "no car"
   // and "no budget" cannot reach it — those name no place.
   new RegExp(`(?:^|[.;!?]\\s+|\\b[Bb]ut\\s+|\\b[Aa]nd\\s+)(?:[Pp]lease\\s+)?[Nn]o\\s+(${NAME})\\b(?!\\s+(?:car|budget|rush|hurry|problem|worries|idea))`, "g"),
-  // "not X", where X is capitalised: "the real earthworks, not Legoland"
-  new RegExp(`\\b[Nn]ot\\s+(${NAME})\\b`, "g"),
-  // Danish: "ikke til X", "undgå X", "spring X over", "vi vil ikke til X"
-  new RegExp(`\\b(?:[Ii]kke\\s+(?:til|i|ind\\s+til)|[Uu]ndg[åa]|[Ss]pring)\\s+(?:\\w+\\s+){0,2}(${NAME})`, "g"),
+
+  // Danish: "ikke til X", "undgå X", "vi vil ikke til X"
+  new RegExp(`\\b(?:[Ii]kke\\s+(?:til|i|ind\\s+til)|[Uu]ndg[åa])\\s+${FILLER}{0,2}(${NAME})`, "g"),
+  // ── AND "SPRING" NEEDS ITS "OVER" ───────────────────────
+  // The Danish for skip is "spring over", and this matched the bare verb, which
+  // is also an English season and an English noun. Measured by a Fable review on
+  // 12 Sep: "We are coming in spring to Copenhagen" ruled out Copenhagen, and
+  // "Spring break in Copenhagen with the kids" did the same. The particle is not
+  // optional in Danish and it is what separates the two languages here.
+  new RegExp(`\\b[Ss]pring\\s+over\\s+${FILLER}{0,2}(${NAME})`, "g"),
+  new RegExp(`\\b[Ss]pring\\s+${FILLER}{0,2}(${NAME})\\s+over\\b`, "g"),
 ];
 
 // ── AND THE PLAINEST SENTENCE THERE IS ──────────────────────────────
@@ -130,7 +151,15 @@ const NOT_GOING = new RegExp(
 // WHEN, not whether. A short run before it rather than a hard anchor, because
 // the name can carry a word the gazetteer does not: "not going to Copenhagen
 // Airport first". Bounded, and it cannot cross a full stop.
-export const ORDERING_AFTER = /^[^.!?]{0,24}?\b(?:first|firstly|straight|straightaway|right away|yet|initially|to begin with|at first|until|till|unless|before|after(?!\s+all))\b/i;
+// ── IN SIX LANGUAGES, NOT ONE ──────────────────────────
+//
+// English only until 12 Sep, when a Fable review ran the Danish equivalents of
+// the sentences this guard exists for. "Vi skal ikke til Aarhus først, vi starter
+// i Aalborg" and "Vi kommer ikke til Aarhus før om aftenen" both ruled Aarhus
+// out of a trip that goes there, while their English twins were correctly kept.
+// A guard that works in one language and not the others is worse than none,
+// because it makes the English tests look like proof.
+export const ORDERING_AFTER = /^[^.!?]{0,24}?\b(?:first|firstly|straight|straightaway|right away|yet|initially|to begin with|at first|until|till|unless|before|after(?!\s+all)|først|forst|før(?!st)|endnu|indtil|inden|medmindre|först|tills|innan|zuerst|erst|bis|bevor|außer|ausser|eerst|tot|voordat|tenzij)\b/i;
 
 // ── AND THE TWO THAT PUT THE NAME FIRST ─────────────────────────────
 // "Take Aarhus off", "Aarhus is out". Both are somebody editing a list they can
@@ -156,6 +185,23 @@ export const ORDERING_AFTER = /^[^.!?]{0,24}?\b(?:first|firstly|straight|straigh
 // and the note under it said "Leaving out And Skagen, as you asked."
 const NAME_FIRST = [
   new RegExp(`\\b(?:[Tt]ake|[Tt]aking|[Ll]eave|[Ll]eaving|[Cc]ross|[Kk]nock)\\s+(${NAME})\\s+(?:off|out)\\b(?!\\s+(?:for|to|with))`, "g"),
+  // ── AND "NOT X", WHICH MOVED IN HERE ─────────────────────
+  //
+  // "the real earthworks, not Legoland" is the sentence it was written for, and
+  // it is the loosest shape in the file: two words, one of them capitalised.
+  // A Fable review measured what else it caught on 12 Sep, each of which printed
+  // "Leaving out X, as you asked" at the traveller and removed rows:
+  //
+  //   "Not Sure yet, maybe Aarhus"   -> ruled out Sure
+  //   "Not Yet"                      -> ruled out Yet
+  //   "not Peter, he stays home"     -> ruled out Peter, and with him every
+  //                                     Peter Beier Chokolade in the country
+  //
+  // NOT_A_PLACE cannot answer this, because the thing it would have to list is
+  // every capitalised word that is not a town, which is most of them. So the
+  // sentence has to name a place the app has heard of before it can take one
+  // away. The map and the preview both hand one over for free.
+  new RegExp(`\\b[Nn]ot\\s+(${NAME})\\b`, "g"),
   new RegExp(`(?:^|[.;!?]\\s+|,\\s+)(?:[Bb]ut\\s+|[Aa]nd\\s+|[Ss]o\\s+|[Tt]hen\\s+)*(${NAME})\\s+(?:is|are)\\s+out\\b(?!\\s+of)`, "g"),
 ];
 
@@ -272,22 +318,22 @@ const TRAVEL_VERB = "go|going|goes|went|return|returning|head|heading|travel|tra
 // them says which, so every one of them needs the scope search below.
 const ANAPHORS = [
   // "I don't want to go there", "we won't go back", "not going there again"
-  new RegExp(`\\b(?:${anyOf(["don't", "dont", "do not", "won't", "wont", "will not", "never want", "never wants", "not"])})\\s+(?:\\w+\\s+){0,2}(?:${TRAVEL_VERB})\\s+(?:back\\s+)?(?:there|again)\\b`, "g"),
+  new RegExp(`\\b(?:${anyOf(["don't", "dont", "do not", "won't", "wont", "will not", "never want", "never wants", "not"])})\\s+${FILLER}{0,2}(?:${TRAVEL_VERB})\\s+(?:back\\s+)?(?:there|again)\\b`, "g"),
   // "we don't want to go back.", "not going back."
-  new RegExp(`\\b(?:${anyOf(["don't", "dont", "do not", "won't", "wont", "will not"])})\\s+(?:\\w+\\s+){0,2}(?:go|going|head|heading|travel)\\s+back\\b`, "g"),
+  new RegExp(`\\b(?:${anyOf(["don't", "dont", "do not", "won't", "wont", "will not"])})\\s+${FILLER}{0,2}(?:go|going|head|heading|travel)\\s+back\\b`, "g"),
   // "been there, done that", "we'd rather give it a miss", "please leave it out"
   new RegExp(`\\b${either("been")}\\s+there,?\\s+(?:${anyOf(["done that", "we'd rather", "so"])})`, "g"),
   new RegExp(`\\b(?:${anyOf(["give it a miss", "gave it a miss", "leave it out", "leave that out", "had enough of it", "had enough of that", "sick of it", "tired of it", "not that one", "skip it", "skip that"])})`, "g"),
   // Danish: "der gider vi ikke hen igen", "vil ikke derhen", "vil aldrig derhen igen"
-  new RegExp(`\\b(?:${anyOf(["vil ikke", "vil aldrig", "skal ikke", "gider ikke", "gider vi ikke", "vil vi ikke", "skal vi ikke"])})\\s+(?:\\w+\\s+){0,2}(?:derhen|dertil|tilbage|derop|derned|hen)\\b`, "g"),
-  new RegExp(`\\b[Dd]er(?:hen|ned|op|over)?\\s+(?:${anyOf(["gider vi ikke", "vil vi ikke", "skal vi ikke", "har vi ikke"])})\\s+(?:\\w+\\s+){0,2}(?:hen|tilbage|igen)?`, "g"),
+  new RegExp(`\\b(?:${anyOf(["vil ikke", "vil aldrig", "skal ikke", "gider ikke", "gider vi ikke", "vil vi ikke", "skal vi ikke"])})\\s+${FILLER}{0,2}(?:derhen|dertil|tilbage|derop|derned|hen)\\b`, "g"),
+  new RegExp(`\\b[Dd]er(?:hen|ned|op|over)?\\s+(?:${anyOf(["gider vi ikke", "vil vi ikke", "skal vi ikke", "har vi ikke"])})\\s+${FILLER}{0,2}(?:hen|tilbage|igen)?`, "g"),
   // "vi vil helst ikke derhen igen", "vi skal ikke derover igen"
-  new RegExp(`\\b(?:${anyOf(["vil helst ikke", "skal ikke", "gider ikke", "behøver ikke", "behøver vi ikke"])})\\s+(?:\\w+\\s+){0,2}(?:derhen|dertil|derover|derned|derop|tilbage|igen)\\b`, "g"),
+  new RegExp(`\\b(?:${anyOf(["vil helst ikke", "skal ikke", "gider ikke", "behøver ikke", "behøver vi ikke"])})\\s+${FILLER}{0,2}(?:derhen|dertil|derover|derned|derop|tilbage|igen)\\b`, "g"),
   // "det dropper vi", "den springer vi over", "den by springer vi over"
   new RegExp(`\\b(?:[Dd]et|[Dd]en)(?:\\s+\\w+){0,2}\\s+(?:${anyOf(["dropper vi", "springer vi over", "står vi over", "skipper vi"])})`, "g"),
   new RegExp(`\\b(?:${anyOf(["kan vi godt springe over", "kan vi springe over", "vil vi gerne undgå", "vil vi undgå", "gider vi ikke"])})`, "g"),
   // "we have no wish to go back there", "we're not interested in it"
-  new RegExp(`\\b(?:${anyOf(["no wish to", "no desire to", "no interest in", "not interested in", "no plans to"])})\\s+(?:\\w+\\s+){0,3}(?:${TRAVEL_VERB}|it|there)\\b`, "g"),
+  new RegExp(`\\b(?:${anyOf(["no wish to", "no desire to", "no interest in", "not interested in", "no plans to"])})\\s+${FILLER}{0,3}(?:${TRAVEL_VERB}|it|there)\\b`, "g"),
   // "keep us well away from that place", "that one can come off the list"
   new RegExp(`\\b(?:${anyOf(["away from that", "away from it", "off the list", "come off the list", "give that a miss", "give that one a miss"])})`, "g"),
 ];
@@ -382,7 +428,23 @@ const NOT_COMING = /\b(?:is\s?n[o']t|are\s?n[o']t|wo\s?n[o']t\s+be|not)\s+(?:com
 //
 // Removed rather than counted, and only where it sits directly after a
 // negation, so it cannot change any sentence that is not already a refusal.
-const INTENSIFIER_AFTER_NO = /\b(don't|dont|do not|not|won't|wont|can't|cant|never|no)\s+(?:really|rally|actually|particularly|especially|honestly|truly|quite|even|much|just|super|overly)\s+/gi;
+// ── AND "JUST" AND "EVEN" ARE NOT INTENSIFIERS, THEY ARE THE OPPOSITE ─
+//
+// They were on this list for one night. A Fable review measured what that did:
+// "Not just Copenhagen, we want to see Jutland too" had its "just" scrubbed,
+// became "Not Copenhagen", and ruled out the city the sentence was asking for
+// MORE of. Same for "It's not just Legoland we're after, the kids want Tivoli
+// too", and for "I don't really want to skip Aarhus", where the scrub turned a
+// double negative into a single one.
+//
+// "Not really X" means less of X. "Not just X" means X and more. The first
+// belongs here and the second reverses the sentence, which is the one thing
+// this file may never do: a false exclusion is worse than a missed one.
+const INTENSIFIER_AFTER_NO = /\b(don't|dont|do not|not|won't|wont|can't|cant|never|no)\s+(?:really|rally|actually|particularly|especially|honestly|truly|quite|much|super|overly)\s+/gi;
+
+// The verbs that say "leave it out" without saying "not", which is what makes a
+// negation in front of them invisible to the pattern itself.
+const SKIP_VERB_FIRST = /^(?:skip|avoid|leave\s+out|leave\s+off|steer\s+clear\s+of|stay\s+away\s+from|keep\s+away\s+from|remove|take\s+out|undg[åa]|spring)\b/i;
 
 export const readExclusions = (travellerText, { known = [] } = {}) => {
   const t = clean(travellerText).replace(INTENSIFIER_AFTER_NO, "$1 ");
@@ -393,6 +455,27 @@ export const readExclusions = (travellerText, { known = [] } = {}) => {
     re.lastIndex = 0;
     let m;
     while ((m = re.exec(t)) !== null) {
+      // ── AND "DON'T SKIP TIVOLI" IS NOT SKIPPING TIVOLI ────────
+      //
+      // The skip verbs carry no negation of their own, so anything in front of
+      // them was invisible. Measured by a Fable review on 12 Sep: "Don't skip
+      // Tivoli, it's great", "Please don't leave out Tivoli", "Don't remove
+      // Aarhus, I still want it" and "Never skip Ribe" all ruled the place out
+      // and told the traveller so. Every one of those sentences is somebody
+      // asking for the place.
+      //
+      // The same guard the anaphors have used since they were written, pointed
+      // at the other family of patterns.
+      if (SKIP_VERB_FIRST.test(m[0])
+          && NEGATED_BEFORE.test(t.slice(Math.max(0, m.index - 40), m.index))) continue;
+      // ── AND THE ORDERING GUARD BELONGS TO EVERY PATTERN ───────
+      //
+      // It was written for NOT_GOING and applied only there, so "We are not
+      // going to Aarhus first, we start in Aalborg" was correctly kept while
+      // its Danish twin "Vi skal ikke til Aarhus først" ruled Aarhus out. Same
+      // sentence, same trip, two answers, decided by which pattern happened to
+      // match. A guard that holds in one language is not a guard.
+      if (ORDERING_AFTER.test(t.slice(m.index + m[0].length))) continue;
       const name = trimTail(m[1]);
       if (!name) continue;
       const low = name.toLowerCase();
@@ -458,7 +541,20 @@ export const isExcluded = (row, excluded) => {
   if (!list.length) return false;
   const fields = [row?.name, row?.town, row?.city, row?.location, row?.region]
     .map(x => clean(x).toLowerCase()).filter(Boolean);
-  return fields.some(f => list.some(x => f === x || f.includes(x) || x.includes(f)));
+  // ── ONE DIRECTION, NOT TWO ─────────────────────────
+  //
+  // `x.includes(f)` was the third test and it runs the rule backwards: a row
+  // whose name is a SUBSTRING of the thing ruled out. Measured by a Fable review
+  // on 12 Sep. Rule out "Copenhagen Zoo" and every row whose town is Copenhagen
+  // goes with it, Tivoli included, because "copenhagen zoo".includes(
+  // "copenhagen"). Rule out "Aarhus Domkirke" and the city of Aarhus disappears.
+  //
+  // The two cases this function is documented to cover both run the other way:
+  // "Legoland" rules out "Legoland Billund Resort" through f.includes(x), and
+  // "Billund" rules out everything whose town is Billund through f === x.
+  // Nothing needed the third test, and what it did was delete a city because
+  // somebody skipped one attraction in it.
+  return fields.some(f => list.some(x => f === x || f.includes(x)));
 };
 
 export const withoutExcluded = (rows, excluded) =>
