@@ -48,7 +48,7 @@ import { arrivalDateIn, dateRangeIn, departureDateIn, dayCountIn, monthOnlyIn, l
 import { PARTY_BARE, PARTY_POSSESSIVE, PARTY_POSSESSIVES, PARTY_COUNT, TRAVEL_VERBS, FROM_WORDS, TRANSPORT_PREPS, VEHICLE_WORDS, TRANSPORT_VERBS, PUBLIC_TRANSPORT, alt, LETTER, INTEREST_ALL_WORDS, INTEREST_WORD_TERM, NAMES_A_CHILD } from "./travellerWords";
 import { dayStart } from "./calendarDay";
 import { travelModeKey, withoutNonModes } from "./routeOrder";
-import { directAnswers } from "./directAnswer";
+import { directAnswers, isRefusal } from "./directAnswer";
 
 const clean = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
 const has = (v) => !!clean(v);
@@ -862,7 +862,38 @@ const NOT_WANTED = new RegExp(
   // want nature and food" — a blocking slot sent to `declined` on a plain
   // answer, which is the same failure this whole night is about. A refusal is a
   // clause, and a clause ends at a comma.
-  "(?:(?!\\b(?:but|though|however|instead|rather|men|dog|aber|sondern|maar)\\b)[^.,;:!?]){0,48}",
+  // ── AND IT STOPS AT THE END OF THE TURN ─────────────────────────
+  //
+  // Oliver, 13 Sep 2026: "the chat got stuck because I said 'kid's trip'". His
+  // session, turn by turn:
+  //
+  //   Gemlyx  Have you got somewhere booked to stay already?
+  //   Oliver  nope i dont
+  //   Gemlyx  I still do not know what kind of trip this is. Name one thing.
+  //   Oliver  for kids
+  //   Gemlyx  I still do not know what kind of trip this is. Name one thing.
+  //   Oliver  history
+  //   Gemlyx  I still do not know what kind of trip this is. Name one thing.
+  //
+  // He typed a word the question itself offers and was asked the question again.
+  //
+  // The traveller's turns are joined with a newline and read as one text, and
+  // this window ran forty-eight characters past a negation, stopping at a full
+  // stop, a comma or a contrast word. A NEWLINE WAS NOT ON THAT LIST. So "dont"
+  // in an answer about a hotel swallowed the next two turns whole:
+  //
+  //   withoutRefused("nope i dont\nfor kids\nhistory")  ->  "nope i  "
+  //
+  // A blocking slot the traveller had answered twice stayed empty, the gate kept
+  // asking, and he could not get out of it by answering correctly.
+  //
+  // THIS IS THE WHOLE CLASS, NOT ONE TURN. Any "no", "not", "don't", "ikke" or
+  // "nicht" anywhere in a conversation made the next one to three turns
+  // invisible to this reader, and to every reader built on it: the interests
+  // slot, briefThemes (which decides what goes in the prompt) and the check for
+  // children with no adult. A refusal is a clause, a clause ends at a comma, and
+  // a turn ends harder than a comma does.
+  "(?:(?!\\b(?:but|though|however|instead|rather|men|dog|aber|sondern|maar)\\b)[^.,;:!?\\n\\r]){0,48}",
   "gi");
 // ── AND SOME REFUSALS COME AFTER THE THING ──────────────────────────
 // "christmas markets bore us", "museums are not for me", "hiking, hated it".
@@ -873,7 +904,10 @@ const REFUSED_AFTER = new RegExp(
   // scrub ran first and would take the wrong half of the sentence with it: "we
   // hate hiking" is a forward refusal and "hiking, hated it" is a backward one,
   // and one pattern cannot be both.
-  "(?:(?![.,;:!?])[^.,;:!?]){0,48}\\b(?:bores?|bored|boring|isn'?t for (?:me|us)|are not for (?:me|us)|not for (?:me|us)|no thanks|keder|langweilig)\\b",
+  // Newline-stopped as well, and for the mirror reason: this window runs
+  // BACKWARDS, so without it "keder" in one turn reached back and deleted the
+  // answers in the turns before it.
+  "(?:(?![.,;:!?])[^.,;:!?\\n\\r]){0,48}\\b(?:bores?|bored|boring|isn'?t for (?:me|us)|are not for (?:me|us)|not for (?:me|us)|no thanks|keder|langweilig)\\b",
   "gi");
 // Backward first: a post-position verdict names the theme in front of it, and a
 // forward scrub reaching that verdict would delete the verdict and leave the
@@ -958,7 +992,7 @@ export const namedStayIn = (text) => {
   return hit ? hit.trim() : "";
 };
 
-const readInterests = (text, intakeInterest) => {
+const readInterests = (text, intakeInterest, turns = null, answering = null) => {
   const ticked = (Array.isArray(intakeInterest) ? intakeInterest : []).map(clean).filter(Boolean);
   if (ticked.length) return { value: ticked.join(", "), source: "intake" };
   const s = withoutRefused(withoutNamedStay(String(text || "")).toLowerCase());
@@ -998,7 +1032,38 @@ const readInterests = (text, intakeInterest) => {
     if (!at.has(term) || m.index < at.get(term)) at.set(term, m.index);
   }
   const found = [...at.entries()].sort((a, b) => a[1] - b[1]).map(([term]) => term);
-  return found.length ? { value: found.slice(0, 6).join(", "), source: "said" } : null;
+  if (found.length) return { value: found.slice(0, 6).join(", "), source: "said" };
+
+  // ── AND "JUST A KIDS TRIP" IS WHAT KIND OF TRIP IT IS ──────────────
+  //
+  // Oliver, 13 Sep 2026: "the chat got stuck because I said 'kid's trip'". Asked
+  // what kind of trip it was, he answered "jusr a kids trip", then "for kids",
+  // and the slot stayed empty both times.
+  //
+  // The list above has no word for it, and putting one there would be the bug
+  // the list's own comment is about. This reader runs over the WHOLE
+  // conversation, and "kids" is the most common word in an answer to a
+  // completely different question: "9 kids" answering WHO IS COMING would fill
+  // what kind of trip it is, without him ever saying. A hard slot filled by a
+  // guess is the thing this slot was made hard to prevent.
+  //
+  // WHAT MAKES IT AN ANSWER IS THE QUESTION IN FRONT OF IT, which is the
+  // argument directAnswer.js makes for every other slot. So it is read ONLY
+  // from a turn that was answering this question, and never from the join.
+  //
+  // "family" rather than a new word: it is already the term THEME_WORDS and
+  // PLACE_THEMES use, so the reader that picks places, the map's own labels and
+  // the guide prompt all knew what a family trip was before this line existed.
+  // Only the slot that gates the build could not hear it said.
+  const rows = Array.isArray(turns) ? turns : [];
+  const asks = Array.isArray(answering) ? answering : [];
+  let family = false;
+  rows.forEach((turn, i) => {
+    const keys = Array.isArray(asks[i]) ? asks[i] : [];
+    if (keys.length !== 1 || keys[0] !== "interests") return;
+    if (NAMES_A_CHILD.test(withoutRefused(String(turn || "")))) family = true;
+  });
+  return family ? { value: "family", source: "said" } : null;
 };
 
 // ── HOW THEY GET AROUND ─────────────────────────────────────────────
@@ -1114,7 +1179,7 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   set("days", readDays(t, intake.arrival, intake.departure, today, turns, answering));
   set("when", readWhen(t, turns, intake.arrival, intake.departure, today));
   set("party", readParty(t, intake.travelers, intake.familyMode));
-  set("interests", readInterests(t, intake.interest));
+  set("interests", readInterests(t, intake.interest, turns, answering));
   set("transport", readTransport(t, intake.transport));
   set("stay", readStay(t, intake.stayBooked));
   // AFTER the stay slot and BEFORE the direct-answer pass, so a name and a span
@@ -1186,6 +1251,62 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
       if (v) known.stayWhen = v;
     });
   }
+  // ── AND A TURN THAT TRIED AND LANDED NOWHERE ──────────────────────
+  //
+  // Oliver, 13 Sep 2026: "I'd rather have the model asks 'do you mean public
+  // transport'". He had typed "public transpor", one letter short, and Gemlyx
+  // wrote back "Good to know, that's the main piece settled" while every reader
+  // in this file saw nothing at all. The trip went on with no mode, which means
+  // no distance ceiling, which is how somebody on buses is offered a town four
+  // hours away.
+  //
+  // NO LIST OF TYPOS. His second message: "if we must go to a bunch of typos".
+  // A dictionary of misspellings only ever covers the ones somebody thought of,
+  // in one language, and this app reads six. What the app knows for certain
+  // needs no dictionary: WHICH QUESTION WAS ON THE TABLE, and WHETHER ANYTHING
+  // AT ALL CAME OUT OF THE ANSWER. That pair is true for a typo, for a phrasing
+  // nobody anticipated, and for a seventh language, so it is the thing recorded.
+  //
+  // THREE GUARDS, and each of them is a turn that must NOT be queried:
+  //   A REFUSAL is a deliberate non-answer. "Not sure yet" landing nowhere is
+  //     the traveller being clear, and asking them to rephrase it is rude.
+  //   A TURN THAT FILLED SOMETHING ELSE is a change of subject, not a miss.
+  //     "We are going in September" to the transport question is September.
+  //   THE ACKNOWLEDGEMENT PLACEHOLDER is not something filled. Its own value
+  //     says "said in the conversation", which carries no information, and a
+  //     turn that produced only that produced nothing.
+  //
+  // It never fills a slot. All it does is say, to the one part of the system
+  // that can put it into words, that a question was answered and the answer did
+  // not land. The brief is still never read from Gemlyx's own replies.
+  const answeringKeys = Array.isArray(answering) ? answering : [];
+  const filledSomething = (turn) => {
+    const one = String(turn || "");
+    const res = [
+      readOrigin(one, null), readDays(one, null, null, today, [one], null),
+      readWhen(one, [one], null, null, today), readParty(one, null, null),
+      readInterests(one, null), readTransport(one, null), readStay(one, null),
+      readStayNights(one, { arrival: null, today }), readBudget(one, null),
+    ];
+    return res.some(r => r && r.value !== ACKNOWLEDGED_VALUE);
+  };
+  const unread = [];
+  turns.forEach((turn, i) => {
+    const keys = Array.isArray(answeringKeys[i]) ? answeringKeys[i] : [];
+    if (keys.length !== 1) return;
+    const key = keys[0];
+    const held = known[key];
+    if (held && held.value !== ACKNOWLEDGED_VALUE) return;
+    const said = String(turn || "").trim();
+    if (!said || isRefusal(said)) return;
+    if (filledSomething(said)) return;
+    // LAST ONE WINS, per slot. If they tried twice, the words to quote back are
+    // the ones they typed most recently.
+    const at = unread.findIndex(u => u.key === key);
+    const row = { key, said: said.replace(/\s+/g, " ").slice(0, 120) };
+    if (at >= 0) unread[at] = row; else unread.push(row);
+  });
+
   const wasAsked = new Set((Array.isArray(asked) ? asked : []).map(clean).filter(Boolean));
   // A slot with a `needs` predicate only applies to some trips. Nobody is asked
   // which nights their booking covers when they have not booked anything, and
@@ -1252,7 +1373,7 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   // Asked, unanswered, and required anyway. Kept apart from `missing` so the
   // asking cadence is unchanged and only the BUILD is gated.
   const unanswered = HARD_SLOTS.filter(k => !known[k] && wasAsked.has(k));
-  return { known, missing, declined, vague, vagueToAsk, unanswered, cappedDays, ready: missing.length === 0 && unanswered.length === 0 };
+  return { known, missing, declined, vague, vagueToAsk, unanswered, unread, cappedDays, ready: missing.length === 0 && unanswered.length === 0 };
 };
 
 export const briefReady = (brief) => !!brief && brief.missing.length === 0 && !(brief.unanswered || []).length;
@@ -1308,6 +1429,33 @@ export const nextAsks = (brief, { limit = MAX_ASKS_AT_ONCE } = {}) => {
     .slice(0, Math.max(0, limit))
     .map(k => BRIEF_SLOTS.find(s => s.key === k))
     .filter(Boolean);
+};
+
+// ── WHAT THIS TURN ACTUALLY ASKS FOR ────────────────────────────────
+//
+// nextAsks says what is OPEN. This says what the reply will be told to ask,
+// which is not the same list, and the difference is what App.jsx records as
+// "asked" afterwards. Two conditions take slots off it, and both are about a
+// question that is better than the stock one being put instead:
+//
+//   A CONFLICT. Already true since 5 Sep, and the comment on it is the reason
+//     this function exists: recording a slot as asked when the question was
+//     never put is how a slot becomes "asked and refused" with nobody ever
+//     having been asked.
+//   AN ANSWER NOBODY COULD READ. Added 13 Sep. The block raises their own
+//     words instead of the stock question, so the stock question is not asked
+//     and must not be recorded as asked.
+//
+// ONE READER, BECAUSE THIS WENT WRONG THE MOMENT IT WAS TWO. briefBlock
+// filtered the unreadable slots out and App.jsx did not, so the block asked
+// about "public transpor" while App.jsx wrote the transport slot down as asked
+// and refused. The suite caught it on the assertion that pins the pair, which
+// is the assertion that exists because the conflict half went the same way.
+export const asksThisTurn = (brief, conflicts = []) => {
+  if (!brief) return [];
+  if ((Array.isArray(conflicts) ? conflicts : []).filter(c => c?.question).length) return [];
+  const queried = new Set((brief.unread || []).filter(u => u && u.key && u.said).map(u => u.key));
+  return nextAsks(brief).filter(s => !queried.has(s.key));
 };
 
 // ── AND A REFUSAL NOBODY CAN SEE IS A DEAD END ──────────────────────
@@ -1619,9 +1767,40 @@ export const briefBlock = (brief, conflicts = [], { picked = [], turnedDown = []
   // The conflict wins, because it is about facts already given and the missing
   // slot will still be missing next turn. nextAsks is not consulted at all in
   // that case, which is the same thing App.jsx does with askedThisTurn.
-  const asks = clash.length ? [] : nextAsks(brief);
+  // ── AND AN ANSWER THAT LANDED NOWHERE IS QUERIED, NOT REPEATED ────
+  //
+  // Oliver, 13 Sep 2026: "I'd rather have the model asks 'do you mean public
+  // transport'". He typed "public transpor" and nothing could read it, so the
+  // question would simply come round again, which is the same insult as being
+  // asked what kind of trip it is three times after typing "history".
+  //
+  // The app has worked out THAT the answer did not land and cannot work out
+  // WHAT they meant: guessing that is a dictionary of typos in six languages,
+  // which is the thing he did not want. So the model is handed the fact and
+  // their exact words, and does the one part it is good at.
+  //
+  // ITS GUESS NEVER FILLS THE SLOT. Nothing in this app reads the brief out of
+  // Gemlyx's own replies, which is what stops it inventing a trip, and that
+  // holds here too: the confirmation has to come back in the traveller's own
+  // words, so the question is worded to get the word back rather than a yes.
+  const unreadable = (brief.unread || []).filter(u => u && u.key && u.said);
+  if (unreadable.length) {
+    lines.push("THEY ANSWERED, AND NOTHING IN THE APP COULD READ WHAT THEY TYPED. Do not ask the question again as though they had said nothing, and never treat it as settled. Build your question out of their own words. Where it reads as a typo or a word you can nearly make out, say what you think they meant and ask them to confirm it IN WORDS rather than with a yes, because a yes on its own does not reach the plan. Where you cannot tell at all, say so warmly and ask them to put it another way:");
+    unreadable.forEach(u => {
+      const slot = BRIEF_SLOTS.find(x => x.key === u.key);
+      lines.push(`  ${slot?.label || u.key}: they typed "${u.said}"`);
+    });
+  }
+  // Those slots are being asked about above, in better words than the stock
+  // question. Asking both in one reply is two questions about one thing, which
+  // is the shape this file keeps finding and removing.
+  const asks = asksThisTurn(brief, clash);
   if (!asks.length) {
-    lines.push(clash.length
+    // AND "everything you need" is not true while a question is standing. The
+    // conflict branch already knew this; an unreadable answer is the same
+    // shape, and without this line the block would raise their own words and
+    // then tell the model to stop asking questions in the same breath.
+    lines.push(clash.length || unreadable.length
       ? "ASK THE QUESTION ABOVE AND NOTHING ELSE IN THIS REPLY, then wait for their answer. Whatever else is missing can wait a turn."
       : "YOU HAVE EVERYTHING YOU NEED. Do not ask another question. Say in one short line what you are about to plan, and offer to build it.");
     return lines.join("\n");

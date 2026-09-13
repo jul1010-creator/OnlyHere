@@ -160,13 +160,13 @@ writeFileSync(entry, `
   export { GOOGLE_SIGN_IN } from ${JSON.stringify(join(root, "src/config.js"))};
   export { writeInLanguage } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { guideLanguage, languageOfProse, ruledOutLanguages, briefSentences, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS, MARKER_FLOOR, MARKER_MARGIN } from ${JSON.stringify(join(root, "src/utils/travellerLanguage.js"))};
-  export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, LABEL_CLASS, LABEL_SIDES, LABEL_GAP, labelBox, labelSides, SPOT_PIN_ZOOM, isSpotPin, spotsShowAt } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
-  export { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE, cameraArrive, cameraLanded, frameFor, SLIDE_HOLD_MS, makeCamera } from ${JSON.stringify(join(root, "src/utils/mapDirections.js"))};
+  export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, LABEL_CLASS, LABEL_SIDES, LABEL_GAP, labelBox, labelSides, SPOT_PIN_ZOOM, isSpotPin, spotsShowAt, PHONE_MAP_PINS, phoneMapShows } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
+  export { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE, cameraArrive, cameraLanded, frameFor, SLIDE_HOLD_MS, makeCamera, unplayedBeat } from ${JSON.stringify(join(root, "src/utils/mapDirections.js"))};
   export { costLines, byUrgency, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { freeButPriced, moneyProblems, LODGING_FLOOR_DKK } from ${JSON.stringify(join(root, "src/utils/moneyClaims.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
-  export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, briefBlock, buildBlockedNote, MAX_ASKS_AT_ONCE, enoughToRecommend, unsureWhatTheyWant, ACKNOWLEDGED_VALUE, namedStayIn, readStayNights, bookedDayNumbers } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
+  export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, asksThisTurn, briefBlock, buildBlockedNote, MAX_ASKS_AT_ONCE, enoughToRecommend, unsureWhatTheyWant, ACKNOWLEDGED_VALUE, namedStayIn, readStayNights, bookedDayNumbers } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { GREETING, openingThread, withTestBrief, withoutTestBrief, threadIsSound, TEST_BRIEF } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { CHAT_REPORT_KIND, CHAT_REPORT_VERSION, buildChatReport, chatReportFilename, turnReport, briefTimeline, intakeReport } from ${JSON.stringify(join(root, "src/utils/chatReport.js"))};
   export { RIGHTS_HOLDER, copyrightLine, GUIDE_RIGHTS_SHORT, GUIDE_RIGHTS_FULL, TDM_RESERVATION } from ${JSON.stringify(join(root, "src/utils/rights.js"))};
@@ -32213,10 +32213,30 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // briefBlock suppresses the missing-slot list on exactly that condition, and
   // recording a slot as asked when the question was never put is how a slot
   // becomes "asked and refused" without anybody being asked.
+  // ── AND THE PAIR IS NOW ONE FUNCTION, WHICH IS WHY THIS EXISTS ──
+  //
+  // These two assertions pinned the same expression written out twice, once in
+  // App.jsx and once in briefBlock, kept in step by hand. On 13 Sep a second
+  // condition was added to the briefBlock half (an answer nothing could read is
+  // queried in the traveller's own words rather than asked again) and the
+  // App.jsx half did not learn it: the block asked about "public transpor"
+  // while App.jsx recorded the transport slot as asked and refused. THIS
+  // ASSERTION IS WHAT CAUGHT IT, which is the whole argument for pinning a
+  // pair rather than each half. So the pair became one exported function, and
+  // what is pinned now is that both sides call it.
   ok("what was asked is taken from what it was told to ask",
-     /const askedThisTurn = conflicts\.length \? \[\] : nextAsks\(brief\)\.map\(s => s\.key\);/.test(app));
+     /const askedThisTurn = asksThisTurn\(brief, conflicts\)\.map\(s => s\.key\);/.test(app));
   ok("and nothing is recorded on a turn that asks about a conflict instead",
-     /const asks = clash\.length \? \[\] : nextAsks\(brief\);/.test(readFileSync(join(root, "src/utils/tripBrief.js"), "utf8")));
+     /const asks = asksThisTurn\(brief, clash\);/.test(readFileSync(join(root, "src/utils/tripBrief.js"), "utf8")));
+  {
+    const { asksThisTurn } = M;
+    const open = readBrief({ travellerText: "I want to go to Denmark", today: AUG });
+    ok("with nothing in the way it is the ordinary next question", asksThisTurn(open, []).length > 0);
+    is("a conflict takes the whole list", asksThisTurn(open, [{ question: "which is it?" }]).length, 0);
+    is("and so does a slot whose answer nobody could read",
+       asksThisTurn({ ...open, missing: ["transport"], unread: [{ key: "transport", said: "public transpor" }] }, [])
+         .filter(s => s.key === "transport").length, 0);
+  }
   ok("and remembered across turns", /setBriefAsked\(prev => \[\.\.\.new Set\(\[\.\.\.prev, \.\.\.askedThisTurn\]\)\]\)/.test(app));
   ok("only when a reply actually arrived", /if \(replyText && askedThisTurn\.length\)/.test(app));
   // Two at a time, so the "two more things" that were three cannot recur.
@@ -48573,8 +48593,38 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      new RegExp(`@media \\(max-width: \\$\\{RAIL_BREAKPOINT_PX - 1\\}px\\)[\\s\\S]{0,300}?\\.\\$\\{RAIL_CLASS\\}\\.has-map`).test(readFileSync(join(root, "src/utils/chatRail.js"), "utf8")));
   ok("and the row stacks there so it lands underneath",
      /@media \(max-width: \$\{RAIL_BREAKPOINT_PX - 1\}px\)[\s\S]{0,200}?\.chat-with-rail \{ flex-direction: column; \}/.test(readFileSync(join(root, "src/utils/chatRail.js"), "utf8")));
+  // Measured at 390 by 844: the map inside the rail is 167px tall, the zoom
+  // control is 60px of it in the bottom right, and the "Is this interesting?"
+  // card opened on a pin near it sat under the control with No covered. A
+  // phone pinches; the card is the thing it needs.
+  ok("and the phone rail has no plus and minus over its 167 pixels",
+     new RegExp(`@media \\(max-width: \\$\\{RAIL_BREAKPOINT_PX - 1\\}px\\)[\\s\\S]{0,900}?\\.\\$\\{RAIL_CLASS\\} \\.leaflet-control-zoom \\{ display: none; \\}`).test(readFileSync(join(root, "src/utils/chatRail.js"), "utf8")));
+  ok("which the desktop keeps", !new RegExp(`min-width: \\$\\{RAIL_BREAKPOINT_PX\\}px\\)[\\s\\S]{0,900}?leaflet-control-zoom`).test(railMapCss({})));
+  // ── FROM THIS RENDER'S PINS, THROUGH THE ONE RULE, 13 SEP 2026 ──
+  //
+  // This pinned `(pinsRef.current || []).length >= 2`, which read the ref the
+  // walk below the class writes, so the class was one render stale: measured
+  // on a phone, the second pin existed at +0ms and the rail earned its class
+  // at +507ms. And it was one of two readers of "is there a map on a phone";
+  // the other, `const shown = wide` in ChatMiniMap, said never, so the rail
+  // shipped as a blank 190px strip. Both now read phoneMapShows, and the rail
+  // is rendered by the walk that has the pins.
   ok("and it only appears once there are two pins to relate",
-     /\(pinsRef\.current \|\| \[\]\)\.length >= 2 \? " has-map" : ""/.test(appR));
+     /className=\{`\$\{RAIL_CLASS\}\$\{phoneMapShows\(onMap\.pins\) \? " has-map" : ""\}`\}/.test(appR));
+  ok("read off the pins this render walked, not the ref the last one wrote",
+     /pinsRef\.current = onMap\.pins;\s*return \(\s*<div className=\{`\$\{RAIL_CLASS\}\$\{phoneMapShows\(onMap\.pins\)/.test(appR)
+     && !/pinsRef\.current \|\| \[\]\)\.length >= 2/.test(appR));
+  {
+    const { PHONE_MAP_PINS, phoneMapShows } = M;
+    is("the phone's number is two, for the reason the rail has argued since it was written", PHONE_MAP_PINS, 2);
+    ok("two pins is a phone map", phoneMapShows([{ key: "a" }, { key: "b" }]));
+    ok("one is not", !phoneMapShows([{ key: "a" }]));
+    ok("and nothing is not", !phoneMapShows([]) && !phoneMapShows(null) && !phoneMapShows(undefined));
+    // Neither reader keeps a copy of the number.
+    const miniSrc = readFileSync(join(root, "src/components/ChatMiniMap.jsx"), "utf8");
+    ok("the component reads the same rule", /const shown = wide \|\| phoneMapShows\(list\);/.test(miniSrc));
+    ok("and neither reader holds its own two", !/length >= 2/.test(miniSrc) && !/PHONE_MAP_PINS/.test(appR.slice(appR.indexOf("chat-with-rail"), appR.indexOf("chat-with-rail") + 60000)));
+  }
   // The rail is inside the flex row, not floating after it.
   ok("the messages and the rail share one flex row", /<div className="chat-with-rail">[\s\S]{0,3000}<div className="ai-msgs"/.test(appR));
   ok("and the message list can shrink so the rail has room", /className="ai-msgs" style=\{\{ flex: "1 1 auto", minWidth: 0/.test(appR));
@@ -49460,6 +49510,60 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // count. Replaying its camera moves would yank the map off whatever the
   // conversation is about now.
   ok("an old reply is not wired to the camera", /onWord=\{streaming && withBeats\?\.beats\.length \?/.test(appR));
+  // ── AND A MAP BUILT AFTER THE WORD DOES NOT PLAY THE BEAT AGAIN ──
+  //
+  // Oliver, 13 Sep 2026: "from start, it just randomly zoomed into Copenhagen
+  // before even moving on from 'Denmark'."
+  //
+  // Measured in a real browser with the camera logged, on a build with five
+  // stubbed towns and a scripted reply, before a line was changed. The reply
+  // in one conversation flew to Copenhagen, as it should. Then "Clear it",
+  // and an opening line that named no town: the new map was built on Denmark
+  // at zoom 5 and flew straight to zoom 12 on Copenhagen with NO pin on it,
+  // and the only entry in the move log was the old beat. Leaving the Detour
+  // page and coming back did the same. Every other candidate was measured on
+  // the same rig and cleared: a reply naming Copenhagen and Billund in its
+  // question pinned nothing and moved nothing; a beat naming a town with no
+  // pin resolved to null; the greeting is sliced off before the pins walk;
+  // and the country frame holds every pin, so the pins never ask for a fit.
+  //
+  // The cause is two readers of one beat. The reveal fires it on the word,
+  // once, and the line above keeps old replies from firing it again. But
+  // mapFocus is App state and outlives the map, and React runs an effect on
+  // mount whatever its deps say, so the map's own effect fired the last beat
+  // a second time on every map built after it. A beat is a move made once, by
+  // the map that was there when it was said; a map built later opens on the
+  // country like any other.
+  // The rule is pure, in mapDirections.js, on the two numbers the component
+  // keeps: the seq the map was first rendered with, and the seq now.
+  {
+    const { unplayedBeat } = M;
+    is("a map born with no beat has nothing to play", unplayedBeat(null, null), null);
+    is("the first beat after it plays", unplayedBeat(1, null), 1);
+    is("the same beat read again, which is what a rebuilt map reads, does not", unplayedBeat(1, 1), null);
+    is("a map born with a stale beat plays nothing on mount", unplayedBeat(7, 7), null);
+    is("and the next beat after that plays", unplayedBeat(8, 7), 8);
+    is("a seq that went missing plays nothing rather than guessing", unplayedBeat(undefined, 3), null);
+    // Played once, so the number the component keeps is the seq handed back
+    // and nothing else: a second read of 8 against 8 is null.
+    is("and what it hands back is the seq to remember", unplayedBeat(unplayedBeat(8, 7), 8), null);
+  }
+  ok("the seq that was current when the map was first rendered is remembered",
+     /const playedSeqRef = useRef\(focusSeq\);/.test(chatCode));
+  ok("and only a newer one moves the camera, through the pure rule rather than a copy of it",
+     /const next = unplayedBeat\(focusSeq, playedSeqRef\.current\);\s*if \(next == null\) return;\s*playedSeqRef\.current = next;/.test(chatCode)
+     && /import \{[^}]*\bunplayedBeat\b[^}]*\} from "\.\.\/utils\/mapDirections"/.test(chatCode));
+  // Remembered BEFORE the map is looked at: a beat that arrived while there
+  // was no map to fly is a beat for a word already gone, and the map that
+  // appears later must not play it either.
+  ok("which is decided before the map is looked at",
+     /playedSeqRef\.current = next;\s*const map = mapRef\.current;\s*if \(!map \|\| !focus\) return;/.test(chatCode));
+  ok("and the effect still watches the seq alone, so two beats on one place are two moves",
+     /cam\.arrive\(\{ kind: "in", lat: focus\.lat, lon: focus\.lon \}\);\s*\}, \[focusSeq\]\);/.test(chatCode));
+  // Verified on the same rig after the change: "Clear it" and a new opening
+  // line left the map on Denmark with an empty move log; leaving the Detour
+  // page and returning did too; and the next reply's OUT then IN still played,
+  // in order, with the hold between them.
   // ── AND A REPLY STILL ARRIVING IS STILL STREAMING ────────────────
   // The reveal can finish before the API has: the bubble shows complete
   // sentences as they land, a short opener is revealed in under a second, and
@@ -49646,7 +49750,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // to name somewhere and a map appeared out of nowhere mid-conversation. A
   // map of Denmark with nothing on it is the context every pin is about to be
   // placed in, and it says what the column is for without a sentence.
-  ok("the map renders on width alone, not on having a pin", /const shown = wide;/.test(chatCode));
+  // ── AND THE PHONE FROM TWO PINS, 13 SEP 2026 ─────────────────
+  // This pinned `const shown = wide;`. Oliver: "the phone still doesn't have
+  // the map implemented." The wide column keeps the rule above, a map before
+  // there is anything on it; a phone has no column to keep open, so there it
+  // renders when the rail does, from two pins, through the rule App.jsx puts
+  // the has-map class on.
+  ok("the wide column renders on width alone, not on having a pin, and the phone on two pins",
+     /const shown = wide \|\| phoneMapShows\(list\);/.test(chatCode));
   ok("and it mounts on the same condition", /if \(!shown \|\| !holderRef\.current \|\| mapRef\.current\) return;/.test(chatCode));
   ok("a narrow screen still gets no map", /if \(!shown\) return null;/.test(chatCode));
   // No line under an empty map: there is nothing to tap yet, and a sentence
@@ -49834,13 +49945,36 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and a row with no themes gets no line at all",
      /const theme = picked\[p\.key\];\s*const best = theme\s*\?[\s\S]{0,160}?\s*: "";/.test(chatCode));
   // ── AND THE LINE THAT SAYS WHAT IT IS FOR IS IN THE LABEL ────────
-  // Not beside it, and not back in the hover card. The whole point of the
-  // change was that all of them are readable at once without clicking anything,
-  // so a version keeping the name and dropping the line has undone it while
-  // every other assertion here stays green.
-  ok("the label carries the name and the line under it",
-     /`<span class="pin-name">\$\{esc\(p\.place\?\.name \|\| ""\)\}<\/span>`\s*\+ \(best \? `<span class="pin-best">\$\{esc\(best\)\}<\/span>` : ""\)/
-       .test(chatCode));
+  // Not beside it, and not back in the hover card: it is the same label, on
+  // the same pin, so a version that moved the word into the card has undone
+  // the 9 Sep change while every other assertion here stays green.
+  //
+  // ── BUT ONLY ON THE PIN THE READER IS POINTING AT, 13 SEP 2026 ──
+  //
+  // This pinned the word as a permanent part of every label ("readable at
+  // once without clicking anything", his 9 Sep ask). Oliver, the same day
+  // the brief gate went in, on a map of Denmark with five pins each carrying
+  // its word: "Those categories popping up is akward." The gate was
+  // open in that session and working, so the render inside it was the fault:
+  // five chips at once over a small map are a stack, and a chip nobody asked
+  // about explains nothing. He has walked the always-on version back three
+  // times now. So the permanent label is the name, and the word joins it while
+  // the pointer is on that pin, which is the gesture the map already uses for
+  // "tell me about this one" (the card, and the "Is this interesting?"
+  // question on a place inside a town). One pin at a time, on one movement,
+  // rather than a second affordance beside the first.
+  ok("the label every pin always carries is the name alone",
+     /const nameHtml = `<span class="pin-name">\$\{esc\(p\.place\?\.name \|\| ""\)\}<\/span>`;\s*marker\.bindTooltip\(nameHtml,/.test(chatCode));
+  ok("and no label is bound with the word already in it",
+     !/bindTooltip\([^)]*pin-best/.test(chatCode) && !/\+ \(best \? `<span class="pin-best">/.test(chatCode));
+  ok("the word joins it while the pointer is on that pin, and leaves when the pointer does",
+     /if \(best\) \{\s*const withWord = nameHtml \+ `<span class="pin-best">\$\{esc\(best\)\}<\/span>`;\s*marker\.on\("mouseover", \(\) => marker\.getTooltip\(\)\?\.setContent\(withWord\)\);\s*marker\.on\("mouseout", \(\) => marker\.getTooltip\(\)\?\.setContent\(nameHtml\)\);\s*\}/.test(chatCode));
+  // Measured in a real browser before this was written: five town pins showed
+  // five names; hovering the second read "Ribe / Coast"; moving off it read
+  // "Ribe" again. The same content in, the same content out, so the label
+  // layOut measured with the name alone is the label every other pin has.
+  ok("and the gate in front of it is untouched",
+     /const picked = sayWhatFor \? distinctThemes\(/.test(chatCode) && /sayWhatFor=\{unsureWhatTheyWant\(liveIntakeBrief\)\}/.test(appR));
   // The key went with the prefix rather than being left unused. An entry
   // nothing renders is a translation nobody can check and three columns to keep
   // in step for no reader.
@@ -49881,7 +50015,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the side is chosen by counting what it would cover",
      /const l = cx - 66, r = cx \+ 66, t = here\.y - 54, b = here\.y \+ 54;\s*const spills[\s\S]{0,120}?return others\.filter\(o => o\.x > l && o\.x < r && o\.y > t && o\.y < b\)\.length \+ spills;/.test(chatCode));
   ok("and recomputed on every open, because the map refits when a place is added",
-     /marker\.on\("mouseover", \(\) => \{[\s\S]{0,240}?pop\.options\.offset = L\.point\(sideFor\(\)/.test(chatCode));
+     /marker\.on\("mouseover click", \(\) => \{[\s\S]{0,240}?pop\.options\.offset = L\.point\(sideFor\(\)/.test(chatCode));
   // ── SPILLING COSTS LESS THAN HIDING, AND THE NUMBER IS THE CLAIM ─
   // At 1 they tied, the tie-break sent Ribe's card right, and Aarhus became
   // unreachable. Off the edge Leaflet pans and everything stays reachable;
@@ -49897,8 +50031,36 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Its pins change on almost every reply. Rebuilding the Leaflet instance
   // each time re-downloads every tile and throws away wherever the person had
   // panned to, mid-conversation.
-  ok("the mount effect does not depend on the pins", /\}, \[any\]\);/.test(chatCode));
-  ok("and the pin effect depends on them by value, not by array identity", /\}, \[pinKey\]\);/.test(chatCode));
+  // ── AND ITS DEP IS THE BOX, NOT THE PINS, 13 SEP 2026 ─────────
+  //
+  // This pinned `}, [any]);` under the caption "the mount effect does not
+  // depend on the pins", and `any` was `list.length > 0 && wide`, which IS the
+  // pins. Measured before it changed: on a desktop the map was built twice in
+  // one conversation, torn down and rebuilt with its tiles on the reply that
+  // named the first town; and on a phone it could never build, because `any`
+  // is false below the breakpoint and an effect whose deps never change never
+  // re-runs, which is the other half of the blank strip. The map is built when
+  // `shown` turns true and removed when it turns false, and nothing else.
+  ok("the mount effect depends on the box being there, and on nothing about the pins", /\}, \[shown\]\);/.test(chatCode) && !/\}, \[any\]\);/.test(chatCode));
+  ok("and no dep is derived from the pins any more", !/const any = /.test(chatCode));
+  // The pin effect runs on the same commit the box appears, after the mount
+  // effect in declaration order, so a map built with the same pins as before
+  // is drawn on the frame it is built rather than left empty until the next
+  // reply changes them. By value still: the same pins in the same places
+  // arriving as a new array is not a change.
+  ok("and the pin effect depends on them by value, and on the map being built", /\}, \[pinKey, shown\]\);/.test(chatCode));
+  ok("with the mount effect declared first, so a rebuilt map is drawn on the commit it is built",
+     chatCode.indexOf("}, [shown]);") < chatCode.indexOf("}, [pinKey, shown]);"));
+  // ── AND THE BOX IS WATCHED, BECAUSE IT KEEPS CHANGING ───────────
+  // Leaflet reads its container once and on window resize. The desktop rail
+  // grows with every reply (measured: 237px tall at the first reply, 317 two
+  // replies on) and the phone rail appears with the second pin; a map with a
+  // stale size draws its tiles for the old box and leaves the rest grey.
+  ok("the map's box is observed and every change re-measures",
+     /new ResizeObserver\(\(\) => \{ if \(mapRef\.current === map\) map\.invalidateSize\(\); \}\)/.test(chatCode)
+     && /if \(watch\) watch\.observe\(holderRef\.current\);/.test(chatCode));
+  ok("guarded for a browser without it", /typeof ResizeObserver === "function"/.test(chatCode));
+  ok("and disconnected when the map goes", /if \(watch\) watch\.disconnect\(\);[\s\S]{0,160}?map\.remove\(\);/.test(chatCode));
   ok("the open handler is held in a ref so a new closure cannot invalidate anything",
      /openRef\.current = onOpen;/.test(chatCode));
   // Found in the browser: hovering a pin with no card left the PREVIOUS
@@ -49922,7 +50084,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Subscribed, because windows get resized and tablets get rotated.
   ok("and it listens for the width changing", /mq\.addEventListener\("change", onChange\)/.test(chatCode));
   ok("and stops listening when it goes", /mq\.removeEventListener\("change", onChange\)/.test(chatCode));
-  ok("nothing mounts while it is narrow", /const any = list\.length > 0 && wide;/.test(chatCode));
+  // This pinned `const any = list.length > 0 && wide;` as "nothing mounts
+  // while it is narrow". Since 13 Sep a narrow screen mounts the map when its
+  // rail is there, from two pins, and the rule the sentence was protecting is
+  // kept in the words it meant: nothing mounts while nobody can see it.
+  ok("nothing mounts while nobody can see it", /if \(!shown \|\| !holderRef\.current \|\| mapRef\.current\) return;/.test(chatCode) && /if \(!shown\) return null;/.test(chatCode));
   // Clicking the map must not close it, or the click that lands on the card
   // closes the card first and the entry never opens.
   ok("and a click on the card is not swallowed by the map", /closeOnClick: false/.test(chatCode));
@@ -49988,7 +50154,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // puts the old 220px box back inside a 460px column, which is the "the map is
   // not given enough space" half of the complaint on its own.
   ok("the map's own box grows with its column",
-     /style=\{\{ flex: "1 1 auto", minHeight: height,/.test(chatCode));
+     /style=\{\{ flex: "1 1 auto", minHeight: wide \? height : 0,/.test(chatCode));
+  // The floor is the wide column's. On a phone the rail says how tall it is
+  // (190px in chatRail.js), and a 220px floor inside a 190px box was a map
+  // spilling over the input bar; measured after: holder 169px, map 356 by 167.
+  ok("and on a phone the floor is gone, so the box takes what the rail has", /minHeight: wide \? height : 0/.test(chatCode));
   // The prop stays as the FLOOR rather than the size, because a caller with no
   // flex parent still needs a box that has one.
   ok("and the prop it used to be sized by is the floor now", /height = 220/.test(chatCode));
@@ -54706,6 +54876,187 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         "Just the two of us", "We fly in on the 14th", "2 adults and 2 kids", "Public Transport",
         "We are driving up tomorrow", "I want a car"].filter(s => themes(s) !== null)
          .map(s => `${s} -> ${themes(s)}`), []);
+
+    // ── AND A REFUSAL STOPS AT THE END OF THE TURN IT IS IN ──────────
+    //
+    // Oliver, 13 Sep 2026: "the chat got stuck because I said 'kid's trip'".
+    // His session, four traveller turns of it:
+    //
+    //   Gemlyx  Have you got somewhere booked to stay already?
+    //   Oliver  nope i dont
+    //   Gemlyx  I still do not know what kind of trip this is. Name one thing.
+    //   Oliver  for kids
+    //   Gemlyx  I still do not know what kind of trip this is. Name one thing.
+    //   Oliver  history
+    //   Gemlyx  I still do not know what kind of trip this is. Name one thing.
+    //
+    // He typed a word the question itself offers and got the question back.
+    //
+    // The turns are joined with a newline and read as one text, and the refusal
+    // window ran 48 characters past a negation, stopping only at a full stop, a
+    // comma or a contrast word. A NEWLINE WAS NOT ON THAT LIST, so "dont" in an
+    // answer about a hotel swallowed the next two turns:
+    //
+    //   withoutRefused("nope i dont\nfor kids\nhistory")  ->  "nope i  "
+    //
+    // Bisected turn by turn: every pair with "history" in it read the history,
+    // and only the pair beginning "nope i dont" did not.
+    is("a refusal does not eat the turns after it",
+       withoutRefused("nope i dont\nfor kids\nhistory"), "nope i  \nfor kids\nhistory");
+    is("and the mirror case, since the backward window reaches the turns before",
+       withoutRefused("christmas markets bore us\nwe like food").includes("we like food"), true);
+    // The clause rules it already had, unchanged. A refusal still runs to the end
+    // of its own clause, and a comma and a contrast word still stop it.
+    is("a refusal still takes its whole clause", withoutRefused("no museums or castles please").trim(), "");
+    ok("and still stops at a comma", /we love food and history/.test(withoutRefused("No problem, we love food and history")));
+    // The whole session, replayed. This is the one that was stuck.
+    {
+      const rows = ["hi", "billund", "9", "in 2 days", "9 kids", "jusr a kids trip",
+                    "public transpor", "nope i dont", "for kids", "history"];
+      const asking = [[], ["origin"], ["days"], ["when"], ["party"], ["interests"],
+                      ["transport"], ["stay"], ["interests"], ["interests"]];
+      const b = readBrief({ travellerText: rows.join("\n"), travellerTurns: rows,
+                            asked: ["origin", "days", "when", "party", "interests", "transport", "stay"],
+                            answering: asking, today: T });
+      is("his own stuck session reads the history he typed", b.known.interests?.value, "history");
+      is("and stops asking a question he has answered", b.declined.includes("interests"), false);
+    }
+
+    // ── AND "JUST A KIDS TRIP" IS WHAT KIND OF TRIP IT IS ────────────
+    //
+    // The same session, two turns earlier. Asked what kind of trip it was, he
+    // answered "jusr a kids trip" and then "for kids", and the slot stayed empty
+    // both times. There is no word for it in the interests vocabulary and there
+    // must not be one: this reader runs over the WHOLE conversation, and "kids"
+    // is the commonest word in the answer to a different question.
+    //
+    // So it is read only from a turn that was answering THIS question, and the
+    // value is "family" because that is the term THEME_WORDS and PLACE_THEMES
+    // already use. Nothing new was invented; the gate just could not hear it.
+    is("a trip for children is an answer about what kind of trip it is",
+       ["jusr a kids trip", "for kids", "a family trip", "just the children really",
+        "noget for børnene", "für die kinder"].filter(s => answered(s) !== "family"), []);
+    // THE HALF THAT MATTERS MORE. "9 kids" answering WHO IS COMING must not fill
+    // what kind of trip it is. A hard slot filled from a different question is
+    // the exact failure making it hard was meant to prevent.
+    const askedAs = (s, key) => readBrief({ travellerText: s, travellerTurns: [s],
+      answering: [[key]], asked: [key], today: T }).known.interests?.value ?? null;
+    is("but never from the answer to who is coming",
+       ["9 kids", "2 adults and 2 kids", "me and the family", "my wife and our son"]
+         .filter(s => askedAs(s, "party") !== null), []);
+    // Not "returns nothing" for the first of these: it names a museum, and museum
+    // is a theme word, so "museum" is the right read. The claim is narrower and
+    // it is the one that matters, which is that the CHILDREN in a sentence
+    // nobody was asked for never decide what kind of trip this is.
+    is("nor from a sentence nobody was asked for",
+       ["the kids museum in Odense", "somewhere the children can run around",
+        "we are travelling with our son"].filter(s => (themes(s) || "").includes("family")), []);
+    // And a theme they DID name still wins, because the sentence reader runs first.
+    is("a named theme is not overwritten by the children in the same turn",
+       answered("history, and we have kids with us"), "history");
+
+    // ── AND AN ANSWER THAT LANDED NOWHERE IS QUERIED ────────────────
+    //
+    // Oliver, 13 Sep 2026: "I'd rather have the model asks 'do you mean public
+    // transport'". He typed "public transpor", one letter short. Every reader
+    // saw nothing, Gemlyx wrote "that's the main piece settled", and the trip
+    // went on with no mode, which means no distance ceiling, which is how
+    // somebody on buses is offered a town four hours away.
+    //
+    // NO DICTIONARY OF TYPOS, which was his second message: "if we must go to a
+    // bunch of typos". A misspelling list only covers the ones somebody thought
+    // of, in one language, and this app reads six. Two things the app knows for
+    // certain need no list: which question was on the table, and whether
+    // anything at all came out of the answer.
+    {
+      const { briefBlock } = M;
+      const unreadOf = (turn, key) => readBrief({ travellerText: turn, travellerTurns: [turn],
+        answering: [[key]], asked: [key], today: T }).unread || [];
+      is("a turn that tried and landed nowhere is recorded with their own words",
+         unreadOf("public transpor", "transport"), [{ key: "transport", said: "public transpor" }]);
+      // THE THREE GUARDS, and each is a turn that must not be queried. Getting
+      // any of these wrong turns a helpful question into a pestering one.
+      is("a refusal is a clear answer and is never queried", unreadOf("not sure yet", "transport"), []);
+      is("a turn that answered something else is a change of subject, not a miss",
+         unreadOf("we are going in september", "transport"), []);
+      is("and a turn that read fine is not queried", unreadOf("by car", "transport"), []);
+      is("nor is an empty one", unreadOf("   ", "transport"), []);
+      // The block, which is the whole point of recording it.
+      const b = readBrief({ travellerText: "public transpor", travellerTurns: ["public transpor"],
+        answering: [["transport"]], asked: ["transport"], today: T });
+      const block = briefBlock(b);
+      ok("the block tells the model the answer did not land",
+         /NOTHING IN THE APP COULD READ WHAT THEY TYPED/.test(block));
+      ok("and hands it their exact words", /they typed "public transpor"/.test(block));
+      ok("and forbids asking the same question again cold",
+         /Do not ask the question again as though they had said nothing/.test(block));
+      // THE HALF THAT KEEPS THE RULE INTACT. Nothing in this app reads the brief
+      // out of Gemlyx's own replies, so a bare yes to the model's guess cannot
+      // reach the plan, and the model is told to ask for the word instead of
+      // pretending otherwise.
+      ok("and says a yes on its own will not reach the plan",
+         /confirm it IN WORDS rather than with a yes/.test(block));
+      is("and the stock question is not asked beside it",
+         /how they get around: How are you getting around/.test(block), false);
+      ok("nor is the reply told it has everything it needs",
+         !/YOU HAVE EVERYTHING YOU NEED/.test(block));
+    }
+
+    // ── EVERY OPTION GEMLYX NAMES, READ BACK ────────────────────────
+    //
+    // The question and the reader are written in different files, and there is
+    // nothing to stop somebody adding an option to the question that the reader
+    // has never heard of. That is not a theory: on 13 Sep the transport ask
+    // ended "Car, bike, trains and buses, or a mix of them", and "a mix of them"
+    // read as nothing at all. The Danish one ends "eller en blanding", and that
+    // read as an answer about INTERESTS, on the turn after Gemlyx asked about
+    // transport. Same shape as the attractions list calling Legoland free: the
+    // app arguing with itself, and the traveller losing.
+    //
+    // TWO DIRECTIONS, because one alone is worth little. Each option has to read
+    // back into the slot it was offered for, AND each option has to still appear
+    // in the ask, so this list cannot quietly drift away from the question.
+    {
+      const { BRIEF_SLOTS } = M;
+      const OFFERED = [
+        ["interests", "ask", ["Food", "history", "design", "nature", "nightlife"]],
+        ["interests", "askDa", ["Mad", "historie", "design", "natur", "natteliv"]],
+        ["transport", "ask", ["Car", "bike", "trains and buses", "a mix of them"]],
+        ["transport", "askDa", ["Bil", "cykel", "tog og bus", "en blanding"]],
+      ];
+      const slotOf = (key) => BRIEF_SLOTS.find(x => x.key === key);
+      // ── AND THE APP'S OWN VOICE KEEPS THE DASH BAN TOO ──────────
+    //
+    // entryAudit flags a single em or en dash in a published entry as "high,
+    // voice". correction.js tells the writer "Never write an em dash or an en
+    // dash". A deterministic strip runs over a finished guide payload. Every
+    // one of those is aimed at the model, and the app was printing dashes of
+    // its own straight onto the screen: his screenshot of 13 Sep 2026 reads
+    // "5 of 7 — 2 still to go", and the very first sentence of every
+    // conversation carried two more.
+    {
+      const { progressLine, percentLine, GREETING } = M;
+      const DASH = /[—–]/;
+      const lines = [
+        GREETING.text,
+        progressLine({ ready: true, total: 7 }),
+        progressLine({ total: 7, done: 6, last: "how long" }),
+        progressLine({ total: 7, done: 5, open: ["interests", "transport"] }),
+        percentLine({ known: { origin: { value: "billund" } }, vague: [] }),
+      ];
+      is("nothing the app says to a traveller carries a dash", lines.filter(l => DASH.test(String(l || ""))), []);
+    }
+
+    is("the options listed here are the ones the question prints",
+         OFFERED.flatMap(([key, field, opts]) =>
+           opts.filter(o => !String(slotOf(key)?.[field] || "").toLowerCase().includes(o.toLowerCase()))
+               .map(o => `${key}.${field} does not offer ${o}`)), []);
+      const fills = (key, said) => readBrief({ travellerText: said, travellerTurns: [said],
+        answering: [[key]], asked: [key], today: T }).known[key]?.value ?? null;
+      is("and every one of them reads back into the slot it was offered for",
+         OFFERED.flatMap(([key, field, opts]) =>
+           opts.filter(o => fills(key, o) === null).map(o => `${key}.${field}: ${o} reads as nothing`)), []);
+    }
   }
 
   // ── "THE AI GOTTA SOLVE IT SOMEHOW" ───────────────────────────────
@@ -58939,12 +59290,28 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("only a place inside a town carries the question", /const asks = asking && isSpotPin\(p\);/.test(mini));
     // The gate is part of what a pin IS, so the effect redraws when it flips.
     ok("and the gate is part of the pins' value, so a flip redraws them",
-       /\.join\("\|"\) \+ \(asking \? "\|ask" : ""\);/.test(mini) && /\}, \[pinKey\]\);/.test(mini));
+       /\.join\("\|"\) \+ \(asking \? "\|ask" : ""\);/.test(mini) && /\}, \[pinKey, shown\]\);/.test(mini));
     // Never opened by the app. Oliver, 12 Sep: "Can the photo on the map not
     // automatically pop up? ... if I put my mouse on it, then it shows." One
     // openPopup in the file, inside the pointer's own handler, and no fire().
     is("the card is opened by the pointer and by nothing else", (mini.match(/openPopup\(\)/g) || []).length, 1);
-    ok("inside the hover handler", /marker\.on\("mouseover", \(\) => \{[\s\S]{0,300}?marker\.openPopup\(\);/.test(mini));
+    // ── AND BY A TAP, 13 SEP 2026 ─────────────────────────────────
+    // Measured on the phone build with every event on the icon logged: a tap
+    // is touchstart, touchend, then the browser's own mouseover, mousemove,
+    // mousedown, mouseup and click on the same element. The hover handler
+    // opened the card on the mouseover and the click handler bindPopup
+    // attaches, which toggles, shut it on the click; then the container's
+    // mouseleave, which a lifted finger also sends, shut it again. So the
+    // question could not be reached by tapping at all. The pointer's own
+    // handler now opens on click as well, Leaflet's toggle is taken off, and
+    // the map closes the card when a mouse leaves, never when a finger lifts.
+    ok("inside the pointer's handler, hover and click alike", /marker\.on\("mouseover click", \(\) => \{[\s\S]{0,300}?marker\.openPopup\(\);/.test(mini));
+    ok("with Leaflet's own click toggle taken off the pin, guarded on its name",
+       /if \(typeof marker\._openPopup === "function"\) marker\.off\("click", marker\._openPopup, marker\);/.test(mini));
+    ok("and the card shuts when a mouse leaves the map, not when a finger lifts",
+       /const shut = \(e\) => \{ if \(e && e\.pointerType === "touch"\) return; map\.closePopup\(\); \};/.test(mini)
+       && /addEventListener\("pointerleave", shut\)/.test(mini) && /removeEventListener\("pointerleave", shut\)/.test(mini)
+       && !/"mouseleave"/.test(mini));
     ok("and still nothing opens itself when the flight lands", !/marker\.fire\(/.test(mini));
     // A pin already decided is not asked again: a Yes shows as its state and
     // a No has no pin left to ask on.

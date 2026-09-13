@@ -3,10 +3,10 @@ import { createPortal } from "react-dom";
 import L from "leaflet";
 import { addTileLayer } from "../utils/mapTiles";
 import { ChatPlaceCards, showablePhoto } from "./ChatPlaceCards";
-import { POPUP_CLASS, RAIL_BREAKPOINT_PX, LABEL_CLASS, labelSides, isSpotPin, spotsShowAt } from "../utils/chatRail";
+import { POPUP_CLASS, RAIL_BREAKPOINT_PX, LABEL_CLASS, labelSides, isSpotPin, spotsShowAt, phoneMapShows } from "../utils/chatRail";
 import { distinctThemes, THEME_LABEL } from "../utils/placeThemes";
 import { entryWord } from "../utils/entryWords";
-import { makeCamera } from "../utils/mapDirections";
+import { makeCamera, unplayedBeat } from "../utils/mapDirections";
 import { t as uiT } from "../utils/uiLanguage";
 
 // ── THE MAP UNDER THE CHAT ──────────────────────────────────────────
@@ -33,8 +33,8 @@ import { t as uiT } from "../utils/uiLanguage";
 // is fine on a page whose pins change when you navigate. THIS map's pins change
 // on almost every reply, and a rebuild re-downloads every tile and throws away
 // wherever the person had panned to, mid-conversation. So: one effect that
-// mounts the map and never re-runs, and a second that clears a layer group and
-// draws into it.
+// builds the map when its box appears and not again while the box is there,
+// and a second that clears a layer group and draws into it.
 // Skagen down to the German border, Blåvand across to Bornholm. Framed by
 // fitBounds rather than by a hand-picked zoom, so a 210px column and a 300px
 // one both get the country instead of one of them getting Jutland.
@@ -217,6 +217,24 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   // rotated past the breakpoint got the short pan instead of the establishing
   // flight the whole design turns on.
   //
+  // ── AND THEN THE PHONE GOT A MAP, 13 SEP 2026 ─────────────────────
+  //
+  // Oliver: "the phone still doesn't have the map implemented." The stacked
+  // rule in chatRail.js answered that with a 190px rail under the
+  // conversation, shown from two pins, and measured at 390 by 844 it shipped
+  // a blank strip: this component still returned null below the breakpoint,
+  // so the rail had its height and nothing in it.
+  //
+  // So `wide` is no longer the whole of "is anybody looking". It is the wide
+  // column, which always has a map; below it the map exists exactly when the
+  // rail does, which is phoneMapShows, the one rule App.jsx puts the has-map
+  // class on. The concern above is kept whole by that: a map is built only
+  // when the box it goes in is on screen and has a size, so no Leaflet ever
+  // measures a display:none rail. And flownRef needs no new decision, because
+  // it is gone: nothing flies on its own any more, the map opens on the
+  // country wherever it is built and the reply's beats are the only descent,
+  // so a phone map built mid-conversation opens on Denmark like a desktop one.
+  //
   // The same constant the CSS uses, so the query and the rule cannot drift.
   // Subscribed rather than read once, because a window gets resized and a
   // tablet gets rotated.
@@ -251,7 +269,6 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   // with a different card are not the same pins the same way.
   const asking = !!ask;
   const pinKey = list.map(p => `${p?.key}@${p?.lat},${p?.lon}${p?.latest ? "*" : ""}`).join("|") + (asking ? "|ask" : "");
-  const any = list.length > 0 && wide;
   // ── THE MAP IS THERE BEFORE THERE IS ANYTHING ON IT ───────────────
   // Oliver, 8 Sep 2026: "I think map should already be shown from start."
   // It was gated on having a pin, so the panel was empty until Gemlyx happened
@@ -259,7 +276,12 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   // A map of Denmark with nothing on it is not an empty state, it is the
   // context every pin is about to be placed in, and it is the thing that says
   // what this column is for without a sentence explaining it.
-  const shown = wide;
+  //
+  // That is the wide column. A phone has no column to keep open, so there the
+  // map appears with the rail, from two pins: the same rule, phoneMapShows,
+  // that App.jsx puts the has-map class on, so the box and the map in it
+  // cannot disagree about whether there is one.
+  const shown = wide || phoneMapShows(list);
 
   // ── THE MOVES THEMSELVES ─────────────────────────────────────────
   //
@@ -304,6 +326,16 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   };
 
   // ── MOUNT ────────────────────────────────────────────────────────
+  //
+  // KEYED ON shown, WHICH IS WHEN THERE IS A BOX TO BUILD IN. It was keyed on
+  // `any`, the pins being non-empty on a wide screen, a leftover from when
+  // the map was gated on having a pin, and it cost two things that were
+  // measured before it changed. On a desktop the map was torn down and built
+  // again on the reply that named the first town, tiles and all: two map
+  // builds logged in one conversation. On a phone it could never build at
+  // all, because `any` is false below the breakpoint and an effect whose deps
+  // never change never re-runs, so the phone rail stayed empty. The map is
+  // built when the box appears and removed when it goes, and nothing else.
   useEffect(() => {
     if (!shown || !holderRef.current || mapRef.current) return;
     const map = L.map(holderRef.current, {
@@ -342,13 +374,28 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // the guide map and the place map both hit.
     requestAnimationFrame(() => map.invalidateSize());
     const t = setTimeout(() => map.invalidateSize(), 400);
+    // ── AND IT KEEPS MEASURING, BECAUSE THE BOX KEEPS CHANGING ─────
+    //
+    // Leaflet reads its container once and on window resize, and nothing
+    // else. This box changes without the window: the desktop rail is as tall
+    // as the conversation beside it and grows with every reply, and the phone
+    // rail is a 190px strip that appears with the second pin. A map with a
+    // stale size draws its tiles for the old box and leaves the new part
+    // grey, which is the commonest way a phone map ships broken. So the box
+    // itself is watched, and every change re-measures. Guarded, because a
+    // browser without ResizeObserver still has the two calls above.
+    const watch = typeof ResizeObserver === "function"
+      ? new ResizeObserver(() => { if (mapRef.current === map) map.invalidateSize(); })
+      : null;
+    if (watch) watch.observe(holderRef.current);
     return () => {
       clearTimeout(t);
+      if (watch) watch.disconnect();
       camRef.current?.stop();
       camRef.current = null;
       map.remove(); mapRef.current = null; layerRef.current = null; spotLayerRef.current = null;
     };
-  }, [any]);
+  }, [shown]);
 
   // ── PINS ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -380,7 +427,9 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // the user make a decision." Before that the app is picking the criterion
     // and ranking on it, which is the app choosing the trip. Shut, every pin is
     // a name, which is also what stops five labels fighting over a 380px map on
-    // the turn that names the most places and knows the least.
+    // the turn that names the most places and knows the least. Open, every pin
+    // is still a name until the pointer lands on it: since 13 Sep the word
+    // shows on that one pin and no other, see the label below.
     const picked = sayWhatFor ? distinctThemes(list.map(p => ({ key: p.key, themes: p.place?.themes }))) : {};
     const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => (
       { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -433,12 +482,14 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
         keyboard: false,
         zIndexOffset: p.latest ? 1000 : 0,
       }).addTo(isSpotPin(p) ? spotLayer : layer);
-      // ── AND WHAT IT IS FOR, WITHOUT ANYBODY HAVING TO TAP ───────
+      // ── AND WHAT IT IS FOR ──────────────────────────────────────
       //
       // Oliver, 9 Sep 2026, on a reply that had offered him three cities with
       // one card open over Aarhus: "is it possible to include what the city is
       // best for? When given options like that", then "have all of them shown
-      // (without overlapping oneanother)".
+      // (without overlapping oneanother)". This heading read "without anybody
+      // having to tap" until 13 Sep; see the block below the word for what
+      // moved and why.
       //
       // From the row's OWN themes, so a label cannot claim something the entry
       // does not, and empty for a row carrying none: the hardcoded fallback
@@ -465,11 +516,43 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       // rather than the tail of a sentence, which is what inSentence was for.
       const theme = picked[p.key];
       const best = theme ? entryWord(THEME_LABEL[theme] || "", code) : "";
-      marker.bindTooltip(
-        `<span class="pin-name">${esc(p.place?.name || "")}</span>`
-        + (best ? `<span class="pin-best">${esc(best)}</span>` : ""),
+      // ── AND ONLY ON THE PIN THE READER IS POINTING AT ─────────
+      //
+      // Oliver, 13 Sep 2026, on a map of Denmark with five pins each carrying
+      // its word, Billund / Family, Copenhagen / Food, Ribe / Coast, Odense /
+      // History: "Those categories popping up is akward."
+      //
+      // The gate above (sayWhatFor, unsureWhatTheyWant in App.jsx) was
+      // already shut for anybody who had named a theme of their own, and it
+      // was open in that session. So the gate is right and the render inside
+      // it was still wrong: five words at once over a 380px map are a stack
+      // of chips, and a chip nobody asked about explains nothing. The 9 Sep
+      // ask this was built for, "have all of them shown", is the ask he has
+      // walked back three times since ("only for when someone is in doubt",
+      // "awkward to have on all the time", and this).
+      //
+      // So the label every pin always carries is the NAME, and the word joins
+      // it only while the pointer is on that pin. That is the gesture the map
+      // already has for "tell me about this one": hovering opens the card,
+      // and on a place inside a town it opens the "Is this interesting?"
+      // question. One pin at a time, on the same movement, rather than a
+      // second affordance beside it. The word still comes from the row's own
+      // themes, chosen across the set, in the reader's language, and it is
+      // still nothing at all for a row carrying no themes.
+      //
+      // setContent rather than a second tooltip: the label keeps the side
+      // layOut chose for it and grows in place, and it is measured with the
+      // name alone, which is the size it has on every pin but the one under
+      // the cursor.
+      const nameHtml = `<span class="pin-name">${esc(p.place?.name || "")}</span>`;
+      marker.bindTooltip(nameHtml,
         { permanent: true, direction: "top", className: LABEL_CLASS,
           opacity: 1, interactive: false, offset: [0, -h] });
+      if (best) {
+        const withWord = nameHtml + `<span class="pin-best">${esc(best)}</span>`;
+        marker.on("mouseover", () => marker.getTooltip()?.setContent(withWord));
+        marker.on("mouseout", () => marker.getTooltip()?.setContent(nameHtml));
+      }
       labelled.push({ key: p.key, ph: h, marker });
 
       // ── A POPUP ONLY WHERE THERE IS A PICTURE TO PUT IN IT ──────
@@ -510,18 +593,38 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
         // card underneath closes the card first and the entry never opens.
         closeOnClick: false,
       });
+      // ── AND A TAP MUST NOT OPEN IT AND SHUT IT IN ONE GO ───────
+      //
+      // Measured on the phone build, 13 Sep 2026, with every event on the
+      // icon logged: a tap is touchstart, touchend, and then the browser's
+      // own mouseover, mousemove, mousedown, mouseup and click on the same
+      // element. The hover handler below opened the card on the mouseover,
+      // and the click handler bindPopup attaches, which TOGGLES, closed it
+      // again on the click, so the card was on screen for a frame and gone
+      // before the thumb had lifted. "Is this interesting?" could not be
+      // reached by tapping at all, on a phone or on a touch laptop.
+      //
+      // So Leaflet's toggle comes off, and the pointer's own handler opens
+      // the card on a click as well as on a hover, which is what the sentence
+      // under it has said the click was for since the day it was written. A
+      // click on a card already open leaves it open; the close button and
+      // leaving the map are how it shuts. Guarded on the method existing,
+      // because it is Leaflet's own name for its handler rather than part of
+      // its documented surface: a Leaflet that renames it keeps the toggle
+      // and loses only the tap, never the map.
+      if (typeof marker._openPopup === "function") marker.off("click", marker._openPopup, marker);
       // ── HOVER OPENS IT, WHICH IS WHY THIS IS NOT CLICK-ONLY ─────
       //
       // Measured in a real browser before writing this: on a 138 by 192 map an
       // open card covers about half of it, and Playwright could not reach the
-      // second pin at all — "<div>Aarhus</div> ... intercepts pointer events".
+      // second pin at all: "<div>Aarhus</div> ... intercepts pointer events".
       // A person can close it and tap again; that is two taps to compare two
       // places, on the feature whose whole point is comparing places.
       //
-      // The rail and this map only exist above 900px (chatRail's breakpoint),
-      // which is a pointer device, so hovering swaps the card with no clicks at
-      // all and the covering never happens. Click still opens it for a touch
-      // laptop, and closeButton stays for the same reason.
+      // Above 900px (chatRail's breakpoint) this is a pointer device, so
+      // hovering swaps the card with no clicks at all and the covering never
+      // happens. Click opens it for a touch laptop and for the phone, and
+      // closeButton stays for the same reason.
       // ── AND WHICH SIDE IT OPENS ON IS COUNTED, NOT GUESSED ──────
       //
       // Three goes at this, each one measured in a browser, and the first two
@@ -570,7 +673,7 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
         if (left === right) return here.x < size.x / 2 ? 1 : -1;
         return left < right ? -1 : 1;
       };
-      marker.on("mouseover", () => {
+      marker.on("mouseover click", () => {
         const pop = marker.getPopup();
         // 54 is half the card's height, which centres it on the pin now that
         // the tip is gone.
@@ -592,8 +695,8 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       });
       // NOT on the marker's own mouseout: the card sits directly above the pin,
       // so moving towards it leaves the marker, and closing there would make
-      // the card impossible to reach. The container's mouseleave below is the
-      // honest boundary, because the card is inside the container.
+      // the card impossible to reach. The container's pointerleave below is
+      // the honest boundary, because the card is inside the container.
       made.push({ key: p.key, place: p.place, host, asks });
       markersRef.current.set(p.key, marker);
     });
@@ -696,17 +799,39 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // move that does happen re-runs this from the moveend listener above.
     layOut();
 
-    const shut = () => map.closePopup();
-    map.getContainer().addEventListener("mouseleave", shut);
+    // ── AND A LIFTED FINGER IS NOT A POINTER LEAVING ───────────
+    //
+    // Measured on the phone build, 13 Sep 2026, with the closers traced: a
+    // tap on a pin opened the card, and then the container's mouseleave
+    // fired six times and shut it, because a touch has no position once the
+    // finger is up and the browser says so with the same event a mouse
+    // sends when it rolls off the map. So the card was gone before it could
+    // be read, and on a phone nothing else was ever going to open it.
+    //
+    // pointerleave rather than mouseleave, because it names what left. A
+    // mouse leaving the map still takes the card down, which is the boundary
+    // the note above chose over the marker's own mouseout; a finger lifting
+    // leaves the card where it is, and the close button on it is how a phone
+    // shuts it.
+    const shut = (e) => { if (e && e.pointerType === "touch") return; map.closePopup(); };
+    map.getContainer().addEventListener("pointerleave", shut);
     cleanRef.current = () => {
-      map.getContainer().removeEventListener("mouseleave", shut);
+      map.getContainer().removeEventListener("pointerleave", shut);
       map.off("moveend zoomend", layOut);
       map.off("zoomend", spots);
     };
     requestAnimationFrame(() => map.invalidateSize());
     // pinKey, not `pins`: by value, for the reason above.
+    // ── AND shown, BECAUSE A NEW MAP HAS NOTHING DRAWN ON IT ───────
+    // The mount effect builds the map when `shown` turns true and removes it
+    // when it turns false, and a map built with the same pins as before is
+    // still a map with no markers on it. This effect runs on the same commit
+    // the box appears, after the mount effect in declaration order, so the
+    // phone map that arrives with the second pin is drawn on the frame it is
+    // built, and a desktop map rebuilt after a rotation gets its pins back
+    // without waiting for the next reply to change them.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pinKey]);
+  }, [pinKey, shown]);
 
   // ── AND THE REPLY CAN MOVE IT WHILE IT TALKS ──────────────────────
   //
@@ -733,9 +858,38 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   // IN plays. And the reply still wins over the app: a fit that is playing is
   // interrupted by a beat, and a fit never displaces one.
   const focusSeq = focus ? focus.seq : null;
+  // ── AND A MAP THAT WAS NOT THERE WHEN THE WORD ARRIVED DOES NOT PLAY IT ──
+  //
+  // Oliver, 13 Sep 2026: "from start, it just randomly zoomed into Copenhagen
+  // before even moving on from 'Denmark'."
+  //
+  // Measured in a real browser before this was written, with the pins and the
+  // camera logged. He had pressed "Clear it", typed an opening line that named
+  // no town, and the map opened on Denmark and flew straight down to Copenhagen
+  // with no pin on it at all. Nothing in the new conversation had said the
+  // word. The beat was the previous conversation's: `focus` is state in App.jsx
+  // and outlives this component, and React runs an effect on mount whatever
+  // its deps say, so every map built after a beat had played it again as if the
+  // reveal had just reached the word. Leaving the Detour page and coming back
+  // did the same, because the page unmounts and the map is built anew.
+  //
+  // Two readers of one beat: the reveal, which fires it once on the word, and
+  // this effect on mount, which fired it a second time on a map that was not
+  // there when it was said. A beat is a move made once, by the map that was
+  // there. A map built later opens on the country like any other, and the pins
+  // effect keeps the picture honest from there. So the seq that was current
+  // when this map was first rendered is remembered, and only a seq that arrives
+  // AFTER it moves the camera: unplayedBeat in utils/mapDirections.js is the
+  // rule, and this ref is the number it runs on. Remembered whether or not the
+  // move could play, because a beat that arrived while there was no map to fly
+  // is a beat for a word already gone.
+  const playedSeqRef = useRef(focusSeq);
   useEffect(() => {
+    const next = unplayedBeat(focusSeq, playedSeqRef.current);
+    if (next == null) return;
+    playedSeqRef.current = next;
     const map = mapRef.current;
-    if (!map || !focus || focusSeq == null) return;
+    if (!map || !focus) return;
     const cam = camRef.current;
     if (!cam) return;
     if (focus.kind === "out") { cam.arrive({ kind: "out" }); return; }
@@ -749,8 +903,12 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
   }, []);
 
-  // A map nobody can see explains nothing at all. Narrow screens get the
-  // inline cards instead and no map at all, which is what `wide` is.
+  // A map nobody can see explains nothing at all. A narrow screen has no map
+  // until there are two pins to relate, and then it has one under the
+  // conversation; see `shown`. The inline cards under each reply are there at
+  // every width, on the desktop beside the map and on the phone above it: a
+  // card is the picture of one place a reply introduced, and the map is where
+  // the places are in relation to each other, which a card cannot say.
   if (!shown) return null;
 
   return (
@@ -772,7 +930,12 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     <div style={{ display: "flex", flexDirection: "column", minHeight: 0, height: "100%" }}>
       <div
         ref={holderRef}
-        style={{ flex: "1 1 auto", minHeight: height, borderRadius: 12, overflow: "hidden", border: `1px solid ${C?.border || "#2A3350"}` }}
+        // ── THE FLOOR IS THE COLUMN'S, NOT THE PHONE'S ──────────────
+        // On the phone the rail says how tall it is (190px, in chatRail.js)
+        // and a 220px floor inside a 190px box is a map spilling over the
+        // input bar under it. There the box takes what the rail has, and the
+        // floor is the wide column's alone.
+        style={{ flex: "1 1 auto", minHeight: wide ? height : 0, borderRadius: 12, overflow: "hidden", border: `1px solid ${C?.border || "#2A3350"}` }}
       />
       {hosts.map(h => createPortal(
         <ChatPlaceCards

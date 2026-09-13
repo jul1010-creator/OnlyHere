@@ -561,7 +561,17 @@ export const LETTER = "A-Za-zÀ-ÖØ-öø-ÿ";
 // it, and where it is wrong the cost is a night out not suggested to two adults,
 // which they can ask for. The other direction is a bar crawl planned around
 // somebody's seven year old.
-export const NAMES_A_CHILD = /(?:^|[^A-Za-z\u00c0-\u00ff])(?:kids?|child|children|toddlers?|bab(?:y|ies)|teens?|teenagers?|son|daughter|grandkids?|grandchildren|famil(?:y|ies)|b(?:ø|o)rn|barn|barnet|kinder|sohn|tochter|familie|gezin|kind(?:eren)?)(?![A-Za-z\u00c0-\u00ff])|(?:^|[^A-Za-z\u00c0-\u00ff])(?:1[0-7]|[1-9])\s*(?:year|yr|år|jahre)s?[- ]?old(?![A-Za-z\u00c0-\u00ff])/i;
+//
+// ── AND THE DEFINITE FORMS, WHICH ARE HOW PEOPLE WRITE IT ───
+//
+// Found 13 Sep 2026 by a test written for something else: "noget for børnene"
+// read as naming nobody. Danish glues the article on the end, so the bare
+// "børn" this had covers the form nobody uses in a sentence: a person says "the
+// children", which in Danish is one word, børnene. Same for barnene and barnen,
+// and German kindern, which is the dative and the form that follows "mit" and
+// "für". Three readers ask this question through this one pattern, including
+// the one that decides whether a night out is planned for a trip with children.
+export const NAMES_A_CHILD = /(?:^|[^A-Za-z\u00c0-\u00ff])(?:kids?|child|children|toddlers?|bab(?:y|ies)|teens?|teenagers?|son|daughter|grandkids?|grandchildren|famil(?:y|ies)|b(?:ø|o)rn(?:ene)?|barn(?:et|ene|en)?|kindern?|sohn|tochter|familie|gezin|kind(?:eren)?)(?![A-Za-z\u00c0-\u00ff])|(?:^|[^A-Za-z\u00c0-\u00ff])(?:1[0-7]|[1-9])\s*(?:year|yr|år|jahre)s?[- ]?old(?![A-Za-z\u00c0-\u00ff])/i;
 
 export const INTEREST_TERMS = {
   food: ["food", "eat", "restaurant", "cuisine", "dining", "foodie",

@@ -397,6 +397,25 @@ export const frameFor = ({ pins = [], added = [], view = null, country = null, i
 // reply chose the picture, and only a camera left on nothing is pulled back
 // regardless. The claim ends when the camera goes idle, so the traveller naming
 // somewhere new a reply later is judged on its own.
+// ── AND A BEAT IS PLAYED ONCE, BY THE MAP THAT WAS THERE ────────────
+//
+// Oliver, 13 Sep 2026: "from start, it just randomly zoomed into Copenhagen
+// before even moving on from 'Denmark'."
+//
+// The beat that moved it was the previous conversation's. The target the reveal
+// sets is state in App.jsx that outlives the map beside the chat, and the map's
+// own effect runs on mount whatever its deps say, so every map built after a
+// beat had played, whether by "Clear it" and a fresh opening line or by leaving
+// the Detour page and coming back, played the last one again on a picture
+// nobody had asked to move. Measured with the camera logged: Denmark at zoom 5
+// straight to Copenhagen at zoom 12, with no pin on the map at all.
+//
+// So the map remembers the seq it was first rendered with and plays a seq only
+// when it is newer than that. The same seq read again is a rebuilt map reading
+// an old move; null is no beat yet. Pure, on two numbers, and the component
+// keeps the number it hands back.
+export const unplayedBeat = (seq, played) => (seq == null || seq === played ? null : seq);
+
 export const makeCamera = ({ play, picture, hold = SLIDE_HOLD_MS, setTimer = setTimeout, clearTimer = clearTimeout } = {}) => {
   const cam = { playing: null, waiting: null, timer: null, dirty: false, beatSince: false, added: [], keys: new Set() };
   const drive = (move) => {

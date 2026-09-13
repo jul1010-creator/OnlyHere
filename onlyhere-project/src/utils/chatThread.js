@@ -39,7 +39,10 @@
 // element" load-bearing without anything guaranteeing it was still there.
 export const GREETING = {
   role: "assistant",
-  text: "Hi! I'm your Local Assist ◆ Tell me where you're heading — or what you're after — and I'll find you something that exists nowhere else.",
+  // Two em dashes, in the first sentence anybody reads, from an app whose own
+  // published-entry audit flags a single dash as a voice failure. Rewritten
+  // 13 Sep 2026.
+  text: "Hi! I'm your Local Assist ◆ Tell me where you're heading, or what you're after, and I'll find you something that exists nowhere else.",
 };
 
 export const openingThread = () => [GREETING];

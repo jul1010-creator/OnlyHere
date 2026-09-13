@@ -352,14 +352,23 @@ export const briefProgress = (brief) => {
 
 // The sentence a reader sees. Kept here rather than in the render so the suite
 // reads the same words the screen does.
+// ── AND NOT ONE OF THESE CARRIES A DASH ─────────────────────────────
+//
+// Oliver's standing rule, and the app enforces it on everybody except itself:
+// entryAudit flags any published entry holding an em or en dash as "high,
+// voice", correction.js tells the writer "Never write an em dash or an en
+// dash", and a deterministic strip runs over a finished guide payload. All of
+// that is aimed at the model. These five lines are the app's own voice, and
+// every one of them printed a dash straight onto the screen. His screenshot of
+// 13 Sep 2026 has one in it: "5 of 7 [dash] 2 still to go".
 export const progressLine = (progress) => {
   const p = progress || {};
-  if (p.ready) return `Everything I need — ${p.total} of ${p.total}`;
+  if (p.ready) return `Everything I need, ${p.total} of ${p.total}`;
   const n = Math.max(0, Number(p.done) || 0);
-  if (p.last) return `${n} of ${p.total} — I still need ${p.last}`;
+  if (p.last) return `${n} of ${p.total}, and I still need ${p.last}`;
   const left = Array.isArray(p.open) ? p.open.length : 0;
   if (!left) return `${n} of ${p.total}`;
-  return `${n} of ${p.total} — ${left} still to go`;
+  return `${n} of ${p.total}, ${left} still to go`;
 };
 
 export const briefPanel = (brief) => ({
@@ -424,10 +433,10 @@ export const percentLine = (brief) => {
   if (brief?.ready) return "Ready to build";
   const open = openBlocking(brief);
   const last = open.length === 1 ? (slotOf(open[0])?.label || "") : "";
-  if (last) return `${pct}% complete — I still need ${last}`;
+  if (last) return `${pct}% complete, and I still need ${last}`;
   // A vague answer is the other thing worth naming, because narrowing it is the
   // cheapest way for somebody to move the bar.
   const loose = BLOCKING_SLOTS.filter(k => brief?.known?.[k] && (brief?.vague || []).includes(k));
-  if (!open.length && loose.length) return `${pct}% complete — pin down ${slotOf(loose[0])?.label || "the dates"} and I can build`;
+  if (!open.length && loose.length) return `${pct}% complete. Pin down ${slotOf(loose[0])?.label || "the dates"} and I can build`;
   return `${pct}% complete`;
 };

@@ -152,7 +152,7 @@ import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoi
 import { hashForTab, tabForHash, ownsTheAddress } from "./utils/tabUrl";
 import { venueVerdict, venueVia, describeVenue, VENUE_MAX_KM } from "./utils/venueMatch";
 import { cityFromLocation } from "./utils/guideEnrichment";
-import { readBrief, briefBlock, nextAsks, buildBlockedNote, enoughToRecommend, unsureWhatTheyWant, namedStayIn, bookedDayNumbers } from "./utils/tripBrief";
+import { readBrief, briefBlock, nextAsks, asksThisTurn, buildBlockedNote, enoughToRecommend, unsureWhatTheyWant, namedStayIn, bookedDayNumbers } from "./utils/tripBrief";
 import { askedBeforeTurns, lastAskedOnScreen } from "./utils/directAnswer";
 import { briefConflicts } from "./utils/briefConflicts";
 import { townClashes, clashNote } from "./utils/chatGeography";
@@ -180,7 +180,7 @@ import { LanguageChoice } from "./components/LanguagePicker";
 import { NavStrip } from "./components/NavStrip";
 import { alertKey, describeWeatherChange, unseenAlerts, seenAlerts, markAlertSeen, readAlerts, markAlertsRead, unreadAlerts, tripLine, alertCountLine } from "./utils/weatherAlerts";
 import { placesNamedIn, cardsByMessage, rejectedIn, correctedTo } from "./utils/chatPlaces";
-import { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, MAP_CLASS, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS } from "./utils/chatRail";
+import { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, MAP_CLASS, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, phoneMapShows } from "./utils/chatRail";
 import { ChatMiniMap } from "./components/ChatMiniMap";
 import { readMapBeats, beatsDue, beatTarget, MAP_DIRECTION_RULE } from "./utils/mapDirections";
 import { briefProgress, progressLine, briefPercent, percentLine } from "./utils/briefPanel";
@@ -16906,7 +16906,15 @@ If the conversation only covers a single day or a few stops with no explicit day
       // first version recorded it anyway: the slot went to `declined` — asked and
       // refused — without the traveller ever seeing the question. Empty here and
       // empty there, from the same condition, so the two cannot drift.
-      const askedThisTurn = conflicts.length ? [] : nextAsks(brief).map(s => s.key);
+      // ── AND ONE READER FOR IT, NOT A COPY OF THE CONDITION ────────
+      // This was `conflicts.length ? [] : nextAsks(brief)`, the same expression
+      // briefBlock used, kept in step by hand. On 13 Sep a second condition was
+      // added there (an answer nothing could read is queried in their own words
+      // rather than asked again) and this line did not learn it, so the block
+      // asked about "public transpor" while this wrote the transport slot down
+      // as asked and refused. asksThisTurn is now the single answer to "what is
+      // this reply being told to ask", and both sides call it.
+      const askedThisTurn = asksThisTurn(brief, conflicts).map(s => s.key);
       // ── SOMETHING TO GIVE BEFORE IT ASKS ──────────────────────────
       //
       // Oliver, 21 Aug 2026, on the first three turns of his own conversation:
@@ -18118,9 +18126,20 @@ ${languageBlock()}`;
                       rather than set it, so the row is as tall as the
                       conversation and the input bar stays where it was. */}
                   {/* has-map: the phone shows the rail only once the map has
-                      two pins to relate to each other. See the media query in
-                      chatRail.js for why two and not one. */}
-                  <div className={`${RAIL_CLASS}${(pinsRef.current || []).length >= 2 ? " has-map" : ""}`}>
+                      two pins to relate to each other. See phoneMapShows in
+                      chatRail.js for why two and not one.
+
+                      ── FROM THIS RENDER'S PINS, NOT LAST RENDER'S ──────
+                      This read pinsRef.current, which the walk below writes
+                      AFTER the class has been computed, so the class was one
+                      render stale: measured on a phone, the second pin
+                      existed at +0ms and the rail earned its class at
+                      +507ms, on whatever state change came next. In between,
+                      the map inside it was mounting into a display:none box,
+                      which is a 0 by 0 Leaflet container and the way a phone
+                      map ships grey. So the rail is rendered by the same
+                      function that walks the pins, and reads the pins it
+                      just walked. */}
                     {(() => {
                       const convo = aiMessages.slice(1);
                       // Markers out, for the reason given at msgCards above.
@@ -18228,6 +18247,7 @@ ${languageBlock()}`;
                       // this has run and the ref holds the current pins.
                       pinsRef.current = onMap.pins;
                       return (
+                  <div className={`${RAIL_CLASS}${phoneMapShows(onMap.pins) ? " has-map" : ""}`}>
                         <div className={MAP_CLASS}>
                           {/* ── AND WHEN THE PINS ASK "IS THIS INTERESTING?" ──
                               The same gate as the word under a pin, and the
@@ -18245,9 +18265,9 @@ ${languageBlock()}`;
                             turnedDown={turnedDown}
                             onRestore={(name) => setTurnedDown(prev => (prev || []).filter(n => n !== name))} />
                         </div>
+                  </div>
                       );
                     })()}
-                  </div>
                   </>
                   );
                   })()}

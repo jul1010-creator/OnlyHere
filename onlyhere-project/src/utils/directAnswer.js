@@ -379,11 +379,62 @@ export const widestMode = (text) => {
     REACH_ORDER.indexOf(m) > REACH_ORDER.indexOf(best) ? m : best, modes[0]);
 };
 
+// ── "A MIX OF THEM" IS AN ANSWER TO TWO DIFFERENT QUESTIONS ─────────
+//
+// One list, because it is one phrase. It sat inside OPEN_TO_ANYTHING, which is
+// only ever asked of the interests question, and the transport question ends
+// with the very same offer:
+//
+//   "How are you getting around once you're here? Car, bike, trains and buses,
+//    or a mix of them."
+//   "Hvordan kommer du rundt undervejs? Bil, cykel, tog og bus, eller en
+//    blanding."
+//
+// So "a mix" read as nothing at all, and "en blanding" read as an answer about
+// INTERESTS, on the turn after Gemlyx asked about transport. Gemlyx naming an
+// option it cannot read back is the same shape as the attractions list calling
+// Legoland free: the app is arguing with itself, and the traveller loses.
+//
+// "all of the above" and "everything really" are in here too. They are honest
+// answers to a list of modes as well as to a list of themes, and which question
+// they answer is decided by which question was asked, never by the words.
+const MIX_OF_THEM = [
+  "a mix of both", "a mix of everything", "mix of both", "a bit of everything",
+  "bit of everything", "some of everything", "a little of everything",
+  "a mix of them", "a mix of those", "a mix of the two", "a mix", "some of each",
+  "a bit of both", "bit of both", "both really", "mixture", "mixed",
+  "all of it", "all of the above", "everything really",
+  "lidt af det hele", "lidt af hvert", "en blanding", "b(?:\u00e5|aa)de og",
+  "blandet", "en blanding af det hele", "lidt af begge dele",
+  "von allem etwas", "eine mischung", "alles ein bisschen", "gemischt",
+  "een mix", "van alles wat", "een beetje van alles", "gemengd",
+  "lite av varje", "en blandning",
+];
+
+// The mix phrases, read as an answer about MODES rather than about themes. Only
+// reachable from the transport branch below, which is what makes the same words
+// mean two things safely.
+const MIX_RE = new RegExp(`(?:^|[^${LETTER}])(?:${MIX_OF_THEM.join("|")})(?![${LETTER}])`, "i");
+
 export const transportAnswer = (turn) => {
   const t = String(turn ?? "");
   if (isRefusal(t)) return null;
   const said = withoutNonModes(t);
-  if (!MODE_WORD.test(said)) return null;
+  // ── A MIX IS SEVERAL MODES, AND SEVERAL MODES IS NO CEILING ───
+  //
+  // Oliver, 13 Sep 2026. Tested by reading every option Gemlyx names in its own
+  // ask back through the reader for that slot: "a mix of them" and "en
+  // blanding" were the two it could not read, and both are printed in the
+  // question.
+  //
+  // The mode is left null on purpose rather than guessed at. `mode` decides how
+  // far a place can be and still belong to the trip, and somebody with a car
+  // AND a train has the reach of whichever they use that day. travelModeKey's
+  // own comment says an unknown mode means no ceiling, which is the truthful
+  // reading of a mix, so this fills the slot without narrowing the country.
+  if (!MODE_WORD.test(said)) {
+    return MIX_RE.test(t) ? { value: "a mix of ways", mode: null } : null;
+  }
   const mode = HEDGE.test(t) ? travelModeKey(said) : (widestMode(said) || travelModeKey(said));
   // A mode or nothing, exactly as the sentence reader decides it. "we have no
   // car" scrubs to a sentence with no mode in it, and not-a-mode is not an
@@ -666,13 +717,7 @@ const OPEN_TO_ANYTHING = new RegExp(
     // mix of both" and "a bit of everything". Neither named a theme word, so
     // neither could be read, and with `interests` hard that is a locked door
     // behind a question the app wrote itself.
-    "a mix of both", "a mix of everything", "mix of both", "a bit of everything",
-    "bit of everything", "some of everything", "a little of everything",
-    "all of it", "all of the above", "everything really",
-    "lidt af det hele", "lidt af hvert", "en blanding", "b(?:\u00e5|aa)de og",
-    "von allem etwas", "eine mischung", "alles ein bisschen",
-    "een mix", "van alles wat", "een beetje van alles",
-    "lite av varje", "en blandning",
+    ...MIX_OF_THEM,
   ].join("|") + `)(?![${LETTER}])`, "i");
 
 export const openToAnything = (turn) =>

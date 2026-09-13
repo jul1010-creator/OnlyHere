@@ -321,6 +321,23 @@ export const spotsShowAt = (zoom) => Number.isFinite(Number(zoom)) && Number(zoo
 
 export const MAP_CLASS = "chat-rail-map";
 
+// ── WHEN THE PHONE HAS A MAP AT ALL, WRITTEN ONCE ───────────────────
+//
+// Oliver, 13 Sep 2026: "the phone still doesn't have the map implemented."
+// The stacked rule above was the first answer, and measured at 390 by 844 it
+// shipped a blank strip: the rail got its class and its 190 pixels and the
+// component inside it returned null below the breakpoint, so the phone had a
+// gap where the map was promised. Two readers of "is there a map on a phone",
+// one in the CSS class and one in the component, and they disagreed.
+//
+// So the question is asked here and both read it. App.jsx puts has-map on
+// the rail when this says so, and ChatMiniMap renders when this says so or
+// the column is wide, and neither holds a copy of the number. Two, for the
+// reason the CSS gives: a map with one pin says almost nothing, and on a
+// phone the fifth of a screen it takes is a larger share of what there is.
+export const PHONE_MAP_PINS = 2;
+export const phoneMapShows = (pins) => (Array.isArray(pins) ? pins : []).length >= PHONE_MAP_PINS;
+
 // The whole of the side column, which is what he picked on 8 Sep: "The
 // sidepanel is primarily for the map." Only at the rail breakpoint: below it
 // there is no column to put a map in, and a map stacked into a phone panel
@@ -348,6 +365,14 @@ export const railMapCss = (C = {}) => `
           .${RAIL_CLASS}.has-map .${MAP_CLASS} {
             display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0;
           }
+          /* ── AND NO PLUS AND MINUS ON A STRIP THIS SHORT ──────────
+             Measured at 390 by 844: the map inside the rail is 167px tall,
+             the zoom control is 60px of that in the bottom right corner, and
+             the "Is this interesting?" card, opened on a pin near it, sat
+             under the control with the No button covered. A phone pinches to
+             zoom, so the control is chrome it does not need, and the card
+             is the thing it does. */
+          .${RAIL_CLASS} .leaflet-control-zoom { display: none; }
         }
         @media (min-width: ${RAIL_BREAKPOINT_PX}px) {
           /* ── ELASTIC, WITH A FLOOR ───────────────────────────────
