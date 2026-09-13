@@ -4641,7 +4641,12 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     const sold = sweepById("soldout");
     const wasMeasured = {
       name: "Tønder Festival", ticketStatus: "sold_out", ticketInfo: "4-day pass 2,495 DKK (sold out)",
-      __ticket: { source: "ticketmaster", at: "2026-08-13T09:00:00Z", verdict: "confirmed", url: "https://ticketmaster.dk/tf" },
+      // A local morning on 13 August, not 09:00 UTC. A stamp is written as
+      // `new Date().toISOString()` on the machine that ran the check, and the
+      // day a reader is shown is the day it was for whoever ran it, which is
+      // also the day the age counts from. Both readers agree on that now, so
+      // the fixture has to name a moment rather than a UTC date string.
+      __ticket: { source: "ticketmaster", at: new Date(2026, 7, 13, 9, 0).toISOString(), verdict: "confirmed", url: "https://ticketmaster.dk/tf" },
     };
     const swept = applySweepPatch(wasMeasured, { ticketStatus: "on_sale", ticketInfo: "4-day pass 2,295 DKK" }, sold, { at: "2026-09-13" });
     is("the sweep still writes the status it was built to fix", swept.patched.ticketStatus, "on_sale");
@@ -9519,7 +9524,12 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // the person saying something else. `when` is a HARD slot, so the model filled
   // the hole, and it filled it wrong.
   {
-    const SUN = new Date("2026-09-13T09:00:00Z");   // a Sunday
+    // A LOCAL Sunday, not 09:00 UTC. Every expectation below is a calendar day
+    // in the traveller's own week, and the reader takes the weekday off the
+    // anchor's local clock, so a UTC instant makes the anchor a Saturday in
+    // Honolulu and "sunday" then means tomorrow rather than a week away. Found
+    // 13 Sep 2026 while sweeping the suite through the zones.
+    const SUN = new Date(2026, 8, 13, 9, 0);   // a Sunday, wherever this runs
     const on = (s) => { const r = M.relativeAnswerIn(s, SUN); return r ? r.start.toDateString() : null; };
     is("his own turn reads as the Monday he meant", on("Maybe next week? Monday"), "Mon Sep 14 2026");
     is("a bare day name is the next one coming", on("Monday"), "Mon Sep 14 2026");
@@ -14837,6 +14847,34 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     is("and a written one is never a fact however fresh", statedAsFact(written("limited"), NOW), false);
     is("the age is counted in days", ticketCheckAgeDays(measured("limited", 10), NOW), 10);
     is("and is null when there is nothing to count", ticketCheckAgeDays({}, NOW), null);
+
+    // ── AND IT IS THE TRAVELLER'S CALENDAR DAY, NOT GREENWICH'S ───
+    //
+    // Oliver's pre-push hook, 13 Sep 2026, with exactly two failures on his
+    // machine and none on mine: these ages come out one too high in
+    // Europe/Copenhagen and right in UTC and New York.
+    //
+    // A stamp is stored as a full instant through toISOString, which is UTC,
+    // and the age was read by matching the first ten characters of that
+    // string. East of Greenwich the UTC date rolls back first, so a check made
+    // at half past midnight in Copenhagen is written down as yesterday.
+    //
+    // The two below are the two directions, and between them they fail
+    // wherever the suite is run except on the meridian itself: the first one
+    // catches every zone ahead of UTC, the second every zone behind it, and in
+    // UTC both are right either way because UTC is the one place the old
+    // reading was correct. That is why this went green here and red on his
+    // desk, and it is why one assertion would not have been enough.
+    const localInstant = (y, m, d, hh, mm) => new Date(y, m, d, hh, mm).toISOString();
+    is("a check half an hour into today is nought days old",
+       ticketCheckAgeDays({ __ticket: { source: "ticketmaster", at: localInstant(2026, 8, 13, 0, 30) } }, NOW), 0);
+    is("and one half an hour before midnight is a day old",
+       ticketCheckAgeDays({ __ticket: { source: "ticketmaster", at: localInstant(2026, 8, 12, 23, 30) } }, NOW), 1);
+    // And the date a reader is shown comes from the same reader as the count,
+    // rather than printing yesterday over an age of nought.
+    ok("the provenance line names the day the age counts from",
+       /checked against Ticketmaster on 2026-09-13\./.test(
+         M.ticketProvenance({ ticketStatus: "limited", __ticket: { source: "ticketmaster", at: localInstant(2026, 8, 13, 0, 30) } }, NOW)));
     // A stale measured status falls back to the unchecked wording rather than
     // to silence, because the status is real information about some past day.
     ok("a stale measurement stops being stated as fact",

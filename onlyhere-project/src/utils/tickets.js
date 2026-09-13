@@ -64,6 +64,7 @@
 
 import { fold, samePlaceName, containsName } from "./danishNames";
 import { citationUrls } from "./aiClient";
+import { dayStart, dayKey } from "./calendarDay";
 
 // ── ONE VOCABULARY, BECAUSE THERE WERE THREE ────────────────────────
 // Found while wiring this up, and it is the same failure as every other one
@@ -224,12 +225,35 @@ export const stampTicketSource = (payload, rec) => ({
 // is on the site this afternoon.
 export const TICKET_STATUS_FRESH_DAYS = 120;
 
+// ── AND THE AGE IS COUNTED IN CALENDAR DAYS, NOT IN OFFSETS ─────────
+//
+// Found on Oliver's own machine, 13 Sep 2026, by his pre-push hook: two of
+// these assertions fail in Europe/Copenhagen and pass in UTC and New York.
+//
+// A stamp is stored as a full instant, `new Date().toISOString()`, which is
+// UTC. `asDay` further down reads a date by matching the first ten characters
+// of the string, which is right for the date-only values it was written for
+// ("2026-08-14") and wrong for an instant: east of Greenwich the UTC day rolls
+// back before the local one does, so a status stamped at half past midnight in
+// Copenhagen serialises as the previous date and reads as a day older than it
+// is. West of Greenwich it never happens, which is why the suite was green here
+// and red on his desk.
+//
+// An off-by-one inside a 120 day window changes no reader's sentence today. It
+// is fixed anyway, because this is the same shape as the bug calendarDay.js was
+// written for and the file exists so that this question has ONE reader: the
+// local calendar day a value names. dayStart handles both forms, giving local
+// midnight for a date-only string exactly as asDay does, and for an instant the
+// local day that instant actually falls on.
+//
+// Both sides are local midnights, so the subtraction is whole days and Math.round
+// absorbs the 23 and 25 hour days that daylight saving puts between them.
 export const ticketCheckAgeDays = (payload, today = new Date()) => {
-  const then = asDay(String(payload?.__ticket?.at || ""));
+  const then = dayStart(String(payload?.__ticket?.at || ""));
   if (then == null) return null;
   const d = today instanceof Date && !Number.isNaN(today.getTime()) ? today : new Date();
   const now = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  return Math.round((now - then) / DAY);
+  return Math.round((now - then.getTime()) / DAY);
 };
 
 // ── THE ONE READER FOR "MAY THIS BE SAID TO A TRAVELLER AS FACT" ────
@@ -253,7 +277,12 @@ export const statedAsFact = (payload, today = new Date()) => {
 export const ticketProvenance = (payload, today = new Date()) => {
   const t = payload?.__ticket;
   if (!t?.source || t.source === "none") return "";
-  const when = t.at ? String(t.at).slice(0, 10) : "";
+  // The same local calendar day the age above is counted from. It read the
+  // first ten characters of the stored instant until 13 Sep 2026, which is
+  // the UTC date: half past midnight in Copenhagen printed as yesterday while
+  // the age said nought days, so the sentence and the number under it came
+  // from two readers of one question. dayKey is the reader dayStart belongs to.
+  const when = t.at ? (dayKey(t.at) || "") : "";
   if (isMeasured(t.source)) {
     const age = ticketCheckAgeDays(payload, today);
     const stale = age == null || age > TICKET_STATUS_FRESH_DAYS;
@@ -426,7 +455,7 @@ export const ticketLabelLine = (payload, today = new Date()) => {
 export const restampAfterRewrite = (payload, { at = new Date(), by = "" } = {}) => {
   const t = payload?.__ticket;
   if (!isMeasured(t?.source)) return payload;
-  const when = String(t.at || "").slice(0, 10);
+  const when = dayKey(t.at) || "";   // the local day, same reader as the age
   const iso = at instanceof Date && !Number.isNaN(at.getTime()) ? at.toISOString() : new Date().toISOString();
   return {
     ...payload,
