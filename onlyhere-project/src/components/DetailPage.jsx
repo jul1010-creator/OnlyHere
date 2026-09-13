@@ -4,7 +4,7 @@ import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow, ext
 import { byEventDate } from "../utils/eventDates";
 import { relationLine, kindLabel, areasInside } from "../utils/placeKind";
 import { pricedLine } from "../utils/provenance";
-import { ticketBadge } from "../utils/tickets";
+import { ticketLabelLine, ticketProvenance } from "../utils/tickets";
 // ── "ATTRACTIONS ALL SAY FREE" ────────────────────────────────────
 // Oliver, 27 Aug 2026. The badge below appended a literal "· FREE" to every
 // attraction in the pool, because the pool's Studio type is called `free` and
@@ -875,7 +875,14 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                   // and "off_sale" both fell through to showing ticketInfo as
                   // though nothing were wrong. The badge table decides what a
                   // status is allowed to say, in one place. See utils/tickets.js.
-                  const ticket = ticketBadge(e.ticketStatus);
+                  // ── AND WHO SAID IT, WHICH THIS LINE NEVER ASKED ────
+                  // This rendered ticketBadge().label on its own, in red, with
+                  // no tick and no hover: a row reading "Sold out" off a status
+                  // that may be nothing but the writer's feeling. The event card
+                  // has told the two apart since 13 August and this list could
+                  // not. A tick works in a row of chips and not in a one-line
+                  // list, so here the words carry it. See ticketLabelLine.
+                  const ticket = ticketLabelLine(e);
                   const ticketWarn = ticket.tone === "bad" || ticket.tone === "warn";
                   return (
                     <button key={e.id ?? e.name} onClick={() => onOpenEvent && onOpenEvent(e)} disabled={!onOpenEvent}
@@ -898,7 +905,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                             row. A sold-out festival that reads as a plan is the single
                             most expensive way to mislead someone about a trip. */}
                         {ticketWarn ? (
-                          <div style={{ fontSize: 11, color: ticket.tone === "bad" ? "#FF8A80" : "#FFB347", fontWeight: 600, marginTop: 3 }}>{ticket.label}</div>
+                          <div title={ticketProvenance(e)} style={{ fontSize: 11, color: ticket.tone === "bad" ? "#FF8A80" : "#FFB347", fontWeight: 600, marginTop: 3, opacity: ticket.checked ? 1 : 0.8 }}>{ticket.label}</div>
                         ) : e.ticketInfo ? (
                           <div style={{ fontSize: 11, color: C.muted, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.ticketInfo}</div>
                         ) : null}

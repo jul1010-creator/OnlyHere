@@ -51,7 +51,7 @@ writeFileSync(entry, `
   export { supabaseFailure, studioErrorMessage, refreshIsDead, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, cleanIsland, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, dateRangesInText, isoDay, anchoredEdition, venueRatherThanEvent, PROGRAMME_DATES, dateMentions, labelledAt, otherLabelAt, CALENDAR_DATES, DATE_LABEL_WINDOW, looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER, OFFICE_CONTEXT_WINDOW, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS, WRONG_EDITION, readAnotherEdition, statusIsAboutAFinishedEdition, statusRefusalFor, STATUS_REFUSAL_WHY } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
+  export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, datePropositionWhy, nextEdition, dateRangesInText, isoDay, anchoredEdition, venueRatherThanEvent, PROGRAMME_DATES, dateMentions, labelledAt, otherLabelAt, CALENDAR_DATES, DATE_LABEL_WINDOW, looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER, OFFICE_CONTEXT_WINDOW, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS, WRONG_EDITION, readAnotherEdition, statusIsAboutAFinishedEdition, statusRefusalFor, STATUS_REFUSAL_WHY } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isApiCoveredHost, API_COVERED_HOSTS, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES, bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK, linksInMarkdown, ticketLinksFromMarkdown, scoreTicketLinks } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
@@ -78,7 +78,7 @@ writeFileSync(entry, `
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES, distinctThemes } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { tierBadge, TIER_TONE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { withoutNonModes, travelModeKey as travelModeKeyForTest } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
-  export { travelLabel, isAtTravelOrigin, ORIGIN_TAIL, TRAVEL_ORIGIN as TRAVEL_ORIGIN_NAME, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, stripMarkdown, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { travelLabel, isAtTravelOrigin, ORIGIN_TAIL, TRAVEL_ORIGIN as TRAVEL_ORIGIN_NAME, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, stripMarkdown, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, isConfirmedUpcoming, hasConfirmedDate, isOnOrUpcoming, soonestFirst, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fillerWordCounts, FILLER_WORDS, FILLER_ADJECTIVES, FILLER_COUNTED, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, HOUR_OF, scanForAITells, seededShuffle } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll, priceLabel } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -179,7 +179,7 @@ writeFileSync(entry, `
   export { isSameSpot, SAME_SPOT_KM, cityFromLocation, stopTown } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { travellerBudget, budgetTierMismatch, dayTripClaim, dayTripHonest, dayTripRadiusKm, withoutDayTripClaim, describeDayTripClaim, DAY_TRIP_FRACTION } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { placedLibrary, nearbyPublished, describeLocation, distanceWords, walkMinutes, nearbyLabel, NEAR_KM, WALK_KMH, SAME_VISIT_KM, SAME_VISIT_LIMIT } from ${JSON.stringify(join(root, "src/utils/nearbyPlaces.js"))};
-  export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, appearances, otherDatesHere, alsoPlayingLine, describeAppearances, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP, stampTicketSource, ticketProvenance, isMeasured, TICKET_SOURCES, TICKET_SOURCE_LABEL, isAncillaryListing, isSubEventListing, soldOutClaim, saleOpensLater, soldOutContradiction } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
+  export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, appearances, otherDatesHere, alsoPlayingLine, describeAppearances, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP, stampTicketSource, ticketProvenance, isMeasured, statedAsFact, ticketCheckAgeDays, TICKET_STATUS_FRESH_DAYS, ticketPromptNote, ticketBookingWhy, ticketLabelLine, writtenStatusRule, lookupFailureNote, TICKET_SOURCES, TICKET_SOURCE_LABEL, isAncillaryListing, isSubEventListing, soldOutClaim, saleOpensLater, soldOutContradiction } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, readNudge, EMPTY_NUDGE, MIN_SAVES, COOLDOWN_DAYS, MAX_ASKS, NUDGE_KEY, PROFILE_NUDGE_KEY } from ${JSON.stringify(join(root, "src/utils/accountNudge.js"))};
   export { groupRows, groupLabel, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
   export { filterRows, rowMatchesQuery, rowHaystack } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
@@ -261,7 +261,7 @@ writeFileSync(entry, `
   export { placeKindOf, kindLabel, KIND_LABEL, isArea, baseTownFor, relationLine, collapseToParent, areasInside, dayTripsFrom, PLACE_KINDS } from ${JSON.stringify(join(root, "src/utils/placeKind.js"))};
   export { SWEEP_INTENT, SWEEP_PROMPT } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields, changedOnly, FROM_ENTRY_PROMPT } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
-  export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT, correctionLanded, claimLanded, describeCorrection, hasAnchor } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
+  export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT, correctionLanded, claimLanded, describeCorrection, correctionBanner, correctionPublisherNote, MAX_LISTED_CLAIMS, hasAnchor } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { shapeForLive, madeHeading, isPublisherNote, PUBLISHER_NOTE, cleanCredit } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { longestEcho, echoWords, isNameEcho, echoInDraft, describeEcho, ECHO_RUN } from ${JSON.stringify(join(root, "src/utils/echoCheck.js"))};
   export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
@@ -282,7 +282,7 @@ writeFileSync(entry, `
   export { datesFromListings, cityRankOf, cityWanted, CITY_MATCH, CITY_UNKNOWN, CITY_DIFFERENT } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, PRICE_NOT_PUBLISHED, PRICE_UNKNOWN } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { sourceFit, describeSourceFit, LIVING_TYPES } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
-  export { costContradictions, bareOccurrence, questionWordsFor, questionWords, EVERYDAY_WORDS, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, whoSaid, priceMisses, pricesAdmission, NOT_ADMISSION, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { costContradictions, bareOccurrence, questionWordsFor, questionWords, EVERYDAY_WORDS, pricesIn, priceForNoun, tracePrices, describePriceTrace, untracedPriceClaim, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, whoSaid, priceMisses, pricesAdmission, NOT_ADMISSION, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 // ── ESBUILD THROUGH ITS NODE API, NOT ITS BINARY ────────────────────
 // This spawned node_modules/.bin/esbuild, located with existsSync. That works
@@ -3153,6 +3153,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const withEvent = { days: [{ day: 1, stops: [{ name: "Roskilde Festival" }, { name: "Some field" }], glance: { stayArea: "central Roskilde" } }] };
   const acts = M.bookingActions(withEvent, lookup);
   is("a dated event and a bed, nothing invented", acts.length, 2);
+  // Still says limited, because the status is real information. What it no
+  // longer does is turn an unchecked one into an instruction. See the
+  // provenance block further down.
   ok("the limited event says so", /limited/i.test(acts[0].why));
   is("a trip with nothing to book says nothing",
     M.bookingActions({ days: [{ day: 1, stops: [{ name: "A walk" }] }] }, () => null).length, 0);
@@ -4624,6 +4627,46 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("an unchanged row gets no entry in the trail", noop.changed, []);
   ok("and its payload is returned untouched", !("__corrections" in noop.patched));
 
+  // ── AND THE TICK CANNOT BE INHERITED ─────────────────
+  //
+  // Fable, 13 Sep 2026. The sold-out sweep names ticketStatus in its own fields
+  // list, which is the point of it: a wrong sold-out talks somebody out of a
+  // trip. What it also did was write a MODEL'S READING OF A WEB PAGE over a
+  // field the pipeline can MEASURE, and leave __ticket exactly as it found it.
+  //
+  // A row stamped ticketmaster therefore came out of a sweep holding a status
+  // Ticketmaster never said, still drawing the tick that means Ticketmaster
+  // said it and still hovering "checked against Ticketmaster on 13 August".
+  {
+    const sold = sweepById("soldout");
+    const wasMeasured = {
+      name: "Tønder Festival", ticketStatus: "sold_out", ticketInfo: "4-day pass 2,495 DKK (sold out)",
+      __ticket: { source: "ticketmaster", at: "2026-08-13T09:00:00Z", verdict: "confirmed", url: "https://ticketmaster.dk/tf" },
+    };
+    const swept = applySweepPatch(wasMeasured, { ticketStatus: "on_sale", ticketInfo: "4-day pass 2,295 DKK" }, sold, { at: "2026-09-13" });
+    is("the sweep still writes the status it was built to fix", swept.patched.ticketStatus, "on_sale");
+    is("but the row stops claiming a ticket seller measured it", swept.patched.__ticket.source, "writer");
+    is("so the card stops drawing the tick", M.statedAsFact(swept.patched, new Date(2026, 8, 13)), false);
+    ok("and the stamp says what happened", /overwritten by the soldout sweep/.test(swept.patched.__ticket.verdict));
+    ok("naming the last real measurement", /Ticketmaster on 2026-08-13/.test(swept.patched.__ticket.verdict));
+    // The listing is still a real page for this event and the Tickets button
+    // falls back to it, so the link is not collateral damage.
+    is("the listing link survives", swept.patched.__ticket.url, "https://ticketmaster.dk/tf");
+    // A sweep that changed the price and not the status has not touched the
+    // measured value, so the stamp is left alone.
+    const priceOnly = applySweepPatch(wasMeasured, { ticketInfo: "4-day pass 2,295 DKK" }, sold, { at: "2026-09-13" });
+    is("a sweep that left the status alone leaves the stamp alone", priceOnly.patched.__ticket.source, "ticketmaster");
+    // And a row nobody ever measured has nothing to demote.
+    const neverMeasured = applySweepPatch(
+      { name: "X", ticketStatus: "sold_out", __ticket: { source: "writer", at: "2026-08-13T09:00:00Z", verdict: "no-match", url: "" } },
+      { ticketStatus: "on_sale" }, sold, { at: "2026-09-13" });
+    is("and a written one is left as it was", neverMeasured.patched.__ticket.verdict, "no-match");
+    // The trail still records the change, which is the other half of the answer
+    // to "where did this value come from".
+    is("the audit trail still names the field",
+       swept.patched.__corrections.filter(c => c.field === "ticketStatus").map(c => c.source), ["sweep: soldout"]);
+  }
+
   // ── snapshots, which gate everything else ────────────────────────
   const snapRows = [
     { id: 7, type: "town", payload: { name: "Ribe", placeKind: "town", nested: { a: [1, 2] } } },
@@ -5906,6 +5949,72 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // except the component that renders the words COMING EVENTS.
   ok("the strip uses the strict test", /isConfirmedUpcoming\(e\) && !isCurrentlyLive/.test(strip));
   ok("and never the loose one again", !/isUpcoming\(e\.date\)/.test(strip));
+
+  // ── AND THE FOURTH READER OF "IS THIS ON" ────────────────
+  //
+  // Fable, 13 Sep 2026, auditing how events reach a traveller. isUpcoming only
+  // ever looks at the START, so a festival that opened yesterday and runs all
+  // week is neither upcoming nor finished. The LIVE strip learned that on 7
+  // August, the events grid learned it separately, and the Update Events check
+  // learned it a third time with its own note: "an event that is running RIGHT
+  // NOW is the one whose ticket status is most worth refreshing, and isUpcoming
+  // alone excluded exactly those."
+  //
+  // The CHAT PROMPT was the fourth and was never taught. A traveller standing
+  // in Denmark on a festival's opening weekend asked what was on, and the model
+  // was reading a list the festival had been filtered out of.
+  {
+    const { isOnOrUpcoming, isConfirmedUpcoming, soonestFirst } = M;
+    const NOW = new Date(2026, 8, 13, 14, 0);
+    const live = { name: "Live one", date: "2026-09-12", dateEnd: "2026-09-19" };
+    const soon = { name: "Soon", date: "2026-09-20", dateEnd: "2026-09-21" };
+    const far = { name: "Far off", date: "2027-07-01", dateEnd: "2027-07-04" };
+    const over = { name: "Over", date: "2026-08-01", dateEnd: "2026-08-03" };
+    const undated = { name: "Undated", date: "", dateEnd: "" };
+
+    is("a festival running today is not upcoming, which is the whole bug",
+       isConfirmedUpcoming(live, NOW), false);
+    is("and the new reader has it", isOnOrUpcoming(live, NOW), true);
+    is("a future one is still in", isOnOrUpcoming(soon, NOW), true);
+    // The sharpest case, and the one a traveller is most likely to ask about:
+    // isUpcoming compares local midnight against the clock, so a one-day event
+    // happening THIS AFTERNOON has already stopped being upcoming.
+    const today1 = { name: "Today only", date: "2026-09-13", dateEnd: "2026-09-13" };
+    is("an event on today is not upcoming by the old test", isConfirmedUpcoming(today1, NOW), false);
+    is("and the new one has it", isOnOrUpcoming(today1, NOW), true);
+    is("a finished one is still out", isOnOrUpcoming(over, NOW), false);
+    // The half isConfirmedUpcoming was written for, unchanged: an event with no
+    // announced date cannot be put in a day plan at 14:00 on a Tuesday.
+    is("and an undated one is still out", isOnOrUpcoming(undated, NOW), false);
+
+    // ── AND EIGHT PICKED BY DATABASE ROW ORDER ────────────
+    //
+    // liveContent pushes rows into these arrays in the order Supabase returns
+    // them, which is row id. The chat prompt then took .slice(0, 8), so which
+    // eight events the model could plan around was decided by the order they
+    // happened to be drafted in, under a heading that says UPCOMING.
+    is("a live event sorts first, because it cannot be planned for later",
+       soonestFirst([far, soon, live], NOW).map(e => e.name), ["Live one", "Soon", "Far off"]);
+    is("and the rest are soonest first",
+       soonestFirst([far, soon], NOW).map(e => e.name), ["Soon", "Far off"]);
+    is("a row with an unreadable date sorts last rather than first",
+       soonestFirst([{ name: "Broken", date: "whenever" }, soon], NOW).map(e => e.name), ["Soon", "Broken"]);
+    is("ties are broken by name so the list does not reshuffle every reply",
+       soonestFirst([{ name: "B", date: "2026-09-20" }, { name: "A", date: "2026-09-20" }], NOW).map(e => e.name), ["A", "B"]);
+    is("and it never mutates the array it was given", (() => {
+      const rows = [far, soon]; soonestFirst(rows, NOW); return rows.map(e => e.name);
+    })(), ["Far off", "Soon"]);
+
+    // WIRED into the prompt, and the three lists read one function so a fifth
+    // reader cannot be added without meeting it.
+    const appE = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the chat prompt sorts before it slices",
+       /const nextUp = \(list\) => soonestFirst\(list\.filter\(e => isOnOrUpcoming\(e\)\)\)\.slice\(0, 8\)/.test(appE));
+    is("and the three lists are built from it, not written out three times",
+       (appE.match(/const upcoming(?:Local|Major|Viking) = nextUp\(/g) || []).length, 3);
+    ok("a live one is labelled so the model does not say it starts on Monday",
+       /isCurrentlyLive\(e\.date, e\.dateEnd\) \? ", ON NOW" : ""/.test(appE));
+  }
 
   // ── "REMOVE ANYTHING 2026" ───────────────────────────────────────
   // Two of five Discover candidates had finished in June. The date is in prose
@@ -14110,10 +14219,22 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const lookup = (n) => n === "Roskilde Festival" ? { _src: "event", date: "2026-06-27", ticketStatus: "off_sale" } : null;
   const why = bookingActions(guide, lookup)[0].why;
   ok("the guide explains off sale rather than calling it sold out", /can mean sold out, not open yet, or closed/.test(why));
-  // The old code compared the raw field against two strings, so a row written
-  // by an older publish fell through to the generic line.
-  const legacy = bookingActions(guide, () => ({ _src: "event", date: "2026-06-27", ticketStatus: "selling_fast" }))[0].why;
+  // ── AND IT NOW CARRIES THE PROVENANCE, 13 SEP 2026 ───────────────
+  //
+  // This fixture has no __ticket on it, so before today it produced the same
+  // sentence a Ticketmaster-confirmed row produced. That is the defect Fable
+  // was sent to find: "Tickets are limited. Book before you fly." printed off a
+  // status the run log had already recorded as the writer's own guess. The
+  // fixture below is given a measured stamp so it keeps testing the thing this
+  // assertion was written for, which is that the old spelling selling_fast
+  // still reaches its advice through the vocabulary rather than falling to the
+  // generic line. The provenance split is asserted directly underneath.
+  const measuredStamp = { source: "ticketmaster", at: new Date().toISOString(), verdict: "confirmed", url: "" };
+  const legacy = bookingActions(guide, () => ({ _src: "event", date: "2026-06-27", ticketStatus: "selling_fast", __ticket: measuredStamp }))[0].why;
   ok("an old spelling still reaches its real advice", /Book before you fly/.test(legacy));
+  const guessed = bookingActions(guide, () => ({ _src: "event", date: "2026-06-27", ticketStatus: "selling_fast" }))[0].why;
+  is("and an unchecked one never tells a reader to book before flying", /Book before you fly/.test(guessed), false);
+  ok("it says who did not check it", /nobody checked that with a ticket seller/.test(guessed));
 
   // ── WIRED ────────────────────────────────────────────────────────
   const app6 = readFileSync(join(root, "src/App.jsx"), "utf8");
@@ -14150,7 +14271,10 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the search reads as a search", /note\("Ticketmaster, searched by name"/.test(app6));
   ok("a measured status is a recorded decision", /winner: "Ticketmaster's own listing"/.test(app6));
   // The honest half. Without this the run log cannot tell a guess from a fact.
-  ok("and so is the absence of one", /the status is WRITTEN, not measured/.test(app6));
+  // The honest half moved into utils/tickets.js on 13 Sep so a third case could
+  // be added to it, so this now asserts the CALL rather than the sentence. The
+  // sentences themselves are held to their word beside writtenStatusRule.
+  ok("and so is the absence of one", /rule: writtenStatusRule\(/.test(app6));
   ok("a cancelled event blocks the publish in words a person reads", /STOP, DO NOT PUBLISH: /.test(app6));
 
   const fn = readFileSync(join(root, "api/tickets.js"), "utf8");
@@ -14644,6 +14768,125 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the badge marks a measured status", /\{measured \? "✓ " : ""\}\{b\.label\}/.test(app9));
   ok("and the provenance is readable on it", /title=\{ticketProvenance\(event\)\}/.test(app9));
   ok("the stamp is written onto the draft", /t = stampTicketSource\(t, rec\)/.test(app9));
+
+  // ── AND NEITHER MAY THE SENTENCE A TRAVELLER READS ───────────
+  //
+  // Oliver, 13 Sep 2026, holding the Midtfyns run whose Ticketmaster step
+  // failed with an expired Studio session: "a reader is shown 'tickets
+  // limited, book before travelling' off the back of a guess."
+  //
+  // He was. The badge told a measured status from a written one with a tick,
+  // and the two places that turn a status into WORDS read the bare field:
+  // eventTicketNote, which goes into the chat and guide prompt, and
+  // bookingActions, which is the guide's own "what do I have to book" list.
+  // Both printed the identical sentence whichever it was.
+  {
+    const { statedAsFact, ticketPromptNote, ticketBookingWhy, ticketCheckAgeDays, TICKET_STATUS_FRESH_DAYS } = M;
+    const NOW = new Date(2026, 8, 13);
+    const day = (n) => new Date(2026, 8, 13 - n).toISOString();
+    const measured = (status, ago = 2) => ({ ticketStatus: status, __ticket: { source: "ticketmaster", at: day(ago), verdict: "confirmed", url: "" } });
+    const written = (status) => ({ ticketStatus: status, __ticket: { source: "writer", at: day(2), verdict: "no-match", url: "" } });
+
+    // THE CASE FROM THE RUN LOG, both ways round.
+    ok("a measured limited still tells the reader to book",
+       /book before travelling/.test(ticketPromptNote(measured("limited"), NOW)));
+    is("a written one never does",
+       /book before travelling\]/.test(ticketPromptNote(written("limited"), NOW)), false);
+    ok("and it says why", /nobody checked that with a ticket seller/.test(ticketPromptNote(written("limited"), NOW)));
+
+    // The direction that costs a trip. reconcileTickets cannot produce sold_out
+    // at all, because Ticketmaster has no sold-out code, so every sold_out on
+    // every row is the writer's and the prompt has to say so.
+    is("a written sold out is never stated as sold out",
+       /^ \[SOLD OUT/.test(ticketPromptNote(written("sold_out"), NOW)), false);
+    ok("it is handed over as something to check",
+       /say it needs checking and never state it as sold out/.test(ticketPromptNote(written("sold_out"), NOW)));
+    ok("a measured one still shouts", /SOLD OUT/.test(ticketPromptNote(measured("sold_out"), NOW)));
+
+    // A cancelled event is the one finding that should stop a day being built,
+    // so the unmeasured wording keeps the protection and drops the certainty.
+    ok("a written cancelled still keeps the day from being built",
+       /do not build a day around it/.test(ticketPromptNote(written("cancelled"), NOW)));
+    ok("and still asks for it to be confirmed",
+       /confirm it with the organiser/.test(ticketPromptNote(written("cancelled"), NOW)));
+
+    // Off sale keeps the sentence utils/tickets.js exists for in both branches.
+    ok("off sale is never flattened into sold out, measured",
+       /never say sold out/.test(ticketPromptNote(measured("off_sale"), NOW)));
+    ok("nor written", /never say sold out/.test(ticketPromptNote(written("off_sale"), NOW)));
+
+    // Unchanged: a row with no status worth a bracket still offers its ticket
+    // line, which is the branch every attraction and most festivals take.
+    is("a status with nothing to say falls back to the ticket line",
+       ticketPromptNote({ ticketStatus: "", ticketInfo: "From 395 DKK" }, NOW), " [tickets: From 395 DKK]");
+    is("and says nothing at all with neither", ticketPromptNote({}, NOW), "");
+
+    // ── AND A MEASUREMENT HAS A DATE ON IT ────────────────
+    //
+    // Nothing in this app re-runs the ticketing API on a published row: the
+    // Update Events panel asks Perplexity and only flags, and the sold-out
+    // sweep only looks at rows already claiming sold out. So the stamp is
+    // written once at draft time and its date never moves, and a tick over a
+    // status measured before the sale opened is the same wrong shape as no
+    // tick over a measured one.
+    is("a fresh check counts", statedAsFact(measured("limited", 2), NOW), true);
+    is("a check older than the window does not", statedAsFact(measured("limited", TICKET_STATUS_FRESH_DAYS + 1), NOW), false);
+    is("the day it turns is the window itself", statedAsFact(measured("limited", TICKET_STATUS_FRESH_DAYS), NOW), true);
+    is("a stamp with no date cannot be aged, so it is not a fact",
+       statedAsFact({ ticketStatus: "limited", __ticket: { source: "ticketmaster" } }, NOW), false);
+    is("and a written one is never a fact however fresh", statedAsFact(written("limited"), NOW), false);
+    is("the age is counted in days", ticketCheckAgeDays(measured("limited", 10), NOW), 10);
+    is("and is null when there is nothing to count", ticketCheckAgeDays({}, NOW), null);
+    // A stale measured status falls back to the unchecked wording rather than
+    // to silence, because the status is real information about some past day.
+    ok("a stale measurement stops being stated as fact",
+       /nobody checked that with a ticket seller/.test(ticketPromptNote(measured("limited", 400), NOW)));
+    ok("and the hover line says nothing has re-checked it",
+       /Nothing has re-checked it since/.test(M.ticketProvenance(measured("on_sale", 400), NOW)));
+    is("while a fresh one does not carry that clause",
+       /Nothing has re-checked it since/.test(M.ticketProvenance(measured("on_sale", 2), NOW)), false);
+
+    // The guide's booking list, which is prose rather than an instruction.
+    ok("the booking list states a measured limited", /Book before you fly/.test(ticketBookingWhy(measured("limited"), NOW)));
+    is("and never states a written one", /Book before you fly/.test(ticketBookingWhy(written("limited"), NOW)), false);
+    // It also used to say "Sold out on the official site" about a status no
+    // official site was ever asked for.
+    is("and no longer credits an official site nobody read",
+       /official site, so this one/.test(ticketBookingWhy(written("sold_out"), NOW)), false);
+    ok("a free event still needs nothing booked", /nothing to book/.test(ticketBookingWhy({ ticketStatus: "free" }, NOW)));
+    ok("and a plain dated event keeps its line", /book before you travel rather than at the gate/.test(ticketBookingWhy({ ticketStatus: "" }, NOW)));
+
+    // ── AND THE ONE IN A LIST, WHERE A TICK IS NOT ENOUGH ─────
+    //
+    // DetailPage's "What's on in this town" list rendered the badge label on
+    // its own, in red, with no tick, no opacity and no hover: a row reading
+    // "Sold out" off a status that may be nothing but the writer's feeling.
+    // utils/tickets.js opens on exactly that direction, because a wrong
+    // sold-out talks somebody out of a trip that would have worked.
+    is("a measured label is stated plainly", M.ticketLabelLine(measured("sold_out"), NOW).label, "Sold out");
+    is("and an unchecked one says so in the words", M.ticketLabelLine(written("sold_out"), NOW).label, "Sold out, not checked");
+    is("the tone is unchanged, because the status is still worth the colour", M.ticketLabelLine(written("sold_out"), NOW).tone, "bad");
+    is("a status with no badge stays silent", M.ticketLabelLine({ ticketStatus: "unknown" }, NOW).label, "");
+    is("and on_sale is not dressed up as checked", M.ticketLabelLine(written("on_sale"), NOW).label, "Tickets on sale, not checked");
+    {
+      const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+      ok("the town page asks the same reader", /const ticket = ticketLabelLine\(e\)/.test(dp));
+      ok("and hangs the provenance on it", /title=\{ticketProvenance\(e\)\}/.test(dp));
+      is("with no bare badge label left in that list",
+         /const ticket = ticketBadge\(e\.ticketStatus\)/.test(dp), false);
+    }
+
+    // WIRED, in all three places, so no fourth reader of this question can be
+    // added without meeting the function.
+    ok("the chat prompt asks the shared reader", /const eventTicketNote = \(e\) => ticketPromptNote\(e\)/.test(app9));
+    ok("the badge asks the same one", /const measured = statedAsFact\(event\)/.test(app9));
+    const gr = readFileSync(join(root, "src/utils/guideReading.js"), "utf8");
+    ok("and so does the booking list", /why: ticketBookingWhy\(real\)/.test(gr));
+    // Comment lines are skipped: the sentence is quoted in the note explaining
+    // why it moved, and a file that explains itself must not fail its own rule.
+    is("with no second copy of the wording left behind in the guide",
+       gr.split("\n").filter(l => !l.trimStart().startsWith("//")).some(l => /Book before you fly/.test(l)), false);
+  }
 }
 
 // ── THE PHONE ─────────────────────────────────────────────────────
@@ -16379,6 +16622,79 @@ rmSync(dir, { recursive: true, force: true });
   ok("and the note is told whether a page that was read states it",
      /const traced = priceSource\(readerText\(t\), pagesByUrl, rankedSources\.map\(r => r\.host\)\);/.test(stripNonCode(app)));
   ok("and the run log records the comparison either way", /note\(`Prices against the official site\$\{suffix\}`/.test(app));
+
+  // ── AND REPORTING IT WAS ALL ANYTHING COULD EVER DO ─────────
+  //
+  // Oliver, 13 Sep 2026, on the Midtfyns run: "A price of 1235 DKK appears in
+  // the draft and on no page anybody read. The At a Glance extractor REFUSED
+  // it. The price check flagged it. The correction pass ran. The identical
+  // check flagged the identical figure again. Find out where in the draft it
+  // lives and why nothing could remove it."
+  //
+  // Nothing could remove it because nothing was ever asked to. Every rule above
+  // this line writes a founder note, and __notes is deliberately founder-only.
+  // The publish gates are the coordinate, the venue subject, the tier, a row
+  // contradicting its own dates and a missing date. The one stage that can take
+  // a sentence OUT of a draft is the invented-claim correction, and only
+  // Perplexity's findings and the stated-absence gate's ever reached it.
+  {
+    const { untracedPriceClaim } = M;
+    const invented = tracePrices("The weekend pass is 1235 DKK.", "The official site text, with its dates and no price on it.", "");
+    is("the figure is untraced to begin with", invented.untraced.length, 1);
+    const claim = untracedPriceClaim(invented, { anyPageStates: false });
+    ok("a figure on no page anybody read becomes a claim to remove", /1235 DKK/.test(claim));
+    ok("and it asks for a removal rather than a caveat", /Do not keep it with a caveat/.test(claim));
+    ok("and it names every place that was looked at", /not on the ticket listings/.test(claim));
+    // ── AND IT NAMES BOTH CAUSES ───────────────────────────────────
+    // My first version of this sentence said "A price nobody published is a
+    // price the writer composed", which is one of two causes asserted as the
+    // only one. describePriceTrace carries the same confession about its own
+    // first draft, thirty lines up in the same file. The correction is handed
+    // fresh research before it rewrites, so one instruction can serve both.
+    ok("a price on a page nothing opened is a real possibility it states",
+       /published somewhere nothing opened/.test(claim));
+    ok("and the fresh research is what decides which it was",
+       /if the fresh research states this figure, keep it/.test(claim));
+
+    // THE CASE OLIVER SAID IS NOT AN ERROR, 13 Aug 2026, on "15 to 135 DKK":
+    // "it shouldn't consider that an error. It was perfectly correct, because
+    // it was taken from the ticket agent." A figure off a ticket agent is on a
+    // page that was read, and buying a rewrite of a correct price is worse than
+    // the gap. This is the whole reason the gate is two conditions, not one.
+    is("a figure a page we read does state is left alone",
+       untracedPriceClaim(invented, { anyPageStates: true }), "");
+    is("and so is a draft whose prices all trace",
+       untracedPriceClaim(tracePrices("adults 155 DKK", "entry is 155,- for adults"), { anyPageStates: false }), "");
+    is("and a run that could not check anything claims nothing",
+       untracedPriceClaim(tracePrices("adults 120 kr", ""), { anyPageStates: false }), "");
+    is("nor does a draft with no price in it",
+       untracedPriceClaim(tracePrices("free entry", "some page text"), { anyPageStates: false }), "");
+
+    // Several figures read as several, so the sentence never says "that figure"
+    // about three of them.
+    const two = tracePrices("Day tickets 1235 DKK, weekend 1345 DKK.", "The site states its dates and nothing else.", "");
+    ok("two untraced figures are named together", /1235 DKK, 1345 DKK/.test(untracedPriceClaim(two, { anyPageStates: false })));
+    ok("and the sentence agrees with itself", /those figures are/.test(untracedPriceClaim(two, { anyPageStates: false })));
+
+    // WIRED, and wired to the one door that can remove anything.
+    ok("the claim is computed where the trace already is",
+       /const claim = untracedPriceClaim\(pt, \{ anyPageStates: !!traced \}\);/.test(stripNonCode(app)));
+    ok("on the first pass only, like the stated-absence gate",
+       /if \(!again && hasADoor\) \{\s*\n\s*const claim = untracedPriceClaim/.test(app));
+    // AND ONLY WHERE THERE IS A DOOR, which is the list the price hunt and
+    // priceMisses already use: "a food hall has no door". A restaurant's dish
+    // prices live on a PDF or a photograph of a board as often as not, so "no
+    // page we read states it" is the ordinary case there, and buying a rewrite
+    // of a correct menu paragraph is worse than the gap.
+    ok("and only for a type with one price for one door",
+       /const hasADoor = TYPES_WITH_A_DOOR\.includes\(sType\);/.test(app));
+    ok("and it joins the flagged claims the correction is given",
+       /\.\.\.untracedPriceFindings\.map\(text => \(\{ label: "CONTRADICTED", text, mine: true \}\)\)/.test(app));
+    ok("which makes the draft go to the rewrite even when the checker liked it",
+       /\(absenceFindings\.length \|\| untracedPriceFindings\.length\)/.test(app));
+    ok("and the run log says it was fed to the correction",
+       /note\("A price with no page behind it"/.test(app));
+  }
 }
 
 // ── A GLANCE FIELD IS AN ANSWER, NOT A REPORT ON THE SEARCH ─────────
@@ -29094,6 +29410,18 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // assertions written as "is this string in the file" all stayed green, because
   // the copy in the :focus rule satisfied them on its own.
   is("textareas are fields in both rules", (th.match(/textarea:not\(\.gx-plain\)/g) || []).length, 2);
+  // The zoom rule drops the .gx-plain escape on purpose: that class is about who
+  // draws the border, and a browser gesture does not care who drew it. The chat
+  // composer IS .gx-plain and is the field he was complaining about.
+  ok("and the zoom rule reaches the composer too", /@media \(max-width: \$\{RAIL_BREAKPOINT_PX\}px\)[\s\S]{0,400}?font-size: 16px !important;/.test(th));
+  ok("at exactly the threshold, not above it", !/font-size: 1[789]px !important;/.test(th));
+  // Never maximum-scale on the viewport: that stops a person zooming the page at
+  // all, and a reader who needs to magnify text is not one this app will break.
+  // The META TAG, not the word: index.html explains in a comment WHY it carries
+  // no maximum-scale, and a test that greps the file cannot tell the rule from
+  // the reasoning about it.
+  ok("and the page can still be zoomed by hand",
+     !/<meta[^>]*name="viewport"[^>]*(?:maximum-scale|user-scalable)/.test(readFileSync(join(root, "index.html"), "utf8")));
   is("and so are selects", (th.match(/select:not\(\.gx-plain\)/g) || []).length, 2);
   // 2px, not 1.5px. Chrome floors a 1.5px border to one device pixel at DPR 1,
   // measured in a real browser, so the thickness half of the fix did nothing at
@@ -29102,15 +29430,24 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("at a width that survives a whole device pixel", !/border: 1\.5px solid var\(--gx-field-border\)/.test(th));
   // A checkbox is not a box you type into, and repainting its native border is
   // how a tick becomes unreadable.
+  // ── THREE RULES NOW, NOT TWO ──────────────────────────────────────
+  // Oliver, 13 Sep 2026: "it's annoying that when you start writing, it zooms so
+  // far into the chat bar that you have to zoom out to click the send button."
+  // Safari on iOS zooms a focused field whose font size is under 16px and never
+  // zooms back, so the 13px composer magnified the page and put the send button
+  // off the right edge. A third rule raises every field to exactly 16 below the
+  // rail breakpoint. It carries the same exclusion list, because a checkbox is
+  // not a box you type into in that rule either.
   for (const t of ["checkbox", "radio", "range", "file", "button", "submit"]) {
-    is(`a ${t} input is left alone in both rules`, (th.match(new RegExp(`:not\\(\\[type="${t}"\\]\\)`, "g")) || []).length, 2);
+    is(`a ${t} input is left alone in all three rules`, (th.match(new RegExp(`:not\\(\\[type="${t}"\\]\\)`, "g")) || []).length, 3);
   }
   // ── AND THE FIELDS THAT ARE NOT <input> ELEMENTS ────────────────
   // The arrival and departure pickers are <button>s that open a calendar. They
   // sit under a form label, they say "Select date & time", and they were the
   // first two controls on the screen his father was looking at. A selector keyed
   // on element type cannot see that, so they say it themselves.
-  is("a field that is not an input can opt in, in both rules", (th.match(/\.gx-field[,:{ ]/g) || []).length, 2);
+  // Three now: the border, the focus ring and the phone zoom rule.
+  is("a field that is not an input can opt in, in all three rules", (th.match(/\.gx-field[,:{ ]/g) || []).length, 3);
   {
     const dtp = readFileSync(join(root, "src/components/DateTimePicker.jsx"), "utf8");
     ok("and the date pickers do", /<button type="button" className="gx-field" onClick=\{\(\) => setOpen/.test(dtp));
@@ -32506,6 +32843,85 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // The call site must no longer re-truncate it.
     const appF = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
     ok("and App.jsx does not slice it back off", !/describeCorrection\(landed\)\.slice\(/.test(appF));
+  }
+
+  // ── AND THE BANNER ABOVE IT HAD TO STOP SAYING "FIXED" ───────
+  //
+  // Oliver, 13 Sep 2026, on step 48 of the Midtfyns run. describeCorrection's
+  // message has to end "do not read the banner above as a pass" because the
+  // banner was written UNCONDITIONALLY four lines later and said the claims had
+  // been "fixed in the draft below". The landing check had measured the
+  // opposite one statement earlier, and the banner is the loud red thing at the
+  // top of the panel while the check is one line in a list of founder notes.
+  //
+  // describeCorrection's own comment said what was missing: "the point of it is
+  // that the banner above it stops being able to say 'fixed' on its own
+  // authority". This is that half.
+  {
+    const { correctionBanner, correctionPublisherNote, UNVERIFIED, CONTRADICTED } = M;
+    const BEFORE = JSON.stringify({ realityCheck: 'Go for the free Thursday opener before the main two days.', camping: 'camping closes at 22:00' });
+    const AFTER = BEFORE;
+    const GONE_AFTER = JSON.stringify({ realityCheck: "The gates open on the Friday.", camping: "camping closes at 22:00" });
+    const FLAG = { label: CONTRADICTED, text: 'The draft says "the free Thursday opener", and the official programme has no Thursday.' };
+    const SOFT = { label: UNVERIFIED, text: 'The draft says "camping closes at 22:00" and no page states it either way.' };
+
+    const failed = correctionLanded([FLAG], BEFORE, AFTER);
+    const survived = correctionBanner(failed, "CONTRADICTED: the Thursday opener");
+    ok("a surviving contradicted claim leads the banner", /^THE AUTO-CORRECTION DID NOT LAND/.test(survived));
+    is("and the banner never says the draft was fixed", /fixed in the draft below/.test(survived), false);
+    ok("it says the draft is not fixed", /THIS DRAFT IS NOT FIXED/.test(survived));
+    ok("and carries the landing check's own words", /THE CORRECTION DID NOT LAND/.test(survived));
+    ok("with the flagged claims still listed", /the Thursday opener/.test(survived));
+
+    // The unverified case is not a failure and must not be dressed as one: the
+    // writer kept something a web search could not reach, which is often right.
+    const soft = correctionBanner(correctionLanded([SOFT], BEFORE, AFTER), "UNVERIFIED: camping hours");
+    is("an unverified survivor is not called a failed correction", /DID NOT LAND/.test(soft), false);
+    ok("but it is not called a clean pass either", /WITH SOMETHING LEFT IN/.test(soft));
+    ok("and it says what unverified means", /a fact about the search, not about the claim/.test(soft));
+
+    // And the clean case keeps its old job, with the one thing it never said:
+    // that something read the draft afterwards and checked.
+    const clean = correctionBanner(correctionLanded([FLAG], BEFORE, GONE_AFTER), "CONTRADICTED: the Thursday opener");
+    ok("a landed correction still reads as one", /^AUTO-CORRECTED\./.test(clean));
+    ok("and says the draft was read afterwards", /found none of them left/.test(clean));
+    is("with nothing claiming a failure", /DID NOT LAND/.test(clean), false);
+    // An empty flagged list must not leave a dangling colon with nothing after it.
+    ok("an empty claim list does not trail off", !/:\s*$/.test(correctionBanner(correctionLanded([], BEFORE, BEFORE), "")));
+
+    // ── AND IT TRAVELS WITH THE DRAFT, NOT ONLY ON THE SCREEN ────
+    //
+    // The banner is React state. publishDraft never sees it, and the publish
+    // gates are the coordinate, the venue subject, the tier, the self
+    // contradicting date and the missing date, none of which knows a correction
+    // was attempted. So a draft whose correction failed could be published with
+    // nothing in front of the founder saying so at the moment he pressed the
+    // button. It goes into uncertainties behind FIX BEFORE PUBLISHING, which is
+    // already in PUBLISHER_NOTE and already stripped by shapeForLive.
+    const note = correctionPublisherNote(failed);
+    ok("a failed correction is written onto the draft", /^FIX BEFORE PUBLISHING: /.test(note));
+    ok("and quotes the words that survived", /Thursday opener/.test(note));
+    ok("and says the banner is about the attempt", /about the attempt, not about the result/.test(note));
+    is("a landed correction writes nothing", correctionPublisherNote(correctionLanded([FLAG], BEFORE, GONE_AFTER)), "");
+    is("and neither does an unverified survivor", correctionPublisherNote(correctionLanded([SOFT], BEFORE, AFTER)), "");
+    // THE HALF THAT MAKES IT SAFE. A publisher note that reached a reader would
+    // be the entry telling a traveller its own facts are wrong.
+    is("and a traveller can never meet it", M.isPublisherNote(note), true);
+    const shapedWithNote = M.shapeForLive("festival", {
+      name: "Midtfyns Festival", desc: "x", dateStart: "2027-07-01", tier: "Worth Considering",
+      uncertainties: [note, "The camping hours could not be confirmed."],
+    });
+    is("publish strips it and keeps the real one",
+       (shapedWithNote.uncertainties || []), ["The camping hours could not be confirmed."]);
+
+    // WIRED.
+    const appB = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the banner is the function, not a string in the component",
+       /inventedWarning = correctionBanner\(landed, flaggedText\)/.test(appB));
+    is("and the old unconditional sentence is gone",
+       /and fixed in the draft below/.test(appB), false);
+    ok("and the publisher note is put on the draft",
+       /const stillThere = correctionPublisherNote\(landed\)/.test(appB));
   }
 }
 
@@ -37899,7 +38315,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // "And don't assume a date. If you have found a date, make sure it's actually
 // the right date."
 {
-  const { anchoredEdition, labelledAt, isoDay, datePropositionProblem, DATE_PROPOSITION_WHY, CALENDAR_DATES } = M;
+  const { anchoredEdition, labelledAt, isoDay, datePropositionProblem, DATE_PROPOSITION_WHY, datePropositionWhy, CALENDAR_DATES } = M;
   const today = new Date(2026, 7, 20);
 
   // ── THE TWO IT BROKE ────────────────────────────────────────────
@@ -38002,6 +38418,47 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("a November date for an August festival is refused",
      datePropositionProblem("2026-11-04", "2026-08-02", today), "a-different-month-from-the-one-on-file");
   ok("and the refusal explains itself", /different month/.test(DATE_PROPOSITION_WHY["a-different-month-from-the-one-on-file"]));
+
+  // ── BUT ONLY ONE CALLER CAN ANSWER THE QUESTION IT ASSERTS ────
+  //
+  // Fable, 13 Sep 2026. `labelled` defaults to false, and the Update Events
+  // check has TWO tiers. The site-read tier passes `labelled: read.labelled`,
+  // computed by anchoredEdition off the page's own characters. The web-search
+  // fallback passes nothing, because it holds a model's JSON reply rather than
+  // a page, and it should not try: a model saying "yes, the site labels it" is
+  // a request with a failure rate, which is the whole thing the Smukfest rule
+  // exists to survive.
+  //
+  // So the REFUSAL is right on both tiers and is unchanged. The SENTENCE was
+  // not: on the search tier it told Oliver "the page never says it is the
+  // event's own date" about a page nothing had opened. Same shape as a failed
+  // Ticketmaster call reported as "no listing", which is the other half of
+  // today's audit: a fact about our own reach, stated as a fact about a source.
+  ok("the site tier keeps the sentence it earned",
+     /the page never says it is the event's own date/
+       .test(datePropositionWhy("a-different-month-from-the-one-on-file")));
+  is("the search tier does not assert what nobody read",
+     /the page never says/.test(datePropositionWhy("a-different-month-from-the-one-on-file", { labelChecked: false })), false);
+  ok("it says nothing could check", /nothing could check whether its source/
+     .test(datePropositionWhy("a-different-month-from-the-one-on-file", { labelChecked: false })));
+  ok("and still gives the rule and the way out", /the operator's own page will say so/
+     .test(datePropositionWhy("a-different-month-from-the-one-on-file", { labelChecked: false })));
+  // Every other reason is the same on both tiers, because every other reason is
+  // about the date itself rather than about a page.
+  is("no other reason changes with who is asking",
+     Object.keys(DATE_PROPOSITION_WHY)
+       .filter(k => k !== "a-different-month-from-the-one-on-file")
+       .filter(k => datePropositionWhy(k) !== datePropositionWhy(k, { labelChecked: false })), []);
+  is("and an unknown key still comes back as itself", datePropositionWhy("something-new"), "something-new");
+  // Wired to the tier that cannot check.
+  {
+    const appD = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the search tier asks for the honest sentence",
+       /parsed\.ignoredWhy = datePropositionWhy\(badProposal, \{ labelChecked: false \}\)/.test(appD));
+    ok("and the site tier still answers the question off the page",
+       /datePropositionProblem\(isoDay\(found\.start\), ev\.date, checkFrom, \{ labelled: read\.labelled \}\)/.test(appD));
+  }
+
   // Unless the page says in words that it moved. A genuine change is announced.
   is("but a labelled move is allowed through",
      datePropositionProblem("2026-11-04", "2026-08-02", today, { labelled: true }), "");
@@ -48063,7 +48520,23 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      (css.match(new RegExp(`\\.${INLINE_CARDS_CLASS}[^}]*display:\\s*none`, "g")) || []), []);
   ok("the stylesheet actually carries it", /\$\{railCss\(\)\}/.test(appR));
   ok("the inline cards are still marked, which is how this file finds them", appR.includes("className={INLINE_CARDS_CLASS}"));
-  ok("and the rail is marked so it can be shown", appR.includes("className={RAIL_CLASS}"));
+  // ── AND THE PHONE SHOWS IT TOO, AS OF 13 SEP 2026 ─────────────────
+  //
+  // Oliver: "the phone still doesn't have the map implemented." It was hidden
+  // below the breakpoint from the day the rail was built, on the reasoning that
+  // a map stacked into a phone panel pushes the reply off the top. Under the
+  // conversation rather than over it, the reply keeps the top of the screen.
+  //
+  // The class is now conditional, because the map only earns a fifth of a phone
+  // screen once it has two pins to relate to each other, which is the number
+  // this rail has argued for since it was written.
+  ok("and the rail is marked so it can be shown", /className=\{`\$\{RAIL_CLASS\}\$\{[^`]*has-map/.test(appR));
+  ok("and the phone is given the map under the conversation",
+     new RegExp(`@media \\(max-width: \\$\\{RAIL_BREAKPOINT_PX - 1\\}px\\)[\\s\\S]{0,300}?\\.\\$\\{RAIL_CLASS\\}\\.has-map`).test(readFileSync(join(root, "src/utils/chatRail.js"), "utf8")));
+  ok("and the row stacks there so it lands underneath",
+     /@media \(max-width: \$\{RAIL_BREAKPOINT_PX - 1\}px\)[\s\S]{0,200}?\.chat-with-rail \{ flex-direction: column; \}/.test(readFileSync(join(root, "src/utils/chatRail.js"), "utf8")));
+  ok("and it only appears once there are two pins to relate",
+     /\(pinsRef\.current \|\| \[\]\)\.length >= 2 \? " has-map" : ""/.test(appR));
   // The rail is inside the flex row, not floating after it.
   ok("the messages and the rail share one flex row", /<div className="chat-with-rail">[\s\S]{0,3000}<div className="ai-msgs"/.test(appR));
   ok("and the message list can shrink so the rail has room", /className="ai-msgs" style=\{\{ flex: "1 1 auto", minWidth: 0/.test(appR));
@@ -48095,7 +48568,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // "The sidepanel is primarily for the map." A card in there is what made the
   // row 640 pixels tall, so the absence is the fix and is asserted as such.
   {
-    const railBlock = appR.slice(appR.indexOf("<div className={RAIL_CLASS}>"));
+    // The class is a template literal now, so this finds the div by its opening.
+    const railBlock = appR.slice(appR.indexOf("<div className={`${RAIL_CLASS}"));
     const railEnds = railBlock.indexOf("</div>\n                )}");
     ok("the rail block is found", railEnds > 0);
     ok("and there is no card in it", !/layout="rail"/.test(railBlock.slice(0, railEnds > 0 ? railEnds : 4000)));
@@ -50024,14 +50498,72 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // reading of the log was his. I fixed this sentence inside matchEvent on 31
   // August and not here.
   const appT = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // ── MOVED OUT OF THE COMPONENT, 13 SEP 2026 ──────────────────────
+  //
+  // These three read App.jsx source because the sentences were written inline
+  // in a ternary inside publishDraft's sibling, and a rule that lives in a
+  // component is a rule the suite can only spell-check. Fable found a third
+  // case the ternary could not express: the Midtfyns run's Ticketmaster step
+  // FAILED with an expired session, so the candidate list was empty for a
+  // reason that has nothing to do with the festival, and the log told Oliver
+  // "Ticketmaster returned nothing under this name".
+  //
+  // A two-branch ternary cannot grow a third branch that depends on a variable
+  // it was never given, so the sentences are writtenStatusRule in
+  // utils/tickets.js and are asserted on their behaviour rather than on their
+  // characters. The App.jsx assertions that remain are about the WIRING: that
+  // the component calls the function and hands it both facts.
   ok("a weak match no longer claims there was no listing",
-     /Ticketmaster HAS listings under this name and none could be confirmed as this edition/.test(appT));
+     /Ticketmaster HAS listings under this name and none could be confirmed as this edition/
+       .test(M.writtenStatusRule({ verdict: "weak-match" })));
   ok("and only a true no-match says nothing was returned",
-     /noneAtAll\s*\?\s*"Ticketmaster returned nothing under this name/.test(appT));
+     /^Ticketmaster returned nothing under this name/.test(M.writtenStatusRule({ verdict: "no-match" })));
+  is("a weak match is not the no-match sentence",
+     /returned nothing under this name/.test(M.writtenStatusRule({ verdict: "weak-match" })), false);
   ok("which is chosen by the verdict, not written once for both",
      /const noneAtAll = rec\.verdict === "no-match";/.test(appT));
+  ok("and the rule is the one function, not a ternary in the component",
+     /rule: writtenStatusRule\(\{ lookupFailed: ticketLookupFailed, verdict: rec\.verdict \}\)/.test(appT));
   ok("and the loser line stops saying there was nothing to check against",
      /noneAtAll \? "nobody, there was nothing to check it against" : "a Ticketmaster listing that could not be confirmed/.test(appT));
+
+  // ── AND A FAILED CALL IS NOT AN ABSENT LISTING ───────────────────
+  //
+  // Step 23 of the Midtfyns run, 13 Sep 2026: "Your Studio session has expired.
+  // Log out and back in." Nothing downstream could tell that from a festival
+  // Ticketmaster has never heard of, because both produce the same empty
+  // candidate array, and the decision log then stated a fact about a login as a
+  // finding about the festival. The two need opposite answers: a real miss is
+  // expected and has no action, a failed call is one re-run from a measurement.
+  ok("a failed lookup says the lookup failed",
+     /lookup FAILED on this run/.test(M.writtenStatusRule({ lookupFailed: true, verdict: "no-match" })));
+  is("and never says Ticketmaster returned nothing",
+     /returned nothing under this name/.test(M.writtenStatusRule({ lookupFailed: true, verdict: "no-match" })), false);
+  ok("and it says a re-run may still measure it",
+     /re-running the draft/.test(M.writtenStatusRule({ lookupFailed: true })));
+  // The failure outranks the verdict. A failed call that also came back as a
+  // weak match is impossible, but the flag is the stronger fact either way.
+  ok("the failure outranks the verdict",
+     /lookup FAILED on this run/.test(M.writtenStatusRule({ lookupFailed: true, verdict: "weak-match" })));
+  // Every branch still has to say the thing the run log is for.
+  ok("and every branch still says the status is written",
+     [{}, { verdict: "weak-match" }, { lookupFailed: true }]
+       .every(a => /WRITTEN, not measured/.test(M.writtenStatusRule(a))));
+  // The founder note, which is the half that survives the run log.
+  ok("the founder is told the call did not run",
+     /lookup did not run on this draft/.test(M.lookupFailureNote("session expired")));
+  ok("and that it is not the same as having no listing",
+     /not the same as this festival having no listing/.test(M.lookupFailureNote("")));
+  ok("with the reason quoted back", /session expired/.test(M.lookupFailureNote("session expired")));
+  // The reason is an API's own message and usually ends in a full stop, which
+  // read as "Log out and back in.. That is not the same".
+  is("and no doubled full stop where the two sentences meet",
+     /\.\./.test(M.lookupFailureNote("Your Studio session has expired. Log out and back in.")), false);
+  ok("and it is wired where the failure is known",
+     /if \(ticketLookupFailed\) noteToFounder\(lookupFailureNote\(ticketLookupWhy\)\)/.test(appT));
+  ok("the flag is set when the API answers with an error",
+     /if \(td\?\.error\) \{\s*\n\s*ticketLookupFailed = true;/.test(appT));
+  ok("and when the call throws", /catch \(err\) \{\s*\n\s*ticketLookupFailed = true;/.test(appT));
 
   // ── 4. THE CAP THAT PICKED FOUR SOURCES BY THE ALPHABET ──────────
   //
@@ -51540,8 +52072,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── BUT NOT OVER THE TOP OF A LOUDER WARNING ───────────────────
   // On "unreadable" or an error the founder is told nothing was verified at
   // all. Turning that into a routine correction would replace the warning.
+  // The condition gained a second source on 13 Sep, when the untraced-price
+  // finding started coming through the same door, so it is asserted on the two
+  // guards that matter rather than on the whole line: an errored or unreadable
+  // check must still take the louder warning and never a routine correction.
   ok("except when the check did not answer",
-     /if \(!inventedCheck\.error && inventedRead\.verdict !== "unreadable" && absenceFindings\.length\)/.test(appN));
+     /if \(!inventedCheck\.error && inventedRead\.verdict !== "unreadable" &&/.test(appN));
   ok("and the log says which findings were ours rather than the checker's",
      /came from our own stated-absence gate rather than from the checker/.test(appN));
   // Only the first pass. Feeding the second one back would ask the correction

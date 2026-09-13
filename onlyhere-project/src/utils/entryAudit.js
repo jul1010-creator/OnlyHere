@@ -1437,6 +1437,64 @@ export const describePriceTrace = (r, { statedOn = undefined } = {}) => {
   return `NOT FROM THE OFFICIAL SITE: ${figures}. ${many ? "These figures do" : "This figure does"} not appear anywhere in the official site's own text, so ${many ? "they came" : "it came"} from a search result or a blog rather than from whoever charges it. Name the day, the ticket tier and whether it is still buyable, or move ${many ? "them" : "it"} to uncertainties.${listedNote}`;
 };
 
+// ── A PRICE ON NO PAGE ANYBODY READ IS NOT A PRICE ────────────
+//
+// Oliver, 13 Sep 2026, on the Midtfyns run: "A price of 1235 DKK appears in the
+// draft and on no page anybody read. The At a Glance extractor REFUSED it. The
+// price check flagged it. The correction pass ran. The identical check flagged
+// the identical figure again. Find out why nothing could remove it."
+//
+// Nothing could remove it because nothing was ever asked to. Every price rule
+// in this pipeline REPORTS. tracePrices writes a founder note into __notes,
+// which is deliberately founder-only and deliberately not published; the
+// publish gates are the coordinate, the venue subject, the tier, a row
+// contradicting its own dates and a missing date, and not one of them reads a
+// price. The only machinery that can take a sentence OUT of a draft is the
+// invented-claim correction, and the only findings that reach it are
+// Perplexity's and the stated-absence gate's.
+//
+// So the pipeline knew, said so three times, and the figure published.
+//
+// NARROW, BECAUSE A CORRECTION IS EXPENSIVE AND A FALSE ONE IS WORSE THAN THE
+// GAP. Oliver, 13 Aug 2026, on a trace reading "NOT FROM THE OFFICIAL SITE: 15
+// to 135 DKK": "it shouldn't consider that an error. It was perfectly correct,
+// because it was taken from the ticket agent." He is right, and that case is
+// excluded here by construction: this only fires when NO page this run read
+// states the figure, which is the answer priceSource already computes and which
+// the run log already prints as "no page that was read states this figure, so
+// there is no page to show a reader". A figure off a ticket agent is on a page
+// that was read.
+//
+// CONTRADICTED rather than UNVERIFIED, on the same reasoning the stated-absence
+// findings carry: this is not a claim a search failed to reach, it is a claim
+// the run itself opened the operator's own site and the ticket listings for and
+// found nowhere. And an UNVERIFIED survivor is reported softly, while a price
+// surviving its own removal is exactly the failure that must read as one.
+export const untracedPriceClaim = (r, { anyPageStates = true } = {}) => {
+  if (!r || !r.checked) return "";
+  const figures = (r.untraced || []);
+  if (!figures.length) return "";
+  // A page that was read states it. That is a provenance question, not an
+  // invention, and describePriceTrace already says which page to look at.
+  if (anyPageStates) return "";
+  const many = figures.length > 1;
+  const shown = figures.map(showPrice).join(", ");
+  // ── AND IT NAMES BOTH CAUSES, BECAUSE THERE ARE TWO ─────────
+  //
+  // My own first version of this sentence read "A price nobody published is a
+  // price the writer composed", which is one of two possible causes asserted as
+  // the only one. describePriceTrace has the same paragraph written down about
+  // its own first draft: "That is one of three possible causes asserted as the
+  // only one, which is exactly the overreach of the line it replaces." Reached
+  // for the same shortcut inside the fix for it, an hour later.
+  //
+  // The correction pass is handed FRESH RESEARCH for every flagged claim before
+  // it rewrites anything, so both causes get the right answer from one
+  // instruction: a real price the research finds is stated, and a figure the
+  // research cannot reach comes out.
+  return `The draft states ${shown}, and ${many ? "those figures are" : "that figure is"} on no page this run read: not on the operator's own site, not on the ticket listings, and not on any other page opened for this draft. Two things cause that. The price may be published somewhere nothing opened, in which case the fresh research below will state it and the entry keeps it. Or nobody ever stated it, in which case it is a figure the writer composed and a reader would book a trip around it. So: if the fresh research states ${many ? "these figures" : "this figure"}, keep ${many ? "them" : "it"}. If it does not, take ${many ? "them" : "it"} out of wherever ${many ? "they appear" : "it appears"} in the entry. Do not keep ${many ? "them" : "it"} with a caveat.`;
+};
+
 // ── "SEE WEBSITE" IS WEAK, AND FOR REFFEN IT IS WORSE THAN WEAK ─────
 //
 // Oliver, on a Reffen draft: `"price": "See website"` is weak. He is right, and

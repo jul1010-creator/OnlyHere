@@ -671,6 +671,74 @@ export const describeCorrection = (r) => {
   return lines.join(" ");
 };
 
+// ── AND THE BANNER MAY NOT SAY "FIXED" ON ITS OWN AUTHORITY ───────
+//
+// Oliver, 13 Sep 2026, on step 48 of the Midtfyns run. The landing check said
+// "THE CORRECTION DID NOT LAND. 1 flagged claim is still in the draft after the
+// rewrite", and ended with the sentence it exists for: "do not read the banner
+// above as a pass."
+//
+// It had to end with that sentence because the banner was written
+// UNCONDITIONALLY, four lines later, and read:
+//
+//   AUTO-CORRECTED. These claims were flagged as possibly invented,
+//   re-researched with fresh web search, and fixed in the draft below
+//   (anything still unverifiable was removed rather than guessed).
+//
+// Every clause of that is a claim about work the very next check had already
+// measured and found wanting, and the banner is the loud red thing at the top
+// of the panel while the landing check is one line in a list of founder notes.
+// So the pipeline knew the correction had failed and the largest thing on the
+// screen said it had worked.
+//
+// describeCorrection's own comment says what this function is for: "the point
+// of it is that the banner above it stops being able to say 'fixed' on its own
+// authority". This is the half that was never built.
+//
+// THREE OUTCOMES, NOT TWO. A contradicted claim surviving is a failure and
+// leads. An unverified one surviving is often the writer keeping something the
+// search could not reach, so it is reported without the word failed. Nothing
+// surviving is the case the old banner described, and it keeps its wording.
+export const correctionBanner = (landed, flaggedText) => {
+  const claims = String(flaggedText || "").trim();
+  // The list is the growing part, so the sentence in front of it has to be
+  // finished with or without it. An empty list used to leave a trailing colon
+  // over nothing, which reads as a message that was cut off.
+  const tail = claims ? `\n\nThe claims, as they were flagged:\n\n${claims}` : "";
+  const hard = (landed?.survivedContradicted || []).length;
+  const soft = (landed?.survivedUnverified || []).length;
+  // describeCorrection says which claims and why, in wording this must not
+  // repeat: the lead states the outcome, the description states the evidence.
+  if (hard) {
+    return "THE AUTO-CORRECTION DID NOT LAND, AND THIS DRAFT IS NOT FIXED. "
+      + `${describeCorrection(landed)}${tail}`;
+  }
+  if (soft) {
+    return "AUTO-CORRECTED, WITH SOMETHING LEFT IN. "
+      + `${describeCorrection(landed)}${tail}`;
+  }
+  return "AUTO-CORRECTED. These claims were flagged as possibly invented, re-researched with fresh web search, and removed or replaced in the draft below "
+    + `(anything still unverifiable was removed rather than guessed). The landing check then read the draft that replaced it and found none of them left. Review before publishing.${tail}`;
+};
+
+// ── AND IT GOES ON THE DRAFT, NOT ONLY ON THE SCREEN ────────────
+//
+// The banner is React state. It is gone the moment the panel re-renders from a
+// queued draft, and publishDraft never sees it. A surviving contradicted claim
+// is the one thing in this stage that should be in front of somebody at the
+// moment they press Publish, so it goes into `uncertainties` behind the
+// FIX BEFORE PUBLISHING prefix, which PUBLISHER_NOTE already strips at publish
+// so no traveller can ever meet it. Same channel the cancelled-event finding
+// uses, and for the same reason.
+export const correctionPublisherNote = (landed) => {
+  const hard = (landed?.survivedContradicted || []).length;
+  if (!hard) return "";
+  const quotes = (landed.survivedContradicted || [])
+    .flatMap(r => (r.survived || []).map(a => `"${String(a).slice(0, 60)}"`))
+    .slice(0, MAX_LISTED_CLAIMS);
+  return `FIX BEFORE PUBLISHING: the auto-correction was asked to remove ${hard} claim${hard === 1 ? "" : "s"} a page contradicted, and ${hard === 1 ? "it is" : "they are"} still in the draft${quotes.length ? `, on the draft's own words: ${quotes.join(", ")}` : ""}. Fix by hand or redraft. The banner saying the draft was auto-corrected is about the attempt, not about the result.`;
+};
+
 // ── THE CHECKER COULD NOT SEE THE RESEARCH IT WAS CHECKING ──────────
 //
 // The invented-claim check was handed rawResearch.slice(0, 3000). rawResearch

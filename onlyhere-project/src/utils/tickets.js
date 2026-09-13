@@ -200,15 +200,244 @@ export const stampTicketSource = (payload, rec) => ({
   },
 });
 
+// ── AND A MEASUREMENT HAS A DATE ON IT FOR A REASON ─────────────────
+//
+// Fable, 13 Sep 2026, auditing how events update. The answer to "what
+// re-checks a published event's ticket status" is: the founder pressing "Run
+// check" in Studio, which asks Perplexity and only flags what it finds, and
+// the sold-out sweep, which only looks at rows already claiming sold out.
+// NOTHING ANYWHERE RE-RUNS THE TICKETING API ON A PUBLISHED ROW. So `__ticket`
+// is stamped once, at draft time, and its date never moves again.
+//
+// That turns the tick on the badge into the thing this file was written
+// against. The comment on stampTicketSource already says it: "a ticket status
+// with no date is a claim that quietly ages into a lie". The date is stored and
+// nothing has ever read it, so a status measured before a festival's sale
+// opened still renders as a checked fact a year later.
+//
+// 120 DAYS IS A JUDGEMENT AND IT IS SAID OUT LOUD RATHER THAN HIDDEN IN A
+// CONSTANT. A ticket status is a claim about availability, and availability
+// moves over a selling season. Four months is longer than a season, so
+// anything older than this was measured before the question a reader is asking
+// could even be answered. Nothing in the library is that old today, which is
+// the point: this starts refusing rows as they age rather than changing what
+// is on the site this afternoon.
+export const TICKET_STATUS_FRESH_DAYS = 120;
+
+export const ticketCheckAgeDays = (payload, today = new Date()) => {
+  const then = asDay(String(payload?.__ticket?.at || ""));
+  if (then == null) return null;
+  const d = today instanceof Date && !Number.isNaN(today.getTime()) ? today : new Date();
+  const now = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return Math.round((now - then) / DAY);
+};
+
+// ── THE ONE READER FOR "MAY THIS BE SAID TO A TRAVELLER AS FACT" ────
+//
+// Everything that words a ticket status for a person goes through here, so the
+// badge, the chat prompt and the guide's booking list cannot disagree about
+// whether a status was measured. This codebase's signature bug is one question
+// with several readers, and this question had three: the card checked
+// `isMeasured`, and the other two checked nothing at all.
+//
+// A check with no date cannot be aged, and every stamp since 13 August carries
+// one, so an undated stamp is an old row rather than a fresh measurement.
+export const statedAsFact = (payload, today = new Date()) => {
+  if (!isMeasured(payload?.__ticket?.source)) return false;
+  const age = ticketCheckAgeDays(payload, today);
+  if (age == null) return false;
+  return age <= TICKET_STATUS_FRESH_DAYS;
+};
+
 // One line a reader can act on, or "" when there is nothing honest to say.
-export const ticketProvenance = (payload) => {
+export const ticketProvenance = (payload, today = new Date()) => {
   const t = payload?.__ticket;
   if (!t?.source || t.source === "none") return "";
   const when = t.at ? String(t.at).slice(0, 10) : "";
   if (isMeasured(t.source)) {
-    return `Ticket status checked against ${TICKET_SOURCE_LABEL[t.source]}${when ? ` on ${when}` : ""}.`;
+    const age = ticketCheckAgeDays(payload, today);
+    const stale = age == null || age > TICKET_STATUS_FRESH_DAYS;
+    return `Ticket status checked against ${TICKET_SOURCE_LABEL[t.source]}${when ? ` on ${when}` : ""}.`
+      + (stale ? " Nothing has re-checked it since, so confirm on the official site before you count on it." : "");
   }
   return "Ticket status has not been checked against a ticket seller. Confirm on the official site before you count on it.";
+};
+
+// ── THE SENTENCE A TRAVELLER MEETS, WORDED FROM THE PROVENANCE ──────
+//
+// Oliver, 13 Sep 2026, holding the Midtfyns run log: "a reader is shown
+// 'tickets limited, book before travelling' off the back of a guess."
+//
+// He is, and the log proves the pipeline knew. Step 23 failed with an expired
+// Studio session, ticketStatus stayed the writer's "limited", the row was
+// stamped `source: "writer"`, and both of the places that turn a status into a
+// sentence read the bare field:
+//
+//   the chat prompt        " [tickets limited, book before travelling]"
+//   the guide booking list "Tickets are limited. Book before you fly."
+//
+// Neither looked at `__ticket`. A status nobody checked was handed to the model
+// as a fact and printed to a reader as an instruction, in the identical words a
+// measured one gets. The card badge has told the two apart with a tick since 13
+// August; these two never learned.
+//
+// Both wordings live here rather than at their call sites, for the reason the
+// badge table moved here: two places saying the same thing in their own words
+// is how one of them quietly stops saying it.
+const seller = (payload) => TICKET_SOURCE_LABEL[String(payload?.__ticket?.source || "")] || "a ticket seller";
+
+// For the chat and guide prompt. Same shape as before, leading space and
+// brackets, so the lists it goes into read the same.
+export const ticketPromptNote = (e, today = new Date()) => {
+  const st = normaliseTicketStatus(e?.ticketStatus);
+  const sure = statedAsFact(e, today);
+  const who = seller(e);
+  if (st === "cancelled") {
+    return sure
+      ? ` [CANCELLED on ${who}'s own listing, do not plan around it]`
+      : " [this entry says CANCELLED and no ticket seller was asked, so tell the reader to confirm it with the organiser and do not build a day around it]";
+  }
+  if (st === "sold_out") {
+    return sure
+      ? ` [SOLD OUT on ${who}'s own listing]`
+      : " [this entry says sold out and nobody checked that with a ticket seller, so say it needs checking and never state it as sold out]";
+  }
+  if (st === "off_sale") {
+    return sure
+      ? ` [NOT ON SALE RIGHT NOW on ${who}, which is not the same as sold out: it can also mean sales have not opened or have closed. Say it needs checking, never say sold out]`
+      : " [this entry says not on sale right now and nobody checked that with a ticket seller. Say it needs checking, never say sold out]";
+  }
+  if (st === "limited") {
+    return sure
+      ? ` [tickets limited on ${who}'s own listing, book before travelling]`
+      : " [this entry says tickets are limited and nobody checked that with a ticket seller, so do not tell the reader to book before travelling on the strength of it]";
+  }
+  return String(e?.ticketInfo || "").trim() ? ` [tickets: ${e.ticketInfo}]` : "";
+};
+
+// For the guide's "what do I have to book" list, which is prose a traveller
+// reads rather than an instruction to a model.
+export const ticketBookingWhy = (e, today = new Date()) => {
+  const st = normaliseTicketStatus(e?.ticketStatus);
+  const sure = statedAsFact(e, today);
+  const who = seller(e);
+  if (st === "cancelled") {
+    return sure
+      ? `${who} lists this as cancelled, so check the official site before building a day around it.`
+      : "This entry says cancelled and no ticket seller was asked, so confirm it with the organiser before building a day around it.";
+  }
+  if (st === "sold_out") {
+    return sure
+      ? `Sold out on ${who}, so this one is worth checking for returns rather than counting on.`
+      : "This entry says sold out and nobody checked that with a ticket seller, so check the official site rather than dropping it.";
+  }
+  if (st === "off_sale") {
+    return sure
+      ? `${who} has tickets off sale at the moment, which can mean sold out, not open yet, or closed. Check the official site before you count on it.`
+      : "This entry says tickets are off sale, which can mean sold out, not open yet, or closed, and nobody checked it with a ticket seller. Check the official site before you count on it.";
+  }
+  if (st === "limited") {
+    return sure
+      ? "Tickets are limited. Book before you fly."
+      : "This entry says tickets are limited and nobody checked that with a ticket seller, so check the official site before you count on getting one.";
+  }
+  if (st === "free") return "Free to get in, so nothing to book, but the date is fixed.";
+  return "Dated event, so book before you travel rather than at the gate.";
+};
+
+// ── AND WHY A STATUS IS THE WRITER'S, WHICH IS NOT ALWAYS THE SAME ──
+//
+// Oliver, 13 Sep 2026, on step 23 of the Midtfyns run: the Ticketmaster call
+// FAILED with "Your Studio session has expired. Log out and back in." and the
+// decision log underneath it read:
+//
+//   rule: Ticketmaster returned nothing under this name, so the status is
+//         WRITTEN, not measured. Most Danish festivals sell through their own
+//         site.
+//
+// Ticketmaster returned nothing because nobody asked it. The candidate list is
+// empty in both cases, matchEvent cannot tell them apart, and the log then
+// states as a finding about this festival something that is a fact about a
+// login. The two need opposite answers: a real miss is expected and there is
+// nothing to do about it, while a failed call is one re-run away from a
+// measured status.
+//
+// The sentence lives here rather than at the call site so it can be asserted.
+// App.jsx cannot be rendered by the suite, and a rule that lives only in a
+// component is a rule nothing can hold to its word.
+export const NOT_CHECKED = "not-checked";
+
+export const writtenStatusRule = ({ lookupFailed = false, verdict = "" } = {}) => {
+  if (lookupFailed) {
+    return "The Ticketmaster lookup FAILED on this run, so nothing was checked and no listing was ruled out. The status is WRITTEN, not measured, and re-running the draft once the call works may measure it.";
+  }
+  if (verdict === "weak-match") {
+    return "Ticketmaster HAS listings under this name and none could be confirmed as this edition, so the status is WRITTEN, not measured. The listing is named below, open it before publishing.";
+  }
+  return "Ticketmaster returned nothing under this name, so the status is WRITTEN, not measured. Most Danish festivals sell through their own site.";
+};
+
+// The founder note for the same thing. Empty when the lookup worked, because a
+// miss is the ordinary outcome and is already said in the run log.
+export const lookupFailureNote = (why) => {
+  // The reason is a message from an API and usually ends in a full stop of its
+  // own, which read as "log out and back in.. That is not the same".
+  const w = String(why || "").trim().slice(0, 160).replace(/[.:;,\s]+$/, "");
+  return `The Ticketmaster lookup did not run on this draft${w ? `: ${w}` : ""}. That is not the same as this festival having no listing. The ticket status on this row is the writer's own and nothing checked it, so either fix the call and redraft, or set the status by hand from the operator's own ticket page.`;
+};
+
+// ── AND THE SHORT LABEL IN A LIST, WHICH HAS NO ROOM FOR A TICK ──
+//
+// The third reader of "is this checked", found in the same audit. DetailPage's
+// "What's on in this town" list renders ticketBadge(e.ticketStatus).label on
+// its own, in red, with no tick, no opacity and no hover line: a row reading
+// "Sold out" off a status nobody ever put to a ticket seller. This file's own
+// opening paragraph is about that direction, because "a wrong sold-out talks
+// somebody out of a trip that would have worked".
+//
+// A tick is not enough here. On the event card the tick sits in a row of chips
+// where its absence is legible; in a one-line list it is a mark nobody reads as
+// a warning. So the words carry it.
+export const ticketLabelLine = (payload, today = new Date()) => {
+  const b = ticketBadge(payload?.ticketStatus);
+  if (!b.label) return { label: "", tone: "", checked: false };
+  const checked = statedAsFact(payload, today);
+  return { label: checked ? b.label : `${b.label}, not checked`, tone: b.tone, checked };
+};
+
+// ── AND A LATER PASS MAY NOT INHERIT THE TICK ──────────────
+//
+// Fable, 13 Sep 2026. The "Sold out, read again" sweep names ticketStatus in
+// its own `fields` list, which is deliberate and is the whole point of it: a
+// wrong sold-out talks somebody out of a trip and the sweep exists to correct
+// one. What it also does is write a MODEL'S READING OF A WEB PAGE over a field
+// that may have been measured, and leave __ticket exactly as it found it.
+//
+// So a row stamped `source: "ticketmaster"` can come out of a sweep holding a
+// status Ticketmaster never said, still wearing the tick, still hovering
+// "Ticket status checked against Ticketmaster on 13 August". The stamp is a
+// record of where the VALUE came from, and the moment something else writes the
+// value the stamp is about a number that is no longer there.
+//
+// It is not thrown away. The listing URL stays, because the listing is still a
+// real page for this event and the Tickets button falls back to it, and the
+// verdict says what happened and when it was last measured, so an audit can
+// still see that somebody once checked it.
+export const restampAfterRewrite = (payload, { at = new Date(), by = "" } = {}) => {
+  const t = payload?.__ticket;
+  if (!isMeasured(t?.source)) return payload;
+  const when = String(t.at || "").slice(0, 10);
+  const iso = at instanceof Date && !Number.isNaN(at.getTime()) ? at.toISOString() : new Date().toISOString();
+  return {
+    ...payload,
+    __ticket: {
+      source: "writer",
+      at: iso,
+      verdict: `overwritten by ${by || "a later pass"}, so this status is no longer the one that was measured`
+        + `${when ? `. The last measured status came from ${TICKET_SOURCE_LABEL[t.source]} on ${when}` : ""}`,
+      url: String(t.url || ""),
+    },
+  };
 };
 
 // ── READING TICKETMASTER'S OWN FIELDS ───────────────────────────────

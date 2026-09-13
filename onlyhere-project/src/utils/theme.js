@@ -1,3 +1,4 @@
+import { RAIL_BREAKPOINT_PX } from "./chatRail";
 // ── THREE THEMES, ONE MUTABLE PALETTE ────────────────────────────────
 // Oliver, 7 Aug 2026, after seeing the warm proposal next to the current dark:
 // "Keep both. Give people an option to either have Light, Dark, or that warm
@@ -224,6 +225,34 @@ const FIELD_CSS = `
     border-color: var(--gx-field-ring) !important;
     outline: 2px solid var(--gx-field-ring) !important;
     outline-offset: 1px;
+  }
+  /* ── AND A PHONE MAY NOT ZOOM WHEN SOMEBODY STARTS TYPING ────
+     Oliver, 13 Sep 2026: "it's annoying that when you start writing, it zooms so
+     far into the chat bar that you have to zoom out to click the send button."
+
+     Safari on iOS zooms the page whenever a field takes focus and its computed
+     font size is under 16px, and it does not zoom back out afterwards. The chat
+     composer is 13px, so tapping it magnified the page and put the send button
+     off the right edge: you type a sentence and then have to pinch out to send
+     it.
+
+     SIXTEEN IS THE THRESHOLD, not a preference. Anything at or above it is left
+     alone and anything under it is raised to exactly it, which is also the right
+     size for a field somebody is typing into with a thumb. The alternative fix
+     is maximum-scale on the viewport, which stops a person zooming the page at
+     all; a reader who needs to magnify text is not a reader this app is willing
+     to break.
+
+     Keyed on the same element test as the rule above, minus the .gx-plain
+     escape: that class is about who draws the border, and this is about a
+     browser gesture that does not care. */
+  @media (max-width: ${RAIL_BREAKPOINT_PX}px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]),
+    textarea,
+    select,
+    .gx-field {
+      font-size: 16px !important;
+    }
   }
 `;
 

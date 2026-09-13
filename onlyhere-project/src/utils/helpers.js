@@ -254,7 +254,52 @@ export const hasConfirmedDate = (e) => {
   const parsed = new Date(d);
   return !isNaN(parsed);
 };
-export const isConfirmedUpcoming = (e) => hasConfirmedDate(e) && isUpcoming(e?.date ?? e);
+export const isConfirmedUpcoming = (e, today = new Date()) => hasConfirmedDate(e) && isUpcoming(e?.date ?? e, today);
+
+// ── AND "UPCOMING" LOSES THE ONE THAT IS ON TODAY ─────────────
+//
+// isUpcoming only ever looks at the START, so a festival that opened yesterday
+// and runs all week is not upcoming and has not finished. This codebase has
+// found that twice and fixed it twice, in its own words both times:
+//
+//   the LIVE / COMING strip   "isConfirmedUpcoming(e) || isCurrentlyLive(...)"
+//   the events grid           "isCurrentlyLive OR isUpcoming, not isUpcoming
+//                              alone. isUpcoming only ever..."
+//   Update current events     "an event that is running RIGHT NOW is the one
+//                              whose ticket status is most worth refreshing,
+//                              and isUpcoming alone excluded exactly those"
+//
+// Three readers of one question, each taught separately. The fourth was the
+// CHAT PROMPT, and it was never taught: a traveller standing in Denmark on the
+// opening weekend of a festival asked Gemlyx what was on and the festival was
+// not in the list it was reading from. One function now, so a fifth reader
+// cannot be added without meeting it.
+export const isOnOrUpcoming = (e, today = new Date()) =>
+  isConfirmedUpcoming(e, today) || isCurrentlyLive(e?.date ?? e, e?.dateEnd, today);
+
+// ── AND EIGHT OF THEM PICKED BY DATABASE ROW ORDER ───────────
+//
+// Fable, 13 Sep 2026, auditing how events reach a traveller. The chat prompt
+// takes `.slice(0, 8)` of each event list, and those lists are filled by
+// liveContent in the order the rows come back from Supabase, which is row id
+// and has nothing to do with when anything happens. So which eight events the
+// model is allowed to plan around was decided by the order they were drafted
+// in, and a festival running during somebody's trip could be cut in favour of
+// one eleven months out.
+//
+// A LIVE ONE FIRST, because it is the only kind that cannot be planned for
+// later. Then soonest. Then by name, so the list is stable between renders
+// rather than reshuffling on every reply.
+export const soonestFirst = (rows, today = new Date()) => {
+  const now = dayStart(today) || new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const key = (e) => {
+    if (isCurrentlyLive(e?.date ?? e, e?.dateEnd, today)) return -1;
+    const s = dayStart(e?.date ?? e);
+    return s ? Math.round((s.getTime() - now.getTime()) / 86400000) : Number.MAX_SAFE_INTEGER;
+  };
+  return [...(Array.isArray(rows) ? rows : [])].sort((a, b) =>
+    key(a) - key(b) || String(a?.name || "").localeCompare(String(b?.name || "")));
+};
 
 // ── AND A FESTIVAL IS ON, ON ITS LAST DAY ───────────────────────────
 //

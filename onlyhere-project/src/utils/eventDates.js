@@ -277,6 +277,36 @@ export const DATE_PROPOSITION_WHY = {
   "inside-the-dates-already-on-file": "the suggested date is one of the days this event already runs on, so it is the same edition rather than a new date",
 };
 
+// ── AND ONE OF THOSE SENTENCES IS ONLY TRUE ON ONE PATH ───────
+//
+// Fable, 13 Sep 2026, auditing how events update. `labelled` is the parameter
+// that separates a festival announcing a genuine move from a number scraped out
+// of a programme grid, and exactly ONE of the two callers can answer it.
+//
+//   the site-read tier   passes `labelled: read.labelled`, computed by
+//                        anchoredEdition off the page's own characters
+//   the web-search tier  passes nothing, so `labelled` defaults to false
+//
+// The second one cannot answer it and should not try: it holds a model's JSON
+// reply, not a page, and a model saying "yes, the site labels it" is a request
+// with a failure rate, which is what the Smukfest rule exists to survive. The
+// REFUSAL is therefore right on both paths and stays exactly as it is.
+//
+// What is wrong is the sentence. On the search path it told the founder "the
+// page never says it is the event's own date" about a page nothing opened,
+// which is the same shape as a failed Ticketmaster call reported as "no
+// listing": a fact about our own reach, stated as a fact about the source.
+//
+// So the reason is a function of who is asking. Every other key is unchanged
+// and still comes out of the table above.
+export const datePropositionWhy = (problem, { labelChecked = true } = {}) => {
+  const key = String(problem || "");
+  if (key === "a-different-month-from-the-one-on-file" && !labelChecked) {
+    return "the suggested date is in a different month from the one on file, and it came from a web search rather than from a page this run read, so nothing could check whether its source calls this the event's own dates. An annual festival keeps its slot in the year. If it has moved for real, the operator's own page will say so, and reading that page is what settles it";
+  }
+  return DATE_PROPOSITION_WHY[key] || key;
+};
+
 // ── AND A REFUSED DATE CAN CONDEMN THE REST OF THE ANSWER ───────────
 //
 // The date is not the only thing one of these replies carries. It also carries

@@ -60,7 +60,7 @@
 import { enforceScope } from "./correction";
 import { PLACE_KINDS } from "./placeKind";
 import { PLACE_THEMES, cleanThemes, MAX_THEMES } from "./placeThemes";
-import { soldOutClaim, soldOutContradiction } from "./tickets";
+import { soldOutClaim, soldOutContradiction, restampAfterRewrite } from "./tickets";
 import { citationUrls } from "./aiClient";
 
 const clean = (v) => String(v == null ? "" : v).trim();
@@ -560,9 +560,22 @@ export const applySweepPatch = (payload, rawPatch, sweep, meta = {}) => {
   const changed = sweep.fields.filter(f => JSON.stringify(base[f]) !== JSON.stringify(patched[f]));
   if (!changed.length) return { patched: base, changed: [], reverted };
 
+  // ── AND THE PROVENANCE GOES WITH THE VALUE ──────────────
+  //
+  // ticketStatus is the one field in this registry that the pipeline can also
+  // MEASURE, against a ticket seller's own listing, and __ticket is the record
+  // of that. A sweep writes a model's reading of a web page over it and left
+  // the record untouched, so a row could come out of here holding a status
+  // Ticketmaster never said while the card still drew the tick that means
+  // Ticketmaster said it. The stamp is about the value, so it follows the
+  // value. See restampAfterRewrite in utils/tickets.js.
+  const finished = changed.includes("ticketStatus")
+    ? restampAfterRewrite(patched, { at: meta.at ? new Date(meta.at) : new Date(), by: `the ${sweep.id} sweep` })
+    : patched;
+
   // Same shape correctEntry writes (correction.js), so one trail records every
   // way a published row has ever been changed rather than two half-trails.
-  patched.__corrections = [
+  finished.__corrections = [
     ...(Array.isArray(base.__corrections) ? base.__corrections : []),
     ...changed.map(f => ({
       at: meta.at || "",
@@ -571,7 +584,7 @@ export const applySweepPatch = (payload, rawPatch, sweep, meta = {}) => {
       source: meta.source || `sweep: ${sweep.id}`,
     })),
   ];
-  return { patched, changed, reverted };
+  return { patched: finished, changed, reverted };
 };
 
 // ── snapshots, which gate everything else ───────────────────────────

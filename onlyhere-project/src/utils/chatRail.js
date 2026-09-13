@@ -110,6 +110,36 @@ export const railCss = () => `
         .${INLINE_CARDS_CLASS} { flex-wrap: nowrap; }
         .${INLINE_CARDS_CLASS}::-webkit-scrollbar { height: 0; }
         .${RAIL_CLASS} { display: none; }
+        /* ── AND THE PHONE GETS THE MAP TOO, UNDER THE CONVERSATION ──
+           Oliver, 13 Sep 2026: "the phone still doesn't have the map
+           implemented."
+
+           It was hidden below the breakpoint from the day the rail was built,
+           for a reason written here at the time: there is no side column on a
+           phone, and a map stacked into the panel pushes the reply off the top.
+           The second half of that is right and the conclusion was too strong.
+           Under the conversation rather than over it, the reply keeps the top of
+           the screen and the map is where a thumb already is.
+
+           IT ONLY APPEARS WHEN IT HAS SOMETHING TO SAY. The has-map class is set by
+           App.jsx at two pins, which is the number this file has argued for
+           since the rail was written: "a map with one pin says almost nothing,
+           because the thing a map is for is showing places in relation to each
+           other." On a phone that argument is worth more, because the space it
+           takes is a larger share of what there is.
+
+           A HEIGHT, not flex. Above the breakpoint the map is elastic and takes
+           what the rail has; in a column there is nothing to take, so it says
+           how tall it is. 190 is about a fifth of a phone screen, enough for two
+           pins and their labels and small enough that the reply above it is
+           still the page. */
+        @media (max-width: ${RAIL_BREAKPOINT_PX - 1}px) {
+          .chat-with-rail { flex-direction: column; }
+          .${RAIL_CLASS}.has-map {
+            display: flex; flex-direction: column; min-height: 0;
+            height: 190px; margin-bottom: 12px;
+          }
+        }
         @media (min-width: ${RAIL_BREAKPOINT_PX}px) {
           /* ── THE RAIL IS THE MAP NOW, SO IT GETS THE ROOM ────────
              It was clamped at 300px wide because a 132px popup card had to
@@ -312,6 +342,13 @@ export const LABEL_CLASS = "gemlyx-pin-label";
 // route map too, from a file neither of them imports.
 export const railMapCss = (C = {}) => `
         .${MAP_CLASS} { display: none; }
+        /* On a phone the rail is a row of its own with a stated height, so the
+           map fills it the same way it fills the rail on a desktop. */
+        @media (max-width: ${RAIL_BREAKPOINT_PX - 1}px) {
+          .${RAIL_CLASS}.has-map .${MAP_CLASS} {
+            display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0;
+          }
+        }
         @media (min-width: ${RAIL_BREAKPOINT_PX}px) {
           /* ── ELASTIC, WITH A FLOOR ───────────────────────────────
              flex rather than a height, so the map takes what the rail has

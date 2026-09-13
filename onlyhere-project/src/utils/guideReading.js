@@ -1,5 +1,5 @@
 import { isFerryText, getEventDate } from "./helpers";
-import { normaliseTicketStatus } from "./tickets";
+import { ticketBookingWhy } from "./tickets";
 import { dayStart, dayPlus, dayWithin } from "./calendarDay";
 import { fold, PLACE_NAMES } from "./danishNames";
 import { entryPrice } from "./entryPrice";
@@ -342,15 +342,22 @@ export const bookingActions = (guide, lookupRealPlace) => {
         // purpose: Ticketmaster's "offsale" is not a sold-out confirmation, and
         // telling a reader it is talks them out of a trip that would have
         // worked. See utils/tickets.js.
-        const st = normaliseTicketStatus(real.ticketStatus);
+        // ── AND WHETHER ANYBODY CHECKED IT ──────────────────────────
+        // This read the status field and nothing else, so "Tickets are limited.
+        // Book before you fly." was printed in the same words whether a ticket
+        // seller's own listing said it or a writer had a feeling. The card
+        // badge has told those apart with a tick since 13 August and this list,
+        // which is the part of the guide a reader ACTS on, could not. The
+        // wording moved into utils/tickets.js so there is one reader of
+        // "may this be said as fact". See ticketBookingWhy.
+        //
+        // It also said "Sold out on the official site" about a status no
+        // official site was ever asked for. reconcileTickets cannot produce
+        // sold_out at all, because Ticketmaster has no sold-out code, so every
+        // sold_out on every row is the writer's.
         out.push({
           what: s.name,
-          why: st === "cancelled" ? "Listed as cancelled, so check the official site before building a day around it."
-            : st === "sold_out" ? "Sold out on the official site, so this one is worth checking for returns rather than counting on."
-            : st === "off_sale" ? "Tickets are not on sale at the moment, which can mean sold out, not open yet, or closed. Check the official site before you count on it."
-            : st === "limited" ? "Tickets are limited. Book before you fly."
-            : st === "free" ? "Free to get in, so nothing to book, but the date is fixed."
-            : "Dated event, so book before you travel rather than at the gate.",
+          why: ticketBookingWhy(real),
         });
       }
     });

@@ -45,9 +45,9 @@ import { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, NUDGE_KEY
 import { sweepAll, sweepRow, deepCheckPlan, checkAge } from "./utils/factSweep";
 import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filterRows, stampLabel, rowStampIsEdit, hasSources, SORTS } from "./utils/manageGroups";
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
-import { matchEvent, reconcileTickets, ticketsForPrompt, appearances, otherDatesHere, alsoPlayingLine, describeAppearances, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured, TICKET_HUNT_PROMPT, ticketHuntUrls } from "./utils/tickets";
-import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT, correctionLanded, describeCorrection } from "./utils/factCheckRead";
-import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, launderedAbsence, priceSource, priceMisses, findTicketPrice, whoSaid, ticketPriceOn, pricesAdmission, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit, LIVING_TYPES, VENUE_KINDS, UNCONFIRMED_IDENTITY, UNVERIFIED_PROSE } from "./utils/entryAudit";
+import { matchEvent, reconcileTickets, ticketsForPrompt, appearances, otherDatesHere, alsoPlayingLine, describeAppearances, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, statedAsFact, ticketPromptNote, writtenStatusRule, lookupFailureNote, TICKET_HUNT_PROMPT, ticketHuntUrls } from "./utils/tickets";
+import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT, correctionLanded, describeCorrection, correctionBanner, correctionPublisherNote } from "./utils/factCheckRead";
+import { tracePrices, describePriceTrace, untracedPriceClaim, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, launderedAbsence, priceSource, priceMisses, findTicketPrice, whoSaid, ticketPriceOn, pricesAdmission, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit, LIVING_TYPES, VENUE_KINDS, UNCONFIRMED_IDENTITY, UNVERIFIED_PROSE } from "./utils/entryAudit";
 import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM, upgradeWorthIt, onFootMinutes } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises, MAX_BARS_A_NIGHT, MAX_CLUBS_A_NIGHT } from "./utils/planGate";
 import { isPremium } from "./utils/premium";
@@ -93,7 +93,7 @@ import { cities, allProducts, campingSpots, PRODUCT_COORDS } from "./data/shop";
 
 import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION, PAID_PLANS_LIVE } from "./config";
 import {
-  getSeason, getEventDate, isUpcoming, isCurrentlyLive, hasFinished, externalHref, weatherIcon,
+  getSeason, getEventDate, isUpcoming, isCurrentlyLive, isOnOrUpcoming, soonestFirst, hasFinished, externalHref, weatherIcon,
   isInDenmark, travelLabel, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, readerView, seededShuffle, daysUntil, detectLegMode, haversineKm, scanForAITells, priceBand, PRICE_BANDS,
   getEnclosingJSONStringBounds, nextWeekdayTimestamp,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
@@ -231,7 +231,7 @@ import { dateClaimProblems } from "./utils/dateClaims";
 import { proposals as waitingProposals, describeProposals, writeFor, MOVE as WAIT_MOVE } from "./utils/undatedSweep";
 import { avatarUrl } from "./utils/accountAvatar";
 import { WAITING_TYPE, waitingReason, waitingPayload, waitingLine, waitingDays, waitingOrder, promoted, isWaiting } from "./utils/undatedEvents";
-import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition, venueRatherThanEvent, statusRefusalFor, STATUS_REFUSAL_WHY } from "./utils/eventDates";
+import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, datePropositionWhy, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition, venueRatherThanEvent, statusRefusalFor, STATUS_REFUSAL_WHY } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
 import { newStreamState, readStreamEvent, visibleText, streamContent, streamContentForApi, streamDiagnosis, streamTrace, ranOutThinking } from "./utils/streamRead";
 import { heroNeedsReplacing, heroPatch, heroStatusLine, isAbsolutePhoto } from "./utils/heroPhoto";
@@ -4570,6 +4570,18 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
       // Perplexity's findings, zero for this one. Held here so it can be given
       // the same five.
       let absenceFindings = [];
+      // ── AND THE PRICES NOBODY PUBLISHED ──────────────────────────
+      //
+      // Oliver, 13 Sep 2026: a price of 1235 DKK in the Midtfyns draft, on no
+      // page anybody read, refused by the At a Glance extractor and flagged by
+      // the price check twice, before and after the correction, and published
+      // anyway. Every price rule here REPORTS. The only thing that can take a
+      // sentence out of a draft is the invented-claim correction, and the only
+      // findings that reached it were Perplexity's and the stated-absence
+      // gate's. So this joins them, on the same terms and through the same
+      // door, and the landing check then says whether it came out.
+      // See untracedPriceClaim in utils/entryAudit.js for how narrow it is.
+      let untracedPriceFindings = [];
       let journeyMeasuredTo = null;
       // ── AND NOT EVERY TYPE IS ASKED THE QUESTION ─────────────────
       //
@@ -5895,11 +5907,29 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
       // the time in the direction that costs somebody a trip.
       let ticketCandidates = [];
       let ticketText = "";
+      // ── WHETHER THE CALL RAN AT ALL ───────────────────────────────
+      //
+      // Oliver, 13 Sep 2026, on the Midtfyns run: step 23 FAILED with "Your
+      // Studio session has expired. Log out and back in.", and the decision
+      // line 25 steps later said "Ticketmaster returned nothing under this
+      // name". It returned nothing because nobody asked it.
+      //
+      // The candidate list is empty either way, so matchEvent cannot tell the
+      // two apart and has no business trying: it is handed a list. This flag is
+      // the only place that knows, and until now it stayed inside one note()
+      // call and reached nothing. The two cases want opposite answers, since a
+      // real miss is expected on a Danish festival and there is nothing to do
+      // about it, while a failed call is one re-run away from a measured
+      // status. See writtenStatusRule in utils/tickets.js.
+      let ticketLookupFailed = false;
+      let ticketLookupWhy = "";
       if (sType === "festival") {
         try {
           const tr = await studioFetch(`/api/tickets?name=${encodeURIComponent(name)}`);
           const td = await tr.json();
           if (td?.error) {
+            ticketLookupFailed = true;
+            ticketLookupWhy = `${td.error}: ${td.detail || ""}`;
             note("Ticket status from Ticketmaster", {
               provider: "ticketmaster", detail: `listings for "${name}" in Denmark`,
               outcome: "failed", used: false, got: "",
@@ -5964,6 +5994,8 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
             }
           }
         } catch (err) {
+          ticketLookupFailed = true;
+          ticketLookupWhy = String(err);
           note("Ticket status from Ticketmaster", {
             provider: "ticketmaster", detail: `listings for "${name}" in Denmark`,
             outcome: "failed", used: false, why: String(err),
@@ -6993,6 +7025,32 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           const traced = priceSource(readerText(t), pagesByUrl, rankedSources.map(r => r.host));
           const line = describePriceTrace(pt, { statedOn: traced ? domainOf(traced.url) : null });
           noteToFounder(line);
+          // FIRST PASS ONLY, exactly as the stated-absence gate does it: the
+          // second run of this gate exists to say whether the fix landed, and
+          // feeding it back in would ask the correction to fix what the
+          // correction just produced.
+          // AND ONLY FOR THE TYPES WITH A DOOR, which is the same list the
+          // price hunt and priceMisses already use, for the reason written
+          // beside them: "a food hall has no door". A restaurant's dish prices
+          // live on a PDF menu or a photograph of a board as often as not, so
+          // "no page we read states it" is the ordinary case there rather than
+          // the alarming one, and buying a rewrite of a correct menu paragraph
+          // is worse than the gap. A festival, an attraction and a bookable
+          // thing all have one price for one door, and this run opened the
+          // operator's own ticket page looking for it.
+          if (!again && hasADoor) {
+            const claim = untracedPriceClaim(pt, { anyPageStates: !!traced });
+            untracedPriceFindings = claim ? [claim] : [];
+            if (claim) {
+              note("A price with no page behind it", {
+                provider: "fetch",
+                detail: "every figure in the draft, against every page this run opened",
+                outcome: "found", used: false,
+                got: claim,
+                why: "This is fed to the correction as a contradicted claim, so the rewrite is asked to remove it and the landing check is asked whether it did. Until today the price checks could only report, and a figure nobody published survived its own refusal and two flags.",
+              });
+            }
+          }
         }
         // ── AND WHICH KIND OF "NO PRICE" THIS IS ────────────────
         // Oliver: `"price": "See website"` is weak. For Reffen it is worse than
@@ -7624,14 +7682,23 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           // Same miss as the price button: the report was corrected and the
           // second place that says the same thing was not.
           const noneAtAll = rec.verdict === "no-match";
+          // ── AND A FAILED CALL IS NOT AN ABSENT LISTING ──────────
+          // The three sentences live in writtenStatusRule so the suite can hold
+          // them to their word. The one that was missing is the one Oliver's
+          // 13 Sep run needed: the lookup FAILED, and the log told him the
+          // festival has no listing.
           decide("ticketStatus", {
             winner: `the model ("${modelSaid}")`,
-            loser: noneAtAll ? "nobody, there was nothing to check it against" : "a Ticketmaster listing that could not be confirmed as this edition",
-            rule: noneAtAll
-              ? "Ticketmaster returned nothing under this name, so the status is WRITTEN, not measured. Most Danish festivals sell through their own site."
-              : "Ticketmaster HAS listings under this name and none could be confirmed as this edition, so the status is WRITTEN, not measured. The listing is named below — open it before publishing.",
+            loser: ticketLookupFailed
+              ? "nobody, because the lookup did not run"
+              : noneAtAll ? "nobody, there was nothing to check it against" : "a Ticketmaster listing that could not be confirmed as this edition",
+            rule: writtenStatusRule({ lookupFailed: ticketLookupFailed, verdict: rec.verdict }),
             value: rec.detail,
           });
+          // A founder note as well as a log line. The run log is gone by the
+          // time anybody reads the draft, and this is the one finding here that
+          // has an action attached to it: fix the call and redraft.
+          if (ticketLookupFailed) noteToFounder(lookupFailureNote(ticketLookupWhy));
         }
         // A real price, from the operator's ticketing system. The festival
         // prompt has to carry the words "never invent prices" precisely because
@@ -7969,10 +8036,14 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // gets a much louder warning that nothing was verified at all, and
         // flipping the verdict to "flagged" would replace that warning with a
         // routine correction. The line still reaches __notes as it always did.
-        if (!inventedCheck.error && inventedRead.verdict !== "unreadable" && absenceFindings.length) {
+        if (!inventedCheck.error && inventedRead.verdict !== "unreadable" && (absenceFindings.length || untracedPriceFindings.length)) {
           inventedRead.findings = [
             ...inventedRead.findings,
             ...absenceFindings.map(text => ({ label: "CONTRADICTED", text, mine: true })),
+            // The same door and the same label. A price on no page this run
+            // opened is not a claim a search failed to reach, it is one the run
+            // itself went looking for and found nowhere.
+            ...untracedPriceFindings.map(text => ({ label: "CONTRADICTED", text, mine: true })),
           ];
           inventedRead.verdict = "flagged";
         }
@@ -8194,6 +8265,18 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
                     JSON.stringify(writtenFields(t)),
                   );
                   noteToFounder(describeCorrection(landed));
+                  // ── AND IT TRAVELS WITH THE DRAFT ─────────────────
+                  // The banner below is React state and publishDraft never sees
+                  // it, so a surviving contradicted claim was invisible at the
+                  // one moment it matters. Behind the FIX BEFORE PUBLISHING
+                  // prefix, which shapeForLive strips, so no traveller can meet
+                  // it. See correctionPublisherNote in utils/factCheckRead.js.
+                  {
+                    const stillThere = correctionPublisherNote(landed);
+                    if (stillThere && !(t.uncertainties || []).includes(stillThere)) {
+                      t.uncertainties = [stillThere, ...(t.uncertainties || [])];
+                    }
+                  }
                   note("Did the correction land", {
                     provider: "claude",
                     detail: "each flagged claim, against the draft that replaced the one it was flagged in",
@@ -8223,7 +8306,12 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
                   }
                   ui(setStudioDraft, merged);
                   ui(setStudioDraftText, JSON.stringify(merged, null, 2));
-                  ui(setStudioInventedWarning, inventedWarning = `AUTO-CORRECTED. These claims were flagged as possibly invented, re-researched with fresh web search, and fixed in the draft below (anything still unverifiable was removed rather than guessed). Review before publishing:\n\n${flaggedText}`);
+                  // ── THE BANNER READS THE LANDING CHECK ────────────
+                  // It used to say "fixed in the draft below" whatever the
+                  // check directly above it had just found, which is why that
+                  // check's own message has to end "do not read the banner
+                  // above as a pass". See correctionBanner.
+                  ui(setStudioInventedWarning, inventedWarning = correctionBanner(landed, flaggedText));
                 } else ui(setStudioInventedWarning, inventedWarning = flaggedText);
               } else ui(setStudioInventedWarning, inventedWarning = flaggedText);
             } else ui(setStudioInventedWarning, inventedWarning = flaggedText);
@@ -10738,7 +10826,11 @@ ${researchRules("festival", ev)}`
           const badProposal = parsed.dateChanged
             ? datePropositionProblem(parsed.dateChanged, ev.date, new Date(), { onFileEnd: ev.dateEnd })
             : "";
-          if (badProposal) { parsed.ignoredDate = parsed.dateChanged; parsed.ignoredWhy = DATE_PROPOSITION_WHY[badProposal] || badProposal; parsed.dateChanged = ""; }
+          // labelChecked: false, because this branch holds a model's JSON reply
+          // rather than a page, so nothing here read the source to see whether
+          // it calls this the event's own dates. The refusal is unchanged; the
+          // sentence stops asserting what nobody checked. See datePropositionWhy.
+          if (badProposal) { parsed.ignoredDate = parsed.dateChanged; parsed.ignoredWhy = datePropositionWhy(badProposal, { labelChecked: false }); parsed.dateChanged = ""; }
           const dateReallyChanged = parsed.dateChanged && !sameDay(parsed.dateChanged, ev.date);
           const statusReallyChanged = parsed.ticketStatusChanged
             && normaliseTicketStatus(parsed.ticketStatusChanged) !== normaliseTicketStatus(ev.ticketStatus);
@@ -16704,20 +16796,39 @@ If the conversation only covers a single day or a few stops with no explicit day
       // that was measured or explicitly written, never a fallback: "off sale"
       // gets its own wording precisely because Ticketmaster cannot tell sold
       // out apart from not-open-yet. See utils/tickets.js.
-      const eventTicketNote = (e) => {
-        const st = normaliseTicketStatus(e.ticketStatus);
-        if (st === "cancelled") return " [CANCELLED, do not plan around it]";
-        if (st === "sold_out") return " [SOLD OUT]";
-        if (st === "off_sale") return " [NOT ON SALE RIGHT NOW, which is not the same as sold out: it can also mean sales have not opened or have closed. Say it needs checking, never say sold out]";
-        if (st === "limited") return " [tickets limited, book before travelling]";
-        return e.ticketInfo ? ` [tickets: ${e.ticketInfo}]` : "";
-      };
-      // isConfirmedUpcoming: an event with no announced dates cannot go into a
-      // day plan, and handing one to the writer is how "check the dates" ends up
-      // scheduled at 14:00 on a Tuesday.
-      const upcomingLocal = events.filter(e => isConfirmedUpcoming(e)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})${eventTicketNote(e)}`).join("; ");
-      const upcomingMajor = majorEvents.filter(e => isConfirmedUpcoming(e)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})${eventTicketNote(e)}`).join("; ");
-      const upcomingViking = vikingEvents.filter(e => isConfirmedUpcoming(e)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})${eventTicketNote(e)}`).join("; ");
+      // ── AND IT MAY ONLY STATE WHAT SOMEBODY MEASURED ──────────────
+      //
+      // Oliver, 13 Sep 2026, on the Midtfyns run whose Ticketmaster step failed
+      // with an expired session: "a reader is shown 'tickets limited, book
+      // before travelling' off the back of a guess."
+      //
+      // That was this function. It read `e.ticketStatus` and nothing else, so a
+      // status the run log itself had recorded as "WRITTEN, not measured" was
+      // handed to the model as a bracketed fact, in the identical words a
+      // Ticketmaster-confirmed one gets. The wording now lives beside the badge
+      // table in utils/tickets.js and asks __ticket who said it. See
+      // ticketPromptNote.
+      const eventTicketNote = (e) => ticketPromptNote(e);
+      // isOnOrUpcoming, which is isConfirmedUpcoming plus the one thing it
+      // cannot see: an event with no announced dates still cannot go into a day
+      // plan, and handing one to the writer is how "check the dates" ends up
+      // scheduled at 14:00 on a Tuesday. What it also could not see is a
+      // festival that OPENED YESTERDAY and runs all week, because isUpcoming
+      // only ever looks at the start. The LIVE strip, the events grid and the
+      // update check each learned that separately and this list never did, so
+      // the traveller standing in Denmark on a festival's opening weekend was
+      // talking to a model that had not been told about it.
+      //
+      // AND EIGHT PICKED BY ROW ORDER IS NOT EIGHT UPCOMING EVENTS. These lists
+      // come out of liveContent in the order Supabase returned the rows, so the
+      // slice below was keeping whichever eight were drafted first. soonestFirst
+      // puts a live one at the front and then orders by date, which is what the
+      // heading over them has always claimed. See utils/helpers.js.
+      const eventLine = (e) => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)}${isCurrentlyLive(e.date, e.dateEnd) ? ", ON NOW" : ""})${eventTicketNote(e)}`;
+      const nextUp = (list) => soonestFirst(list.filter(e => isOnOrUpcoming(e))).slice(0, 8).map(eventLine).join("; ");
+      const upcomingLocal = nextUp(events);
+      const upcomingMajor = nextUp(majorEvents);
+      const upcomingViking = nextUp(vikingEvents);
       const craftList = craftItems.map(c => `${c.name} in ${c.location} (${c.price})`).join("; ");
       const shuffledTowns = deal(towns);
       const townsList = shuffledTowns.map(t => `${t.name}${t.region ? ` (${t.region})` : ""}${t.highlight ? ` — ${t.highlight}` : ""}`).join("; ");
@@ -17581,7 +17692,16 @@ ${languageBlock()}`;
               // about rendered the identical badge. The tick is the difference,
               // and the absence of it is the other half: an unticked badge is a
               // claim nobody checked. See __ticket in utils/tickets.js.
-              const measured = isMeasured(event.__ticket?.source);
+              // ── AND A CHECK FROM LAST SPRING IS NOT A CHECK ───────
+              // This asked isMeasured, which asks WHO said it and never WHEN.
+              // Nothing in this app re-runs the ticketing API on a published
+              // row, so the stamp is written once at draft time and its date
+              // never moves. A tick over a status measured before the sale
+              // opened is the same wrong shape as an unticked one over a
+              // measured status. statedAsFact asks both questions, and it is
+              // the reader the chat prompt and the guide's booking list now use
+              // too, so the three cannot drift.
+              const measured = statedAsFact(event);
               return (
                 <span title={ticketProvenance(event)}
                   style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 100, ...tone, ...size, opacity: measured ? 1 : 0.72 }}>
@@ -17997,7 +18117,10 @@ ${languageBlock()}`;
                       is elastic: chatRail's CSS makes the map fill the rail
                       rather than set it, so the row is as tall as the
                       conversation and the input bar stays where it was. */}
-                  <div className={RAIL_CLASS}>
+                  {/* has-map: the phone shows the rail only once the map has
+                      two pins to relate to each other. See the media query in
+                      chatRail.js for why two and not one. */}
+                  <div className={`${RAIL_CLASS}${(pinsRef.current || []).length >= 2 ? " has-map" : ""}`}>
                     {(() => {
                       const convo = aiMessages.slice(1);
                       // Markers out, for the reason given at msgCards above.
