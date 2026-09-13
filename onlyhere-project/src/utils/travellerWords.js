@@ -280,6 +280,40 @@ export const THIS_WEEKEND = [
   "dieses wochenende", "am wochenende", "dit weekend", "in het weekend",
   "i helgen", "denna helg", "questo weekend",
 ];
+// ── THE DAYS OF THE WEEK, WHICH NOTHING COULD READ ───────────
+//
+// Oliver, 13 Sep 2026, a Sunday, with his own session: "It doesn't understand
+// 'next week' and 'on monday'. In fact, it calculated it as the 19th of
+// September." He had typed "Maybe next week? Monday", and the reply said
+// "Monday next week puts you right around September 19th". The right answer was
+// the 14th, the very next day, and he had to correct it four turns later with
+// "I said I was going Monday next week.. that is the 14th".
+//
+// The app read NOTHING from that turn, on a HARD slot, so the model filled the
+// hole and filled it wrong. "next week" on its own was already understood; a
+// day name was not, in any of the six languages, so the one word that made the
+// answer precise was the one word nothing could see.
+//
+// NO ABBREVIATIONS. "sat", "wed" and "sun" are an English verb, an English verb
+// and an English noun, and a traveller writing about a sunny day would have been
+// given an arrival date for Sunday.
+export const WEEKDAYS = {
+  0: ["sunday", "søndag", "sonntag", "zondag", "söndag", "domenica"],
+  1: ["monday", "mandag", "montag", "maandag", "måndag", "mandag", "lunedì"],
+  2: ["tuesday", "tirsdag", "dienstag", "dinsdag", "tisdag", "martedì"],
+  3: ["wednesday", "onsdag", "mittwoch", "woensdag", "mercoledì"],
+  4: ["thursday", "torsdag", "donnerstag", "donderdag", "giovedì"],
+  5: ["friday", "fredag", "freitag", "vrijdag", "venerdì"],
+  6: ["saturday", "lørdag", "samstag", "zaterdag", "lördag", "sabato"],
+};
+// The little words in front of one, which change nothing about which day it is:
+// a traveller saying "next Monday" on a Sunday means tomorrow, which is exactly
+// what Oliver said he meant.
+export const WEEKDAY_LEAD = ["on", "next", "this", "coming", "på", "paa", "næste", "naeste", "kommende",
+  "am", "nächsten", "naechsten", "op", "volgende", "nästa", "nasta", "neste"];
+export const WEEKDAY_INDEX = Object.entries(WEEKDAYS)
+  .reduce((out, [i, words]) => { words.forEach(w => { out[w] = Number(i); }); return out; }, {});
+
 export const NEXT_WEEK = [
   "next week", "næste uge", "naeste uge", "nächste woche", "naechste woche",
   "volgende week", "nästa vecka", "neste uke", "la prossima settimana",
@@ -527,7 +561,7 @@ export const LETTER = "A-Za-zÀ-ÖØ-öø-ÿ";
 // it, and where it is wrong the cost is a night out not suggested to two adults,
 // which they can ask for. The other direction is a bar crawl planned around
 // somebody's seven year old.
-export const NAMES_A_CHILD = /(?:^|[^A-Za-z\u00c0-\u00ff])(?:kids?|child|children|toddlers?|bab(?:y|ies)|teens?|teenagers?|son|daughter|grandkids?|grandchildren|famil(?:y|ies)|b(?:\u00f8|o)rn|barn|barnet|kinder|sohn|tochter|familie|gezin|kind(?:eren)?)(?![A-Za-z\u00c0-\u00ff])|(?:^|[^A-Za-z\u00c0-\u00ff])(?:1[0-7]|[1-9])\s*(?:year|yr|\u00e5r|jahre)s?[- ]?old(?![A-Za-z\u00c0-\u00ff])/i;
+export const NAMES_A_CHILD = /(?:^|[^A-Za-z\u00c0-\u00ff])(?:kids?|child|children|toddlers?|bab(?:y|ies)|teens?|teenagers?|son|daughter|grandkids?|grandchildren|famil(?:y|ies)|b(?:ø|o)rn|barn|barnet|kinder|sohn|tochter|familie|gezin|kind(?:eren)?)(?![A-Za-z\u00c0-\u00ff])|(?:^|[^A-Za-z\u00c0-\u00ff])(?:1[0-7]|[1-9])\s*(?:year|yr|år|jahre)s?[- ]?old(?![A-Za-z\u00c0-\u00ff])/i;
 
 export const INTEREST_TERMS = {
   food: ["food", "eat", "restaurant", "cuisine", "dining", "foodie",
@@ -554,42 +588,42 @@ export const INTEREST_TERMS = {
             "cykelture", "cykeltur", "radfahren", "fietsen", "fietstocht", "cykling"],
   beach: ["beach", "beaches", "seaside", "coast", "coastal",
           "strand", "strande", "kyst", "kysten",
-          "str\u00e4nde", "kuste", "k\u00fcste", "stranden", "kust",
-          "str\u00e4nder", "kusten"],
-  island: ["island", "islands", "\u00f8er", "\u00f8erne", "insel", "inseln", "eiland", "eilanden", "\u00f6ar"],
+          "strände", "kuste", "k\u00fcste", "stranden", "kust",
+          "stränder", "kusten"],
+  island: ["island", "islands", "øer", "øerne", "insel", "inseln", "eiland", "eilanden", "öar"],
   nightlife: ["nightlife", "night out", "clubbing",
-              "natteliv", "nattelivet", "g\u00e5 i byen", "ud i byen",
+              "natteliv", "nattelivet", "gå i byen", "ud i byen",
               "nachtleben", "ausgehen",
               "nachtleven", "uitgaan",
               "nattliv", "uteliv"],
   bar: ["bar", "bars", "pub", "pubs", "barer", "v\u00e6rtshus", "kneipe", "kneipen", "kroeg", "krogen"],
   beer: ["beer", "brewery", "breweries", "craft beer",
-         "\u00f8l", "bryggeri", "bryggerier", "mikrobryggeri",
-         "bier", "brauerei", "brouwerij", "\u00f6l", "bryggeri"],
+         "øl", "bryggeri", "bryggerier", "mikrobryggeri",
+         "bier", "brauerei", "brouwerij", "öl", "bryggeri"],
   wine: ["wine", "vin", "wein", "wijn"],
   art: ["art", "gallery", "galleries", "street art",
         "kunst", "galleri", "gallerier", "kunstmuseum",
         "galerie", "galerij", "konst", "galleri"],
   culture: ["culture", "cultural", "kultur", "kulturelle", "kulturliv",
             "kulturell", "cultuur", "cultureel"],
-  shopping: ["shopping", "shops", "boutiques", "indk\u00f8b", "butikker",
+  shopping: ["shopping", "shops", "boutiques", "indkøb", "butikker",
              "einkaufen", "winkelen", "shoppa"],
   castle: ["castle", "castles", "palace", "palaces", "manor",
-           "slot", "slotte", "slottet", "herreg\u00e5rd", "borg",
-           "schloss", "schl\u00f6sser", "burg", "kasteel", "kastelen", "slott"],
+           "slot", "slotte", "slottet", "herregård", "borg",
+           "schloss", "schlösser", "burg", "kasteel", "kastelen", "slott"],
   church: ["church", "churches", "cathedral", "abbey",
            "kirke", "kirker", "domkirke", "katedral",
            "kirche", "kirchen", "kerk", "kerken", "kyrka", "kyrkor"],
   "theme park": ["theme park", "theme parks", "amusement park", "amusement parks",
                  "forlystelsespark", "forlystelsesparker", "tivolier",
                  "freizeitpark", "vergn\u00fcgungspark", "pretpark", "attractiepark",
-                 "n\u00f6jespark", "tivolipark"],
+                 "nöjespark", "tivolipark"],
   zoo: ["zoo", "zoos", "aquarium", "zoologisk", "dyrepark", "dierentuin", "djurpark"],
   sightseeing: ["sightseeing", "sights", "landmarks",
                 "sev\u00e6rdigheder", "sev\u00e6rdighederne",
-                "sehensw\u00fcrdigkeiten", "bezienswaardigheden", "sev\u00e4rdheter"],
+                "sehensw\u00fcrdigkeiten", "bezienswaardigheden", "sevärdheter"],
   "christmas market": ["christmas market", "christmas markets", "julemarked",
-                       "julemarkeder", "weihnachtsmarkt", "weihnachtsm\u00e4rkte",
+                       "julemarkeder", "weihnachtsmarkt", "weihnachtsmärkte",
                        "kerstmarkt", "julmarknad"],
   relax: ["relax", "relaxing", "slow", "unwind", "chill",
           "afslapning", "slappe af", "rolige dage",
@@ -604,7 +638,7 @@ export const INTEREST_TERMS = {
   spa: ["spa", "wellness", "kurbad", "badeland", "sauna"],
   "hidden gem": ["hidden gem", "hidden gems", "off the beaten", "local spot",
                  "local spots", "skjulte perler", "perler", "lokale steder",
-                 "geheimtipp", "geheimtipps", "verborgen parels", "dolda p\u00e4rlor"],
+                 "geheimtipp", "geheimtipps", "verborgen parels", "dolda pärlor"],
   surf: ["surf", "surfing", "surfen", "surfa"],
   wildlife: ["wildlife", "birdwatching", "birding", "dyreliv", "fugle", "fuglekiggeri",
              "tierwelt", "vogelbeobachtung", "dieren", "djurliv"],

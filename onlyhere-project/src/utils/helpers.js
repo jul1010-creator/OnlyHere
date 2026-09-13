@@ -8,6 +8,7 @@ import { MONTH_PATTERN } from "./travellerWords";
 // distinctiveWords only, and danishNames imports nothing at all, so this adds
 // no cycle. See hostMatchesName for what it is guarding.
 import { fold, GENERIC_PLACE_WORDS } from "./danishNames";
+import { readMapBeats } from "./mapDirections";
 
 // ── ONE ANSWER TO "IS THIS LEG A BOAT" ───────────────────────────────
 // Audited 10 Aug 2026: this question was being asked in SEVEN places in FIVE
@@ -525,6 +526,61 @@ export const dotJoin = (...parts) => parts.map(p => String(p ?? "").trim()).filt
 // a genuinely-ready summary with a hidden marker string; this checks for that marker
 // instead of counting "Day N:" occurrences. isFullPlanText is kept for any content
 // that still uses the old day-by-day format (e.g. already-sent messages).
+// ── WHY GEMLYX KEEPS NAMING THE SAME FIVE PLACES ─────────────
+//
+// Oliver, 13 Sep 2026: "Why does Gemlyx seem to have a lot of 'kødbyen' bias?"
+//
+// Measured across the six chat exports he had sent by then, counting how often
+// each name appears in GEMLYX's turns against how often it appears in the
+// traveller's:
+//
+//   Dragør                 13 times, across 3 sessions, traveller: 0
+//   Vesterbro              11 times, across 3 sessions, traveller: 0
+//   Nightpay               11 times, across 4 sessions, traveller: 0
+//   Nyhavn                  9 times, across 3 sessions, traveller: 0
+//   Jomfru Ane Gade         9 times, across 5 sessions, traveller: 1
+//   Kødbyen                 2 times, across 1 session,  traveller: 0
+//
+// So he was right that there is a bias and wrong about which name carries it:
+// Kødbyen is the least repeated of the six. What they have in common is that
+// every one of them sits near the top of its published list.
+//
+// THE CAUSE IS THE ORDER, not the model. Every inventory handed to the chat is
+// built with a plain `.map()` over the array as the database returned it, in the
+// same order, on every turn of every conversation. `towns` was the one exception
+// and even that used `sort(() => Math.random() - 0.5)`, which is not a shuffle:
+// a comparator that answers at random is inconsistent, so the sort is undefined
+// and rows tend to stay near where they started. A model reading the same list
+// in the same order reaches for the same end of it.
+//
+// SEEDED, AND THE SEED HOLDS FOR A CONVERSATION. Reshuffling on every turn would
+// move the ground under a model that has just recommended something, so the
+// order is fixed for the whole chat and different for the next one.
+//
+// mulberry32, thirty-two bits, because this decides the order of a list and
+// nothing about it needs to be unguessable.
+export const seededRandom = (seed) => {
+  let a = (Number(seed) >>> 0) || 1;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+// Fisher-Yates, walking backwards, which is the one that actually produces every
+// permutation with equal probability. Returns a new array; the caller's list is
+// content and is never reordered in place.
+export const seededShuffle = (list, seed) => {
+  const out = Array.isArray(list) ? [...list] : [];
+  const rnd = seededRandom(seed);
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rnd() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+};
+
 export const READY_MARKER = "[[GEMLYX_READY_TO_BUILD]]";
 
 // ── TOLERANT ON PURPOSE ─────────────────────────────────────────────
@@ -561,6 +617,33 @@ export const stripReadyMarker = (text) =>
         .replace(/\n{3,}/g, "\n\n")
         .trim()
     : text;
+
+// ── WHAT THE TRAVELLER ACTUALLY SEES, IN ONE PLACE ───────────
+//
+// Oliver, 13 Sep 2026, with a screenshot of the assist panel on the preview
+// screen and "[[GEMLYX_READY_TO_BUILD]]" sitting in the middle of the reply,
+// selected with his mouse. His words: "remove this from the assist" and "looks
+// too 'beta'".
+//
+// Three places render an assistant reply: the Detour chat, the assist on the
+// preview screen, and the Local Assist on a built guide. The Detour one cleaned
+// the text and the other two printed `m.text` raw, so both of them showed the
+// ready marker, the camera markers and every asterisk of markdown the model
+// wrote. Same reply, three renderers, one of them correct.
+//
+// ORDER IS LOAD-BEARING and is the reason this is a function rather than three
+// call sites agreeing today. readMapBeats records how many words come BEFORE
+// each camera beat, so it has to run on the string that becomes the bubble,
+// after the marker and the markdown are gone. A strip that ran afterwards would
+// slide the words out from under every beat, and the drift grows with the
+// length of the reply, so a short one would look fine.
+//
+// Returns both halves: the text to print, and the beats for a caller that has a
+// map to point. A caller with no map takes `.text` and ignores the rest.
+export const readerView = (text) => {
+  const beats = readMapBeats(stripMarkdown(stripReadyMarker(text)));
+  return { text: beats.clean, beats: beats.beats };
+};
 
 // Common AI-writing tells — surface-level phrases that read as generic AI filler
 // rather than a real person's voice. Case-insensitive, checked as whole phrases

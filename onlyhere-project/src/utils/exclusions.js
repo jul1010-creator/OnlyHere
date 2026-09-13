@@ -560,6 +560,38 @@ export const isExcluded = (row, excluded) => {
 export const withoutExcluded = (rows, excluded) =>
   (Array.isArray(rows) ? rows : []).filter(r => !isExcluded(r, excluded));
 
+// ── AND A REFUSAL MADE WITH A TAP JOINS THE ONES MADE IN WORDS ──────
+//
+// Oliver, 13 Sep 2026, on the zoomed-in chat map: "a short description of the
+// places (like at the final guide), and then a 'Is this interesting?' Yes/No."
+//
+// A No there is a refusal with no sentence behind it. readExclusions reads the
+// traveller's WORDS and that is the right rule: writing "skip Legoland" into the
+// conversation on their behalf would put words in their mouth, and the brief is
+// never read from anything but what they typed. So the tap lives in its own
+// list (App.jsx holds it beside pickedExtras, the list of Yeses) and is merged
+// with the typed refusals HERE, once, so the preview pools, the guide's
+// constraints and the note under the preview title all read one answer to
+// "what did they rule out".
+//
+// Names only. A tap holds the row's own name, which is what isExcluded folds a
+// row against, so a No on "Legoland" takes "Legoland Billund Resort" with it
+// exactly as the sentence would have. Deduplicated case-blind, and the typed
+// ones first because they are the ones with a sentence a person can point at.
+export const ruledOutFor = (ownWords, tapped = [], { known = [] } = {}) => {
+  const out = readExclusions(ownWords, { known });
+  for (const raw of (Array.isArray(tapped) ? tapped : [])) {
+    // A tap holds a string. Anything else in the list is a bug upstream, and
+    // coercing it would turn a stray number into a place ruled out.
+    if (typeof raw !== "string") continue;
+    const name = clean(raw);
+    if (!name) continue;
+    if (out.some(x => x.toLowerCase() === name.toLowerCase())) continue;
+    out.push(name);
+  }
+  return out;
+};
+
 // ── AND SAY IT OUT LOUD ─────────────────────────────────────────────
 //
 // A place silently dropped is indistinguishable from a place we do not have, and

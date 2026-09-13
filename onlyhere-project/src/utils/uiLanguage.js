@@ -494,6 +494,24 @@ export const UI_STRINGS = {
   "map.offMapOne":   { en: "{n} earlier place is off this map.", da: "{n} tidligere sted ligger uden for kortet.", de: "{n} früherer Ort liegt außerhalb dieser Karte." },
   "map.offMapMany":  { en: "{n} earlier places are off this map.", da: "{n} tidligere steder ligger uden for kortet.", de: "{n} frühere Orte liegen außerhalb dieser Karte." },
 
+  // ── "IS THIS INTERESTING?" ON A PIN, AND THE ROW UNDER THE MAP ───
+  //
+  // Oliver, 13 Sep 2026: "a short description of the places (like at the final
+  // guide), and then a 'Is this interesting?' Yes/No. Obviously not all the
+  // time." The card is ChatPlaceCards and the rule for WHEN it asks lives in
+  // App.jsx beside the map; these are only the words. A question and two
+  // answers, nothing explaining what a tap does: the answer is the control.
+  "card.interesting": { en: "Is this interesting?", da: "Er det her interessant?", de: "Ist das interessant?" },
+  "card.yes":         { en: "Yes", da: "Ja", de: "Ja" },
+  "card.no":          { en: "No", da: "Nej", de: "Nein" },
+  // The state a Yes leaves behind, and a button: pressing it takes the place
+  // out again, which is what the chip beside the preview does with "Added".
+  "card.added":       { en: "Added", da: "Tilføjet", de: "Hinzugefügt" },
+  // The row under the map naming what a No took off it, each name a button
+  // that puts the pin back. A place silently dropped is indistinguishable from
+  // a place Gemlyx does not have, which is Layla's whole problem.
+  "map.leftOut":      { en: "Left out:", da: "Udeladt:", de: "Weggelassen:" },
+
   // The two search boxes that are not the header's. header.search covers that
   // one already, and these say what they search rather than repeating "Søg".
   "search.attractions": { en: "Search attractions", da: "Søg i attraktioner", de: "Attraktionen suchen" },

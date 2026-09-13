@@ -48,7 +48,7 @@ import { journeyFromStored, legSteps, worthShowingLegs, journeyAgencies, JOURNEY
 import { dayWeather, weatherIsStale, weatherChanges } from "../utils/weather";
 import { dayWarnings, dayCrossings, tripWeatherWarning } from "../utils/weatherWarn";
 import { askClaude } from "../utils/aiClient";
-import { testTravelerLine, isFerryText, daysUntil } from "../utils/helpers";
+import { testTravelerLine, isFerryText, daysUntil, readerView } from "../utils/helpers";
 import { aiDisclosureFor } from "../utils/aiDisclosure";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen, clampNote } from "../utils/guideReading";
 import { BOOKING_AFFILIATE_ID } from "../config";
@@ -2582,7 +2582,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               return (
               <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%", background: m.role === "user" ? C.accent : C.bg, border: m.role === "user" ? "none" : `1px solid ${C.border}`, color: m.role === "user" ? "#fff" : C.light, borderRadius: 14, padding: "9px 13px", fontSize: 13, lineHeight: 1.55 }}>
                 {m.role === "assistant"
-                  ? <TypewriterText text={m.text} active={streaming} onDone={() => setChatRevealedUpTo(prev => Math.max(prev, i))} />
+                  ? <TypewriterText text={readerView(m.text).text} active={streaming} onDone={() => setChatRevealedUpTo(prev => Math.max(prev, i))} />
                   : m.text}
               </div>
               );

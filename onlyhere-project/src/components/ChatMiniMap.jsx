@@ -87,7 +87,41 @@ const OUT_SECONDS = 1.9, IN_SECONDS = 1.1, FIT_SECONDS = 0.9;
 // reads as furniture; red is the one colour nothing else here uses.
 const PIN_RED = "#E8232A";
 
-export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, height = 220, sayWhatFor = false, focus = null }) => {
+// ── "IS THIS INTERESTING?" ────────────────────────────────────────
+//
+// Oliver, 13 Sep 2026: "Is it possible that when it zooms in, it can [show] a
+// short description of the places (like at the final guide), and then a 'Is
+// this interesting?' Yes/No. Obviously not all the time. But it's a good
+// mechanism in a time of uncertainty."
+//
+// Three props carry it, and this component decides none of it:
+//
+//   ask         null, or { picked, cautionFor, onYes, onNo }. Null is the gate
+//               shut, and the gate is unsureWhatTheyWant(brief) in App.jsx,
+//               the same test that opens the word under a pin. It is the
+//               "time of uncertainty" in his sentence, and there is no second
+//               test here. With it open, every pin for a place INSIDE a town
+//               (isSpotPin, so only ever drawn from SPOT_PIN_ZOOM, which is
+//               "when it zooms in") carries the card with the description and
+//               the question. Towns never ask: "is Aarhus interesting" is the
+//               shape of the trip, and that is decided in the conversation.
+//   turnedDown  the names a No has taken off the map, for the row under it.
+//   onRestore   what pressing a name in that row does: the No is withdrawn
+//               and the pin comes back.
+//
+// ── AND "OBVIOUSLY NOT ALL THE TIME" IS THREE RULES, NOT ONE ─────
+//
+// The brief gate is the first. The second is that a place already decided is
+// not asked again: a Yes shows as its state, and a No takes the pin off, so
+// there is nothing left to ask on. The third is that the card is a POPUP, one
+// open at a time and only ever opened by the pointer, never by the app. That is
+// Oliver's own rule from 12 Sep ("Can the photo on the map not automatically
+// pop up? ... if I put my mouse on it, then it shows") and it is also what
+// stops five pins named in one reply becoming five cards at once, which on a
+// 380px map is a wall. A card that opened itself on the newest pin was
+// considered and rejected for both reasons: it breaks the 12 Sep rule, and
+// choosing WHICH pin to open is the app choosing the trip.
+export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, height = 220, sayWhatFor = false, focus = null, ask = null, turnedDown = [], onRestore = null }) => {
   // ── THE READER'S LANGUAGE, ONCE ─────────────────────────────────
   //
   // `lang` is readerLanguage()'s OBJECT, not a two letter code. Handing the
@@ -208,7 +242,15 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   const list = Array.isArray(pins) ? pins : [];
   // DEPENDED ON BY VALUE. The same pins in the same places arriving as a new
   // array must not count as a change, or the redraw runs on every keystroke.
-  const pinKey = list.map(p => `${p?.key}@${p?.lat},${p?.lon}${p?.latest ? "*" : ""}`).join("|");
+  // ── AND WHETHER THE PINS CARRY A QUESTION IS PART OF THE VALUE ──
+  // A pin with no photograph gets a popup only while there is a question to
+  // put in it (see the pin effect), so the gate opening or shutting changes
+  // what a pin IS, and the effect has to redraw when it does. Folded into the
+  // key rather than added as a second dependency, because the rule of this
+  // key is "the same pins, the same way, is no change", and the same pins
+  // with a different card are not the same pins the same way.
+  const asking = !!ask;
+  const pinKey = list.map(p => `${p?.key}@${p?.lat},${p?.lon}${p?.latest ? "*" : ""}`).join("|") + (asking ? "|ask" : "");
   const any = list.length > 0 && wide;
   // ── THE MAP IS THERE BEFORE THERE IS ANYTHING ON IT ───────────────
   // Oliver, 8 Sep 2026: "I think map should already be shown from start."
@@ -436,7 +478,15 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       // is required and missing. A card with neither is a tooltip with a close
       // button, so those pins get a real tooltip and open on a click.
       const shot = showablePhoto(p.place);
-      if (!shot) {
+      // ── AND A QUESTION IS THE OTHER REASON FOR A CARD ─────────
+      // With the gate open, a place inside a town gets a card whether or not
+      // it has a picture: the card is then the name, the description and the
+      // question, and ChatPlaceCards says why that is not the "tooltip with a
+      // close button" the rule below was written against. Read out of the
+      // closure like `code` above: `asking` is in pinKey, so this effect
+      // re-runs when it changes.
+      const asks = asking && isSpotPin(p);
+      if (!shot && !asks) {
         // ── AND IT MUST TAKE THE OTHER CARD DOWN ──────────────────
         // Found in the browser, not by reading: hovering this pin left the
         // PREVIOUS place's card open, so you pointed at Skagen and read
@@ -526,12 +576,25 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
         // the tip is gone.
         if (pop) pop.options.offset = L.point(sideFor() * 76, 54);
         marker.openPopup();
+        // ── AND A CARD WITH A QUESTION IN IT IS TALLER THAN 108 ────
+        // The 54 above is half of the photo card. A card carrying the
+        // description and the Yes/No is taller by an amount that depends on
+        // the sentence, so it is measured once it is on screen and re-centred
+        // on the pin. Leaflet's update() re-runs its own pan-to-fit with the
+        // new offset. Nothing changes for the plain card, whose height is
+        // within a few pixels of what the number assumes.
+        const el = pop && typeof pop.getElement === "function" ? pop.getElement() : null;
+        const tall = el ? el.offsetHeight : 0;
+        if (pop && tall > 0 && Math.abs(tall / 2 - 54) > 6) {
+          pop.options.offset = L.point(sideFor() * 76, Math.round(tall / 2));
+          pop.update();
+        }
       });
       // NOT on the marker's own mouseout: the card sits directly above the pin,
       // so moving towards it leaves the marker, and closing there would make
       // the card impossible to reach. The container's mouseleave below is the
       // honest boundary, because the card is inside the container.
-      made.push({ key: p.key, place: p.place, host });
+      made.push({ key: p.key, place: p.place, host, asks });
       markersRef.current.set(p.key, marker);
     });
     // Set once per pin change, not per render: the effect below it does not
@@ -718,6 +781,17 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
           C={C}
           onOpen={onOpen}
           lang={lang}
+          // Built per render, so a Yes shows as its state on the next paint
+          // without the pins being redrawn. `h.asks` was decided when the pin
+          // was made and `ask` is live: both have to hold, because the render
+          // between the gate shutting and the effect catching up still has the
+          // old hosts.
+          ask={ask && h.asks ? {
+            picked: (Array.isArray(ask.picked) ? ask.picked : []).includes(h.place?.name),
+            caution: typeof ask.cautionFor === "function" ? String(ask.cautionFor(h.place) || "") : "",
+            onYes: () => { if (typeof ask.onYes === "function") ask.onYes(h.place); },
+            onNo: () => { if (typeof ask.onNo === "function") ask.onNo(h.place); },
+          } : null}
         />,
         h.host,
         h.key,
@@ -731,6 +805,26 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
             conversation is a map of a different trip. */}
         {dropped > 0 && ` ${uiT(dropped === 1 ? "map.offMapOne" : "map.offMapMany", uiCode).replace("{n}", String(dropped))}`}
       </div>
+      {/* ── WHAT A NO TOOK OFF THE MAP, SAID OUT LOUD ──────────────
+          The pin is gone, and a pin that is gone looks exactly like a place
+          Gemlyx never had. So the names sit here, each one a button that
+          withdraws the No: a tap is the easiest thing in this app to do by
+          mistake, and a refusal nobody can see or undo is the constraint that
+          "vanishes without a word", which exclusions.js calls Layla's whole
+          problem. Shown whether or not the gate is still open, because the No
+          was made when it was and still holds. */}
+      {(Array.isArray(turnedDown) ? turnedDown : []).filter(Boolean).length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4, marginTop: 4, fontSize: 10, color: C?.muted || "#9AA3BC", lineHeight: 1.5 }}>
+          <span>{uiT("map.leftOut", uiCode)}</span>
+          {(Array.isArray(turnedDown) ? turnedDown : []).filter(Boolean).map(name => (
+            <button key={name} type="button"
+              onClick={() => { if (typeof onRestore === "function") onRestore(name); }}
+              style={{ background: "none", border: `1px solid ${C?.border || "#2A3350"}`, color: C?.text || "#EFE9D6", borderRadius: 100, padding: "1px 7px", fontSize: 10, cursor: "pointer", fontFamily: "'Inter', sans-serif", lineHeight: 1.5 }}>
+              {name} {"\u2715"}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

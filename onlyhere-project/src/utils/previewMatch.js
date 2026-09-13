@@ -1,5 +1,5 @@
 import { fold, variantsOf, matchVariantsOf, samePlaceName, containsName, foundAt } from "./danishNames";
-import { readExclusions, isExcluded, ORDERING_AFTER } from "./exclusions";
+import { isExcluded, ruledOutFor, ORDERING_AFTER } from "./exclusions";
 import { townOfLocation } from "./nightlife";
 import { canonicalRegion, regionPart, regionOf, REGION_NAMES } from "./regions";
 import { tierOf, THEME_LABEL } from "./placeThemes";
@@ -876,7 +876,16 @@ const ANCHOR_FALLBACK_NAME = "where you are";
 //
 // It falls back to the whole text when the caller does not pass it, so every
 // existing call site keeps today's behaviour rather than silently narrowing.
-export const matchedPlaces = (convoText, pools, { days = null, wanted = null, themes = null, mode = null, budget = null, saidByTraveller = "" } = {}) => {
+// ── AND `turnedDown` IS WHAT THEY TAPPED NO ON, ON THE MAP ─────────
+//
+// Oliver, 13 Sep 2026, on the zoomed-in chat map: "a short description of the
+// places ... and then a 'Is this interesting?' Yes/No." A No there is a
+// refusal the transcript cannot show, because nobody typed it, and the rule
+// above (ruled out means read from ownWords) would let a place they turned
+// down with a tap onto this screen with a picture. It arrives as names and
+// joins the typed refusals at the one door they already go through, so a tap
+// and a sentence are honoured by the same filter.
+export const matchedPlaces = (convoText, pools, { days = null, wanted = null, themes = null, mode = null, budget = null, saidByTraveller = "", turnedDown = [] } = {}) => {
   // ── WHERE THEY LAND ─────────────────────────────────────────────
   // Read once, at the top, because two things below need it: the region pass
   // ranks by how reachable a town is from here, and the towns are handed back
@@ -904,12 +913,17 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
   // one door and not its siblings is the failure this repository has now paid
   // for four separate times. See utils/exclusions.js, and constraintCheck.js,
   // whose `checkExcluded` has been auditing a field nothing wrote.
-  const ruledOut = readExclusions(ownWords);
+  // ruledOutFor is readExclusions over ownWords plus the tapped names, merged
+  // once in exclusions.js so this screen, the guide build and the note under
+  // the preview title cannot hold three versions of "what they ruled out".
+  const ruledOut = ruledOutFor(ownWords, turnedDown);
   // Every return path goes through this. A place ruled out is REMOVED rather
   // than marked, unlike `_leaving`: a departure town is still where they are and
   // belongs on screen, while a place they said not to send them to does not
-  // belong on the screen at all. The guide says out loud that it left it out —
-  // see excludedNote — so the removal is never silent.
+  // belong on the screen at all. The preview says out loud that it left it out,
+  // through excludedNote, so the removal is never silent. (That sentence was
+  // written on 26 Aug and was not true until 13 Sep: excludedNote had no caller
+  // anywhere in the app. GuidePreviewScreen renders it now.)
   const keep = (rows) => (ruledOut.length ? rows.filter(r => !isExcluded(r, ruledOut)) : rows);
   // ── AND THE ARRIVAL IS THEIRS TO STATE TOO ──────────────────────
   //

@@ -1,5 +1,7 @@
 import { EntryLink } from "./EntryLink";
 import { creditIsRequired } from "../utils/imageCredits";
+import { cardLine } from "../utils/cardLine";
+import { t as uiT } from "../utils/uiLanguage";
 
 // ── THE PICTURES UNDER A REPLY ───────────────────────────────────────
 //
@@ -146,16 +148,58 @@ export const CARDS_MAX = 3;
 // two numbers are one decision about the shape of a card.
 export const STRIP_CARD_W = 150;
 
-export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "row", className = "" }) => {
+// ── "IS THIS INTERESTING?" ON THE PIN CARD ──────────────────────────
+//
+// Oliver, 13 Sep 2026, on the map once it has flown down into a town: "Is it
+// possible that when it zooms in, it can [show] a short description of the
+// places (like at the final guide), and then a 'Is this interesting?' Yes/No.
+// Obviously not all the time. But it's a good mechanism in a time of
+// uncertainty."
+//
+// `ask` is that mechanism, and it is a PROP rather than a decision this file
+// makes: the card knows how to ask and nothing about when. When it asks is
+// decided beside the map in App.jsx (the brief has to say the traveller is
+// unsure, the pin has to be a place inside a town, and the place must not be
+// decided already), and ChatMiniMap hands the card `ask` only for the pins that
+// pass. Null is the card exactly as it was.
+//
+//   ask.picked    true once they said Yes; the question is replaced by the
+//                 state, and the state is a button that undoes it
+//   ask.caution   the one computed reservation, or "". weighAdd.js counts
+//                 it; nothing here writes one
+//   ask.onYes     what a Yes does (App.jsx adds the name to pickedExtras)
+//   ask.onNo      what a No does (App.jsx adds it to the turned-down list,
+//                 and the pin comes off the map)
+//
+// ── THE DESCRIPTION IS READ, NEVER WRITTEN ──────────────────────────
+//
+// "like at the final guide" means the sentence the preview shows under a
+// place, and that is cardLine, the reader the preview and the chat's held
+// block already use. The same function, so a place is described the same way
+// on the map as it is on the screen where the guide is approved. A row with no
+// usable text gets the name and the question and no invented prose.
+//
+// ── AND A PIN WITH NO PHOTOGRAPH CAN CARRY IT ───────────────────────
+//
+// "No photograph, no card" is the rule for a picture feature, and it stays the
+// rule for every card without a question in it. A card with a question is not
+// a picture feature: leaving out the photo-less places would let the traveller
+// steer only among the places that happen to have a licensed picture, which is
+// not a rule anybody chose. So in the pin layout, `ask` admits a place with no
+// photograph, and the card is then the name, the line and the question.
+export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "row", className = "", ask = null }) => {
   // One name for the two, because they were two until the side column stopped
   // carrying cards. Kept as a separate word rather than folded into `pin`
   // everywhere below, so the difference between "this is the column shape" and
   // "this is the smaller one inside a marker" stays readable.
   const pin = layout === "pin";
   const rail = pin;
+  // Only the pin layout can ask, and only a pin card may exist without a
+  // picture. See the note above the signature.
+  const asking = pin && !!ask;
   const found = (Array.isArray(places) ? places : [])
     .map(p => ({ place: p, shot: showablePhoto(p) }))
-    .filter(x => x.shot);
+    .filter(x => x.shot || (asking && String(x.place?.name || "").trim()));
   // TWO, for the reason spelled out below. The cap is here rather than at the
   // call site because both call sites want it and one of them is a map marker
   // that only ever passes one anyway.
@@ -269,6 +313,9 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
             animationDelay: `${idx * 90}ms`,
           }}
         >
+          {/* No frame at all without a photograph: a 62px box with an emoji in
+              it is the "empty frame" the card rule was written against. */}
+          {shot && (
           <div style={{ position: "relative", height: photoHeight, background: `${C.gold}18` }}>
             <img
               src={shot.photo}
@@ -303,6 +350,7 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
                 badge on the odd one out is information, and a badge on
                 everything is furniture. */}
           </div>
+          )}
           <div style={{ padding: "7px 9px 8px" }}>
             <EntryLink
               type={place._src}
@@ -322,6 +370,48 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
                 wordBreak: "break-word",
               }}>{place.name}</div>
             </EntryLink>
+            {/* The sentence the preview shows for this place, through the same
+                reader. Empty for a row with no usable text, and then nothing is
+                rendered here rather than a sentence made up to fill the gap. */}
+            {asking && cardLine(place) && (
+              <div style={{ fontSize: 10.5, color: C.light || C.text, lineHeight: 1.45, marginTop: 4, wordBreak: "break-word" }}>{cardLine(place)}</div>
+            )}
+            {asking && (
+              // stopPropagation on every button, because the card's own onClick
+              // opens the entry and a Yes that also opened the entry would be a
+              // Yes nobody meant. type="button", so no form anywhere near this
+              // can ever submit on it.
+              <div style={{ marginTop: 6 }}>
+                {ask.picked ? (
+                  <button type="button"
+                    onClick={(e) => { e.stopPropagation(); ask.onYes && ask.onYes(); }}
+                    style={{ background: C.gold, border: `1px solid ${C.gold}`, color: "#0A0F1E", borderRadius: 100, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                    {uiT("card.added", langKey(lang))} {"\u2713"}
+                  </button>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: C.text }}>{uiT("card.interesting", langKey(lang))}</div>
+                    {/* The reservation, only where there is one. Same words as
+                        the chip beside the preview, computed by the same file. */}
+                    {ask.caution && (
+                      <div style={{ fontSize: 9.5, color: C.muted, lineHeight: 1.4, marginTop: 2 }}>Worth knowing: {ask.caution}.</div>
+                    )}
+                    <div style={{ display: "flex", gap: 6, marginTop: 5 }}>
+                      <button type="button"
+                        onClick={(e) => { e.stopPropagation(); ask.onYes && ask.onYes(); }}
+                        style={{ flex: 1, background: `${C.gold}22`, border: `1px solid ${C.gold}`, color: C.gold, borderRadius: 100, padding: "4px 0", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        {uiT("card.yes", langKey(lang))}
+                      </button>
+                      <button type="button"
+                        onClick={(e) => { e.stopPropagation(); ask.onNo && ask.onNo(); }}
+                        style={{ flex: 1, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "4px 0", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        {uiT("card.no", langKey(lang))}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
             {/* Says what tapping does, which is the whole of what the badge
                 above it was reaching for. A picture that opens something has to
                 say so, or it is a picture.
@@ -333,7 +423,7 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
             <div style={{ fontSize: 9.5, color: C.muted, marginTop: 2, fontWeight: 600 }}>
               {openLabel(lang)}
             </div>
-            {creditLine(shot.credit) && (
+            {shot && creditLine(shot.credit) && (
               // WRAPS, never truncates. An ellipsis through "CC BY-SA 3.0"
               // leaves an attribution that names the photographer and not the
               // licence, which is half of what CC BY asks for. Two lines of 8.5px

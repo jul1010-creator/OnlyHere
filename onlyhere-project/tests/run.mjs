@@ -80,7 +80,7 @@ writeFileSync(entry, `
   export { withoutNonModes, travelModeKey as travelModeKeyForTest } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { travelLabel, isAtTravelOrigin, ORIGIN_TAIL, TRAVEL_ORIGIN as TRAVEL_ORIGIN_NAME, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, stripMarkdown, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fillerWordCounts, FILLER_WORDS, FILLER_ADJECTIVES, FILLER_COUNTED, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
-  export { arrivalRow, transitDepartureAnchor, departureParam, HOUR_OF, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { arrivalRow, transitDepartureAnchor, departureParam, HOUR_OF, scanForAITells, seededShuffle } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll, priceLabel } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { icsEscape, icsFold, icsStamp, stayMinutes, DEFAULT_STAY_MINUTES, icsUid, stopEvent, guideEvents, buildIcs, icsFilename } from ${JSON.stringify(join(root, "src/utils/calendarExport.js"))};
   export { isAbsolutePhoto, heroNeedsReplacing, heroPatch, heroStatusLine } from ${JSON.stringify(join(root, "src/utils/heroPhoto.js"))};
@@ -166,7 +166,7 @@ writeFileSync(entry, `
   export { freeButPriced, moneyProblems, LODGING_FLOOR_DKK } from ${JSON.stringify(join(root, "src/utils/moneyClaims.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
-  export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, briefBlock, buildBlockedNote, MAX_ASKS_AT_ONCE, enoughToRecommend, ACKNOWLEDGED_VALUE, namedStayIn, readStayNights, bookedDayNumbers } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
+  export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, briefBlock, buildBlockedNote, MAX_ASKS_AT_ONCE, enoughToRecommend, unsureWhatTheyWant, ACKNOWLEDGED_VALUE, namedStayIn, readStayNights, bookedDayNumbers } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { GREETING, openingThread, withTestBrief, withoutTestBrief, threadIsSound, TEST_BRIEF } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { CHAT_REPORT_KIND, CHAT_REPORT_VERSION, buildChatReport, chatReportFilename, turnReport, briefTimeline, intakeReport } from ${JSON.stringify(join(root, "src/utils/chatReport.js"))};
   export { RIGHTS_HOLDER, copyrightLine, GUIDE_RIGHTS_SHORT, GUIDE_RIGHTS_FULL, TDM_RESERVATION } from ${JSON.stringify(join(root, "src/utils/rights.js"))};
@@ -226,10 +226,11 @@ writeFileSync(entry, `
   export { LANGUAGES, MONTH_INDEX, PARTY_BARE, PARTY_POSSESSIVE, YES_WORDS, NO_WORDS, alt, LETTER } from ${JSON.stringify(join(root, "src/utils/travellerWords.js"))};
   export { auditRow, auditRows, auditLinks, auditSummary, auditNote, programmeState, ticketDestination, tourDestination, linkPatch, TICKET, TOUR } from ${JSON.stringify(join(root, "src/utils/affiliateAudit.js"))};
   export { problemText, problemList, problemHeading, PROBLEM_NOTE } from ${JSON.stringify(join(root, "src/utils/planProblems.js"))};
-  export { readExclusions, isExcluded, withoutExcluded, excludedNote } from ${JSON.stringify(join(root, "src/utils/exclusions.js"))};
+  export { readExclusions, isExcluded, withoutExcluded, excludedNote, ruledOutFor } from ${JSON.stringify(join(root, "src/utils/exclusions.js"))};
   export { latestRelativeAnswer, departureDateIn } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { launderedAbsence } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { contradictedAbsence, sentences } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
+  export { weighAdd, addCaution, tripLoadBlock, STOPS_A_DAY, mainTheme } from ${JSON.stringify(join(root, "src/utils/weighAdd.js"))};
   export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dateRangeIn, dayCountIn, relativeDayIn, relativeAnswerIn, daysBetween, describePicks, monthOnlyIn, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED, isRegionCrossing } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
@@ -9393,6 +9394,46 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // And none of it bought by loosening what a date is. This sentence ends in a
     // full stop after a clock time, and a full stop is not an ordinal.
     is("a clock time is still not a trip", span("I am at work today till 5."), null);
+  }
+
+  // ── AND A DAY OF THE WEEK, WHICH NOTHING COULD READ ───────────────
+  //
+  // Oliver, 13 Sep 2026, a Sunday, with his own session: "It doesn't understand
+  // 'next week' and 'on monday'. In fact, it calculated it as the 19th of
+  // September." He typed "Maybe next week? Monday". The answer was the 14th, the
+  // very next day, and he had to correct it four turns later.
+  //
+  // TWO SEPARATE FAULTS. No day name was readable in any of the six languages,
+  // so the one word that made his answer precise was invisible. And the answer
+  // test threw away what was left: "Maybe next week? Monday" says one thing
+  // twice, ten characters apart, and the half the reader did not use counted as
+  // the person saying something else. `when` is a HARD slot, so the model filled
+  // the hole, and it filled it wrong.
+  {
+    const SUN = new Date("2026-09-13T09:00:00Z");   // a Sunday
+    const on = (s) => { const r = M.relativeAnswerIn(s, SUN); return r ? r.start.toDateString() : null; };
+    is("his own turn reads as the Monday he meant", on("Maybe next week? Monday"), "Mon Sep 14 2026");
+    is("a bare day name is the next one coming", on("Monday"), "Mon Sep 14 2026");
+    is("and the little word in front changes nothing", on("on monday"), "Mon Sep 14 2026");
+    is("nor does next", on("next monday"), "Mon Sep 14 2026");
+    // With a week phrase beside it the day belongs to THAT week.
+    is("a day inside next week is that week's day", on("Friday next week"), "Fri Sep 18 2026");
+    is("and without one it is this week's", on("friday"), "Fri Sep 18 2026");
+    // Six languages, like every other list in this project.
+    is("Danish", on("p\u00e5 mandag"), "Mon Sep 14 2026");
+    is("German", on("am Montag"), "Mon Sep 14 2026");
+    is("Swedish", on("n\u00e4sta fredag"), "Fri Sep 18 2026");
+    // A shrug in front of an answer is still an answer.
+    is("and a maybe does not throw it away", on("m\u00e5ske p\u00e5 fredag"), "Fri Sep 18 2026");
+    // Today is not the answer to "when are you coming": somebody who means
+    // today says today.
+    is("a day name never means today", on("sunday"), "Sun Sep 20 2026");
+    // ── AND NONE OF IT BOUGHT BY READING A DATE OUT OF CHAT ─────
+    // The whole reason this guard exists: a date reader that fires on any time
+    // word fills a hard slot from a goodbye.
+    is("a goodbye is not a date",
+       ["Talk tomorrow!", "see you monday, bye", "Is Tivoli open on monday?",
+        "Tomorrow is my birthday", "I will let you know on monday"].filter(s => on(s)), []);
   }
 
   const march = tripWindow({ arrival: "2027-03-12", departure: "2027-03-15" });
@@ -20624,14 +20665,19 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // ── AND WHAT THEY SAID ABOUT MONEY ──────────────────────────────
   // "geranium is NOT mid-range.. so remember to make food places include in
   // budget." Nothing in the matcher had ever read a price.
-  ok("the budget reaches the matcher too", /mode, budget, saidByTraveller \}\)/.test(preview));
+  // `mode, budget, saidByTraveller` rather than the tail of the object: the
+  // options gained `turnedDown` on 13 Sep (the places tapped No on, on the
+  // chat map), and an assertion that breaks when something is added BESIDE
+  // the thing it guards teaches the next person to edit the assertion.
+  ok("the budget reaches the matcher too", /mode, budget, saidByTraveller/.test(preview));
   // ── AND SO DOES WHAT THEY THEMSELVES SAID ───────────────────────
   // The last option, and the one that stops the region pass opening on a region
   // GEMLYX named. Oliver's Aalborg brief named no region; Gemlyx's own reply
   // said "proper North Jutland arrival", regionsNamed read Jutland out of it,
   // and Ribe, three hundred kilometres away, became a legal candidate.
+  // The option, wherever it sits in the object, for the reason given above.
   ok("and the traveller's own turns reach it, for the region pass",
-     /saidByTraveller \}\);/.test(preview));
+     /budget, saidByTraveller(?:, \w+)* \}\);/.test(preview));
   ok("and it is read from the budget box and their own words",
      /travellerBudget\(\[intakeBudgetText, saidByTraveller\]\.filter\(Boolean\)\.join\("\\n"\)\)/.test(preview));
   ok("the budget box is a prop", /intakeBudgetText = "",/.test(preview));
@@ -20922,6 +20968,56 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
     // inventory went into the prompt, and the plan gate that flags a night out
     // nobody asked for returned nothing for a plan carrying Jomfru Ane Gade.
     // Two readers of one question, and the one without the scrub won.
+    // ── AND SAYING YES WITH A REASON TO THINK TWICE ──────────
+    //
+    // Oliver, 13 Sep 2026, on the assist beside the preview: "It doesn't add
+    // anything. Also, is it possible for the AI to calculate if such a decision
+    // might not be wise? Example: 'I can add Aalborg Zoo. However, you might
+    // want to reconsider whether you will have the time.'"
+    //
+    // The app counts it, not the model. The trip in these fixtures is his own
+    // from that morning: nine people, a week built around theme parks.
+    {
+      const { weighAdd, addCaution, tripLoadBlock, STOPS_A_DAY } = M;
+      const zoo = { name: "Aalborg Zoo", town: "Aalborg", themes: ["family"], price: "DKK 249 for adults and DKK 149 per child" };
+      const museum = { name: "Aalborg Historiske Museum", town: "Aalborg", themes: ["history"], price: "Free entry" };
+      const held = [
+        { name: "Legoland", town: "Billund", themes: ["family"] },
+        { name: "F\u00e5rup Sommerland", town: "Blokhus", themes: ["family"] },
+        { name: "LEGO House", town: "Billund", themes: ["family"] },
+        { name: "Skagen", town: "Skagen", themes: ["coast"] },
+      ];
+      const ctx = { days: 2, partySize: 9, already: held, townsOnRoute: ["Skagen", "Aalborg", "Billund"] };
+      const kinds = (p, c = ctx) => weighAdd(p, c).map(n => n.kind);
+      is("a fourth theme park is counted, not judged", kinds(zoo).includes("repeat"), true);
+      is("and the count is of rows", weighAdd(zoo, ctx).find(n => n.kind === "repeat").text.includes("3 family stops"), true);
+      is("a paid door for a group is worth raising", kinds(zoo).includes("cost"), true);
+      // The ROW'S OWN WORDS, never a total. Nine times 249 plus something is a
+      // sum this file would have to parse out of prose, and a wrong total stated
+      // confidently is the failure every other gate in this project exists for.
+      const cost = weighAdd(zoo, ctx).find(n => n.kind === "cost");
+      ok("and it quotes the ticket line rather than multiplying it",
+         cost.text.includes("DKK 249 for adults") && !/\b2241\b|\b\d{4,}\b/.test(cost.text));
+      // A free museum on the route, in a theme the week does not already have.
+      is("and nothing is raised when nothing is wrong", weighAdd(museum, ctx), []);
+      is("so the chip says nothing either", addCaution(weighAdd(museum, ctx)), "");
+      // ROOM, only where the length is known.
+      const packed = { ...ctx, days: 1 };
+      ok("a trip with no room left says so", kinds(museum, packed).includes("time"));
+      is("and a trip with no stated length says nothing about room",
+         kinds(museum, { ...ctx, days: null }).includes("time"), false);
+      // A detour is a fact about the route, not an opinion about the place.
+      ok("a town nobody is visiting is a detour",
+         kinds({ name: "M\u00f8ns Klint", town: "M\u00f8n", themes: ["nature"] }).includes("route"));
+      // The block the model reads carries the counts and forbids the sum.
+      const block = tripLoadBlock(ctx);
+      ok("the model is handed the counts", /4 stops across 2 days/.test(block) && /family x3/.test(block));
+      ok("and told not to do the arithmetic", /Never state a total yourself/.test(block));
+      ok("and the pace is the one constant, not a second number",
+         block.includes(`About ${STOPS_A_DAY} a day`));
+      is("an empty trip has nothing to say", tripLoadBlock({}), "");
+    }
+
     is("a refusal of a night out never opens the list",
        ["Well, I can't really be doing nightlife when I'm with my kids..",
         "No nightlife please, we have the kids",
@@ -44810,12 +44906,38 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // Shut, every pin is a name. That is also what stops five labels fighting
     // over a 380px map on the turn that names the most places and knows least.
     const chatMap = readFileSync(join(root, "src/components/ChatMiniMap.jsx"), "utf8");
+    // `sayWhatFor = false, focus = null,` rather than the end of the signature:
+    // three props joined it on 13 Sep (ask, turnedDown, onRestore, for the
+    // "Is this interesting?" card), and an assertion pinned to the closing
+    // brace fails on the day something is added beside the thing it guards.
     ok("the map takes the gate rather than deciding for itself",
-       /sayWhatFor = false, focus = null \}\) => \{/.test(chatMap));
+       /sayWhatFor = false, focus = null,/.test(chatMap));
     ok("and says nothing about what a place is for until it opens",
        /const picked = sayWhatFor \? distinctThemes\(/.test(chatMap) && /\)\) : \{\};/.test(chatMap));
+    // ── AND THE GATE CHANGED, 13 SEP 2026 ────────────────────────
+    //
+    // It was enoughToRecommend, which is true when interests OR party is known,
+    // so the word under a pin was on for nearly everybody. Oliver, with a
+    // screenshot of three pins reading Coast, History and Family: "the
+    // categories under each town should only be for people being uncertain of
+    // their decisions. It's awkward to have on all the time. Nobody will
+    // understand what it means."
+    //
+    // enoughToRecommend answers a different question: whether there is enough to
+    // MATCH a town on. This one asks whether the traveller needs telling what a
+    // town is for, and somebody who has said "history and nature" does not.
     ok("and the app opens it from the brief rather than from the pins",
-       /sayWhatFor=\{enoughToRecommend\(liveIntakeBrief\)\}/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+       /sayWhatFor=\{unsureWhatTheyWant\(liveIntakeBrief\)\}/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+    const said = (v) => brief({ interests: { value: v } });
+    ok("somebody who named a theme is not shown what it means",
+       M.unsureWhatTheyWant(said("history, nature")) === false);
+    ok("somebody who has said nothing is", M.unsureWhatTheyWant(brief({})) === true);
+    ok("and so is somebody who handed the choice over",
+       M.unsureWhatTheyWant(said("open to anything, Gemlyx chooses")) === true);
+    // The placeholder means "they said something about it" and carries no
+    // theme, which is the same nothing as far as this question goes.
+    ok("and the acknowledged placeholder counts as nothing",
+       M.unsureWhatTheyWant(said(M.ACKNOWLEDGED_VALUE)) === true);
   }
   // ── AND A NAMED REFUSAL IS NOT A PRONOUN ─────────────────────────
   // "We don't want to go back" matches on its own, and the sentence goes on to
@@ -44874,7 +44996,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // failure this repository has now paid for four separate times.
   {
     const pm = stripComments(readFileSync(join(root, "src/utils/previewMatch.js"), "utf8"));
-    ok("the matcher reads the exclusions itself", /const ruledOut = readExclusions\(ownWords\)/.test(pm));
+    // ── THROUGH ruledOutFor SINCE 13 SEP, WHICH IS readExclusions PLUS THE TAPS ──
+    // The map gained "Is this interesting? Yes/No", and a No there is a
+    // refusal nobody typed. The matcher still reads the typed ones from
+    // ownWords and nothing else in the transcript; the merge with the tapped
+    // list happens once, in exclusions.js, and the assertion under this one
+    // pins that the helper starts from readExclusions over the same words.
+    ok("the matcher reads the exclusions itself", /const ruledOut = ruledOutFor\(ownWords, turnedDown\)/.test(pm));
+    ok("and the helper it reads through is readExclusions over those words plus the taps",
+       /export const ruledOutFor = \(ownWords, tapped = \[\], \{ known = \[\] \} = \{\}\) => \{\s*const out = readExclusions\(ownWords, \{ known \}\);/
+         .test(stripComments(readFileSync(join(root, "src/utils/exclusions.js"), "utf8"))));
     // ownWords, not the whole transcript: a place GEMLYX named is not a place
     // the traveller ruled out.
     ok("from the traveller's own words rather than the transcript", !/readExclusions\(text\)/.test(pm));
@@ -44883,8 +45014,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
     // constraintCheck has audited a field with no writer since the day it was
     // written. This is the writer.
+    // ruledOutFor rather than readExclusions since 13 Sep: the same typed
+    // refusals, plus the places tapped No on, on the chat map, merged once.
     ok("and the built guide finally carries the constraints it is audited against",
-       /_constraints: \{ excluded: readExclusions\(saidByTravellerForGuide\)/.test(app));
+       /_constraints: \{ excluded: ruledOutFor\(saidByTravellerForGuide, turnedDown\)/.test(app));
   }
 }
 
@@ -48229,8 +48362,20 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // And it is wired, on both halves.
     {
       const appS = readFileSync(join(root, "src/App.jsx"), "utf8");
-      ok("the chat map walks the attractions as well as the towns",
-         /const spotPool = pools\.filter\(p => p\?\._src === "free"\)/.test(appS));
+      // ── AND EVERYTHING IT NAMES, AS OF 13 SEP 2026 ────────────
+      //
+      // This pinned `_src === "free"`, attractions only. Oliver, after a
+      // nightlife-led session: "when it zooms in, it still does not show any
+      // attractions." Nothing had been dropped for a missing coordinate, which
+      // the caption would have said. Nothing MATCHED: the reply had named
+      // Kodbyen and a bar in it, and a layer that can only draw free entrances
+      // had nothing to draw.
+      //
+      // Towns still walk separately with their own budget, which is the line
+      // below and the reason this is safe: a reply full of bars cannot push the
+      // town they are flying into off the map.
+      ok("the chat map walks everything Gemlyx names, not only the attractions",
+         /const spotPool = pools\.filter\(p => \["free", "food", "nightlife", "craft"\]\.includes\(p\?\._src\)\)/.test(appS));
       ok("as two walks rather than one pool", /const onTowns = walk\(townPool\);\n\s*const onSpots = walk\(spotPool\);/.test(appS));
       ok("merged with the towns first", /pins: \[\.\.\.onTowns\.pins, \.\.\.onSpots\.pins\]/.test(appS));
       ok("and what was left off is still counted honestly",
@@ -48597,12 +48742,37 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   //    the model cannot follow: it has no coordinates. It has the lists in the
   //    same prompt, so the rule names them, and names what a close view draws,
   //    which is the information the zoom decision needs.
+  // ── AND THE LIST IS NOT CALLED "FREE" ANY MORE ─────────────────
+  //
+  // Oliver, 13 Sep 2026, on the session that started in Skagen: "it said
+  // Legoland and another children's attraction was free entrance, and that only
+  // transport cost money." The array is called freeEntrance for what it used to
+  // hold; it holds Legoland now, and the prompt was appending "free entry" to
+  // every row of it. Both the heading and this rule said free, so the model was
+  // told three times. The price on each row comes off entryPrice.js now, which
+  // is what the CARD on the same screen had been using all along.
   ok("the rule names the lists the model can see",
-     /TOWNS and HIDDEN GEM TOWNS lists below/.test(MAP_DIRECTION_RULE) && /FREE ENTRANCE ATTRACTIONS list below/.test(MAP_DIRECTION_RULE));
+     /TOWNS and HIDDEN GEM TOWNS lists below/.test(MAP_DIRECTION_RULE)
+     && /ATTRACTIONS, FOOD and NIGHTLIFE lists below/.test(MAP_DIRECTION_RULE));
+  ok("and it does not call any of them free", !/FREE ENTRANCE/.test(MAP_DIRECTION_RULE)
+     && !/free attractions/.test(MAP_DIRECTION_RULE));
   ok("and those list headings exist in the prompt it joins",
-     /\nTOWNS: \$\{townList\}/.test(appR) && /\nHIDDEN GEM TOWNS \(/.test(appR) && /\nFREE ENTRANCE ATTRACTIONS \(/.test(appR));
-  ok("and says what a close view shows", /Flown down to a town, it shows that town and, inside it, a pin for every place from the FREE ENTRANCE ATTRACTIONS list/.test(MAP_DIRECTION_RULE));
-  ok("and that a zoom is earned by naming what is inside", /naming two or three of its free attractions from the list as you go/.test(MAP_DIRECTION_RULE));
+     /\nTOWNS: \$\{townList\}/.test(appR) && /\nHIDDEN GEM TOWNS \(/.test(appR) && /\nATTRACTIONS, EACH WITH WHAT ITS OWN ENTRY SAYS/.test(appR));
+  // ── AND EVERY ROW CARRIES ITS OWN ANSWER ────────────────────────
+  // Three values, because "we have not been told" is a real answer and the one
+  // Legoland's own ticket line produces: "Children under 2: free entry" is a
+  // claim about who, not about the door.
+  ok("the attractions list reads the price off the entry",
+     /const attractionsList = deal\(freeEntrance\)\.map\(a => \{[\s\S]{0,400}?entryPrice\(a\)/.test(appR));
+  ok("and names a paid door as paid", /COSTS MONEY/.test(appR));
+  ok("and an unpriced one as unknown rather than free",
+     /ENTRY PRICE NOT KNOWN, never call this one free/.test(appR));
+  // The sentence he actually read: "the theme parks and museums on your route
+  // are free entry, so your real cost is transport and food for nine people."
+  ok("and the sentence he read is forbidden by name",
+     /NEVER TELL ANYBODY THE ONLY REAL COST IS TRANSPORT/.test(appR));
+  ok("and says what a close view shows", /Flown down to a town, it shows that town and, inside it, a pin for every place from the ATTRACTIONS, FOOD and NIGHTLIFE lists/.test(MAP_DIRECTION_RULE));
+  ok("and that a zoom is earned by naming what is inside", /naming two or three of the places inside it from the lists as you go/.test(MAP_DIRECTION_RULE));
   // A camera sat on Aalborg for twelve turns of his 21:24 transcript, through
   // a reply summing up a route from Skagen to Germany, because nothing said
   // that leaving the town means leaving the close view.
@@ -48811,15 +48981,99 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and the played counter resets per reply", /beatOwnerRef\.current !== m\.idx/.test(appR));
   // The markers come out AFTER every other strip, so the words the beat counted
   // are the words the reveal walks.
-  ok("the markers are read off the final text, not the raw one",
-     /const readable = m\.role === "assistant" \? stripMarkdown\(stripReadyMarker\(m\.text\)\) : m\.text;\s*\n\s*const withBeats = m\.role === "assistant" \? readMapBeats\(readable\) : null;/.test(appR));
+  // ── WHY IT KEPT NAMING THE SAME FIVE PLACES ─────────────────────
+  //
+  // Oliver, 13 Sep 2026: "Why does Gemlyx seem to have a lot of 'k\u00f8dbyen'
+  // bias? You can look through the chats, you'll notice that it does love
+  // k\u00f8dbyen a lot." Counted across his six exports, Gemlyx's turns against the
+  // traveller's: Drag\u00f8r 13 to 0, Vesterbro 11 to 0, Nightpay 11 to 0, Nyhavn 9
+  // to 0, Jomfru Ane Gade 9 to 1, K\u00f8dbyen 2 to 0. The bias was real and
+  // K\u00f8dbyen was the mildest case of it. What the six had in common was a place
+  // near the top of their published list.
+  {
+    const { seededShuffle } = M;
+    const list = Array.from({ length: 10 }, (_, i) => i);
+    is("a seed gives the same order twice", seededShuffle(list, 7).join(","), seededShuffle(list, 7).join(","));
+    ok("and a different seed gives a different one", seededShuffle(list, 7).join(",") !== seededShuffle(list, 8).join(","));
+    is("nothing is lost or duplicated", [...seededShuffle(list, 3)].sort((a, b) => a - b).join(","), list.join(","));
+    ok("and the caller's list is not reordered under them",
+       (() => { const src = [...list]; seededShuffle(src, 4); return src.join(","); })() === list.join(","));
+    // ── AND IT IS A REAL SHUFFLE ──────────────────────────────────
+    //
+    // The old one was `sort(() => Math.random() - 0.5)`, a comparator that
+    // answers at random. The sort is then undefined and rows stay near where
+    // they started. Measured over 20,000 runs of this ten item list: the first
+    // element stayed first 3,910 times, where an even shuffle leaves it there
+    // 2,000. Nearly double, on the end of the list a model reads first.
+    //
+    // Fewer runs here because this is a test suite and not a study. The bound is
+    // loose enough never to flake and tight enough that the old comparator, which
+    // lands around 39 percent, could not pass it.
+    {
+      const RUNS = 4000;
+      let stayed = 0;
+      for (let seed = 1; seed <= RUNS; seed += 1) if (seededShuffle(list, seed)[0] === 0) stayed += 1;
+      const pct = stayed / RUNS;
+      ok(`the first row does not stay first (${Math.round(pct * 100)}%, want about 10%)`, pct > 0.06 && pct < 0.16);
+    }
+    // And it is wired to every pool the chat recommends from.
+    const appI = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the order is fixed for one conversation", /const chatSeedRef = useRef\(/.test(appI));
+    ok("and a fresh one is dealt when the chat is started over",
+       /clearThread\(\)[\s\S]{0,220}chatSeedRef\.current = Math\.floor\(Math\.random\(\)/.test(appI));
+    is("every recommendation pool is dealt rather than read in database order",
+       ["towns", "campingSpots", "foodSpots", "nightlifeSpots", "freeEntrance", "handmadeCraftShops"]
+         .filter(p => !new RegExp(`deal\\(${p}\\)`).test(appI)), []);
+    // ── AND THE EVENTS ARE NOT ──────────────────────────────────
+    // They are filtered by date and cut to eight, so the order decides WHICH
+    // ONES SURVIVE. A festival during somebody's trip is not interchangeable
+    // with one in March.
+    is("and the events are not, because their order decides which ones survive",
+       ["events", "majorEvents", "vikingEvents"].filter(p => new RegExp(`deal\\(${p}\\)`).test(appI)), []);
+    // stripComments, because two comments in App.jsx now NAME the old comparator
+    // in order to explain why it went. A rule that cannot tell code from the
+    // comment describing it is a rule that punishes writing the reason down.
+    ok("the old comparator is gone", !/sort\(\(\) => Math\.random\(\) - 0\.5\)/.test(stripComments(appI)));
+  }
+
+  // ── AND ALL THREE RENDERERS MAKE THE SAME CALL ──────────────────
+  //
+  // Oliver, 13 Sep 2026, with a screenshot of the assist panel on the preview
+  // screen and "[[GEMLYX_READY_TO_BUILD]]" printed in the middle of the reply,
+  // selected with his mouse: "remove this from the assist", "looks too 'beta'".
+  //
+  // Three places render an assistant reply. This assertion pinned the ONE that
+  // was right, spelled out as two lines of App.jsx, and could not see that the
+  // assist on the preview screen and the Local Assist on a built guide both
+  // printed `m.text` raw: the ready marker, the camera markers and every
+  // asterisk of markdown, straight into the bubble.
+  //
+  // So it pins the shared call instead of one spelling of it. readerView is in
+  // utils/helpers.js and the order inside it is the load-bearing part: the beats
+  // count the words in the string that BECOMES the bubble, so every strip has
+  // to have run before readMapBeats sees it.
+  ok("the chat reads the reply through readerView", /const view = m\.role === "assistant" \? readerView\(m\.text\) : null;/.test(appR));
+  is("and every renderer of a reply goes through it", [
+    ["src/App.jsx", /<TypewriterText text=\{readerView\(m\.text\)\.text\}/],
+    ["src/pages/GuidePage.jsx", /<TypewriterText text=\{readerView\(m\.text\)\.text\}/],
+  ].filter(([f, re]) => !re.test(readFileSync(join(root, f), "utf8"))).map(([f]) => f), []);
+  is("and none of them prints the raw text", [
+    "src/App.jsx", "src/pages/GuidePage.jsx",
+  ].filter(f => /<TypewriterText text=\{m\.text\}/.test(readFileSync(join(root, f), "utf8"))), []);
+  // The order, asserted where it lives rather than at three call sites.
+  ok("and readerView strips before it counts",
+     /readMapBeats\(stripMarkdown\(stripReadyMarker\(text\)\)\)/.test(readFileSync(join(root, "src/utils/helpers.js"), "utf8")));
 }
-  ok("fed by mapPlaces and not by the card's reading", /const walk = \(pool\) => mapPlaces\(\{[\s\S]{0,400}?coordsFor: placeCoords,/.test(appR));
+  // The walk grew a body on 13 Sep: the pool is filtered through
+  // withoutExcluded first, for the places tapped No on, and the three readers
+  // are handed the filtered pool as `kept`. The assertions below name `kept`
+  // for that reason, and the one after them pins the filter itself.
+  ok("fed by mapPlaces and not by the card's reading", /const walk = \(pool\) => \{\s*const kept = withoutExcluded\(pool, turnedDown\);\s*return mapPlaces\(\{[\s\S]{0,400}?coordsFor: placeCoords,/.test(appR));
   // placeCoords, not a fresh `__lat ?? lat` read. Six copies of that question
   // have been found in this codebase and five of them were wrong.
   is("and nothing in the map component resolves a coordinate itself",
      (chatCode.match(/__lat|__lon/g) || []).length, 0);
-  ok("the map's pins drop the card's photo rule", /placesFor: \(text\) => placesNamedIn\(clean\(text\), pool, \{ needsPhoto: false/.test(appR));
+  ok("the map's pins drop the card's photo rule", /placesFor: \(text\) => placesNamedIn\(clean\(text\), kept, \{ needsPhoto: false/.test(appR));
   // ── AND THE MAP PINS TOWNS, AND WHAT IS INSIDE THEM ─────────────
   // Oliver, 8 Sep 2026: "we only need to have the towns popping up on the map.
   // No need to have it popping up two places." A town is the unit a person
@@ -48838,10 +49092,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // is asked about the same set the pin reader is.
   ok("the map is fed towns",
      /const townPool = pools\.filter\(p => p\?\._src === "town"\);/.test(appR));
-  ok("and the attractions he was being told about",
-     /const spotPool = pools\.filter\(p => p\?\._src === "free"\);/.test(appR));
+  // Everything Gemlyx names, as of 13 Sep 2026, and not attractions alone. See
+  // the block further up for the session that forced it.
+  ok("and everything else he was being told about",
+     /const spotPool = pools\.filter\(p => \["free", "food", "nightlife", "craft"\]\.includes\(p\?\._src\)\);/.test(appR));
   ok("and the unpin reader is asked about the same set",
-     /rejectsFor: \(text, m\) => rejectedIn\(clean\(text\), pool, \{ own: m\?\.role === "user" \}\)/.test(appR));
+     /rejectsFor: \(text, m\) => rejectedIn\(clean\(text\), kept, \{ own: m\?\.role === "user" \}\)/.test(appR));
+  ok("and so is the correction reader",
+     /correctsFor: \(text\) => correctedTo\(clean\(text\), kept\)/.test(appR));
   // The CARD still sees everything: a restaurant or a bar is exactly what a
   // card is for, and it is the map that cannot say anything useful about one.
   // Two assertions here were the same string twice, which is a test that can
@@ -49082,7 +49340,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      /entryWord\(THEME_LABEL\[theme\]/.test(chatCode));
   ok("at the layout built for it", /layout="pin"/.test(chatCode));
   is("and the map writes no <img> of its own", (chatCode.match(/<img|innerHTML/g) || []).length, 0);
-  ok("a pin with no showable photograph gets no card", /const shot = showablePhoto\(p\.place\);\s*if \(!shot\) \{/.test(chatCode));
+  // ── UNLESS THERE IS A QUESTION TO PUT IN IT, 13 SEP 2026 ──────────
+  // "No photograph, no card" was written for a picture feature, where an empty
+  // frame is worse than nothing. Oliver then asked for "a short description of
+  // the places ... and then a 'Is this interesting?' Yes/No" on the zoomed-in
+  // map, and a question has to be askable on every place inside a town, not
+  // only the ones with a licensed picture. So the branch that gives a pin no
+  // card now needs BOTH to be false: no picture, and no question. The question
+  // half is `asking && isSpotPin(p)`, asserted by name further down.
+  ok("a pin with no showable photograph and no question gets no card",
+     /const shot = showablePhoto\(p\.place\);[\s\S]{0,900}?const asks = asking && isSpotPin\(p\);\s*if \(!shot && !asks\) \{/.test(chatCode));
   // ── THE PIN LAYOUT IS THE SAME COMPONENT ───────────────────────
   // A second component would be a second place for the credit to be got wrong.
   const cards = readFileSync(join(root, "src/components/ChatPlaceCards.jsx"), "utf8");
@@ -54293,10 +54560,28 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   }
   is("an age given without the word is still a child",
      partyAnswer("my wife and I plus our 7 year old")?.kidAges, [7]);
-  // A total is only computed when both halves are known: adding what is known to
-  // "me, my wife and our 3 kids" gives 3 for a party of five, and a wrong number
-  // is worse than none because everything downstream believes it.
-  is("half a party is not a total", partyAnswer("me, my wife and our 3 kids")?.total, null);
+  // A total is only computed when both halves are known, because adding what is
+  // known to a half-read party gives a number that is wrong in a believable way,
+  // and everything downstream believes it.
+  //
+  // THE EXAMPLE MOVED, 13 Sep 2026. It used to be "me, my wife and our 3 kids",
+  // which was half-read only because the reader could not see a couple listed
+  // with a COMMA: it found the three children and no adults at all. Oliver's own
+  // session that morning said "It's me, my boyfriend, and our 7 kids" and the
+  // brief came out holding SEVEN CHILDREN travelling alone. That sentence is
+  // fully read now, so it is no longer an example of a half, and five is the
+  // right answer for it.
+  is("a couple listed with a comma is still a couple",
+     partyLine(partyAnswer("me, my wife and our 3 kids")), "2 adults and 3 children");
+  is("and it totals correctly once both halves are known",
+     partyAnswer("me, my wife and our 3 kids")?.total, 5);
+  is("his own sentence, which read as seven children alone",
+     partyLine(partyAnswer("It's me, my boyfriend, and our 7 kids")), "2 adults and 7 children");
+  // A real half: the adults are known and the children are not.
+  is("half a party is not a total", partyAnswer("my wife and I plus our kids")?.total, null);
+  // And a comma does not turn two relatives into a couple.
+  ok("a sister and her husband are not a couple travelling",
+     (partyAnswer("me, my sister and her husband")?.adults ?? null) !== 2);
 
   // ── 6. "NO KIDS" IS NOT KIDS ──────────────────────────────────────
   const fakeB = (known) => ({ known });
@@ -57896,6 +58181,296 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   is("a genuine contradiction still fires", REALLY_WRONG.length, 1);
   ok("and says which way round it is", /too short for the distance/.test(REALLY_WRONG[0].direction));
   ok("an entry with a real pair is still checkable", checkable("It is a 30 km walk and takes 5 minutes."));
+}
+
+// ── "IS THIS INTERESTING?" YES/NO ON THE ZOOMED-IN MAP, 13 SEP 2026 ─
+//
+// Oliver: "Is it possible that when it zooms in, it can [show] a short
+// description of the places (like at the final guide), and then a 'Is this
+// interesting?' Yes/No. Obviously not all the time. But it's a good mechanism
+// in a time of uncertainty."
+//
+// Four things had to be true and each is asserted below on its own: the
+// description is READ off the row by the reader the preview already uses and
+// never written; a No has a real home (turnedDown, the counterpart of
+// pickedExtras) that reaches the map, the preview, the guide build and the
+// model; a Yes writes to the one list of adds there already was; and the card
+// asks only in a time of uncertainty, which is unsureWhatTheyWant, the gate the
+// word under a pin already had, plus never twice and never by itself.
+{
+  const { briefBlock, ruledOutFor, readExclusions, matchedPlaces, previewPools, buildPreviewReport, UI_STRINGS, UI_CODES, t, cardLine } = M;
+  const BANNED = /\b(?:actually|truly|genuinely|genuine|simply|really|quite)\b/i;
+  const DASH = /[–—]/;
+
+  // ── 1. THE MODEL IS TOLD WHAT WAS TAPPED ─────────────────────────
+  //
+  // The brief block is how facts reach the model, and a tap is a fact the
+  // transcript cannot show. Handed over as names, and never written into the
+  // conversation as though the traveller had typed it.
+  {
+    const asking = { known: {}, missing: ["days"], unanswered: [], declined: [] };
+    const full = { known: {}, missing: [], unanswered: [], declined: [] };
+    const both = briefBlock(asking, [], { picked: ["Legoland"], turnedDown: ["Tivoli"] });
+    ok("a Yes reaches the model as a place in the trip",
+       /THEY TAPPED YES ON THESE PLACES ON THE MAP, SO THEY ARE IN THE TRIP: Legoland\./.test(both));
+    ok("and a No as a place never to offer again",
+       /THEY TAPPED NO ON THESE PLACES ON THE MAP: Tivoli\. Never offer, recommend or plan any of them again/.test(both));
+    ok("and the No says what to do when they ask about it anyway",
+       /answer the question and still leave it out of the plan/.test(both));
+    // Before the first question and before the early return, so a full brief
+    // that asks nothing still carries them. The first version of a block line
+    // added after the return would be green on the asking path and absent on
+    // the one that builds.
+    const done = briefBlock(full, [], { picked: ["Legoland"], turnedDown: ["Tivoli"] });
+    ok("a brief with nothing left to ask still carries both",
+       /YOU HAVE EVERYTHING YOU NEED/.test(done) && /TAPPED YES/.test(done) && /TAPPED NO/.test(done));
+    ok("the lines come before the questions, where the block states facts",
+       both.indexOf("TAPPED NO") < both.indexOf("STILL MISSING"));
+    // Nothing tapped is the block exactly as it was, for every caller without a
+    // map.
+    const plain = briefBlock(asking, []);
+    ok("nothing tapped prints nothing about taps", !/TAPPED/.test(plain));
+    is("and the third argument is optional", briefBlock(asking), plain);
+    // Names are folded once. A tap holds a name and nothing else, and a name
+    // repeated is one decision.
+    const folded = briefBlock(asking, [], { turnedDown: ["Tivoli", " Tivoli ", "Tivoli", "", null] });
+    is("a name tapped three times is one name", (folded.match(/Tivoli/g) || []).length, 1);
+    ok("and blanks are not names", !/TAPPED NO ON THESE PLACES ON THE MAP: ,/.test(folded) && /MAP: Tivoli\./.test(folded));
+    ok("a list of blanks prints no line at all", !/TAPPED/.test(briefBlock(asking, [], { turnedDown: ["", "  "], picked: [null] })));
+    // App.jsx keeps the two lists disjoint; a caller that does not gets the Yes,
+    // because a place kept in is visible and a place kept out is not.
+    const clash = briefBlock(asking, [], { picked: ["Legoland"], turnedDown: ["legoland"] });
+    ok("a name on both lists reads as a Yes", /TAPPED YES[^\n]*Legoland/.test(clash) && !/TAPPED NO/.test(clash));
+    // The writing rules, on the lines a model reads as a sample of its register.
+    const mine = both.split("\n").filter(l => /TAPPED/.test(l)).join("\n");
+    ok("the tap lines carry no dash", !DASH.test(mine));
+    ok("and none of the banned words", !BANNED.test(mine));
+    // Wired, with the app's own two lists and nothing invented between them.
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the prompt hands the block the two lists",
+       /\$\{briefBlock\(brief, conflicts, \{ picked: pickedExtras, turnedDown \}\)\}/.test(app));
+  }
+
+  // ── 2. A NO HAS SOMEWHERE TO LIVE, AND IT IS NOT A SENTENCE ──────
+  //
+  // rejectedIn reads refusals out of TEXT. A tap is not text, and faking one by
+  // injecting "skip Legoland" into the conversation would put words in the
+  // traveller's mouth. So the No is state, the counterpart of pickedExtras, and
+  // it is merged with the typed refusals once, in exclusions.js.
+  {
+    is("a tap joins the typed refusals", ruledOutFor("Please don't send us to Legoland.", ["Tivoli"]), ["Legoland", "Tivoli"]);
+    is("typed first, because those have a sentence somebody can point at",
+       ruledOutFor("Skip Tivoli.", ["Legoland"]), ["Tivoli", "Legoland"]);
+    is("and a name in both is one name", ruledOutFor("Skip Tivoli.", ["tivoli", "Tivoli"]), ["Tivoli"]);
+    is("blanks and non-strings are not names", ruledOutFor("", ["", null, "  ", 7]), []);
+    is("a missing list is no list", ruledOutFor("Skip Tivoli.", null), ["Tivoli"]);
+    is("and nothing typed and nothing tapped is nothing", ruledOutFor("", []), []);
+    // The gazetteer still passes through, so the name-first shapes keep the
+    // guard that stops a person being read as a town.
+    is("the gazetteer reaches readExclusions through it",
+       [ruledOutFor("Take Aarhus off", [], { known: ["Aarhus"] }), ruledOutFor("Take Aarhus off", [])], [["Aarhus"], []]);
+    is("and with nothing tapped it is readExclusions exactly",
+       ruledOutFor("I'm not going to Aarhus after all", []), readExclusions("I'm not going to Aarhus after all"));
+    // A tapped name is folded the way isExcluded folds a row, so a No on
+    // Legoland takes "Legoland Billund Resort" with it, exactly as the
+    // sentence would have, and no further.
+    const { isExcluded } = M;
+    ok("a No on Legoland covers its fuller name", isExcluded({ name: "Legoland Billund Resort" }, ruledOutFor("", ["Legoland"])));
+    ok("and leaves LEGO House alone", !isExcluded({ name: "LEGO House", town: "Billund" }, ruledOutFor("", ["Legoland"])));
+    ok("and never takes the town", !isExcluded({ name: "Billund", town: "Billund" }, ruledOutFor("", ["Legoland Billund Resort"])));
+
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the list exists beside the list of adds", /const \[turnedDown, setTurnedDown\] = useState\(\[\]\);/.test(app));
+    ok("declared after pickedExtras, which it is the counterpart of",
+       app.indexOf("const [pickedExtras, setPickedExtras] = useState([]);") < app.indexOf("const [turnedDown, setTurnedDown] = useState([]);"));
+    // THE MAP. The pool the walk reads is filtered before any turn is read, so
+    // a turned-down place cannot be found by any message, cannot spend the
+    // cap, and comes off the map on the render after the tap.
+    ok("a No takes the place out of the pool the map walks",
+       /const walk = \(pool\) => \{\s*const kept = withoutExcluded\(pool, turnedDown\);/.test(app));
+    // THE PREVIEW. Through the matcher's own option, so every return path of
+    // matchedPlaces drops it, offers included.
+    ok("and reaches the preview's matcher", /turnedDown=\{turnedDown\}/.test(app) && /turnedDown = \[\],/.test(readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8")));
+    // THE GUIDE. The constraints it is audited against, and both build prompts
+    // as a block, like the adds.
+    ok("and the guide's constraints", /_constraints: \{ excluded: ruledOutFor\(saidByTravellerForGuide, turnedDown\)/.test(app));
+    is("and both build prompts, as the adds do", (app.match(/\$\{chosenExtrasBlock\}\$\{turnedDownBlock\}/g) || []).length, 2);
+    ok("stated as tapped, so the writer knows where it came from",
+       /PLACES THE TRAVELER TURNED DOWN, by tapping No on them on the map\. None of these may appear as a stop/.test(app));
+    ok("and only the tapped list goes to the writer, since typed refusals are already in the text it reads",
+       /const turnedDownNames = \(Array\.isArray\(turnedDown\) \? turnedDown : \[\]\)/.test(app));
+    const blockLine = (app.match(/PLACES THE TRAVELER TURNED DOWN[^\n]*/) || [""])[0];
+    ok("the block carries no dash and no banned word", !!blockLine && !DASH.test(blockLine) && !BANNED.test(blockLine));
+    // THE CHIPS. A reply that names a turned-down place anyway must not grow a
+    // button offering to add it.
+    ok("and the assist chips read the same filtered pool",
+       /placesNamedIn\(readerView\(text\)\.text, withoutExcluded\(addablePool, turnedDown\), \{ needsPhoto: false, cap: 3 \}\)/.test(app));
+    // THE RESET. A tap is a decision about this trip, and the reset that
+    // shipped clearing only the messages was the "asked, so stop asking" hole
+    // in a different costume.
+    ok("starting the chat over clears both lists",
+       /setAiMessages\(clearThread\(\)\);[^\n]{0,160}setPickedExtras\(\[\]\); setTurnedDown\(\[\]\);/.test(app));
+    // And it is on the run report beside pickedExtras, so a screenshot of a
+    // missing place can be traced to the tap.
+    is("the run report carries it", buildPreviewReport({ turnedDown: ["Tivoli"] }).turnedDown, ["Tivoli"]);
+    is("and defaults to none", buildPreviewReport({}).turnedDown, []);
+  }
+
+  // ── 3. THE PREVIEW POOLS DROP IT, ON EVERY PATH ──────────────────
+  {
+    const CONVO = "user: Family of four, kids 7 and 10, four days in Copenhagen. We love markets and cycling, mid range, one or two special meals out.";
+    const pools = previewPools({
+      towns: [{ name: "Copenhagen", isMajorCity: true }],
+      freeEntrance: [{ name: "Amalienborg Slot", city: "Copenhagen" }, { name: "Tivoli", city: "Copenhagen" }],
+      foodSpots: [{ name: "Torvehallerne", location: "Frederiksborggade 21, Copenhagen" }],
+      nightlifeSpots: [], craftItemsFallback: [], events: [], majorEvents: [],
+    });
+    const before = matchedPlaces(CONVO, pools).map(p => p.name);
+    ok("the fixture reaches the place at all", before.includes("Tivoli") && before.includes("Amalienborg Slot"));
+    const after = matchedPlaces(CONVO, pools, { turnedDown: ["Tivoli"] }).map(p => p.name);
+    ok("a tapped No takes it off the preview", !after.includes("Tivoli"));
+    ok("and only it", after.includes("Amalienborg Slot") && after.includes("Torvehallerne") && after.includes("Copenhagen"));
+    is("and no option is the screen exactly as it was", matchedPlaces(CONVO, pools, { turnedDown: [] }).map(p => p.name), before);
+    // Held back rows go through the same door, so a turned-down place is not
+    // waiting behind "Add attractions" either.
+    const doors = matchedPlaces(CONVO, pools, { wanted: new Set(["food"]), turnedDown: ["Tivoli"] });
+    ok("nor is it behind the door of a section the brief did not ask for",
+       !doors.some(p => p.name === "Tivoli") && doors.some(p => p.name === "Amalienborg Slot" && p._notAsked));
+    // And the screen says so. previewMatch.js claimed this since 26 Aug through
+    // a function nobody called.
+    const preview = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+    ok("the preview merges the typed and tapped refusals the way the matcher does",
+       /const leftOut = ruledOutFor\(saidByTraveller, turnedDown\);/.test(preview));
+    ok("and says what it left out, through excludedNote, which now has a caller",
+       /\{excludedNote\(leftOut\) && \(/.test(preview) && /\{excludedNote\(leftOut\)\}/.test(preview));
+    ok("and hands the matcher the list", /saidByTraveller, turnedDown \}\);/.test(preview));
+  }
+
+  // ── 4. WHEN THE CARD ASKS, AND WHEN IT DOES NOT ──────────────────
+  //
+  // "Obviously not all the time." One gate, the one that already exists:
+  // unsureWhatTheyWant. Then never on a town, never on a place already
+  // decided, and never opened by the app.
+  {
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    const mini = readFileSync(join(root, "src/components/ChatMiniMap.jsx"), "utf8");
+    ok("the gate is unsureWhatTheyWant and nothing else",
+       /ask=\{unsureWhatTheyWant\(liveIntakeBrief\) \? askOnMap : null\}/.test(app));
+    ok("the same gate that opens the word under a pin",
+       /sayWhatFor=\{unsureWhatTheyWant\(liveIntakeBrief\)\}/.test(app));
+    ok("no second test was invented for it", !/enoughToRecommend\(liveIntakeBrief\)/.test(app.slice(app.indexOf("<ChatMiniMap"), app.indexOf("<ChatMiniMap") + 900)));
+    ok("the map takes the three props and decides none of it",
+       /focus = null, ask = null, turnedDown = \[\], onRestore = null \}\) => \{/.test(mini));
+    // Only a place inside a town. Towns are drawn at every zoom and never ask.
+    ok("only a place inside a town carries the question", /const asks = asking && isSpotPin\(p\);/.test(mini));
+    // The gate is part of what a pin IS, so the effect redraws when it flips.
+    ok("and the gate is part of the pins' value, so a flip redraws them",
+       /\.join\("\|"\) \+ \(asking \? "\|ask" : ""\);/.test(mini) && /\}, \[pinKey\]\);/.test(mini));
+    // Never opened by the app. Oliver, 12 Sep: "Can the photo on the map not
+    // automatically pop up? ... if I put my mouse on it, then it shows." One
+    // openPopup in the file, inside the pointer's own handler, and no fire().
+    is("the card is opened by the pointer and by nothing else", (mini.match(/openPopup\(\)/g) || []).length, 1);
+    ok("inside the hover handler", /marker\.on\("mouseover", \(\) => \{[\s\S]{0,300}?marker\.openPopup\(\);/.test(mini));
+    ok("and still nothing opens itself when the flight lands", !/marker\.fire\(/.test(mini));
+    // A pin already decided is not asked again: a Yes shows as its state and
+    // a No has no pin left to ask on.
+    ok("the card is told whether the place is already picked",
+       /picked: \(Array\.isArray\(ask\.picked\) \? ask\.picked : \[\]\)\.includes\(h\.place\?\.name\)/.test(mini));
+    ok("and only a pin made with a question gets one, while the gate is live",
+       /ask=\{ask && h\.asks \? \{/.test(mini));
+    // A taller card is re-centred on its pin once it has a height.
+    ok("a card taller than the photo card is re-centred after it opens",
+       /const tall = el \? el\.offsetHeight : 0;[\s\S]{0,200}?pop\.options\.offset = L\.point\(sideFor\(\) \* 76, Math\.round\(tall \/ 2\)\);\s*pop\.update\(\);/.test(mini));
+    // What a Yes and a No do, in one place, keeping the two lists disjoint.
+    const memo = app.slice(app.indexOf("const askOnMap = useMemo("), app.indexOf("}), [pickedExtras, tripWeighsNow]);"));
+    ok("a Yes writes to pickedExtras, the one list of adds", /onYes: \(place\) => \{[\s\S]*?setPickedExtras\(prev => \(prev \|\| \[\]\)\.includes\(name\) \? \(prev \|\| \[\]\)\.filter\(n => n !== name\) : \[\.\.\.\(prev \|\| \[\]\), name\]\);/.test(memo));
+    ok("and takes the name off the turned-down list", /onYes: \(place\) => \{[\s\S]*?setTurnedDown\(prev => \(prev \|\| \[\]\)\.filter\(n => n !== name\)\);/.test(memo));
+    ok("a No writes to turnedDown", /onNo: \(place\) => \{[\s\S]*?setTurnedDown\(prev => \(prev \|\| \[\]\)\.includes\(name\) \? prev : \[\.\.\.\(prev \|\| \[\]\), name\]\);/.test(memo));
+    ok("and takes the name off the picked list", /onNo: \(place\) => \{[\s\S]*?setPickedExtras\(prev => \(prev \|\| \[\]\)\.filter\(n => n !== name\)\);/.test(memo));
+    ok("the caution is computed by weighAdd against the trip, never written",
+       /cautionFor: \(place\) => addCaution\(weighAdd\(place, tripWeighsNow\)\)/.test(memo));
+    // What a No took off the map is said under it, each name a way back.
+    ok("the row under the map names what a No removed", /uiT\("map\.leftOut", uiCode\)/.test(mini));
+    ok("and each name is a button that withdraws the No", /onClick=\{\(\) => \{ if \(typeof onRestore === "function"\) onRestore\(name\); \}\}/.test(mini));
+    ok("wired to the list", /onRestore=\{\(name\) => setTurnedDown\(prev => \(prev \|\| \[\]\)\.filter\(n => n !== name\)\)\}/.test(app));
+  }
+
+  // ── 5. THE CARD ITSELF, READ OFF THE SCREEN ──────────────────────
+  {
+    const { renderSurface } = await import(pathToFileURL(join(root, "tests/render.mjs")).href);
+    const C = { surface: "#111", border: "#222", gold: "#D9A441", text: "#fff", light: "#eee", muted: "#888" };
+    const DESC = "Tivoli opened in 1843 as a pleasure garden in the middle of the city. It suits families and anyone who likes an evening out with lights on.";
+    const withShot = {
+      name: "Tivoli", _src: "free", desc: DESC,
+      photo: "https://upload.wikimedia.org/x.jpg",
+      __photoCredit: { photographer: "Bahnfrend", source: "wikimedia", license: "CC BY-SA 4.0" },
+    };
+    const noShot = { name: "Den Gamle By", _src: "free", desc: DESC };
+    const bare = { name: "Moesgaard", _src: "free" };
+    const ask = { picked: false, caution: "", onYes: () => {}, onNo: () => {} };
+    const card = (props) => renderSurface("src/components/ChatPlaceCards.jsx", "ChatPlaceCards", { C, layout: "pin", ...props });
+
+    const asked = await card({ places: [withShot], ask });
+    ok("the pin card asks the question", asked.says("Is this interesting?"));
+    ok("with the two answers as buttons", />Yes<\/button>/.test(asked.html) && />No<\/button>/.test(asked.html));
+    // THE DESCRIPTION IS THE PREVIEW'S SENTENCE, through the same reader. cardLine
+    // picks the sentence that answers "is this for me" over the founding date.
+    is("the line is what the preview would show", cardLine(withShot), "It suits families and anyone who likes an evening out with lights on.");
+    ok("and that is the line on the card", asked.says(cardLine(withShot)));
+    ok("not the founding date the paragraph opens with", !asked.says("opened in 1843"));
+    ok("the licence credit is untouched by the question", asked.says("Bahnfrend") && asked.says("CC BY-SA 4.0"));
+    ok("and the door into the entry is still there", asked.says("Read more"));
+    // The same reader. A second sentence-picker here would be how the map and
+    // the preview come to describe one place two ways.
+    const cardsSrc = readFileSync(join(root, "src/components/ChatPlaceCards.jsx"), "utf8");
+    ok("through the reader the preview imports", /import \{ cardLine \} from "\.\.\/utils\/cardLine";/.test(cardsSrc)
+       && /import \{ cardLine \} from "\.\.\/utils\/cardLine";/.test(readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8")));
+    is("and rendered by calling it", (cardsSrc.match(/cardLine\(place\)/g) || []).length, 2);
+
+    // No picture is no longer no card, when there is a question to ask.
+    const askedNoShot = await card({ places: [noShot], ask });
+    ok("a place with no photograph still gets asked about", askedNoShot.says("Den Gamle By") && askedNoShot.says("Is this interesting?"));
+    ok("with no picture frame drawn around nothing", !/<img/.test(askedNoShot.html));
+    ok("and its description", askedNoShot.says("It suits families"));
+    const silent = await card({ places: [noShot], ask: null });
+    is("but with no question it is no card, as before", silent.html, "");
+    // No usable text is the name and the question and nothing invented.
+    const bareCard = await card({ places: [bare], ask });
+    is("a row with no text gets no sentence made up for it", cardLine(bare), "");
+    is("so the card is the name, the question, the answers and the door", bareCard.text, "Moesgaard Is this interesting? Yes No Read more");
+
+    // Decided is not asked again. A Yes shows as its state, and the state is a
+    // button that undoes it.
+    const picked = await card({ places: [withShot], ask: { ...ask, picked: true } });
+    ok("a place already picked shows its state", picked.says("Added"));
+    ok("and is not asked again", !picked.says("Is this interesting?") && !/>No<\/button>/.test(picked.html));
+    // The caution, only where there is one, in the chip's own words.
+    const warned = await card({ places: [withShot], ask: { ...ask, caution: "that is 4 stops in 1 day" } });
+    ok("a computed reservation is shown under the question", warned.says("Worth knowing: that is 4 stops in 1 day."));
+    ok("and none is shown when there is none", !asked.says("Worth knowing"));
+
+    // The row layout never asks: the question belongs to the map.
+    const row = await renderSurface("src/components/ChatPlaceCards.jsx", "ChatPlaceCards", { C, layout: "row", places: [withShot], ask });
+    ok("the card under a reply does not ask", !row.says("Is this interesting?"));
+    ok("nor does a photo-less place get a card there", (await renderSurface("src/components/ChatPlaceCards.jsx", "ChatPlaceCards", { C, layout: "row", places: [noShot], ask })).html === "");
+
+    // In the reader's language, from the one catalogue.
+    const da = await card({ places: [withShot], ask, lang: { tag: "da-DK" } });
+    ok("a Danish reader is asked in Danish", da.says("Er det her interessant?") && />Ja<\/button>/.test(da.html) && />Nej<\/button>/.test(da.html));
+    const de = await card({ places: [withShot], ask, lang: { tag: "de-DE" } });
+    ok("and a German one in German", de.says("Ist das interessant?") && />Nein<\/button>/.test(de.html));
+    ok("every string is in every language",
+       ["card.interesting", "card.yes", "card.no", "card.added", "map.leftOut"].every(k => UI_CODES.every(c => String(UI_STRINGS[k]?.[c] || "").trim())));
+    ok("and the row under the map is too", t("map.leftOut", "da") === "Udeladt:" && t("map.leftOut", "en") === "Left out:");
+
+    // A tap must not also open the entry: the card's own onClick does that.
+    is("every answer stops its click reaching the card", (cardsSrc.match(/e\.stopPropagation\(\); ask\.on(?:Yes|No) && ask\.on(?:Yes|No)\(\);/g) || []).length, 3);
+    is("and is a plain button that no form can submit on", (cardsSrc.match(/<button type="button"/g) || []).length, 3);
+    // Money only ever comes from entryPrice, through weighAdd's cost note. The
+    // card itself writes no word about it.
+    ok("the card says nothing about money of its own",
+       !/\b(?:free|gratis|paid|DKK|kr\.?|kroner)\b/i.test(stripComments(cardsSrc).replace(/"[^"\n]*"/g, "")));
+  }
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

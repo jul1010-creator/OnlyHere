@@ -93,6 +93,10 @@ export const buildPreviewReport = ({
   eventPlan = null,
   picked = [],
   pickedExtras = [],
+  // The places tapped No on, on the chat map. On the report for the same
+  // reason pickedExtras is: a screenshot of a missing place has to be
+  // traceable to the tap that removed it.
+  turnedDown = [],
   matched = [],
   namedNames = [],
   profile = null,
@@ -154,6 +158,7 @@ export const buildPreviewReport = ({
     // the case a report is MOST useful for and was the one it explained least.
     coverage,
     pickedExtras,
+    turnedDown,
     rows: (Array.isArray(matched) ? matched : []).map(p => rowReport(p, { wasNamed: named.has(p?.name) })),
   };
 };

@@ -515,7 +515,16 @@ const SOLO = /\b(?:alone|just me|only me|solo|by myself|on my own|alene|kun mig|
 // and the two readers cannot drift apart again.
 const COUPLE = new RegExp(
   `(?:^|[^${LETTER}])(?:`
-  + `me and (?:${alt(PARTY_POSSESSIVES)}|the)\\s+(?:${alt(PARTNER_WORDS)})`
+  // ── AND A COMMA IS HOW PEOPLE LIST THEMSELVES ──────────────
+  //
+  // Oliver's own session, 13 Sep 2026: "It's me, my boyfriend, and our 7 kids"
+  // came back as SEVEN CHILDREN and no adults, while "I'm with my gay husband
+  // and 2 kids" reads correctly. The only difference is the comma. Same for
+  // "me, my wife and our 2 kids".
+  //
+  // A party of seven unaccompanied children is not an underspecified party, it
+  // is an impossible one, and it is what the guide would have been built for.
+  + `me(?:\\s+and|\\s*,)\\s+(?:${alt(PARTY_POSSESSIVES)}|the)\\s+(?:${alt(PARTNER_WORDS)})`
   + `|(?:${alt(PARTY_POSSESSIVES)}|the)\\s+(?:${alt(PARTNER_WORDS)})\\s+(?:and|og|und|en|och)\\s+(?:${alt(ME_WORDS)})`
   // The preposition shape. The possessive is required, so bare "man" and
   // "mand" cannot match the impersonal pronoun they also are.

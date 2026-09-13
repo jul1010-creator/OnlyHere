@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
 import { Routes, Route, useNavigate, useParams, useLocation } from "react-router-dom";
 // One string, named once. The route table and the effect that opens the page
 // both read it, and two hand-written copies of a path is how a link and the
@@ -94,7 +94,7 @@ import { cities, allProducts, campingSpots, PRODUCT_COORDS } from "./data/shop";
 import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION, PAID_PLANS_LIVE } from "./config";
 import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, hasFinished, externalHref, weatherIcon,
-  isInDenmark, travelLabel, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm, scanForAITells, priceBand, PRICE_BANDS,
+  isInDenmark, travelLabel, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, readerView, seededShuffle, daysUntil, detectLegMode, haversineKm, scanForAITells, priceBand, PRICE_BANDS,
   getEnclosingJSONStringBounds, nextWeekdayTimestamp,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
@@ -152,13 +152,27 @@ import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoi
 import { hashForTab, tabForHash, ownsTheAddress } from "./utils/tabUrl";
 import { venueVerdict, venueVia, describeVenue, VENUE_MAX_KM } from "./utils/venueMatch";
 import { cityFromLocation } from "./utils/guideEnrichment";
-import { readBrief, briefBlock, nextAsks, buildBlockedNote, enoughToRecommend, namedStayIn, bookedDayNumbers } from "./utils/tripBrief";
+import { readBrief, briefBlock, nextAsks, buildBlockedNote, enoughToRecommend, unsureWhatTheyWant, namedStayIn, bookedDayNumbers } from "./utils/tripBrief";
 import { askedBeforeTurns, lastAskedOnScreen } from "./utils/directAnswer";
 import { briefConflicts } from "./utils/briefConflicts";
 import { townClashes, clashNote } from "./utils/chatGeography";
-import { readExclusions, withoutExcluded, excludedNote } from "./utils/exclusions";
+// ── THREE OF THESE WERE IMPORTED AND CALLED NOWHERE, 13 SEP 2026 ─────
+//
+// readExclusions was the only one with a call site (the guide's _constraints).
+// withoutExcluded and excludedNote were imported on 26 Aug and never called,
+// so the exclusion path was narrower than it read: the preview filtered its
+// own pools through isExcluded, the map through rejectedIn, the guide carried
+// the list for the swap gate and the tours, and nothing ever SAID what it had
+// left out, the sentence in previewMatch.js claiming otherwise notwithstanding.
+//
+// withoutExcluded has a caller now (the chat map's pools and the assist chips,
+// for the places tapped No on). excludedNote's caller is GuidePreviewScreen.
+// ruledOutFor is the typed refusals and the tapped ones merged once, which is
+// what the guide's constraints are built from.
+import { withoutExcluded, ruledOutFor } from "./utils/exclusions";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
+import { weighAdd, addCaution, tripLoadBlock } from "./utils/weighAdd";
 import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl, TICKET_FIELD, TOUR_FIELD } from "./utils/ticketLink";
 import { tourQuery, tourKindFor, tourTownFor, pickTourUrl, tourPhrase, tourCandidates, tourProposal, replaceTour, describeTourFindings, tourAliveVerdict, tourRemovalFor, TOUR_RESWEEP_DAYS, FOUND as TOUR_FOUND, GONE as TOUR_GONE, UNKNOWN as TOUR_UNKNOWN, ALIVE as TOUR_ALIVE } from "./utils/tourSweep";
 import { currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLanguage";
@@ -13661,6 +13675,20 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       const chosenExtrasBlock = chosenExtras.length
         ? `\n\nPLACES THE TRAVELER ADDED THEMSELVES, after being shown that these were left out of their brief. They asked for these specifically, so every one MUST appear as a stop:\n${chosenExtras.map(p => `- ${p.name}${p.city || p.town ? ` in ${p.city || p.town}` : ""}`).join("\n")}`
         : "";
+      // ── AND THE PLACES THEY TAPPED NO ON ────────────────────────
+      //
+      // Oliver, 13 Sep 2026, on the zoomed-in chat map: "Is this interesting?
+      // Yes/No." The Yeses are chosenExtras above. A No is a refusal the
+      // conversation cannot show, because nobody typed it, and both prompts
+      // below read the conversation for refusals. So the tapped list goes in
+      // as its own block, to BOTH prompts like the adds, and only the tapped
+      // list: a typed refusal is already in the conversation the model reads,
+      // and readExclusions can misread a sentence, which is a risk the swap
+      // gate carries and the writer's prompt should not amplify into a rule.
+      const turnedDownNames = (Array.isArray(turnedDown) ? turnedDown : []).map(n => String(n || "").trim()).filter(Boolean);
+      const turnedDownBlock = turnedDownNames.length
+        ? `\n\nPLACES THE TRAVELER TURNED DOWN, by tapping No on them on the map. None of these may appear as a stop, be suggested in a note, or be offered as an alternative, in any wording:\n${turnedDownNames.map(n => `- ${n}`).join("\n")}`
+        : "";
       // ── AND THE BED THEY HAVE ALREADY PAID FOR ──────────────────
       //
       // Oliver, 12 Sep 2026: "It didn't ask what date I booked it for. It just
@@ -13714,7 +13742,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       let planProblems = [];
       try {
         const plannerRes = await askOpenAI(
-          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nA NIGHT OUT IS AT MOST ${MAX_BARS_A_NIGHT} BARS AND ${MAX_CLUBS_A_NIGHT} CLUB, PER DAY, AND THE CLUB IS OPTIONAL. Nobody follows an itinerary once the night has started, so a day carrying four bars is a day where two of them will never be reached and the whole plan reads as padding. Pick the one or two worth STARTING at and leave the rest out. This is a ceiling and not a target: most days need no bar at all.\n\nUse only real place names mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.${beenBlock}\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.${chosenEventsBlock}${chosenExtrasBlock}\n\nConversation:\n${convoText}`,
+          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nA NIGHT OUT IS AT MOST ${MAX_BARS_A_NIGHT} BARS AND ${MAX_CLUBS_A_NIGHT} CLUB, PER DAY, AND THE CLUB IS OPTIONAL. Nobody follows an itinerary once the night has started, so a day carrying four bars is a day where two of them will never be reached and the whole plan reads as padding. Pick the one or two worth STARTING at and leave the rest out. This is a ceiling and not a target: most days need no bar at all.\n\nUse only real place names mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.${beenBlock}\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.${chosenEventsBlock}${chosenExtrasBlock}${turnedDownBlock}\n\nConversation:\n${convoText}`,
           1200
         );
         if (!plannerRes.error && plannerRes.text) {
@@ -13981,7 +14009,7 @@ CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stop
 CRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE ROUTE, NOT JUST EACH DAY INTERNALLY: this applies across the whole trip, not just within one day — Copenhagen/Zealand and Jutland are different regions connected only by a long bridge/ferry crossing or a flight, never a short hop. Don't send the trip deeper into one region for several days and then jump straight to the other with no bridging day (e.g. Day 1-2 further into Jutland, Day 3 suddenly Copenhagen). If a planning skeleton is provided below, its day-to-day order already accounts for this — follow it. If you're structuring the trip yourself (no skeleton, or it's missing this), order the days to move in one general direction across the country and minimize total region-crossings over the whole trip.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a real buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a real buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't mentioned just to fill a day.` : ""} Use only real place names mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${chosenEventsBlock}${chosenExtrasBlock}${bookedStayBlock}${beenBlock}${essentialsFacts}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't mentioned just to fill a day.` : ""} Use only real place names mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${chosenEventsBlock}${chosenExtrasBlock}${turnedDownBlock}${bookedStayBlock}${beenBlock}${essentialsFacts}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
       // Guide-building is genuine multi-step reasoning (timing, geography, avoiding
       // duplicates, family-mode adjustments) — this is the one call in Detour worth
       // Opus's extra reasoning depth, and it already has a loading screen the person
@@ -14653,7 +14681,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         } catch { /* never at the cost of the guide */ }
       }
 
-      setGuideModal({ _gid: gid, _fx: fxLine, _constraints: { excluded: readExclusions(saidByTravellerForGuide), transport: { ruledOut: [] } }, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
+      setGuideModal({ _gid: gid, _fx: fxLine, _constraints: { excluded: ruledOutFor(saidByTravellerForGuide, turnedDown), transport: { ruledOut: [] } }, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
       // A build that failed halfway still spent everything it spent up to that
       // point, and a meter that only counts successes reports a cost per guide
@@ -14706,7 +14734,11 @@ If the conversation only covers a single day or a few stops with no explicit day
   const generateRandomGuide = () => {
     if (guideModal === "loading") return;
     const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-    const some = (arr, n) => arr.slice().sort(() => Math.random() - 0.5).slice(0, n);
+    // seededShuffle, not sort(() => Math.random() - 0.5). A comparator that
+    // answers at random leaves the front of the list near the front, so the
+    // "random" traveller kept being handed the same rows. Same fix and the same
+    // reason as the chat inventory; see utils/helpers.js.
+    const some = (arr, n) => seededShuffle(arr, Math.floor(Math.random() * 0xFFFFFFFF) || 1).slice(0, n);
 
     const days = 2 + Math.floor(Math.random() * 6);            // 2 to 7
     const who = pick([
@@ -15084,6 +15116,22 @@ If the conversation only covers a single day or a few stops with no explicit day
   // distinguish from an untouched list, because the whole point is that Gemlyx
   // picked none of these. See wantedCategories in utils/previewMatch.js.
   const [pickedExtras, setPickedExtras] = useState([]);
+  // ── AND THE COUNTERPART: THE PLACES THEY TAPPED NO ON ─────────────
+  //
+  // Oliver, 13 Sep 2026, on the zoomed-in chat map: "a short description of
+  // the places (like at the final guide), and then a 'Is this interesting?'
+  // Yes/No." A Yes writes to pickedExtras above, the one list of adds. A No
+  // needs somewhere of its own, because the only reader of refusals in this
+  // app (readExclusions, over the traveller's TEXT) cannot see a tap, and
+  // writing "skip Legoland" into the conversation on their behalf would put
+  // words in their mouth: the brief is never read from anything but what they
+  // typed. Names, like pickedExtras, and disjoint from it by construction.
+  //
+  // Where it goes: the map pool (the pin comes off), the preview pools and
+  // the guide's _constraints through ruledOutFor in exclusions.js, both build
+  // prompts as a block, and the chat prompt through briefBlock. Not persisted,
+  // exactly like pickedExtras, and cleared with it when the chat starts over.
+  const [turnedDown, setTurnedDown] = useState([]);
   // TEST-PIPELINE TRANSPARENCY (Oliver: "Can you in the test pipeline also
   // show me what the plan was? I want to see what recommendations is given to
   // the different types of people"): the Random-guide button stores its
@@ -15714,6 +15762,13 @@ If the conversation only covers a single day or a few stops with no explicit day
   // state variable declared further down the component is the exact
   // temporal-dead-zone class of bug that crashed the whole app in the PASS 24
   // hotfix. Do not move this block above those declarations.
+  // ── THE ORDER THE INVENTORY IS READ IN, FIXED PER CONVERSATION ────
+  //
+  // See `deal` in sendAI for what this is for and what it was measured against.
+  // One number, chosen when the app loads and again whenever the conversation is
+  // started over, so a chat keeps one order from end to end and the next chat
+  // gets a different one.
+  const chatSeedRef = useRef(Math.floor(Math.random() * 0xFFFFFFFF) || 1);
   const [previewChatOpen, setPreviewChatOpen] = useState(false);
   const [previewChatInput, setPreviewChatInput] = useState("");
   const [previewRevealedUpTo, setPreviewRevealedUpTo] = useState(0);
@@ -15721,6 +15776,93 @@ If the conversation only covers a single day or a few stops with no explicit day
   useEffect(() => {
     if (previewChatOpen && previewChatScrollRef.current) previewChatScrollRef.current.scrollTop = previewChatScrollRef.current.scrollHeight;
   }, [aiMessages, previewChatOpen, aiLoading]);
+  // ── WHAT THE ASSIST JUST OFFERED, AND WHAT IT WOULD COST THEM ─────
+  //
+  // The four pools a traveller can add from, which is the same list
+  // `chosenExtras` filters over when the guide is built. Towns and events are
+  // not here: a town is not a stop you bolt on, and an event has its own picker
+  // with its own limit.
+  const addablePool = useMemo(() => [
+    ...(freeEntrance || []).map(p => ({ ...p, _src: "free" })),
+    ...(craftItemsFallback || []).map(p => ({ ...p, _src: "craft" })),
+    ...(foodSpots || []).map(p => ({ ...p, _src: "food" })),
+    ...(nightlifeSpots || []).map(p => ({ ...p, _src: "nightlife" })),
+  ], [freeEntrance, craftItemsFallback, foodSpots, nightlifeSpots]);
+  // ── WHAT THE TRIP WEIGHS, AS FAR AS THIS COMPONENT CAN SEE ────────
+  //
+  // The explicit adds, plus the towns the map is currently showing. It does NOT
+  // include the places the preview matched on its own, because those are worked
+  // out inside GuidePreviewScreen's render and never come back up here.
+  //
+  // So this UNDERCOUNTS the plan, and it undercounts in the safe direction: the
+  // "that would be your ninth stop" caution fires later than it could, and never
+  // earlier than it should. A caution nobody can check is worse than a caution
+  // that stays quiet.
+  const tripWeighsNow = useMemo(() => ({
+    days: Number.isFinite(liveIntakeBrief?.known?.days?.value) ? liveIntakeBrief.known.days.value : null,
+    partySize: Number.isFinite(liveIntakeBrief?.known?.party?.total) ? liveIntakeBrief.known.party.total : null,
+    already: addablePool.filter(p => (pickedExtras || []).includes(p.name)),
+    townsOnRoute: (pinsRef.current || []).filter(p => p?.place?._src === "town").map(p => p.place?.name).filter(Boolean),
+  }), [liveIntakeBrief, addablePool, pickedExtras]);
+  const assistOffers = useCallback((text) => {
+    if (!text || !addablePool.length) return [];
+    // needsPhoto false: a chip is a name and a button, so a place with no
+    // picture is still perfectly addable. The cards are the ones that need one.
+    // ── AND NOT A PLACE THEY TAPPED NO ON ─────────────────────────
+    // The prompt is told not to name one, and if a reply does anyway, a chip
+    // under it offering to add the place they just turned down is the
+    // mechanism arguing with the person. withoutExcluded folds the names the
+    // way the preview and the map do, so one No means one thing everywhere.
+    const named = placesNamedIn(readerView(text).text, withoutExcluded(addablePool, turnedDown), { needsPhoto: false, cap: 3 });
+    return named.map(place => ({ place, caution: addCaution(weighAdd(place, tripWeighsNow)) }));
+  }, [addablePool, tripWeighsNow, turnedDown]);
+  // ── "IS THIS INTERESTING?" ON THE MAP, AND WHAT A TAP DOES ────────
+  //
+  // Oliver, 13 Sep 2026: "Is it possible that when it zooms in, it can [show]
+  // a short description of the places (like at the final guide), and then a
+  // 'Is this interesting?' Yes/No. Obviously not all the time. But it's a good
+  // mechanism in a time of uncertainty."
+  //
+  // This is the whole of what a tap does; the map only draws the card.
+  //
+  //   YES  goes into pickedExtras, the ONE list of things the traveller has
+  //        added. The chip beside the preview and the tick on the preview
+  //        screen already write there, chosenExtras reads it when the guide is
+  //        built, and tripLoadBlock counts it. A second list for the map would
+  //        be a second answer to "what did they add".
+  //   NO   goes into turnedDown, and comes out of pickedExtras if it was
+  //        there. The pin comes off through withoutExcluded at the map walk
+  //        below; the rest of the journey is listed at the state.
+  //
+  // The two are kept disjoint here rather than reconciled by every reader.
+  // The caution under the question is computed by weighAdd against what the
+  // trip already holds, the same call the chip makes, and never written by a
+  // model.
+  //
+  // WHEN the card asks is decided where the map is rendered, by
+  // unsureWhatTheyWant(liveIntakeBrief): the same test that opens the word
+  // under a pin, and the test the owner's "time of uncertainty" already has.
+  // This object is only what happens once it has.
+  const askOnMap = useMemo(() => ({
+    picked: pickedExtras || [],
+    cautionFor: (place) => addCaution(weighAdd(place, tripWeighsNow)),
+    // The row's name exactly as the row holds it, because every reader of
+    // both lists (chosenExtras, the chip, the preview's tick) matches with
+    // includes(p.name) and a trimmed copy would miss its own row.
+    onYes: (place) => {
+      const name = place?.name;
+      if (typeof name !== "string" || !name.trim()) return;
+      setTurnedDown(prev => (prev || []).filter(n => n !== name));
+      // A toggle, like the chip: pressing "Added" takes it out again.
+      setPickedExtras(prev => (prev || []).includes(name) ? (prev || []).filter(n => n !== name) : [...(prev || []), name]);
+    },
+    onNo: (place) => {
+      const name = place?.name;
+      if (typeof name !== "string" || !name.trim()) return;
+      setPickedExtras(prev => (prev || []).filter(n => n !== name));
+      setTurnedDown(prev => (prev || []).includes(name) ? prev : [...(prev || []), name]);
+    },
+  }), [pickedExtras, tripWeighsNow]);
   // PERSONAL "WHY" LINE (Oliver: "the preview should probably describe why
   // this road is good for this specific person"): when the preview opens, one
   // small, cheap Claude call turns the traveler's own stated interests/pace/
@@ -15831,9 +15973,12 @@ If the conversation only covers a single day or a few stops with no explicit day
       intake: { transport: intakeTransport },
     }).known.transport?.mode || null;
     const budgetForWhy = travellerBudget([intakeBudgetText, saidByTravellerOnly].filter(Boolean).join("\n"));
+    // `turnedDown` as well, since 13 Sep: the screen keeps a place tapped No
+    // on off the list, and a line that could still promise it is the same
+    // line-versus-list contradiction one option over.
     const matchedForWhy = matchedPlaces(forMatch, previewPools({
       towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
-    }), { days, wanted, themes, mode: modeForWhy, budget: budgetForWhy, saidByTraveller: saidByTravellerOnly });
+    }), { days, wanted, themes, mode: modeForWhy, budget: budgetForWhy, saidByTraveller: saidByTravellerOnly, turnedDown });
     // _notAsked as well as _leaving. A row held back is a row not on the
     // screen, and naming one of those is the same failure as naming one they
     // told you they are leaving.
@@ -16030,9 +16175,56 @@ If the conversation only covers a single day or a few stops with no explicit day
     })();
   }, []);
 
+  // ── THE CHAT FOLLOWS ITS OWN TEXT DOWN ──────────────────
+  //
+  // Oliver, 13 Sep 2026: "it's annoying that I constantly have to scroll down
+  // every time Gemlyx says something."
+  //
+  // This fired once, on `aiMessages` changing, and a reply is EMPTY at that
+  // moment. It is revealed word by word by TypewriterText over several seconds,
+  // and the place cards under it load their pictures later still, so the box
+  // grew for ten seconds after the one scroll that was supposed to keep up with
+  // it. Every reply ended below the fold and he dragged the bar down by hand.
+  //
+  // A ResizeObserver watches the thing that is growing instead of the thing
+  // that triggered it, so the reveal, the pictures and a re-flow on a narrow
+  // window are all one mechanism rather than three hooks that each need their
+  // own reason to fire.
+  //
+  // AND IT LETS GO WHEN HE SCROLLS UP. Sticking to the bottom while somebody is
+  // reading the middle of a reply is the opposite annoyance, and worse, because
+  // there is no way to escape it. Anything further than a line and a half from
+  // the bottom counts as reading, and the follow stops until they come back
+  // down.
   useEffect(() => {
-    if (aiMessages.length > 1) document.querySelectorAll(".ai-msgs").forEach(el => { el.scrollTop = el.scrollHeight; });
-  }, [aiMessages]);
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const NEAR = 60;
+    const boxes = Array.from(document.querySelectorAll(".ai-msgs"));
+    if (!boxes.length) return undefined;
+    const stick = new WeakMap();
+    const near = (el) => el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR;
+    const onScroll = (e) => stick.set(e.currentTarget, near(e.currentTarget));
+    const obs = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const el = entry.target.closest(".ai-msgs") || entry.target;
+        if (stick.get(el) === false) continue;
+        el.scrollTop = el.scrollHeight;
+      }
+    });
+    boxes.forEach(el => {
+      stick.set(el, true);
+      el.addEventListener("scroll", onScroll, { passive: true });
+      // The container's own box does not change size, so the observer watches
+      // what is inside it.
+      Array.from(el.children).forEach(child => obs.observe(child));
+      obs.observe(el);
+      el.scrollTop = el.scrollHeight;
+    });
+    return () => {
+      obs.disconnect();
+      boxes.forEach(el => el.removeEventListener("scroll", onScroll));
+    };
+  }, [aiMessages.length, aiLoading]);
 
   // "roadtrips" removed as its own tab — folded into Gemlyx Detour's existing
   // "🚗 Road Trip" quick-start (same roadTrips data), per Oliver's call to stop
@@ -16437,14 +16629,74 @@ If the conversation only covers a single day or a few stops with no explicit day
     setAiMessages(prev => [...prev, { role: "user", text: msg, hidden: !!opts.hidden }]);
     setAiLoading(true);
     try {
-      const productList = allProducts.map(p => `${p.name} in ${p.city} (${p.price}) - ${p.exclusive}`).join(", ");
-      const townList = towns.map(t => `${t.name} (${dotJoin(t.region, travelLabel(null, t, t.travelTime))})${t.tag ? ` — ${t.tag}` : ""}`).join("; ");
+      // ── AND THE ORDER THEY ARE READ IN ────────────────────
+      //
+      // Oliver, 13 Sep 2026: "Why does Gemlyx seem to have a lot of 'kødbyen'
+      // bias? You can look through the chats, you'll notice that it does love
+      // kødbyen a lot." Counted across his six exports, Gemlyx's own turns
+      // against the traveller's: Dragør 13 to 0, Vesterbro 11 to 0, Nightpay 11
+      // to 0, Nyhavn 9 to 0, Jomfru Ane Gade 9 to 1, and Kødbyen 2 to 0. The
+      // bias is real and Kødbyen is the mildest case of it. What the six share
+      // is a place near the top of their published list.
+      //
+      // Every one of these was a plain `.map()` over the array in the order the
+      // database returned it, identical on every turn of every conversation.
+      // `towns` was the one exception and used `sort(() => Math.random() - 0.5)`,
+      // which is not a shuffle: measured over 20,000 runs of a ten item list, the
+      // first element stayed first 3,910 times where a real shuffle leaves it
+      // there 2,000. See seededShuffle in utils/helpers.js.
+      //
+      // ONE SEED FOR THE WHOLE CONVERSATION, so the order is stable while
+      // Gemlyx is talking and different the next time somebody starts. Reshuffling
+      // per turn would move the ground under a recommendation it had just made.
+      //
+      // EVENTS ARE NOT SHUFFLED. They are filtered by date and cut to eight, so
+      // the order decides WHICH ONES SURVIVE, and a festival during somebody's
+      // trip is not interchangeable with one in March.
+      const deal = (list) => seededShuffle(list || [], chatSeedRef.current);
+      const productList = deal(allProducts).map(p => `${p.name} in ${p.city} (${p.price}) - ${p.exclusive}`).join(", ");
+      const townList = deal(towns).map(t => `${t.name} (${dotJoin(t.region, travelLabel(null, t, t.travelTime))})${t.tag ? ` — ${t.tag}` : ""}`).join("; ");
       const tripList = roadTrips.map(r => `${r.name} (${r.duration}, ${r.distance}) — stops: ${r.stops.map(s => s.name).join(", ")}`).join("; ");
-      const campList = campingSpots.map(s => `${s.name} (${s.region}, ${s.type})`).join("; ");
-      const foodList = foodSpots.map(f => `${f.name} (${f.category}, ${f.location}, ${f.price})`).join("; ");
-      const nightlifeList = nightlifeSpots.map(f => `${f.name} (${f.type}, crowd: ${f.crowd}, ${f.location})`).join("; ");
-      const attractionsList = freeEntrance.map(a => `${a.name} in ${a.city} (${a.type}, free entry)`).join("; ");
-      const handmadeList = handmadeCraftShops.map(s => `${s.name} in ${s.location} (${s.yearRound ? "open year-round" : "seasonal"})`).join("; ");
+      const campList = deal(campingSpots).map(s => `${s.name} (${s.region}, ${s.type})`).join("; ");
+      const foodList = deal(foodSpots).map(f => `${f.name} (${f.category}, ${f.location}, ${f.price})`).join("; ");
+      const nightlifeList = deal(nightlifeSpots).map(f => `${f.name} (${f.type}, crowd: ${f.crowd}, ${f.location})`).join("; ");
+      // ── AND THE PRICE COMES OFF THE ENTRY, NOT OFF THE ARRAY'S NAME ─
+      //
+      // Oliver, 13 Sep 2026, on the session that started in Skagen: "it said
+      // Legoland and another children's attraction was free entrance, and that
+      // only transport cost money."
+      //
+      // The model did not invent that. This line appended the words "free entry"
+      // to EVERY row, and the heading below the list said "(free, no ticket
+      // needed)", so it was told twice, unconditionally, that Legoland is free.
+      // It then wrote "the theme parks and museums on your route are free entry,
+      // so your real cost is transport and food for nine people", which is a
+      // faithful reading of what this app handed it.
+      //
+      // The array is called freeEntrance for what it used to hold. The comment
+      // at the top of this file already says so: "it used to mean it, and it
+      // holds Legoland now." entryPrice.js was written for exactly this question
+      // and answers it three ways, and the CARD on the same screen was already
+      // using it: the Legoland card reads "Entry is not free" beside a prompt
+      // saying it is. Two readers of one question, and the wrong one reached the
+      // model.
+      //
+      // THE THIRD ANSWER MATTERS MOST. `null` is "we have not been told", and it
+      // is what Legoland's own ticket line produces, because "Children under 2:
+      // free entry" is a claim about who, not about the door. A row nobody has
+      // priced is never called free here; it is named as unknown, out loud, so
+      // the model quotes nothing.
+      const attractionsList = deal(freeEntrance).map(a => {
+        const p = entryPrice(a);
+        const said = String(p?.says || "").trim();
+        const money = p?.free === true
+          ? (said ? `free entry: ${said}` : "free entry")
+          : p?.free === false
+            ? (said ? `COSTS MONEY: ${said}` : "COSTS MONEY, price not stated")
+            : "ENTRY PRICE NOT KNOWN, never call this one free";
+        return `${a.name} in ${a.city} (${a.type}, ${money})`;
+      }).join("; ");
+      const handmadeList = deal(handmadeCraftShops).map(s => `${s.name} in ${s.location} (${s.yearRound ? "open year-round" : "seasonal"})`).join("; ");
       // ── THE FLAG THE GUIDE PROMPT ACTS ON ─────────────────────────
       // The prompt below tells the writer that if it says SOLD OUT it must say
       // so plainly and not suggest attending, so this string decides whether a
@@ -16467,7 +16719,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const upcomingMajor = majorEvents.filter(e => isConfirmedUpcoming(e)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})${eventTicketNote(e)}`).join("; ");
       const upcomingViking = vikingEvents.filter(e => isConfirmedUpcoming(e)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})${eventTicketNote(e)}`).join("; ");
       const craftList = craftItems.map(c => `${c.name} in ${c.location} (${c.price})`).join("; ");
-      const shuffledTowns = [...towns].sort(() => Math.random() - 0.5);
+      const shuffledTowns = deal(towns);
       const townsList = shuffledTowns.map(t => `${t.name}${t.region ? ` (${t.region})` : ""}${t.highlight ? ` — ${t.highlight}` : ""}`).join("; ");
       const now = new Date();
       const monthName = now.toLocaleString("en", { month: "long" });
@@ -16661,7 +16913,7 @@ ROAD TRIPS: ${tripList}
 CAMPING & SHELTERS: ${campList}
 FOOD SPOTS (Local & Major): ${foodList}
 ${nightBlockList}
-FREE ENTRANCE ATTRACTIONS (free, no ticket needed): ${attractionsList}
+ATTRACTIONS, EACH WITH WHAT ITS OWN ENTRY SAYS ABOUT THE DOOR. This list was free entrances once and is not now, so read the money note on each one and never the name of the list. A row marked COSTS MONEY is not free, whatever it is: quote its price line as given and let them do the sum. A row marked ENTRY PRICE NOT KNOWN has not been checked, so say it needs checking and never that it is free. NEVER TELL ANYBODY THE ONLY REAL COST IS TRANSPORT unless every single place you have put in front of them says free entry above: ${attractionsList}
 HANDMADE CANDY & CRAFT SHOPS (walk-in, watch it made): ${handmadeList}
 UPCOMING LOCAL EVENTS: ${upcomingLocal}
 UPCOMING MAJOR EVENTS: ${upcomingMajor}
@@ -16694,7 +16946,9 @@ ${heldBlock}${nightBlock}
 ── THE TRIP BRIEF, AS MEASURED RATHER THAN AS YOU FEEL IT ──
 This block is computed from what the traveller has typed and from the form they filled in. It is not your impression of the conversation and it overrides your impression of the conversation. Never say you have everything you need unless this block says so, and never say a traveller has already told you something that is not listed as known here.
 
-${briefBlock(brief, conflicts)}
+${briefBlock(brief, conflicts, { picked: pickedExtras, turnedDown })}
+
+${tripLoadBlock(tripWeighsNow)}
 
 IF A TURN OF YOURS IS MISSING FROM THIS CONVERSATION, IT NEVER REACHED THEM. A reply of yours that failed to send is removed from the history you see, so you may find two of their messages in a row with nothing of yours between them. That gap is a reply of yours that they never saw. Do not guess what they meant by a short follow-up like "what?" or "huh?" in that position, do not explain their own message back to them, and never treat the exchange as settled because of it. Answer their last real message again, plainly.
 
@@ -17637,9 +17891,13 @@ ${languageBlock()}`;
                       // strip that ran afterwards would move the words out from
                       // under it. The drift would grow with the length of the
                       // reply, so a short one would look fine.
-                      const readable = m.role === "assistant" ? stripMarkdown(stripReadyMarker(m.text)) : m.text;
-                      const withBeats = m.role === "assistant" ? readMapBeats(readable) : null;
-                      const assistantText = withBeats ? withBeats.clean : readable;
+                      // readerView in utils/helpers.js, which is the same call
+                      // the assist on the preview screen and the Local Assist on
+                      // a built guide make. Three renderers of one reply, and
+                      // until 13 Sep this was the only one that cleaned it.
+                      const view = m.role === "assistant" ? readerView(m.text) : null;
+                      const withBeats = view;
+                      const assistantText = view ? view.text : m.text;
                       return (
                       <div key={m.idx} className="gemlyx-msg-in" style={{ display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
                         {m.role === "assistant" && (
@@ -17776,10 +18034,29 @@ ${languageBlock()}`;
                       // cannot do without. Each kind gets its own budget, and
                       // they are merged after.
                       //
-                      // Attractions only, which is what he named. Restaurants
-                      // and bars are a bigger change to the same map and he has
-                      // not asked for them; see SPOT_PIN_ZOOM in chatRail.js
-                      // for the rule this all hangs off.
+                      // ── AND NOW EVERYTHING IT NAMES ───────────────
+                      //
+                      // This read `_src === "free"` and the comment here said
+                      // attractions only, because restaurants and bars were a
+                      // bigger change than he had asked for. Oliver, 13 Sep
+                      // 2026, after a nightlife-led session: "when it zooms in,
+                      // it still does not show any attractions."
+                      //
+                      // Nothing was dropped for a missing coordinate that time,
+                      // which the caption would have said. Nothing MATCHED. The
+                      // reply had named Kodbyen and Mesteren & Laerlingen, both
+                      // nightlife rows, and a layer that can only draw free
+                      // entrances had nothing to draw. Asked what the layer
+                      // should hold, he chose everything Gemlyx names.
+                      //
+                      // Towns keep their own walk and their own budget below,
+                      // so a talkative reply full of bars still cannot push the
+                      // town they are flying into off the map. And what gets
+                      // named is already gated: the nightlife inventory only
+                      // reaches the prompt when somebody asked for it, so a
+                      // family week cannot fill this layer with bars.
+                      // See SPOT_PIN_ZOOM in chatRail.js for the rule this all
+                      // hangs off.
                       // ── AND A CORRECTION TAKES THE WRONG PIN OFF ──
                       // Oliver, 12 Sep 2026: Gemlyx assumed Copenhagen, he
                       // wrote "No, it's actually Billund I'm flying into.." and
@@ -17788,14 +18065,29 @@ ${languageBlock()}`;
                       // RIGHT one, because the wrong one is in the reply it is
                       // correcting. See correctedTo in utils/chatPlaces.js.
                       const townPool = pools.filter(p => p?._src === "town");
-                      const spotPool = pools.filter(p => p?._src === "free");
-                      const walk = (pool) => mapPlaces({
-                        messages: convo,
-                        placesFor: (text) => placesNamedIn(clean(text), pool, { needsPhoto: false, cap: 6 }),
-                        rejectsFor: (text, m) => rejectedIn(clean(text), pool, { own: m?.role === "user" }),
-                        correctsFor: (text) => correctedTo(clean(text), pool),
-                        coordsFor: placeCoords,
-                      });
+                      const spotPool = pools.filter(p => ["free", "food", "nightlife", "craft"].includes(p?._src));
+                      // ── AND A NO ON A CARD TAKES THE PLACE OUT OF THE POOL ──
+                      // Oliver, 13 Sep 2026: "Is this interesting? Yes/No."
+                      // A No is a refusal nobody typed, so rejectsFor, which
+                      // reads refusals out of the text, cannot see it. The
+                      // pool is filtered instead, before the walk: a place not
+                      // in the pool cannot be found by any turn, its pin never
+                      // spends the cap, and `latest` is counted among what is
+                      // left. withoutExcluded folds the name the way a typed
+                      // "skip Legoland" is folded, so the two refusals take the
+                      // same rows off. Both pools, one rule; a No is only ever
+                      // made on a place inside a town, and isExcluded runs one
+                      // way, so no spot's name can take a town with it.
+                      const walk = (pool) => {
+                        const kept = withoutExcluded(pool, turnedDown);
+                        return mapPlaces({
+                          messages: convo,
+                          placesFor: (text) => placesNamedIn(clean(text), kept, { needsPhoto: false, cap: 6 }),
+                          rejectsFor: (text, m) => rejectedIn(clean(text), kept, { own: m?.role === "user" }),
+                          correctsFor: (text) => correctedTo(clean(text), kept),
+                          coordsFor: placeCoords,
+                        });
+                      };
                       const onTowns = walk(townPool);
                       const onSpots = walk(spotPool);
                       // Towns first, so a shared coordinate draws the town
@@ -17814,7 +18106,21 @@ ${languageBlock()}`;
                       pinsRef.current = onMap.pins;
                       return (
                         <div className={MAP_CLASS}>
-                          <ChatMiniMap focus={mapFocus} pins={onMap.pins} dropped={onMap.dropped} C={C} onOpen={(p) => openStopDetail(p, { windowed: true })} lang={readerLanguage()} sayWhatFor={enoughToRecommend(liveIntakeBrief)} />
+                          {/* ── AND WHEN THE PINS ASK "IS THIS INTERESTING?" ──
+                              The same gate as the word under a pin, and the
+                              only one: unsureWhatTheyWant is true when they
+                              have not named a theme of their own or handed
+                              the choice to Gemlyx, which is the "time of
+                              uncertainty" in his sentence. Somebody who has
+                              said "history and nature" has decided, and a
+                              card asking them anyway is the 13 Sep complaint
+                              about the categories ("awkward to have on all
+                              the time") in a new costume. What a Yes and a No
+                              do is askOnMap, above with the assist chip. */}
+                          <ChatMiniMap focus={mapFocus} pins={onMap.pins} dropped={onMap.dropped} C={C} onOpen={(p) => openStopDetail(p, { windowed: true })} lang={readerLanguage()} sayWhatFor={unsureWhatTheyWant(liveIntakeBrief)}
+                            ask={unsureWhatTheyWant(liveIntakeBrief) ? askOnMap : null}
+                            turnedDown={turnedDown}
+                            onRestore={(name) => setTurnedDown(prev => (prev || []).filter(n => n !== name))} />
                         </div>
                       );
                     })()}
@@ -18047,8 +18353,16 @@ ${languageBlock()}`;
                             slot as DECLINED and goes ready on the first message.
                             The reset button shipped clearing only the messages,
                             which is the same "asked, so stop asking" hole the
-                            5 Sep work exists to close. */}
-                        <button onClick={() => { setAiMessages(clearThread()); setBriefAsked([]); setBriefSettled([]); setEverReadyToBuild(false); setChatResetAsk(false); }}
+                            5 Sep work exists to close.
+
+                            AND THE TAPS, 13 Sep. pickedExtras and turnedDown
+                            are decisions about THIS trip: a Yes that survived
+                            the reset would force last conversation's place
+                            into the next guide as "a place the traveller added
+                            themselves", and a No would keep a pin off a map
+                            nobody has refused anything on yet. Same hole, two
+                            more lists. */}
+                        <button onClick={() => { setAiMessages(clearThread()); setBriefAsked([]); setBriefSettled([]); setPickedExtras([]); setTurnedDown([]); setEverReadyToBuild(false); setChatResetAsk(false); chatSeedRef.current = Math.floor(Math.random() * 0xFFFFFFFF) || 1; }}
                           style={{ background: `${C.gold}18`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                           {uiT("chat.resetYes", uiLang)}
                         </button>
@@ -25597,6 +25911,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           setPickedEvents={setPickedEvents}
           pickedExtras={pickedExtras}
           setPickedExtras={setPickedExtras}
+          turnedDown={turnedDown}
           session={userSession}
           onSignIn={() => { setAuthMode("in"); setAuthOpen(true); }}
           // Oliver, 15 Aug 2026: "If the person has an account, then Gemlyx and
@@ -25675,11 +25990,52 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             {aiMessages.filter(m => !m.hidden).map((m, i, arr) => {
               const isLatestAssistant = m.role === "assistant" && i === arr.length - 1;
               const streaming = isLatestAssistant && i > previewRevealedUpTo;
+              // ── AND THE THINGS IT JUST OFFERED, AS ONE TAP ───────
+              //
+              // Oliver, 13 Sep 2026: "It doesn't add anything." He asked this
+              // panel "Is it possible to add something in Aalborg?", got a good
+              // answer naming two real places, and nothing changed on screen,
+              // because this assist shares the chat engine and has no route to
+              // the preview at all. The section buttons add; this could only
+              // talk.
+              //
+              // A CHIP RATHER THAN A SILENT ADD, which is what he chose when
+              // asked. Adding something he had not confirmed would be the app
+              // deciding for him, and every other door on this screen is a door.
+              //
+              // The caution under it is computed, never written by the model.
+              // See utils/weighAdd.js for what is counted and what is only ever
+              // quoted.
+              const offers = m.role === "assistant" && !streaming ? assistOffers(m.text) : [];
               return (
-                <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%", background: m.role === "user" ? `linear-gradient(135deg, ${C.accent}, #C22A3C)` : C.bg, color: m.role === "user" ? "#fff" : C.light, borderRadius: 14, padding: "10px 13px", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%", display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ background: m.role === "user" ? `linear-gradient(135deg, ${C.accent}, #C22A3C)` : C.bg, color: m.role === "user" ? "#fff" : C.light, borderRadius: 14, padding: "10px 13px", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
                   {m.role === "assistant"
-                    ? <TypewriterText text={m.text} active={streaming} onDone={() => setPreviewRevealedUpTo(prev => Math.max(prev, i))} />
+                    ? <TypewriterText text={readerView(m.text).text} active={streaming} onDone={() => setPreviewRevealedUpTo(prev => Math.max(prev, i))} />
                     : m.text}
+                </div>
+                {offers.map(({ place, caution }) => {
+                  const on = (pickedExtras || []).includes(place.name);
+                  return (
+                    <div key={`offer-${place._src}-${place.id ?? place.name}`}
+                      style={{ display: "flex", alignItems: "center", gap: 10, background: C.surface, border: `1px solid ${on ? `${C.gold}66` : C.border}`, borderRadius: 12, padding: "8px 10px" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>{place.name}</div>
+                        {/* The reservation, only where there is one. A chip that
+                            always has a caveat on it is a caveat nobody reads. */}
+                        {caution && !on && (
+                          <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.45, marginTop: 2 }}>Worth knowing: {caution}.</div>
+                        )}
+                      </div>
+                      <button onClick={() => setPickedExtras(prev => (prev || []).includes(place.name)
+                        ? (prev || []).filter(n => n !== place.name)
+                        : [...(prev || []), place.name])}
+                        style={{ flexShrink: 0, background: on ? C.gold : "none", border: `1px solid ${C.gold}${on ? "" : "55"}`, color: on ? "#0A0F1E" : C.gold, borderRadius: 100, padding: "6px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        {on ? "Added \u2713" : "Add"}
+                      </button>
+                    </div>
+                  );
+                })}
                 </div>
               );
             })}

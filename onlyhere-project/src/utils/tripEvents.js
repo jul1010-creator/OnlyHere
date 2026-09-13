@@ -1,6 +1,6 @@
 import { tierOf } from "./placeThemes";
 // ── ONE VOCABULARY, SIX LANGUAGES, READ BY EVERY PARSER BELOW ───────
-import { MONTH_INDEX, MONTH_PATTERN, MONTH_INDEX_ABBR, MONTH_PATTERN_ABBR, MONTH_PATTERN_ABBR_TRAILING, DAY_WORDS, WEEK_WORDS, ONE_WEEK, RELATIVE_DAYS, THIS_WEEKEND, NEXT_WEEK, IN_N_DAYS, TRAVEL_VERBS, ARRIVAL_VERBS, SPELLED_NUMBERS, NUMBER_TOKEN, alt, LETTER } from "./travellerWords";
+import { MONTH_INDEX, MONTH_PATTERN, MONTH_INDEX_ABBR, MONTH_PATTERN_ABBR, MONTH_PATTERN_ABBR_TRAILING, DAY_WORDS, WEEK_WORDS, ONE_WEEK, RELATIVE_DAYS, THIS_WEEKEND, NEXT_WEEK, WEEKDAYS, WEEKDAY_LEAD, WEEKDAY_INDEX, IN_N_DAYS, TRAVEL_VERBS, ARRIVAL_VERBS, SPELLED_NUMBERS, NUMBER_TOKEN, alt, LETTER } from "./travellerWords";
 // The band vocabulary, imported rather than restated. A copy of "2 means
 // comfortable" in this file is a number that has to be kept in step with
 // another file by hand, which is the drift this codebase keeps finding.
@@ -553,12 +553,42 @@ export const relativeDayIn = (text, today = new Date()) => {
     const sat = plus(toSat);
     return { start: sat, end: new Date(sat.getFullYear(), sat.getMonth(), sat.getDate() + 1), matched: wk[1] };
   }
-  // Next week starts on its Monday. Denmark counts the week from Monday.
+  // ── AND A DAY OF THE WEEK, WHICH IS HOW PEOPLE SAY IT ───────
+  //
+  // Oliver, 13 Sep 2026, a Sunday: "It doesn't understand 'next week' and 'on
+  // monday'. In fact, it calculated it as the 19th of September." He typed
+  // "Maybe next week? Monday" and the answer should have been the 14th, the
+  // very next day. "next week" was already understood here; the day name was
+  // not, so the word that made his answer precise was invisible and the model
+  // filled a HARD slot with a date it made up.
+  //
+  // STRICTLY AFTER TODAY. Somebody who means today says today. Somebody saying
+  // "Monday" on a Monday means the one coming, which is the reading every diary
+  // uses.
+  const day = new RegExp(`(?:^|[^${LETTER}])(?:(?:${alt(WEEKDAY_LEAD)})\\s+)?(${alt(Object.values(WEEKDAYS).flat())})(?![${LETTER}])`, "i").exec(s);
   const nw = new RegExp(`(?:^|[^${LETTER}])(${alt(NEXT_WEEK)})(?![${LETTER}])`, "i").exec(s);
-  if (nw) {
-    const dow = base.getDay();
-    return { start: plus(((8 - dow) % 7) || 7), end: null, matched: nw[1] };
+  const nextMonday = () => ((8 - base.getDay()) % 7) || 7;
+  if (day) {
+    const want = WEEKDAY_INDEX[String(day[1]).toLowerCase()];
+    if (Number.isInteger(want)) {
+      // WITH "next week" BESIDE IT, the day belongs to that week rather than to
+      // this one: "Friday next week" is not this Friday. Without it, the next
+      // one to come round.
+      const from = nw ? nextMonday() : 0;
+      const start = new Date(base.getFullYear(), base.getMonth(), base.getDate() + from);
+      const ahead = ((want - start.getDay()) + 7) % 7;
+      const total = from + ahead + (!nw && ahead === 0 ? 7 : 0);
+      // THE CONTIGUOUS PHRASE, because `matched` exists to be REMOVED from the
+      // turn, by the answer test below and by readDays one file over. "Maybe
+      // next week? Monday" holds the two halves ten characters apart, and a
+      // matched value of "Monday next week" is a string that appears nowhere in
+      // it: the replace did nothing, the whole turn stayed as residue, and the
+      // answer was thrown away. The other half is stripped as filler instead.
+      return { start: plus(total), end: null, matched: day[0].trim() };
+    }
   }
+  // Next week starts on its Monday. Denmark counts the week from Monday.
+  if (nw) return { start: plus(nextMonday()), end: null, matched: nw[1] };
   return null;
 };
 
@@ -604,6 +634,11 @@ const RE_ASSERTION = "said|say|saying|told|already|again|mentioned|literally|jus
 const ANSWER_FILLER = new RegExp(
   `^(?:and|og|men|but|vi|we|i|jeg|du|man|ich|wir|ik|wij|je|jag|han|hun|hij|zij|to|til|for|on|om|about|ca|omkring|ish` +
   `|start|starts|starting|starter|please|thanks|tak|ja|yes|yep|ok|okay` +
+  // ── AND THE WORD THAT MEANS THEY ARE NOT CERTAIN ──────────────
+  // "Maybe next week? Monday" is an answer with a shrug on it, and the shrug
+  // was the only word left over, so the whole answer was thrown away and a HARD
+  // slot stayed empty. Somebody who is not sure yet has still told you when.
+  `|maybe|probably|perhaps|possibly|likely|m(?:å|aa)ske|nok|vielleicht|wahrscheinlich|misschien|kanske|forse` +
   `|the|a|an|den|det|er|is|it` +
   // Where they will be, which is half of what a date answer says: "I'm here
   // today", "we're there from the 14th", "back then". None of them narrows
@@ -701,6 +736,17 @@ export const relativeAnswerIn = (turn, today = new Date()) => {
   let rest = raw.toLowerCase().replace(rel.matched.toLowerCase(), " ");
   rest = rest.replace(/\b\d{1,2}\s*(?:-|–|to)?\s*(?:days?|dage?|weeks?|uger?)\b/gi, " ");
   rest = rest.replace(/(?:^|[^\wÆØÅæøå])(?:én|en|hele|den ene|a|an|one)\s+(?:hel\s+)?(?:uge[nr]?|week)\b/gi, " ");
+  // ── AND THE OTHER HALF OF A SPLIT ANSWER ────────────────────────
+  // "Maybe next week? Monday" says one thing twice. relativeDayIn reads the day
+  // and reports the day; the week phrase is left behind and would count as a
+  // person saying something else. Same for "this weekend, Saturday".
+  rest = rest.replace(new RegExp(`(?:^|[^${LETTER}])(?:${alt([...NEXT_WEEK, ...THIS_WEEKEND])})(?![${LETTER}])`, "gi"), " ");
+  // And the little words a day name carries, which say nothing on their own.
+  rest = rest.replace(new RegExp(`(?:^|[^${LETTER}])(?:${alt(WEEKDAY_LEAD)})(?![${LETTER}])`, "gi"), " ");
+  // A day NAME is always part of a date answer and never something else the
+  // person said, so it is filler here whichever branch above actually matched.
+  // "this weekend, saturday" says one thing twice, like the week phrase above.
+  rest = rest.replace(new RegExp(`(?:^|[^${LETTER}])(?:${alt(Object.values(WEEKDAYS).flat())})(?![${LETTER}])`, "gi"), " ");
   const words = rest.split(/[^\wÆØÅæøåéèü]+/).filter(Boolean);
   const unknown = words.filter(w => !ANSWER_FILLER.test(w));
   if (!unknown.length) return rel;

@@ -4,6 +4,7 @@ import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 import { C } from "../utils/theme";
 import { testTravelerLine, getEventDate } from "../utils/helpers";
 import { matchedPlaces, previewPools, mentionsPlace, wantedCategories, groupKeyOf, parentTownOf, tripAnchorFor, eventReachBand, tripPoints } from "../utils/previewMatch";
+import { ruledOutFor, excludedNote } from "../utils/exclusions";
 import { tripWindow, tripEvents, describePicks } from "../utils/tripEvents";
 import { briefThemes, rankOffers, offerReason, OFFER_LIMIT } from "../utils/interestFit";
 import { cardLine } from "../utils/cardLine";
@@ -279,6 +280,12 @@ export const GuidePreviewScreen = ({
   // handed to the PLANNER as fixed points rather than to the writer.
   pickedExtras = [],
   setPickedExtras = () => {},
+  // And the places they tapped No on, on the chat map. Oliver, 13 Sep 2026:
+  // "Is this interesting? Yes/No." Names, held by App.jsx beside pickedExtras.
+  // They reach the matcher, so a place turned down with a tap is kept off this
+  // screen the way a place turned down in a sentence is, and they reach the
+  // note under the title, so the traveller can see the No was heard.
+  turnedDown = [],
   // Ask Gemlyx, inside this overlay. Oliver, 15 Aug 2026: "So if they want to
   // add that on, then make Gemlyx AI prepared to answer them questions on that
   // INSIDE the preview." Nobody should have to close a screen they are still
@@ -416,7 +423,17 @@ export const GuidePreviewScreen = ({
   // pass opening on a region GEMLYX named. See matchedPlaces: his Aalborg brief
   // named no region at all, and Ribe arrived through the word "Jutland" in the
   // app's own reply.
-  const matched = matchedPlaces(convoText, previewPools({ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted, themes, mode, budget, saidByTraveller });
+  const matched = matchedPlaces(convoText, previewPools({ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted, themes, mode, budget, saidByTraveller, turnedDown });
+  // ── AND WHAT WAS LEFT OUT IS SAID, NOT SWALLOWED ──────────────────
+  //
+  // previewMatch.js has claimed since 26 Aug that "the guide says out loud
+  // that it left it out, see excludedNote, so the removal is never silent."
+  // excludedNote had no caller. A place ruled out in a sentence, or now with a
+  // tap, vanished from this screen with nothing saying so, and a place that
+  // vanishes looks exactly like a place Gemlyx does not have. The same merge
+  // the matcher runs, so the note and the screen cannot disagree about what
+  // was removed.
+  const leftOut = ruledOutFor(saidByTraveller, turnedDown);
   // Group into the fixed category order above, each capped independently.
   // Two sections ("Major Cities"/"Towns") now share src:"town" and are
   // told apart by their own `match` predicate — apply it on top of the
@@ -649,6 +666,7 @@ export const GuidePreviewScreen = ({
                   intake: { arrival: intakeArrival, departure: intakeDeparture, interest: intakeInterest },
                   wanted, themes, window: win, sections, eventPlan, picked,
                   pickedExtras: pickedExtras || [],
+                  turnedDown: turnedDown || [],
                   matched,
                   namedNames: matched.filter(p => mentions(p.name)).map(p => p.name),
                   profile: userProfile,
@@ -667,6 +685,12 @@ export const GuidePreviewScreen = ({
         {previewWhy && (
           <div style={{ fontSize: 13, color: C.gold, lineHeight: 1.6, marginBottom: 14, textAlign: "center", fontFamily: "'Fraunces', serif", fontStyle: "italic", maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
             {previewWhy}
+          </div>
+        )}
+        {/* What their No took off this screen, in one line. See leftOut. */}
+        {excludedNote(leftOut) && (
+          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 14, textAlign: "center" }}>
+            {excludedNote(leftOut)}
           </div>
         )}
         {/* The "✦ Want to ask something or change it first? Back to chat"

@@ -257,7 +257,7 @@ const readWhen = (text, turns, intakeArrival, intakeDeparture, today) => {
   return rel ? { value: rel.start, precision: "day", source: "said", end: rel.end } : null;
 };
 
-const readDays = (text, intakeArrival, intakeDeparture, today = new Date(), turns = null) => {
+const readDays = (text, intakeArrival, intakeDeparture, today = new Date(), turns = null, answering = null) => {
   const both = daysBetween(intakeArrival, intakeDeparture);
   if (both && both > 0) return { value: both, source: "intake" };
   // ── THE LAST NUMBER THEY SAID, NOT THE FIRST ──────────────────────
@@ -331,8 +331,30 @@ const readDays = (text, intakeArrival, intakeDeparture, today = new Date(), turn
   // Denmark in 3 days" — names no travelling, so relativeAnswerIn returns
   // nothing, nothing is removed, and the count stands.
   const said = Array.isArray(turns) && turns.length ? turns : [String(text || "")];
+  // ── AND A NUMBER OF NIGHTS IS NOT A NUMBER OF DAYS ───────────
+  //
+  // Oliver's own session, 13 Sep 2026 at 03:04. He said "I'm gonna be in
+  // Denmark for 7 days" at turn 3. At turn 8 he was asked which nights his
+  // booking covers and answered "It's just one-two days probably." The brief
+  // came out holding TWO, because this reader is last-wins per turn and that
+  // sentence has a number and a day word in it.
+  //
+  // A seven day trip became a two day trip, on the slot that sizes the whole
+  // guide, from an answer about a hotel. Nothing on screen said so.
+  //
+  // The discriminator is the one this file already uses twice: the question
+  // that was on the table. A turn answering `stayWhen` or `stay` is about the
+  // booking, so its numbers belong to the booking. Every other turn is read as
+  // it always was, including a turn that corrects the length while answering
+  // nothing in particular.
+  const asks = Array.isArray(answering) ? answering : [];
+  const aboutTheBooking = (i) => {
+    const keys = Array.isArray(asks[i]) ? asks[i] : [];
+    return keys.length > 0 && keys.every(k => k === "stayWhen" || k === "stay");
+  };
   let raw = null, rawAt = -1, span = null, spanAt = -1;
   for (let i = 0; i < said.length; i += 1) {
+    if (aboutTheBooking(i)) continue;
     const arrival = relativeAnswerIn(said[i], today);
     // CASE-INSENSITIVELY. relativeDayIn matches on a lowercased copy, so
     // `matched` comes back lowercase and a plain String.replace would miss
@@ -1089,7 +1111,7 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   const set = (key, res) => { if (res) known[key] = res; };
 
   set("origin", readOrigin(t, intake.startPoint));
-  set("days", readDays(t, intake.arrival, intake.departure, today, turns));
+  set("days", readDays(t, intake.arrival, intake.departure, today, turns, answering));
   set("when", readWhen(t, turns, intake.arrival, intake.departure, today));
   set("party", readParty(t, intake.travelers, intake.familyMode));
   set("interests", readInterests(t, intake.interest));
@@ -1425,7 +1447,22 @@ export const blockingTotal = (brief) => BRIEF_SLOTS
   .length;
 const stillOpenCount = (brief) => openBlocking(brief).length;
 
-export const briefBlock = (brief, conflicts = []) => {
+// ── AND THE THIRD ARGUMENT IS WHAT THEY TAPPED, NOT WHAT THEY TYPED ──
+//
+// Oliver, 13 Sep 2026, on the zoomed-in map: "a short description of the
+// places (like at the final guide), and then a 'Is this interesting?' Yes/No."
+//
+// Everything else in this block is read out of the traveller's own words, and
+// that rule stands: a tap is never written into the conversation as though
+// they had said it. But a tap IS a decision they made, and a No that reached
+// the map and the preview and never reached the model would have Gemlyx
+// offering Legoland in the reply after the tap, which is worse than never
+// having asked. So the two lists arrive here as names, which is what a tap
+// holds, and the model is told what they are and where they came from.
+//
+// Both default to nothing, so every caller that does not have a map keeps the
+// block it had.
+export const briefBlock = (brief, conflicts = [], { picked = [], turnedDown = [] } = {}) => {
   if (!brief) return "";
   const lines = [];
   const knownKeys = BRIEF_SLOTS.filter(s => brief.known[s.key]);
@@ -1435,6 +1472,24 @@ export const briefBlock = (brief, conflicts = []) => {
       const k = brief.known[s.key];
       lines.push(`  ${s.label}: ${k.value}${k.source === "intake" ? " (from the form they filled in)" : ""}`);
     });
+  }
+  // Names only, folded once, with the empties out. A tap holds a name and
+  // nothing else, and a name repeated is one decision, not two.
+  const tapped = (list) => [...new Set((Array.isArray(list) ? list : []).filter(x => typeof x === "string").map(clean).filter(Boolean))];
+  const saidYes = tapped(picked);
+  // App.jsx keeps the two lists disjoint, so this only matters to a caller
+  // that does not. A name on both is read as a Yes: a place kept in is a place
+  // the traveller can see in the plan and take out, and a place kept out on a
+  // contradiction is the silent drop this file keeps finding.
+  const saidNo = tapped(turnedDown).filter(n => !saidYes.some(y => y.toLowerCase() === n.toLowerCase()));
+  if (saidYes.length) {
+    lines.push(`THEY TAPPED YES ON THESE PLACES ON THE MAP, SO THEY ARE IN THE TRIP: ${saidYes.join(", ")}. Plan around them, and do not offer any of them again as though it were new.`);
+  }
+  // The stronger of the two, and the one this block exists for. A place they
+  // turned down and are then offered again is the mechanism working against
+  // the person it was built for.
+  if (saidNo.length) {
+    lines.push(`THEY TAPPED NO ON THESE PLACES ON THE MAP: ${saidNo.join(", ")}. Never offer, recommend or plan any of them again, in any wording, and never ask whether they have changed their mind. If they ask about one of them directly, answer the question and still leave it out of the plan.`);
   }
   // ── AND SAY IT WHEN THE NUMBER IS NOT THEIRS ──────────────────────
   // He said fifteen days and the plan is built for fourteen. The reply agreed
@@ -1725,6 +1780,34 @@ export const briefMovedOn = (declinedAt, brief) =>
 // ages. That is enough to stop the brief asking again and it is nowhere near
 // enough to recommend a town on. Eight children once reached the guide builder
 // as a sentence about a conversation through exactly this value.
+// ── AND WHO THE WORD UNDER A PIN IS ACTUALLY FOR ─────────────
+//
+// Oliver, 13 Sep 2026, on the map in the chat: "the categories under each town
+// should only be for people being uncertain of their decisions. It's awkward to
+// have on all the time. Nobody will understand what it means."
+//
+// The map was using enoughToRecommend, which is true when interests OR party is
+// known, so it was on for nearly everybody. It answers a different question:
+// that one asks whether there is enough to MATCH a town on, and this one asks
+// whether the traveller needs telling what a town is for.
+//
+// Somebody who has said "history and nature" has already decided. The word
+// under the pin tells them what they just said. Somebody who has said nothing,
+// or who has handed the choice to Gemlyx, is being shown a shape they did not
+// pick, and then the word is the whole point of the pin.
+//
+// This is the same instinct as 10 Sep, when the label read "Best if you want
+// history" and he said "that is only for when someone is in doubt". That fix
+// took the prefix off. This one takes the word off too, for the people who are
+// not in doubt.
+export const unsureWhatTheyWant = (brief) => {
+  const v = clean((brief?.known || {}).interests?.value);
+  if (!v || v === ACKNOWLEDGED_VALUE) return true;
+  // The handover reads "open to anything, Gemlyx chooses". They answered the
+  // question, and the answer was that they do not know.
+  return /Gemlyx chooses/i.test(v);
+};
+
 export const enoughToRecommend = (brief) => {
   const said = (key) => {
     const v = clean((brief?.known || {})[key]?.value);

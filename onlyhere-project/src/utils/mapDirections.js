@@ -91,6 +91,11 @@ export const readMapBeats = (text) => {
     // dropped here instead, so the clean text reads exactly as it would have
     // been written without the marker at all.
     if (/[^\S\n]$/.test(clean) && /^[^\S\n]/.test(segment)) segment = segment.slice(1);
+    // AND AT THE START OF A LINE THERE IS NOTHING TO BALANCE IT AGAINST.
+    // A marker written on its own before a sentence left the space after it
+    // standing, so the bubble opened with an indent that nothing explains. The
+    // rule above only fires between two spaces.
+    if ((!clean || /\n$/.test(clean)) && /^[^\S\n]+/.test(segment)) segment = segment.replace(/^[^\S\n]+/, "");
     clean += segment;
     found.push({ kind: m[1] === undefined ? "out" : "in", place: String(m[1] || "").trim(), at: clean.length });
     last = m.index + m[0].length;
@@ -99,6 +104,11 @@ export const readMapBeats = (text) => {
   if (!found.length) return { clean: raw, beats: [] };
   let tail = raw.slice(last);
   if (/[^\S\n]$/.test(clean) && /^[^\S\n]/.test(tail)) tail = tail.slice(1);
+  // AND THE SAME AT THE START OF A LINE, where there is no space in front of
+  // the marker to balance the one behind it. A marker written on its own line
+  // above a sentence left the bubble opening with an indent that nothing
+  // explains, which is most of what "looks too beta" is made of.
+  if ((!clean || /\n$/.test(clean)) && /^[^\S\n]+/.test(tail)) tail = tail.replace(/^[^\S\n]+/, "");
   clean += tail;
   const beats = found
     // An IN with nothing to fly to is a marker the model half wrote. Dropping it
@@ -250,9 +260,9 @@ You move it by writing a marker INSIDE your reply, at the exact word the picture
   [[MAP_IN:Copenhagen]]   fly down to that place and hold there
   [[MAP_OUT]]             pull back to the whole of Denmark
 
-WHAT THE MAP HOLDS, SO YOU KNOW WHAT A MOVE WILL SHOW. Pulled back, it is a map of Denmark with a pin on the towns this conversation has named, yours and theirs, so wide is the trip taking shape. Flown down to a town, it shows that town and, inside it, a pin for every place from the FREE ENTRANCE ATTRACTIONS list below that has come up in this conversation, and nothing else: a paid museum, a restaurant, a bar or an event has no pin, however good it is. It can fly to the towns in the TOWNS and HIDDEN GEM TOWNS lists below and to those free attractions, and nowhere else. A marker naming anything else does nothing at all, so a move is for SHOWING a place the map knows, never for introducing one it does not.
+WHAT THE MAP HOLDS, SO YOU KNOW WHAT A MOVE WILL SHOW. Pulled back, it is a map of Denmark with a pin on the towns this conversation has named, yours and theirs, so wide is the trip taking shape. Flown down to a town, it shows that town and, inside it, a pin for every place from the ATTRACTIONS, FOOD and NIGHTLIFE lists below that has come up in this conversation, and nothing else: an event has no pin, however good it is. It can fly to the towns in the TOWNS and HIDDEN GEM TOWNS lists below and to those places, and nowhere else. A marker naming anything else does nothing at all, so a move is for SHOWING a place the map knows, never for introducing one it does not.
 
-A NAME IS NOT A REASON TO ZOOM. The first time a place comes up, leave the map wide: its pin appears on the country, which already says where it is. Flying down to a town the moment somebody says its name shows one pin on an empty street plan, which is less than they had a second earlier. Fly down when you are about to walk them through the INSIDE of that town, naming two or three of its free attractions from the list as you go, because those are what a close view has to show. One line about a town and then your question is not that, and the map stays wide.
+A NAME IS NOT A REASON TO ZOOM. The first time a place comes up, leave the map wide: its pin appears on the country, which already says where it is. Flying down to a town the moment somebody says its name shows one pin on an empty street plan, which is less than they had a second earlier. Fly down when you are about to walk them through the INSIDE of that town, naming two or three of the places inside it from the lists as you go, because those are what a close view has to show. One line about a town and then your question is not that, and the map stays wide.
 
 THE SHAPE OF A GOOD RUN. Wide is the normal state and not a failure. Close for the town you are walking them through; wide again the moment the subject leaves it, whether you are weighing one town against another, summing up the whole route, or answering something about the trip rather than the town. "Here is how I would spend a day inside Aarhus: [[MAP_IN:Aarhus]] start at ..." lands the camera as you start showing the inside. "Interesting! [[MAP_OUT]] For your taste I would go north instead. [[MAP_IN:Aalborg]] Inside Aalborg, start at ..." pulls back while you think and closes in as you answer. Each marker goes INSIDE its sentence, on the word where the picture should change, and never collected at the end of the reply.
 
