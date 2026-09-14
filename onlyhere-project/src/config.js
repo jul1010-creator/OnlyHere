@@ -282,26 +282,31 @@ export const TIQETS_AFFILIATE_TEMPLATE = "https://tp.media/r?campaign_id=89&mark
 // moving trucks, minibuses and trailers. AutoEurope was chosen over GetRentacar
 // on fifteen Danish pickup points. This is ten times that.
 //
-// TWO THINGS THAT CUT THE OTHER WAY, and neither is a reason not to do it:
+// TWO THINGS I WROTE HERE THIS AFTERNOON WERE WRONG, and they are corrected
+// rather than deleted, because a caveat that turns out to be false is worth
+// more as a record of how it was checked than as a blank space.
 //
-//   THE SITE IS DANISH ONLY. Gemlyx's own inbound list is Germany 6.0m,
-//   Netherlands 2.0m, United States 1.1m, United Kingdom 0.9m, Sweden 0.8m.
-//   A German reading an English guide who lands on a Danish booking form is a
-//   click that goes nowhere, and this is the one programme on the list where
-//   that is true.
+//   I WROTE "THE SITE IS DANISH ONLY". It is not. Oliver: "There is an English
+//   translation button." He is right, and the check that missed it was a page
+//   fetch that reported "a language selector visible but no English translation
+//   provided". Read properly on 14 Sep 2026: hejoscar.dk declares
+//   <link rel="alternate" hreflang="en-dk" href="https://hejoscar.dk/en">, and
+//   that page is a complete English site, <html lang="en">, titled "Rental cars
+//   from just 249 DKK/day | Oscar Car Rental", with the booking search, the
+//   vehicle types, the driver-age field and the FAQ all in English. So a German
+//   or American reader lands somewhere they can read and book.
 //
-//   NO AIRPORT BRANCH IS NAMED. Not at Kastrup, Billund, Aalborg, Aarhus or
-//   Esbjerg. A traveller who flies in picks the car up where they land, and
-//   that is the single most common car-hire moment in an inbound trip.
+//   I WROTE "NO AIRPORT BRANCH IS NAMED". Also wrong. The English locations
+//   page lists 150 branches, and among them: aalborg-airport, billund, kastrup
+//   (which is where Copenhagen Airport is), esbjerg, esbjerg-n, esbjerg-v,
+//   aarhus-c, aarhus-n, aarhus-oe and odense-c. So the flying-in pickup is
+//   covered at every airport Gemlyx's own guides route through.
 //
-// So the shape that answers both is TWO programmes rather than one, chosen by
-// where the reader is picking up: Oscar for a town pickup, which is where its
-// 145 branches beat everything, and a broker for an airport one. DiscoverCars
-// is the broker, re-checked the same day: Copenhagen, Billund, Aalborg, Aarhus
-// and Esbjerg, the airports at CPH, BLL, AAL and AAR, brokered from Alamo,
-// Hertz, Europcar, Budget, SIXT, Avis and Thrifty. That is his call to make and
-// it is written here so it can be made from the evidence rather than from
-// memory.
+// WHICH LEAVES NO ARGUMENT AGAINST IT. On the inventory rule this block is
+// built on, Oscar wins outright: 150 Danish branches against AutoEurope's
+// fifteen pickup points, an English booking flow, and prices from 249 kr a day.
+// A second broker programme for airports, which is what the wrong version of
+// this comment argued for, is not needed.
 //
 // WHAT IS LEFT IS ONE PASTE, and it is his to make: a network link is generated
 // against his own account and cannot be written here. The Adtraction shape is

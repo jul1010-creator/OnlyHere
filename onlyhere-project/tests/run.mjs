@@ -31858,6 +31858,115 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
            app.indexOf("const [entered, setEntered] = useState(false);") < at);
       }
 
+      // ── DELETING AN ACCOUNT HAD TO GO THROUGH A MAILBOX ─────────
+      //
+      // Oliver, 14 Sep 2026, ten minutes after turning email confirmation on:
+      // "we need a log out option.. so I can create a new one. Also, make a
+      // 'delete account' in the account info."
+      //
+      // Both controls existed. Sign out was at the bottom of General, and the
+      // delete was under ABOUT ME, which is the page about what Gemlyx knows
+      // rather than the page about the account. He did not find either, which is
+      // the only test of a control's placement that counts.
+      //
+      // AND THE DELETE DID NOT DELETE THE ACCOUNT. It removed the rows and left
+      // the auth user standing, and the line under the button said so: "Contact
+      // hello@gemlyxtravel.com to also remove the sign-in record." So the
+      // address stayed taken, the person could not sign up again, and an erasure
+      // request ended in a mailbox rather than in a button.
+      {
+        const api = readFileSync(join(root, "api/delete-account.js"), "utf8");
+        const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+        const me = readFileSync(join(root, "src/components/AboutMePage.jsx"), "utf8");
+
+        // THE ONE SECURITY PROPERTY. The id comes from the caller's own token
+        // and never from the request, so the worst a forged call can do is
+        // delete the account it already holds a valid token for. A version
+        // taking ?id= would be a public endpoint for deleting any account in the
+        // database and would look almost identical in a diff.
+        ok("the account deleted is the one the token belongs to",
+           /admin\/users\/\$\{encodeURIComponent\(who\.userId\)\}/.test(api));
+        is("and no user id is ever read off the request",
+           (api.match(/req\.(?:query|body)/g) || []), []);
+        ok("it is POST only, so a prefetch or a crawler cannot perform it",
+           /req\.method !== "POST"/.test(api));
+        ok("and it still refuses a request that is not from the site",
+           /if \(!requestIsFromSite\(req\.headers\)\) \{/.test(api));
+        // NOT founder-gated, unlike every other endpoint that calls resolveUser.
+        // This one is for readers, and isFounder would lock out everybody it is
+        // built for.
+        ok("and it is not gated to the founder, which would lock out every reader",
+           !/isFounder/.test(stripComments(api)));
+        // 404 is a success from the reader's side: the account they asked to
+        // remove is not there.
+        ok("an account already gone counts as deleted", /gone\.status !== 404/.test(api));
+
+        // ORDER MATTERS AND FAILS SAFE. The login goes second: first would kill
+        // the token deleteMyData authenticates with, leaving the rows behind
+        // forever with no account left to reach them from.
+        const h = app.indexOf("const handleDeleteAccount = async () => {");
+        const block = app.slice(h, h + 2200);
+        ok("the rows go before the login, so a dead token cannot strand them",
+           block.indexOf("await deleteMyData(userSession)") < block.indexOf("/api/delete-account"));
+        ok("and a login that survives is said out loud rather than swallowed",
+           /loginNote \|\| "Your account and everything on it has been deleted"/.test(block));
+
+        // AND THE WORDS MATCH WHAT IT DOES NOW.
+        ok("the button says account rather than data", /Delete my account/.test(me));
+        ok("and nothing still tells them to send an email to finish the job",
+           !/to also remove the sign-in record/.test(me));
+        ok("it sits with Sign out rather than under About me",
+           me.indexOf("Sign out\n        </button>") < me.indexOf("Delete my account"));
+        ok("and the confirm names everything that goes", /your login all go/.test(app));
+      }
+
+      // ── AND WHOSE SAVES THOSE WERE ──────────────────────────────
+      //
+      // Oliver, 14 Sep 2026, looking at the signup sheet a minute after signing
+      // out of his own account: "The saved items should ONLY be for the account
+      // that saves it!!!!"
+      //
+      // The sheet was announcing the bug: "5 saved items on this device will
+      // come with you." Those five were his own account's, synced down minutes
+      // earlier, and the next account made on that machine was going to absorb
+      // them. On a shared computer that is one person handed another person's
+      // trips and the places they have been.
+      //
+      // The comment that used to sit in handleSignOut argued the other way, that
+      // wiping the device copy "would be a nasty surprise for someone signing
+      // out on a shared laptop who then goes back to their own phone". The
+      // shared laptop is the case it got wrong, and the phone is answered by the
+      // account: what synced is in the account, so it is on the phone already.
+      {
+        const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+        const so = app.indexOf("const handleSignOut = async () => {");
+        const out = app.slice(so, so + 3200);
+        ok("signing out releases the account's saves from the device",
+           /setSavedPlaces\(\[\]\)/.test(out) && /setSavedGuides\(\[\]\)/.test(out) && /setBeenList\(\[\]\)/.test(out));
+        ok("and the stored copies with them",
+           /removeItem\("gemlyx_saved_places"\)/.test(out) && /removeItem\("gemlyx_saved_guides"\)/.test(out) && /removeItem\("gemlyx_been"\)/.test(out));
+        // THE LEARNED PROFILE IS ABOUT A PERSON, NOT A BROWSER. Leaving it
+        // hands the next account somebody else's interests, pace and budget,
+        // and the guide builder reads all three.
+        ok("and what Gemlyx learned about them, which the builder reads",
+           /setUserProfile\(null\)/.test(out));
+        // THE ONE EXCEPTION, AND IT IS AN HONEST ONE: if the last push failed,
+        // the device copy is the only copy and clearing it destroys trips
+        // rather than moving them. Same flag the account screen reports, so the
+        // two cannot disagree about whether the account has it.
+        ok("unless the last sync failed, when the device copy is the only copy",
+           /const heldOnlyHere = !cloudSyncOk;/.test(out) && /if \(heldOnlyHere\)/.test(out));
+        ok("and that case says so rather than clearing quietly",
+           /the last sync to your account did not land/.test(out));
+        // Deleting the account clears the same things and has no exception,
+        // because there is nothing left to sync back to.
+        const dl = app.indexOf("const handleDeleteAccount = async () => {");
+        const del = app.slice(dl, dl + 3200);
+        ok("deleting the account clears the device too",
+           /setSavedPlaces\(\[\]\)/.test(del) && /removeItem\("gemlyx_been"\)/.test(del) && /setUserProfile\(null\)/.test(del));
+        ok("and no copy is promised to survive it", !/Saves on this device stay/.test(app));
+      }
+
       // ── AND THE APP HAD NO HEADINGS IN IT AT ALL ────────────────
       //
       // 14 Sep 2026, measured on the live site before a beta:
@@ -46922,7 +47031,29 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("and none of them invents a fare", pt.filter(l => l.kind === COST_KIND.TRANSPORT).every(l => !l.price));
     // A driving trip is not sold a seat by anybody.
     ok("a driving trip is offered no rail operator", !lines.some(l => l.name === "DSB"));
-    ok("but it is offered a car", lines.some(l => l.kind === COST_KIND.CAR));
+    // ── AND THIS ONE PINNED THE STATE, SO IT WENT RED THE DAY THE
+    //    PROGRAMME CLOSED ────────────────────────────────────────────
+    //
+    // Oliver, 14 Sep 2026: "Autoeurope cars affiliate has closed by the way.. we
+    // need an alternative." CAR_RENTAL_LINK was emptied rather than left
+    // pointing at a dead programme, because carRentalUrl only asks whether the
+    // string looks like a URL and a closed programme's short link still does.
+    // This line went red an hour later, because it asserted that a driving trip
+    // SEES a car rather than the rule that produces one.
+    //
+    // It is the same lesson the comment over carRentalActive already spells
+    // out, arriving from the other direction: "it went red the moment Oliver did
+    // the thing its own comment told him to do and pasted a link". It goes red
+    // when he takes one away as well.
+    //
+    // THE RULE IS A CONDITIONAL, and stating it as one covers both the day
+    // there is a programme and the day there is not. What it still catches is
+    // the pair that would be real bugs: a car line with no link on it, and a car
+    // offered to somebody who said they are not driving.
+    is("a driving trip is offered a car exactly when a car programme is configured",
+       lines.some(l => l.kind === COST_KIND.CAR), M.carRentalActive());
+    ok("and a car line never appears without the link that produced it",
+       lines.filter(l => l.kind === COST_KIND.CAR).every(l => !!l.href));
     ok("and a walking trip is offered neither",
       !byUrgency(run({ mode: "walk", saidNoCar: true })).some(l => l.kind === COST_KIND.CAR || l.name === "DSB"));
   }

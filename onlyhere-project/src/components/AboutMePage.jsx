@@ -333,6 +333,47 @@ export const AboutMePage = ({
           Sign out
         </button>
       </Card>
+
+      {/* ── AND DELETING IT SITS WITH SIGNING OUT OF IT ────────────────
+          Oliver, 14 Sep 2026: "make a 'delete account' in the account info."
+
+          It existed, and it was under ABOUT ME, which is the page about what
+          Gemlyx knows rather than the page about the account. Nobody looking for
+          a way out of a product reads the section titled "About me", and he did
+          not find it either, which is the only test that matters.
+
+          Next to Sign out, because the two are the same question asked with
+          different force, and somebody who has just failed to find one is
+          looking for the other.
+
+          AND IT SAYS WHAT IT DOES NOW. The button read "Delete my data" and the
+          line under it read "Contact hello@gemlyxtravel.com to also remove the
+          sign-in record", which was an honest label on a product that could not
+          do the thing the button implied. api/delete-account.js does it, so the
+          words no longer have to apologise for the code. */}
+      {/* ── HIS EDIT: THE LIST WAS STATING THE OBVIOUS ────────────────
+          The first version listed five things, and his answer was "some of these
+          are logical". Right: nobody needs telling that an address you sign in
+          with is stored. What is left is the part somebody would not assume,
+          which is that Gemlyx draws conclusions from behaviour, and the two
+          things that can be removed. */}
+      <Card>
+        <H>Delete your account</H>
+        <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: 8 }}>
+          {savedPlaces.length} saved {savedPlaces.length === 1 ? "place" : "places"} and {savedGuides.length} saved {savedGuides.length === 1 ? "guide" : "guides"}
+          {cloudSyncOk ? ", synced to this account." : ". Not reaching your account right now, so these are on this device only."}
+        </div>
+        <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: 18 }}>
+          No tracking, no marketing email, nothing sold. The <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>Privacy Policy</a> lists it in full.
+        </div>
+        <button onClick={onDelete} disabled={deleting}
+          style={{ width: "100%", background: "none", border: "1px solid #E23B4E66", color: "#E57373", borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 700, cursor: deleting ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
+          {deleting ? "Deleting…" : "Delete my account"}
+        </button>
+        <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, marginTop: 12 }}>
+          Removes your saved places, your guides, your details, everything Gemlyx has learned, and the login itself, on this device and in your account. This cannot be undone.
+        </div>
+      </Card>
     </>
   );
 
@@ -469,29 +510,6 @@ export const AboutMePage = ({
         )}
       </Card>
 
-      {/* ── HIS EDIT: THE LIST WAS STATING THE OBVIOUS ────────────────
-          The first version listed five things, and his answer was "some of these
-          are logical". Right: nobody needs telling that an address you sign in
-          with is stored. What is left is the part somebody would not assume,
-          which is that Gemlyx draws conclusions from behaviour, and the two
-          things that can be removed. */}
-      <Card>
-        <H>Your data</H>
-        <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: 8 }}>
-          {savedPlaces.length} saved {savedPlaces.length === 1 ? "place" : "places"} and {savedGuides.length} saved {savedGuides.length === 1 ? "guide" : "guides"}
-          {cloudSyncOk ? ", synced to this account." : ". Not reaching your account right now, so these are on this device only."}
-        </div>
-        <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: 18 }}>
-          No tracking, no marketing email, nothing sold. The <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>Privacy Policy</a> lists it in full.
-        </div>
-        <button onClick={onDelete} disabled={deleting}
-          style={{ width: "100%", background: "none", border: "1px solid #E23B4E66", color: "#E57373", borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 700, cursor: deleting ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
-          {deleting ? "Deleting…" : "Delete my data"}
-        </button>
-        <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, marginTop: 12 }}>
-          Removes your saved places, your guides, your details and everything Gemlyx has learned. Contact hello@gemlyxtravel.com to also remove the sign-in record.
-        </div>
-      </Card>
     </>
   );
 

@@ -12767,13 +12767,60 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   }, [userSession]);
 
   const handleSignOut = async () => {
+    // ── WHOSE SAVES ARE THESE ────────────────────────────────────────
+    //
+    // Oliver, 14 Sep 2026, looking at the signup sheet a minute after signing
+    // out of his own account: "The saved items should ONLY be for the account
+    // that saves it!!!!"
+    //
+    // He is right, and the sheet was telling him what was about to happen:
+    // "5 saved items on this device will come with you." Those five were his
+    // OWN account's, synced down minutes earlier, and the next account created
+    // on this machine was going to absorb them.
+    //
+    // ── THE OLD REASONING, AND WHY IT WAS BACKWARDS ─────────────────
+    //
+    // The line that used to sit here said local saves stay because "wiping the
+    // device copy would be a nasty surprise for someone signing out on a shared
+    // laptop who then goes back to their own phone."
+    //
+    // The shared laptop is the case it gets WRONG. Person A signs out, person B
+    // signs up, and person B is handed A's trips and the places A marked as
+    // been to. And the phone half of that sentence is answered by the account
+    // itself: what was synced is in the account, so it is on the phone already.
+    //
+    // So the rule is the one he stated. An account's saves belong to the
+    // account, and the device keeps a copy only while somebody is signed in to
+    // it. What survives a sign out is what was never in an account: saves made
+    // while signed out, which is the case the signup sheet's sentence was
+    // written for and the only case where it is true.
+    //
+    // THE ONE EXCEPTION IS AN HONEST ONE. If the last push to the account
+    // failed, the device copy is the ONLY copy, and clearing it would destroy
+    // trips rather than move them. cloudSyncOk is the same flag the account
+    // screen reports, so the two can never disagree about whether the account
+    // has it.
+    const heldOnlyHere = !cloudSyncOk;
     await authSignOut();
     setUserSession(null);
     syncedOnceRef.current = false;
-    // Local saves deliberately STAY. Signing out is not "delete my trips", and
-    // wiping the device copy would be a nasty surprise for someone signing out
-    // on a shared laptop who then goes back to their own phone.
-    showToast("Signed out · saves on this device are untouched", 2600);
+    if (heldOnlyHere) {
+      showToast("Signed out. Your saves are still on this device because the last sync to your account did not land.", 6000);
+    } else {
+      setSavedPlaces([]);
+      setSavedGuides([]);
+      setBeenList([]);
+      // The learned profile is about a PERSON, not a browser. Leaving it would
+      // hand the next account somebody else's interests, pace and budget, and
+      // the guide builder reads all three.
+      setUserProfile(null);
+      try {
+        localStorage.removeItem("gemlyx_saved_places");
+        localStorage.removeItem("gemlyx_saved_guides");
+        localStorage.removeItem("gemlyx_been");
+      } catch { /* private mode, nothing to clear */ }
+      showToast("Signed out. Your saves are in your account, not on this device.", 3200);
+    }
     
   };
 
@@ -12782,10 +12829,52 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     setAccountBusy(true);
     try {
       await deleteMyData(userSession);
+      // ── AND THE LOGIN, WHICH DID NOT GO ─────────────────────────
+      //
+      // Oliver, 14 Sep 2026: "make a 'delete account' in the account info."
+      // There was already a button, and it removed the ROWS and left the auth
+      // user standing. The line under it said so out loud: "Contact
+      // hello@gemlyxtravel.com to also remove the sign-in record." So the
+      // address stayed taken, the person could not sign up again, and an
+      // erasure request ended in a mailbox rather than in a button.
+      //
+      // The browser cannot do this part. Removing an auth user needs the
+      // service role key, which is why api/delete-account.js exists and why
+      // that file takes the id from the caller's own token and never from the
+      // request.
+      //
+      // SECOND, NOT FIRST. If the login went first the token would die with it
+      // and deleteMyData would have nothing to authenticate with, leaving the
+      // rows behind forever with no account left to reach them from. This
+      // order fails safe: the rows are gone either way, and a login that
+      // survives is recoverable by hand.
+      let loginNote = "";
+      try {
+        const res = await studioFetch("/api/delete-account", { method: "POST" });
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          loginNote = String(body?.error || "Your data is gone, but the login could not be removed. Mail hello@gemlyxtravel.com.");
+        }
+      } catch {
+        loginNote = "Your data is gone, but the login could not be removed. Mail hello@gemlyxtravel.com.";
+      }
       await authSignOut();
       setUserSession(null);
       syncedOnceRef.current = false;
-      showToast("Your saved data has been deleted from our servers", 3400);
+      // The same clearing sign out does, and for the stronger reason: the
+      // account this device held a copy for no longer exists, so the copy is
+      // somebody's deleted data sitting in a browser. No cloudSyncOk exception
+      // here either, because there is nothing left to sync it back to.
+      setSavedPlaces([]);
+      setSavedGuides([]);
+      setBeenList([]);
+      setUserProfile(null);
+      try {
+        localStorage.removeItem("gemlyx_saved_places");
+        localStorage.removeItem("gemlyx_saved_guides");
+        localStorage.removeItem("gemlyx_been");
+      } catch { /* private mode, nothing to clear */ }
+      showToast(loginNote || "Your account and everything on it has been deleted", loginNote ? 6000 : 3400);
       
     } catch (e) {
       showToast(`Could not delete: ${String(e.message || e).slice(0, 60)}`, 4000);
@@ -26987,7 +27076,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         onProfileSaved={(next) => setUserProfile(next)}
         onNeedsSetup={(sql) => setProfileSetupSql(sql)}
         onSignOut={() => { navigate("/"); handleSignOut(); }}
-        onDelete={() => { if (window.confirm("Delete your saved places and guides from our servers? Saves on this device stay, and this cannot be undone.")) { navigate("/"); handleDeleteAccount(); } }} />
+        onDelete={() => { if (window.confirm("Delete your Gemlyx account? Your saved places, your guides, your details and your login all go, on this device and in your account, and this cannot be undone.")) { navigate("/"); handleDeleteAccount(); } }} />
 
       {/* ── THE ACCOUNT PANEL IS GONE ───────────────────────────────
           Oliver, 23 Aug 2026, with a red cross drawn across the whole of it:
