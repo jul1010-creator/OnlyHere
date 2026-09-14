@@ -28,6 +28,9 @@
 import { haversineKm } from "./helpers";
 import { MODE_DAY_KM, travelModeKey } from "./routeOrder";
 import { shutOnVisit, openAtVisit, describeClosedAt } from "./openingHours";
+// The audit's own walker, so the gate and the audit on the finished guide
+// cannot disagree about whether a stop sits in a place the traveller refused.
+import { ruledOutStops } from "./constraintCheck";
 
 export const MIN_STOPS_MIDDLE_DAY = 2;
 
@@ -526,6 +529,28 @@ export const checkPlan = (days, coords = {}, opts = {}) => {
           detail: `${st.name} is on day ${dayNo} and they have already been there. Replace it with somewhere in the same town they have not done.` });
       });
     });
+  }
+
+  // ── 10. SOMEWHERE THEY RULED OUT ──────────────────────────────────
+  //
+  // Measured 13 Sep 2026 on a brief saying "Please skip Copenhagen, we have
+  // done it twice already": the refusal reached the planner only as a sentence
+  // inside the conversation, with nothing marking it, and the audit written for
+  // this on 25 Aug had never once run on a built guide. The prompt now carries
+  // the list as a rule, and the rule the paragraph above gives for the been
+  // list holds here too: a rule enforced only in a prompt is not enforced.
+  //
+  // The whole list, unlike the been list, and on purpose. A place somebody has
+  // already done is a town they may still route through; a place somebody
+  // REFUSED is not, so a town ruled out takes every stop inside it with it.
+  // That is what ruledOutStops answers, and it is the audit's own walker, so a
+  // skeleton this gate passes is a skeleton the audit passes for the same
+  // reason.
+  if (Array.isArray(opts.ruledOut) && opts.ruledOut.length) {
+    for (const hit of ruledOutStops(list, opts.ruledOut)) {
+      problems.push({ code: "RULED_OUT", day: hit.day, stop: hit.stop,
+        detail: `${hit.stop} is on day ${hit.day} and they ruled out ${hit.said}. Take it out and put a real place from the conversation that is not in ${hit.said} in its place, never another place in ${hit.said}.` });
+    }
   }
 
   return {

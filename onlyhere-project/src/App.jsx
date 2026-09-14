@@ -169,7 +169,27 @@ import { townClashes, clashNote } from "./utils/chatGeography";
 // for the places tapped No on). excludedNote's caller is GuidePreviewScreen.
 // ruledOutFor is the typed refusals and the tapped ones merged once, which is
 // what the guide's constraints are built from.
-import { withoutExcluded, ruledOutFor } from "./utils/exclusions";
+import { withoutExcluded, ruledOutFor, excludedBlock } from "./utils/exclusions";
+// ── THE AUDIT, WHICH HAD ONE CALLER AND IT WAS NOT THE BUILD ─────────
+//
+// constraintCheck.js has checked a guide against what the traveller said
+// since 25 Aug 2026. Until 13 Sep its only caller was the swap gate on the
+// guide page, so a guide fresh from the writer was never audited at all, and
+// constraintNote and repairWorked, written for exactly the moment the audit
+// fires on a build, were written and wired to nothing. generateGuide calls
+// all of them now; see the audit block after the writer returns.
+import { constraintViolations, violationsOfKind, constraintNote, repairWorked } from "./utils/constraintCheck";
+// ── AND THE THIRD READER OVER THE SAME GUIDE, 14 SEP 2026 ─────────────────────
+//
+// The audit above checks the guide against what the TRAVELLER said. Nothing
+// checked it against what GEMLYX said, so "Day 2: Stevns Klint" in the chat
+// and no Stevns Klint in the guide passed every gate. utils/chatPromises.js
+// reads the three shapes that are a promise and nothing hedged; the block
+// after the exclusions audit compares and reports. swapIsAllowed is the guide
+// page's own rule for "a change may not add a violation", borrowed for the
+// rebuild rather than restated.
+import { readPromises, brokenPromises, promiseNote, rebuildKeptMore, promiseRetryBlock } from "./utils/chatPromises";
+import { swapIsAllowed } from "./utils/stopSwap";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
 import { weighAdd, addCaution, tripLoadBlock } from "./utils/weighAdd";
@@ -13767,20 +13787,32 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       const chosenExtrasBlock = chosenExtras.length
         ? `\n\nPLACES THE TRAVELER ADDED THEMSELVES, after being shown that these were left out of their brief. They asked for these specifically, so every one MUST appear as a stop:\n${chosenExtras.map(p => `- ${p.name}${p.city || p.town ? ` in ${p.city || p.town}` : ""}`).join("\n")}`
         : "";
-      // ── AND THE PLACES THEY TAPPED NO ON ────────────────────────
+      // ── AND THE PLACES THEY RULED OUT, TYPED OR TAPPED ──────────
       //
-      // Oliver, 13 Sep 2026, on the zoomed-in chat map: "Is this interesting?
-      // Yes/No." The Yeses are chosenExtras above. A No is a refusal the
-      // conversation cannot show, because nobody typed it, and both prompts
-      // below read the conversation for refusals. So the tapped list goes in
-      // as its own block, to BOTH prompts like the adds, and only the tapped
-      // list: a typed refusal is already in the conversation the model reads,
-      // and readExclusions can misread a sentence, which is a risk the swap
-      // gate carries and the writer's prompt should not amplify into a rule.
-      const turnedDownNames = (Array.isArray(turnedDown) ? turnedDown : []).map(n => String(n || "").trim()).filter(Boolean);
-      const turnedDownBlock = turnedDownNames.length
-        ? `\n\nPLACES THE TRAVELER TURNED DOWN, by tapping No on them on the map. None of these may appear as a stop, be suggested in a note, or be offered as an alternative, in any wording:\n${turnedDownNames.map(n => `- ${n}`).join("\n")}`
-        : "";
+      // Measured 13 Sep 2026 on a brief saying "Please skip Copenhagen, we
+      // have done it twice already." Every reader in utils/exclusions.js read
+      // it, the preview printed "Leaving out Copenhagen, as you asked", and
+      // both prompts below were handed the whole conversation with no list of
+      // what had been ruled out. Only a No TAPPED on the map went in as a
+      // rule, in a block of its own, on the reasoning that a typed refusal was
+      // already in the text the model reads. It was, beside Gemlyx's own reply
+      // discussing the same city, and nothing told the planner which sentence
+      // was the rule. The guide could put Copenhagen straight back in, and the
+      // audit written for that on 25 Aug had never run on a built guide.
+      //
+      // ONE LIST. ruledOutFor is the typed refusals and the tapped ones merged
+      // once, the same call the preview note and the guide's constraints read,
+      // so the block, the plan gate, the audit and the swap gate all answer
+      // "what did they rule out" from one reading. The misread risk the old
+      // comment worried about is real and it is already taken: whatever this
+      // list holds has been printed to the traveller on the preview screen
+      // before the build starts, so a name here is a name they have seen.
+      const ruledOut = ruledOutFor(saidByTravellerForGuide, turnedDown);
+      const ruledOutBlock = excludedBlock(ruledOut);
+      // Built once, here, and carried onto the finished guide as _constraints:
+      // the audit after the writer and the swap gate on the guide page then
+      // check the same guide against the same object.
+      const guideConstraints = { excluded: ruledOut, transport: { ruledOut: [] } };
       // ── AND THE BED THEY HAVE ALREADY PAID FOR ──────────────────
       //
       // Oliver, 12 Sep 2026: "It didn't ask what date I booked it for. It just
@@ -13834,7 +13866,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       let planProblems = [];
       try {
         const plannerRes = await askOpenAI(
-          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nA NIGHT OUT IS AT MOST ${MAX_BARS_A_NIGHT} BARS AND ${MAX_CLUBS_A_NIGHT} CLUB, PER DAY, AND THE CLUB IS OPTIONAL. Nobody follows an itinerary once the night has started, so a day carrying four bars is a day where two of them will never be reached and the whole plan reads as padding. Pick the one or two worth STARTING at and leave the rest out. This is a ceiling and not a target: most days need no bar at all.\n\nUse only real place names mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.${beenBlock}\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.${chosenEventsBlock}${chosenExtrasBlock}${turnedDownBlock}\n\nConversation:\n${convoText}`,
+          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nA NIGHT OUT IS AT MOST ${MAX_BARS_A_NIGHT} BARS AND ${MAX_CLUBS_A_NIGHT} CLUB, PER DAY, AND THE CLUB IS OPTIONAL. Nobody follows an itinerary once the night has started, so a day carrying four bars is a day where two of them will never be reached and the whole plan reads as padding. Pick the one or two worth STARTING at and leave the rest out. This is a ceiling and not a target: most days need no bar at all.\n\nUse only real place names mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.${beenBlock}\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.${chosenEventsBlock}${chosenExtrasBlock}${ruledOutBlock}\n\nConversation:\n${convoText}`,
           1200
         );
         if (!plannerRes.error && plannerRes.text) {
@@ -13904,7 +13936,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // only speaks when the same town holds a venue that IS on a bar street,
       // so a lone bar in a town with no bar street is left alone.
       const nightAlone = (name) => strandedNight(name, nightlifeSpots, nightlifeStreets);
-            let verdict = checkPlan(skeleton.days, gateCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate, datePrecision, wasDone, nightKind, nightAlone });
+            let verdict = checkPlan(skeleton.days, gateCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate, datePrecision, ruledOut, wasDone, nightKind, nightAlone });
             let planDays = skeleton.days;
 
             // ONE RETRY, NEVER A REFUSAL. Some trips genuinely are awkward, and
@@ -13920,7 +13952,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
                   `This itinerary skeleton has specific, checkable problems. Fix them and return the corrected skeleton.\n\nPROBLEMS:\n${planProblemsForPrompt(verdict.problems)}\n\nHOW TO FIX EACH KIND:\n- A day with too few stops: add real places in or near that day's town, from the conversation, never invented.\n- The same place on two days: that is where they are STAYING. Keep it once, and give the other day its own places in that town or nearby.\n- Too few different places overall: the trip is thinner than the number of days it claims. Add real ones from the conversation.\n- A day that covers too much ground: move a stop to a neighbouring day, or drop the one that forces the long haul. A day that is mostly transit is a day the trip did not have.\n- A crowded arrival day: they land, queue at passport control, collect bags, cross the city and check in before any of it. Keep the two best things and move the rest to a later day. Do not compensate by overfilling day two.
 - A place closed on the day it is planned for: move it to a day it is open, or drop it. Never leave it where it is with a note.
 - A place planned for an hour it is shut: change its arrivalTime to one inside its opening hours. A club that opens at 23:00 belongs at 23:00 or later, and the bar you were going to visit afterwards goes BEFORE it, not after. Do not compress the rest of the day to make room; move or drop something instead.
-- A place they have already been to: swap it for a different real place in the same town, from the conversation. Do not delete it and leave the day one stop shorter, and do not move it to another day.\n\nSame JSON shape, nothing else: {"days": [{"day": 1, "stops": [{"name": "...", "town": "...", "arrivalTime": "..."}]}]}. Only real place names from the conversation.\n\nCurrent skeleton:\n${JSON.stringify(skeleton)}\n\nConversation:\n${convoText}`,
+- A place they have already been to: swap it for a different real place in the same town, from the conversation. Do not delete it and leave the day one stop shorter, and do not move it to another day.\n- A place the traveler ruled out: take it out. Put a real place from the conversation that is NOT in the place they ruled out where it was, never another place inside the same ruled out town, and do not move it to another day.\n\nSame JSON shape, nothing else: {"days": [{"day": 1, "stops": [{"name": "...", "town": "...", "arrivalTime": "..."}]}]}. Only real place names from the conversation.\n\nCurrent skeleton:\n${JSON.stringify(skeleton)}\n\nConversation:\n${convoText}`,
                   1200
                 );
                 if (!fixRes.error && fixRes.text) {
@@ -13935,7 +13967,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
                       const key = townKeyFor(st.town || "") || townKeyFor(st.name);
                       if (key) fixedCoords[st.name] = { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
                     }));
-                    const second = checkPlan(fixed.days, fixedCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate, datePrecision, wasDone, nightKind, nightAlone });
+                    const second = checkPlan(fixed.days, fixedCoords, { isPublished, mode: gateMode, hoursFor, arrivalDate, datePrecision, ruledOut, wasDone, nightKind, nightAlone });
                     // Keep whichever is actually better. A "fix" that trades two
                     // problems for three is not a fix.
                     if (second.problems.length < verdict.problems.length) { verdict = second; planDays = fixed.days; }
@@ -14101,7 +14133,7 @@ CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stop
 CRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE ROUTE, NOT JUST EACH DAY INTERNALLY: this applies across the whole trip, not just within one day — Copenhagen/Zealand and Jutland are different regions connected only by a long bridge/ferry crossing or a flight, never a short hop. Don't send the trip deeper into one region for several days and then jump straight to the other with no bridging day (e.g. Day 1-2 further into Jutland, Day 3 suddenly Copenhagen). If a planning skeleton is provided below, its day-to-day order already accounts for this — follow it. If you're structuring the trip yourself (no skeleton, or it's missing this), order the days to move in one general direction across the country and minimize total region-crossings over the whole trip.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a real buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a real buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't mentioned just to fill a day.` : ""} Use only real place names mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${chosenEventsBlock}${chosenExtrasBlock}${turnedDownBlock}${bookedStayBlock}${beenBlock}${essentialsFacts}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't mentioned just to fill a day.` : ""} Use only real place names mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${chosenEventsBlock}${chosenExtrasBlock}${ruledOutBlock}${bookedStayBlock}${beenBlock}${essentialsFacts}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
       // Guide-building is genuine multi-step reasoning (timing, geography, avoiding
       // duplicates, family-mode adjustments) — this is the one call in Detour worth
       // Opus's extra reasoning depth, and it already has a loading screen the person
@@ -14126,7 +14158,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       if (requestedDays && (!parsed.days || parsed.days.length < requestedDays)) {
         buildStage("Finishing the remaining days", 70);
         const retryResult = await askClaude(
-          `Turn the trip plan discussed in this conversation into strict JSON. The "days" array MUST contain EXACTLY ${requestedDays} entries — your last attempt returned only ${parsed.days?.length || 0}, which is wrong. Same shape as before: {"title": "...", "essentials": {"budgetReality": "...", "transportTip": "...", "keepInMind": "..."}, "days": [{"day": 1, "title": "...", "stops": [{"name": "...", "town": "...", "arrivalTime": "...", "suggestedStay": "...", "note": "..."}]}]}. Split every place discussed across all ${requestedDays} days in a sensible order — repeat a base town for a slower day if too few places were discussed, but never invent one that wasn't mentioned. Use only real place names mentioned in the conversation. Respond with ONLY the raw JSON object, no markdown code fences, nothing else.${guideLangBlock}\n\nConversation:\n${convoText}`,
+          `Turn the trip plan discussed in this conversation into strict JSON. The "days" array MUST contain EXACTLY ${requestedDays} entries — your last attempt returned only ${parsed.days?.length || 0}, which is wrong. Same shape as before: {"title": "...", "essentials": {"budgetReality": "...", "transportTip": "...", "keepInMind": "..."}, "days": [{"day": 1, "title": "...", "stops": [{"name": "...", "town": "...", "arrivalTime": "...", "suggestedStay": "...", "note": "..."}]}]}. Split every place discussed across all ${requestedDays} days in a sensible order — repeat a base town for a slower day if too few places were discussed, but never invent one that wasn't mentioned. Use only real place names mentioned in the conversation. Respond with ONLY the raw JSON object, no markdown code fences, nothing else.${ruledOutBlock}${guideLangBlock}\n\nConversation:\n${convoText}`,
           6000,
           "claude-opus-4-8",
           true // expectJson — same prose-reply protection as the main build call
@@ -14137,6 +14169,134 @@ If the conversation only covers a single day or a few stops with no explicit day
         } catch { /* keep the first attempt if the retry itself fails to parse */ }
       }
       if (!parsed.days || parsed.days.length === 0) throw new Error("empty");
+      // ── THE AUDIT RUNS ON WHAT CAME BACK ─────────────────────────
+      //
+      // constraintCheck.js was written on 25 Aug 2026 to check a built guide
+      // against what the traveller said, and until 13 Sep its only caller was
+      // the swap gate on the guide page. A guide fresh from the writer was
+      // never audited, so "skip Copenhagen" could come back as a day in
+      // Copenhagen with nothing in this pipeline noticing. Measured that day:
+      // the refusal reached both prompts as a sentence in the transcript and
+      // as nothing else, and the audit would have caught the result in one
+      // line had anything called it.
+      //
+      // HERE, before the polish and the fact-check, where the day-count retry
+      // above sits and for its reason: a guide that has to be rebuilt should
+      // be rebuilt before the expensive stages run on the wrong one. The audit
+      // reads stop names and towns, and no later stage changes those.
+      //
+      // WHAT HAPPENS WHEN IT FIRES is the answer this pipeline already gives a
+      // writer that under-complied with a hard instruction, two blocks up: one
+      // more call with the failure named, never a refusal. The rebuild is
+      // accepted on three conditions and otherwise the first attempt stands:
+      // it holds at least as many days (the day-count retry's own rule, since
+      // dropping the Copenhagen day is fewer violations and a shorter trip),
+      // no day came back empty, and repairWorked, the title gate's rule
+      // generalised: fewer violations than before. Whatever survives goes into
+      // planProblems in the traveller's own words, through constraintNote,
+      // where every other check on the finished guide already reports and
+      // where the person who built the guide reads it above the guide. A
+      // refused place shipped in silence is the failure this path exists to
+      // stop; a refused place named above the guide is a limitation stated.
+      {
+        const audit = (g) => violationsOfKind(constraintViolations(g, guideConstraints, { modeOf: detectLegMode }), "excluded");
+        let broken = audit(parsed);
+        if (broken.length) {
+          buildStage("Taking out what was ruled out", 70);
+          console.warn("The guide plans a place the traveller ruled out:", broken.map(v => v.why));
+          const again = await askClaude(
+            `${guideSystemPrompt}\n\nYOUR LAST ATTEMPT BROKE THE RULE ABOVE ABOUT PLACES THE TRAVELER RULED OUT. ${broken.map(v => v.why).join(" ")} Rebuild the days concerned around real places from the conversation that are not in any place ruled out, keep every other day as it was, keep the same number of days, and never leave a day empty.\n\nRespond with ONLY the raw JSON object described above, no markdown code fences, nothing else.\n\nConversation:\n${convoText}`,
+            6000,
+            "claude-opus-4-8",
+            true // expectJson, the same prose-reply protection as the main build call
+          );
+          if (!again.error && again.text) {
+            try {
+              const rebuilt = await parseClaudeJSON(again.text, 6000);
+              const whole = Array.isArray(rebuilt?.days) && rebuilt.days.length >= parsed.days.length
+                && rebuilt.days.every(d => Array.isArray(d?.stops) && d.stops.length > 0);
+              if (whole && repairWorked(parsed, rebuilt, guideConstraints, { modeOf: detectLegMode })) parsed = rebuilt;
+            } catch { /* the first attempt stands, and the line below records what it still holds */ }
+          }
+          broken = audit(parsed);
+        }
+        note("The finished guide, against what the traveller ruled out", {
+          detail: ruledOut.length ? `ruled out: ${ruledOut.join(", ")}` : "nothing was ruled out",
+          outcome: broken.length ? "empty" : "ok",
+          got: broken.length ? broken.map(v => v.why).join(" ") : "no stop sits in a place they ruled out",
+          why: broken.length
+            ? "Both prompts carried the list, the plan gate had it, the writer was asked once more, and the place is still in the guide. It is named above the guide rather than shipped in silence."
+            : "",
+          used: !broken.length,
+        });
+        if (broken.length) planProblems = [...planProblems, constraintNote(broken)];
+      }
+      // ── AND WHAT THE CHAT PROMISED, WHICH NOTHING COMPARED ────────────
+      //
+      // On the open list for days: nothing in the app compared what Gemlyx
+      // said in the conversation against the plan that came back. Measured on
+      // 14 Sep 2026 with three replies shaped the way the prompt asks for them
+      // (a week written out day by day, "I'll work Kongens Have into the first
+      // afternoon", "you'll be there for Aalborg Karneval") against guides
+      // that left the place out: the audit above, the plan gate, the title
+      // check and the chosen-events check below all said nothing. See
+      // utils/chatPromises.js for the reader and for why it is as narrow as
+      // it is: a false accusation is worse than a missed promise, because it
+      // fires on every trip and gets switched off.
+      //
+      // ITS OWN AUDIT AND ITS OWN NOTE, not a kind inside constraintViolations,
+      // on purpose. That object is carried onto the guide as _constraints and
+      // the swap gate on the guide page reads it, and the swap gate's sentence
+      // is "that one breaks something you told me". A promise is something
+      // Gemlyx told them, and a traveller swapping out a stop Gemlyx once
+      // promised is changing their mind, not breaking a rule.
+      //
+      // Otherwise the shape of the block above: one more call with the failure
+      // named, taken only if it kept more promises, kept every day, left none
+      // empty, and added no violation of what the traveller SAID, which is the
+      // swap gate's own question and is asked through swapIsAllowed. Whatever
+      // survives is written above the guide through promiseNote, and into the
+      // run log either way, so a report shows the comparison ran.
+      //
+      // A composed brief (the Studio test button) has no assistant turns, so
+      // the reader is handed an empty thread and has nothing to read.
+      {
+        const promised = readPromises(
+          overrideConvoText ? [] : aiMessages.slice(1),
+          previewPools({ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }),
+          { ownWords: saidByTravellerForGuide, tapped: turnedDown, pickedEvents },
+        );
+        const audit = (g) => brokenPromises(promised, g?.days);
+        let unkept = audit(parsed);
+        if (unkept.length) {
+          buildStage("Putting back what the chat promised", 71);
+          console.warn("The guide leaves out a place the chat promised:", unkept.map(v => v.why));
+          const again = await askClaude(
+            `${guideSystemPrompt}\n\n${promiseRetryBlock(unkept)}\n\nRespond with ONLY the raw JSON object described above, no markdown code fences, nothing else.\n\nConversation:\n${convoText}`,
+            6000,
+            "claude-opus-4-8",
+            true // expectJson, the same prose-reply protection as the main build call
+          );
+          if (!again.error && again.text) {
+            try {
+              const rebuilt = await parseClaudeJSON(again.text, 6000);
+              const violationsOf = (g, c) => constraintViolations(g, c, { modeOf: detectLegMode });
+              if (rebuildKeptMore(parsed, rebuilt, promised) && swapIsAllowed(parsed, rebuilt, guideConstraints, { violationsOf })) parsed = rebuilt;
+            } catch { /* the first attempt stands, and the line below records what it still leaves out */ }
+          }
+          unkept = audit(parsed);
+        }
+        note("The finished guide, against what the chat promised", {
+          detail: promised.length ? `promised in the chat: ${promised.map(p => p.name).join(", ")}` : "the chat promised nothing by name",
+          outcome: unkept.length ? "empty" : "ok",
+          got: unkept.length ? unkept.map(v => v.why).join(" ") : "every place the chat promised is a stop",
+          why: unkept.length
+            ? "The planner and the writer both read the conversation, the writer was asked once more, and the place is still not in the guide. It is named above the guide rather than shipped in silence."
+            : "",
+          used: !unkept.length,
+        });
+        if (unkept.length) planProblems = [...planProblems, promiseNote(unkept)];
+      }
       // Every writable prose field in the finished guide, flattened to a flat list
       // with a stable id so ChatGPT can flag by id (never by re-quoting text, which
       // drifts) and Claude's rewrite can be written straight back into the object —
@@ -14773,7 +14933,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         } catch { /* never at the cost of the guide */ }
       }
 
-      setGuideModal({ _gid: gid, _fx: fxLine, _constraints: { excluded: ruledOutFor(saidByTravellerForGuide, turnedDown), transport: { ruledOut: [] } }, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
+      setGuideModal({ _gid: gid, _fx: fxLine, _constraints: guideConstraints, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
       // A build that failed halfway still spent everything it spent up to that
       // point, and a meter that only counts successes reports a cost per guide
@@ -17040,6 +17200,8 @@ UPCOMING VIKING EVENTS (markets, festivals, battle reenactments): ${upcomingViki
 HIDDEN GEM TOWNS (this is Gemlyx's actual core differentiator, real lesser-known towns worth a detour, not the famous cities everyone already knows): ${townsList}
 
 ACTIVELY USE THE HIDDEN GEM TOWNS LIST, DON'T JUST DEFAULT TO FAMOUS ATTRACTIONS: when building a multi-day plan, deliberately pull at least one real town from the list above rather than filling every day with only the most famous, most obvious sights. Working a hidden gem into the plan (not just mentioning it exists) is exactly what makes a Gemlyx-built trip different from a generic one. If someone's request sounds like they'd prefer a lighter, town-hopping style trip (cycling or driving around and seeing real places, not a packed sightseeing schedule), lean into that, and don't force a dense day of attractions onto someone who'd rather just wander through a few real towns.
+
+WHEN YOU OFFER A PLACE, OFFER ONE GEMLYX HOLDS. This is the one rule that decides whether the app around you works at all. Everything on the lists above has a page, a photograph, a checked entry and a coordinate, and a name that is not on them has none of those: no pin on their map, no card under your reply, nothing they can open, and the map then shows whichever other town you happened to mention instead of the one you recommended. Oliver, 13 September 2026, reading his own session: "I'm coming up through South Jutland, but it instantly pins Copenhagen.. why would it not pin Ribe or something?" The reply had offered him Haderslev, which Gemlyx holds nothing for, and named Copenhagen only as the place he was NOT stopping at yet, so Copenhagen was the only thing on screen. Ribe and Aabenraa were both on the lists and both on his road. So: every place you put forward as somewhere to go comes off the lists above. You may still ANSWER about anywhere in Denmark, and you should, but that is answering a question rather than making an offer. If the honest answer to what they said is a place Gemlyx does not hold, name it and say plainly that Gemlyx has no page for that one yet, then put a place from the lists beside it.
 
 If asked for a plan or itinerary, structure it day by day using only the above, and factor in the current season. ACTIVELY CROSS-REFERENCE EVENTS AGAINST THE TRAVELER'S DATES: if they've told you when they're visiting (or roughly when, as in "next week" or "in August"), check the UPCOMING EVENTS lists above for anything whose real date range overlaps with their trip, and proactively mention it as part of the plan rather than waiting to be asked. A real festival happening during someone's actual visit is exactly the kind of specific, useful detail worth surfacing unprompted. Don't force an event in in if nothing overlaps; a fabricated sense of good timing is worse than no mention at all. If you do suggest an event, ALWAYS pass along its real ticket situation from the [tickets: ...] note next to it. If it says SOLD OUT, say so plainly and don't suggest attending (mention it as a "happening nearby" fact instead, not a plan to join); if it says tickets are limited or sell out fast, tell them to book now, before the trip, not "when they arrive". That is the single most common way someone misses something they specifically traveled for. FROZEN FACT, CORRECTED 21 Aug 2026 (VisitDenmark overnight-stay figures via The Local): DO NOT SAY OR IMPLY THAT MOST TOURISTS ONLY SEE COPENHAGEN. This prompt asserted it for weeks and it is false. Germany is by far the largest source of visitors, 13.2 million overnight stays, and they go to the Jutland coasts rather than the capital: Vesterhavet 5 million, Nordvestkysten 2.3 million, South Jutland 1.6 million. Across all visitors, 80 percent of overnight stays are coastal and nature and only 11 percent are the major cities. Around two thirds of Norwegian visits are outside Copenhagen. It IS true of long-haul visitors and of some European city breaks: 77 percent of American stays are in the capital, 63 percent of Dutch and roughly half of Swedish. So never open with the claim as a general fact about tourists, and never tell somebody they are missing the real Denmark before knowing where they are going: a German family heading for a west-coast holiday house has already found it, and being told otherwise is both wrong and patronising. Gemlyx's mission is unchanged and its reason is narrower: when a traveller's OWN brief points only at Copenhagen and they have more than 2 days, suggest at least one destination outside it, because that is the trip that misses most, not because most trips do. If asked about transport, always mention that the physical Rejsekort card was discontinued (28 May 2026) and the current fine for an invalid ticket is 750 DKK. The most common tourist mistakes are forgetting to check out, and assuming an installed app means a purchased ticket. FROZEN TRANSPORT FACT (checked 10 Aug 2026, rejsekort.dk + rejsebillet.dk): never recommend a PHYSICAL Rejsekort, because the card is discontinued. Do NOT claim the Rejsekort app is unavailable to visitors: its own terms ask only for an email, a name, a birthdate, a phone number and a payment card, and reserve MitID and CPR for pensioner and disabled fare types. Steer a short trip to a fixed ticket for the real reason instead, which is that the app is check-in and check-out and forgetting to check out is the most common tourist fine. Visitors buy tickets in the official Rejsebillet app (single tickets and passes for all of Denmark, from Rejsekort & Rejseplan A/S, paid in advance) or the DOT/DSB apps; the Copenhagen Card works as before (activate once, show on request). If unsure about any ticket mechanic, name the official app and point at it rather than describing mechanics.
 

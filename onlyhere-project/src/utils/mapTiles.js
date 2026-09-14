@@ -30,10 +30,50 @@
 //
 //   filter       See the note on `filter` below. This is the one that will make
 //                you think Watercolor looks terrible when it does not.
+//
+// ── AND SINCE 13 SEP 2026, A FOURTH THING: HOW IT IS DRAWN ─────────
+// A raster provider sends pictures and the URL is the whole request. A vector
+// provider sends geometry and the picture is drawn here, from a style. So a
+// style row carries EITHER a tile URL for L.tileLayer OR a `glStyle` for
+// MapLibre, and addTileLayer reads which by whether glStyle is present. That
+// one field is the reader; there is no separate "kind" flag to fall out of
+// step with it.
+//
+// ── AND A FIFTH: WHAT TO SHOW WHEN IT FAILS ────────────────────────
+// `fallback` names the next row to try when this one is refused. Before the
+// vector style there was one fallback for everything, the OSM raster, and it
+// was spelled DEFAULT_TILE_STYLE. Now the chain is chart, then navy, then dark:
+// a guide whose Watercolor is refused gets the drawn navy map, and a night when
+// OpenFreeMap is down degrades to the inverted OSM raster the app shipped with
+// rather than to a dark box. The last row has no fallback, on purpose: see
+// addTileLayer for why the layer that always works gets no handler.
+import { BASEMAP_STYLE, OPENFREEMAP_TILEJSON, OPENFREEMAP_ATTRIBUTION } from "./mapStyle";
+
 export const TILE_STYLES = {
-  // What the app has always used: OpenStreetMap, inverted to dark so it sits in
-  // the dark brand. Kept as the default for the Studio map and the little map on
-  // a place page, where a dark panel is the right answer.
+  // ── THE DEFAULT: DRAWN, DARK, AND WORDLESS ─────────────────────
+  // Oliver, 13 Sep 2026: the inverted map "does look kinda old school... how it
+  // reads the countries". OpenFreeMap's vector tiles drawn by the style in
+  // mapStyle.js: land and sea in the dark theme's own colours, a coastline,
+  // subdued roads, and not one place name, because the app's town chips are
+  // meant to be the only words on the map. See mapStyle.js for the whole
+  // reasoning, including why OpenFreeMap and not the three others measured.
+  //
+  // `url` is the TileJSON the style points at, reported here so that "where do
+  // these tiles come from" has the same answer for every row in this table.
+  navy: {
+    url: OPENFREEMAP_TILEJSON,
+    glStyle: BASEMAP_STYLE,
+    maxZoom: 19,
+    attribution: OPENFREEMAP_ATTRIBUTION,
+    filter: "",
+    fallback: "dark",
+  },
+
+  // What the app used from the start: OpenStreetMap, inverted to dark so it sits
+  // in the dark brand. The end of every fallback chain now rather than the
+  // default, because OSM's tile usage policy says commercial access "may be
+  // blocked without prior notice" and the "Access blocked" grid has already
+  // been seen once, from a page with no Referer.
   dark: {
     url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
     maxZoom: 19,
@@ -42,6 +82,7 @@ export const TILE_STYLES = {
     // App.jsx so the filter travels with the tiles it was written for. A style
     // whose tiles are already painted must NOT inherit it.
     filter: "invert(1) hue-rotate(189deg) brightness(0.92) contrast(1.12) saturate(0.35)",
+    fallback: null,
   },
 
   // ── THE CHART ─────────────────────────────────────────────────────
@@ -91,9 +132,32 @@ export const TILE_STYLES = {
       + ' &copy; <a href="https://stamen.com/" target="_blank" rel="noreferrer">Stamen Design</a>'
       + ' &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
     filter: "",
+    // The guide keeps the chart Oliver chose for it. When Stadia declines, the
+    // drawn navy map is the next best thing and the raster comes after that.
+    fallback: "navy",
   },
 };
 
+// What a component gets when it does not ask for anything, and where an
+// unknown name lands. Not the end of the fallback chain any more: that is
+// whichever row has no `fallback`.
+// ── AND HE LOOKED AT IT AND WANTED THE DETAIL BACK ──────────────────
+//
+// Oliver, 14 Sep 2026, 01:30, on the navy map running on his own dev server:
+// "I don't like that map though.. I do like a detailed map."
+//
+// Fair, and the fault is upstream of the style. The brief I wrote for it said
+// Denmark as a shape with no words on it, because his complaint the hour before
+// was foreign region names shouting over Danish ones. Stripping every label and
+// most of the detail answers that complaint by removing the map, and a travel
+// app wants the opposite: roads, towns, the places around the places.
+//
+// So the default goes back to the raster he already had while that gets built
+// properly. NOTHING ELSE IS TORN OUT. The navy row, the style, the MapLibre
+// loader and the whole vector path stay exactly where they are, because the
+// detailed version is that style with layers added rather than a different
+// mechanism, and OpenFreeMap is still the only source that is free, keyless and
+// allowed commercially. This line is the switch.
 export const DEFAULT_TILE_STYLE = "dark";
 
 // ── WHAT DECIDES WHETHER THE CHART IS AVAILABLE ─────────────────────
@@ -204,19 +268,40 @@ export const TILE_ERROR_LIMIT = 3;
 // undefined and blanking the map: a typo in a prop should cost you the styling
 // you asked for, not the basemap.
 export const tileConfig = (style = DEFAULT_TILE_STYLE) => {
-  const asked = TILE_STYLES[style] ? style : DEFAULT_TILE_STYLE;
-  const name = refused.has(asked) ? DEFAULT_TILE_STYLE : asked;
+  let name = TILE_STYLES[style] ? style : DEFAULT_TILE_STYLE;
+  // Down the chain past every row the server has refused, stopping at the
+  // first that has not been, or at the row with nowhere further to go. Bounded
+  // by the size of the table so a fallback typed as a loop can never spin.
+  for (let hops = 0; refused.has(name) && TILE_STYLES[name].fallback && hops < Object.keys(TILE_STYLES).length; hops++) {
+    name = TILE_STYLES[name].fallback;
+  }
   const s = TILE_STYLES[name];
   return {
     url: s.url,
     maxZoom: s.maxZoom,
     attribution: s.attribution,
     className: `gemlyx-tiles gemlyx-tiles-${name}`,
-    // Which style actually resolved, so a caller that cares can tell whether it
-    // got what it asked for rather than having to guess.
+    // Which style resolved in the end, so a caller that cares can tell whether
+    // it got what it asked for rather than having to guess.
     style: name,
+    // Present for a drawn style, absent for a raster one. addTileLayer reads
+    // this and nothing else to choose its path.
+    glStyle: s.glStyle || null,
+    fallback: s.fallback || null,
   };
 };
+
+// ── THE MAPLIBRE CHUNK, REACHED THROUGH ONE SEAM ───────────────────
+// vectorBasemap.js is where maplibre-gl, its worker and the Leaflet plugin are
+// imported, and it is loaded on demand: see that file for the bundle arithmetic.
+// The import() is behind a function so the suite can stand in a fake, the way
+// it already stands in a fake L. Under plain Node the real import would fail,
+// which is a fine way to test the path where the chunk never arrives and a poor
+// way to test every other one.
+const loadVector = () => import("./vectorBasemap.js");
+let vectorLoader = loadVector;
+// Tests only, like __resetRefusedStyles. Passing nothing restores the real one.
+export const __setVectorLoader = (fn) => { vectorLoader = fn || loadVector; };
 
 // ── ADD THE LAYER, AND FALL BACK IF IT IS REFUSED ───────────────────
 //
@@ -229,26 +314,118 @@ export const tileConfig = (style = DEFAULT_TILE_STYLE) => {
 // the test suite under plain Node, where `leaflet` reaches for `window`; and
 // injecting it is the only way to test a path that otherwise needs a real 401
 // from a real unregistered domain to fire.
+//
+// ── AND SINCE THE VECTOR STYLE, TWO PATHS INTO ONE RECOVERY ────────
+// A raster row is L.tileLayer, synchronous, and returns the layer, as it
+// always did. A drawn row needs maplibre-gl, which arrives in its own chunk,
+// so that path is asynchronous and returns a promise of the layer (null once
+// it has fallen back or the map went away first). No component reads the
+// return value; the suite does.
+//
+// Whatever fails, the recovery is the same function: remember what was
+// refused, take the failed layer off, and ask for the next row down the
+// chain. The raster path has done that since August; the drawn path adds two
+// ways to fail before a single tile is asked for and one after, listed at
+// each site below.
 export const addTileLayer = (L, map, style = DEFAULT_TILE_STYLE) => {
   const cfg = tileConfig(style);
-  const layer = L.tileLayer(cfg.url, cfg);
-  layer.addTo(map);
-  // Already on the basemap that always works: there is nothing to fall back to,
-  // and attaching a handler that removes it is a way to end up with no tiles at
-  // all on a bad connection.
-  if (cfg.style === DEFAULT_TILE_STYLE) return layer;
-  let errors = 0;
-  layer.on("tileerror", () => {
-    if (++errors < TILE_ERROR_LIMIT) return;
+  // ── THE CREDIT IS THE PROVIDER'S CONDITION, NOT THE MAP'S CHOICE ──
+  // ChatMiniMap builds its map with attributionControl off, and a map with
+  // no control renders no credit whichever layer is on it. OpenFreeMap's terms
+  // are the credit and nothing else, and OSM's tile policy asks for the same,
+  // so a map that arrives without a control gets one here, from the file that
+  // owns the provider. Leaflet's own default corner, like the other maps.
+  if (!map.attributionControl && cfg.attribution && L.control?.attribution) {
+    L.control.attribution().addTo(map);
+  }
+  // ── A MAP THAT HAS BEEN TORN DOWN IS NOT ADDED TO ──────────────
+  // React unmounts the component, the effect cleanup calls map.remove(), and
+  // some time later the chunk arrives or a third refused tile lands. Leaflet
+  // empties its panes on remove(), so adding a layer then throws from inside
+  // a promise callback or an image error handler, with nobody to catch it.
+  // remove() fires `unload` first, which is the one signal Leaflet gives.
+  let gone = false;
+  map.once?.("unload", () => { gone = true; });
+  let done = false;
+  const giveUp = (layer, remember, why) => {
+    if (done) return null;
+    done = true;
     // Recorded BEFORE the swap, so tileConfig stops handing this style out
-    // immediately and a second map on the same page never repeats the 401s.
-    refused.add(cfg.style);
-    writeRefusedMemo();
-    try { map.removeLayer(layer); } catch { /* a map already torn down is fine */ }
-    const fb = tileConfig(DEFAULT_TILE_STYLE);
-    L.tileLayer(fb.url, fb).addTo(map);
+    // immediately and a second map on the same page never repeats the refusal.
+    // Recorded even when this map has gone, because the server's answer is
+    // about the server. Not recorded at all for a chunk that never arrived:
+    // see below.
+    if (remember) { refused.add(cfg.style); writeRefusedMemo(); }
+    if (gone) return null;
+    if (layer) { try { map.removeLayer(layer); } catch { /* a map already torn down is fine */ } }
+    if (!cfg.fallback) return null;
+    // Said out loud, because with a listener on MapLibre's error event its own
+    // console line goes quiet, and "why is my map the old one today" is a
+    // question Oliver will ask with the console open.
+    console.warn(`Gemlyx basemap: ${cfg.style} ${why}, showing ${tileConfig(cfg.fallback).style} instead`);
+    // The NEXT row, asked for by name, whether or not this one was recorded.
+    // Asking for `style` again would work for a recorded refusal (tileConfig
+    // walks past it) and loop for an unrecorded one (it would hand this same
+    // row straight back). One call shape that is right both times.
+    return addTileLayer(L, map, cfg.fallback);
+  };
+
+  if (!cfg.glStyle) {
+    const layer = L.tileLayer(cfg.url, cfg);
+    layer.addTo(map);
+    // Already on the basemap that always works: there is nothing to fall back
+    // to, and attaching a handler that removes it is a way to end up with no
+    // tiles at all on a bad connection.
+    if (!cfg.fallback) return layer;
+    let errors = 0;
+    layer.on("tileerror", () => {
+      if (++errors < TILE_ERROR_LIMIT) return;
+      giveUp(layer, true, "refused its tiles");
+    });
+    return layer;
+  }
+
+  return vectorLoader().then((chunk) => {
+    if (gone) return null;
+    // FAILURE ONE: no WebGL2. MapLibre 6 throws from its constructor, which the
+    // plugin runs inside addTo. An answer about the device rather than the
+    // domain, remembered the same way: it will not change before the memo
+    // expires, and remembering it saves the next map the chunk download.
+    let layer;
+    try {
+      layer = chunk.vectorLayer(cfg);
+      layer.addTo(map);
+    } catch (err) {
+      if (layer) { try { map.removeLayer(layer); } catch { /* the plugin's own onRemove is guarded for this */ } }
+      return giveUp(null, true, `could not start (${err?.message || err})`);
+    }
+    // Same rule as the raster path: the last row gets no handler.
+    if (!cfg.fallback) return layer;
+    // FAILURE TWO: the server says no. MapLibre reports every failed request
+    // as one `error` event, the way Leaflet reports one `tileerror`, so the
+    // same limit tells a refusal from a hole. With one difference: a refused
+    // TILESET DESCRIPTION (the TileJSON) means no tile will ever be asked for,
+    // so that one event is the whole answer and counts as the whole limit. A
+    // tile failure carries the tile; the description's failure does not.
+    // Whether the failure is an HTTP status or the network is `status` either
+    // way: MapLibre wraps a blocked or unreachable host as status 0.
+    let errors = 0;
+    layer.getMaplibreMap().on("error", (e) => {
+      const whole = !e?.tile && Number.isFinite(e?.error?.status);
+      errors += whole ? TILE_ERROR_LIMIT : 1;
+      if (errors < TILE_ERROR_LIMIT) return;
+      giveUp(layer, true, `was refused (${e?.error?.message || "tile errors"})`);
+    });
+    return layer;
+  }, (err) => {
+    // FAILURE THREE: the chunk itself did not arrive. NOT remembered, and this
+    // is deliberate: the memo records what the SERVER said about a style, and
+    // a chunk that failed to load says nothing about OpenFreeMap. The common
+    // cause is a tab left open across a deploy, asking for a chunk hash the
+    // new build no longer has; a reload fixes that, and a memo would have kept
+    // the raster for a day after the reload.
+    return giveUp(null, false, `did not load (${err?.message || err})`);
   });
-  return layer;
 };
 
 // The CSS for every style, built FROM the table so a new style cannot be added

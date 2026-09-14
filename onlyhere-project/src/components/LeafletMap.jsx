@@ -11,8 +11,10 @@ export const LeafletMap = ({ center, zoom, overlayLabel }) => {
     const map = L.map(holderRef.current, { zoomControl: false }).setView(center, zoom);
     // The basemap comes from utils/mapTiles.js rather than being written out
     // here — this was one of three verbatim copies of the same URL, maxZoom and
-    // attribution. Still "dark": a dark panel is the right answer in Studio and
-    // on a place page. The guide's own chart asks for "chart".
+    // attribution. Nothing asked for, so the default: since 13 Sep 2026 that is
+    // the drawn navy map from OpenFreeMap (TILE_STYLES.navy), with the inverted
+    // OSM raster behind it as the fallback. The guide's own chart asks for
+    // "chart".
     addTileLayer(L, map);
     L.control.zoom({ position: "bottomleft" }).addTo(map);
     mapRef.current = map;

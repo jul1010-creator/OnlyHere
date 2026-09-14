@@ -1,0 +1,8 @@
+/* ── TWO RULES OUT OF MAPLIBRE'S 84 KB STYLESHEET ────────────────────
+   maplibre-gl.css is controls, popups, markers and their icons as data URIs.
+   A basemap drawn under Leaflet uses none of that: Leaflet owns every control
+   and every marker. These two rules are the only ones the canvas needs, taken
+   from that file so the container clips its canvas and the canvas sits at the
+   container's origin, wherever Leaflet has translated the container to. */
+.maplibregl-map { overflow: hidden; position: relative; }
+.maplibregl-canvas { position: absolute; left: 0; top: 0; }

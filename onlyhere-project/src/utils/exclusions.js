@@ -603,3 +603,31 @@ export const excludedNote = (excluded) => {
   const names = list.length === 1 ? list[0] : `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}`;
   return `Leaving out ${names}, as you asked.`;
 };
+
+// ── AND SAY IT TO THE PLANNER, WHICH NOBODY DID ─────────────────────
+//
+// Measured 13 Sep 2026, on a conversation saying "Please skip Copenhagen, we
+// have done it twice already." Every reader in this file read it, the preview
+// printed "Leaving out Copenhagen, as you asked", and then both build prompts
+// were handed the whole conversation with no list of what had been ruled out.
+// The one refusal that DID reach them as a rule was a tap on the map, in its
+// own block; a typed one was left to be noticed inside the transcript, on the
+// reasoning that it was already in the text the model reads. It was, and so
+// was Gemlyx's own reply talking about Copenhagen, and nothing told the
+// planner which of the two sentences was the rule.
+//
+// ONE BLOCK FOR BOTH KINDS. The tapped list and the typed list are merged once
+// by ruledOutFor above, so this reads that merged answer and never rebuilds
+// its own; a block that took only the tapped half was the second reader of
+// "what did they rule out" and the reason the typed half went missing.
+//
+// The sentence about spellings is there because the writer is asked for the
+// real Danish town name and the traveller types the English one, and a rule
+// that says "Copenhagen" to a model writing "København" is a rule it can miss
+// honestly. Empty when nothing is ruled out, so a prompt never carries a
+// heading with nothing under it.
+export const excludedBlock = (excluded) => {
+  const list = (Array.isArray(excluded) ? excluded : []).map(clean).filter(Boolean);
+  if (!list.length) return "";
+  return `\n\nPLACES THE TRAVELER RULED OUT, in their own words in the conversation below or by tapping No on the map. None of these may appear as a stop, be named in a note, or be offered as an alternative, in any wording and in either its Danish or its English spelling. A town ruled out takes every stop inside it with it. Where the conversation seems to plan one of these anyway, the refusal wins and that part of the plan goes somewhere else:\n${list.map(n => `- ${n}`).join("\n")}`;
+};

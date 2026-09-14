@@ -85,7 +85,7 @@ writeFileSync(entry, `
   export { icsEscape, icsFold, icsStamp, stayMinutes, DEFAULT_STAY_MINUTES, icsUid, stopEvent, guideEvents, buildIcs, icsFilename } from ${JSON.stringify(join(root, "src/utils/calendarExport.js"))};
   export { isAbsolutePhoto, heroNeedsReplacing, heroPatch, heroStatusLine } from ${JSON.stringify(join(root, "src/utils/heroPhoto.js"))};
   export { saveLabel, saveHint, savedLine, planFromSavedLabel } from ${JSON.stringify(join(root, "src/utils/savedTrip.js"))};
-  export { CONSTRAINT_KINDS, constraintViolations, violationsOfKind, constraintNote, repairWorked, INVENTORY_MAY_NOT_SELECT } from ${JSON.stringify(join(root, "src/utils/constraintCheck.js"))};
+  export { CONSTRAINT_KINDS, constraintViolations, violationsOfKind, constraintNote, repairWorked, INVENTORY_MAY_NOT_SELECT, ruledOutStops } from ${JSON.stringify(join(root, "src/utils/constraintCheck.js"))};
   export { briefPanel, briefSentence, briefGaps, willNotAssume, briefVagueNote, briefLines, whenPhrase, clauseFor, isAcknowledged, ACKNOWLEDGED, briefProgress, progressLine, briefPercent, percentLine } from ${JSON.stringify(join(root, "src/utils/briefPanel.js"))};
   export { EVIDENCE, EVIDENCE_RANK, EVIDENCE_LABEL, fieldSourceKey, PERISHABLE_FIELD_TOPIC, PERISHABLE_FIELDS, isPerishable, perishableTopic, evidenceOf, entryEvidence, evidenceCounts, unbackedPerishables, weakestClaim, evidenceNote, PERISHABLE_TOPICS_USED, PAGE_SCAN_TOPICS } from ${JSON.stringify(join(root, "src/utils/evidence.js"))};
   export { selfContradictions as selfContra, PROSE_FIELDS as AUDIT_PROSE_FIELDS, PROSE_LISTS } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -149,7 +149,7 @@ writeFileSync(entry, `
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, formatLogs, logChips, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { fieldProvenance, correctionProvenance, entrySources, untracedFields, describeProvenance, readerCorrection, readerCorrections, isCheckerVoice, readerUncertainty, readerUncertainties, READER_UNCERTAINTY_LIMIT } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
   export { ALLOWED_ORIGINS, originOf, isAllowedOrigin, requestIsFromSite, NOT_FROM_SITE, STUDIO_ONLY_ENDPOINTS, resolveUser, isFounder } from ${JSON.stringify(join(root, "src/utils/apiGuard.js"))};
-  export { citationUrls } from ${JSON.stringify(join(root, "src/utils/aiClient.js"))};
+  export { citationUrls, askOpenAI, askClaude } from ${JSON.stringify(join(root, "src/utils/aiClient.js"))};
   export { THEMES, THEME_ORDER, DEFAULT_THEME } from ${JSON.stringify(join(root, "src/utils/theme.js"))};
   export { layoutBody, trimCaption } from ${JSON.stringify(join(root, "src/utils/articleLayout.js"))};
   export { instagramTarget, isEmbeddablePost } from ${JSON.stringify(join(root, "src/components/InstagramEmbed.jsx"))};
@@ -205,6 +205,7 @@ writeFileSync(entry, `
   export { SRC_FOR_TYPE, PLACE_SOURCES, srcForType, ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES, QUERY_WORDS, DISCOVER_WORDS, sourceIsAboutPlace, nameIsDistinctive, nameCore, isNeverOwnSite, isNeverASource, SOURCE_RULES_NEST } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { ARRIVAL_TYPES, hasArrivalField } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK, CHARACTERISATION_FIELDS, REPORT_FIELDS } from ${JSON.stringify(join(root, "src/utils/checkScope.js"))};
+  export { accountIn, accountsOnPage, accountFits, socialRecord, asUrl, OWN_PAGE, LINKED, NAMED } from ${JSON.stringify(join(root, "src/utils/socialAccounts.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, RESERVED_THEME, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
@@ -226,7 +227,8 @@ writeFileSync(entry, `
   export { LANGUAGES, MONTH_INDEX, PARTY_BARE, PARTY_POSSESSIVE, YES_WORDS, NO_WORDS, alt, LETTER } from ${JSON.stringify(join(root, "src/utils/travellerWords.js"))};
   export { auditRow, auditRows, auditLinks, auditSummary, auditNote, programmeState, ticketDestination, tourDestination, linkPatch, TICKET, TOUR } from ${JSON.stringify(join(root, "src/utils/affiliateAudit.js"))};
   export { problemText, problemList, problemHeading, PROBLEM_NOTE } from ${JSON.stringify(join(root, "src/utils/planProblems.js"))};
-  export { readExclusions, isExcluded, withoutExcluded, excludedNote, ruledOutFor } from ${JSON.stringify(join(root, "src/utils/exclusions.js"))};
+  export { readExclusions, isExcluded, withoutExcluded, excludedNote, ruledOutFor, excludedBlock } from ${JSON.stringify(join(root, "src/utils/exclusions.js"))};
+  export { readPromises, brokenPromises, promiseNote, rebuildKeptMore, promiseRetryBlock, DAY as PROMISE_DAY, WILL as PROMISE_WILL, THERE as PROMISE_THERE } from ${JSON.stringify(join(root, "src/utils/chatPromises.js"))};
   export { latestRelativeAnswer, departureDateIn } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { launderedAbsence } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { contradictedAbsence, sentences } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
@@ -236,7 +238,8 @@ writeFileSync(entry, `
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { mergeForecasts, agreementNote, SPREAD_DISAGREES_C, weatherIsStale, weatherChanges, WEATHER_STALE_HOURS, dayWeather } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { WIND_FRESH, WIND_STRONG, WIND_GALE, WIND_STORM, RAIN_WET, RAIN_HEAVY, COLD_WET_C, FROST_C, HARD_FROST_C, HEAT_C, forecastWarnings, normalsWarnings, beltCrossing, dayCrossings, crossingWarning, dayWarnings, tripWeatherWarning, GREAT_BELT_TRAILER_MS, GREAT_BELT_CLOSED_MS } from ${JSON.stringify(join(root, "src/utils/weatherWarn.js"))};
-  export { TILE_STYLES, tileConfig, tileCss, DEFAULT_TILE_STYLE, addTileLayer, styleRefused, __resetRefusedStyles, TILE_ERROR_LIMIT, readRefusedMemo, writeRefusedMemo, REFUSED_TTL_MS } from ${JSON.stringify(join(root, "src/utils/mapTiles.js"))};
+  export { TILE_STYLES, tileConfig, tileCss, DEFAULT_TILE_STYLE, addTileLayer, styleRefused, __resetRefusedStyles, __setVectorLoader, TILE_ERROR_LIMIT, readRefusedMemo, writeRefusedMemo, REFUSED_TTL_MS } from ${JSON.stringify(join(root, "src/utils/mapTiles.js"))};
+  export { BASEMAP_STYLE, OPENFREEMAP_TILEJSON, OPENFREEMAP_ATTRIBUTION, OPENMAPTILES_LAYERS } from ${JSON.stringify(join(root, "src/utils/mapStyle.js"))};
   export { coverageByPart, thinnestParts, coverageSummary, discoveryFraming, isAlreadyCovered, splitAlreadyCovered } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget, placeFromText, candidateFitsTarget, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { checkPlan, planProblemsForPrompt, titlePromises, MAX_DAY_KM, dayCeilingKm } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
@@ -311,8 +314,21 @@ try {
   process.exit(1);
 }
 const esbuildFailed = (e) => String([e?.message, ...(e?.errors || []).map(x => x.text)].filter(Boolean).join("\n"));
+// ── THE ONE MODULE THE BUNDLE MUST NOT FOLLOW ───────────────────────
+// mapTiles.js reaches maplibre-gl through `import("./vectorBasemap.js")`, and
+// that module imports the worker as `maplibre-gl/dist/...?worker&url`, a
+// Vite spelling esbuild cannot resolve. Tried the other way first, 13 Sep
+// 2026: marking the maplibre packages external instead lets the build
+// succeed and then esbuild HOISTS the externals to top-level imports of the
+// output, because it inlines a dynamic import as a lazily initialised module
+// when it is not code splitting. Node then fails to resolve maplibre-gl at
+// load and the whole suite dies before its first assertion. Leaving the
+// loader module itself external keeps the import() as the string it is in
+// the source, which never runs here: every test of that path stands in a fake
+// through __setVectorLoader, the way a fake L already stands in for Leaflet.
 try {
-  buildSync({ entryPoints: [entry], bundle: true, format: "esm", platform: "node", outfile: bundle, logLevel: "silent" });
+  buildSync({ entryPoints: [entry], bundle: true, format: "esm", platform: "node", outfile: bundle, logLevel: "silent",
+              external: ["*/vectorBasemap.js"] });
 } catch (e) {
   console.error("\n  Bundling failed:\n" + esbuildFailed(e));
   process.exit(1);
@@ -32185,6 +32201,34 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // on 5 Sep (the conflicts) and an assertion that breaks when something is
   // added BESIDE the thing it guards teaches the next person to edit the
   // assertion, which is how a guard stops guarding.
+  // ── AND AN OFFER COMES OFF THE LISTS ────────────────────────────
+  //
+  // Oliver, 13 Sep 2026, reading his own session: "I'm coming up through South
+  // Jutland, but it instantly pins Copenhagen.. why would it not pin Ribe or
+  // something?"
+  //
+  // The reply had offered him Haderslev, which Gemlyx holds no entry for, and
+  // named Copenhagen only as the place he was NOT stopping at yet. So the only
+  // name in that sentence the app could find a coordinate for was Copenhagen,
+  // and the map showed the one town the reply was steering him past. Ribe and
+  // Aabenraa were both on the lists and both on his road.
+  //
+  // The prompt told the model to use the lists ONLY when building a day by day
+  // plan. A recommendation inside a conversation had no rule at all, so a name
+  // off the lists reached the traveller with no pin, no card and nothing to
+  // open, which is the whole mechanism this app is built on switching itself
+  // off silently.
+  ok("an offer has to come from what Gemlyx holds",
+     /WHEN YOU OFFER A PLACE, OFFER ONE GEMLYX HOLDS/.test(app));
+  ok("and it says what a name off the lists costs the traveller",
+     /no pin on their map, no card under your reply, nothing they can open/.test(app));
+  // NOT a gag order. Answering about anywhere in Denmark is still the job, and
+  // a rule that forbade it would make the chat worse than a search box.
+  ok("answering about anywhere is still allowed",
+     /You may still ANSWER about anywhere in Denmark/.test(app));
+  ok("and an honest answer off the lists has to say so",
+     /Gemlyx has no page for that one yet/.test(app));
+
   ok("the block reaches the prompt", /\$\{briefBlock\(brief[,)]/.test(app));
   ok("and it is told the block outranks its impression",
      /it overrides your impression of the conversation/.test(app));
@@ -35896,7 +35940,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // "Why VITE stadia key?? So others can use my key too..?"
   //
   // Yes. Vite inlines every VITE_-prefixed variable into the bundle at build
-  // time — it is a find-and-replace, not a secret store — so the key would have
+  // time (it is a find-and-replace, not a secret store) so the key would have
   // sat in a public JS file and in the query string of every tile request, and
   // Stadia's own docs say not to do it: "We recommend only using API keys in
   // cases where it is not likely to be leaked to an end user."
@@ -35908,78 +35952,307 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("no tile url carries an api_key", !/api_key/.test(tileConfig("chart").url) && !/api_key/.test(tileConfig().url));
   ok("and nothing in the file reads a key out of the bundle",
      !/import\.meta\.env/.test(mapTilesSrc) && !/STADIA_KEY/.test(stripNonCode(mapTilesSrc)));
-  // The chart is handed out by default now. Whether it WORKS is Stadia's answer to
-  // a real request, which nothing here can know — see the fallback assertions below.
+  // The chart is handed out when asked for. Whether it WORKS is Stadia's answer to
+  // a real request, which nothing here can know; see the fallback assertions below.
   is("the chart is offered rather than pre-refused", tileConfig("chart").style, "chart");
-  is("and an unknown style still lands on the basemap that works", tileConfig("nonsense").style, DEFAULT_TILE_STYLE);
-  is("and says which style it actually resolved", tileConfig("chart").className.includes("chart"), true);
+  is("and an unknown style still lands on the default", tileConfig("nonsense").style, DEFAULT_TILE_STYLE);
+  is("and says which style it resolved", tileConfig("chart").className.includes("chart"), true);
+
+  // ── 13 SEP 2026: THE DEFAULT IS DRAWN, NOT INVERTED ───────────────
+  // Oliver: the map "does look kinda old school... how it reads the countries".
+  // Rendered from his live domain that day, a Denmark trip map carried Agder,
+  // Arendal, Kristiansand, Goteborg, Halmstad and "Region Nordjylland" as loud
+  // as Copenhagen, because the inverted OSM raster keeps every word OSM draws.
+  // And OSM's tile policy says commercial access "may be blocked without prior
+  // notice", which he has seen once already as a grid of "Access blocked" tiles.
+  //
+  // So the default is now the navy row: OpenFreeMap vector tiles drawn by the
+  // style in mapStyle.js. The inverted raster stays as the LAST fallback, so a
+  // bad night at OpenFreeMap degrades to the map the app shipped with rather
+  // than to a dark box.
+  const { BASEMAP_STYLE, OPENFREEMAP_TILEJSON, OPENFREEMAP_ATTRIBUTION, OPENMAPTILES_LAYERS, __setVectorLoader, tileCss } = M;
+  // ── AND THE DEFAULT WENT BACK, 14 SEP 2026 ──────────────────────
+  // "I don't like that map though.. I do like a detailed map." The drawn style
+  // is Denmark as a shape with no words on it, which answers the complaint
+  // before it by removing the map. The raster is the default again while a
+  // detailed dark style is built on the same vector source, and every row,
+  // loader and fallback below stays exactly where it is.
+  is("the default row is the raster again", DEFAULT_TILE_STYLE, "dark");
+  ok("and the drawn one is still there to go back to", !!TILE_STYLES.navy);
+  ok("and it is drawn, not fetched as pictures", TILE_STYLES.navy.glStyle === BASEMAP_STYLE);
+  is("from OpenFreeMap", TILE_STYLES.navy.url, OPENFREEMAP_TILEJSON);
+  ok("which nobody has to register for: the url carries no key either", !/key|token/i.test(OPENFREEMAP_TILEJSON));
+  // ONE URL. The style points at the TileJSON, and the table reports the same
+  // string as the row's url. Two spellings of the tile host would be the two
+  // readers this codebase keeps paying for.
+  is("the style's source and the table's url are one constant", BASEMAP_STYLE.sources.openmaptiles.url, TILE_STYLES.navy.url);
+  ok("and the TileJSON is the description, not a versioned tile path",
+     /openfreemap\.org\/planet$/.test(OPENFREEMAP_TILEJSON));
+  // ── THE CHAIN ───────────────────────────────────────────────────
+  // chart, then navy, then dark. The guide keeps the Watercolor Oliver chose
+  // for it and gets the drawn map when Stadia declines; the drawn map gets the
+  // raster when OpenFreeMap declines; the raster gets nothing, because the
+  // last row is the one that gets no fallback handler at all.
+  is("the chart falls back to the drawn map", TILE_STYLES.chart.fallback, "navy");
+  is("the drawn map falls back to the inverted raster", TILE_STYLES.navy.fallback, "dark");
+  is("and the raster is the end of the line", TILE_STYLES.dark.fallback, null);
+  for (const [name, row] of Object.entries(TILE_STYLES)) {
+    ok(`${name}'s fallback is a real row or nothing`, row.fallback == null || !!TILE_STYLES[row.fallback]);
+    // Walk it. A chain that never reaches a row without a fallback is a loop,
+    // and tileConfig bounds its walk by the table size for exactly that case.
+    let at = name, hops = 0;
+    while (TILE_STYLES[at].fallback && hops < 10) { at = TILE_STYLES[at].fallback; hops++; }
+    ok(`${name}'s chain ends`, !TILE_STYLES[at].fallback);
+    // The end of every chain is a RASTER row. The end gets no fallback handler,
+    // and a drawn row at the end could fail to start (no WebGL2, no chunk) with
+    // nowhere to go, which is a dark box with pins on it.
+    ok(`and ends on a raster row`, !TILE_STYLES[at].glStyle);
+  }
+  ok("no drawn style carries the raster inversion", !TILE_STYLES.navy.filter);
+  ok("so the css has no rule for it", !/gemlyx-tiles-navy/.test(tileCss()));
+  ok("while the raster fallback keeps its inversion", /gemlyx-tiles-dark \{ filter: invert\(1\)/.test(tileCss()));
 
   // ── THE REFUSAL IS LEARNED FROM THE SERVER, NOT FROM CONFIG ───────
   // Two wrong answers in two days came from deciding this at build time: a docs
   // sentence, then an env var. A domain either is registered with Stadia or it is
   // not, and Vercel previews get a random *.vercel.app hostname nobody will ever
-  // register — so a build-time flag is wrong on every preview while being right in
+  // register, so a build-time flag is wrong on every preview while being right in
   // production. The tile response is the only thing that knows.
+  //
+  // The same is true of OpenFreeMap, with two more ways to fail before a tile is
+  // asked for: the maplibre chunk, and WebGL2. Every path is driven here with a
+  // fake L, a fake map and a fake chunk, because the real ones need a browser, a
+  // GPU and a 401 from a real unregistered domain.
   {
     __resetRefusedStyles();
-    // A fake L, because the real path needs a 401 from an unregistered domain.
-    const made = [];
+    const made = [];      // every layer put on a map, raster or drawn, in order
     const removed = [];
-    const fakeL = { tileLayer: (url, opts) => {
-      const layer = { url, opts, handlers: {},
+    const controls = [];
+    const warned = [];
+    const fakeL = {
+      tileLayer: (url, opts) => ({ url, opts, handlers: {},
         addTo() { made.push(this); return this; },
-        on(ev, fn) { this.handlers[ev] = fn; return this; } };
-      return layer;
-    } };
-    const fakeMap = { removeLayer: (l) => removed.push(l) };
-    const layer = addTileLayer(fakeL, fakeMap, "chart");
-    is("the chart layer goes on the map", made.length, 1);
-    ok("with the chart url", /stamen_watercolor/.test(made[0].url));
-    // ── ABSOLUTE NUMBERS, NOT TILE_ERROR_LIMIT - 1 ─────────────────
-    // The first version of this drove the handler TILE_ERROR_LIMIT - 1 times, and
-    // mutations setting the limit to 1 and to 400 both survived it: a test written
-    // relative to a constant moves with the constant and cannot catch it being
-    // wrong. This suite has that trap written down from 13 Aug and I walked into it
-    // again. So the range is asserted in absolute terms with the reason attached,
-    // and the handler is driven with literals.
-    ok("one stray tile error is not enough to drop a basemap", TILE_ERROR_LIMIT >= 2);
-    ok("and the limit still fires inside one viewport, which holds about a dozen tiles",
-       TILE_ERROR_LIMIT <= 8);
-    // Two errors: a hole, not a refusal. Nothing moves.
-    layer.handlers.tileerror();
-    layer.handlers.tileerror();
-    is("a couple of missing tiles change nothing", made.length, 1);
-    ok("and the style is not refused yet", !styleRefused("chart"));
-    // The third: every tile in the viewport is failing, so it is the domain.
-    layer.handlers.tileerror();
-    ok("a refused style is recorded", styleRefused("chart"));
-    is("the failing layer is taken off the map", removed.length, 1);
-    is("and the basemap that works replaces it", made.length, 2);
-    ok("which is the OpenStreetMap one", /openstreetmap/i.test(made[1].url));
-    ok("carrying the dark inversion class", made[1].opts.className.includes(DEFAULT_TILE_STYLE));
-    // AND EVERY MAP OPENED AFTERWARDS ALREADY KNOWS. The answer is about the
-    // domain, so a second map must not repeat the 401s.
-    is("a later map does not ask again", tileConfig("chart").style, DEFAULT_TILE_STYLE);
-    const second = addTileLayer(fakeL, fakeMap, "chart");
-    ok("it goes straight to the working basemap", /openstreetmap/i.test(made[2].url));
-    // A layer already on the fallback gets no handler, because removing it would
-    // leave a map with no tiles at all.
-    //
-    // typeof, NOT the value. `is` compares with JSON.stringify, and
-    // JSON.stringify(aFunction) and JSON.stringify(undefined) are BOTH the JS
-    // value undefined — so `is(..., second.handlers.tileerror, undefined)` passed
-    // whether or not a handler was attached, and the mutation removing the guard
-    // survived it. An assertion that cannot fail is worse than no assertion,
-    // because it reads as coverage.
-    is("and gets no fallback handler of its own", typeof second.handlers.tileerror, "undefined");
-    ok("while the chart layer did get one", typeof layer.handlers.tileerror === "function");
-    __resetRefusedStyles();
-    ok("the chart is offered again once the refusal is cleared", !styleRefused("chart"));
+        on(ev, fn) { this.handlers[ev] = fn; return this; } }),
+      control: { attribution: () => ({ addTo(map) { map.attributionControl = this; controls.push(map); return this; } }) },
+    };
+    // The drawn layer as vectorBasemap.js would build it, minus WebGL: it keeps
+    // the config it was built from and hands out a fake MapLibre map whose only
+    // job is to receive the `error` handler.
+    const drawnLayer = (cfg) => {
+      const gl = { handlers: {}, on(ev, fn) { this.handlers[ev] = fn; return this; } };
+      return { url: cfg.url, opts: cfg, handlers: gl.handlers,
+        addTo() { made.push(this); return this; },
+        getMaplibreMap: () => gl };
+    };
+    let chunk = async () => ({ vectorLayer: drawnLayer });
+    __setVectorLoader(() => chunk());
+    const newMap = () => ({ handlers: {}, attributionControl: {},
+      removeLayer: (l) => removed.push(l),
+      once(ev, fn) { this.handlers[ev] = fn; } });
+    // The chunk arrives on a later tick, so the assertions after a refusal wait
+    // one.
+    const settle = () => new Promise(r => setTimeout(r, 0));
+    const prevWarn = console.warn;
+    console.warn = (...a) => warned.push(a.join(" "));
+    try {
+      const fakeMap = newMap();
+      const layer = addTileLayer(fakeL, fakeMap, "chart");
+      is("the chart layer goes on the map", made.length, 1);
+      ok("with the chart url", /stamen_watercolor/.test(made[0]?.url));
+      // ── ABSOLUTE NUMBERS, NOT TILE_ERROR_LIMIT - 1 ─────────────────
+      // The first version of this drove the handler TILE_ERROR_LIMIT - 1 times, and
+      // mutations setting the limit to 1 and to 400 both survived it: a test written
+      // relative to a constant moves with the constant and cannot catch it being
+      // wrong. This suite has that trap written down from 13 Aug and I walked into it
+      // again. So the range is asserted in absolute terms with the reason attached,
+      // and the handler is driven with literals.
+      ok("one stray tile error is not enough to drop a basemap", TILE_ERROR_LIMIT >= 2);
+      ok("and the limit still fires inside one viewport, which holds about a dozen tiles",
+         TILE_ERROR_LIMIT <= 8);
+      // Two errors: a hole, not a refusal. Nothing moves.
+      layer.handlers.tileerror();
+      layer.handlers.tileerror();
+      is("a couple of missing tiles change nothing", made.length, 1);
+      ok("and the style is not refused yet", !styleRefused("chart"));
+      // The third: every tile in the viewport is failing, so it is the domain.
+      layer.handlers.tileerror();
+      ok("a refused style is recorded", styleRefused("chart"));
+      is("the failing layer is taken off the map", removed.length, 1);
+      ok("and the console is told which, and what replaced it",
+         warned.length === 1 && /chart/.test(warned[0]) && /navy/.test(warned[0]));
+      await settle();
+      is("and the drawn map replaces it", made.length, 2);
+      // Before 13 Sep the replacement was the OSM raster. It is the drawn navy
+      // map now, and it must not be OSM: that is the whole point of the row.
+      ok("which is the OpenFreeMap one", made[1]?.url === OPENFREEMAP_TILEJSON);
+      ok("drawn from the style", made[1]?.opts?.glStyle === BASEMAP_STYLE);
+      ok("carrying its own class, not the inversion", made[1]?.opts?.className.includes("navy") && !made[1]?.opts?.className.includes("dark"));
+      ok("and wired to MapLibre's error event", typeof made[1]?.handlers?.error === "function");
+      // AND EVERY MAP OPENED AFTERWARDS ALREADY KNOWS. The answer is about the
+      // domain, so a second map must not repeat the 401s.
+      is("a later map does not ask again", tileConfig("chart").style, "navy");
+
+      // ── AND THE DRAWN MAP CAN BE REFUSED THE SAME WAY ──────────────
+      // MapLibre reports each failed request as one `error` event, the way
+      // Leaflet reports one `tileerror`. A tile failure carries the tile. Two
+      // of those are a hole; the third is OpenFreeMap saying no.
+      const drawn = made[1];
+      drawn.handlers.error({ tile: {}, error: { status: 403, message: "Forbidden" } });
+      drawn.handlers.error({ tile: {}, error: { status: 403, message: "Forbidden" } });
+      is("two refused tiles change nothing", made.length, 2);
+      ok("and the drawn map is not refused yet", !styleRefused("navy"));
+      drawn.handlers.error({ tile: {}, error: { status: 403, message: "Forbidden" } });
+      ok("the third refuses it", styleRefused("navy"));
+      is("and takes the drawn layer off", removed.length, 2);
+      is("and the inverted raster is back", made.length, 3);
+      ok("which is the OpenStreetMap one", /openstreetmap/i.test(made[2]?.url));
+      ok("carrying the dark inversion class", made[2]?.opts?.className.includes("dark"));
+      // A layer already on the last row gets no handler, because removing it
+      // would leave a map with no tiles at all.
+      //
+      // typeof, NOT the value. `is` compares with JSON.stringify, and
+      // JSON.stringify(aFunction) and JSON.stringify(undefined) are BOTH the JS
+      // value undefined, so `is(..., x.handlers.tileerror, undefined)` passed
+      // whether or not a handler was attached, and the mutation removing the
+      // guard survived it. An assertion that cannot fail is worse than no
+      // assertion, because it reads as coverage.
+      is("and gets no fallback handler of its own", typeof made[2]?.handlers?.tileerror, "undefined");
+      ok("while the chart layer did get one", typeof layer.handlers.tileerror === "function");
+      is("so the whole chain now resolves to the raster", tileConfig("chart").style, "dark");
+      is("for a map that asked for nothing in particular too", tileConfig().style, "dark");
+      is("which is what the default is again", DEFAULT_TILE_STYLE, "dark");
+      __resetRefusedStyles();
+      ok("the chart is offered again once the refusal is cleared", !styleRefused("chart"));
+      // ── AND THE DEFAULT IS THE RASTER AGAIN, 14 SEP 2026 ────────
+      // Oliver, looking at the drawn map on his own dev server: "I don't like
+      // that map though.. I do like a detailed map." The style is a shape of
+      // Denmark with no words on it, which answers the complaint before it
+      // (foreign region names shouting over Danish ones) by removing the map.
+      // So the DEFAULT went back to the raster while a detailed dark style is
+      // built, and the whole vector path stayed exactly where it is. These
+      // assertions therefore name the style they are testing rather than
+      // leaning on whichever one is currently default, which is what they
+      // should have done from the start.
+      ok("and so is the drawn map", tileConfig("navy").style === "navy");
+
+      // ── A REFUSED TILEJSON IS THE WHOLE ANSWER AT ONCE ─────────────
+      // The TileJSON is the description of the tileset. If it is refused, no
+      // tile is ever asked for, so a counter waiting for three tile errors
+      // would wait forever over a dark box. Its one error carries no tile and
+      // an HTTP status, and counts as the whole limit.
+      made.length = 0; removed.length = 0; warned.length = 0;
+      addTileLayer(fakeL, newMap(), "navy");
+      await settle();
+      is("a fresh map gets the drawn layer first", made.length, 1);
+      made[0].handlers.error({ error: { status: 403, message: "Forbidden" } });
+      ok("one refused description refuses the style", styleRefused("navy"));
+      is("and the raster is on the map", made.length, 2);
+      ok("which is OSM", /openstreetmap/i.test(made[1]?.url));
+      __resetRefusedStyles();
+      // A blocked or unreachable host is status 0 in MapLibre's error, still a
+      // number, still the whole answer.
+      made.length = 0;
+      addTileLayer(fakeL, newMap(), "navy");
+      await settle();
+      made[0].handlers.error({ error: { status: 0, message: "Failed to fetch" } });
+      ok("and an unreachable host counts the same", styleRefused("navy") && made.length === 2);
+      __resetRefusedStyles();
+      // An error with neither a tile nor a status is a style complaint of
+      // MapLibre's own (a bad layer, say). It counts one, like a hole, so a
+      // single warning cannot swap the basemap on its own.
+      made.length = 0;
+      addTileLayer(fakeL, newMap(), "navy");
+      await settle();
+      made[0].handlers.error({ error: { message: "layers[3]: something" } });
+      ok("a lone style complaint does not swap the basemap", !styleRefused("navy") && made.length === 1);
+      __resetRefusedStyles();
+
+      // ── NO WEBGL2: THE LAYER CANNOT START ──────────────────────────
+      // MapLibre 6 throws from its constructor, inside the plugin's onAdd,
+      // inside addTo. That is an answer about the device, remembered like one
+      // about the domain: it saves every later map the chunk download.
+      made.length = 0; removed.length = 0; warned.length = 0;
+      chunk = async () => ({ vectorLayer: (cfg) => ({ url: cfg.url, opts: cfg, addTo() { throw new Error("WebGL2 is required to display this map."); } }) });
+      addTileLayer(fakeL, newMap(), "navy");
+      await settle();
+      ok("a layer that cannot start is refused", styleRefused("navy"));
+      is("and the raster takes its place", made.length, 1);
+      ok("which is OSM", /openstreetmap/i.test(made[0]?.url));
+      ok("and the console says why", /could not start/.test(warned[0]) && /WebGL2/.test(warned[0]));
+      __resetRefusedStyles();
+
+      // ── THE CHUNK NEVER ARRIVED: FALL BACK, REMEMBER NOTHING ───────
+      // The memo records what the SERVER said about a style. A chunk that
+      // failed to load says nothing about OpenFreeMap: the usual cause is a tab
+      // left open across a deploy, asking for a hash the new build no longer
+      // has. A reload fixes that, and a memo would have kept the raster for a
+      // day after the reload.
+      made.length = 0; warned.length = 0;
+      chunk = async () => { throw new Error("Failed to fetch dynamically imported module"); };
+      addTileLayer(fakeL, newMap(), "navy");
+      await settle();
+      is("the raster is on the map", made.length, 1);
+      ok("which is OSM", /openstreetmap/i.test(made[0]?.url));
+      ok("and nothing is remembered against the drawn map", !styleRefused("navy"));
+      is("so the next map asks for it again", tileConfig("navy").style, "navy");
+      ok("and the console says the chunk did not load", /did not load/.test(warned[0]));
+      chunk = async () => ({ vectorLayer: drawnLayer });
+
+      // ── A MAP TORN DOWN BEFORE THE CHUNK ARRIVES ───────────────────
+      // React unmounts, the effect cleanup calls map.remove(), and the chunk
+      // resolves afterwards. Leaflet has emptied its panes by then, so adding
+      // the layer would throw from inside a promise with nobody to catch it.
+      // remove() fires `unload` first; that flag is honoured.
+      made.length = 0;
+      const doomed = newMap();
+      const pending = addTileLayer(fakeL, doomed, "navy");
+      doomed.handlers.unload();
+      await settle();
+      is("nothing is added to a map that has gone", made.length, 0);
+      is("and the promise settles to nothing rather than hanging", await pending, null);
+      // The raster path honours the same flag: three refused tiles landing
+      // after teardown must not put a fallback on a dead map.
+      made.length = 0;
+      const doomedChart = newMap();
+      const chartLayer = addTileLayer(fakeL, doomedChart, "chart");
+      doomedChart.handlers.unload();
+      chartLayer.handlers.tileerror(); chartLayer.handlers.tileerror(); chartLayer.handlers.tileerror();
+      await settle();
+      is("nor does a raster refusal after teardown", made.length, 1);
+      // The server's answer is still the server's answer, map or no map: the
+      // refusal is recorded so the NEXT map does not ask Stadia again.
+      ok("but the refusal itself is still remembered", styleRefused("chart"));
+      __resetRefusedStyles();
+
+      // ── THE CREDIT IS A LICENCE CONDITION, NOT A COURTESY ──────────
+      // ChatMiniMap builds its map with attributionControl off, and OpenFreeMap's
+      // one condition is the credit. A map that arrives without a control gets
+      // one from the file that owns the provider; a map that has one is left
+      // alone.
+      controls.length = 0;
+      const bare = newMap(); delete bare.attributionControl;
+      addTileLayer(fakeL, bare);
+      is("a map with no attribution control is given one", controls.length, 1);
+      ok("and it is the map's own from then on", bare.attributionControl != null);
+      addTileLayer(fakeL, newMap(), "navy");
+      is("a map that already has one is left alone", controls.length, 1);
+      await settle();
+      // The credit itself, in OpenFreeMap's words. Read the way a browser
+      // would render it: tags stripped, the entity decoded.
+      const credit = OPENFREEMAP_ATTRIBUTION.replace(/<[^>]+>/g, "").replace(/&copy;/g, "©").replace(/\s+/g, " ").trim();
+      is("the credit is the one OpenFreeMap asks for", credit, "OpenFreeMap © OpenMapTiles Data from OpenStreetMap");
+      ok("and every link in it opens away from the app", !/<a (?![^>]*target="_blank")/.test(OPENFREEMAP_ATTRIBUTION));
+      is("and it is what the drawn layer is handed", made[made.length - 1]?.opts?.attribution, OPENFREEMAP_ATTRIBUTION);
+    } finally {
+      console.warn = prevWarn;
+      __setVectorLoader(null);
+      __resetRefusedStyles();
+    }
 
     // ── AND THE MEMO, WHICH HAD NO TEST AT ALL ─────────────────────
     // Learning from the server costs three refused tiles, which render for a
     // moment before the swap. Once a session is tolerable; once a page load, on a
-    // guide somebody paid for, is not. So the answer is remembered — and the
+    // guide somebody paid for, is not. So the answer is remembered, and the
     // remembering was written with localStorage captured at module load, which
     // under plain Node is dead code no assertion could reach. A mutation deleting
     // the whole expiry survived, which is how that was found.
@@ -35994,10 +36267,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const hadStore = "localStorage" in globalThis;
     const prevStore = globalThis.localStorage;
     globalThis.localStorage = fake;
+    // The chart's refusal now hands the map to the drawn row, which needs the
+    // chunk; the fake stands in again so these stay about the memo.
+    __setVectorLoader(async () => ({ vectorLayer: drawnLayer }));
+    console.warn = () => {};
     try {
       // A refusal is written down.
       __resetRefusedStyles();
-      const l3 = addTileLayer(fakeL, fakeMap, "chart");
+      const l3 = addTileLayer(fakeL, newMap(), "chart");
       l3.handlers.tileerror(); l3.handlers.tileerror(); l3.handlers.tileerror();
       ok("a refusal is written to storage", !!cells.gemlyx_tiles_refused);
       ok("naming the style that failed", /chart/.test(cells.gemlyx_tiles_refused));
@@ -36006,9 +36283,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       cells.gemlyx_tiles_refused = JSON.stringify({ chart: Date.now() });
       readRefusedMemo();
       ok("a fresh memo is believed on the next load", styleRefused("chart"));
+      // A memo can hold both rows, and the chain reads both.
+      __resetRefusedStyles();
+      cells.gemlyx_tiles_refused = JSON.stringify({ chart: Date.now(), navy: Date.now() });
+      readRefusedMemo();
+      is("two refusals in the memo walk the chain to the raster", tileConfig("chart").style, "dark");
       // ── THE EXPIRY IS THE WHOLE POINT ────────────────────────────
       // Without it the first browser to see a 401 keeps the plain basemap forever,
-      // including after the domain is registered and the chart starts working —
+      // including after the domain is registered and the chart starts working:
       // the same failure shape as deciding at build time, just slower to notice.
       // The stamp is absolute, so this is a real elapsed-time test rather than one
       // written relative to REFUSED_TTL_MS.
@@ -36034,7 +36316,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       // ── A STAMP IN THE FUTURE NEVER EXPIRES ──────────────────────
       // Found by mutation: removing the isFinite guard changed nothing, because
       // NaN already fails the comparison. An equivalent mutant means the guard is
-      // not guarding what it looks like — and the real hole was the other
+      // not guarding what it looks like, and the real hole was the other
       // direction. A negative age is always under the TTL, so one stamp from a
       // clock that has since been set back would turn the chart off indefinitely.
       __resetRefusedStyles();
@@ -36050,29 +36332,146 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       readRefusedMemo();
       writeRefusedMemo();
       ok("a blocked storage does not throw", true);
-      const l4 = addTileLayer(fakeL, fakeMap, "chart");
+      const l4 = addTileLayer(fakeL, newMap(), "chart");
       l4.handlers.tileerror(); l4.handlers.tileerror(); l4.handlers.tileerror();
       ok("and the in-session fallback still works without storage", styleRefused("chart"));
+      await settle();
     } finally {
       __resetRefusedStyles();
+      __setVectorLoader(null);
+      console.warn = prevWarn;
       if (hadStore) globalThis.localStorage = prevStore; else delete globalThis.localStorage;
     }
     ok("the chart is offered again with storage restored", !styleRefused("chart"));
   }
   // Every component goes through it, or the recovery only exists on the maps that
   // remembered to ask for it.
-  for (const f of ["PlaceMiniMap.jsx", "GuideRouteMap.jsx", "LeafletMap.jsx"]) {
+  for (const f of ["PlaceMiniMap.jsx", "GuideRouteMap.jsx", "LeafletMap.jsx", "ChatMiniMap.jsx"]) {
     const src = stripNonCode(readFileSync(join(root, "src/components/" + f), "utf8"));
     ok(`${f} adds its tiles through the one wiring`, /addTileLayer\(L, map/.test(src));
     ok(`${f} does not build its own tile layer`, !/L\.tileLayer\(/.test(src));
+    // stripComments, not stripNonCode: an import specifier is a string, and a
+    // scan with the strings blanked could not see one.
+    ok(`${f} does not reach for maplibre itself`, !/maplibre/i.test(stripComments(readFileSync(join(root, "src/components/" + f), "utf8"))));
   }
   // The painted style must never inherit the dark inversion, whichever way it
   // resolves. This is the one that makes Watercolor look broken rather than absent.
   is("the chart carries no filter", TILE_STYLES.chart.filter, "");
   ok("the dark style still carries its inversion", /invert\(1\)/.test(TILE_STYLES.dark.filter));
-  is("Watercolor stops at the zoom its tileset actually reaches", TILE_STYLES.chart.maxZoom, 16);
+  is("Watercolor stops at the zoom its tileset reaches", TILE_STYLES.chart.maxZoom, 16);
   ok("and credits all three parties Stadia require",
      ["Stadia Maps", "Stamen Design", "OpenStreetMap"].every(n => TILE_STYLES.chart.attribution.includes(n)));
+
+  // ── THE STYLE ITSELF, CHECKED WITHOUT A BROWSER ────────────────────
+  // The proxy in the container that wrote this blocks every tile host, so the
+  // style could not be rendered here. What CAN be checked offline is checked:
+  // that it is a valid style, that it draws no words, that every layer reads a
+  // real OpenMapTiles layer, and that its filters pick what they were meant to.
+  {
+    let spec;
+    try { spec = await import("@maplibre/maplibre-gl-style-spec"); } catch { spec = null; }
+    // A missing validator is a failed assertion, not a skipped one. The package
+    // ships inside maplibre-gl, so `npm install` is the fix.
+    ok("the MapLibre style spec is installed alongside maplibre-gl", !!spec);
+    if (spec) {
+      const problems = spec.validateStyleMin(BASEMAP_STYLE).map(e => e.message);
+      is("the basemap style validates against the style spec", problems, []);
+      // The filters, evaluated by the same code MapLibre runs on a tile. The
+      // country border is the one with room to go wrong: its maritime halves
+      // would draw box lines across the Kattegat, and a region border would put
+      // "Region Nordjylland" back on the map as a line instead of a word.
+      const layer = (id) => BASEMAP_STYLE.layers.find(l => l.id === id);
+      const passes = (id, props) => spec.featureFilter(layer(id).filter, `layers[${id}].filter`)
+        .filter({ zoom: 10 }, { type: 2, properties: props, geometry: [] });
+      ok("the country border is drawn on land", passes("country-border", { admin_level: 2, maritime: 0 }));
+      ok("and not at sea", !passes("country-border", { admin_level: 2, maritime: 1 }));
+      ok("and a region border is not drawn at all", !passes("country-border", { admin_level: 4, maritime: 0 }));
+      ok("a border whose level arrives as a string still draws", passes("country-border", { admin_level: "2" }));
+      ok("and one with no maritime flag is taken as land", passes("country-border", { admin_level: 2 }));
+      ok("a motorway is a motorway", passes("road-motorway", { class: "motorway" }));
+      ok("and a primary road is not", !passes("road-motorway", { class: "primary" }));
+      ok("farmland is not painted, because it is most of Denmark", !passes("wood", { class: "farmland" }));
+      ok("forest is", passes("wood", { class: "wood" }));
+      ok("towns are painted", passes("built-up", { class: "residential" }));
+      ok("cemeteries are not", !passes("built-up", { class: "cemetery" }));
+      ok("ferries are drawn", passes("ferry", { class: "ferry" }));
+    }
+    is("it is a version 8 style", BASEMAP_STYLE.version, 8);
+    // NOT ONE WORD. The whole complaint was the words. A symbol layer is the
+    // only way a MapLibre style can draw text or an icon, and glyphs and a
+    // sprite are the only way it could fetch a font or an icon sheet.
+    is("the style draws no symbol layer", BASEMAP_STYLE.layers.filter(l => l.type === "symbol").map(l => l.id), []);
+    ok("and asks for no glyphs and no sprite", !("glyphs" in BASEMAP_STYLE) && !("sprite" in BASEMAP_STYLE));
+    ok("every layer reads a layer OpenMapTiles publishes",
+       BASEMAP_STYLE.layers.every(l => l.type === "background" || OPENMAPTILES_LAYERS.includes(l["source-layer"])));
+    ok("from the one source", BASEMAP_STYLE.layers.every(l => l.type === "background" || l.source === "openmaptiles"));
+    ok("and no layer is a label layer of the schema",
+       BASEMAP_STYLE.layers.every(l => !/_name$|^place$|^poi$|^housenumber$|_label$/.test(l["source-layer"] || "")));
+    is("layer ids are unique", new Set(BASEMAP_STYLE.layers.map(l => l.id)).size, BASEMAP_STYLE.layers.length);
+    // The palette is the dark theme's. The sea is the page background; the land
+    // is between the theme's surface and its border, so the map sits inside the
+    // same family as the cards around it.
+    const { THEMES } = M;
+    is("the sea is the dark theme's page background",
+       BASEMAP_STYLE.layers.find(l => l.id === "water").paint["fill-color"], THEMES.dark.bg);
+    ok("the coastline is drawn as a line over the water polygons",
+       BASEMAP_STYLE.layers.some(l => l.id === "coast" && l.type === "line" && l["source-layer"] === "water"));
+    ok("water is painted after the land fills, so a shore polygon cannot cover the sea",
+       BASEMAP_STYLE.layers.findIndex(l => l.id === "water") > BASEMAP_STYLE.layers.findIndex(l => l.id === "built-up"));
+    ok("and roads are drawn over the coast line, not under it",
+       BASEMAP_STYLE.layers.findIndex(l => l.id === "road-motorway") > BASEMAP_STYLE.layers.findIndex(l => l.id === "coast"));
+    ok("every road is drawn quietly, under half opacity, so the gold route wins",
+       BASEMAP_STYLE.layers.filter(l => /^road-|^rail$|^ferry$|^path$/.test(l.id)).every(l => l.paint["line-opacity"] <= 0.5));
+  }
+
+  // ── WHERE MAPLIBRE LIVES, AND WHERE IT MUST NOT ────────────────────
+  // maplibre-gl is about a megabyte minified. Imported statically anywhere it
+  // would ride along with the landing page. It is imported in exactly one file,
+  // and that file is reached only through import() from mapTiles.js, which is
+  // how Vite is made to split it into its own chunk.
+  {
+    const vectorSrc = readFileSync(join(root, "src/utils/vectorBasemap.js"), "utf8");
+    // Two scans, for two questions. An import specifier is a string, so the
+    // assertions about WHAT is imported read the file with its strings intact
+    // (stripComments); the ones about what the code DOES read it with strings
+    // blanked (stripNonCode), so a string could not satisfy them.
+    const vectorCode = stripNonCode(vectorSrc);
+    const vectorImports = stripComments(vectorSrc);
+    ok("mapTiles reaches the chunk through a dynamic import",
+       /import\("\.\/vectorBasemap\.js"\)/.test(stripComments(mapTilesSrc)));
+    ok("and never imports maplibre statically", !/from ["']maplibre-gl|from ["']@maplibre/.test(stripComments(mapTilesSrc)));
+    const walk = (d) => readdirSync(join(root, d), { withFileTypes: true }).flatMap(e =>
+      e.isDirectory() ? walk(join(d, e.name)) : (/\.(js|jsx)$/.test(e.name) ? [join(d, e.name)] : []));
+    const importers = walk("src").filter(f => /from ["']maplibre-gl|from ["']@maplibre\//.test(stripComments(readFileSync(join(root, f), "utf8"))));
+    is("maplibre is imported by one file in src, and it is the chunk", importers, [join("src", "utils", "vectorBasemap.js")]);
+    // MapLibre 6 ships its worker as a separate module that imports a shared
+    // module, and works out its own URL from import.meta.url, which under Vite
+    // is a file the build never emitted. So the worker is a Vite worker entry
+    // and MapLibre is told where it landed before any map exists.
+    ok("the worker is handed to Vite as a worker entry", /maplibre-gl\/dist\/maplibre-gl-worker\.mjs\?worker&url/.test(vectorImports));
+    ok("and MapLibre is told its url", /setWorkerUrl\(workerUrl\)/.test(vectorCode));
+    ok("before any layer is built", vectorCode.indexOf("setWorkerUrl(workerUrl)") < vectorCode.indexOf("export const vectorLayer"));
+    // A layer whose GL map never started (no WebGL2) must still come off the
+    // map, or the React cleanup's map.remove() throws out of the effect.
+    ok("the plugin's onRemove is guarded for a GL map that never started",
+       /onRemove\(map\) \{\s*if \(this\._glMap\) return MaplibreGL\.prototype\.onRemove\.call\(this, map\);/.test(vectorCode));
+    // Two rules out of MapLibre's 84 KB stylesheet, the two the canvas needs.
+    const css = readFileSync(join(root, "src/utils/vectorBasemap.css"), "utf8");
+    ok("the chunk carries its own two css rules", /\.maplibregl-map \{[^}]*overflow: hidden/.test(css) && /\.maplibregl-canvas \{[^}]*position: absolute/.test(css));
+    ok("rather than the whole maplibre stylesheet", !/maplibre-gl\.css/.test(vectorImports));
+    // The credit reaches Leaflet through the plugin's own option for it, and
+    // the layer is told it may not take the reader's gestures.
+    ok("the drawn layer hands the credit to the plugin as customAttribution", /customAttribution: cfg\.attribution/.test(vectorCode));
+    ok("and is not interactive, because Leaflet owns every gesture", /interactive: false/.test(vectorCode));
+    ok("and reads the style from the table rather than a url", /style: cfg\.glStyle/.test(vectorCode));
+    // Both packages are real dependencies, pinned to the versions that were
+    // read and tested together on 13 Sep 2026: MapLibre 6 changed how the
+    // worker ships, and the plugin's range is what says it can cope.
+    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    ok("maplibre-gl is a dependency", !!pkg.dependencies["maplibre-gl"]);
+    ok("and so is the leaflet plugin", !!pkg.dependencies["@maplibre/maplibre-gl-leaflet"]);
+    ok("both pinned exactly", /^\d/.test(pkg.dependencies["maplibre-gl"]) && /^\d/.test(pkg.dependencies["@maplibre/maplibre-gl-leaflet"]));
+  }
 
   // ── AND NO READER-FACING SCREEN NAMES A COMPETITOR ────────────────
   // A leg chip read "No direct route, check Rome2Rio", in gold, on the guide he
@@ -45531,8 +45930,20 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // written. This is the writer.
     // ruledOutFor rather than readExclusions since 13 Sep: the same typed
     // refusals, plus the places tapped No on, on the chat map, merged once.
+    // ── AND SINCE THE NIGHT OF 13 SEP, READ ONCE ─────────────────────
+    // This pinned `_constraints: { excluded: ruledOutFor(saidByTravellerForGuide,
+    // turnedDown)` inline on the setGuideModal line, which was the list being
+    // read at the END of the build, after both prompts had already gone out
+    // without it. The list is now read once, before the planner, into
+    // `ruledOut`, and one object built from it feeds the prompts, the plan
+    // gate, the audit on the finished guide and the guide itself. The guide
+    // line is pinned to that object, and the reading is pinned to happen once.
     ok("and the built guide finally carries the constraints it is audited against",
-       /_constraints: \{ excluded: ruledOutFor\(saidByTravellerForGuide, turnedDown\)/.test(app));
+       /_constraints: guideConstraints, _mode: travelMode/.test(app));
+    ok("built once, from the list read once before the planner",
+       /const ruledOut = ruledOutFor\(saidByTravellerForGuide, turnedDown\);\s*const ruledOutBlock = excludedBlock\(ruledOut\);[\s\S]{0,400}?const guideConstraints = \{ excluded: ruledOut, transport: \{ ruledOut: \[\] \} \};/.test(app));
+    is("and nothing in App.jsx reads the refusals a second time",
+       (app.match(/ruledOutFor\(/g) || []).length, 1);
   }
 }
 
@@ -49086,8 +49497,110 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
     // A PREPOSITIONAL FRAME, not a vocabulary. Every one of these says the
     // place is on the far side of the journey being described.
-    for (const frame of ["on the way to", "en route to", "straight through", "past", "beyond", "instead of", "rather than", "unlike"]) {
+    for (const frame of ["on the way to", "en route to", "straight through", "past", "beyond", "instead of", "rather than", "unlike", "before", "short of", "on the far side of"]) {
       ok(`"${frame}" is a place being passed`, isPassedThrough(`We would send you ${frame} Copenhagen for this one`, "Copenhagen"));
+    }
+    // ── AND THE ONE THAT COST HIM A MAP, 13 SEP 2026 ────────────────
+    //
+    // Oliver, on the first reply of his own session: "I'm coming up through
+    // South Jutland, but it instantly pins Copenhagen.. why would it not pin
+    // Ribe or something?"
+    //
+    // The reply, verbatim: "If you fancy breaking the journey before
+    // Copenhagen, the train from Germany runs close to Haderslev". Copenhagen
+    // is the far end of a drive he has not started, named to say where the stop
+    // would go, and it was the only pin on his map, because Haderslev is a town
+    // Gemlyx holds no entry for. This frame knew every preposition in that
+    // sentence except the one it used.
+    ok("the far end of a journey he has not started is not an offer",
+       isPassedThrough("If you fancy breaking the journey before Copenhagen, the train from Germany runs close to Haderslev", "Copenhagen"));
+    // ── AND "AFTER" IS DELIBERATELY NOT IN THE LIST ─────────────────
+    // "After Aarhus we head north" is a plan that CONTAINS Aarhus. A frame that
+    // suppressed it would take away a pin the traveller asked for, which is the
+    // expensive direction here exactly as it is in exclusions.js.
+    ok("a place the plan moves on from keeps its pin",
+       !isPassedThrough("After Aarhus we head north to Skagen", "Aarhus"));
+    // And the every-mention rule is what makes "before" safe at all: a reply
+    // that names the place anywhere else, unframed, keeps it.
+    ok("a day that holds the place outranks a mention of the day before it",
+       !isPassedThrough("Day 4: Copenhagen, and the day before Copenhagen you are in Odense", "Copenhagen"));
+
+    // ── AND WHERE A PLACE ANNOUNCES ITS SEASONAL THINGS ─────────────
+    //
+    // Oliver, 14 Sep 2026: "API direct key should also be used for attractions
+    // own social media.. it's often the place they announce seasonal things",
+    // then "I want you to get a sweep done for everything.. a search for every
+    // attraction and event's own social media."
+    //
+    // He is right about where the information is. A castle announces its winter
+    // hours on Facebook and gets round to the website in March. The events audit
+    // found the Naestved row stuck because a festival with no website on file is
+    // refused by every tier every run, and a festival with no website still has
+    // a Facebook page.
+    //
+    // THE FIRST TIER IS FREE AND IT IS ALSO THE BEST: a business links its own
+    // accounts in its own footer, so an account read off the place's own page is
+    // theirs BY CONSTRUCTION rather than by a judgement about a name. What
+    // follows is the judgement about which links on that page are accounts at
+    // all, and every refusal below is a real shape off a real Danish venue page.
+    {
+      const { accountIn, accountsOnPage, accountFits, socialRecord, LINKED, NAMED } = M;
+      const got = (u) => { const a = accountIn(u); return a ? `${a.platform}/${a.handle}` : null; };
+      is("a plain page is the account", got("https://www.facebook.com/ribevikingecenter"), "facebook/ribevikingecenter");
+      is("an instagram profile too", got("https://instagram.com/legolandbillund/"), "instagram/legolandbillund");
+      is("and the three spellings of a youtube channel are one thing",
+         [got("https://www.youtube.com/@LouisianaChannel"), got("https://www.youtube.com/channel/UCabc123")],
+         ["youtube/LouisianaChannel", "youtube/UCabc123"]);
+      // A SHARE BUTTON IS THE VISITOR'S ACCOUNT, NOT THE VENUE'S, and it is on
+      // almost every page in the country.
+      is("a share button is not an account",
+         ["https://www.facebook.com/sharer/sharer.php?u=x", "https://www.facebook.com/sharer.php?u=x",
+          "https://twitter.com/intent/tweet?text=hi"].filter(u => got(u) !== null), []);
+      // A POST IS NOT A PROFILE. Real, and not somewhere to ask a question of.
+      is("nor is a post or a feed",
+         ["https://www.instagram.com/p/Cabc123/", "https://www.instagram.com/explore/tags/denmark/",
+          "https://www.youtube.com/watch?v=abc", "https://www.tiktok.com/tag/denmark"].filter(u => got(u) !== null), []);
+      // SOMEBODY ELSE'S ACCOUNT, in the footer beside the venue's own. Matched
+      // on the whole handle, so a venue whose name contains one of these words
+      // is untouched.
+      is("nor the tourist board or the agency that built the site",
+         ["https://www.facebook.com/VisitDenmark", "https://www.linkedin.com/company/visitaarhus"]
+           .filter(u => got(u) !== null), []);
+      // The page walk: the share button and the post go, the duplicate collapses,
+      // the credit line goes, and the order is the order the page lists them.
+      const page = `<footer><a href="/kontakt">Kontakt</a>
+        <a href="https://www.facebook.com/sharer/sharer.php?u=x">Del</a>
+        <a href="https://www.facebook.com/ribevikingecenter"><img src="fb.svg"></a>
+        <a href="https://www.instagram.com/ribevikingecenter/"></a>
+        <a href="https://www.instagram.com/p/Cabc/">et opslag</a>
+        <a href="https://www.facebook.com/ribevikingecenter">igen</a>
+        <a href="https://wordpress.com">Lavet af</a></footer>`;
+      is("a real footer yields the two accounts and nothing else",
+         accountsOnPage(page).map(a => `${a.platform}/${a.handle}`),
+         ["facebook/ribevikingecenter", "instagram/ribevikingecenter"]);
+
+      // ── AND THE REMOTE TIER NEEDS A REASON, NOT A SCORE ───────────
+      // Only ever asked of an account a SEARCH handed back, where a wrong handle
+      // is worse than none: every later check would read another business's
+      // posts and flag nonsense about this row.
+      is("an account that links the site we hold is theirs, with nothing to judge",
+         accountFits({ platform: "facebook", handle: "someoddhandle" },
+           { name: "Ribe VikingeCenter", website: "https://ribevikingecenter.dk",
+             bioLinks: ["http://www.ribevikingecenter.dk/en"] }), LINKED);
+      is("a handle carrying the name is worth a look and nothing more",
+         accountFits({ platform: "facebook", handle: "RibeVikingeCenter" },
+           { name: "Ribe VikingeCenter", website: "" }), NAMED);
+      // A TOWN IS NOT A VENUE. "ribe" would match half the country, so a short
+      // handle is refused outright rather than ranked low.
+      is("and a town name on its own is refused",
+         accountFits({ platform: "facebook", handle: "ribe" }, { name: "Ribe VikingeCenter", website: "" }), null);
+
+      // The record carries the day it was found, for the same reason every
+      // ticket stamp does: an account that moved is a fact that ages.
+      const rec = socialRecord(accountsOnPage(page), { at: new Date(2026, 8, 14) });
+      is("the record is dated", rec.at, "2026-09-14");
+      is("and holds one account per platform", rec.accounts.map(a => a.platform), ["facebook", "instagram"]);
+      is("and nothing at all is nothing, rather than an empty shell", socialRecord([]), null);
     }
     // AND WHAT MUST SURVIVE. The frame has to sit immediately in front of the
     // name, so a sentence that merely contains one of those words elsewhere
@@ -49770,21 +50283,40 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // We just need a proper pointer", with a picture of the shape everyone has
   // seen on a map since paper ones. A circle is a dot ON the map; a pin POINTS
   // AT a spot, and the difference is the whole reason the shape exists.
-  ok("the pin is a teardrop", /<path d="M12 1\.2C6\.1 1\.2/.test(chatCode));
-  ok("with a hole through it", /<circle cx="12" cy="11\.9" r="4\.3"/.test(chatCode));
+  // ── AND THEN THE SHAPE ITSELF, 13 SEP 2026 ──────────────────────
+  //
+  // He asked how to make the app look less old school and named the pins. I
+  // told him the teardrop is the 2008 Google Maps shape and that people read it
+  // as old before they read anything else. He answered with a product
+  // photograph: a box of Markierungsnadeln, a 6mm glossy red ball on a 16mm
+  // steel needle, and "is this possible?".
+  //
+  // So these five assertions now pin the marking pin instead. Every claim they
+  // were making is still made: the tip is still the anchor, the colour is still
+  // his red, and the newest place still reads louder without a second colour.
+  // Only the silhouette changed.
+  ok("the head is a ball with a light on it", /radialGradient id="\$\{id\}b"/.test(chatCode));
+  ok("on a steel needle", /linearGradient id="\$\{id\}n"/.test(chatCode));
+  ok("pushed in at an angle rather than standing upright", /const PIN_TILT = 10;/.test(chatCode));
   ok("and no round dot is left", !/border-radius:50%/.test(chatCode));
   // THE ANCHOR IS THE TIP, which is the half a dot could never get right: a
-  // circle centred on its coordinate covers the thing it marks.
-  ok("the point sits on the coordinate", /iconAnchor: \[w \/ 2, h\]/.test(chatCode));
+  // circle centred on its coordinate covers the thing it marks. The tip is no
+  // longer the bottom of the box, because the pin leans and its shadow needs
+  // room, so the generator returns the point and Leaflet is given that.
+  ok("the point sits on the coordinate", /iconAnchor: \[pin\.cx, pin\.tip\]/.test(chatCode));
   // RED, which he asked for in one word after being shown the site's gold.
   // Gold is the accent on every heading and badge here, so a gold pin reads as
   // furniture; red is the one colour nothing else in this app uses.
-  ok("the pin is red", /const PIN_RED = "#E8232A";/.test(chatCode) && /const fill = PIN_RED;/.test(chatCode));
+  ok("the pin is red", /const PIN_RED = "#E8232A";/.test(chatCode) && /stop-color="\$\{PIN_RED\}"/.test(chatCode));
   // The newest place keeps the reading the dots carried in colour, in SIZE and
   // weight instead: bigger, full strength, and a halo. Two reds would have been
   // a second thing to learn.
   ok("and the newest one is still the one you notice",
-     /const w = p\.latest \? 23 : 17;/.test(chatCode) && /opacity:\.72;/.test(chatCode));
+     /p\.latest \? PIN_HEAD_PX \* 1\.36 : PIN_HEAD_PX/.test(chatCode) && /latest \? "" : "opacity:\.88;"/.test(chatCode));
+  // Each pin needs gradient ids of its own. Without that every pin on the map
+  // paints itself with the first one's gradient, which is one shared ball that
+  // never changes size, and it only shows up once two pins differ.
+  ok("every pin gets its own gradients", /let pinSeq = 0;/.test(chatCode) && /pushPin\(r, p\.latest, `p\$\{pinSeq\+\+\}`\)/.test(chatCode));
   // ── AND EVERY PIN SAYS WHAT IT IS ────────────────────────────────
   //
   // This used to read "a nameplate is lifted clear of the head" and pin the
@@ -53104,9 +53636,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     "src/utils/apiCost.js:currentRun",
     "src/utils/arrival.js:tripAnchor",
     "src/utils/briefPanel.js:briefPanel",
-    "src/utils/constraintCheck.js:constraintNote",
-    "src/utils/constraintCheck.js:repairWorked",
-    "src/utils/constraintCheck.js:violationsOfKind",
+    // constraintNote, repairWorked and violationsOfKind came off this list on
+    // 13 Sep 2026: generateGuide audits the freshly built guide with them.
     "src/utils/costLedger.js:linkGaps",
     "src/utils/entryAudit.js:describeNameFit",
     "src/utils/entryAudit.js:nameFit",
@@ -53133,6 +53664,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     "src/utils/linkPreview.js:isCrawler",
     "src/utils/linkPreview.js:structuredData",
     "src/utils/mapTiles.js:__resetRefusedStyles",
+    // Tests only, like its sibling above: the seam that stands a fake in for
+    // the maplibre chunk, which plain Node could never load.
+    "src/utils/mapTiles.js:__setVectorLoader",
     "src/utils/mapTiles.js:styleRefused",
     "src/utils/modelProvenance.js:readerFacingStages",
     "src/utils/nearbyPlaces.js:nearbyLabel",
@@ -59218,13 +59752,25 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and reaches the preview's matcher", /turnedDown=\{turnedDown\}/.test(app) && /turnedDown = \[\],/.test(readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8")));
     // THE GUIDE. The constraints it is audited against, and both build prompts
     // as a block, like the adds.
-    ok("and the guide's constraints", /_constraints: \{ excluded: ruledOutFor\(saidByTravellerForGuide, turnedDown\)/.test(app));
-    is("and both build prompts, as the adds do", (app.match(/\$\{chosenExtrasBlock\}\$\{turnedDownBlock\}/g) || []).length, 2);
-    ok("stated as tapped, so the writer knows where it came from",
-       /PLACES THE TRAVELER TURNED DOWN, by tapping No on them on the map\. None of these may appear as a stop/.test(app));
-    ok("and only the tapped list goes to the writer, since typed refusals are already in the text it reads",
-       /const turnedDownNames = \(Array\.isArray\(turnedDown\) \? turnedDown : \[\]\)/.test(app));
-    const blockLine = (app.match(/PLACES THE TRAVELER TURNED DOWN[^\n]*/) || [""])[0];
+    // ── ONE BLOCK, TYPED AND TAPPED, SINCE THE NIGHT OF 13 SEP ──────
+    // Four assertions here pinned the tapped-only block: `turnedDownBlock`
+    // spliced into both prompts, headed "PLACES THE TRAVELER TURNED DOWN, by
+    // tapping No", built from `turnedDownNames`, and one of them was titled
+    // "only the tapped list goes to the writer, since typed refusals are
+    // already in the text it reads". That reasoning was the hole. Measured the
+    // same night with the harness further down: "Please skip Copenhagen" in
+    // the traveller's own turn reached both prompts as a sentence in the
+    // transcript, beside Gemlyx's own reply about Copenhagen, and no block
+    // said which one was the rule. The tapped list is now merged with the
+    // typed one by ruledOutFor, exactly as the preview note and the guide's
+    // constraints already read it, and ONE block goes to both prompts.
+    ok("and the guide's constraints", /_constraints: guideConstraints, _mode: travelMode/.test(app));
+    is("and both build prompts, as the adds do", (app.match(/\$\{chosenExtrasBlock\}\$\{ruledOutBlock\}/g) || []).length, 2);
+    ok("stated as ruled out, typed or tapped, so the writer knows a No on the map counts the same as a sentence",
+       /PLACES THE TRAVELER RULED OUT, in their own words in the conversation below or by tapping No on the map\. None of these may appear as a stop/.test(M.excludedBlock(["Tivoli"])));
+    ok("and the block is built from the merged list, never from the tapped half alone",
+       /const ruledOutBlock = excludedBlock\(ruledOut\);/.test(app) && !/turnedDownNames|turnedDownBlock/.test(app));
+    const blockLine = M.excludedBlock(["Tivoli"]).split("\n").find(l => /PLACES THE TRAVELER RULED OUT/.test(l)) || "";
     ok("the block carries no dash and no banned word", !!blockLine && !DASH.test(blockLine) && !BANNED.test(blockLine));
     // THE CHIPS. A reply that names a turned-down place anyway must not grow a
     // button offering to add it.
@@ -59411,6 +59957,541 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // card itself writes no word about it.
     ok("the card says nothing about money of its own",
        !/\b(?:free|gratis|paid|DKK|kr\.?|kroner)\b/i.test(stripComments(cardsSrc).replace(/"[^"\n]*"/g, "")));
+  }
+}
+
+// ── THE REFUSAL THAT REACHED THE PLANNER UNMARKED ───────────────────
+//
+// 13 Sep 2026, the top open item in two handoffs and nobody had touched it.
+// Measured before anything was changed, with the harness below: a
+// conversation whose traveller turn says "Please skip Copenhagen, we have
+// done it twice already", lifted through the exact template literals App.jsx
+// hands to askOpenAI and askClaude, with fetch stubbed so the thing read is
+// the wire body. Both bodies carried "Copenhagen" in the transcript. Neither
+// carried a block naming what may not appear. The same refusal TAPPED on the
+// map produced the block in both, so the asymmetry was the whole bug: a No
+// said with a tap was a rule, a No said in a sentence was a sentence.
+//
+// And constraintCheck.js, the audit written for exactly this on 25 Aug, had
+// one caller in the app and it was the swap gate on the guide page. A guide
+// fresh from the writer was never audited at all.
+//
+// THREE THINGS CLOSED IT, and each is pinned below so none can come back: one
+// block from the one merged list, into both prompts and the day-count retry;
+// the plan gate judging the skeleton against the same list through the
+// audit's own walker; and the audit running on the finished guide, with one
+// more call when it fires and the survivors written above the guide.
+{
+  const { ruledOutFor, readExclusions, excludedBlock, ruledOutStops, constraintViolations, constraintNote, checkPlan, askOpenAI, askClaude } = M;
+  const DASH = /[–—]/;
+  const BANNED = /\b(?:actually|truly|genuinely|genuine|simply)\b/i;
+
+  // ── 1. THE BLOCK ─────────────────────────────────────────────────
+  {
+    is("nothing ruled out is no block, so no prompt carries a heading with nothing under it", excludedBlock([]), "");
+    is("blanks are not names", excludedBlock(["", "  ", null]), "");
+    const block = excludedBlock(["Copenhagen", "Legoland"]);
+    ok("the heading says ruled out and says what may not appear",
+       /^\n\nPLACES THE TRAVELER RULED OUT/.test(block) && /None of these may appear as a stop, be named in a note, or be offered as an alternative/.test(block));
+    is("and lists each name on its own line", block.split("\n").filter(l => /^- /.test(l)), ["- Copenhagen", "- Legoland"]);
+    ok("a town takes what is inside it", /A town ruled out takes every stop inside it with it/.test(block));
+    ok("and either spelling is covered, because the writer is asked for the Danish town name",
+       /in either its Danish or its English spelling/.test(block));
+    ok("no dash and no banned word anywhere in it", !DASH.test(block) && !BANNED.test(block));
+    // The tap and the sentence arrive as one list, in the order ruledOutFor
+    // gives them: typed first, because those have a sentence to point at.
+    is("typed and tapped are one block",
+       excludedBlock(ruledOutFor("Skip Tivoli.", ["Legoland"])).split("\n").filter(l => /^- /.test(l)), ["- Tivoli", "- Legoland"]);
+  }
+
+  // ── 2. THE HOLE, MEASURED THE WAY IT WAS FOUND ───────────────────
+  //
+  // The prompts are built inside generateGuide, a closure over React state,
+  // so the templates are lifted out of the source and evaluated with the real
+  // ruledOutFor and excludedBlock in scope. `with` over a Proxy: every
+  // identifier the template names that this test did not set reads as "",
+  // which is what an empty block is in App.jsx, and real globals fall
+  // through. A missing anchor fails by name rather than passing on nothing.
+  {
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    const lift = (re, label) => { const m = app.match(re); ok(`the harness can find ${label} in App.jsx`, !!m); return m ? m[1] : "``"; };
+    const blockStatements = lift(/(const ruledOut = ruledOutFor\([^\n]*\n\s*const ruledOutBlock = [^\n]*)\n/, "the list and the block being built");
+    const plannerTemplate = lift(/(`You are planning the STRUCTURE[\s\S]*?`),\s*\n\s*1200\s*\n\s*\);/, "the planner prompt");
+    const writerTemplate = lift(/const guideSystemPrompt = (`[\s\S]*?`);\n\s*\/\/ Guide-building is/, "the writer prompt");
+    const writerCall = lift(/const guideResult = await askClaude\(\s*\n\s*(`[^\n]*`),/, "the writer call");
+    const retryTemplate = lift(/const retryResult = await askClaude\(\s*\n\s*(`[^\n]*`),/, "the day-count retry");
+
+    const scopeFor = (values) => new Proxy(values, {
+      has: (t, k) => (typeof k === "symbol" ? false : (k in t) || !(k in globalThis)),
+      get: (t, k) => (typeof k === "symbol" ? undefined : k in t ? t[k] : ""),
+    });
+    const evaluate = (statements, template, values) =>
+      new Function("__s", `with (__s) { ${statements}\n return ${template}; }`)(scopeFor(values));
+    const prompts = (aiMessages, turnedDown = []) => {
+      // The same two lines generateGuide opens with.
+      const convoText = aiMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
+      const saidByTravellerForGuide = aiMessages.slice(1).filter(m => m.role === "user").map(m => m.text || "").join("\n");
+      const values = { convoText, saidByTravellerForGuide, turnedDown, requestedDays: 4, MAX_BARS_A_NIGHT: 2, MAX_CLUBS_A_NIGHT: 1,
+                       ruledOutFor, excludedBlock, parsed: { days: [] } };
+      const planner = evaluate(blockStatements, plannerTemplate, values);
+      const guideSystemPrompt = evaluate(blockStatements, writerTemplate, values);
+      const writer = evaluate("", writerCall, { ...values, guideSystemPrompt });
+      const retry = evaluate(blockStatements, retryTemplate, values);
+      return { planner, writer, retry };
+    };
+    // What may not appear, read off a prompt: the heading line and the "- "
+    // lines under it. Both prompts say "Copenhagen" in their geography
+    // boilerplate, so a bare search for the name proves nothing either way.
+    const refusalBlock = (prompt) => {
+      const at = prompt.lastIndexOf("\n\nConversation:\n");
+      const lines = prompt.slice(0, at).split("\n");
+      const out = [];
+      for (let i = 0; i < lines.length; i++) {
+        if (!/PLACES THE TRAVELER RULED OUT/.test(lines[i])) continue;
+        out.push(lines[i]);
+        for (let j = i + 1; j < lines.length && /^- /.test(lines[j]); j++) out.push(lines[j]);
+      }
+      return out.join("\n");
+    };
+
+    const HIS = [
+      { role: "assistant", text: "Hi, where are you thinking of going?" },
+      { role: "user", text: "Four days in October, two adults, no car. Please skip Copenhagen, we have done it twice already. Aarhus and Ribe would be great." },
+      { role: "assistant", text: "Lovely. Aarhus and Ribe are both easy by train from Billund, and Copenhagen is a long way east so it would be a stretch anyway." },
+      { role: "user", text: "Trains are fine. Flying into Billund." },
+    ];
+    is("the brief rules out exactly one place", ruledOutFor(HIS.filter(m => m.role === "user").map(m => m.text).join("\n"), []), ["Copenhagen"]);
+    const { planner, writer, retry } = prompts(HIS);
+    ok("THE HOLE: the planner is told, in a block, that Copenhagen may not appear",
+       /PLACES THE TRAVELER RULED OUT[^\n]*\n- Copenhagen$/.test(refusalBlock(planner)));
+    ok("and so is the writer", /PLACES THE TRAVELER RULED OUT[^\n]*\n- Copenhagen$/.test(refusalBlock(writer)));
+    ok("and so is the day-count retry, or a short first attempt would reopen the hole through the side door",
+       /PLACES THE TRAVELER RULED OUT[^\n]*\n- Copenhagen$/.test(refusalBlock(retry)));
+    is("one block, the same string in all three, so they cannot disagree about what was ruled out",
+       [refusalBlock(writer), refusalBlock(retry)], [refusalBlock(planner), refusalBlock(planner)]);
+    ok("the conversation still goes in whole, because the rule is in addition to it and not instead of it",
+       planner.endsWith(`\n\nConversation:\n${HIS.slice(1).map(m => `${m.role}: ${m.text}`).join("\n")}`) && /skip Copenhagen/.test(writer));
+    ok("and the block sits above the conversation, where the rules are", planner.indexOf("PLACES THE TRAVELER RULED OUT") < planner.lastIndexOf("\n\nConversation:\n"));
+
+    // The traveller's turns only. Gemlyx saying "skip Copenhagen" is Gemlyx
+    // suggesting, and the brief is never read from the app's own replies.
+    const GEMLYX_SAID_IT = [
+      { role: "assistant", text: "Hi, where are you thinking of going?" },
+      { role: "user", text: "Four days in October, two adults, no car. Aarhus and Ribe would be great." },
+      { role: "assistant", text: "You could skip Copenhagen entirely and stay in Jutland." },
+    ];
+    is("a refusal in Gemlyx's own turn rules nothing out", refusalBlock(prompts(GEMLYX_SAID_IT).planner), "");
+    is("and nothing ruled out is no heading at all, on either prompt",
+       [refusalBlock(prompts(GEMLYX_SAID_IT).writer), /RULED OUT/.test(prompts(GEMLYX_SAID_IT).writer)], ["", false]);
+    // A tap alone still produces the block, which is the half that already
+    // worked and must keep working.
+    ok("a No tapped on the map with nothing typed is still a rule",
+       /- Tivoli$/.test(refusalBlock(prompts(GEMLYX_SAID_IT, ["Tivoli"]).planner)));
+    ok("and a tap beside a sentence is one list with both",
+       /- Copenhagen\n- Tivoli$/.test(refusalBlock(prompts(HIS, ["Tivoli"]).writer)));
+
+    // Through the real client, so what is asserted is the body on the wire.
+    // Same save-and-restore every other fetch stub in this file uses.
+    const realFetch = globalThis.fetch;
+    const sent = [];
+    globalThis.fetch = async (url, init) => {
+      sent.push({ url, body: JSON.parse(init.body) });
+      const reply = url === "/api/openai"
+        ? { choices: [{ message: { content: "{\"days\":[]}" } }], usage: {} }
+        : { content: [{ type: "text", text: "{\"days\":[]}" }], usage: {} };
+      return { ok: true, json: async () => reply };
+    };
+    try {
+      await askOpenAI(planner, 1200);
+      await askClaude(writer, 6000, "claude-opus-4-8", true);
+    } finally { globalThis.fetch = realFetch; }
+    is("the planner's wire body is the prompt, block included", sent[0]?.url === "/api/openai" && sent[0].body.messages[0].content, planner);
+    is("and the writer's", sent[1]?.url === "/api/anthropic" && sent[1].body.messages[0].content, writer);
+  }
+
+  // ── 3. THE GATE, BECAUSE A PROMPT IS NOT A RULE ───────────────────
+  // The sentence the been check carries, applied to the refusals: the
+  // skeleton is judged against the same list before the writer is called,
+  // with the same one retry, and through the audit's own walker.
+  {
+    const days = [
+      { day: 1, stops: [{ name: "Tivoli", town: "Copenhagen" }, { name: "Rundetaarn", town: "Copenhagen" }] },
+      { day: 2, stops: [{ name: "ARoS", town: "Aarhus" }, { name: "Den Gamle By", town: "Aarhus" }] },
+    ];
+    const coords = { Tivoli: { lat: 55.67, lon: 12.57 }, Rundetaarn: { lat: 55.68, lon: 12.57 }, ARoS: { lat: 56.15, lon: 10.2 }, "Den Gamle By": { lat: 56.16, lon: 10.19 } };
+    const v = checkPlan(days, coords, { isPublished: () => true, ruledOut: ["Copenhagen"] });
+    is("every stop in a place they ruled out is refused, with its day",
+       v.problems.filter(p => p.code === "RULED_OUT").map(p => `${p.day}:${p.stop}`), ["1:Tivoli", "1:Rundetaarn"]);
+    ok("and the skeleton does not pass", !v.ok);
+    ok("the planner is told to take it out and not to reach for another place in the same town",
+       v.problems.filter(p => p.code === "RULED_OUT").every(p => /Take it out/.test(p.detail) && /never another place in Copenhagen/.test(p.detail)));
+    ok("the rest of the trip is left alone", !v.problems.some(p => p.code === "RULED_OUT" && /ARoS|Den Gamle By/.test(p.stop)));
+    is("without the list it says nothing", checkPlan(days, coords, { isPublished: () => true }).problems.filter(p => p.code === "RULED_OUT").length, 0);
+    is("and an empty list is no list", checkPlan(days, coords, { isPublished: () => true, ruledOut: [] }).problems.filter(p => p.code === "RULED_OUT").length, 0);
+    // The writer is asked for the Danish town name and the traveller typed
+    // the English one. One town.
+    is("a skeleton spelling the town in Danish is caught by a refusal typed in English",
+       checkPlan([{ day: 1, stops: [{ name: "Nyhavn", town: "København" }] }], {}, { ruledOut: ["Copenhagen"] }).problems.filter(p => p.code === "RULED_OUT").map(p => p.stop), ["Nyhavn"]);
+    ok("the detail carries no dash and no banned word",
+       v.problems.filter(p => p.code === "RULED_OUT").every(p => !DASH.test(p.detail) && !BANNED.test(p.detail)));
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    is("the build hands the list to the gate on both passes, beside the been check",
+       (app.match(/datePrecision, ruledOut, wasDone, nightKind, nightAlone \}\)/g) || []).length, 2);
+    ok("and the fix prompt knows how to fix the new kind",
+       /- A place the traveler ruled out: take it out\. Put a real place from the conversation that is NOT in the place they ruled out where it was, never another place inside the same ruled out town/.test(app));
+    ok("the gate walks the stops with the audit's own walker rather than a second one",
+       /import \{ ruledOutStops \} from "\.\/constraintCheck";/.test(readFileSync(join(root, "src/utils/planGate.js"), "utf8"))
+       && /for \(const hit of ruledOutStops\(list, opts\.ruledOut\)\)/.test(readFileSync(join(root, "src/utils/planGate.js"), "utf8")));
+  }
+
+  // ── 4. THE AUDIT, WHICH NOW HAS A WALKER AND TWO CALLERS ─────────
+  {
+    const stop = (name, town) => ({ name, town });
+    is("the walker names every hit with its day and what was said",
+       ruledOutStops([{ day: 1, stops: [stop("Nyhavn", "Copenhagen"), stop("ARoS", "Aarhus")] }, { day: 3, stops: [stop("Tivoli", "Copenhagen")] }], ["Copenhagen"]),
+       [{ day: 1, stop: "Nyhavn", town: "Copenhagen", said: "Copenhagen" }, { day: 3, stop: "Tivoli", town: "Copenhagen", said: "Copenhagen" }]);
+    is("no list is no hits", ruledOutStops([{ day: 1, stops: [stop("Nyhavn", "Copenhagen")] }], []), []);
+    is("and a day with no number is counted from one", ruledOutStops([{ stops: [stop("Nyhavn", "Copenhagen")] }], ["Copenhagen"])[0]?.day, 1);
+    // "skip Copenhagen" against a stop whose town says København folded to two
+    // different strings, and the audit passed the capital they had refused.
+    is("a refusal typed in English catches a stop filed under the Danish name",
+       constraintViolations({ days: [{ day: 1, stops: [stop("Nyhavn", "København")] }] }, { excluded: ["Copenhagen"] }).map(v => v.said), ["Copenhagen"]);
+    is("and the other way round", constraintViolations({ days: [{ day: 1, stops: [stop("Nyhavn", "Copenhagen")] }] }, { excluded: ["København"] }).length, 1);
+    // One violation per place, naming every stop, so a retry that fixes one
+    // of four Copenhagen stops is not accepted as having fixed the day.
+    const two = constraintViolations({ days: [{ day: 1, stops: [stop("Nyhavn", "Copenhagen")] }, { day: 3, stops: [stop("Tivoli", "Copenhagen"), stop("ARoS", "Aarhus")] }] }, { excluded: ["Copenhagen"] });
+    is("two stops in one refused town are one violation naming both", two.map(v => v.found), ["Nyhavn, Tivoli"]);
+    is("with the days they fall on", two[0]?.days, [1, 3]);
+    is("and a sentence in the plural", two[0]?.why, "You said you did not want Copenhagen, and Nyhavn and Tivoli are in Copenhagen.");
+    is("which constraintNote speaks to the traveller as one thing", constraintNote(two),
+       "One thing here does not match what you told me. You said you did not want Copenhagen, and Nyhavn and Tivoli are in Copenhagen. Say the word and I will rebuild around it.");
+    ok("and none of it carries a dash or a banned word", !DASH.test(constraintNote(two)) && !BANNED.test(constraintNote(two)));
+    // The word rule survives the spelling rule.
+    is("Ribe still does not fire on Ribera", constraintViolations({ days: [{ day: 1, stops: [stop("Ribera", "Ribera")] }] }, { excluded: ["Ribe"] }), []);
+  }
+
+  // ── 5. THE WIRING, WHICH IS WHERE THIS ONE WENT MISSING ──────────
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    const build = app.slice(app.indexOf("const generateGuide = async"), app.indexOf("_constraints: guideConstraints"));
+    ok("the audit runs on the freshly built guide, against the object built once, with the same mode reader as the swap gate",
+       /const audit = \(g\) => violationsOfKind\(constraintViolations\(g, guideConstraints, \{ modeOf: detectLegMode \}\), "excluded"\);/.test(build));
+    // Position: after the day-count retry and before the polish, so a rebuild
+    // happens before the expensive stages run on the wrong guide.
+    const at = build.indexOf("const audit = (g) => violationsOfKind(");
+    ok("after the day-count retry", at > build.indexOf("Finishing the remaining days"));
+    ok("and before the writing is polished", at < build.indexOf("Polishing the writing"));
+    // One more call with the failure named, carrying the whole prompt so every
+    // other rule still holds, never a refusal.
+    const retryLine = (build.match(/`\$\{guideSystemPrompt\}\\n\\nYOUR LAST ATTEMPT BROKE THE RULE ABOVE ABOUT PLACES THE TRAVELER RULED OUT\. [^\n]*/) || [""])[0];
+    ok("when it fires the writer is asked once more, with the violations in the traveller's words",
+       /\$\{broken\.map\(v => v\.why\)\.join\(" "\)\}/.test(retryLine) && /never leave a day empty/.test(retryLine));
+    ok("the sentence added to the prompt carries no dash and no banned word",
+       !!retryLine && !DASH.test(retryLine.slice(retryLine.indexOf("YOUR LAST"))) && !BANNED.test(retryLine.slice(retryLine.indexOf("YOUR LAST"))));
+    // The slice used to run to collectGuideProseFields. Since 14 Sep the chat
+    // promise audit sits between the two, with one call of its own, so the
+    // exclusions block ends where that one begins and each is counted alone.
+    const auditBlock = build.slice(at, build.indexOf("const promised = readPromises("));
+    ok("the exclusions audit ends where the promise audit begins", auditBlock.length > 500 && build.indexOf("const promised = readPromises(") > at);
+    ok("the first thing done with the parsed guide is to audit it", /let broken = audit\(parsed\);\s*if \(broken\.length\) \{/.test(auditBlock));
+    ok("and never a refusal: nothing in the audit block throws", !/\bthrow\b/.test(auditBlock));
+    is("exactly one extra call, never a loop", (auditBlock.match(/await askClaude\(/g) || []).length, 1);
+    // Accepted on repairWorked's rule and the day-count retry's own guard, or
+    // the first attempt stands.
+    ok("the rebuild is taken only if it fixed something, on repairWorked's rule",
+       /if \(whole && repairWorked\(parsed, rebuilt, guideConstraints, \{ modeOf: detectLegMode \}\)\) parsed = rebuilt;/.test(auditBlock));
+    ok("and only if it kept every day and left none empty, since dropping the Copenhagen day is fewer violations and a shorter trip",
+       /rebuilt\.days\.length >= parsed\.days\.length\s*&& rebuilt\.days\.every\(d => Array\.isArray\(d\?\.stops\) && d\.stops\.length > 0\)/.test(auditBlock));
+    ok("the audit is run again on whatever stands", /broken = audit\(parsed\);\s*\}/.test(auditBlock));
+    // Survivors are spoken, where every other check on the finished guide
+    // already reports, in the traveller's own words.
+    ok("what survives is written above the guide through constraintNote",
+       /if \(broken\.length\) planProblems = \[\.\.\.planProblems, constraintNote\(broken\)\];/.test(auditBlock));
+    ok("and into the run log, so a report shows it was checked even when it passed",
+       /note\("The finished guide, against what the traveller ruled out", \{/.test(auditBlock));
+    // The swap gate on the guide page reads the same object off the guide.
+    ok("the guide page's swap gate reads the object the build wrote",
+       /const constraints = guide\?\._constraints \|\| null;/.test(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8")));
+  }
+}
+
+// ── THE PROMISE GATE, 14 SEP 2026 ───────────────────────────────────
+//
+// On the open list for days: "Nothing in the app compares what the chat
+// promised a traveller against what the built plan contains."
+//
+// MEASURED FIRST. Three replies shaped the way the prompt asks for them, each
+// against a guide that left the place out, run through every post-build check
+// the app had: constraintViolations, checkPlan, titlePromises and the
+// chosen-events check. Zero findings, three times. The other direction: the
+// eighteen verbatim Gemlyx sentences this repository quotes (comments, test
+// fixtures, the prompt's own examples), against a reader that took any
+// published name in a reply as a promise. Fifteen of eighteen name a
+// published place and not one is a promise. So the reader in
+// utils/chatPromises.js reads three shapes and nothing hedged, and every
+// assertion below that says "reads as nothing" is one of the sentences that
+// would have made it cry wolf.
+{
+  const { readPromises, brokenPromises, promiseNote, rebuildKeptMore, promiseRetryBlock, previewPools, isFullPlanText } = M;
+  const BANNED = /\b(?:actually|truly|genuinely|genuine|simply|really|quite)\b/i;
+  const DASH = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+  const POOLS = previewPools({
+    towns: ["Copenhagen", "Aalborg", "Aarhus", "Ribe", "Roskilde", "Skagen", "Billund", "Faxe", "Kliplev", "Helsingør", "Tønder", "Rømø", "Fur"].map(name => ({ name })),
+    freeEntrance: [{ name: "Tivoli", town: "Copenhagen" }, { name: "Kongens Have", town: "Copenhagen" }, { name: "Kronborg", town: "Helsingør" },
+      { name: "Louisiana", town: "Humlebæk" }, { name: "Faxe Kalkbrud", town: "Faxe" }, { name: "Stevns Klint", town: "Store Heddinge" },
+      { name: "Viking Ship Museum", town: "Roskilde" }, { name: "Den Gamle By", town: "Aarhus" }],
+    foodSpots: [{ name: "Reffen", town: "Copenhagen" }],
+    nightlifeSpots: [{ name: "Old Irish Pub", town: "Copenhagen" }],
+    craftItemsFallback: [{ name: "Ribe Glas", town: "Ribe" }],
+    events: [{ name: "Roskilde Festival", town: "Roskilde" }, { name: "Aalborg Karneval", town: "Aalborg" }, { name: "Oktoberfest Aalborg", town: "Aalborg" }],
+  });
+  const u = (text) => ({ role: "user", text });
+  const a = (text) => ({ role: "assistant", text });
+  const own = (thread) => thread.filter(m => m.role === "user").map(m => m.text).join("\n");
+  const read = (thread, extra = {}) => readPromises(thread, POOLS, { ownWords: own(thread), ...extra });
+  const namesOf = (thread, extra) => read(thread, extra).map(p => p.name);
+  const one = (text, extra) => namesOf([u("hi"), a(text)], extra);
+
+  // ── 1. THE GAP, SHOWN FAILING AND THEN CAUGHT ────────────────────
+  {
+    const week = [u("Three days from Copenhagen Airport, 12 to 14 September, two of us, history and the coast, by train."),
+      a("Right, here is the shape of it.\n\nDay 1: Land at Kastrup, drop the bags, then Roskilde for the Viking Ship Museum and the cathedral.\nDay 2: Down to Stevns Klint for the cliffs, Faxe Kalkbrud on the way back.\nDay 3: An easy Copenhagen morning, Tivoli in the afternoon before the flight.\n\nWant me to turn that into the guide?"),
+      u("Sounds good, build it."),
+      a("Done, that is the trip. Coast on the middle day, the cliffs are the point of it.\n[[GEMLYX_READY_TO_BUILD]]")];
+    const guide = { title: "Three Days of History and Coast", days: [
+      { day: 1, stops: [{ name: "Copenhagen Airport", town: "Copenhagen" }, { name: "Viking Ship Museum", town: "Roskilde" }] },
+      { day: 2, stops: [{ name: "Faxe Kalkbrud", town: "Faxe" }, { name: "Roskilde Domkirke", town: "Roskilde" }] },
+      { day: 3, stops: [{ name: "Nyhavn", town: "Copenhagen" }, { name: "Tivoli", town: "Copenhagen" }] },
+    ] };
+    // What the app had. Every reader that runs on a built guide, and none of
+    // them can see a sentence Gemlyx wrote.
+    const ruledOut = M.ruledOutFor(own(week), []);
+    is("the exclusions audit sees nothing", M.constraintViolations(guide, { excluded: ruledOut, transport: { ruledOut: [] } }, { modeOf: () => "" }).length, 0);
+    is("the plan gate sees nothing", M.checkPlan(guide.days, {}, { ruledOut }).problems.length, 0);
+    is("the title check sees nothing", M.titlePromises(guide.title, guide.days.flatMap(d => d.stops.map(s => s.name)), guide.days.flatMap(d => d.stops.map(s => s.town))).length, 0);
+    // What the reader sees.
+    const promised = read(week);
+    is("the day structure promises every unhedged place in it, town and attraction alike",
+       promised.map(p => p.name).sort(), ["Copenhagen", "Faxe Kalkbrud", "Roskilde", "Stevns Klint", "Tivoli", "Viking Ship Museum"]);
+    is("each carries the day it was promised for", promised.find(p => p.name === "Stevns Klint")?.day, 2);
+    is("and the shape that read it", promised.find(p => p.name === "Stevns Klint")?.shape, M.PROMISE_DAY);
+    const broken = brokenPromises(promised, guide.days);
+    is("the one the guide left out is the one reported", broken.map(b => b.name), ["Stevns Klint"]);
+    is("with the sentence it came from, header and all, so the finding can be checked by reading",
+       broken[0].said, "Day 2: Down to Stevns Klint for the cliffs, Faxe Kalkbrud on the way back");
+    is("and the note quotes it in Gemlyx's own voice, not the traveller's", promiseNote(broken),
+       "One thing here is not what I said in the chat. In the chat I wrote \"Day 2: Down to Stevns Klint for the cliffs, Faxe Kalkbrud on the way back\", and no day here has Stevns Klint. Say the word and I will rebuild around it.");
+    ok("the note carries no dash and no banned word", !DASH.test(promiseNote(broken)) && !BANNED.test(promiseNote(broken)));
+    is("two findings are counted in the heading", promiseNote([...broken, ...broken]).slice(0, 46), "2 things here are not what I said in the chat.");
+    is("no findings is no note", promiseNote([]), "");
+    // A town is kept by a stop inside it: Roskilde is in the guide as the
+    // museum and the cathedral, Copenhagen as Nyhavn.
+    ok("a promised town is kept by any stop whose town it is", !broken.some(b => b.name === "Roskilde" || b.name === "Copenhagen"));
+  }
+
+  // ── 2. THE TWO COMMITMENT SHAPES ─────────────────────────────────
+  {
+    const will = [u("Two days in Copenhagen, 3 and 4 October, just me, I really want to see Kongens Have."),
+      a("Got it. I'll work Kongens Have into the first afternoon, it sits right behind Rosenborg so the two go together. The rest leans on the harbour and one long lunch.\n[[GEMLYX_READY_TO_BUILD]]"), u("Yes please.")];
+    const p = read(will);
+    is("a first-person commitment with the place as its object is a promise", p.map(x => `${x.name}:${x.shape}`), [`Kongens Have:${M.PROMISE_WILL}`]);
+    is("quoted as written, not folded", p[0].said, "I'll work Kongens Have into the first afternoon, it sits right behind Rosenborg so the two go together.");
+    ok("Rosenborg, named in the same sentence with no commitment on it, is not one", !p.some(x => x.name === "Rosenborg"));
+    const there = [u("Aalborg, 22 to 24 May, four of us, we like a party."),
+      a("Your Saturday is the 23rd and you'll be there for Aalborg Karneval, the biggest street party in Northern Europe, so I've built that day around it and kept the Friday light.\n[[GEMLYX_READY_TO_BUILD]]"), u("Great, go.")];
+    is("an event they are told they will be there for is a promise", read(there, { pickedEvents: null }).map(x => `${x.name}:${x.shape}`), [`Aalborg Karneval:${M.PROMISE_THERE}`]);
+    ok("and the town is not read out of the event's name", !namesOf(there, { pickedEvents: null }).includes("Aalborg"));
+    // The ways the same thing is said.
+    for (const [text, want] of [
+      ["I'll include Tivoli on day 2.", ["Tivoli"]],
+      ["I've added Reffen to the first evening.", ["Reffen"]],
+      ["I'll work Kongens Have in.", ["Kongens Have"]],
+      ["I'm putting Tivoli on day 2.", ["Tivoli"]],
+      ["I am going to add Reffen for the first evening.", ["Reffen"]],
+      ["I've built the Saturday around Aalborg Karneval.", ["Aalborg Karneval"]],
+      ["I'll plan the whole day around Tivoli.", ["Tivoli"]],
+      ["Tivoli is going in, the kids will love it.", ["Tivoli"]],
+      ["Tivoli goes in on day 2.", ["Tivoli"]],
+      ["Your Saturday is Aalborg Karneval.", ["Aalborg Karneval"]],
+      ["Day 2 is Ribe.", ["Ribe"]],
+      ["You'll be there for Roskilde Festival.", ["Roskilde Festival"]],
+      ["I'll put Tivoli on day 2 and Louisiana on day 3.", ["Tivoli"]],
+    ]) is(`a promise: ${text}`, one(text, { pickedEvents: null }), want);
+  }
+
+  // ── 3. A MENTION IS NOT A PROMISE ────────────────────────────────
+  //
+  // The real corpus first. Every one of these was written by Gemlyx to a
+  // traveller (or by Oliver as an example of what it should write), fifteen
+  // of them name a published place, and every one must read as nothing.
+  {
+    const REAL = [
+      "Nice, Aalborg's a great pick. Since you haven't mentioned a starting point, I'll assume you're landing at Copenhagen Airport and making your way north. There's a couple of real events up in Jutland worth timing around.",
+      "Ferry into Aalborg, nice, that's proper North Jutland arrival. Just need two more things: what's the budget looking like, and what pulls you in most?",
+      "Haha, no worries, that 'what?' is just you being surprised I asked haha, all good, you already answered everything I needed.",
+      "For your kind of trip, I'd steer well clear of Old Irish Pub near Rådhuspladsen, that's stag-do and pub-crawl territory, not what two old friends looking for design and quiet want.",
+      "If you come up that road you'll pass close to Kliplev, tiny place but its church tower has these old pilgrim engravings on the bells that most people driving straight to Copenhagen never stop for.",
+      "Tomorrow through the 20th keeps you clear of Oktoberfest in Aalborg. One thing first, and then I can build it: Which dates?",
+      "I'll plan for around 4 days between the two towns since you haven't said otherwise.",
+      "I'll plan you both starting from Copenhagen Airport unless you're setting off from somewhere else.",
+      "A Children's Museum is better for a group of kids than standing in a Tivoli queue on day one.",
+      "One more thing on Aalborg if it appeals: there is a beer walk through the old town.",
+      "You could look at Ribe while you are there.",
+      "Lovely. Aarhus and Ribe are both easy by train from Billund, and Copenhagen is a long way east so it would be a stretch anyway.",
+      "You could skip Copenhagen entirely and stay in Jutland.",
+      "Interesting! Well for your specific taste, I can recommend Aarhus because it has a proper old town.",
+      "I'd go with Kronborg over that other museum, it's an easy train ride and fits what you're into.",
+      "Aight, we're not going Copenhagen then 😂",
+      "Hej hej! Where are you headed in Denmark, and how many days have you got?",
+      "Copenhagen, or somewhere further out?",
+    ];
+    const named = REAL.filter(t => POOLS.some(p => M.mentionsPlace(t, p.name))).length;
+    ok(`the corpus is the measurement it claims: ${named} of ${REAL.length} sentences name a published place`, named >= 14);
+    for (const text of REAL) is(`reads as nothing: ${text.slice(0, 60)}`, one(text, { pickedEvents: null }), []);
+    // And the hedged, refused, asked and undone forms, each of which fired in
+    // some draft of the reader or would have.
+    for (const text of [
+      "Tivoli is nearby if you fancy it.",
+      "I'll keep Tivoli out, you said the kids have had enough of it.",
+      "I'll add Tivoli as an option for the last afternoon.",
+      "I'll keep Ribe in mind for a later trip.",
+      "I'd include Tivoli if the weather turns.",
+      "I would include Tivoli, it is a great day out.",
+      "Would you rather I include Tivoli or Louisiana?",
+      "I'll include Roskilde Festival only if you can get tickets.",
+      "I'll put you in Ribe for two nights.",
+      "Tivoli is in Copenhagen, ten minutes from the station.",
+      "Saturday is Aalborg Karneval, so the hotels will be full.",
+      "You'll be there for the festival.",
+      "You'll be there for it, so I've built that day around it.",
+      "I've planned the route around Copenhagen so you never sit in its traffic.",
+      "I'll book Tivoli tickets ahead for you, they sell out.",
+      "You'll want to book Tivoli ahead.",
+      "Day 1 and day 2 are in Copenhagen, day 3: Roskilde.",
+      "Dag 1: Vi kunne tage til Ribe. Dag 2: Skagen, hvis vejret holder.",
+    ]) is(`reads as nothing: ${text}`, one(text, { pickedEvents: null }), []);
+    // A day structure keeps the unhedged names and drops the rest, clause by
+    // clause: "Ribe, and Rømø if you want the beach" is one promise.
+    for (const [text, want] of [
+      ["Day 1: Copenhagen. Day 2: Tivoli if you fancy it, otherwise Louisiana up the coast.", ["Copenhagen"]],
+      ["Day 1: Land at Copenhagen Airport, then Roskilde. Day 2: Ribe.", ["Roskilde", "Ribe"]],
+      ["Day 1: Roskilde, not Copenhagen. Day 2: Ribe or Tønder, your call.", ["Roskilde"]],
+      ["Day 1: Aarhus, then Den Gamle By. Day 2: Skagen, and Rømø is not far if you want the beach.", ["Den Gamle By", "Aarhus", "Skagen"]],
+      ["Day 1: Skagen, buy a fur coat at the market. Day 2: Ribe, weather permitting.", ["Skagen"]],
+      ["Day 1: Skagen, then the island of Fur by ferry. Day 2: Ribe.", ["Skagen", "Fur", "Ribe"]],
+      ["Dag 1: København og Tivoli. Dag 2: Ribe, hvis vejret holder.", ["Copenhagen", "Tivoli"]],
+      ["**Day 1:** Roskilde\n- Viking Ship Museum\n- the cathedral\n\n**Day 2:** Ribe\n\nWant me to build it?", ["Roskilde", "Viking Ship Museum", "Ribe"]],
+      // Longer names first within a day, because the reader tries "Aalborg
+      // Karneval" before "Aalborg" so a run matching both is read as the event.
+      ["Day 1: Roskilde for the Viking Ship Museum. Day 2: Ribe, worth the drive.", ["Viking Ship Museum", "Roskilde", "Ribe"]],
+    ]) is(`a day structure reads exactly ${JSON.stringify(want)}: ${text.slice(0, 50)}`, one(text), want);
+    is("a craft product is never a promise, it is a thing and not a place", one("Day 1: Ribe, pick up some Ribe Glas. Day 2: Skagen."), ["Ribe", "Skagen"]);
+    is("a single bare day header is not a plan, which is isFullPlanText's rule and not a second one", one("Day 1: Ribe."), []);
+    ok("and the Danish header counts as a plan for the button too", isFullPlanText("Dag 1: Ribe.\nDag 2: Skagen."));
+    ok("while a weekday or a Danish compound with dag in it does not", !isFullPlanText("Monday 1: Ribe. Tuesday 2: Skagen.") && !isFullPlanText("hverdag 1: Ribe. hverdag 2: Skagen."));
+  }
+
+  // ── 4. A PROMISE THE CONVERSATION MOVED ON FROM IS NOT ONE ───────
+  {
+    const plan = a("Day 1: Roskilde. Day 2: Tivoli. Day 3: Ribe.");
+    for (const [label, thread, want, extra] of [
+      ["they rule it out afterwards", [u("hi"), plan, u("skip Tivoli please")], ["Roskilde", "Ribe"]],
+      ["they had ruled it out before", [u("no Tivoli, been there"), plan, u("ok")], ["Roskilde", "Ribe"]],
+      ["they tapped No on it", [u("hi"), plan], ["Roskilde", "Ribe"], { tapped: ["Tivoli"] }],
+      ["they rule out the town it sits in", [u("hi"), plan, u("we are not going to Copenhagen after all")], ["Roskilde", "Ribe"]],
+      ["they name it again afterwards, so the question is open", [u("hi"), plan, u("Tivoli sounds great, can we do it in the evening?")], ["Roskilde", "Ribe"]],
+      ["a re-planning word afterwards voids everything before it", [u("hi"), plan, u("hmm, what else is there?"), a("Louisiana instead, then.")], []],
+      ["Gemlyx walks it back", [u("hi"), plan, u("ok"), a("On reflection, skip Tivoli, it is shut on Mondays. Ribe and Roskilde stand.")], ["Roskilde", "Ribe"]],
+      ["a later day structure replaces the earlier one", [u("hi"), plan, u("ok"), a("Day 1: Roskilde. Day 2: Louisiana. Day 3: Ribe.")], ["Roskilde", "Louisiana", "Ribe"]],
+      ["a later commitment adds to it", [u("hi"), plan, u("ok"), a("I'll add Reffen to day 1 too.")], ["Roskilde", "Tivoli", "Ribe", "Reffen"]],
+      ["an errored reply is not read", [u("hi"), { role: "assistant", text: "Day 1: Roskilde. Day 2: Tivoli.", isError: true }], []],
+      ["a hidden turn is not read", [u("hi"), { role: "assistant", text: "Day 1: Roskilde. Day 2: Tivoli.", hidden: true }], []],
+      ["a traveller writing a day structure promises nothing", [u("Day 1: Roskilde. Day 2: Tivoli."), a("Looks good.")], []],
+    ]) is(`void: ${label}`, readPromises(thread, POOLS, { ownWords: own(thread), ...(extra || {}) }).map(p => p.name), want);
+    // The event tick on the preview screen. Ticked, the chosen-events check
+    // owns it; touched and left unticked, they declined it; never touched,
+    // Gemlyx's word is the only word there is.
+    const said = [u("hi"), a("You'll be there for Roskilde Festival.")];
+    is("an event they ticked belongs to the chosen-events check", namesOf(said, { pickedEvents: ["Roskilde Festival"] }), []);
+    is("an event they left unticked, having touched the section, was declined", namesOf(said, { pickedEvents: ["Aalborg Karneval"] }), []);
+    is("an event with the section never touched stands", namesOf(said, { pickedEvents: null }), ["Roskilde Festival"]);
+    is("and the tick rule is about events, not places", namesOf([u("hi"), a("Day 1: Ribe. Day 2: Tivoli.")], { pickedEvents: [] }), ["Ribe", "Tivoli"]);
+    is("no thread is no promise", readPromises([], POOLS, {}), []);
+    is("no pools is no promise", readPromises([u("hi"), plan], [], { ownWords: "hi" }), []);
+    is("markers are stripped before reading", one("[[MAP_IN:Copenhagen]] Day 1: Ribe. Day 2: Skagen. [[GEMLYX_READY_TO_BUILD]]"), ["Ribe", "Skagen"]);
+  }
+
+  // ── 5. KEPT, IN EITHER SPELLING AND EITHER DIRECTION ─────────────
+  {
+    const kept = (assistant, days) => brokenPromises(read([u("hi"), a(assistant)]), days).map(b => b.name);
+    is("a promise in English is kept by a stop filed under the Danish name", kept("Day 1: Copenhagen. Day 2: Ribe.", [{ day: 1, stops: [{ name: "Nyhavn", town: "København" }] }, { day: 2, stops: [{ name: "Ribe Domkirke", town: "Ribe" }] }]), []);
+    is("Tivoli is kept by Tivoli Gardens", kept("Day 1: Tivoli. Day 2: Ribe.", [{ day: 1, stops: [{ name: "Tivoli Gardens", town: "Copenhagen" }] }, { day: 2, stops: [{ name: "Ribe", town: "Ribe" }] }]), []);
+    is("and Legoland by Legoland Billund Resort", brokenPromises([{ name: "Legoland", shape: "day", said: "Day 1: Legoland" }], [{ day: 1, stops: [{ name: "Legoland Billund Resort", town: "Billund" }] }]), []);
+    is("a promise with no stop anywhere is broken", kept("Day 1: Tivoli. Day 2: Ribe.", [{ day: 1, stops: [{ name: "Tivoli", town: "Copenhagen" }] }, { day: 2, stops: [{ name: "Nyhavn", town: "Copenhagen" }] }]), ["Ribe"]);
+    ok("the day it was promised for is not enforced, only the place: Ribe on day 1 keeps a day 2 promise",
+       kept("Day 1: Tivoli. Day 2: Ribe.", [{ day: 1, stops: [{ name: "Ribe", town: "Ribe" }, { name: "Tivoli", town: "Copenhagen" }] }, { day: 2, stops: [{ name: "Nyhavn", town: "Copenhagen" }] }]).length === 0);
+    is("no days is every promise broken", brokenPromises([{ name: "Ribe", shape: "day", said: "Day 2: Ribe" }], null).map(b => b.name), ["Ribe"]);
+    is("a finding carries what was said, in the shape the other audits use", Object.keys(brokenPromises([{ name: "Ribe", shape: "day", day: 2, said: "Day 2: Ribe." }], [])[0]).sort(), ["day", "fixable", "found", "kind", "name", "said", "shape", "why"]);
+    is("a long sentence is cut at a word and marked", brokenPromises([{ name: "Ribe", shape: "will", said: "I'll include Ribe, " + "which is a long way from anywhere and worth every minute of the drive down through the marsh and the sheep ".repeat(2) }], [])[0].said.endsWith("..."), true);
+    ok("and the quote never opens with a lowercase folded copy", /^I'll include Ribe/.test(brokenPromises([{ name: "Ribe", shape: "will", said: "I'll include Ribe." }], [])[0].said));
+  }
+
+  // ── 6. THE ONE MORE CALL, AND ITS ACCEPTANCE RULE ────────────────
+  {
+    const promised = read([u("hi"), a("Day 1: Tivoli. Day 2: Ribe.")]);
+    const before = { days: [{ day: 1, stops: [{ name: "Tivoli", town: "Copenhagen" }] }, { day: 2, stops: [{ name: "Nyhavn", town: "Copenhagen" }] }] };
+    const fixed = { days: [{ day: 1, stops: [{ name: "Tivoli", town: "Copenhagen" }] }, { day: 2, stops: [{ name: "Ribe Domkirke", town: "Ribe" }] }] };
+    ok("a rebuild that kept the promise is taken", rebuildKeptMore(before, fixed, promised));
+    ok("one that changed nothing is not", !rebuildKeptMore(before, before, promised));
+    ok("nor one that dropped a day to do it", !rebuildKeptMore(before, { days: [fixed.days[1]] }, promised));
+    ok("nor one that left a day empty", !rebuildKeptMore(before, { days: [fixed.days[0], { day: 2, stops: [] }] }, promised));
+    ok("nor a reply that is not a guide", !rebuildKeptMore(before, null, promised) && !rebuildKeptMore(before, { days: "no" }, promised));
+    const block = promiseRetryBlock(brokenPromises(promised, before.days));
+    ok("the retry names the failure in the sentence the traveller could read", /YOUR LAST ATTEMPT LEFT OUT A PLACE THE CONVERSATION HAD ALREADY PROMISED\. In the chat I wrote "Day 2: Ribe", and no day here has Ribe\./.test(block));
+    ok("and asks for the same number of days and no empty one, the day-count retry's own rule", /keep the same number of days, and never leave a day empty/.test(block));
+    ok("the retry carries no dash and no banned word", !DASH.test(block) && !BANNED.test(block));
+    is("nothing broken is no block", promiseRetryBlock([]), "");
+  }
+
+  // ── 7. THE WIRING, WHICH IS WHERE EVERY OTHER CHECK WENT MISSING ─
+  {
+    const raw = readFileSync(join(root, "src/App.jsx"), "utf8");
+    const app = stripComments(raw);
+    const build = app.slice(app.indexOf("const generateGuide = async"), app.indexOf("_constraints: guideConstraints"));
+    const at = build.indexOf("const promised = readPromises(");
+    ok("the promise audit runs on the freshly built guide", at > 0);
+    ok("after the exclusions audit, so a place they refused is never put back by this one",
+       at > build.indexOf("const audit = (g) => violationsOfKind("));
+    ok("and before the writing is polished, so a rebuild happens before the expensive stages", at < build.indexOf("Polishing the writing"));
+    const block = build.slice(at, build.indexOf("collectGuideProseFields"));
+    ok("it reads the thread the traveller saw, greeting sliced off, and nothing at all for a composed test brief",
+       /readPromises\(\s*overrideConvoText \? \[\] : aiMessages\.slice\(1\),/.test(block));
+    ok("through the same published pools the chat map and the preview read",
+       /previewPools\(\{ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents \}\)/.test(block));
+    ok("with the traveller's own words, the tapped Nos and the event ticks, so every void rule has its input",
+       /\{ ownWords: saidByTravellerForGuide, tapped: turnedDown, pickedEvents \}/.test(block));
+    is("exactly one extra call, never a loop", (block.match(/await askClaude\(/g) || []).length, 1);
+    ok("the rebuild is taken only if it kept more, kept every day, and added no violation of what the traveller said, through the swap gate's own rule",
+       /if \(rebuildKeptMore\(parsed, rebuilt, promised\) && swapIsAllowed\(parsed, rebuilt, guideConstraints, \{ violationsOf \}\)\) parsed = rebuilt;/.test(block));
+    ok("and never a refusal: nothing in the block throws", !/\bthrow\b/.test(block));
+    ok("what survives is written above the guide through promiseNote", /if \(unkept\.length\) planProblems = \[\.\.\.planProblems, promiseNote\(unkept\)\];/.test(block));
+    ok("and into the run log either way", /note\("The finished guide, against what the chat promised", \{/.test(block));
+    // NOT in the constraints object. The swap gate's sentence is "that one
+    // breaks something you told me", and a promise is something Gemlyx said.
+    ok("promises never reach _constraints, where the swap gate would turn them into a rule the traveller set",
+       !/promised|readPromises|brokenPromises/.test(build.slice(build.indexOf("const guideConstraints = {"), build.indexOf("const guideConstraints = {") + 200)));
+    ok("and the audit file does not know about them", !/promise/i.test(stripComments(readFileSync(join(root, "src/utils/constraintCheck.js"), "utf8"))));
+    ok("the stage label it shows carries no dash and no banned word", /buildStage\("Putting back what the chat promised", 71\)/.test(block));
+    // The reader reuses the chat's own three readers of "is this a
+    // recommendation" and the exclusions reader, rather than growing copies.
+    const src = stripComments(readFileSync(join(root, "src/utils/chatPromises.js"), "utf8"));
+    ok("the reader asks previewMatch whether a name is being recommended rather than deciding again",
+       /import \{ mentionsPlace, isRejectedPlace, onlyAskedAbout, isPassedThrough \} from "\.\/previewMatch";/.test(src)
+       && /!isRejectedPlace\(text, name\) && !onlyAskedAbout\(text, name\) && !isPassedThrough\(text, name\)/.test(src));
+    ok("and exclusions whether they ruled it out, typed or tapped", /ruledOutFor\(own, tapped,/.test(src) && /isExcluded\(p\.row, ruledOut\)/.test(src));
+    ok("and isFullPlanText whether a reply is a plan, rather than counting headers a second way", /if \(!isFullPlanText\(text\)\) return \[\];/.test(src));
+    ok("the source carries no dash", !DASH.test(readFileSync(join(root, "src/utils/chatPromises.js"), "utf8")));
+    ok("nor a banned word outside the rule that names one", !BANNED.test(src.replace(/"[^"\n]*"/g, "")));
   }
 }
 

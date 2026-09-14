@@ -137,8 +137,10 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
       // basemap is three properties rather than a URL, and in particular why
       // the dark inversion filter must not run over painted tiles.
       //
-      // "chart" on the guide, because this is the map a traveller keeps. The
-      // Studio map and the little map on a place page stay dark.
+      // "chart" on the guide, because this is the map a traveller keeps. When
+      // Stadia declines it, the drawn navy map is next (TILE_STYLES.chart's
+      // fallback) and the inverted OSM raster comes after that. Every other map
+      // asks for nothing and gets the navy map first.
       addTileLayer(L, map, "chart");
       L.control.zoom({ position: "bottomleft" }).addTo(map);
       mapRef.current = map;

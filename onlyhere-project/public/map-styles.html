@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemlyx map styles</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{--bg:#0A0F1E;--surface:#0F1628;--border:#212C44;--text:#EDF0F7;--muted:#7C88A6;
+        --gold:#D9A441;--pin:#E8232A}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       padding-block:20px;padding-left:16px;padding-right:16px;max-width:960px;margin-inline:auto}
+  h1{font-size:19px;margin:0 0 4px}
+  p.sub{color:var(--muted);margin:0 0 16px;font-size:13px}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+         padding:13px 14px;margin-bottom:12px}
+  .row{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+  .row + .row{margin-top:9px}
+  .lab{font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--gold);
+       width:100%;margin-bottom:3px}
+  button{font:inherit;font-size:12.5px;padding:6px 11px;border-radius:99px;cursor:pointer;
+         background:transparent;color:var(--muted);border:1px solid var(--border);transition:.12s}
+  button:hover{color:var(--text);border-color:#33405e}
+  button[aria-pressed="true"]{background:var(--text);color:#0A0F1E;border-color:var(--text);font-weight:600}
+  .sl{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);
+      flex:1 1 210px;min-width:200px;background:#0c1324;border:1px solid var(--border);
+      border-radius:99px;padding:5px 12px}
+  .sl input{flex:1;accent-color:var(--pin)}
+  .sl b{color:var(--text);font-weight:600;min-width:30px;text-align:right;font-variant-numeric:tabular-nums}
+  .wrap{position:relative}
+  #map{height:min(58vh,460px);min-height:300px;border-radius:14px;overflow:hidden;
+       background:#0c1120;border:1px solid var(--border)}
+  #warn{position:absolute;inset:0;display:none;place-items:center;text-align:center;
+        background:rgba(10,15,30,.93);border-radius:14px;padding:22px;z-index:500;pointer-events:none}
+  #warn div{max-width:46ch}
+  #warn b{display:block;color:var(--pin);font-size:13px;letter-spacing:.5px;text-transform:uppercase;margin-bottom:7px}
+  #warn p{color:var(--text);font-size:13.5px;margin:0 0 8px}
+  #warn small{color:var(--muted);font-size:12px;line-height:1.5;display:block}
+  .filtered .leaflet-tile-pane{filter:invert(1) hue-rotate(189deg) brightness(.92) contrast(1.12) saturate(.35)}
+  .leaflet-container{background:#0c1120;font:inherit}
+  .leaflet-control-attribution{background:rgba(10,15,30,.7)!important;color:#5d6883!important;font-size:9px!important}
+  .leaflet-control-attribution a{color:#7C88A6!important}
+  .leaflet-tooltip{border:0;background:transparent;box-shadow:none;padding:0;white-space:nowrap}
+  .leaflet-tooltip:before{display:none}
+  .chip{background:rgba(10,15,30,.84);border:1px solid rgba(255,255,255,.1);border-radius:99px;
+        padding:3px 10px;color:#EDF0F7;font-size:11.5px;font-weight:500;
+        box-shadow:0 4px 14px rgba(0,0,0,.45)}
+  .chip i{font-style:normal;color:var(--muted);font-weight:400}
+  .out{margin-top:12px;font-size:12.5px;color:var(--muted);background:var(--surface);
+       border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:0 12px 12px 0;
+       padding:11px 14px}
+  .out b{color:var(--text)}
+  code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--gold)}
+</style>
+</head>
+<body>
+
+<h1>Gemlyx Detour, the map</h1>
+<p class="sub">One map, real tiles, five real places. Change one thing at a time and tell me the
+numbers at the bottom.</p>
+
+<div class="panel">
+  <div class="row"><span class="lab">Basemap</span>
+    <button data-bm="osmInvert" aria-pressed="true">OSM inverted, on the site now</button>
+    <button data-bm="cartoDark">CARTO dark</button>
+    <button data-bm="cartoBare">CARTO dark, no labels</button>
+    <button data-bm="stadia">Stadia smooth dark</button>
+  </div>
+  <div class="row"><span class="lab">Marker</span>
+    <button data-pin="teardrop" aria-pressed="true">Teardrop, on the site now</button>
+    <button data-pin="push">Marking pin</button>
+    <button data-pin="dot">Dot</button>
+  </div>
+  <div class="row"><span class="lab">The pin</span>
+    <label class="sl">head <input id="s-r" type="range" min="7" max="20" step="1" value="11"><b id="v-r">11</b></label>
+    <label class="sl">needle <input id="s-reach" type="range" min="14" max="40" step="1" value="22"><b id="v-reach">2.2</b></label>
+    <label class="sl">tilt <input id="s-tilt" type="range" min="0" max="30" step="1" value="10"><b id="v-tilt">10</b></label>
+  </div>
+  <div class="row"><span class="lab">Labels</span>
+    <button data-lab="two">Name over category, now</button>
+    <button data-lab="one" aria-pressed="true">Name only</button>
+    <button data-lab="off">None</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div id="map"></div>
+  <div id="warn"><div><b id="warn-t"></b><p id="warn-p"></p>
+    <small>Every basemap here checks who is asking. Opened as a file this page has no address
+    for them to check, so they refuse. Put this file in <code>public/</code> and open
+    <code>localhost:5173/map-styles.html</code> with your dev server running.</small></div></div>
+</div>
+
+<div class="out" id="out"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const INK = "#0A0F1E", RED = "#E8232A";
+const PLACES = [
+  { name:"Billund",    theme:"Family",  lat:55.7333, lon:9.1167  },
+  { name:"Ribe",       theme:"Coast",   lat:55.3306, lon:8.7681  },
+  { name:"Odense",     theme:"History", lat:55.4038, lon:10.4024 },
+  { name:"Copenhagen", theme:"Food",    lat:55.6761, lon:12.5683, latest:true },
+  { name:"Aalborg",    theme:"Art",     lat:57.0488, lon:9.9217  },
+];
+const OSM = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+const CARTO = OSM + ' &copy; <a href="https://carto.com/attributions">CARTO</a>';
+const BM = {
+  osmInvert:{ url:"https://tile.openstreetmap.org/{z}/{x}/{y}.png", max:19, attr:OSM, filter:true },
+  cartoDark:{ url:"https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", max:20, attr:CARTO, sub:"abcd" },
+  cartoBare:{ url:"https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", max:20, attr:CARTO, sub:"abcd" },
+  stadia:{ url:"https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png", max:20,
+           attr:'&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> ' + OSM },
+};
+
+// ── the marking pin, from the article Oliver sent ──
+let seq = 0;
+function pushSvg(r, reach, tilt, latest) {
+  const id = "p" + (seq++);
+  const L = r * reach * 2, topW = r * 0.5, pad = r * 0.95;
+  const w = Math.ceil(r * 2 + pad * 2), h = Math.ceil(r + L + pad * 2);
+  const cx = w / 2, cy = pad + r, tip = cy + L;
+  return { w, h, cx, tip, svg:
+`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;overflow:visible;
+  filter:drop-shadow(${(r*.3).toFixed(1)}px ${(r*.45).toFixed(1)}px ${(r*.45).toFixed(1)}px rgba(0,0,0,.62))${latest?`drop-shadow(0 0 ${(r*.8).toFixed(1)}px ${RED}77)`:""};${latest?"":"opacity:.88"}">
+ <defs>
+  <radialGradient id="${id}b" cx="33%" cy="28%" r="75%">
+   <stop offset="0%" stop-color="#FF9A93"/><stop offset="38%" stop-color="${RED}"/>
+   <stop offset="100%" stop-color="#7A0E13"/></radialGradient>
+  <linearGradient id="${id}n" x1="0" y1="0" x2="1" y2="0">
+   <stop offset="0%" stop-color="#8892A6"/><stop offset="34%" stop-color="#F2F5FA"/>
+   <stop offset="68%" stop-color="#AAB4C6"/><stop offset="100%" stop-color="#636B7D"/></linearGradient>
+ </defs>
+ <g transform="rotate(${tilt} ${cx} ${tip})">
+  <path d="M${cx-topW} ${cy} L${cx+topW} ${cy} L${cx+topW*.1} ${tip} L${cx-topW*.1} ${tip} Z" fill="url(#${id}n)"/>
+  <path d="M${cx+topW} ${cy} L${cx+topW*.1} ${tip} L${cx-topW*.1} ${tip} Z" fill="${INK}" opacity=".3"/>
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="url(#${id}b)" stroke="${INK}" stroke-width="${r*.11}" stroke-opacity=".7"/>
+  <ellipse cx="${cx-r*.3}" cy="${cy-r*.36}" rx="${r*.34}" ry="${r*.24}" fill="#fff" opacity=".78"
+           transform="rotate(-30 ${cx-r*.3} ${cy-r*.36})"/>
+ </g></svg>` };
+}
+const ICONS = {
+  teardrop: (p) => { const w = p.latest ? 23 : 17, h = Math.round(w*4/3);
+    return { icon: L.divIcon({ className:"", iconSize:[w,h], iconAnchor:[w/2,h],
+      html:`<svg width="${w}" height="${h}" viewBox="0 0 24 32" style="display:block;filter:drop-shadow(0 1px 3px rgba(0,0,0,.6));${p.latest?"":"opacity:.72"}">
+        <path d="M12 1.2C6.1 1.2 1.3 6 1.3 11.9c0 7.6 10.7 18.9 10.7 18.9s10.7-11.3 10.7-18.9C22.7 6 17.9 1.2 12 1.2z" fill="${RED}" stroke="${INK}" stroke-width="2"/>
+        <circle cx="12" cy="11.9" r="4.3" fill="${INK}"/></svg>` }), lift: h }; },
+  push: (p) => { const r = (p.latest ? S.r * 1.32 : S.r) / 2;
+    const g = pushSvg(r, S.reach, S.tilt, p.latest);
+    return { icon: L.divIcon({ className:"", iconSize:[g.w,g.h], iconAnchor:[g.cx,g.tip], html:g.svg }), lift: g.tip }; },
+  dot: (p) => { const d = p.latest ? S.r * 1.3 : S.r, box = d + 16;
+    return { icon: L.divIcon({ className:"", iconSize:[box,box], iconAnchor:[box/2,box/2],
+      html:`<span style="display:block;width:${box}px;height:${box}px;position:relative">
+        ${p.latest?`<span style="position:absolute;inset:0;border-radius:50%;background:${RED};opacity:.16"></span>`:""}
+        <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:${d}px;height:${d}px;
+          border-radius:50%;background:${RED};box-shadow:0 0 0 2.5px ${INK},0 2px 8px rgba(0,0,0,.55);${p.latest?"":"opacity:.82"}"></span>
+      </span>` }), lift: box/2 }; },
+};
+const LABELS = {
+  off: null,
+  one: (p) => `<span class="chip">${p.name}</span>`,
+  two: (p) => `<span class="chip">${p.name} <i>${p.theme}</i></span>`,
+};
+
+const S = { bm:"osmInvert", pin:"teardrop", lab:"one", r:11, reach:2.2, tilt:10 };
+const box = document.getElementById("map");
+const map = L.map(box, { zoomControl:false, attributionControl:true, zoomSnap:0 }).setView([56.05, 10.6], 6);
+// Fit the country to whatever box this ends up in, so a narrow side panel and a
+// full window both show Denmark rather than a fixed zoom that suits one of them.
+const DK = L.latLngBounds([54.5, 7.9], [57.9, 13.2]);
+const fit = () => map.fitBounds(DK, { padding: [26, 26] });
+let tiles = null, layer = L.layerGroup().addTo(map);
+
+const WHY = {
+  osmInvert: ["OpenStreetMap refused these tiles",
+    "This is what the app looks like the day OpenStreetMap block it, and it is the reason worth talking about rather than the colours."],
+  cartoDark: ["CARTO refused these tiles", "Their basemaps want a free key, which takes a minute and no account."],
+  cartoBare: ["CARTO refused these tiles", "Their basemaps want a free key, which takes a minute and no account."],
+  stadia: ["Stadia refused these tiles", "They authenticate on the domain, so this only loads from a registered address or localhost."],
+};
+function drawTiles() {
+  if (tiles) map.removeLayer(tiles);
+  const b = BM[S.bm], name = S.bm;
+  box.classList.toggle("filtered", !!b.filter);
+  document.getElementById("warn").style.display = "none";
+  let bad = 0;
+  tiles = L.tileLayer(b.url, { maxZoom:b.max, attribution:b.attr, subdomains:b.sub || "abc", detectRetina:true });
+  // A refused tile still draws: the provider answers with a picture saying no, which
+  // tiles across the whole map and reads as a broken product rather than a refusal.
+  tiles.on("tileerror", () => { if (++bad < 3 || name !== S.bm) return; show(name); });
+  tiles.on("tileload", (e) => {
+    const img = e.tile;
+    if (img.naturalWidth && img.naturalHeight) return;
+    if (++bad >= 3 && name === S.bm) show(name);
+  });
+  tiles.addTo(map);
+  // OSM answer a block with a 200 and a picture, so nothing errors. Ask the server
+  // itself, once, and read the status.
+  if (name === "osmInvert") {
+    fetch("https://tile.openstreetmap.org/6/33/19.png", { method:"GET", cache:"no-store" })
+      .then(r => { if (!r.ok && name === S.bm) show(name); })
+      .catch(() => { if (name === S.bm) show(name); });
+  }
+}
+function show(name) {
+  const [t, p] = WHY[name] || ["These tiles were refused", ""];
+  document.getElementById("warn-t").textContent = t;
+  document.getElementById("warn-p").textContent = p;
+  document.getElementById("warn").style.display = "grid";
+}
+function drawPins() {
+  layer.clearLayers();
+  PLACES.forEach(p => {
+    const made = ICONS[S.pin](p);
+    const m = L.marker([p.lat, p.lon], { icon: made.icon, keyboard:false, zIndexOffset: p.latest ? 900 : 0 }).addTo(layer);
+    const lab = LABELS[S.lab];
+    if (lab) m.bindTooltip(lab(p), { permanent:true, direction:"top", offset:[0, -made.lift - 3], opacity:1 });
+  });
+}
+function say() {
+  const names = { osmInvert:"OSM inverted (what ships today)", cartoDark:"CARTO dark",
+                  cartoBare:"CARTO dark, no labels", stadia:"Stadia smooth dark" };
+  const pins = { teardrop:"teardrop (what ships today)", push:"marking pin", dot:"dot" };
+  const labs = { two:"name over category (what ships today)", one:"name only", off:"no labels" };
+  document.getElementById("out").innerHTML =
+    `<b>Tell me this line and I will build it:</b><br><code>${names[S.bm]} &middot; ${pins[S.pin]}`
+    + (S.pin === "push" ? ` &middot; head ${S.r}px &middot; needle ${S.reach.toFixed(1)} &middot; tilt ${S.tilt}&deg;` : "")
+    + ` &middot; ${labs[S.lab]}</code>`;
+}
+function pick(attr, key) {
+  document.querySelectorAll(`[data-${attr}]`).forEach(b =>
+    b.setAttribute("aria-pressed", String(b.dataset[attr] === key)));
+}
+document.querySelectorAll("[data-bm]").forEach(b => b.onclick = () => { S.bm = b.dataset.bm; pick("bm", S.bm); drawTiles(); say(); });
+document.querySelectorAll("[data-pin]").forEach(b => b.onclick = () => { S.pin = b.dataset.pin; pick("pin", S.pin); drawPins(); say(); });
+document.querySelectorAll("[data-lab]").forEach(b => b.onclick = () => { S.lab = b.dataset.lab; pick("lab", S.lab); drawPins(); say(); });
+const bind = (id, key, div, fix) => {
+  const el = document.getElementById("s-" + id), out = document.getElementById("v-" + id);
+  el.oninput = () => { S[key] = el.value / div; out.textContent = fix ? S[key].toFixed(fix) : S[key]; drawPins(); say(); };
+};
+bind("r", "r", 1, 0); bind("reach", "reach", 10, 1); bind("tilt", "tilt", 1, 0);
+new ResizeObserver(() => { map.invalidateSize(); fit(); }).observe(box);
+drawTiles(); drawPins(); say(); fit();
+</script>
+</body>
+</html>

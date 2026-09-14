@@ -86,6 +86,47 @@ const OUT_SECONDS = 1.9, IN_SECONDS = 1.1, FIT_SECONDS = 0.9;
 // this app's accent and is already on every heading and badge, so a gold pin
 // reads as furniture; red is the one colour nothing else here uses.
 const PIN_RED = "#E8232A";
+// The ball on an ordinary pin, in pixels. The newest place gets the same pin
+// larger rather than a second colour, which is the rule the teardrop set.
+// ── HALVED, 14 SEP 2026 ─────────────────────────────────────────────
+// "I like the pins, although maybe they should be ½ size." This is the only
+// number that decides it; the needle and the tilt are ratios off it, so the
+// whole pin scales from here.
+const PIN_HEAD_PX = 6;
+// The needle, in ball diameters. Life is 2.7 and looks like a matchstick at this
+// size; 2.1 keeps the pin under 40px tall, which matters on the 190px phone strip.
+const PIN_REACH = 2.1;
+const PIN_TILT = 10;
+// Each gradient needs an id of its own or every pin on the map inherits the
+// first one's, which is a single shared ball that never changes size.
+let pinSeq = 0;
+// ── THE MARKING PIN ─────────────────────────────────────────────────
+// Returns the markup and the three numbers Leaflet needs: the box, the point
+// inside it that sits on the coordinate, and how much of the pin stands above
+// that point, which is what the label layout measures against.
+const pushPin = (r, latest, id) => {
+  const L2 = r * PIN_REACH * 2;
+  const topW = r * 0.5, pad = r * 0.95;
+  const w = Math.ceil(r * 2 + pad * 2), h = Math.ceil(r + L2 + pad * 2);
+  const cx = w / 2, cy = pad + r, tip = cy + L2;
+  const glow = latest ? ` drop-shadow(0 0 ${(r * 0.8).toFixed(1)}px ${PIN_RED}77)` : "";
+  return { w, h, cx, tip, above: Math.round(L2 + r),
+    svg: `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;overflow:visible;`
+      + `filter:drop-shadow(${(r * 0.3).toFixed(1)}px ${(r * 0.45).toFixed(1)}px ${(r * 0.45).toFixed(1)}px rgba(0,0,0,.62))${glow};${latest ? "" : "opacity:.88;"}">`
+      + `<defs><radialGradient id="${id}b" cx="33%" cy="28%" r="75%">`
+      + `<stop offset="0%" stop-color="#FF9A93"/><stop offset="38%" stop-color="${PIN_RED}"/>`
+      + `<stop offset="100%" stop-color="#7A0E13"/></radialGradient>`
+      + `<linearGradient id="${id}n" x1="0" y1="0" x2="1" y2="0">`
+      + `<stop offset="0%" stop-color="#8892A6"/><stop offset="34%" stop-color="#F2F5FA"/>`
+      + `<stop offset="68%" stop-color="#AAB4C6"/><stop offset="100%" stop-color="#636B7D"/></linearGradient></defs>`
+      + `<g transform="rotate(${PIN_TILT} ${cx} ${tip})">`
+      + `<path d="M${cx - topW} ${cy} L${cx + topW} ${cy} L${cx + topW * 0.1} ${tip} L${cx - topW * 0.1} ${tip} Z" fill="url(#${id}n)"/>`
+      + `<path d="M${cx + topW} ${cy} L${cx + topW * 0.1} ${tip} L${cx - topW * 0.1} ${tip} Z" fill="#0A0F1E" opacity=".3"/>`
+      + `<circle cx="${cx}" cy="${cy}" r="${r}" fill="url(#${id}b)" stroke="#0A0F1E" stroke-width="${(r * 0.11).toFixed(2)}" stroke-opacity=".7"/>`
+      + `<ellipse cx="${cx - r * 0.3}" cy="${cy - r * 0.36}" rx="${(r * 0.34).toFixed(2)}" ry="${(r * 0.24).toFixed(2)}" fill="#fff" opacity=".78"`
+      + ` transform="rotate(-30 ${cx - r * 0.3} ${cy - r * 0.36})"/>`
+      + `</g></svg>` };
+};
 
 // ── "IS THIS INTERESTING?" ────────────────────────────────────────
 //
@@ -465,16 +506,35 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       // The newest place keeps its own reading, which the dots carried in the
       // colour and now carry in SIZE and weight: bigger, full strength, and a
       // faint halo. Two reds would have been a second thing to learn.
-      const w = p.latest ? 23 : 17;
-      const h = Math.round(w * 4 / 3);
-      const fill = PIN_RED;
+      // ── AND THEN HE SENT A PHOTOGRAPH OF A REAL ONE ───────────
+      //
+      // Oliver, 13 Sep 2026, asked how to make the app look less old school
+      // and named the pins himself. I answered that the teardrop above is the
+      // 2008 Google Maps shape and that people read it as old before they read
+      // anything else on the screen. He replied with a product photo: a box of
+      // Markierungsnadeln, a 6mm glossy red ball on a 16mm steel needle, and
+      // "is this possible?".
+      //
+      // It is, and it is better than the dot I had offered. A trip is planned
+      // by sticking pins in a map, so the marker that says so is the object
+      // itself rather than an icon of one. THE TIP IS STILL THE ANCHOR, which
+      // is the half the teardrop already had right and a circle never can.
+      //
+      // THE NEEDLE IS SHORTER THAN LIFE. The real article is 2.7 ball
+      // diameters of needle. Rendered at map size that reads as a matchstick,
+      // so `reach` is the compromise, measured at 4x and at 11px before being
+      // written down here.
+      //
+      // TILTED, because a pin somebody pushed in is never upright, and the
+      // shadow falls down and to the right so it sits ON the map rather than
+      // printed on it.
+      const r = (p.latest ? PIN_HEAD_PX * 1.36 : PIN_HEAD_PX) / 2;
+      const pin = pushPin(r, p.latest, `p${pinSeq++}`);
+      const h = pin.above;   // what stands above the coordinate, for the labels
       const icon = L.divIcon({
         className: "gemlyx-chat-pin",
-        html: `<svg width="${w}" height="${h}" viewBox="0 0 24 32" style="display:block;filter:drop-shadow(0 1px 3px rgba(0,0,0,.6))${p.latest ? ` drop-shadow(0 0 6px ${PIN_RED}88)` : ""};${p.latest ? "" : "opacity:.72;"}">`
-          + `<path d="M12 1.2C6.1 1.2 1.3 6 1.3 11.9c0 7.6 10.7 18.9 10.7 18.9s10.7-11.3 10.7-18.9C22.7 6 17.9 1.2 12 1.2z" fill="${fill}" stroke="#0A0F1E" stroke-width="2"/>`
-          + `<circle cx="12" cy="11.9" r="4.3" fill="#0A0F1E"/>`
-          + `</svg>`,
-        iconSize: [w, h], iconAnchor: [w / 2, h],
+        html: pin.svg,
+        iconSize: [pin.w, pin.h], iconAnchor: [pin.cx, pin.tip],
       });
       const marker = L.marker([p.lat, p.lon], {
         icon,

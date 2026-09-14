@@ -61,12 +61,24 @@
 // WHAT tripBrief STILL HAS TO LEARN, written down rather than assumed, because
 // two of these have no reader yet and the checker is useless without them:
 //
-//   `excluded`  no slot exists. "We're not interested in Copenhagen" is the most
-//               common constraint in travel chat and nothing reads it today.
+//   `excluded`  read since 26 Aug by utils/exclusions.js, and since 13 Sep it
+//               reaches both build prompts, the plan gate and this audit on the
+//               freshly built guide. See generateGuide in App.jsx.
 //   `stay.name` readStay returns "booked" or "not booked" and never WHICH hotel,
 //               so the Layla complaint that hurt most cannot be checked yet.
 //   `maxBases`  "we'd rather not change hotels every night, two or three bases"
 //               is unread. It is a number in a sentence.
+
+// ── THE ONE IMPORT, AND WHY IT IS ALLOWED ───────────────────────────
+//
+// danishNames.js is a leaf (it reaches only travellerWords), so it cannot make
+// the cycle the paragraph above forbids. It is here because the writer prompt
+// asks for "the real Danish town/city" and a traveller types the English one:
+// "skip Copenhagen" against a stop whose town says "København" folded to two
+// different strings and the audit passed the capital the traveller had refused.
+// guideTours already matches a ruled-out town through variantsOf for the same
+// reason; this is the audit catching up with it.
+import { variantsOf } from "./danishNames";
 
 const said = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
 
@@ -79,7 +91,7 @@ const fold = (v) => said(v).toLowerCase()
 
 // A word, not a substring. "Ribe" must not match "Ribera", and an excluded
 // "Als" must not fire on "Falster".
-const namesMatch = (a, b) => {
+const wordMatch = (a, b) => {
   const x = fold(a), y = fold(b);
   if (!x || !y) return false;
   if (x === y) return true;
@@ -87,10 +99,15 @@ const namesMatch = (a, b) => {
   return wrap(x, y) || wrap(y, x);
 };
 
-export const CONSTRAINT_KINDS = ["excluded", "transport", "stay", "bases", "dates"];
+// In either spelling. Place names only, never the sight table, which is the
+// line variantsOf itself draws: matching must not walk the sights.
+const namesMatch = (a, b) => {
+  const A = variantsOf(a), B = variantsOf(b);
+  if (!A.length || !B.length) return false;
+  return A.some(x => B.some(y => wordMatch(x, y)));
+};
 
-const allStops = (guide) =>
-  (Array.isArray(guide?.days) ? guide.days : []).flatMap(d => Array.isArray(d?.stops) ? d.stops : []).filter(Boolean);
+export const CONSTRAINT_KINDS = ["excluded", "transport", "stay", "bases", "dates"];
 
 // Every phrase in the guide that describes how somebody gets from one place to
 // the next. `legMode` is injected because detectLegMode lives in helpers and
@@ -107,22 +124,59 @@ const stayTexts = (guide) =>
     said(d?.glance?.recommendedStay) || said(d?.glance?.stayArea) || said(d?.glance?.accommodation) || ""
   ).filter(Boolean);
 
+// ── EVERY STOP THAT SITS IN A PLACE THEY RULED OUT ──────────────────
+//
+// Exported, because the plan gate judges the SKELETON against the same list
+// before the writer is ever called, and a second walker there would be the
+// two-readers fault this repository keeps paying for: the gate and the audit
+// disagreeing about whether a stop is in Copenhagen. One walker, one matcher,
+// and the skeleton is the same shape as the guide (days, each holding stops
+// with a name and a town), so both callers hand it the same thing.
+//
+// Every hit, with its day, rather than the first: the retry prompt has to name
+// each stop it is being asked to take out, and "Nyhavn is in Copenhagen" said
+// once about a day that holds four Copenhagen stops is a repair that fixes one.
+export const ruledOutStops = (days, excluded) => {
+  const list = (Array.isArray(excluded) ? excluded : []).map(said).filter(Boolean);
+  if (!list.length) return [];
+  const out = [];
+  (Array.isArray(days) ? days : []).forEach((d, i) => {
+    const dayNo = d?.day || i + 1;
+    (Array.isArray(d?.stops) ? d.stops : []).forEach(s => {
+      if (!s) return;
+      const place = list.find(p => namesMatch(s.town, p) || namesMatch(s.name, p));
+      if (!place) return;
+      out.push({ day: dayNo, stop: said(s.name) || said(s.town), town: said(s.town), said: place });
+    });
+  });
+  return out;
+};
+
+// "Nyhavn, Tivoli and Rundetaarn", or one name on its own.
+const listNames = (names) =>
+  names.length <= 1 ? (names[0] || "") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+
 // ── THE CHECKS ──────────────────────────────────────────────────────
 //
 // Each returns a violation or null. Every violation carries what was SAID and
 // what was FOUND, because a report that only names the rule cannot be argued
 // with and cannot be shown to the person who set it.
 const checkExcluded = (guide, constraints) => {
-  const out = [];
-  (constraints?.excluded || []).forEach(place => {
-    const hit = allStops(guide).find(s => namesMatch(s?.town, place) || namesMatch(s?.name, place));
-    if (hit) out.push({
-      kind: "excluded", said: place, found: said(hit.name) || said(hit.town),
-      why: `You said you did not want ${place}, and ${said(hit.name) || said(hit.town)} is in ${place}.`,
+  const hits = ruledOutStops(guide?.days, constraints?.excluded);
+  const byPlace = new Map();
+  for (const h of hits) {
+    if (!byPlace.has(h.said)) byPlace.set(h.said, []);
+    byPlace.get(h.said).push(h);
+  }
+  return [...byPlace].map(([place, found]) => {
+    const names = found.map(h => h.stop).filter((x, i, a) => x && a.indexOf(x) === i);
+    return {
+      kind: "excluded", said: place, found: names.join(", "),
+      days: found.map(h => h.day).filter((x, i, a) => a.indexOf(x) === i),
+      why: `You said you did not want ${place}, and ${listNames(names)} ${names.length === 1 ? "is" : "are"} in ${place}.`,
       fixable: true,
-    });
+    };
   });
-  return out;
 };
 
 const checkTransport = (guide, constraints, modeOf) => {

@@ -650,7 +650,26 @@ export const onlyAskedAbout = (convoText, name) => {
 // The window is small and anchored, exactly as REJECT_BEFORE is: the phrase
 // has to sit immediately in front of the name, so "Copenhagen is worth two
 // days, and most people start there" keeps its card.
-const PASSING_BEFORE = /\b(?:straight (?:to|for|towards?|through)|on (?:the|your) way (?:to|through)|en route to|driving (?:to|towards?|through)|heading (?:straight )?(?:to|for|towards?)|past|through|beyond|bypass(?:ing)?|instead of|rather than|unlike|compared (?:to|with))\s+(?:the\s+)?$/i;
+// ── AND A PLACE THE JOURNEY HAS NOT REACHED YET ─────────────────────
+//
+// Oliver, 13 Sep 2026, on the first reply of his own session: "I'm coming up
+// through South Jutland, but it instantly pins Copenhagen.. why would it not
+// pin Ribe or something?"
+//
+// The reply read "If you fancy breaking the journey before Copenhagen, the
+// train from Germany runs close to Haderslev". Copenhagen is the far end of a
+// drive he has not started, named to say where the stop would go, and it was
+// the only pin on the map. Same shape as "driving straight to Copenhagen never
+// stop for" that this frame was written against, with one preposition it did
+// not know.
+//
+// "AFTER" IS DELIBERATELY NOT HERE. "After Aarhus we head north" is a plan that
+// contains Aarhus, and a frame that suppressed it would take away a pin the
+// traveller asked for. This list only holds phrases that put the place beyond
+// the part being talked about, and the every-mention rule below is what makes
+// even those safe: a reply that names Copenhagen anywhere else, unframed, keeps
+// its card and its pin.
+const PASSING_BEFORE = /\b(?:straight (?:to|for|towards?|through)|on (?:the|your) way (?:to|through)|en route to|driving (?:to|towards?|through)|heading (?:straight )?(?:to|for|towards?)|past|through|beyond|bypass(?:ing)?|instead of|rather than|unlike|compared (?:to|with)|before|short of|on the far side of)\s+(?:the\s+)?$/i;
 // ── AND THE WINDOW IS NOT THE BOUND, THE ANCHOR IS ──────────────────
 // Mutation tested 8 Sep 2026: widening this to 400 SURVIVES the suite, and it
 // is an equivalent mutant rather than a hole. PASSING_BEFORE ends in `$`, so

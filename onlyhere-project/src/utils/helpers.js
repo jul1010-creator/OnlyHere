@@ -910,9 +910,23 @@ export const scanForAITells = (text, extraPhrases = []) => {
   return found.sort((a, b) => a.index - b.index);
 };
 
+// ── AND A PLAN WRITTEN IN DANISH IS A PLAN ────────────────────────────────
+//
+// 22 Aug 2026, Oliver's father, in Danish: a whole week written out day by
+// day, "Den er klar.", and no button. The marker fix is told above; what this
+// line could not do for him is count a single one of his headers, because it
+// knew the English word for a day and nothing else. "Dag" is the word in
+// Danish, Norwegian, Swedish and Dutch, and it is the only extra word here:
+// the shape is the header, not the vocabulary. A word boundary in front, so
+// "Monday 1:" and "hverdag 1:" are not headers either. The en dash in the
+// class is spelled as an escape, so the source carries none.
+//
+// Read by the build button and, since 14 Sep, by the chat promise reader in
+// utils/chatPromises.js, which asks this one question here rather than
+// counting headers a second way.
 export const isFullPlanText = (text) => {
   if (!text) return false;
-  const dayHeaders = (text.match(/day\s*\d+\s*[:\-–]/gi) || []).length;
+  const dayHeaders = (text.match(/\b(?:day|dag)\s*\d+\s*[:\-\u2013]/gi) || []).length;
   return dayHeaders >= 2 || (dayHeaders >= 1 && text.length > 500);
 };
 
