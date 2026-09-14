@@ -45510,6 +45510,45 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── THE SHAPES PEOPLE ACTUALLY USE ───────────────────────────────
   is("don't send us to X", readExclusions("Please don't send us to Legoland."), ["Legoland"]);
   is("skip X", readExclusions("We want to skip Copenhagen entirely."), ["Copenhagen"]);
+
+  // ── AND A COMMA IS A SENTENCE BOUNDARY TOO, 14 SEP 2026 ───────────
+  //
+  // Found by testing the live chat rather than by reading the file. One message
+  // typed into the real Gemlyx:
+  //
+  //   "Driving up from Germany through South Jutland, 5 days, two adults,
+  //    history and coast, no Copenhagen please"
+  //
+  // and the map came back with a Copenhagen pin on it. Moving the clause around
+  // showed what was happening: a bare "no" was only ever read at the START of a
+  // message, a full stop brought it back, and one comma in front of it made this
+  // reader blind. "skip" works anywhere, which is why nobody caught it: everyone
+  // who tested this typed the refusal on its own line.
+  //
+  // IT COSTS A GUIDE NOW, NOT A PIN. Since 13 Sep the ruled-out list reaches
+  // both build prompts, so a refusal this reader misses is one the planner never
+  // hears about.
+  is("a refusal at the end of a real sentence is still a refusal",
+     readExclusions("Driving up from Germany through South Jutland, 5 days, two adults, history and coast, no Copenhagen please"),
+     ["Copenhagen"]);
+  is("one clause in front of it is enough to have hidden it",
+     readExclusions("history and coast, no Copenhagen please"), ["Copenhagen"]);
+  is("and a bare comma clause too", readExclusions("5 days in Jutland, no Copenhagen"), ["Copenhagen"]);
+  // THE ANCHOR WAS NEVER THE GUARD. "no car" is held out by the capitalised
+  // NAME run and by the tail list, both of which still hold with the comma in.
+  // Every one of these is a sentence somebody types on the way to a real brief.
+  is("and nothing that names no place is caught by widening it",
+     ["two adults, no car", "we have 5 days, no budget", "Odense and Ribe, no problem",
+      "no rush, we are flexible", "We land in Aarhus, no hurry", "a week, no idea what to do",
+      "Copenhagen and Aarhus, no worries", "two adults, no Danish food",
+      "I have no Monday free", "no, we want Ribe"]
+       .filter(x => readExclusions(x).length).map(x => `${x} -> ${readExclusions(x)}`), []);
+  // ── AND THE WAY THEY RULE ONE OUT WITHOUT A NEGATION ──────────────
+  // "anywhere but X" carries no negation word at all, so nothing above could
+  // see it, and it is how somebody asks for the whole country except one city.
+  is("anywhere but X",
+     ["anywhere but Copenhagen", "somewhere other than Copenhagen", "anything except Copenhagen",
+      "anywhere apart from Copenhagen"].filter(x => readExclusions(x)[0] !== "Copenhagen"), []);
   is("avoid X, capitalised at a sentence start", readExclusions("Avoid Tivoli please."), ["Tivoli"]);
   is("no X on its own", readExclusions("No Legoland."), ["Legoland"]);
   is("had enough of X", readExclusions("we've had enough of Aarhus"), ["Aarhus"]);
@@ -49153,12 +49192,35 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // one coordinate, a duplicate React key so only one card rendered, a
     // markers map that could reach only one of them, and a cap that counted the
     // copy and dropped a real place to make room for it.
+    // ── AND WHO IS ALLOWED TO CHANGE THEIR MIND, 14 SEP 2026 ─────
+    //
+    // This case used to re-add Ribe from GEMLYX's line, "Though Ribe deserves a
+    // second look", and assert only that it arrived once rather than twice. The
+    // duplicate half was the point and it still is. What it also blessed, as a
+    // side effect, was a reply putting back a place the traveller had refused.
+    //
+    // That is the bug found by testing the live chat on 14 Sep: a refusal held
+    // for exactly one turn, and Gemlyx names a refused place constantly, most
+    // often in the sentence explaining why it is leaving it out. Oliver, looking
+    // at a Copenhagen pin in a conversation where he had typed "no Copenhagen
+    // please": "test it through if it still marks countries that shouldn't be
+    // marked."
+    //
+    // So the re-add is the TRAVELLER's, which is the rule this whole file
+    // already keeps about the brief, and the duplicate assertion it was written
+    // for is kept exactly as it was.
     is("changing your mind back gives one pin, not two",
        names(run([
          { role: "assistant", text: "Ribe and Aarhus." },
          { role: "user", text: "not Ribe" },
-         { role: "assistant", text: "Fine, Aarhus then. Though Ribe deserves a second look." },
+         { role: "user", text: "actually Ribe deserves a second look" },
        ])), ["Aarhus", "Ribe"]);
+    is("and Gemlyx arguing for it is not them changing their mind",
+       names(run([
+         { role: "assistant", text: "Ribe and Aarhus." },
+         { role: "user", text: "not Ribe" },
+         { role: "assistant", text: "Fine, Aarhus then. Though Ribe deserves a second look." },
+       ])), ["Aarhus"]);
     is("an error is not a reply here either",
        names(run([{ role: "assistant", text: "Ribe." }, { role: "assistant", isError: true, text: "Hit a snag near Skagen" }])), ["Ribe"]);
     // The newest ones are drawn larger, and they are the ones the reply just
@@ -49260,6 +49322,43 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       is("a sentence naming no town corrects nothing", correctedTo("I'm actually flying in tomorrow", towns), null);
       is("two towns is still ambiguous", correctedTo("I'm actually flying into Billund and then Odense", towns), null);
     }
+    // ── AND A REFUSAL OUTLIVES THE TURN IT WAS SAID IN ──────────────
+    //
+    // Found 14 Sep 2026 by testing the live chat rather than by reading the
+    // file. A fresh conversation, first message: "Flying into Billund for 6
+    // days in October, two adults, we love history and the coast, no Copenhagen
+    // please". Two turns later the map carried six pins and one of them was
+    // COPENHAGEN. Reproduced here with the real readers in three lines.
+    //
+    // Every rejection was applied as the loop passed the turn carrying it, and
+    // nothing remembered it, so the next time anybody named the place it came
+    // back. Gemlyx names a refused place constantly, usually in the sentence
+    // explaining why it is leaving it out, which is the sentence most likely to
+    // put the pin back on the screen.
+    {
+      const say = (role, text) => ({ role, text });
+      const after = (msgs) => names(run(msgs));
+      is("THE BUG: a reply naming a refused place used to put its pin back",
+         after([say("user", "not Aarhus"), say("assistant", "Ribe is a strong base."),
+                say("assistant", "Aarhus has the better museums though.")]), ["Ribe"]);
+      is("and the refusal still works on the turn it was said",
+         after([say("user", "Ribe and not Aarhus")]), ["Ribe"]);
+      // ONLY THE TRAVELLER LIFTS IT. A reply naming it is Gemlyx talking, and
+      // reading that as them changing their mind is the same mistake as reading
+      // the brief out of Gemlyx's own replies.
+      is("a later turn of THEIRS naming it is them changing their mind",
+         after([say("user", "not Aarhus"), say("assistant", "Right, leaving it out."),
+                say("user", "put Aarhus back in")]), ["Aarhus"]);
+      is("and they can change it back again",
+         after([say("user", "not Aarhus"), say("user", "put Aarhus back in"),
+                say("user", "not Aarhus after all")]), []);
+      // AND NOTHING ELSE MOVES. A refusal of one place is a refusal of that one.
+      is("a place nobody refused is untouched",
+         after([say("assistant", "Ribe and Aarhus are both worth it.")]), ["Ribe", "Aarhus"]);
+      is("and refusing one does not take the other with it",
+         after([say("user", "not Aarhus"), say("assistant", "Ribe and Aarhus are both worth it.")]), ["Ribe"]);
+    }
+
     is("no finder, no pins", mapPlaces({ messages: trip }), { pins: [], dropped: 0 });
     is("no resolver, no pins", mapPlaces({ messages: trip, placesFor: named }), { pins: [], dropped: 0 });
 

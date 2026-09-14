@@ -89,8 +89,43 @@ const PATTERNS = [
   new RegExp(`\\b(?:${anyOf(["skip", "avoid", "leave out", "leave off", "steer clear of", "stay away from", "keep away from", "remove", "take out"])})\\s+(?:[Tt]he\\s+)?(${NAME})`, "g"),
   // "no X" only where X is a named place AND the sentence is about the trip.
   // Deliberately requires "please"/"and"/"but" or a sentence start, so "no car"
-  // and "no budget" cannot reach it — those name no place.
-  new RegExp(`(?:^|[.;!?]\\s+|\\b[Bb]ut\\s+|\\b[Aa]nd\\s+)(?:[Pp]lease\\s+)?[Nn]o\\s+(${NAME})\\b(?!\\s+(?:car|budget|rush|hurry|problem|worries|idea))`, "g"),
+  // and "no budget" cannot reach it: those name no place.
+  //
+  // ── AND A COMMA IS A SENTENCE BOUNDARY TOO, 14 SEP 2026 ─────────
+  //
+  // Found by testing the live chat rather than by reading this file. I typed
+  // one message:
+  //
+  //   "Driving up from Germany through South Jutland, 5 days, two adults,
+  //    history and coast, no Copenhagen please"
+  //
+  // and the map came back with a Copenhagen pin on it. Measured straight after,
+  // with the clause moved around:
+  //
+  //   ["Copenhagen"]  no Copenhagen please
+  //   []              history and coast, no Copenhagen please
+  //   []              Driving up from Germany, no Copenhagen please
+  //   ["Copenhagen"]  We are driving up from Germany. No Copenhagen please.
+  //   ["Copenhagen"]  two adults, history and coast, skip Copenhagen
+  //
+  // A bare "no" was only ever read at the START of a message. Put one clause in
+  // front of it and this reader went blind, and a full stop brought it back.
+  // "skip" works anywhere, which is why nobody noticed: everybody who tested
+  // this typed the refusal on its own.
+  //
+  // AND IT COSTS MORE THAN A PIN NOW. As of 13 Sep the ruled-out list reaches
+  // both build prompts, so a refusal this reader misses is a refusal the
+  // PLANNER never hears, and the guide can put the place back in.
+  //
+  // THE ANCHOR WAS NEVER THE REAL GUARD. "no car" and "no budget" are held out
+  // by the two rules under this one: NAME needs a capitalised run, and the tail
+  // refuses that short list by name. The anchor was a third fence in front of
+  // two that already hold, and it was the one keeping honest sentences out.
+  new RegExp(`(?:^|[.,;:!?]\\s*|\\b[Bb]ut\\s+|\\b[Aa]nd\\s+)(?:[Pp]lease\\s+)?[Nn]o\\s+(${NAME})\\b(?!\\s+(?:car|budget|rush|hurry|problem|worries|idea))`, "g"),
+  // ── "ANYWHERE BUT X" ────────────────────────────────────────────
+  // The other way a traveller rules one place out while asking for everywhere
+  // else, and it carries no negation word at all, so nothing above could see it.
+  new RegExp(`\\b(?:anywhere|anything|somewhere|any\\s*where)\\s+(?:but|except|other\\s+than|apart\\s+from)\\s+(${NAME})`, "gi"),
 
   // Danish: "ikke til X", "undgå X", "vi vil ikke til X"
   new RegExp(`\\b(?:[Ii]kke\\s+(?:til|i|ind\\s+til)|[Uu]ndg[åa])\\s+${FILLER}{0,2}(${NAME})`, "g"),

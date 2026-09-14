@@ -208,6 +208,30 @@ export const mapPlaces = ({ messages = [], placesFor, rejectsFor, correctsFor, c
   // into" names the right place and says nothing about the wrong one, because
   // the wrong one is in the turn it is correcting.
   let lastAssistantAdded = [];
+  // ── AND A REFUSAL OUTLIVES THE TURN IT WAS SAID IN ────────────────
+  //
+  // Found 14 Sep 2026 by testing the live chat rather than by reading this
+  // file. A fresh conversation, my first message: "Flying into Billund for 6
+  // days in October, two adults, we love history and the coast, no Copenhagen
+  // please". Two turns later the map carried six pins and one of them was
+  // COPENHAGEN. Measured here straight after, with the real readers:
+  //
+  //   ["Skip Copenhagen please"]                              -> []
+  //   + "Copenhagen has the better museums though."           -> [copenhagen]
+  //
+  // The refusal worked. It worked for exactly one turn. Every rejection was
+  // applied to the map as the loop passed the turn that carried it, and nothing
+  // remembered it afterwards, so the next time ANYBODY named the place it came
+  // straight back. Gemlyx names a refused place all the time, usually in the
+  // sentence explaining why it is leaving it out, which is the sentence most
+  // likely to put the pin back on the screen.
+  //
+  // ONLY THE TRAVELLER CAN LIFT IT. A refusal stays until a LATER TURN OF
+  // THEIRS names the place without refusing it again, which is them changing
+  // their mind. Gemlyx mentioning it is not the traveller changing their mind,
+  // and reading it as one is the same mistake as reading the brief out of
+  // Gemlyx's own replies.
+  const refused = new Set();
   for (const m of list) {
     if (!m || m.isError) continue;
     const text = String(m.text || "");
@@ -231,6 +255,7 @@ export const mapPlaces = ({ messages = [], placesFor, rejectsFor, correctsFor, c
       }
     }
     const added = [];
+    const named = [];
     for (const p of (placesFor(text, m) || [])) {
       const key = String(p?.name || "").trim().toLowerCase();
       if (!key) continue;
@@ -241,6 +266,13 @@ export const mapPlaces = ({ messages = [], placesFor, rejectsFor, correctsFor, c
       // that format is the most believable way to be wrong.
       const at = coordsFor(p);
       if (!at) continue;
+      // What this turn NAMED, refused or not, which is what the lift below
+      // reads. Collected before the refusal check, because the whole question
+      // there is whether the traveller has just named something they had ruled
+      // out, and a list the check has already filtered cannot answer it.
+      named.push({ key, place: p, lat: at.lat, lon: at.lon });
+      // Refused earlier and not asked for since. See `refused` above.
+      if (refused.has(key)) continue;
       here.add(key);
       added.push(key);
       if (!byKey.has(key)) order.push(key);
@@ -253,10 +285,12 @@ export const mapPlaces = ({ messages = [], placesFor, rejectsFor, correctsFor, c
     // AFTER the additions, so a turn that both names and turns down the same
     // place lands on the refusal. placesNamedIn already skips it, and agreeing
     // twice is cheaper than depending on that from over here.
+    const refusedHere = new Set();
     if (typeof rejectsFor === "function") {
       for (const key of (rejectsFor(text, m) || [])) {
         const k = String(key || "").trim().toLowerCase();
         if (!k) continue;
+        refusedHere.add(k);
         // ── AND OUT OF THE ORDER, NOT ONLY OUT OF THE MAP ─────────
         //
         // Found by an adversarial review. `order` is what decides the pins and
@@ -271,6 +305,30 @@ export const mapPlaces = ({ messages = [], placesFor, rejectsFor, correctsFor, c
         if (at >= 0) order.splice(at, 1);
         byKey.delete(k);
         here.delete(k);
+        refused.add(k);
+      }
+    }
+    // A LATER TURN OF THEIRS NAMING IT IS THEM CHANGING THEIR MIND. Read from
+    // what this turn named, which is `added` above, so it costs nothing extra
+    // and cannot disagree with the reader that filled it. Their turn only: a
+    // reply naming a refused place is Gemlyx talking, and it is what put the
+    // pin back for a fortnight.
+    if (m.role === "user" && refused.size) {
+      for (const n of named) {
+        if (!refused.has(n.key)) continue;
+        // ── AND THE TURN THAT REFUSES IT ALSO NAMES IT ──────────
+        // "not Aarhus" names Aarhus. Without this the refusal would be lifted
+        // by the very sentence that made it, on the same pass, which is the
+        // case the comment above the rejection block is already about: a turn
+        // that both names and turns down a place lands on the refusal.
+        if (refusedHere.has(n.key)) continue;
+        refused.delete(n.key);
+        // Back on the map, where the rest of this loop would have put it had it
+        // never been refused: at the end of the order, as the newest thing.
+        if (byKey.has(n.key)) continue;
+        order.push(n.key);
+        byKey.set(n.key, { key: n.key, place: n.place, lat: n.lat, lon: n.lon });
+        here.add(n.key);
       }
     }
     if (here.size) newest = here;
