@@ -15499,25 +15499,6 @@ If the conversation only covers a single day or a few stops with no explicit day
   // first reply of a returning session already obeys the choice instead of
   // arriving long and correcting itself afterwards.
   const [answerLength, setAnswerLength] = useState(() => readAnswerLength());
-  // ── AND A QUESTION SENT OVER FROM A GUIDE DAY ───────────────────
-  //
-  // The other half of Add in. GuidePage navigates here with the question
-  // already written, naming the day and the town, because a door onto an empty
-  // composer hands the traveller the job of phrasing it.
-  //
-  // TYPED, NOT SENT. It lands in the box for them to read and change, since the
-  // seed is a guess at what they meant and sending it for them would spend a
-  // model call on a sentence they never chose. The state is cleared on the way
-  // in so a refresh does not put it back.
-  useEffect(() => {
-    const seed = String(location.state?.detourAsk || "").trim();
-    if (!seed) return;
-    setAiInput(seed);
-    setDetourTab("sightseeing");
-    goTab("ai");
-    navigate(location.pathname, { replace: true, state: null });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state?.detourAsk]);
   const [chatResetAsk, setChatResetAsk] = useState(false);
   const [intakeArrival, setIntakeArrival] = useState("");
   const departurePickerRef = useRef(null);
@@ -15654,6 +15635,48 @@ If the conversation only covers a single day or a few stops with no explicit day
   // and the country picker; choosing Denmark drops you into the app. Shown on
   // every fresh load — it's the brand moment, and it's one click to pass.
   const [entered, setEntered] = useState(false);
+
+  // ── AND A QUESTION SENT OVER FROM A GUIDE DAY ───────────────────
+  //
+  // The other half of Add in. GuidePage navigates here with the question
+  // already written, naming the day and the town, because a door onto an empty
+  // composer hands the traveller the job of phrasing it.
+  //
+  // TYPED, NOT SENT. It lands in the box for them to read and change, since the
+  // seed is a guess at what they meant and sending it for them would spend a
+  // model call on a sentence they never chose. The state is cleared on the way
+  // in so a refresh does not put it back.
+  //
+  // ── AND IT LANDED THEM ON THE FRONT DOOR ─────────────────────────
+  //
+  // Oliver, 14 Sep 2026: "The 'add' sends you right back to the front page."
+  //
+  // Reproduced on the live site: the question DID arrive, "What is worth seeing
+  // in Haderslev on day 1?" was sitting in the composer, and the traveller was
+  // looking at the country picker with "Enter Denmark" on it. So the feature
+  // worked perfectly and was invisible, which is the worst of the three
+  // available outcomes because nothing looks broken enough to report.
+  //
+  // `entered` is what gates the front door, and NOTHING that arrives by a
+  // client-side navigate ever sets it: it is flipped by pressing Enter Denmark,
+  // or on arrival when the address already names a page. A traveller coming
+  // back from their own guide has entered. They entered several screens ago.
+  //
+  // DECLARED BELOW `entered` RATHER THAN BESIDE THE REST OF THE CHAT STATE, for
+  // the reason the address effect four hundred lines down spells out in
+  // capitals: reading that const from above its declaration took the whole
+  // front page out once already, with "Cannot access 'entered' before
+  // initialization".
+  useEffect(() => {
+    const seed = String(location.state?.detourAsk || "").trim();
+    if (!seed) return;
+    setAiInput(seed);
+    setDetourTab("sightseeing");
+    setEntered(true);
+    goTab("ai");
+    navigate(location.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state?.detourAsk]);
   // ── WALKING THROUGH THE ARCH (Oliver, 7 Aug: "a better page swap when you
   // click enter Denmark. Could be a zoom in or fade again") ──────────
   // Entering used to be a hard cut: setEntered(true) and the landing is simply
@@ -22767,9 +22790,29 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     <FlagDK height={13} />
                     <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 2.5, textTransform: "uppercase", color: "rgba(255,255,255,0.85)" }}>Denmark</span>
                   </div>
-                  <div style={{ fontSize: "clamp(32px, 5.5vw, 50px)", fontWeight: 600, fontFamily: "'Fraunces', serif", color: "#fff", lineHeight: 1.1, marginBottom: 12, textShadow: "0 2px 24px rgba(0,0,0,0.55)" }}>
+                  {/* ── THE PAGE HAD NO HEADING AT ALL ────────────────
+                      14 Sep 2026, checked on the live site before a beta:
+                      document.querySelectorAll("h1").length was 0 on every
+                      screen, and the six page titles were divs too. So the
+                      whole app had no heading structure: a screen reader had
+                      nothing to jump to and nothing to announce as the page.
+
+                      Crawlers were already fine, which is why this survived.
+                      linkPreview.js hands a bot an article with its own h1 and
+                      the meta tags to match, so every SEO check passed while
+                      the thing a person uses had no outline in it.
+
+                      ONE h1 PER DOCUMENT, and this is it. The pager keeps all
+                      nine pages mounted at once, so making each page title an
+                      h1 would put nine in the document; they are h2 instead and
+                      this one, the front page's own line, is the h1.
+
+                      margin: 0, because an h1 carries a browser default margin
+                      and this sits inside a centred absolute box where that
+                      would move it. */}
+                  <h1 style={{ fontSize: "clamp(32px, 5.5vw, 50px)", fontWeight: 600, fontFamily: "'Fraunces', serif", color: "#fff", lineHeight: 1.1, margin: "0 0 12px", textShadow: "0 2px 24px rgba(0,0,0,0.55)" }}>
                     Beyond the<br />guidebooks<span style={{ color: C.gold }}>.</span>
-                  </div>
+                  </h1>
                   <div style={{ fontSize: 15, color: "rgba(255,255,255,0.85)", marginBottom: 22, textShadow: "0 1px 10px rgba(0,0,0,0.5)", maxWidth: 420 }}>Hidden gems across the whole country, and this is how you find them.</div>
                   <button onClick={() => { goTab("ai"); window.scrollTo(0, 0); }}
                     style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "13px 26px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 24px rgba(226,59,78,0.4)" }}>
@@ -23479,7 +23522,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             return (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
-                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Attractions</div>
+                <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>Attractions</h2>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Everything worth doing that isn't a town, a bar, or a meal: free places and things worth booking ahead, side by side so you can compare them.</div>
               </div>
 
@@ -23670,7 +23713,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           {tab === "events" && (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
-                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Events</div>
+                <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>Events</h2>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Summer means festival season across Denmark. From legendary stages to harbour markets nobody talks about. We guide you to what's worth traveling for, and exactly how far it is from Copenhagen.</div>
               </div>
 
@@ -23759,7 +23802,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           {tab === "food" && (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
-                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Food</div>
+                <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>Food</h2>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>From a 1965 hot dog cart to Copenhagen's biggest food market: the everyday spots locals eat at, and the bigger names worth the crowd.</div>
               </div>
 
@@ -23942,7 +23985,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 // ── LEVEL 1: pick a town ──────────────────────────
                 <>
                   <div style={{ marginBottom: 18, paddingTop: 8 }}>
-                    <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Nightlife</div>
+                    <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>Nightlife</h2>
                     <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Danes are famously reserved with strangers, and pub culture is where that changes. Below is the honest split: where you'll mostly meet other travelers, and where you'll meet Danes.</div>
                   </div>
                   <PageHero src="/tuborg.jpg" emoji="🍺" color="#E23B4E" />
@@ -24254,7 +24297,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     meaningless for the ones it fits. Hidden is now a
                     FILTER, applied to the entries that earn it, rather than a
                     label stamped across the whole page. */}
-                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Towns</div>
+                <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>Towns</h2>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>From the cities everyone lands in to the places the guidebooks skip. Cobblestones, smokehouses and family workshops, every one hand-researched and checked against multiple sources.</div>
               </div>
               {/* ROUND 5 (Oliver: "Copenhagen is technically a major city..
@@ -24585,7 +24628,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <span style={{ fontSize: 13 }}>✦</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase" }}>Gemlyx Intelligence</span>
                 </div>
-                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Gemlyx Detour</div>
+                <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>Gemlyx Detour</h2>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 480, margin: "0 auto" }}>Your personal Denmark guide. Tell it when you're coming and what you're into, and it plans a real route, checks live weather and events for your exact days, and steers you off the obvious path.</div>
               </div>
 

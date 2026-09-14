@@ -31858,6 +31858,36 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
            app.indexOf("const [entered, setEntered] = useState(false);") < at);
       }
 
+      // ── AND THE APP HAD NO HEADINGS IN IT AT ALL ────────────────
+      //
+      // 14 Sep 2026, measured on the live site before a beta:
+      // document.querySelectorAll("h1").length was 0 on every screen, and the
+      // six page titles were divs as well. A screen reader had nothing to jump
+      // to and nothing to announce as the page.
+      //
+      // IT SURVIVED BECAUSE CRAWLERS WERE ALREADY FINE. linkPreview.js hands a
+      // bot an article carrying its own h1 and the meta to match, so every SEO
+      // check passed while the thing a person uses had no outline in it. Worth
+      // remembering as a shape: a check that passes for the machine can hide a
+      // hole that only a person falls into.
+      {
+        const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+        is("the app has exactly one h1, which is the front page's own line",
+           (app.match(/<h1 style=/g) || []).length, 1);
+        ok("and it is the line the front page leads with",
+           /<h1 style=[\s\S]{0,320}Beyond the<br \/>guidebooks/.test(app));
+        // ONE PER DOCUMENT, and that is why the page titles are h2: the pager
+        // keeps all nine pages mounted at once, so an h1 per page would put
+        // nine of them in one document.
+        is("and the six page titles are second-level headings under it",
+           (app.match(/<h2 style=\{\{ fontSize: 34,/g) || []).length, 6);
+        // margin: 0, because a heading carries a browser default margin and
+        // both of these sit in boxes where that would move them.
+        ok("neither reintroduces the browser's default margin",
+           !/<h1 style=\{\{[^}]*marginBottom: 12/.test(app)
+           && !/<h2 style=\{\{ fontSize: 34,[^}]*marginBottom: 10/.test(app));
+      }
+
       // ── AND SHE STILL DID NOT SEE IT ────────────────────────────
       //
       // Oliver, 14 Sep 2026, relaying the first person to read one of these
