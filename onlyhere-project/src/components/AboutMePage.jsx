@@ -3,6 +3,12 @@ import { C } from "../utils/theme";
 import { EMPTY_PROFILE, cleanProfile, cleanLearned, isBlank, saveProfile, SETUP_SQL, OBSERVED_FIELDS, knownAboutTraveller, REPLY_LENGTHS } from "../utils/profile";
 import { settledObservations, learnedIsEmpty, OBSERVED_MIN } from "../utils/profileLearning";
 import { accountProviders, hasPassword, updatePassword } from "../utils/auth";
+// The guide's own first-stop photograph, the same one its header uses. Imported
+// rather than passed in, because the alternative is threading a resolver through
+// App.jsx for one screen, and this module already has no opinion about where the
+// library lives.
+import { guideHero, heroCaption } from "../utils/guideHero";
+import { lookupRealPlace } from "../utils/guideEnrichment";
 import { currentTrip, tripStatusLine } from "../utils/tripStatus";
 import { ProfileQuestions } from "./ProfileQuestions";
 import { AFFILIATES_PATH } from "../utils/affiliateRoster";
@@ -79,6 +85,19 @@ import { AFFILIATES_PATH } from "../utils/affiliateRoster";
 // phone list, where every section is read before any is opened.
 export const ME_SECTIONS = [
   { id: "general", label: "General", blurb: "Name, contact details and password." },
+  // ── SAVED TRIPS BECAME A PLACE RATHER THAN A ROW ──────────────────
+  //
+  // Oliver, 15 Sep 2026: "I'd like 'saved trips' to have its own page under
+  // account information. I want it to be a bunch of banners from the guides."
+  //
+  // They were a stack of one-line rows two thirds of the way down the Explore
+  // tab, reachable from the menu by scrolling to an anchor. The thing somebody
+  // came back to the app for was the hardest thing on it to find, and it looked
+  // like a file list rather than like the trips it holds.
+  //
+  // Second in the rail on purpose. It is the only section here somebody opens to
+  // USE rather than to change a setting, so it sits directly under General.
+  { id: "trips", label: "Saved trips", blurb: "The guides you kept, and the way back into them." },
   { id: "about", label: "About me", blurb: "Your travel preferences and what Gemlyx has learned." },
   { id: "plan", label: "Plan", blurb: "What your account includes." },
   { id: "legal", label: "Legal", blurb: "Terms of Service and Privacy Policy." },
@@ -100,7 +119,7 @@ export const NOTICED_LABEL = {
 export const AboutMePage = ({
   open, session, profile, savedGuides = [], savedPlaces = [], cloudSyncOk = true,
   setupSql = null, deleting = false, section = null, onSection, onClose, onProfileSaved,
-  onNeedsSetup, onSignOut, onDelete,
+  onNeedsSetup, onSignOut, onDelete, onOpenGuide, onDeleteGuide,
 }) => {
   const [p, setP] = useState(EMPTY_PROFILE);
   const [busy, setBusy] = useState(false);
@@ -586,7 +605,98 @@ export const AboutMePage = ({
     </Card>
   );
 
-  const bodyFor = { general: generalSection, about: aboutSection, plan: planSection, legal: legalSection };
+  // ── SAVED TRIPS ──────────────────────────────────────────────────
+  //
+  // "a bunch of banners from the guides", and the banner he pointed at is the
+  // one at the top of a guide: the photograph, the gold eyebrow, the title over
+  // it. So this is that header at a smaller size, which means somebody scrolling
+  // this list is looking at the same object they will be looking at one tap
+  // later rather than at a row that represents it.
+  //
+  // THE PHOTOGRAPH IS THE GUIDE'S OWN, not a stock shot. guideHero walks the
+  // trip in order and takes the first stop that resolves to a published row with
+  // a picture, so every banner shows a real place on that specific route. The
+  // header of utils/guideHero.js is the argument for why it is that and not
+  // "something Danish", and it applies here unchanged.
+  //
+  // AND WHERE THERE IS NO PHOTOGRAPH THERE IS NO IMAGE. Same rule, same file: a
+  // gradient pretending to be a photo would be a picture of nowhere, on exactly
+  // the guides we know least about. Those banners are typographic instead, which
+  // is honest and still reads as a banner.
+  const tripsSection = (
+    <Card>
+      <H>Saved trips</H>
+      {!savedGuides.length ? (
+        <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.65 }}>
+          Nothing saved yet. Build a trip in Gemlyx Detour and press Keep, and it will be here on every device you sign in on.
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: 14 }}>
+            {savedGuides.length} saved {savedGuides.length === 1 ? "guide" : "guides"}
+            {cloudSyncOk ? ", synced to this account." : ". Not reaching your account right now, so these are on this device only."}
+          </div>
+          {savedGuides.map(g => {
+            const hero = guideHero(g, lookupRealPlace);
+            const caption = heroCaption(hero);
+            const dayCount = Array.isArray(g.days) ? g.days.length : 0;
+            return (
+              <div key={g.id} style={{ position: "relative", marginBottom: 12 }}>
+                {/* The whole banner is the target, not a link at the end of it.
+                    A card somebody has to aim at is a row wearing a photograph. */}
+                <div role="button" tabIndex={0}
+                  onClick={() => onOpenGuide?.(g)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenGuide?.(g); } }}
+                  style={{
+                    position: "relative", overflow: "hidden", cursor: "pointer",
+                    borderRadius: 14, border: `1px solid ${C.border}`,
+                    minHeight: hero?.photo ? 150 : 0,
+                    background: hero?.photo ? `#0b1020 url("${hero.photo}") center/cover no-repeat` : C.surface,
+                    display: "flex", alignItems: "flex-end",
+                  }}>
+                  {/* The scrim, and it is not decoration: white text on an
+                      unknown photograph is unreadable on about half of them. */}
+                  {hero?.photo && (
+                    <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(6,10,22,0.92) 0%, rgba(6,10,22,0.55) 45%, rgba(6,10,22,0.15) 100%)" }} />
+                  )}
+                  <div style={{ position: "relative", padding: hero?.photo ? "18px 16px 14px" : "16px 16px 14px", width: "100%" }}>
+                    <div style={{ fontSize: 9.5, letterSpacing: 1.6, textTransform: "uppercase", color: C.gold, fontWeight: 700, marginBottom: 6 }}>
+                      ✦ Your Gemlyx guide
+                    </div>
+                    <div style={{ fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 600, lineHeight: 1.2, color: hero?.photo ? "#fff" : C.text }}>
+                      {g.title}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: hero?.photo ? "rgba(255,255,255,0.78)" : C.muted, marginTop: 5 }}>
+                      {[dayCount ? `${dayCount} ${dayCount === 1 ? "day" : "days"}` : "", caption].filter(Boolean).join(" · ")}
+                    </div>
+                  </div>
+                </div>
+                {/* Outside the clickable banner, so removing a trip can never be
+                    a mis-tap on the thing that opens it. */}
+                {onDeleteGuide && (
+                  <button onClick={(e) => { e.stopPropagation(); onDeleteGuide(g.id); }}
+                    aria-label={`Remove ${g.title}`}
+                    style={{ position: "absolute", top: 10, right: 10, background: "rgba(6,10,22,0.66)", border: `1px solid ${C.border}`, color: "#fff", borderRadius: 100, width: 28, height: 28, fontSize: 13, lineHeight: 1, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                    ✕
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          {/* The credit the licence asks for. Named per banner rather than in one
+              line at the bottom, because CC BY attaches to the picture and not to
+              the page it is on. */}
+          {savedGuides.some(g => guideHero(g, lookupRealPlace)?.credit) && (
+            <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.6, marginTop: 4 }}>
+              Photographs are from the first stop of each trip, credited in full on the guide itself.
+            </div>
+          )}
+        </>
+      )}
+    </Card>
+  );
+
+  const bodyFor = { general: generalSection, trips: tripsSection, about: aboutSection, plan: planSection, legal: legalSection };
 
   return (
     <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 990, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>

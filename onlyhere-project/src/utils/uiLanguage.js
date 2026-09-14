@@ -481,8 +481,34 @@ export const UI_STRINGS = {
   // the saves off this device. That is right, and it is a surprise, so the
   // question is followed by the fact rather than asked on its own.
   "auth.confirmOut":    { en: "Are you sure you want to log out? Your saved places and guides stay in your account and come back when you sign in, and they are taken off this device.", da: "Er du sikker på, at du vil logge ud? Dine gemte steder og guider bliver i din konto og kommer tilbage, når du logger ind, og de fjernes fra denne enhed.", de: "Willst du dich wirklich abmelden? Deine gespeicherten Orte und Reisen bleiben in deinem Konto und sind nach der nächsten Anmeldung wieder da, und sie werden von diesem Gerät entfernt." },
+  // ── AND THE TWO THAT ASK BEFORE SOMETHING CANNOT BE UNDONE ────────
+  //
+  // Both were window.confirm until 14 Sep, so the delete question had never
+  // been translated at all: it was an English sentence typed into App.jsx, on a
+  // screen whose every other word comes from this file. A Dane reading Konto in
+  // the menu met a paragraph of English at the one moment it mattered most.
+  "auth.confirmDelete": { en: "Delete your Gemlyx account? Your saved places, your guides, your details and your login all go, on this device and in your account, and this cannot be undone.", da: "Vil du slette din Gemlyx-konto? Dine gemte steder, dine guider, dine oplysninger og dit login forsvinder alle sammen, både på denne enhed og i din konto, og det kan ikke fortrydes.", de: "Dein Gemlyx-Konto löschen? Deine gespeicherten Orte, deine Reisen, deine Angaben und dein Login verschwinden alle, auf diesem Gerät und in deinem Konto, und das lässt sich nicht rückgängig machen." },
+  "auth.deleteYes":     { en: "Delete account",  da: "Slet konto",           de: "Konto löschen" },
+  "auth.cancel":        { en: "Cancel",          da: "Fortryd",              de: "Abbrechen" },
   "auth.confirmFirst":  { en: "This account still needs its email confirmed. Open the link we sent, or send it again below.", da: "Kontoen mangler stadig at få bekræftet mailen. Åbn linket, vi sendte, eller send det igen nedenfor.", de: "Für dieses Konto fehlt noch die Bestätigung der E-Mail. Öffne den Link, den wir geschickt haben, oder sende ihn unten erneut." },
-  "auth.alreadyHave":   { en: "That address already has an account, so no new one was made. Sign in below, or use Forgot password.", da: "Der er allerede en konto på den adresse, så der blev ikke oprettet en ny. Log ind nedenfor, eller brug Glemt adgangskode.", de: "Zu dieser Adresse gibt es schon ein Konto, es wurde also keins angelegt. Melde dich unten an oder nutze Passwort vergessen." },
+  // ── WRITTEN TO BE TRUE EVEN IF THE DETECTION IS WRONG ─────────────
+  //
+  // The first version ended "so no new one was made", and that clause is the
+  // only part of this sentence that a false positive would turn into a lie. The
+  // detection reads `identities`, which is community-established rather than
+  // documented, so the sentence is now one that holds either way: if the
+  // address really was taken it is true, and if this fired wrongly on a fresh
+  // signup then an account with that address does now exist, which is also what
+  // it says. What it no longer does is make a claim about what the server did.
+  //
+  // The rest is self-healing, and that is the part worth knowing. Sent to the
+  // sign-in screen, a person in the false-positive case types the password they
+  // just chose, Supabase answers "Email not confirmed" because the account IS
+  // new and unconfirmed, and the branch above that catches it sends the
+  // confirmation and shows them the inbox screen. So the worst case is one
+  // confusing sentence on the way to the right place, not a signup they cannot
+  // complete.
+  "auth.alreadyHave":   { en: "That address already has an account. Sign in below, or use Forgot password if you cannot remember it.", da: "Der er allerede en konto på den adresse. Log ind nedenfor, eller brug Glemt adgangskode, hvis du ikke kan huske den.", de: "Zu dieser Adresse gibt es schon ein Konto. Melde dich unten an oder nutze Passwort vergessen, wenn du es nicht mehr weißt." },
   "auth.stillNeeded":   { en: "Still needed:",      da: "Mangler stadig:",      de: "Fehlt noch:" },
   // The age sits between these two, so both halves are written out and the
   // number is put between them by the caller.

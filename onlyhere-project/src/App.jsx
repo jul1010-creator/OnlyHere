@@ -268,6 +268,7 @@ import { AffiliatePanel } from "./components/AffiliatePanel";
 import { linkPatch } from "./utils/affiliateAudit";
 import { EntryLink } from "./components/EntryLink";
 import { AuthSheet } from "./components/AuthSheet";
+import { ConfirmSheet } from "./components/ConfirmSheet";
 import { ProfileSheet } from "./components/ProfileSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
 import { C, THEMES, THEME_ORDER, applyTheme, storedTheme } from "./utils/theme";
@@ -283,6 +284,7 @@ import { getSession, getStoredSession, captureRedirectSession, signOut as authSi
 import { fetchCloudSaves, pushCloudSaves, mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink, syncFailureNote, SYNC } from "./utils/userSaves";
 import { toggleBeen, isBeen, beenNote, withoutBeen, excludedBeen } from "./utils/beenThere";
 import { fetchBeen, pushBeen, mergeBeen, cleanBeen } from "./utils/beenSync";
+import { stashUnsynced, takeStash, dropStash } from "./utils/deviceStash";
 import { loadImageCredits, allImageCredits, licenseUrl, creditIsRequired } from "./utils/imageCredits";
 import { PhotoCredit } from "./components/PhotoCredit";
 import { placeKindOf, kindLabel, isArea, PLACE_KINDS, KIND_LABEL } from "./utils/placeKind";
@@ -12546,8 +12548,22 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // And the state WRITE is functional, so anything that landed between the
       // read and the set is unioned in rather than replaced.
       const readLocal = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } };
-      const localPlaces = readLocal("gemlyx_saved_places");
-      const localGuides = readLocal("gemlyx_saved_guides");
+      // ── AND WHAT THIS ACCOUNT LEFT HERE LAST TIME ─────────────────
+      //
+      // If a previous sign out on this device could not push, the copy was held
+      // under THIS account's id rather than deleted. Taken here, once, and
+      // folded in exactly like the local list it came from: neither is more
+      // correct than the cloud, so both are merged rather than either winning.
+      //
+      // takeStash reads and removes in one call, so a stash cannot come back
+      // after a later deliberate clear. Keyed by id, so the only session that
+      // can name the key is the one it belongs to. See utils/deviceStash.js.
+      //
+      // BEFORE the merge, not after, so the push at the end of this effect
+      // carries it up and the account finally gets what the failed sync owed it.
+      const heldBack = takeStash(userSession?.userId);
+      const localPlaces = mergeSaves(readLocal("gemlyx_saved_places"), heldBack?.places || [], [], []).places;
+      const localGuides = mergeSaves([], [], readLocal("gemlyx_saved_guides"), heldBack?.guides || []).guides;
       const merged = mergeSaves(localPlaces, cloud.places, localGuides, cloud.guides);
       const gained = (merged.places.length - localPlaces.length) + (merged.guides.length - localGuides.length);
       let finalPlaces = merged.places, finalGuides = merged.guides;
@@ -12570,7 +12586,8 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       const fromCloud = await fetchBeen(userSession);
       if (fromCloud?.missingColumn) setBeenColumnMissing(true);
       else if (fromCloud?.been) {
-        const localBeen = readLocal("gemlyx_been");
+        // The been list was stashed with the rest and comes back with it.
+        const localBeen = mergeBeen(readLocal("gemlyx_been"), heldBack?.been || []);
         let finalBeen = mergeBeen(localBeen, fromCloud.been);
         setBeenList(prev => { finalBeen = mergeBeen(prev, finalBeen); return finalBeen; });
         try { localStorage.setItem("gemlyx_been", JSON.stringify(finalBeen)); } catch { /* private mode */ }
@@ -12579,7 +12596,16 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // to discard it, so a green "saves synced" could sit over a 403 and the
       // person found out weeks later on another device.
       const pushed = await pushCloudSaves(userSession, finalPlaces, finalGuides);
+      // ── AND THE HELD ONES ARE NAMED, BECAUSE THEY WERE PROMISED ───
+      //
+      // The sign out that stashed them said "held here for you and come back
+      // when you sign in on this device". A promise made at sign out has to be
+      // visibly kept at sign in, or the person has no way to know it was, and
+      // `gained` cannot do it: the stash is merged into localPlaces above, so
+      // it counts as already-here rather than as recovered.
+      const heldCount = (heldBack?.places?.length || 0) + (heldBack?.guides?.length || 0);
       showToast(!pushed ? "Signed in, but your saves could not be sent to your account"
+        : heldCount > 0 ? `Signed in · ${heldCount} saved ${heldCount === 1 ? "item" : "items"} held on this device is back in your account`
         : gained > 0 ? `Signed in · ${gained} saved ${gained === 1 ? "item" : "items"} restored` : "Signed in · saves synced", pushed ? 2600 : 3600);
       
     })();
@@ -12766,6 +12792,31 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userSession]);
 
+  // ── ARE YOU SURE, WITHOUT ASKING THE BROWSER TO ASK ──────────────
+  //
+  // Both confirms in this app were window.confirm. That is the wrong dialog for
+  // this audience: the beta goes to Instagram followers, a link opened from
+  // Instagram opens in Instagram's own webview, and native dialogs are the
+  // least reliable thing in those. A SUPPRESSED confirm() RETURNS FALSE, so log
+  // out would not ask, would not error, and would not log anybody out. The
+  // button would do nothing, on the browser most of the first readers use, and
+  // nothing in the code would look wrong.
+  //
+  // Promise-shaped so the callers keep the shape they already had:
+  // `if (!(await askConfirm(...))) return`. See components/ConfirmSheet.jsx.
+  const [confirmAsk, setConfirmAsk] = useState(null);
+  const askConfirm = (text, confirmLabel, opts = {}) =>
+    new Promise((resolve) => setConfirmAsk({ text, confirmLabel, resolve, ...opts }));
+  // The resolver is read out of state and called AFTER the clear, not inside a
+  // setState updater. An updater can be run more than once, and resolving a
+  // promise twice silently keeps the first answer, which is the kind of bug
+  // that only shows up on somebody else's phone.
+  const answerConfirm = (yes) => {
+    const pending = confirmAsk;
+    setConfirmAsk(null);
+    pending?.resolve(!!yes);
+  };
+
   // ── ONE PLACE THAT KNOWS WHAT A DEVICE HOLDS ─────────────────────
   //
   // Sign out and delete both have to empty the same four keys, and the first
@@ -12795,16 +12846,21 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     //
     // The reason it earns a confirm is the paragraph below: signing out CLEARS
     // the saves off this device, which is right and is not what anybody expects
-    // a log out to do. window.confirm rather than a sheet of our own, because
-    // that is what the delete button already uses and two kinds of "are you
-    // sure" in one account screen is one design.
+    // a log out to do.
+    //
+    // askConfirm rather than window.confirm, and delete moved to the same asker
+    // in the same change. The first version used the browser's dialog because
+    // that is what delete already used, and one kind of "are you sure" in one
+    // account screen is one design. It is still one design; it is now ours. See
+    // askConfirm above for why the browser's is the wrong one to hand to people
+    // arriving from an Instagram link.
     //
     // RETURNS WHETHER IT WENT AHEAD, and that is not tidiness. The account page
     // called this as `navigate("/"); handleSignOut();`, so the moment a question
     // appeared in here, pressing Cancel left somebody on the home page having
     // been moved off the screen they said they wanted to stay on. The caller
     // needs the answer, so it is given one.
-    if (!window.confirm(uiT("auth.confirmOut", uiLang))) return false;
+    if (!(await askConfirm(uiT("auth.confirmOut", uiLang), uiT("menu.signOut", uiLang)))) return false;
     // ── WHOSE SAVES ARE THESE ────────────────────────────────────────
     //
     // Oliver, 14 Sep 2026, looking at the signup sheet a minute after signing
@@ -12848,20 +12904,27 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     //
     // A privacy rule with a data-loss exception is not a privacy rule, because
     // the exception is what the next person on this laptop gets. So the clearing
-    // is now unconditional, and the data-loss worry is answered where it can be
-    // answered rather than by keeping the copy: ONE LAST PUSH before the token
-    // dies. If that lands, nothing is lost and there was never anything to
-    // decide. If it does not, the copy goes anyway and the person is told
-    // plainly, which is the honest version of a choice that has to be made
-    // either way.
+    // is unconditional, and the data-loss worry is answered twice over, neither
+    // time by keeping a copy anybody else can reach.
     //
-    // Before authSignOut, necessarily. A push needs a live token and signing out
-    // is what takes it away.
+    // ONE: A LAST PUSH before the token dies. If that lands, nothing was ever
+    // at risk. Before authSignOut, necessarily, since signing out takes the
+    // token away.
     let landed = cloudSyncOk;
     if (!landed) {
       try { landed = await pushCloudSaves(userSession, savedPlaces, savedGuides); }
       catch { landed = false; }
     }
+    // TWO: if it did not land, the copy is held under this ACCOUNT'S id rather
+    // than deleted. Oliver, 14 Sep, choosing between three ways of resolving his
+    // own two rules: keep them for the owner only. The next person on this
+    // browser sees nothing, because nothing they can reach is keyed to them, and
+    // the owner gets them back on their next sign in here. See
+    // utils/deviceStash.js for why the id is the key and not the email.
+    //
+    // Also before authSignOut: userSession is what carries the id, and the line
+    // below sets it to null.
+    const held = landed ? false : stashUnsynced(userSession?.userId, { places: savedPlaces, guides: savedGuides, been: beenList });
     await authSignOut();
     setUserSession(null);
     syncedOnceRef.current = false;
@@ -12873,10 +12936,16 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     // the guide builder reads all three.
     setUserProfile(null);
     clearDeviceSaves();
+    // Three outcomes and three sentences, because "held on this device for you"
+    // and "gone" are different things to be told and the difference is whether
+    // localStorage accepted the write. stashUnsynced returns that answer rather
+    // than assuming it, so this cannot claim a rescue that did not happen.
     showToast(
       landed
         ? "Signed out. Your saves are in your account, not on this device."
-        : "Signed out. The last sync to your account did not land, so anything saved since then is not in it.",
+        : held
+          ? "Signed out. The last sync did not land, so those saves are held here for you and come back when you sign in on this device."
+          : "Signed out. The last sync to your account did not land, so anything saved since then is not in it.",
       landed ? 3200 : 6000,
     );
     return true;
@@ -12959,6 +13028,11 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       setBeenList([]);
       setUserProfile(null);
       clearDeviceSaves();
+      // The stash goes with the account. Without this it is the one place a
+      // deleted account's trips survive, on the machine most likely to be
+      // shared, which is the opposite of what the button promises. `live` and
+      // not userSession, because live is the session this delete actually used.
+      dropStash(live.userId);
       showToast(loginNote || "Your account and everything on it has been deleted", loginNote ? 6000 : 3400);
       
     } catch (e) {
@@ -26261,23 +26335,38 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 One menu, not two. The burger already held the navigation, the
                 theme and the language, and a signed-in menu that dropped any of
                 those would take the site's navigation away on a phone. */}
-            {/* ── AND IT IS A FACE, NOT THREE LINES ────────────────
+            {/* ── A FACE ONCE THERE IS A FACE, AND THREE LINES BEFORE
                 Oliver, 5 Sep 2026: "Can you make the burger menu be an account
                 icon? Like a golden person inside a white circle (like the
                 Gemlyx symbol) if no profile picture. But if you got a profile
                 picture, then a circle like Facebook."
 
-                The same button, doing the same thing. It still opens the menu
-                that holds the navigation on a phone, so nothing is lost by the
-                change; what it gains is that the control you press to reach
-                your account looks like your account. See
-                components/AccountAvatar.jsx for why the person is drawn
+                Then, 15 Sep, looking at it signed out: "I'd like the frame in
+                the right corner to look like a normal burger menu when you're
+                not logged in. Instead of a 'circled man'."
+
+                Both are the same rule and the first version only applied half of
+                it. The control you press to reach your account should look like
+                your account, and when there is no account it is not one: it is
+                the menu that holds the navigation, so it looks like a menu. A
+                person in a circle offered to somebody with no account is a face
+                standing for nothing of theirs, on the first screen they see.
+
+                THE BOX IS 32px EITHER WAY, so the badge that sits on the corner
+                and the width of the header do not move when somebody signs in.
+                See components/AccountAvatar.jsx for why the person is drawn
                 underneath the picture rather than instead of it. */}
             <button className="gemlyx-account" onClick={() => setShowMenu(!showMenu)}
               aria-label={[uiT("header.menu", uiLang), userSession ? accountLabel() : "", unreadTripChanges > 0 ? alertCountLine(unreadTripChanges) : ""].filter(Boolean).join(". ")}
               title={unreadTripChanges > 0 ? alertCountLine(unreadTripChanges) : uiT("header.menu", uiLang)}
               style={{ position: "relative", background: "none", border: "none", padding: 0, cursor: "pointer", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <AccountAvatar url={avatarUrl(userSession, userProfile)} size={32} alt="" />
+              {userSession ? (
+                <AccountAvatar url={avatarUrl(userSession, userProfile)} size={32} alt="" />
+              ) : (
+                <span style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Ico name="menu" size={21} color={C.text} />
+                </span>
+              )}
               {unreadTripChanges > 0 && (
                 <span style={{
                   position: "absolute", top: -6, right: -6, minWidth: 16, height: 16,
@@ -26364,7 +26453,16 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     you click it, the notification is considered read." The count
                     pulses rather than sits still, because a red dot that never
                     moves is furniture after a day. */}
-                <button onClick={() => { setShowMenu(false); readTripChanges(); goTab("home"); setTimeout(() => document.getElementById("gx-saved-trips")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); }}
+                {/* ── A PLACE, NOT A SCROLL POSITION ────────────────────
+                    This used to open the Explore tab and scroll to an anchor two
+                    thirds of the way down it, which is how the thing somebody
+                    comes back to the app for became the hardest thing on it to
+                    find. Oliver, 15 Sep: "I'd like 'saved trips' to have its own
+                    page under account information." It now goes to that page,
+                    which also means the address bar names where you are and the
+                    back button works. readTripChanges still runs here, because
+                    the count on this row is the thing being marked as read. */}
+                <button onClick={() => { setShowMenu(false); readTripChanges(); navigate(`${ABOUT_ME_PATH}/trips`); }}
                   style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "none", border: "none", color: C.text, padding: "10px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left", borderRadius: 10 }}>
                   <Ico name="book" size={15} color={C.gold} />
                   <span style={{ flex: 1 }}>{uiT("menu.saved", uiLang)}</span>
@@ -27157,6 +27255,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           dropped, because a save that was declined is not a save that is
           waiting: leaving it in localStorage would silently add the trip to
           their account the next time they signed in for any other reason. */}
+      {/* Above everything, including DetailPage at 970, because a confirm that
+          opens behind the screen it was asked from is worse than none. */}
+      <ConfirmSheet ask={confirmAsk} onAnswer={answerConfirm} cancelLabel={uiT("auth.cancel", uiLang)} />
+
       <AuthSheet open={(authOpen && !userSession) || !!recoverySession} onSignedIn={handleSignedIn}
         lang={uiLang}
         recoverySession={recoverySession}
@@ -27199,11 +27301,29 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         onClose={() => navigate("/")}
         onProfileSaved={(next) => setUserProfile(next)}
         onNeedsSetup={(sql) => setProfileSetupSql(sql)}
+        // Saved trips moved onto this page on 15 Sep. Both halves of what that
+        // list does are handed over rather than reimplemented: openSavedGuide
+        // knows the difference between a row with a shareable link and one built
+        // on this device, and deleteSavedGuide is the one writer of that key.
+        // No navigate("/") first: openSavedGuide routes to /guide/:id or
+        // /guide/new, and this overlay is held open by the route being /me, so
+        // it closes itself. Two navigations in one tick would be a race for no
+        // reason.
+        onOpenGuide={openSavedGuide}
+        onDeleteGuide={deleteSavedGuide}
         // Navigates only if the sign out actually happened. See the note on
         // handleSignOut's return value: this line used to move somebody home
         // and then ask them whether they wanted to leave.
         onSignOut={async () => { if (await handleSignOut()) navigate("/"); }}
-        onDelete={() => { if (window.confirm("Delete your Gemlyx account? Your saved places, your guides, your details and your login all go, on this device and in your account, and this cannot be undone.")) { navigate("/"); handleDeleteAccount(); } }} />
+        // Same asker as sign out, and the sentence finally comes from the
+        // catalogue: it was typed into this file in English, on a screen whose
+        // every other word is translated. danger paints the yes red rather than
+        // gold, because this is the one answer in the app that cannot be undone.
+        onDelete={async () => {
+          if (!(await askConfirm(uiT("auth.confirmDelete", uiLang), uiT("auth.deleteYes", uiLang), { danger: true }))) return;
+          navigate("/");
+          handleDeleteAccount();
+        }} />
 
       {/* ── THE ACCOUNT PANEL IS GONE ───────────────────────────────
           Oliver, 23 Aug 2026, with a red cross drawn across the whole of it:

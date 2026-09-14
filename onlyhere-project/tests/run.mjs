@@ -157,6 +157,7 @@ writeFileSync(entry, `
   export { decodePastedText, looksPercentEncoded } from ${JSON.stringify(join(root, "src/utils/pastedText.js"))};
   export { placesNamedIn, rejectedIn, correctedTo, CHAT_PLACE_CAP } from ${JSON.stringify(join(root, "src/utils/chatPlaces.js"))};
   export { isOwnRoute, RETURN_PARAM, captureRedirectSession, startGoogleSignIn } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
+  export { stashUnsynced, takeStash, dropStash } from ${JSON.stringify(join(root, "src/utils/deviceStash.js"))};
   export { GOOGLE_SIGN_IN } from ${JSON.stringify(join(root, "src/config.js"))};
   export { writeInLanguage } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { guideLanguage, languageOfProse, ruledOutLanguages, briefSentences, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS, MARKER_FLOOR, MARKER_MARGIN } from ${JSON.stringify(join(root, "src/utils/travellerLanguage.js"))};
@@ -15459,14 +15460,91 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // ME_SECTIONS.length threw. Same rule the shapeForLive block states in its own
   // words, and the second time today it has been needed.
   const sections = ME_SECTIONS || [];
-  // Four now: General, About me, Plan, Legal. He revised the list on 23 Aug.
-  is("four categories", sections.length, 4);
-  is("in the order he reads them", sections.map(x => x.id).join(","), "general,about,plan,legal");
+  // Four on 23 Aug: General, About me, Plan, Legal. Five on 15 Sep, when Saved
+  // trips moved here from an anchor two thirds down the Explore tab: "I'd like
+  // 'saved trips' to have its own page under account information."
+  //
+  // SECOND, and that is the rule rather than the number. Every other section
+  // here is a setting somebody opens to change; this is the only one they open
+  // to USE, so it sits directly under General where a returning reader looks
+  // first.
+  is("five categories", sections.length, 5);
+  is("in the order he reads them", sections.map(x => x.id).join(","), "general,trips,about,plan,legal");
   ok("every one has a label", sections.length > 0 && sections.every(x => !!x.label));
   // The blurb is the line under the name on the PHONE list, which is the whole
   // screen before anything is opened. A row with a name and no line is a guess,
   // and his father is the accessibility test for this product.
   ok("and a line saying what is in it", sections.length > 0 && sections.every(x => (x.blurb || "").length > 12));
+
+  // ── AND THE BANNERS HE ASKED FOR ────────────────────────────────
+  //
+  // "I want it to be a bunch of banners from the guides", with a screenshot of
+  // the header at the top of a guide: photograph, gold eyebrow, title over it.
+  // So the rule is that this list shows the same object somebody is about to
+  // open, not a row that stands for it.
+  {
+    const me = readFileSync(join(root, "src/components/AboutMePage.jsx"), "utf8");
+    const meCode = stripComments(me);
+    // THE GUIDE'S OWN PHOTOGRAPH. guideHero walks the trip in order and takes
+    // the first stop that resolves to a published row with a picture, so every
+    // banner is a real place on that specific route. The alternative, one stock
+    // Danish shot behind all of them, is argued against at length in the header
+    // of utils/guideHero.js and would be a picture of somewhere they are not
+    // going.
+    ok("each banner uses that guide's own first-stop photograph",
+       /const hero = guideHero\(g, lookupRealPlace\);/.test(meCode));
+    // AND NO FALLBACK IMAGE. Same rule as the guide header: a gradient
+    // pretending to be a photo is a picture of nowhere, on exactly the guides we
+    // know least about. Those banners are typographic instead.
+    // The first draft of this assertion also asked that the word "placeholder"
+    // appeared nowhere in the file, and went red on four <input placeholder=...>
+    // attributes. A word search is not a rule; what the rule actually says is
+    // that the no-photo branch renders no image and does not reserve the height
+    // of one, so that is what is read.
+    ok("and none is invented where the trip has no picture",
+       /url\("\$\{hero\.photo\}"\)/.test(meCode)
+       && /minHeight: hero\?\.photo \? 150 : 0,[\s\S]{0,160}: C\.surface,/.test(meCode));
+    // White text on an unknown photograph is unreadable on about half of them,
+    // so the scrim is structural rather than decoration.
+    ok("the title is readable over whatever the photograph turns out to be",
+       /linear-gradient\(to top, rgba\(6,10,22,0\.92\)/.test(meCode));
+    // The whole banner is the target. A card somebody has to aim at is a row
+    // wearing a photograph.
+    ok("the whole banner opens the guide",
+       /role="button" tabIndex=\{0\}\s*onClick=\{\(\) => onOpenGuide\?\.\(g\)\}/.test(meCode));
+    ok("and it answers a keyboard too",
+       /e\.key === "Enter" \|\| e\.key === " "/.test(meCode));
+    // Outside the clickable banner, so removing a trip can never be a mis-tap on
+    // the thing that opens it.
+    ok("removing one is not a mis-tap away from opening it",
+       /onClick=\{\(e\) => \{ e\.stopPropagation\(\); onDeleteGuide\(g\.id\); \}\}/.test(meCode));
+    // An empty state that says what to do, not a blank card. This is the screen
+    // a new account sees first.
+    ok("an empty list says how to fill it", /Nothing saved yet\./.test(me));
+
+    // ── WIRED, WHICH IS THIS CODEBASE'S USUAL FAILURE ─────────────
+    const appT = readFileSync(join(root, "src/App.jsx"), "utf8");
+    // Handed the existing handlers rather than reimplemented. openSavedGuide
+    // knows the difference between a row with a shareable link and one built on
+    // this device, and deleteSavedGuide is the one writer of that key.
+    ok("the page is given the openers it needs",
+       /onOpenGuide=\{openSavedGuide\}/.test(appT) && /onDeleteGuide=\{deleteSavedGuide\}/.test(appT));
+    // ── A PLACE, NOT A SCROLL POSITION ────────────────────────────
+    // The menu row opened the Explore tab and scrolled to an anchor two thirds
+    // of the way down it, which is how the thing somebody comes back for became
+    // the hardest thing to find. It is an address now, so the back button works.
+    ok("the menu goes to that address rather than scrolling to an anchor",
+       /navigate\(`\$\{ABOUT_ME_PATH\}\/trips`\)/.test(appT)
+       && !/getElementById\("gx-saved-trips"\)\?\.scrollIntoView/.test(appT));
+    // The count on that row is what is being marked as read, so this still runs.
+    ok("and still marks the count read on the way",
+       /readTripChanges\(\); navigate\(`\$\{ABOUT_ME_PATH\}\/trips`\)/.test(appT));
+    // THE EXPLORE LIST STAYS, and this is not the duplicate door FAQ was. The
+    // account page is behind `aboutMeOpen && !!userSession`, and saves exist
+    // before anybody signs in, so removing it would strand every signed-out
+    // person's trips with no way back to them.
+    ok("the signed-out list is still reachable", /id="gx-saved-trips"/.test(appT));
+  }
 
   // ── AN ADDRESS SOMEBODY CAN TYPE IS AN ADDRESS SOMEBODY CAN GET WRONG
   is("a real section is itself", meSectionFor("plan"), "plan");
@@ -29611,7 +29689,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("there is a resend", /export const resendConfirmation = async \(email\) => \{/.test(authS));
   // The dedicated endpoint, not a second signup call: that path creates or
   // re-touches an account and returns a shape the caller has to interpret.
-  ok("through the endpoint that does only that", /await post\("resend", \{ type: "signup", email/.test(authS));
+  //
+  // WRAPPED IN withReturn ON 14 SEP, and that is the whole of what changed here.
+  // The endpoint is still resend and it is still not signup; it now carries a
+  // redirect_to so the link in the mail comes back to the origin the person is
+  // standing on rather than to whatever the project's Site URL happens to be.
+  // Both halves are asserted, because the rule was never "this exact string", it
+  // was "the endpoint that does only this thing".
+  ok("through the endpoint that does only that",
+     /await post\(withReturn\("resend"\), \{ type: "signup", email/.test(authS));
+  ok("and not through a second signup, which would re-touch the account",
+     !/resendConfirmation = async \(email\) => \{[\s\S]{0,200}signUpWithPassword/.test(authS));
   ok("and the button calls it", /<button onClick=\{resend\}/.test(sheetS));
 
   // ── THE COOLDOWN IS THERE TO PROTECT THEM ───────────────────────
@@ -31026,7 +31114,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // and nothing about it looks wrong from inside the file.
   {
     const authL = readFileSync(join(root, "src/utils/auth.js"), "utf8");
-    const code = stripNonCode(authL);
+    // ── stripComments, NOT stripNonCode, AND THIS IS WHY ──────────
+    // The first draft of this block used stripNonCode and every assertion in it
+    // went red on code that was correct. stripNonCode blanks STRING CONTENTS,
+    // which is right for "is this code still here" and wrong for every rule in
+    // here, because the thing being pinned IS a string: post(withReturn("recover"))
+    // becomes post(withReturn("         ")) and matches nothing. It blanks the
+    // inside of a regex literal for the same reason, which took out the rest.
+    // stripComments blanks the comments and keeps the strings, which is the
+    // combination this needs: a paragraph above a fix quoting the line it
+    // replaced stays invisible, and the line itself stays readable.
+    const code = stripComments(authL);
     ok("the reset link is told where to come back to",
        /post\(withReturn\("recover"\)/.test(code));
     ok("and so is the confirmation link", /post\(withReturn\("signup"\)/.test(code));
@@ -31065,9 +31163,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // that names both possibilities and both doors out.
   {
     const sheetE = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
-    const codeE = stripNonCode(sheetE);
+    // stripComments for the same reason as the block above: these rules are
+    // about which STRING and which REGEX the sheet reaches for, and stripNonCode
+    // blanks the inside of both. Comments still go, so the paragraph quoting
+    // "Invalid login credentials" cannot satisfy an assertion about it.
+    const codeE = stripComments(sheetE);
+    // The one COUNT in here is about code rather than strings, so it uses the
+    // stricter scan and should: a mention of signUpWithPassword inside a string
+    // is not a second call to it.
+    const bareE = stripNonCode(sheetE);
     is("signing up happens in one place and it is the signup branch",
-       (codeE.match(/signUpWithPassword\(/g) || []).length, 1);
+       (bareE.match(/signUpWithPassword\(/g) || []).length, 1);
     ok("and that place is behind the up mode",
        codeE.indexOf('mode === "up"') < codeE.indexOf("signUpWithPassword("));
     ok("a refused sign in says what is wrong and what to do",
@@ -31089,14 +31195,33 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // mail nobody sent, behind a Resend that also sends nothing.
     ok("a repeat signup is recognised by its empty identity list",
        /Array\.isArray\(data\?\.user\?\.identities\) && data\.user\.identities\.length === 0/
-         .test(stripNonCode(readFileSync(join(root, "src/utils/auth.js"), "utf8"))));
+         .test(stripComments(readFileSync(join(root, "src/utils/auth.js"), "utf8"))));
     // AN ARRAY, AND EMPTY. A response shape without the field must fall through
     // to the ordinary inbox screen rather than tell a new person they exist.
     ok("and a response with no identity list is not treated as one",
        /Array\.isArray\(data\?\.user\?\.identities\) &&/
-         .test(stripNonCode(readFileSync(join(root, "src/utils/auth.js"), "utf8"))));
+         .test(stripComments(readFileSync(join(root, "src/utils/auth.js"), "utf8"))));
     ok("and it moves them to the sign-in screen rather than only telling them",
        /if \(alreadyRegistered\) \{[\s\S]{0,200}setMode\("in"\);/.test(codeE));
+    // ── AND THE SENTENCE SURVIVES THE DETECTION BEING WRONG ───────
+    //
+    // `identities` is community-established rather than documented, so this
+    // branch can in principle fire on a genuinely new signup. The first version
+    // of the message ended "so no new one was made", which is the one clause a
+    // false positive turns into a lie. Pinned as a negative because the risk is
+    // a helpful-sounding claim creeping back in, not the sentence going missing.
+    //
+    // The recovery is real and not a hope: sent to the sign-in screen, that
+    // person types the password they just chose, Supabase answers "Email not
+    // confirmed" because the account IS new, and the branch above catches it,
+    // sends the confirmation and shows the inbox screen. Both halves are
+    // asserted, because the wording is only safe while that path exists.
+    ok("the message makes no claim about what the server did",
+       !/no new one was made/.test(M.UI_STRINGS["auth.alreadyHave"].en)
+       && !/der blev ikke oprettet/.test(M.UI_STRINGS["auth.alreadyHave"].da));
+    ok("and the way out of a wrong one is still wired up",
+       /email not confirmed\|not confirmed\/i\.test\(said\)/.test(codeE)
+       && /await resendConfirmation\(to\);/.test(codeE));
 
     // ── AND AN ACCOUNT WAITING ON ITS CONFIRMATION ────────────────
     // "Email not confirmed" on the sign-in screen is a dead end: the mail is
@@ -31113,6 +31238,114 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
        /catch \(again\) \{\s*setError\(String\(again\?\.message \|\| again\)\);/.test(codeE));
   }
 
+  // ── WHOSE THE UNSYNCED COPY IS ──────────────────────────────────
+  //
+  // Two of Oliver's rules collided on 14 Sep and this is where they stop.
+  //
+  //   "The saved items should ONLY be for the account that saves it!!!!"
+  //   "when you delete / log out, the saved should be gone too"
+  //
+  // against the fact that if the last push failed, the device copy is the ONLY
+  // copy and clearing it destroys trips rather than moving them.
+  //
+  // Two answers were tried and rejected before this one. Keeping the copy
+  // whenever the sync had failed is the leak he named, because cloudSyncOk is
+  // false for an offline moment, a refused write AND a fresh reload that has
+  // not pushed yet, so the safe-looking branch is the one that runs. Clearing
+  // unconditionally and saying so is honest and still loses the trips.
+  //
+  // Both rules are about WHO, not about whether. So the copy is held under a
+  // key that names the account, and handed back only to that account on this
+  // device. Asked and answered: "Keep them for the owner only."
+  //
+  // THESE RUN THE REAL MODULE against a Map standing in for localStorage. A
+  // regex would only say the code is present; the property that matters is that
+  // one account cannot read another's key, which is behaviour.
+  {
+    const store = new Map();
+    const prior = globalThis.localStorage;
+    globalThis.localStorage = {
+      getItem: k => (store.has(k) ? store.get(k) : null),
+      setItem: (k, v) => store.set(k, String(v)),
+      removeItem: k => store.delete(k),
+    };
+    try {
+      is("a copy that could not be pushed is held for its owner",
+         M.stashUnsynced("user-A", { places: [{ id: 1 }], guides: [], been: [] }), true);
+      // THE WHOLE POINT. A reader who does not know the id cannot name the key,
+      // so the isolation does not depend on any code here being right.
+      is("and another account cannot see it", M.takeStash("user-B"), null);
+      const back = M.takeStash("user-A");
+      ok("the owner gets it back", !!back && back.places.length === 1);
+      // One shot. A stash that survived being restored would come back after a
+      // later deliberate clear, which is the bug this area started as.
+      is("and only once", M.takeStash("user-A"), null);
+
+      // Nothing to hold is not a failure, and writing an empty record would
+      // make a later sign in report "restored" over nothing.
+      is("nothing to hold is not a write", M.stashUnsynced("user-C", { places: [], guides: [], been: [] }), false);
+      is("and leaves no key behind", M.takeStash("user-C"), null);
+
+      // Without this the stash is the one place a deleted account's trips
+      // survive, on the machine most likely to be shared.
+      M.stashUnsynced("user-D", { places: [{ id: 9 }] });
+      M.dropStash("user-D");
+      is("deleting the account takes it too", M.takeStash("user-D"), null);
+
+      is("no id means no key rather than a shared one",
+         [M.stashUnsynced("", { places: [{ id: 1 }] }), M.takeStash("")], [false, null]);
+      M.stashUnsynced("user-E", { places: [], guides: [], been: [{ kind: "town", id: "x" }] });
+      is("the been list travels with it", M.takeStash("user-E").been.length, 1);
+
+      // Old enough that handing it back would be a surprise rather than a
+      // rescue. 40 days: a laptop somebody returns to after a trip, not the
+      // accumulated saves of every account that ever signed in here.
+      store.set("gemlyx_held_user-F", JSON.stringify({ places: [{ id: 1 }], guides: [], been: [], at: Date.now() - 41 * 24 * 60 * 60 * 1000 }));
+      is("a stale one is not handed back", M.takeStash("user-F"), null);
+      store.set("gemlyx_held_user-G", "not json");
+      is("and neither is junk", M.takeStash("user-G"), null);
+      is("junk is cleared rather than left to fail again", store.has("gemlyx_held_user-G"), false);
+
+      M.stashUnsynced("user-H", { places: [{ id: 1 }] });
+      ok("the key names the account and nothing else",
+         [...store.keys()].filter(k => k.startsWith("gemlyx_held_")).join(",") === "gemlyx_held_user-H");
+    } finally {
+      if (prior) globalThis.localStorage = prior; else delete globalThis.localStorage;
+    }
+
+    // ── AND IT IS WIRED, WHICH IS THIS CODEBASE'S USUAL FAILURE ───
+    const appH = readFileSync(join(root, "src/App.jsx"), "utf8");
+    const soH = appH.indexOf("const handleSignOut = async () => {");
+    const outH = appH.slice(soH, appH.indexOf("const handleDeleteAccount", soH));
+    // Only when the push did not land. A stash written on every sign out is a
+    // copy of the account sitting on the device for no reason.
+    ok("held only when the last push did not land",
+       /const held = landed \? false : stashUnsynced\(userSession\?\.userId, \{ places: savedPlaces, guides: savedGuides, been: beenList \}\);/.test(outH));
+    // Before authSignOut, because userSession carries the id and the next line
+    // sets it to null.
+    ok("and stashed before the session is thrown away",
+       outH.indexOf("stashUnsynced(") < outH.indexOf("await authSignOut()"));
+    // stashUnsynced reports whether localStorage accepted the write, so the
+    // toast cannot claim a rescue that did not happen.
+    ok("the sentence follows what actually happened rather than assuming",
+       /: held\s*\?\s*"Signed out\. The last sync did not land, so those saves are held here for you/.test(outH));
+    // BEFORE the merge, so the push at the end of that effect carries it up and
+    // the account finally gets what the failed sync owed it.
+    ok("taken back on the next sign in by the same account",
+       /const heldBack = takeStash\(userSession\?\.userId\);/.test(appH)
+       && appH.indexOf("const heldBack = takeStash") < appH.indexOf("const merged = mergeSaves(localPlaces"));
+    ok("and folded in rather than overwriting what is there",
+       /mergeSaves\(readLocal\("gemlyx_saved_places"\), heldBack\?\.places \|\| \[\], \[\], \[\]\)\.places/.test(appH)
+       && /mergeBeen\(readLocal\("gemlyx_been"\), heldBack\?\.been \|\| \[\]\)/.test(appH));
+    // A promise made at sign out has to be visibly kept at sign in. `gained`
+    // cannot do it: the stash is merged into localPlaces, so it counts as
+    // already-here rather than as recovered.
+    ok("and the person is told the promise was kept",
+       /const heldCount = \(heldBack\?\.places\?\.length \|\| 0\) \+ \(heldBack\?\.guides\?\.length \|\| 0\);/.test(appH)
+       && /held on this device is back in your account/.test(appH));
+    ok("and deleting the account drops it", /dropStash\(live\.userId\);/.test(appH));
+  }
+
   // ── AND THE QUESTION BEFORE LOGGING OUT ─────────────────────────
   //
   // "Log out needs a 'Are you sure you want to log out?'" It earns one for a
@@ -31126,9 +31359,93 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // ASKED INSIDE THE FUNCTION, not at each door, so a third door cannot
     // arrive without it.
     ok("it asks before anything is undone",
-       /if \(!window\.confirm\(uiT\("auth\.confirmOut", uiLang\)\)\) return false;/.test(out));
+       /if \(!\(await askConfirm\(uiT\("auth\.confirmOut", uiLang\), uiT\("menu\.signOut", uiLang\)\)\)\) return false;/.test(out));
     ok("and it is the first thing the function does",
-       out.indexOf("window.confirm") < out.indexOf("await authSignOut()"));
+       out.indexOf("askConfirm") < out.indexOf("await authSignOut()"));
+
+    // ── AND THE BROWSER IS NOT THE ONE ASKING ─────────────────────
+    //
+    // Both confirms were window.confirm until 14 Sep. That is the wrong dialog
+    // for this audience: the beta goes to Instagram followers, a link opened
+    // from Instagram opens in Instagram's own webview, and native dialogs are
+    // the least reliable thing in those. A SUPPRESSED confirm() RETURNS FALSE,
+    // so log out would not ask, would not error, and would not log anybody out.
+    // The button would do nothing, on the browser most of the first readers
+    // use, and nothing in the code would look wrong. That is the failure this
+    // assertion exists to stop coming back.
+    //
+    // Scoped to the two READER-facing confirms. Studio still uses the browser's
+    // dialog in two places and may: it is one person, on his own laptop, in a
+    // real browser, and a founder tool is not what an Instagram link opens.
+    // stripComments, because the paragraph above the fix says the words
+    // "window.confirm" while explaining why it is gone. Reading it raw finds
+    // the bug report and calls it the bug, which is a shape this suite has hit
+    // three times before.
+    const outCode = stripComments(appO).slice(so, stripComments(appO).indexOf("const handleDeleteAccount", so));
+    ok("neither reader confirm goes through the browser's own dialog",
+       !/window\.confirm/.test(outCode)
+       && !/window\.confirm\("Delete your Gemlyx account/.test(stripComments(appO)));
+    ok("deleting asks through the same sheet",
+       /await askConfirm\(uiT\("auth\.confirmDelete", uiLang\), uiT\("auth\.deleteYes", uiLang\), \{ danger: true \}\)/.test(appO));
+    // AND THE DELETE SENTENCE IS FINALLY TRANSLATED. It was an English
+    // paragraph typed into App.jsx, on a screen whose every other word comes
+    // from the catalogue, at the one moment it mattered most.
+    ok("and says it in the reader's language rather than in English only",
+       ["en", "da", "de"].every(c => String(M.UI_STRINGS["auth.confirmDelete"]?.[c] || "").trim())
+       && M.UI_STRINGS["auth.confirmDelete"].da !== M.UI_STRINGS["auth.confirmDelete"].en);
+    // THE SHEET IS MOUNTED, or askConfirm returns a promise nobody can answer
+    // and the button hangs for ever. Worse than the dialog it replaced.
+    ok("the sheet that answers it is actually on the page",
+       /<ConfirmSheet ask=\{confirmAsk\} onAnswer=\{answerConfirm\}/.test(appO));
+    // THE RESOLVER IS CALLED OUTSIDE THE STATE UPDATER. An updater can run more
+    // than once, and resolving a promise twice silently keeps the first answer.
+    ok("and answers once, outside the state updater",
+       /const pending = confirmAsk;\s*setConfirmAsk\(null\);\s*pending\?\.resolve\(!!yes\);/.test(appO));
+    {
+      const cs = readFileSync(join(root, "src/components/ConfirmSheet.jsx"), "utf8");
+      // Above DetailPage at 970. A confirm that opens behind the screen it was
+      // asked from is worse than no confirm.
+      ok("it opens above every other layer", /zIndex: 1200/.test(cs));
+      // Escape answers no. There is no browser chrome around this one to
+      // rescue somebody who gets stuck in it.
+      ok("there is a keyboard way out", /e\.key === "Escape"\) onAnswer\(false\)/.test(cs));
+      // The dangerous button is not focused on open, so Enter and a stray tap
+      // both land on the safe one.
+      ok("and the safe answer is the one that holds focus", /cancelRef\.current\?\.focus\(\)/.test(cs));
+    }
+
+    // ── AND THE MAIL IT SENDS ITSELF IS SENT ONCE ─────────────────
+    //
+    // The unconfirmed-sign-in branch sends the confirmation rather than only
+    // offering it. Somebody who does not know their account is unconfirmed does
+    // the ordinary thing and presses Sign in again; without this, every press
+    // spends one of Supabase's small hourly allowance and then answers "email
+    // rate limit exceeded", which reads as the site being broken at the exact
+    // moment they are trying to get in.
+    {
+      const sheetR = stripComments(readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8"));
+      ok("the unasked-for confirmation is sent once per address",
+         /if \(autoSentRef\.current !== to\) \{\s*autoSentRef\.current = to;/.test(sheetR));
+      // A ref, not state: the check and the set happen inside one handler and a
+      // setState would not be visible to the next press.
+      ok("held in a ref, because state would not reach the next press",
+         /const autoSentRef = useRef\(""\);/.test(sheetR));
+      // Address-keyed, so correcting a typo and trying again still sends.
+      ok("and cleared when the sheet reopens, so it is a run of presses and not for ever",
+         /autoSentRef\.current = "";/.test(sheetR));
+      // The cooldown is armed either way, so the button below is then the only
+      // way to send another: a press is a person asking, this branch is a guess.
+      // SCOPED TO THAT BRANCH. setResendAt appears earlier in the file too, in
+      // the signup path, so a whole-file index comparison measures the wrong
+      // one and passes for the wrong reason.
+      {
+        const at = sheetR.indexOf("autoSentRef.current !== to");
+        const branch = sheetR.slice(at, at + 900);
+        ok("the cooldown is armed whether or not one went",
+           branch.includes("setResendAt(Date.now() + RESEND_COOLDOWN_MS)")
+           && branch.indexOf("autoSentRef.current = to") < branch.indexOf("setResendAt(Date.now() + RESEND_COOLDOWN_MS)"));
+      }
+    }
     ok("the question says what happens to the saves",
        /Are you sure you want to log out\?/.test(M.UI_STRINGS["auth.confirmOut"].en)
        && /taken off this device/.test(M.UI_STRINGS["auth.confirmOut"].en));
@@ -58020,11 +58337,37 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 
   {
     const appA = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
-    ok("the header button is the face", /<AccountAvatar url=\{avatarUrl\(userSession, userProfile\)\} size=\{32\}/.test(appA));
+    // ── THE FACE ONCE THERE IS ONE, AND THREE LINES BEFORE ───────
+    //
+    // 5 Sep this button became a person in a circle at every state. 15 Sep,
+    // looking at it signed out: "I'd like the frame in the right corner to look
+    // like a normal burger menu when you're not logged in. Instead of a 'circled
+    // man'." Both instructions are the same rule and the first applied half of
+    // it: the control you press to reach your account should look like your
+    // account, and when there is no account it is not one, it is the menu that
+    // carries the navigation on a phone.
+    ok("the header button is the face once somebody is signed in",
+       /userSession \? \(\s*<AccountAvatar url=\{avatarUrl\(userSession, userProfile\)\} size=\{32\}/.test(appA));
+    ok("and three lines before that",
+       /<Ico name="menu" size=\{21\}/.test(appA)
+       && /^  menu: P\(/m.test(readFileSync(join(root, "src/components/Icon.jsx"), "utf8")));
+    // THE BOX IS 32 EITHER WAY, so the badge on its corner and the width of the
+    // header do not move at the moment somebody signs in.
+    ok("and the button is the same size in both states",
+       /<span style=\{\{ width: 32, height: 32, display: "flex"/.test(appA));
     ok("and the menu shows the same one", /<AccountAvatar url=\{avatarUrl\(userSession, userProfile\)\} size=\{34\}/.test(appA));
     // The count still rides on the button. "the notification also need to be on
     // top of the frame at start, so people can see there is a notification."
-    ok("the unread count is still on it", /className="gemlyx-account"[\s\S]{0,900}unreadTripChanges > 0 && \(/.test(appA));
+    // WINDOWED BY MARKER, NOT BY LENGTH. This was [\s\S]{0,900} and went red the
+    // day the button learned two states, on code that was correct, because the
+    // ternary pushed the badge past the end of the window. The button ends where
+    // its closing tag is, so that is what it reads. Third time this suite has
+    // been bitten by a character count standing in for a scope.
+    {
+      const btn = appA.slice(appA.indexOf('className="gemlyx-account"'));
+      const justTheButton = btn.slice(0, btn.indexOf("</button>"));
+      ok("the unread count is still on it", /unreadTripChanges > 0 && \(/.test(justTheButton));
+    }
     // ── AND THE MENU READ A KEY THAT DOES NOT EXIST ───────────────
     // Both lines said `userSession.user?.email`, and auth.js shape() keeps
     // `email` at the top level and drops the whole `user` object. So the circle

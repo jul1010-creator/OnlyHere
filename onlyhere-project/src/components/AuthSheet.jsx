@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 // The questions themselves live in one place, shared with ProfileSheet.
 import { ProfileQuestions } from "./ProfileQuestions";
 import { EMPTY_PROFILE, saveProfile, holdProfile, missingRequired, REQUIRED_LABEL, underMinimumAge, MIN_ACCOUNT_AGE, TERMS_VERSION } from "../utils/profile";
@@ -96,6 +96,13 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   // rather than mysterious.
   const [sentTo, setSentTo] = useState("");
   const [resendAt, setResendAt] = useState(0);   // epoch ms the resend unlocks
+  // The address the sheet has already sent an unasked-for confirmation to. See
+  // the branch in submit() that catches "Email not confirmed": it sends the
+  // mail rather than only offering it, and Supabase's hourly allowance is small
+  // enough that doing so on every press would spend it in a minute. A ref, not
+  // state, because the check and the set happen inside one handler and a
+  // setState would not be visible to the next press.
+  const autoSentRef = useRef("");
   const [now, setNow] = useState(() => Date.now());
   // The other deliberate way out, since the backdrop is no longer one. Bound
   // only while the sheet is open, so it cannot swallow Escape from anything else.
@@ -164,6 +171,10 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
     setEmail(""); setPassword(""); setConfirm("");
     setAnswers(EMPTY_PROFILE);
     setSentTo(""); setResendAt(0);
+    // Cleared with the rest of the sheet, so closing it and coming back is a
+    // fresh start for this too. The guard is against a run of presses in one
+    // sitting, not a permanent refusal to ever send again.
+    autoSentRef.current = "";
   }, [open, initialMode]);
 
   // Declared BEFORE the early return, because a hook that only sometimes runs
@@ -376,12 +387,29 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         const to = email.trim();
         setSentTo(to);
         setNotice(uiT("auth.confirmFirst", lang));
-        try {
-          await resendConfirmation(to);
-          setError(null);
-        } catch (again) {
-          setError(String(again?.message || again));
+        // ── ONCE PER ADDRESS, NOT ONCE PER ATTEMPT ────────────────
+        //
+        // Supabase's hourly allowance is small, and a person who does not know
+        // their account is unconfirmed does the ordinary thing: press Sign in
+        // again. Sending on every attempt spends the whole allowance in a
+        // minute and then answers "email rate limit exceeded", which reads as
+        // the site being broken at the exact moment they are trying to get in.
+        //
+        // A ref rather than state, because the decision is made inside this
+        // handler and a setState would not be visible to the next press.
+        // Address-keyed, so correcting a typo and trying again still sends.
+        if (autoSentRef.current !== to) {
+          autoSentRef.current = to;
+          try {
+            await resendConfirmation(to);
+            setError(null);
+          } catch (again) {
+            setError(String(again?.message || again));
+          }
         }
+        // The cooldown is armed either way. The button below is then the only
+        // way to send another, which is the point: a press is a person asking,
+        // and this branch is the app guessing.
         setResendAt(Date.now() + RESEND_COOLDOWN_MS);
         setNow(Date.now());
         setBusy(false);
