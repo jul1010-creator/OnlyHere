@@ -13906,8 +13906,15 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and the wording it replaced is off the screen",
      !/add a few optional details about yourself/.test(stripComments(asheet)));
   // The wording moved to a plain register on 23 Aug at his request. The RULE is
-  // that deletion copy names the profile, not that it uses one sentence.
-  ok("and deletion covers it too", /your details and everything Gemlyx has learned/.test(accountScreen));
+  // that deletion copy names the profile, not that it uses one sentence. It went
+  // red again on 14 Sep when the note added the login itself and turned the "and"
+  // into a comma, so it now reads the deletion sentence and asks that both halves
+  // of the profile are named in it, in any order, with any punctuation between.
+  // Scoped to that sentence on purpose: "what Gemlyx has learned" also appears in
+  // the About me section blurb, and an unscoped match would be green with the
+  // deletion note deleted.
+  ok("and deletion covers it too",
+     /Removes[^<]*your details[^<]*Gemlyx has learned/.test(accountScreen));
 
   // ── SKIPPING IS A REAL ANSWER ─────────────────────────────────────
   // An optional step whose decline is a grey link is not optional.
