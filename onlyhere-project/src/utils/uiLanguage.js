@@ -144,6 +144,24 @@ export const UI_STRINGS = {
   // not work.
   "menu.navigate": { en: "Navigate",      da: "Gå til",              de: "Navigation" },
   "menu.saved":    { en: "Saved trips",   da: "Gemte ture",          de: "Gespeicherte Reisen" },
+  // ── TWO ROWS CAME OUT OF THE MENU, 14 SEP 2026 ────────────────────
+  //
+  // FAQ opened the Essentials tab, which is already a row in Navigate directly
+  // above it: "FAQ shouldn't be there either, I think." One page, two doors, in
+  // one menu. THE KEY STAYS, and this is the reason to read before deleting it:
+  // it is also the heading on the Essentials tab itself, so it is still
+  // rendered and still has to be a word in three languages.
+  //
+  // menu.paid went WITH its key, because nothing renders it any more, and an
+  // entry nothing renders is a translation nobody can check and three columns
+  // to keep in step for no reader. It moved on his instruction: "How we're paid
+  // should be along the privacy and terms of use." It was put in the menu on 9
+  // Sep for a good reason, that somebody wondering why a booking link is there
+  // looks in the menu, and it belongs with the other two documents describing
+  // the arrangement between a reader and the site. It is in the footer and on
+  // the account page's Legal card, beside Terms and Privacy in both, where it
+  // is written in English rather than from a key.
+  //
   // "Ofte stillede spørgsmål" is the full Danish and it is 24 characters in a
   // 10px uppercase heading. This is the short form both languages use in
   // ordinary writing.
@@ -151,14 +169,15 @@ export const UI_STRINGS = {
   "menu.credits":  { en: "Photo credits", da: "Fotokreditering",     de: "Bildnachweise" },
   // Danish borrows "support" for a paid helpdesk. This is a person answering
   // his own email, which is "hjælp".
-  // ── AND HOW THE MONEY WORKS, WHERE SOMEBODY WOULD LOOK ────────────
-  //
-  // Oliver, 9 Sep 2026. It was a footer link and a row on the account page,
-  // both of which are places a reader reaches after deciding to trust the site.
-  // Somebody wondering why a booking link is there looks in the menu.
-  "menu.paid":       { en: "How we are paid", da: "Sådan tjener vi penge", de: "Womit wir Geld verdienen" },
   "menu.support":  { en: "Support",       da: "Hjælp",               de: "Hilfe" },
   "menu.account":  { en: "Account",       da: "Konto",               de: "Konto" },
+  // ── AND THE WAY BACK OUT ──────────────────────────────────────────
+  //
+  // Oliver, 14 Sep 2026: "I want login here." Then, a minute later: "I mean log
+  // out." Signing out was a button on the account page, two screens in, which
+  // is a long way to walk for the one action somebody takes when they want to
+  // stop being signed in on this machine.
+  "menu.signOut":  { en: "Log out",       da: "Log ud",              de: "Abmelden" },
   // Its own entry rather than reusing row.needAccount.action, which holds the
   // same word today. Not duplication for its own sake: the suite reads literal
   // keys out of App.jsx with a two-segment pattern, so a three-segment key
@@ -438,6 +457,32 @@ export const UI_STRINGS = {
   "auth.passChanged":   { en: "Password changed. You are signed in.", da: "Adgangskoden er skiftet. Du er logget ind.", de: "Passwort geändert. Du bist angemeldet." },
   "auth.resetSent":     { en: "If that email has an account, a reset link is on its way.", da: "Hvis der er en konto på den mail, er et nulstillingslink på vej.", de: "Wenn es zu dieser Adresse ein Konto gibt, ist ein Link unterwegs." },
   "auth.noSession":     { en: "That sign in did not come back with a session. Try again in a moment.", da: "Det login kom ikke tilbage med en session. Prøv igen om et øjeblik.", de: "Diese Anmeldung kam ohne Sitzung zurück. Versuch es gleich noch einmal." },
+  // ── WHAT A FAILED SIGN IN ACTUALLY SAYS ───────────────────────────
+  //
+  // Oliver, 14 Sep 2026: "logging into an account that doesn't exist, just
+  // 'creates a new account'." It does not, and cannot: signUpWithPassword is
+  // called from one branch of one function and that branch is the signup form.
+  // What it DOES is answer an unknown address with Supabase's own three words,
+  // "Invalid login credentials", which say nothing about which of the two
+  // things is wrong. Somebody who reads that, presses "New User? Sign up
+  // here!" and lands in an account has watched the sheet create one, which is
+  // exactly the sentence he wrote.
+  //
+  // BOTH POSSIBILITIES, ON PURPOSE. Supabase returns one message for a wrong
+  // password and for an address with no account, so that a stranger cannot use
+  // the form to find out who has an account here. Naming only the first would
+  // be a guess; naming only the second would give that away. So it says both,
+  // and points at the two doors out.
+  "auth.badLogin":      { en: "That email and password do not match an account. Check the password, or use Forgot password. If you have not made an account yet, sign up below.", da: "Den mail og adgangskode passer ikke til en konto. Tjek adgangskoden, eller brug Glemt adgangskode. Har du ikke oprettet en konto endnu, så opret dig nedenfor.", de: "Diese E-Mail und dieses Passwort gehören zu keinem Konto. Prüf das Passwort oder nutze Passwort vergessen. Wenn du noch kein Konto hast, registrier dich unten." },
+  // ── AND WHAT LOGGING OUT ASKS FIRST ───────────────────────────────
+  //
+  // "Log out needs a 'Are you sure you want to log out?'" It does, and the
+  // reason is one he himself created an hour earlier: signing out now clears
+  // the saves off this device. That is right, and it is a surprise, so the
+  // question is followed by the fact rather than asked on its own.
+  "auth.confirmOut":    { en: "Are you sure you want to log out? Your saved places and guides stay in your account and come back when you sign in, and they are taken off this device.", da: "Er du sikker på, at du vil logge ud? Dine gemte steder og guider bliver i din konto og kommer tilbage, når du logger ind, og de fjernes fra denne enhed.", de: "Willst du dich wirklich abmelden? Deine gespeicherten Orte und Reisen bleiben in deinem Konto und sind nach der nächsten Anmeldung wieder da, und sie werden von diesem Gerät entfernt." },
+  "auth.confirmFirst":  { en: "This account still needs its email confirmed. Open the link we sent, or send it again below.", da: "Kontoen mangler stadig at få bekræftet mailen. Åbn linket, vi sendte, eller send det igen nedenfor.", de: "Für dieses Konto fehlt noch die Bestätigung der E-Mail. Öffne den Link, den wir geschickt haben, oder sende ihn unten erneut." },
+  "auth.alreadyHave":   { en: "That address already has an account, so no new one was made. Sign in below, or use Forgot password.", da: "Der er allerede en konto på den adresse, så der blev ikke oprettet en ny. Log ind nedenfor, eller brug Glemt adgangskode.", de: "Zu dieser Adresse gibt es schon ein Konto, es wurde also keins angelegt. Melde dich unten an oder nutze Passwort vergessen." },
   "auth.stillNeeded":   { en: "Still needed:",      da: "Mangler stadig:",      de: "Fehlt noch:" },
   // The age sits between these two, so both halves are written out and the
   // number is put between them by the caller.

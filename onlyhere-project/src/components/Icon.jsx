@@ -29,6 +29,10 @@ const ICONS = {
   pin: P("M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11z", <circle cx="12" cy="10" r="2.6" />),
   bulb: P("M9 18h6 M10 21h4 M12 3a6 6 0 0 1 4 10.5c-.8.7-1 1.5-1 2.5H9c0-1-.2-1.8-1-2.5A6 6 0 0 1 12 3z"),
   user: P("M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4.5 21a7.5 7.5 0 0 1 15 0"),
+  // A door with an arrow leaving it. Added 14 Sep 2026 for the menu's Log out
+  // row, which had nothing to wear: the nearest thing in this set was `user`,
+  // and two rows carrying the same face is how a menu stops being scannable.
+  out: P("M10 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5 M16 17l5-5-5-5 M21 12H9"),
   help: P("M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M9.5 9a2.5 2.5 0 0 1 4.9.8c0 1.7-2.4 2.2-2.4 3.7 M12 17h.01"),
   mail: P("M4 6h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z M3.5 7l8.5 6 8.5-6"),
   book: P("M5 4h6a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H5z M19 4h-6a0 0 0 0 0 0 0v16a2 2 0 0 1 2-2h4z"),

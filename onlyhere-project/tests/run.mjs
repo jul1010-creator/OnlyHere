@@ -31005,12 +31005,174 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      ["https://evil.example", "#//evil.example", "#access_token=abc", "javascript:alert(1)", "", null].map(isOwnRoute),
      [false, false, false, false, false, false]);
 
+  // ── THE THREE EMAILED LINKS THAT LANDED NOWHERE ─────────────────
+  //
+  // Oliver, 14 Sep 2026, going to cook: "you need to implement the 'I forgot my
+  // password'." Every piece of it was already written and had been since
+  // August: the link on the sheet, sendPasswordReset, the recovery branch in
+  // captureRedirectSession, the set-a-new-password screen and updatePassword
+  // behind it. Asserted, too, several blocks above this one.
+  //
+  // What was missing is the piece none of those tests could see. Supabase puts
+  // a link in three emails, and where each one lands is decided by a
+  // `redirect_to` on the request that sends it. ONLY the Google button set one.
+  // The other three fell back to the project's Site URL, one value in a
+  // dashboard that has pointed at a Vercel preview for most of this project's
+  // life, so the mail sent, the token was real, and the link opened a different
+  // copy of the app at a different origin where the fragment is read by nothing
+  // and the one-use token is spent.
+  //
+  // A whole feature can be built, tested and useless on one missing parameter,
+  // and nothing about it looks wrong from inside the file.
+  {
+    const authL = readFileSync(join(root, "src/utils/auth.js"), "utf8");
+    const code = stripNonCode(authL);
+    ok("the reset link is told where to come back to",
+       /post\(withReturn\("recover"\)/.test(code));
+    ok("and so is the confirmation link", /post\(withReturn\("signup"\)/.test(code));
+    ok("and the resend of it", /post\(withReturn\("resend"\)/.test(code));
+    // ON THE QUERY STRING, WHICH IS THE PART THAT IS EASY TO GET WRONG. GoTrue
+    // reads redirect_to off the URL on these endpoints and ignores a body field
+    // of the same name, so putting it in the JSON would have looked exactly like
+    // a fix and changed nothing.
+    ok("as a query parameter rather than a body field",
+       /\$\{path\}\?redirect_to=\$\{encodeURIComponent\(back\)\}/.test(code));
+    // One construction, shared, because three call sites getting it right and
+    // one not is the bug this block is about.
+    ok("built once and shared with the Google button",
+       /const returnUrl = \(\) => \{/.test(code)
+       && /authorize\?provider=google&redirect_to=\$\{encodeURIComponent\(returnUrl\(\)\)\}/.test(code));
+    // returnUrl READS both of these, so they have to be declared above it. A
+    // const read before its declaration is only safe while nothing calls the
+    // reader during module evaluation, which is not a property to rely on.
+    ok("and the two it reads are declared above it",
+       code.indexOf("export const RETURN_PARAM") < code.indexOf("const returnUrl")
+       && code.indexOf("export const isOwnRoute") < code.indexOf("const returnUrl"));
+  }
+
+  // ── AND WHAT THE SHEET SAYS WHEN A SIGN IN FAILS ────────────────
+  //
+  // "Apparently, logging into an account that doesn't exist, just 'creates a
+  // new account'." It does not, and the first assertion here is the one that
+  // says so: signUpWithPassword is reachable from exactly one branch of one
+  // function, and that branch is the signup form.
+  //
+  // What the sheet DID do is print Supabase's three words, "Invalid login
+  // credentials", which are deliberately the same for a wrong password and for
+  // an address with no account so that the form cannot be used to find out who
+  // has one. Somebody who reads that, presses "New User? Sign up here!" and
+  // lands in an account has watched the sheet create one. The fix is a sentence
+  // that names both possibilities and both doors out.
+  {
+    const sheetE = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
+    const codeE = stripNonCode(sheetE);
+    is("signing up happens in one place and it is the signup branch",
+       (codeE.match(/signUpWithPassword\(/g) || []).length, 1);
+    ok("and that place is behind the up mode",
+       codeE.indexOf('mode === "up"') < codeE.indexOf("signUpWithPassword("));
+    ok("a refused sign in says what is wrong and what to do",
+       /invalid login credentials\/i\.test\(said\) \? uiT\("auth\.badLogin", lang\)/.test(codeE));
+    // BOTH POSSIBILITIES, because naming only one either guesses or gives away
+    // who has an account here.
+    ok("and names both, rather than guessing which",
+       /do not match an account/.test(M.UI_STRINGS["auth.badLogin"].en)
+       && /Forgot password/.test(M.UI_STRINGS["auth.badLogin"].en)
+       && /sign up/i.test(M.UI_STRINGS["auth.badLogin"].en));
+    // Matched on the wording rather than the status, because the same 400
+    // carries messages worth passing through as they are.
+    ok("and every other message still reaches the screen as itself",
+       /setError\(\/invalid login credentials\/i\.test\(said\) \? uiT\("auth\.badLogin", lang\) : said\)/.test(codeE));
+
+    // ── AN ADDRESS THAT IS ALREADY TAKEN ANSWERS 200 ──────────────
+    // Supabase does not error on a repeat signup, for the same anti-enumeration
+    // reason. Without this the person gets "check your inbox" and waits for a
+    // mail nobody sent, behind a Resend that also sends nothing.
+    ok("a repeat signup is recognised by its empty identity list",
+       /Array\.isArray\(data\?\.user\?\.identities\) && data\.user\.identities\.length === 0/
+         .test(stripNonCode(readFileSync(join(root, "src/utils/auth.js"), "utf8"))));
+    // AN ARRAY, AND EMPTY. A response shape without the field must fall through
+    // to the ordinary inbox screen rather than tell a new person they exist.
+    ok("and a response with no identity list is not treated as one",
+       /Array\.isArray\(data\?\.user\?\.identities\) &&/
+         .test(stripNonCode(readFileSync(join(root, "src/utils/auth.js"), "utf8"))));
+    ok("and it moves them to the sign-in screen rather than only telling them",
+       /if \(alreadyRegistered\) \{[\s\S]{0,200}setMode\("in"\);/.test(codeE));
+
+    // ── AND AN ACCOUNT WAITING ON ITS CONFIRMATION ────────────────
+    // "Email not confirmed" on the sign-in screen is a dead end: the mail is
+    // what they need and the button that sends it is on the other screen,
+    // behind a signup they cannot repeat because the address is taken.
+    ok("an unconfirmed sign in is taken to the screen with the resend on it",
+       /email not confirmed\|not confirmed\/i\.test\(said\)/.test(codeE)
+       && /setSentTo\(to\);/.test(codeE));
+    // AND THE MAIL IS SENT. That screen says a link is on its way, which would
+    // be untrue if arriving there only armed a button.
+    ok("and the mail is actually sent, not merely offered",
+       /await resendConfirmation\(to\);/.test(codeE));
+    ok("with the refusal reported rather than swallowed",
+       /catch \(again\) \{\s*setError\(String\(again\?\.message \|\| again\)\);/.test(codeE));
+  }
+
+  // ── AND THE QUESTION BEFORE LOGGING OUT ─────────────────────────
+  //
+  // "Log out needs a 'Are you sure you want to log out?'" It earns one for a
+  // reason he created an hour earlier: signing out now CLEARS the saves off
+  // this device, which is right and is not what a log out usually does. So the
+  // question is followed by that fact rather than asked on its own.
+  {
+    const appO = readFileSync(join(root, "src/App.jsx"), "utf8");
+    const so = appO.indexOf("const handleSignOut = async () => {");
+    const out = appO.slice(so, appO.indexOf("const handleDeleteAccount", so));
+    // ASKED INSIDE THE FUNCTION, not at each door, so a third door cannot
+    // arrive without it.
+    ok("it asks before anything is undone",
+       /if \(!window\.confirm\(uiT\("auth\.confirmOut", uiLang\)\)\) return false;/.test(out));
+    ok("and it is the first thing the function does",
+       out.indexOf("window.confirm") < out.indexOf("await authSignOut()"));
+    ok("the question says what happens to the saves",
+       /Are you sure you want to log out\?/.test(M.UI_STRINGS["auth.confirmOut"].en)
+       && /taken off this device/.test(M.UI_STRINGS["auth.confirmOut"].en));
+    // AND THE ANSWER REACHES THE CALLER. The account page called this as
+    // `navigate("/"); handleSignOut();`, so the moment a question appeared in
+    // here, Cancel left somebody moved off the screen they said they wanted to
+    // stay on.
+    ok("cancelling does not still move them off the page",
+       /onSignOut=\{async \(\) => \{ if \(await handleSignOut\(\)\) navigate\("\/"\); \}\}/.test(appO));
+    ok("and the function says whether it went ahead", /\n    return true;\n  \};/.test(out + "\n"));
+  }
+
   // ── THE GOOGLE BUTTON USED TO EAT THE SIGNUP FORM ────────────────
   // It was onClick={startGoogleSignIn} with the profile questions rendering
   // directly underneath it, so name, year of birth and gender went to the
   // redirect. The mandatory check lives inside submit(), so it never ran either.
   {
     const sheetA = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
+
+    // ── THE TWO WORDS THAT DECIDE WHAT A BROWSER FILLS IN ─────────
+    //
+    // Oliver, 14 Sep 2026, with a photograph of his own sign-in sheet: an empty
+    // email box above a password box Chrome had already filled. "password is
+    // for some reason always on as default.. having your mail is fine.. but not
+    // password.."
+    //
+    // Two attributes, set as though they were independent, and they are a pair.
+    // Chrome pairs a saved login by finding the USERNAME field, and the email
+    // box said autoComplete="email", which is not one, so it filled the half it
+    // recognised and left the half it did not. The half it filled was the
+    // secret, because the password box said "current-password", which is the
+    // attribute that asks for exactly that.
+    //
+    // So both halves are pinned, and together, because fixing either one alone
+    // puts the sheet back into a state he has already rejected: "username"
+    // without "new-password" fills both, and "new-password" without "username"
+    // leaves the sheet blank and the address retyped every time.
+    ok("the address is offered, because that is the half he does not mind",
+       /autoComplete="username"/.test(sheetA));
+    ok("and no password box asks a browser for a saved one",
+       !/current-password/.test(stripComments(sheetA)));
+    is("every password box says new-password instead",
+       (stripComments(sheetA).match(/autoComplete="new-password"/g) || []).length, 2);
+
     // SCOPED TO THE BUTTON'S OWN HANDLER. Both `missingRequired` and
     // `holdProfile` also appear inside submit(), which sits earlier in the file,
     // so a whole-file indexOf comparison would be measuring the email path and
@@ -54703,7 +54865,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // them did not, so a Danish reader opened the menu and met Saved trips,
   // Navigate, FAQ and Support in English with Tema underneath. Half a
   // translation reads worse than none, because it looks like the switch failed.
-  const MENU_KEYS = ["menu.navigate", "menu.saved", "menu.faq", "menu.credits", "menu.support", "menu.account", "menu.signIn", "menu.paid"];
+  // menu.paid came off this list on 14 Sep with its key, and menu.faq stayed on
+  // it without its row: the row went, the Essentials tab heading that uses the
+  // same key did not. menu.signOut joined it the same night.
+  const MENU_KEYS = ["menu.navigate", "menu.saved", "menu.faq", "menu.credits", "menu.support", "menu.account", "menu.signIn", "menu.signOut"];
   is("every menu row is in the catalogue", MENU_KEYS.filter(k => !UI_STRINGS[k]), []);
   is("and every one of them is written in all three",
      MENU_KEYS.filter(k => !["en", "da", "de"].every(c => String(UI_STRINGS[k]?.[c] || "").trim())), []);
@@ -54715,17 +54880,68 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   const appMenu = readFileSync(join(root, "src/App.jsx"), "utf8");
   is("and every one is actually rendered from it",
      MENU_KEYS.filter(k => !appMenu.includes(`uiT("${k}", uiLang)`)), []);
-    // ── AND WHERE HE ASKED FOR IT ──────────────────────────────────
-    // Oliver, 9 Sep 2026: "I prefer having 'how we're paid' in the burgermenu
-    // or under FAQ". It was a footer link, which is where a reader looks for it
-    // only after already wondering, and the point of saying it is that they do
-    // not have to wonder.
-    ok("how we are paid is a row in the menu",
-       /\{ id: "paid", label: uiT\("menu\.paid", uiLang\), ico: "book", action: "paid" \}/.test(appMenu));
-    // A row wired to nothing is worse than no row: it looks like the page is
-    // broken rather than like the link is missing.
-    ok("and pressing it opens the page that says it",
-       /else if \(item\.action === "paid"\) navigate\(AFFILIATES_PATH\);/.test(appMenu));
+    // ── AND WHERE HE ASKED FOR IT, TWICE ───────────────────────────
+    //
+    // 9 Sep 2026: "I prefer having 'how we're paid' in the burgermenu or under
+    // FAQ", because a footer link is where a reader looks only after already
+    // wondering, and the point of saying it is that they do not have to wonder.
+    //
+    // 14 Sep 2026, with the menu open in front of him: "How we're paid should
+    // be along the privacy and terms of use." So the row went and the rule
+    // changed with it. What BOTH instructions share, and what is pinned here,
+    // is that a reader can reach it without hunting: it is in the footer and on
+    // the account page's Legal card, in both cases beside Terms and Privacy.
+    //
+    // Pinned as a pair, deliberately. Either surface alone is one page away
+    // from being the footer-only state he rejected on 9 Sep.
+    ok("how we are paid sits with the terms and the privacy policy, in the footer",
+       /href=\{AFFILIATES_PATH\}[^<]*>How we are paid<\/a>/.test(appMenu)
+       && appMenu.indexOf('href="/terms.html"') < appMenu.indexOf("href={AFFILIATES_PATH}"));
+    ok("and on the account page's legal card with the same two",
+       /\["How we are paid", AFFILIATES_PATH, false\][\s\S]{0,200}"\/terms\.html", true[\s\S]{0,80}"\/privacy\.html", true/
+         .test(readFileSync(join(root, "src/components/AboutMePage.jsx"), "utf8")));
+    // AND THE KEY WENT WITH THE ROW. An entry nothing renders is a translation
+    // nobody can check and three columns to keep in step for no reader.
+    ok("and the key the row used is gone rather than left unused",
+       !Object.prototype.hasOwnProperty.call(UI_STRINGS, "menu.paid"));
+
+    // ── AND THE OTHER TWO ROWS HE TOOK OFF ─────────────────────────
+    //
+    // "FAQ shouldn't be there either, I think." It opened the Essentials tab,
+    // which is already a row in Navigate directly above it: one page, two doors,
+    // in one menu. The KEY stays, because the same word is the heading on that
+    // tab, which is why this asserts the row and not the string.
+    ok("FAQ is not a second door to a page already in Navigate",
+       !/\{ id: "faq",/.test(appMenu) && !/item\.action === "faq"/.test(appMenu));
+    ok("but the word is still there for the tab that uses it",
+       /uiT\("menu\.faq", uiLang\)/.test(appMenu));
+    // "we already have photo credits on our pictures." The row went and the
+    // SHEET DID NOT: CC BY and CC BY-SA make attribution a condition of use, so
+    // the page listing every photographer is what keeps those images
+    // legitimately usable. It moved to the footer, beside the other documents
+    // of its kind. A sheet nothing can open is the licence quietly lapsing.
+    ok("photo credits is off the menu",
+       !/\{ id: "credits",/.test(appMenu));
+    ok("and still reachable, because the licence depends on it",
+       /onClick=\{\(\) => setShowCredits\(true\)\}/.test(appMenu));
+
+    // ── AND THE WAY BACK OUT IS IN THE MENU ────────────────────────
+    //
+    // "I want login here." Then: "I mean log out." Signing out was a button on
+    // the account page, two screens in, which is a long walk for the one action
+    // somebody takes when they want to stop being signed in on this machine.
+    ok("log out is a row, and only when there is something to log out of",
+       /\.\.\.\(userSession \? \[\{ id: "logout", label: uiT\("menu\.signOut", uiLang\), ico: "out", action: "logout" \}\] : \[\]\)/.test(appMenu));
+    // handleSignOut and not a bare authSignOut. The wrapper is what pushes
+    // anything unsynced, releases the device copy and says which of those
+    // happened; the raw call would leave this account's saves on the machine
+    // for whoever signs in next, which is the bug the wrapper exists for.
+    ok("and it goes through the sign out that releases the device copy",
+       /else if \(item\.action === "logout"\) handleSignOut\(\);/.test(appMenu));
+    // The row had nothing to wear: the nearest icon in the set was `user`, and
+    // two rows carrying the same face is how a menu stops being scannable.
+    ok("with an icon of its own rather than a second user",
+       /\n  out: P\(/.test(readFileSync(join(root, "src/components/Icon.jsx"), "utf8")));
   // The empty states and the two search boxes, same rule. These are the screens
   // where a reader is already unsure whether the site is working, which is the
   // worst possible place for a sentence they cannot read.
@@ -54851,7 +55067,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      AUTH_KEYS.filter(k => UI_STRINGS[k].da === UI_STRINGS[k].en), []);
   is("nor a German one", AUTH_KEYS.filter(k => UI_STRINGS[k].de === UI_STRINGS[k].en), []);
   const authSrc = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
-  is("every auth key is rendered by the sheet", AUTH_KEYS.filter(k => !authSrc.includes(`"${k}"`)), []);
+  // ── ONE OF THEM IS NOT ON THE SHEET, AND SHOULD NOT BE ───────────
+  // The rule this defends is that no auth string is orphaned, not that the
+  // sheet is the only screen allowed to say something about an account.
+  // auth.confirmOut is the "are you sure you want to log out" question, and
+  // logging out happens in App.jsx, from the menu and from the account page,
+  // never on the sheet. Reading the pair keeps the rule and stops the next
+  // account string outside the sheet from being a false failure.
+  const authApp = readFileSync(join(root, "src/App.jsx"), "utf8");
+  is("every auth key is rendered by the sheet or by the app around it",
+     AUTH_KEYS.filter(k => !authSrc.includes(`"${k}"`) && !authApp.includes(`"${k}"`)), []);
   ok("and the sheet imports the reader",
      /import \{ t as uiT, DEFAULT_UI_LANGUAGE \} from "\.\.\/utils\/uiLanguage";/.test(authSrc));
   // A default of English rather than "", so a caller that passes nothing gets

@@ -12786,6 +12786,25 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   };
 
   const handleSignOut = async () => {
+    // ── ASKED ONCE, HERE, RATHER THAN AT EACH DOOR ───────────────────
+    //
+    // Oliver, 14 Sep 2026: "Log out needs a 'Are you sure you want to log
+    // out?'" There are two doors to this now, the menu row and the account
+    // page's button, and the question lives in the function both of them call
+    // so a third door cannot arrive without it.
+    //
+    // The reason it earns a confirm is the paragraph below: signing out CLEARS
+    // the saves off this device, which is right and is not what anybody expects
+    // a log out to do. window.confirm rather than a sheet of our own, because
+    // that is what the delete button already uses and two kinds of "are you
+    // sure" in one account screen is one design.
+    //
+    // RETURNS WHETHER IT WENT AHEAD, and that is not tidiness. The account page
+    // called this as `navigate("/"); handleSignOut();`, so the moment a question
+    // appeared in here, pressing Cancel left somebody on the home page having
+    // been moved off the screen they said they wanted to stay on. The caller
+    // needs the answer, so it is given one.
+    if (!window.confirm(uiT("auth.confirmOut", uiLang))) return false;
     // ── WHOSE SAVES ARE THESE ────────────────────────────────────────
     //
     // Oliver, 14 Sep 2026, looking at the signup sheet a minute after signing
@@ -12860,7 +12879,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
         : "Signed out. The last sync to your account did not land, so anything saved since then is not in it.",
       landed ? 3200 : 6000,
     );
-    
+    return true;
   };
 
   const handleDeleteAccount = async () => {
@@ -23529,6 +23548,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <a href={SUPPORT_PATH} style={{ color: C.muted, textDecoration: "underline" }}>Contact &amp; report</a>
                   <span style={{ opacity: 0.5 }}>·</span>
                   <a href={AFFILIATES_PATH} style={{ color: C.muted, textDecoration: "underline" }}>How we are paid</a>
+                  <span style={{ opacity: 0.5 }}>·</span>
+                  {/* Moved here off the burger menu on 14 Sep 2026, because the
+                      credit is already printed under the photograph it belongs
+                      to. Kept rather than deleted: CC BY and CC BY-SA make
+                      attribution a condition of use, so the sheet listing every
+                      photographer and licence is what keeps those pictures
+                      legitimately usable, and this is the row of the site where
+                      the other documents of that kind already live. */}
+                  <span onClick={() => setShowCredits(true)} style={{ textDecoration: "underline", cursor: "pointer" }}>{uiT("menu.credits", uiLang)}</span>
                 </div>
                 <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.87 · Aug 2026</div>
               </div>
@@ -26394,23 +26422,53 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             ))}
             </div>
             <div style={{ borderTop: `1px solid ${C.border}`, margin: "6px 0" }} />
+            {/* ── WHAT CAME OUT OF THIS LIST, 14 SEP 2026 ──────────────
+                Oliver read it back to himself with the menu open and took three
+                rows off it, each for its own reason.
+
+                FAQ opened the Essentials tab, which is already a row in
+                Navigate directly above: "FAQ shouldn't be there either, I
+                think." One page behind two doors in one menu.
+
+                How we are paid moved rather than went: "How we're paid should
+                be along the privacy and terms of use." It is in the footer and
+                on the account page's Legal card, beside Terms and Privacy in
+                both, which is where a reader looks for the arrangement between
+                themselves and a site.
+
+                Photo credits came off because the credit is already ON the
+                photograph: "we already have photo credits on our pictures."
+                The sheet itself is kept and moved to the footer rather than
+                deleted. CC BY and CC BY-SA make attribution a CONDITION of
+                using the image, so a page listing every photographer is not
+                decoration, and the cost of keeping it is one word in a footer.
+
+                What is left is the account, the way out of it, and a way to
+                reach a person. */}
             {[
               // Sign in reuses row.needAccount.action rather than getting a
               // second entry: one word, one row in the catalogue, which is the
               // reason the catalogue is one module.
               { id: "login", label: userSession ? uiT("menu.account", uiLang) : uiT("menu.signIn", uiLang), ico: "user", action: "login" },
-              { id: "faq", label: uiT("menu.faq", uiLang), ico: "help", action: "faq" },
-              { id: "paid", label: uiT("menu.paid", uiLang), ico: "book", action: "paid" },
-              { id: "credits", label: uiT("menu.credits", uiLang), ico: "book", action: "credits" },
+              // ── AND THE WAY BACK OUT, ONLY WHEN THERE IS ONE ────────
+              // "I want login here." then "I mean log out." Signing out lived
+              // on the account page, two screens in, which is a long walk for
+              // the one thing somebody does when they want to stop being signed
+              // in on this machine. Conditional rather than disabled, because a
+              // row that cannot do anything is still a row to read.
+              ...(userSession ? [{ id: "logout", label: uiT("menu.signOut", uiLang), ico: "out", action: "logout" }] : []),
               { id: "support", label: uiT("menu.support", uiLang), ico: "mail", action: "mail" },
             ].map((item, i) => (
               <button key={item.id}
                 onClick={() => {
                   setShowMenu(false);
-                  if (item.action === "faq") setActive("essentials");
-                  else if (item.action === "paid") navigate(AFFILIATES_PATH);
-                  else if (item.action === "credits") setShowCredits(true);
-                  else if (item.action === "mail") window.open("mailto:hello@gemlyxtravel.com");
+                  if (item.action === "mail") window.open("mailto:hello@gemlyxtravel.com");
+                  // handleSignOut, not a bare authSignOut: it is the one that
+                  // pushes anything unsynced, releases the device copy and says
+                  // which of those happened. Calling the raw one here would
+                  // leave this account's saves sitting on the machine for
+                  // whoever signs in next, which is the bug it was written for.
+                  else if (item.action === "logout") handleSignOut();
                   // authMode is shared state, so opening the sheet without
                   // setting it reopens on whatever screen it was last left on.
                   // Press "Sign up" in the header, close it, then press
@@ -27141,7 +27199,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         onClose={() => navigate("/")}
         onProfileSaved={(next) => setUserProfile(next)}
         onNeedsSetup={(sql) => setProfileSetupSql(sql)}
-        onSignOut={() => { navigate("/"); handleSignOut(); }}
+        // Navigates only if the sign out actually happened. See the note on
+        // handleSignOut's return value: this line used to move somebody home
+        // and then ask them whether they wanted to leave.
+        onSignOut={async () => { if (await handleSignOut()) navigate("/"); }}
         onDelete={() => { if (window.confirm("Delete your Gemlyx account? Your saved places, your guides, your details and your login all go, on this device and in your account, and this cannot be undone.")) { navigate("/"); handleDeleteAccount(); } }} />
 
       {/* ── THE ACCOUNT PANEL IS GONE ───────────────────────────────

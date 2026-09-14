@@ -52,6 +52,56 @@ const post = async (path, body) => {
   return data;
 };
 
+// Only a route of ours, never anything else that might be sitting in the bar.
+// An open redirect is a real risk here even when the destination is same-origin:
+// the value survives a round trip through a third party.
+//
+// Declared HERE, above returnUrl, rather than beside the Google button it was
+// written for. returnUrl reads both, and a const read above its own declaration
+// is only safe for as long as nobody calls the reader during module evaluation,
+// which is not a property worth relying on when moving eight lines removes the
+// question.
+export const RETURN_PARAM = "gx_return";
+export const isOwnRoute = (h) => /^#(\/[a-z0-9/-]*|studio)$/i.test(String(h || ""));
+
+// ── WHERE EVERY EMAILED LINK COMES BACK TO ──────────────────────────
+//
+// Supabase puts a link in three emails: confirm your signup, reset your
+// password, and the resend of the first. Where each one lands is decided by a
+// `redirect_to` on the request that sends it, and ONLY the Google button was
+// setting one. So the other three fell back to the project's Site URL, a single
+// value in a dashboard that has pointed at a Vercel preview domain for most of
+// this project's life.
+//
+// That is why "Forgot password" could be fully built and still be useless: the
+// mail sends, the token is real, and the link opens a DIFFERENT copy of the app
+// at a different origin, where the fragment is read by nothing and the one-use
+// token is spent. Nothing about it looks like a bug from in here. It also means
+// somebody testing on gemlyxtravel.com could be sent to a build from August.
+//
+// Same construction as startGoogleSignIn, and now shared with it rather than
+// written twice: current origin and path, carrying the route they were on so
+// they come back to it.
+//
+// THE ALLOW LIST STILL DECIDES. GoTrue only honours a redirect_to that matches
+// the project's Redirect URLs, and silently uses the Site URL when it does not,
+// so this is half of the fix and Authentication > URL Configuration is the
+// other half. Written down because the failure is invisible from the code.
+const returnUrl = () => {
+  if (typeof window === "undefined") return "";
+  const url = new URL(`${window.location.origin}${window.location.pathname}`);
+  const back = window.location.hash;
+  if (isOwnRoute(back)) url.searchParams.set(RETURN_PARAM, back);
+  return url.toString();
+};
+// GoTrue reads redirect_to off the QUERY STRING on these endpoints, not out of
+// the JSON body. A body field is accepted and ignored, which would have looked
+// exactly like a fix and changed nothing.
+const withReturn = (path) => {
+  const back = returnUrl();
+  return back ? `${path}?redirect_to=${encodeURIComponent(back)}` : path;
+};
+
 // ── Session ────────────────────────────────────────────────────────
 // TOKENS EXPIRE AFTER AN HOUR. Without a refresh, saves would silently stop
 // syncing mid-session and the person would have no idea anything was wrong,
@@ -109,13 +159,31 @@ export const getStoredSession = readStored;   // synchronous, for first paint on
 // {{ if .Data.name }} check has something honest to test.
 export const signUpWithPassword = async (email, password, name = "") => {
   const clean = String(name || "").trim().slice(0, 60);
-  const data = await post("signup", { email: email.trim(), password, ...(clean ? { data: { name: clean } } : {}) });
+  const data = await post(withReturn("signup"), { email: email.trim(), password, ...(clean ? { data: { name: clean } } : {}) });
   // With email confirmation ON in Supabase, signup returns a user but no token.
   // That is not an error, it means "go and check your inbox", and the caller
   // needs to be able to tell the two apart.
   const session = shape(data);
   if (session) write(session);
-  return { session, needsConfirmation: !session };
+  // ── AND AN ADDRESS THAT ALREADY HAS AN ACCOUNT LOOKS IDENTICAL ────
+  //
+  // With confirmation on, signing up with an address that is already registered
+  // does NOT return an error. Supabase answers 200 with a user-shaped object, on
+  // purpose, so that the signup form cannot be used to find out who has an
+  // account here. It is the same reasoning as the one message for a wrong
+  // password and an unknown address.
+  //
+  // The cost is a dead end. Without this, somebody who forgot they had signed
+  // up gets the "check your inbox" screen and waits for a mail that is not
+  // coming, with a Resend button that also does nothing they can see.
+  //
+  // `identities` is the one field that differs: a genuinely new signup comes
+  // back with one entry in it, an existing address with an empty array. Checked
+  // as "an array, and empty" rather than falsy, so that a response shape without
+  // the field at all falls through to the ordinary inbox screen instead of
+  // telling a new person they already exist.
+  const known = Array.isArray(data?.user?.identities) && data.user.identities.length === 0;
+  return { session, needsConfirmation: !session && !known, alreadyRegistered: !session && known };
 };
 
 export const signInWithPassword = async (email, password) => {
@@ -169,20 +237,14 @@ export const signInWithPassword = async (email, password) => {
 // fragment, because the fragment is where Supabase puts the tokens and a URL has
 // only one of those.
 
-// Only a route of ours, never anything else that might be sitting in the bar.
-// An open redirect is a real risk here even when the destination is same-origin:
-// the value survives a round trip through a third party.
-export const RETURN_PARAM = "gx_return";
-export const isOwnRoute = (h) => /^#(\/[a-z0-9/-]*|studio)$/i.test(String(h || ""));
-
 // Google goes through a full page redirect, so there is no promise to await:
 // the browser leaves and comes back with tokens in the URL fragment, which
 // captureRedirectSession picks up on the next load.
 export const startGoogleSignIn = () => {
-  const url = new URL(`${window.location.origin}${window.location.pathname}`);
-  const back = window.location.hash;
-  if (isOwnRoute(back)) url.searchParams.set(RETURN_PARAM, back);
-  window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(url.toString())}`;
+  // returnUrl is this function's own construction, lifted out on 14 Sep so the
+  // three emailed links could use it too. Three call sites getting it right and
+  // one not is how the reset link went a month without landing anywhere.
+  window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(returnUrl())}`;
 };
 
 // Fills in the half of the session the fragment cannot carry. Separate and
@@ -381,11 +443,19 @@ export const hasPassword = (providers) => Array.isArray(providers) && providers.
 // impatient third press, and the error has to reach the screen rather than being
 // swallowed into a spinner that stops.
 export const resendConfirmation = async (email) => {
-  await post("resend", { type: "signup", email: String(email || "").trim() });
+  await post(withReturn("resend"), { type: "signup", email: String(email || "").trim() });
 };
 
+// ── AND THE ONE THAT HAD NEVER LANDED ANYWHERE IN PARTICULAR ────────
+//
+// Oliver, 14 Sep 2026: "you need to implement the 'I forgot my password'." All
+// four pieces of it were already written and had been since August: the link on
+// the sign-in sheet, this call, the recovery branch in captureRedirectSession,
+// the set-a-new-password screen and updatePassword behind it. What was missing
+// was the one that makes the other four reachable, which is telling Supabase
+// where to send the person back to. See returnUrl above.
 export const sendPasswordReset = async (email) => {
-  await post("recover", { email: email.trim() });
+  await post(withReturn("recover"), { email: email.trim() });
 };
 
 export const signOut = async () => {

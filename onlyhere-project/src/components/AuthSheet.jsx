@@ -298,7 +298,21 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         // default would claim every row had agreed to whatever version happens
         // to be current when it was next read.
         const accepted = acceptedNow(answers);
-        const { session, needsConfirmation } = await signUpWithPassword(email, password, answers.name);
+        const { session, needsConfirmation, alreadyRegistered } = await signUpWithPassword(email, password, answers.name);
+        // ── THE ADDRESS WAS ALREADY TAKEN, AND IT SAID 200 ──────────
+        // See signUpWithPassword: Supabase answers a repeat signup with a
+        // user-shaped 200 and no session, so that the form cannot be used to
+        // find out who has an account. Without this the person is shown "check
+        // your inbox" and waits for a mail nobody sent. Sent to the sign-in
+        // screen with the address still in the box, rather than merely told.
+        if (alreadyRegistered) {
+          setMode("in");
+          setConfirm("");
+          setShowGaps(false);
+          setError(uiT("auth.alreadyHave", lang));
+          setBusy(false);
+          return;
+        }
         // THE ANSWERS ARE ALREADY IN HAND. Whether a session came back decides
         // only WHERE they go: straight to the row, or held on the device until
         // the confirmation link turns into a session. See takeHeldProfile.
@@ -326,7 +340,54 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         onSignedIn(signedIn);
       }
     } catch (e) {
-      setError(String(e.message || e));
+      // ── SUPABASE'S THREE WORDS ARE NOT AN ANSWER ────────────────
+      //
+      // "Invalid login credentials" is what comes back both for a wrong
+      // password and for an address that has no account, deliberately, so the
+      // form cannot be used to find out who has one. As a sentence on a screen
+      // it tells the person neither what is wrong nor what to do, and the two
+      // doors out of it are a link they have to think to look for.
+      //
+      // Oliver, 14 Sep 2026: "logging into an account that doesn't exist, just
+      // 'creates a new account'." The sheet cannot do that. What it can do is
+      // fail in a way that leads somebody straight to the signup link, which
+      // reads as the same thing from the outside.
+      //
+      // Matched on Supabase's wording rather than the status, because the same
+      // 400 carries several other messages that are worth passing through as
+      // they are: "Email not confirmed" is a real instruction, and replacing it
+      // with this one would be a lie.
+      const said = String(e.message || e);
+      // ── AND ONE OF THEM IS NOT AN ERROR BUT AN UNFINISHED SIGNUP ──
+      //
+      // With confirmation turned on, somebody who made an account and never
+      // opened the mail is told "Email not confirmed" on the sign-in screen and
+      // left there. The mail is the thing they need and the button that sends it
+      // again is on the other screen, behind a signup they cannot repeat because
+      // the address is taken. So the sheet puts them on that screen instead of
+      // printing the sentence: same address, same Resend, same cooldown.
+      if (/email not confirmed|not confirmed/i.test(said)) {
+        // AND THE MAIL IS SENT RATHER THAN OFFERED. That screen says a link is
+        // on its way to this address, which would be untrue if arriving here
+        // only armed the Resend button, and a screen promising a mail nobody
+        // sent is the exact fault this whole pass is about. They asked to sign
+        // in, the account needs confirming, so the confirmation goes. A refusal
+        // is Supabase's hourly limit and is reported rather than swallowed.
+        const to = email.trim();
+        setSentTo(to);
+        setNotice(uiT("auth.confirmFirst", lang));
+        try {
+          await resendConfirmation(to);
+          setError(null);
+        } catch (again) {
+          setError(String(again?.message || again));
+        }
+        setResendAt(Date.now() + RESEND_COOLDOWN_MS);
+        setNow(Date.now());
+        setBusy(false);
+        return;
+      }
+      setError(/invalid login credentials/i.test(said) ? uiT("auth.badLogin", lang) : said);
     }
     setBusy(false);
   };
@@ -566,9 +627,17 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             {uiT("auth.email", lang)}<span style={{ color: showGaps && !email.trim() ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
           </div>
         )}
+        {/* ── username, NOT email ──────────────────────────────────
+            These two attributes are a pair and were set as if they were
+            independent, which is what produced the state Oliver photographed on
+            14 Sep: an empty email box above a password box Chrome had already
+            filled in. Chrome pairs a saved login by looking for the USERNAME
+            field, and autoComplete="email" is not one, so it filled the half it
+            could recognise and left the half it could not. The mismatch looked
+            like a bug in the sheet and was a bug in these two words. */}
         {mode !== "newpass" && (
           <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"
-            autoComplete="email" style={{ ...field, ...(mode === "up" && showGaps && !email.trim() ? { borderColor: "#FF8A80" } : null) }} />
+            autoComplete="username" style={{ ...field, ...(mode === "up" && showGaps && !email.trim() ? { borderColor: "#FF8A80" } : null) }} />
         )}
         {mode !== "reset" && (
           <>
@@ -581,8 +650,27 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
                 <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, color: C.muted }}> · {uiT("auth.atLeastSix", lang)}</span>
               </div>
             )}
+            {/* ── AND THE PASSWORD IS NOT PREFILLED, IN ANY MODE ───────
+                Oliver, 14 Sep 2026: "password is for some reason always on as
+                default.. having your mail is fine.. but not password.."
+
+                This read "current-password" on the sign-in mode, which is the
+                attribute that ASKS a browser to fill a saved password in before
+                anybody has touched the screen. new-password is how a page says
+                "do not put the saved one here", so the address still arrives
+                and the secret is typed.
+
+                WHAT THIS DOES NOT DO, so the next person reading it does not
+                believe more than it says: the password is still in Chrome's
+                password manager and can still be put in from the key icon on
+                purpose. This changes what happens on its own, not what is
+                possible. Nothing a page sets can reach a saved credential.
+
+                Worth a look on the first deploy. Suppressing this is a request
+                to the browser rather than a setting, and Chrome has changed its
+                mind about how much notice to take of it before. */}
             <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder={uiT(mode === "newpass" ? "auth.newPassword" : "auth.password", lang)}
-              autoComplete={mode === "up" ? "new-password" : "current-password"}
+              autoComplete="new-password"
               onKeyDown={e => { if (e.key === "Enter") submit(); }}
               style={{ ...field, ...(mode === "up" && showGaps && password.length < 6 ? { borderColor: "#FF8A80" } : null) }} />
           </>
