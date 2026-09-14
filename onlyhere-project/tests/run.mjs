@@ -15374,8 +15374,12 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ["the sync state", /Not reaching your account right now/],
     ["the setup SQL", /add column if not exists profile jsonb|setupSql/],
     ["sign out", /Sign out/],
-    ["delete", /Delete my data/],
-    ["and the deletion wording", /your details and everything Gemlyx has learned/],
+    // RENAMED 14 Sep 2026, and the rename is the point. It said "Delete my
+    // data" because that is all it could do: the rows went and the auth user
+    // stayed. api/delete-account.js removes the login too, so the button says
+    // account. See the block at the foot of this file.
+    ["delete", /Delete my account/],
+    ["and the deletion wording", /your details, everything Gemlyx has learned, and the login itself/],
   ]) ok(`${what} survived the move to the page`, re.test(page));
 
   // Every door goes through one decision. Three separate ones is how the landing
@@ -15478,21 +15482,35 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ["the bulk clear", />\s*Clear all\s*</],
     ["the password control", /Change password/],
     ["sign out", /Sign out/],
-    ["delete", /Delete my data/],
+    ["delete", /Delete my account/],
     ["the sync state", /Not reaching your account right now/],
     ["the setup SQL", /setupSql &&/],
   ]) ok(`${what} survived the split`, re.test(page));
 
   // Seeing and undoing stay together, which is rule 4's own wording: the
-  // per-line Forget sits with the lines in About me, and only the destructive
-  // bulk one moved to Your data.
+  // per-line Forget and the bulk Clear all both sit with the lines in About me.
   // Seeing and undoing stay together, which is rule 4's own wording, and both
   // sit inside About me because "everything AI knows about the person should be
   // together. EVERYTHING."
   ok("the learned lines and their controls are in one section",
      /Learned preferences[\s\S]{0,5000}Clear all/.test(page));
-  ok("and deletion sits with the data it deletes",
-     /<H>Your data<\/H>[\s\S]{0,2500}Delete my data/.test(page));
+  // ── AND THEN IT MOVED, ON PURPOSE ───────────────────────────────
+  //
+  // This read "deletion sits with the data it deletes" and pinned the Delete
+  // button inside the "Your data" card in ABOUT ME. Oliver, 14 Sep 2026: "make
+  // a 'delete account' in the account info." He could not find it, and About me
+  // is the page about what Gemlyx knows rather than the page about the account.
+  //
+  // The rule it was really protecting is that the button is not floating on its
+  // own with nothing to say what it takes, and that survives the move: the card
+  // still names the saved places, the guides and the sync state directly above
+  // the button. What changed is which section the card lives in, and it now
+  // lives with Sign out, because the two are the same question asked with
+  // different force.
+  ok("deletion still names what it takes, immediately above the button",
+     /<H>Delete your account<\/H>[\s\S]{0,2500}Delete my account/.test(page));
+  ok("and it sits with signing out rather than under About me",
+     page.indexOf("Sign out") < page.indexOf("Delete my account"));
 
   // ── NO CONTROL THAT CANNOT WORK ─────────────────────────────────
   // He chose "password and sign out only". Email is the ONLY way back into an
@@ -31905,7 +31923,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         // the token deleteMyData authenticates with, leaving the rows behind
         // forever with no account left to reach them from.
         const h = app.indexOf("const handleDeleteAccount = async () => {");
-        const block = app.slice(h, h + 2200);
+        // 4200, not 2200: the clearing block that releases the device copy went
+        // in after this was written and pushed the toast past the end of the
+        // window, so the assertion went red on code that was correct.
+        const block = app.slice(h, h + 4200);
         ok("the rows go before the login, so a dead token cannot strand them",
            block.indexOf("await deleteMyData(userSession)") < block.indexOf("/api/delete-account"));
         ok("and a login that survives is said out loud rather than swallowed",
