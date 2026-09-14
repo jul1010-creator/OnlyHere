@@ -31930,14 +31930,44 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         // the token deleteMyData authenticates with, leaving the rows behind
         // forever with no account left to reach them from.
         const h = app.indexOf("const handleDeleteAccount = async () => {");
-        // 4200, not 2200: the clearing block that releases the device copy went
-        // in after this was written and pushed the toast past the end of the
-        // window, so the assertion went red on code that was correct.
-        const block = app.slice(h, h + 4200);
+        // WINDOWED BY MARKER, NOT BY LENGTH. This was h + 2200, then h + 4200,
+        // and it went red twice on code that was correct, both times because a
+        // comment or a clearing block pushed the last assertion past the end.
+        // The function ends where the next one begins, so that is what it reads
+        // now and no future paragraph can move it.
+        const block = app.slice(h, app.indexOf("const isPlaceSaved", h));
         ok("the rows go before the login, so a dead token cannot strand them",
-           block.indexOf("await deleteMyData(userSession)") < block.indexOf("/api/delete-account"));
+           block.indexOf("await deleteMyData(") < block.indexOf("/api/delete-account"));
         ok("and a login that survives is said out loud rather than swallowed",
            /loginNote \|\| "Your account and everything on it has been deleted"/.test(block));
+
+        // ── AND IT HAS TO BE THE READER'S TOKEN, NOT THE FOUNDER'S ──
+        //
+        // 14 Sep 2026 on the live site: the button answered "You are signed out.
+        // Sign in again and the delete button will work." while he was signed
+        // in. The call went through studioFetch, which sends studioSession, the
+        // FOUNDER login under gemlyx_studio_session. He was signed in as a
+        // reader, so no Authorization header went at all and resolveUser had
+        // nothing to resolve.
+        //
+        // The near miss is the reason this is pinned rather than just fixed.
+        // The endpoint deletes whichever account the token belongs to, by
+        // design, so on a browser holding BOTH sessions the studio token would
+        // have deleted the founder account behind a success toast. Sending the
+        // right person's token IS the safety property of that endpoint.
+        ok("the delete call does not go through the founder's fetch helper",
+           !/studioFetch\("\/api\/delete-account/.test(app));
+        ok("it sends the reader's own token",
+           /Authorization: `Bearer \$\{live\.token\}`/.test(block));
+        // getSession, not userSession: a token lasts an hour and nothing
+        // refreshes this screen, so the stored one is routinely dead by the time
+        // somebody reaches the account page. getSession renews it, and returns
+        // null only when the renewal itself failed, which is the one case where
+        // "you are signed out" is the true sentence.
+        ok("and refreshes it first, because an hour-old token is the normal case",
+           /const live = await getSession\(\);/.test(block));
+        ok("and the rows are deleted with that same session",
+           /await deleteMyData\(live\);/.test(block));
 
         // AND THE WORDS MATCH WHAT IT DOES NOW.
         ok("the button says account rather than data", /Delete my account/.test(me));
@@ -31968,30 +31998,62 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       {
         const app = readFileSync(join(root, "src/App.jsx"), "utf8");
         const so = app.indexOf("const handleSignOut = async () => {");
-        const out = app.slice(so, so + 3200);
+        const out = app.slice(so, app.indexOf("const handleDeleteAccount", so));
         ok("signing out releases the account's saves from the device",
            /setSavedPlaces\(\[\]\)/.test(out) && /setSavedGuides\(\[\]\)/.test(out) && /setBeenList\(\[\]\)/.test(out));
+        // THE STORED KEYS MOVED INTO ONE HELPER, because sign out and delete
+        // both empty the same list and the first version wrote it out twice. A
+        // fifth key added to one copy and not the other is a leak nobody sees,
+        // which is this very bug's shape. So the rule is in two halves: both
+        // paths call the helper, and the helper covers every key a device holds.
+        const clearer = app.slice(app.indexOf("const clearDeviceSaves = () => {"),
+                                  app.indexOf("const handleSignOut"));
         ok("and the stored copies with them",
-           /removeItem\("gemlyx_saved_places"\)/.test(out) && /removeItem\("gemlyx_saved_guides"\)/.test(out) && /removeItem\("gemlyx_been"\)/.test(out));
+           /clearDeviceSaves\(\);/.test(out)
+           && /removeItem\("gemlyx_saved_places"\)/.test(clearer)
+           && /removeItem\("gemlyx_saved_guides"\)/.test(clearer)
+           && /removeItem\("gemlyx_been"\)/.test(clearer));
+        // A guide saved while signed out waits in this key to be claimed by the
+        // NEXT sign-in, which is right while one person is using the browser and
+        // wrong the moment a second one arrives.
+        ok("including the save waiting to be claimed by whoever signs in next",
+           /removeItem\("gemlyx_pending_guide_save"\)/.test(clearer));
         // THE LEARNED PROFILE IS ABOUT A PERSON, NOT A BROWSER. Leaving it
         // hands the next account somebody else's interests, pace and budget,
         // and the guide builder reads all three.
         ok("and what Gemlyx learned about them, which the builder reads",
            /setUserProfile\(null\)/.test(out));
-        // THE ONE EXCEPTION, AND IT IS AN HONEST ONE: if the last push failed,
-        // the device copy is the only copy and clearing it destroys trips
-        // rather than moving them. Same flag the account screen reports, so the
-        // two cannot disagree about whether the account has it.
-        ok("unless the last sync failed, when the device copy is the only copy",
-           /const heldOnlyHere = !cloudSyncOk;/.test(out) && /if \(heldOnlyHere\)/.test(out));
-        ok("and that case says so rather than clearing quietly",
-           /the last sync to your account did not land/.test(out));
-        // Deleting the account clears the same things and has no exception,
-        // because there is nothing left to sync back to.
+        // ── THE EXCEPTION THAT ATE THE RULE ───────────────────────
+        //
+        // The first fix kept the device copy whenever cloudSyncOk was false, on
+        // the reasoning that the copy was then the only copy. Oliver signed out
+        // an hour later and his saves were still there: "when you delete / log
+        // out, the saved should be gone too."
+        //
+        // Both halves were true at once, which is how the exception survived
+        // being written down. cloudSyncOk is false for an offline moment, for a
+        // refused write AND for a fresh reload that has not pushed yet, so the
+        // safe-looking branch is the one that ran and the leak is what it left.
+        //
+        // A privacy rule with a data-loss exception is not a privacy rule,
+        // because the exception is what the next person on the laptop gets. So
+        // the clearing is unconditional now, and the data-loss worry is answered
+        // where it can be answered: one last push while the token is still
+        // alive. These two assertions are a pair, and the second is why the
+        // first is safe to demand.
+        ok("clearing has no exception, whatever the sync state",
+           !/heldOnlyHere/.test(app));
+        ok("because one last push is tried while the token is still alive",
+           /landed = await pushCloudSaves\(userSession, savedPlaces, savedGuides\)/.test(out)
+           && out.indexOf("pushCloudSaves") < out.indexOf("await authSignOut()"));
+        ok("and a push that did not land is said out loud rather than swallowed",
+           /did not land, so anything saved since then is not in it/.test(out));
+        // Deleting the account clears the same things, and never had the
+        // exception, because there is nothing left to sync back to.
         const dl = app.indexOf("const handleDeleteAccount = async () => {");
-        const del = app.slice(dl, dl + 3200);
+        const del = app.slice(dl, app.indexOf("const isPlaceSaved", dl));
         ok("deleting the account clears the device too",
-           /setSavedPlaces\(\[\]\)/.test(del) && /removeItem\("gemlyx_been"\)/.test(del) && /setUserProfile\(null\)/.test(del));
+           /setSavedPlaces\(\[\]\)/.test(del) && /clearDeviceSaves\(\);/.test(del) && /setUserProfile\(null\)/.test(del));
         ok("and no copy is promised to survive it", !/Saves on this device stay/.test(app));
       }
 

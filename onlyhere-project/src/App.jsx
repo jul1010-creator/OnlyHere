@@ -12766,6 +12766,25 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userSession]);
 
+  // ── ONE PLACE THAT KNOWS WHAT A DEVICE HOLDS ─────────────────────
+  //
+  // Sign out and delete both have to empty the same four keys, and the first
+  // version wrote the list out twice. A fifth key added to one copy and not the
+  // other is a leak nobody would see, which is the exact shape of the bug this
+  // whole area was opened to fix, so the list lives once.
+  //
+  // gemlyx_pending_guide_save is in it because a guide saved while signed out
+  // waits in there to be claimed by the NEXT sign-in. That is right while one
+  // person is using the browser and wrong the moment a second one arrives.
+  const clearDeviceSaves = () => {
+    try {
+      localStorage.removeItem("gemlyx_saved_places");
+      localStorage.removeItem("gemlyx_saved_guides");
+      localStorage.removeItem("gemlyx_been");
+      localStorage.removeItem("gemlyx_pending_guide_save");
+    } catch { /* private mode, nothing to clear */ }
+  };
+
   const handleSignOut = async () => {
     // ── WHOSE SAVES ARE THESE ────────────────────────────────────────
     //
@@ -12795,32 +12814,52 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     // while signed out, which is the case the signup sheet's sentence was
     // written for and the only case where it is true.
     //
-    // THE ONE EXCEPTION IS AN HONEST ONE. If the last push to the account
-    // failed, the device copy is the ONLY copy, and clearing it would destroy
-    // trips rather than move them. cloudSyncOk is the same flag the account
-    // screen reports, so the two can never disagree about whether the account
-    // has it.
-    const heldOnlyHere = !cloudSyncOk;
+    // ── THE EXCEPTION THAT ATE THE RULE ─────────────────────────────
+    //
+    // The first version of this kept the device copy whenever the last sync had
+    // not landed, on the reasoning that the copy was then the only copy and
+    // clearing it would destroy trips rather than move them. Oliver signed out
+    // an hour later and his saves were still there: "when you delete / log out,
+    // the saved should be gone too."
+    //
+    // Both things were true at once, which is how the exception survived being
+    // written down. cloudSyncOk is false for an offline moment, a refused write
+    // AND a fresh reload that has not pushed yet, so the safe-looking branch is
+    // the one that ran, and the leak he named is the state it left behind.
+    //
+    // A privacy rule with a data-loss exception is not a privacy rule, because
+    // the exception is what the next person on this laptop gets. So the clearing
+    // is now unconditional, and the data-loss worry is answered where it can be
+    // answered rather than by keeping the copy: ONE LAST PUSH before the token
+    // dies. If that lands, nothing is lost and there was never anything to
+    // decide. If it does not, the copy goes anyway and the person is told
+    // plainly, which is the honest version of a choice that has to be made
+    // either way.
+    //
+    // Before authSignOut, necessarily. A push needs a live token and signing out
+    // is what takes it away.
+    let landed = cloudSyncOk;
+    if (!landed) {
+      try { landed = await pushCloudSaves(userSession, savedPlaces, savedGuides); }
+      catch { landed = false; }
+    }
     await authSignOut();
     setUserSession(null);
     syncedOnceRef.current = false;
-    if (heldOnlyHere) {
-      showToast("Signed out. Your saves are still on this device because the last sync to your account did not land.", 6000);
-    } else {
-      setSavedPlaces([]);
-      setSavedGuides([]);
-      setBeenList([]);
-      // The learned profile is about a PERSON, not a browser. Leaving it would
-      // hand the next account somebody else's interests, pace and budget, and
-      // the guide builder reads all three.
-      setUserProfile(null);
-      try {
-        localStorage.removeItem("gemlyx_saved_places");
-        localStorage.removeItem("gemlyx_saved_guides");
-        localStorage.removeItem("gemlyx_been");
-      } catch { /* private mode, nothing to clear */ }
-      showToast("Signed out. Your saves are in your account, not on this device.", 3200);
-    }
+    setSavedPlaces([]);
+    setSavedGuides([]);
+    setBeenList([]);
+    // The learned profile is about a PERSON, not a browser. Leaving it would
+    // hand the next account somebody else's interests, pace and budget, and
+    // the guide builder reads all three.
+    setUserProfile(null);
+    clearDeviceSaves();
+    showToast(
+      landed
+        ? "Signed out. Your saves are in your account, not on this device."
+        : "Signed out. The last sync to your account did not land, so anything saved since then is not in it.",
+      landed ? 3200 : 6000,
+    );
     
   };
 
@@ -12828,7 +12867,35 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     if (!userSession) return;
     setAccountBusy(true);
     try {
-      await deleteMyData(userSession);
+      // ── THE TOKEN HAS TO BE THIS PERSON'S, AND IT HAS TO BE ALIVE ─
+      //
+      // Oliver, 14 Sep 2026, pressing the button on the live site: the toast
+      // read "You are signed out. Sign in again and the delete button will
+      // work." He was signed in. The endpoint had answered 401 because the call
+      // went through studioFetch, and studioFetch sends studioSession, which is
+      // the FOUNDER login kept under gemlyx_studio_session. He was signed in as
+      // a reader, so there was no studio token to send, so no Authorization
+      // header went at all and resolveUser had nothing to resolve.
+      //
+      // The near miss is worse than the failure. api/delete-account deletes
+      // whichever account the token belongs to, on purpose, so on a browser that
+      // happened to hold BOTH sessions it would have read the studio token and
+      // deleted the founder account while the reader watched a success toast.
+      // Sending the right person's token is not a detail here, it is the whole
+      // safety property of that endpoint.
+      //
+      // getSession rather than userSession because a token lasts an hour and
+      // nothing refreshes this screen. It returns a refreshed session, or null
+      // if the refresh itself failed, which is the only case where "you are
+      // signed out" is the true sentence.
+      const live = await getSession();
+      if (!live?.token) {
+        setUserSession(null);
+        showToast("You are signed out. Sign in again and the delete button will work.", 5000);
+        setAccountBusy(false);
+        return;
+      }
+      await deleteMyData(live);
       // ── AND THE LOGIN, WHICH DID NOT GO ─────────────────────────
       //
       // Oliver, 14 Sep 2026: "make a 'delete account' in the account info."
@@ -12850,7 +12917,10 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // survives is recoverable by hand.
       let loginNote = "";
       try {
-        const res = await studioFetch("/api/delete-account", { method: "POST" });
+        const res = await fetch("/api/delete-account", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${live.token}` },
+        });
         if (!res.ok) {
           const body = await res.json().catch(() => null);
           loginNote = String(body?.error || "Your data is gone, but the login could not be removed. Mail hello@gemlyxtravel.com.");
@@ -12869,11 +12939,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       setSavedGuides([]);
       setBeenList([]);
       setUserProfile(null);
-      try {
-        localStorage.removeItem("gemlyx_saved_places");
-        localStorage.removeItem("gemlyx_saved_guides");
-        localStorage.removeItem("gemlyx_been");
-      } catch { /* private mode, nothing to clear */ }
+      clearDeviceSaves();
       showToast(loginNote || "Your account and everything on it has been deleted", loginNote ? 6000 : 3400);
       
     } catch (e) {
