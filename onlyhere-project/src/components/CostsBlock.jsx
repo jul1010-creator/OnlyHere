@@ -76,8 +76,21 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
             {l.refused
               ? <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{l.refused}</div>
               : l.href
+                /* ── A BUTTON, BECAUSE IT WAS BEING READ AS A CAPTION ──
+                   Oliver, 14 Sep 2026, relaying the first person to read one of
+                   these guides who did not build the app: "the affiliate links
+                   are quite small, according to my friend."
+                   This is the same complaint as the stay links one block up and
+                   it is fixed the same way, because it is the same class of
+                   thing: 12px gold text with no background, no border and no
+                   padding, sitting under a line of prose in a similar weight.
+                   Every link in "What you pay" is the checkout for a line the
+                   reader has already decided to pay for, and it was drawn as a
+                   footnote.
+                   Outlined rather than filled. He asked for "a bit", and this
+                   block can hold six of them at once. */
                 ? <a href={l.href} target="_blank" rel={l.partner ? "noreferrer sponsored nofollow" : "noreferrer"}
-                    style={{ display: "inline-block", marginTop: 3, fontSize: 12, color: C.gold, fontWeight: 700, textDecoration: "none" }}>
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 6, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "7px 13px", fontSize: 12.5, fontWeight: 700, textDecoration: "none" }}>
                     {action(l.kind)} ↗
                   </a>
                 : null}

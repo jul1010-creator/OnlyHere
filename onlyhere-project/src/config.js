@@ -246,7 +246,79 @@ export const TIQETS_AFFILIATE_TEMPLATE = "https://tp.media/r?campaign_id=89&mark
 // send somebody to Billund cars with it. The long-form template with {url} is
 // worth generating when there is a reason to; until then this is honest about
 // what it is.
-export const CAR_RENTAL_LINK = "https://autoeurope.tpx.li/SFG4IdAn";
+//
+// ── AND THEN AUTOEUROPE CLOSED ──────────────────────────────────────
+//
+// Oliver, 14 Sep 2026: "Autoeurope cars affiliate has closed by the way.. we
+// need an alternative."
+//
+// EMPTIED RATHER THAN LEFT POINTING AT A DEAD PROGRAMME. carRentalUrl only asks
+// whether the string looks like a URL, and a tpx.li short link for a closed
+// programme still looks like one, so the button would keep rendering, keep
+// carrying a disclosure that says it is paid, and keep earning nothing. A paid
+// link that pays nobody is the one shape this file has spent three paragraphs
+// refusing. No button is the honest state until there is a live link.
+//
+// THE REPLACEMENT IS DISCOVERCARS, and it is the one the paragraph above named
+// eighteen days before it was needed: "DiscoverCars and Rentalcars both have
+// real Danish coverage and both are on Travelpayouts, so either is a candidate
+// if this one ever needs replacing."
+//
+// Re-run the same check that settled it the first time, on discovercars.com on
+// 14 Sep 2026, because inventory is the rule here and a rate is not: Copenhagen,
+// Billund, Aalborg, Aarhus and Esbjerg, the airports at CPH, BLL, AAL and AAR,
+// and 1,686 Danish deals brokered from Alamo, Hertz, Europcar, Budget, Keddy,
+// SIXT, Enterprise, Avis and Thrifty. That is the same coverage AutoEurope was
+// chosen for, from the same brokers.
+//
+// ── AND THEN HE WENT AFTER THE DANISH ONE INSTEAD ───────────────────
+//
+// Oliver, 14 Sep 2026, an hour later: "I'm gonna seek for Oscar's Biludlejning!
+// I was granted permission for adtraction."
+//
+// He has been chasing Oscar since 9 September and the inventory rule this block
+// is built on is the argument for it. Checked on hejoscar.dk on 14 Sep 2026:
+// 145 branches across all five regions, cars from 249 kr a day, plus vans,
+// moving trucks, minibuses and trailers. AutoEurope was chosen over GetRentacar
+// on fifteen Danish pickup points. This is ten times that.
+//
+// TWO THINGS THAT CUT THE OTHER WAY, and neither is a reason not to do it:
+//
+//   THE SITE IS DANISH ONLY. Gemlyx's own inbound list is Germany 6.0m,
+//   Netherlands 2.0m, United States 1.1m, United Kingdom 0.9m, Sweden 0.8m.
+//   A German reading an English guide who lands on a Danish booking form is a
+//   click that goes nowhere, and this is the one programme on the list where
+//   that is true.
+//
+//   NO AIRPORT BRANCH IS NAMED. Not at Kastrup, Billund, Aalborg, Aarhus or
+//   Esbjerg. A traveller who flies in picks the car up where they land, and
+//   that is the single most common car-hire moment in an inbound trip.
+//
+// So the shape that answers both is TWO programmes rather than one, chosen by
+// where the reader is picking up: Oscar for a town pickup, which is where its
+// 145 branches beat everything, and a broker for an airport one. DiscoverCars
+// is the broker, re-checked the same day: Copenhagen, Billund, Aalborg, Aarhus
+// and Esbjerg, the airports at CPH, BLL, AAL and AAR, brokered from Alamo,
+// Hertz, Europcar, Budget, SIXT, Avis and Thrifty. That is his call to make and
+// it is written here so it can be made from the evidence rather than from
+// memory.
+//
+// WHAT IS LEFT IS ONE PASTE, and it is his to make: a network link is generated
+// against his own account and cannot be written here. The Adtraction shape is
+//
+//   https://track.adtraction.com/t/t?a=<id>&as=<sub>&t=2&tk=1&url=<target>
+//
+// and `url` carries the destination, which is the same {url} template shape the
+// Tiqets and Ticketmaster blocks above use. So a deep link into one branch is
+// available later if Oscar allows deeplinking; the string below is the browse
+// link until then.
+//
+// Nothing else changes. utils/affiliates.js learned the adtraction.com host and
+// the hejoscar merchant in the same commit as this comment, so the button
+// labels itself "Book on Oscar Biludlejning" and carries its disclosure the
+// moment the link exists. Without that half it would have rendered as an
+// ordinary unpaid link, silently.
+export const CAR_RENTAL_LINK = "";
 
 // ── WEGOTRIP, THE HIGHEST RATE ON THE PAGE AND A REAL ONE ───────────
 //

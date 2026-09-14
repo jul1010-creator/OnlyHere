@@ -368,7 +368,20 @@ export const progressLine = (progress) => {
   if (p.last) return `${n} of ${p.total}, and I still need ${p.last}`;
   const left = Array.isArray(p.open) ? p.open.length : 0;
   if (!left) return `${n} of ${p.total}`;
-  return `${n} of ${p.total}, ${left} still to go`;
+  // ── AND THEN HE ASKED FOR A HYPHEN BACK ───────────────────────────
+  //
+  // Oliver, 14 Sep 2026, reading this line on his own screen: "'3 of 7, 4 still
+  // to go' I actually prefer a 'dash' over the 'comma' so 3 of 7 - 4 still to
+  // go".
+  //
+  // Which is not a walking back of the rule above. The rule is about the EM and
+  // EN dash, the typographic pause the model reaches for, and the audit, the
+  // writer prompt and the payload strip are all aimed at those two characters.
+  // A plain hyphen is a different character and this is the one place the app
+  // counts something off against a total, where it separates two numbers rather
+  // than joining a clause. So: hyphen here, and the ban on the other two is
+  // untouched and still enforced by the suite three lines from this one.
+  return `${n} of ${p.total} - ${left} still to go`;
 };
 
 export const briefPanel = (brief) => ({

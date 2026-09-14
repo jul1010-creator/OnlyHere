@@ -210,6 +210,7 @@ import { ChatPlaceCards } from "./components/ChatPlaceCards";
 // hundred characters of it, which on a town is always the founding date. See
 // utils/cardLine.js.
 import { cardLine } from "./utils/cardLine";
+import { answerLengthBlock, readAnswerLength, storeAnswerLength, lengthLabel, SHORT as ANSWER_SHORT, LONG as ANSWER_LONG } from "./utils/answerLength";
 import { travelModeKey, withoutNonModes, overnightMove, dayStartsBeforeItCanArrive } from "./utils/routeOrder";
 import { buildChatReport, chatReportFilename } from "./utils/chatReport";
 import { openingThread, withTestBrief, withoutTestBrief, loadThread, saveThread, clearThread } from "./utils/chatThread";
@@ -249,6 +250,7 @@ import AccountAvatar from "./components/AccountAvatar";
 import ReadMore from "./components/ReadMore";
 import { dateClaimProblems } from "./utils/dateClaims";
 import { proposals as waitingProposals, describeProposals, writeFor, MOVE as WAIT_MOVE } from "./utils/undatedSweep";
+import { socialPlan as buildSocialPlan, describeSocialPlan, socialWriteFor, preTicked as socialPreTicked, describeFinding, canWrite as socialCanWrite, REQUESTS_PER_SEARCH } from "./utils/socialSweep";
 import { avatarUrl } from "./utils/accountAvatar";
 import { WAITING_TYPE, waitingReason, waitingPayload, waitingLine, waitingDays, waitingOrder, promoted, isWaiting } from "./utils/undatedEvents";
 import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, datePropositionWhy, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition, venueRatherThanEvent, statusRefusalFor, STATUS_REFUSAL_WHY } from "./utils/eventDates";
@@ -9720,6 +9722,20 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   const [waitSweep, setWaitSweep] = useState(null);        // { list, summary } | { error }
   const [waitChosen, setWaitChosen] = useState(() => new Set());
   const [waitWriting, setWaitWriting] = useState(null);    // { done, total, failed[] } | null
+
+  // ── THE SOCIAL SWEEP ──────────────────────────────────────────────
+  //
+  // Oliver, 14 Sep 2026: "a search for every attraction and event's own social
+  // media. This will be useful for later redrafts, when things need to get
+  // updated." Every rule lives in utils/socialSweep.js; nothing here decides
+  // anything. Two presses on purpose, because the two tiers do not cost the
+  // same thing and a free half that quietly falls through into a paid one is
+  // the worst way to spend his money.
+  const [socialPlan, setSocialPlan] = useState(null);      // { list, free, paid, have, skipped, summary } | { error }
+  const [socialRunning, setSocialRunning] = useState(null);// { done, total, name } | null
+  const [socialFound, setSocialFound] = useState(null);    // [{ id, name, record, tried, needsSearch, error }]
+  const [socialChosen, setSocialChosen] = useState(() => new Set());
+  const [socialWriting, setSocialWriting] = useState(null);// { done, total, failed[] } | null
   const [sweepWriteState, setSweepWriteState] = useState(null);
   const [sweepSnapshot, setSweepSnapshot] = useState(null);  // {name, count} once downloaded, gates the Save button
   const sweepRestoreRef = useRef(null);
@@ -10397,6 +10413,87 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
     const couldNotAsk = (affSweep?.list || []).filter(p => !p.set && p.verdict !== AFF_FOUND).length;
     setAffSweep(null); setAffChosen(new Set());
     showToast(`🎫 ${added} ticket link${added === 1 ? "" : "s"} added${noes.length ? `, ${noes.length} stamped as asked` : ""}${couldNotAsk ? `, ${couldNotAsk} left alone because the search failed` : ""}`, 3600);
+  };
+
+  // ── THE SOCIAL SWEEP, IN THREE PRESSES ────────────────────────────
+  //
+  // Count, read, search. The first is free and says what the other two cost
+  // before either is available, which is sweeps.js's first rule with a price
+  // tag on it: nothing writes, and now nothing SPENDS, until the whole proposal
+  // has been seen.
+  const SOCIAL_BATCH_CAP = 60;
+
+  const countSocial = async () => {
+    setSocialPlan(null); setSocialFound(null); setSocialChosen(new Set()); setSocialWriting(null);
+    try {
+      const got = await readPublishedRows();
+      if (got.error) { setSocialPlan({ error: got.error }); return; }
+      const plan = buildSocialPlan(got.rows, new Date());
+      setSocialPlan({ ...plan, summary: describeSocialPlan(plan) });
+    } catch (err) {
+      setSocialPlan({ error: String(err?.message || err).slice(0, 200) });
+    }
+  };
+
+  // One loop for both tiers, told which one it is running. Serial and paced,
+  // like every other loop in this panel: a burst of a hundred and twenty
+  // requests is how a rate limit turns a sweep into a mess, and the progress
+  // line names the row so a slow run is legible rather than merely slow.
+  const findSocial = async (rows, tier) => {
+    const capped = (rows || []).slice(0, SOCIAL_BATCH_CAP);
+    if (!capped.length || socialRunning) return;
+    setSocialRunning({ done: 0, total: capped.length, name: "" });
+    const got = [];
+    for (let i = 0; i < capped.length; i++) {
+      const r = capped[i];
+      setSocialRunning({ done: i, total: capped.length, name: r.name });
+      try {
+        const qs = new URLSearchParams({ name: r.name, town: r.town || "", website: r.website || "", ...(tier ? { tier } : {}) });
+        const res = await studioFetch(`/api/social-find?${qs.toString()}`);
+        const data = await res.json().catch(() => null);
+        // COUNTED, NOT SWALLOWED, for the reason the affiliate sweep records: a
+        // quota or a 403 part way through looks exactly like "this place has no
+        // page", and writing it as one hides the row for four months.
+        if (!res.ok || data?.error) got.push({ ...r, record: null, error: String(data?.error || `the endpoint answered ${res.status}`).slice(0, 120) });
+        else got.push({ ...r, record: data.record || null, tried: data.tried || [], needsSearch: !!data.needsSearch, review: data.review || "" });
+      } catch (err) {
+        got.push({ ...r, record: null, error: String(err?.message || err).slice(0, 120) });
+      }
+      setSocialRunning({ done: i + 1, total: capped.length, name: r.name });
+      await new Promise(done => setTimeout(done, 200));
+    }
+    setSocialRunning(null);
+    // Merged by id rather than appended, so the paid pass REPLACES the free
+    // pass's "nothing on its page" line for the same row instead of listing it
+    // twice with two different answers.
+    setSocialFound(prev => [...(prev || []).filter(p => !capped.some(c => c.id === p.id)), ...got]);
+    // Pre-ticked only where the account came off the place's own footer. A
+    // search result is a candidate and the endpoint says so in its own reply,
+    // so pre-ticking those would turn a review into a rubber stamp.
+    setSocialChosen(prev => { const n = new Set(prev); socialPreTicked(got).forEach(id => n.add(id)); return n; });
+  };
+
+  const applySocialSweep = async () => {
+    const list = (socialFound || []).filter(fd => socialCanWrite(fd) && (fd.record ? socialChosen.has(fd.id) : true));
+    if (!list.length) return;
+    setSocialWriting({ done: 0, total: list.length, failed: [] });
+    const failed = [];
+    for (let i = 0; i < list.length; i++) {
+      const w = socialWriteFor(list[i]);
+      try {
+        const out = await patchRowPayload(w.id, w.set);
+        if (!out.ok) failed.push(`${list[i].name}: ${out.why}`);
+      } catch (err) { failed.push(`${list[i].name}: ${String(err?.message || err).slice(0, 60)}`); }
+      setSocialWriting({ done: i + 1, total: list.length, failed: [...failed] });
+      await new Promise(done => setTimeout(done, 200));
+    }
+    if (failed.length < list.length) { await refreshLiveContent(); bumpLiveContent(v => v + 1); }
+    const kept = list.filter(p => p.record).length - failed.length;
+    // The table described rows as they were before this press. Clearing it is
+    // the honest state, and it is what stops a second press writing a snapshot
+    // back over the first.
+    setSocialFound(null); setSocialChosen(new Set()); setSocialPlan(null);
+    showToast(`📣 ${kept < 0 ? 0 : kept} account record${kept === 1 ? "" : "s"} kept. Press Count them again for a fresh table.`, 3600);
   };
 
   const runWaitingSweep = async () => {
@@ -15395,6 +15492,13 @@ If the conversation only covers a single day or a few stops with no explicit day
   // stuck to it). GuidePage renders it as a "Pipeline test" card.
   const randomTestProfileRef = useRef(null);
   const [aiInput, setAiInput] = useState("");
+  // ── HOW LONG AN ANSWER IS ALLOWED TO BE ──────────────────────────
+  // Oliver, 14 Sep 2026: "We need a 'long' / 'Short' answers. Because my friend
+  // don't like these long replies." Then: "She wants simplicity."
+  // Read from storage on the first render rather than in an effect, so the
+  // first reply of a returning session already obeys the choice instead of
+  // arriving long and correcting itself afterwards.
+  const [answerLength, setAnswerLength] = useState(() => readAnswerLength());
   // ── AND A QUESTION SENT OVER FROM A GUIDE DAY ───────────────────
   //
   // The other half of Add in. GuidePage navigates here with the question
@@ -17185,6 +17289,8 @@ BE CONCRETE ABOUT MONEY: "budget", "moderate", or "expensive" mean different thi
 
 FORMATTING: this is critical: write in plain conversational text only. This is a mobile chat bubble, not a document. Never use markdown: no # headings, no ** for bold, no bullet-point dashes, no numbered lists with periods. If you're listing a few things, write them into a flowing sentence ("Try Harry's Place for a hot dog, then walk to Torvehallerne for something more substantial") rather than a list. Use line breaks between short paragraphs instead of headers to organize longer answers. NEVER use the em dash (—) or a double hyphen (--) to join two clauses. It's one of the most recognizable AI-writing tells there is. Use a period and a new sentence, a comma, or a plain word like "and"/"but"/"so" instead.
 
+${answerLengthBlock(answerLength)}
+
 MERCHANDISE: ${productList}
 BOOKING/CRAFT EXPERIENCES: ${craftList}
 TOWNS: ${townList}
@@ -18646,8 +18752,35 @@ ${languageBlock()}`;
                     it is a button that does nothing, and it confirms before it
                     fires because the conversation is the most expensive thing on
                     this screen and the one he has been losing all week. */}
+                {/* ── SHORT OR FULL, AND SHE PICKS ────────────────────────
+                    Oliver, 14 Sep 2026, after watching somebody who did not
+                    build this use it: "We need a 'long' / 'Short' answers.
+                    Because my friend don't like these long replies." Then, in
+                    the three words that are the whole specification: "She wants
+                    simplicity."
+
+                    ABOVE THE BOX, NOT IN A SETTINGS SCREEN. The complaint is
+                    about the reply she is looking at, so the control sits where
+                    she is looking, one tap from the message she just read. A
+                    preference buried behind a gear is one nobody finds at the
+                    moment they want it.
+
+                    No label over it and no sentence under it explaining what
+                    short means. Two words and a state is the whole of it. */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {[ANSWER_SHORT, ANSWER_LONG].map(m => {
+                      const on = answerLength === m;
+                      return (
+                        <button key={m} type="button" onClick={() => setAnswerLength(storeAnswerLength(m))}
+                          style={{ background: on ? `${C.gold}1f` : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? C.gold : C.muted, borderRadius: 100, padding: "4px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          {lengthLabel(m)}
+                        </button>
+                      );
+                    })}
+                  </div>
                 {aiMessages.length > 1 && (
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
                     {chatResetAsk ? (
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span style={{ fontSize: 12, color: C.light }}>{uiT("chat.resetConfirm", uiLang)}</span>
@@ -18684,6 +18817,7 @@ ${languageBlock()}`;
                     )}
                   </div>
                 )}
+                </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   {/* gx-plain: this one already draws itself in the accent at 1.5px, and it
                       is the field the field-affordance rule in theme.js was modelled ON
@@ -21074,6 +21208,147 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               </button>
                               {waitWriting?.failed?.length > 0 && (
                                 <div style={{ fontSize: 10.5, color: "#FFB347" }}>{waitWriting.failed.length} failed: {waitWriting.failed.slice(0, 3).join("; ")}</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── WHERE A PLACE ANNOUNCES ITS SEASONAL THINGS ────
+                        Oliver, 14 Sep 2026: "API direct key should also be used
+                        for attractions own social media.. it's often the place
+                        they announce seasonal things", and then "I want you to
+                        get a sweep done for everything."
+
+                        THREE PRESSES, AND THAT IS THE DESIGN. Counting is free.
+                        Reading a row's own website is free and gives the better
+                        answer, because a business links its own accounts in its
+                        own footer and what is found there is theirs by
+                        construction. Only a row with no website at all costs
+                        money, and the button that spends it says how many
+                        requests that is before it is pressed.
+
+                        SOCIAL IS A SIGNAL AND NEVER A SOURCE. This stores a
+                        handle, which is a fact with an origin. Nothing here
+                        reads a post, and nothing it writes reaches a reader. */}
+                    <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>📣 Find each place's own social accounts</div>
+                          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                            A castle announces its winter hours on Facebook and gets round to the website in March. This finds the account so a later check can ask it. Reading a row's own site is free; only a row with no site at all needs a paid search, and you are told how many before you press it. Up to {SOCIAL_BATCH_CAP} per run.
+                          </div>
+                        </div>
+                        <button onClick={countSocial} disabled={!!socialRunning || socialWriting?.done < socialWriting?.total}
+                          style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
+                          Count them
+                        </button>
+                      </div>
+
+                      {socialPlan?.error && <div style={{ fontSize: 11.5, color: "#FFB347" }}>{socialPlan.error}</div>}
+                      {socialPlan?.summary && <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{socialPlan.summary}</div>}
+
+                      {socialRunning && (
+                        <div style={{ fontSize: 11.5, color: C.gold, marginBottom: 10 }}>
+                          {socialRunning.done}/{socialRunning.total}{socialRunning.name ? ` · ${socialRunning.name}` : ""}
+                        </div>
+                      )}
+
+                      {socialPlan && !socialPlan.error && !socialRunning && (() => {
+                        // The paid list is the rows that never had a website PLUS
+                        // the ones whose own page turned out to link nothing. The
+                        // second group only exists after the free pass has run,
+                        // which is exactly why the free pass stops at its own tier
+                        // instead of falling through and spending.
+                        const stillNeeds = (socialFound || []).filter(fd => fd.needsSearch).map(fd => fd.id);
+                        const free = (socialPlan.free || []).filter(p => !(socialFound || []).some(fd => fd.id === p.id));
+                        const paid = [
+                          ...(socialPlan.paid || []).filter(p => !(socialFound || []).some(fd => fd.id === p.id && !fd.needsSearch)),
+                          ...(socialPlan.list || []).filter(p => stillNeeds.includes(p.id)),
+                        ];
+                        if (!free.length && !paid.length) return null;
+                        return (
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                            {free.length > 0 && (
+                              <button onClick={() => findSocial(free, "page")}
+                                style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                Read {Math.min(free.length, SOCIAL_BATCH_CAP)} website{Math.min(free.length, SOCIAL_BATCH_CAP) === 1 ? "" : "s"} · free
+                              </button>
+                            )}
+                            {paid.length > 0 && (
+                              <button onClick={() => findSocial(paid, "")}
+                                style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                Search {Math.min(paid.length, SOCIAL_BATCH_CAP)} with no page · {Math.min(paid.length, SOCIAL_BATCH_CAP) * REQUESTS_PER_SEARCH} requests
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {socialFound?.length > 0 && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                          {socialFound.map(fd => {
+                            const on = !!fd.record && socialChosen.has(fd.id);
+                            return (
+                              <div key={fd.id} style={{ background: C.bg, border: `1px solid ${on ? `${C.gold}55` : C.border}`, borderRadius: 10, padding: "9px 11px" }}>
+                                <div style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                                  {/* A row with nothing found has no tick rather
+                                      than a disabled one: there is nothing to
+                                      accept, and its stamp is written anyway so
+                                      the next run does not pay for the same no. */}
+                                  {fd.record ? (
+                                    <input type="checkbox" checked={on} disabled={!!socialWriting}
+                                      onChange={() => setSocialChosen(prev => { const n = new Set(prev); n.has(fd.id) ? n.delete(fd.id) : n.add(fd.id); return n; })}
+                                      style={{ marginTop: 3, accentColor: C.gold, cursor: "pointer" }} />
+                                  ) : <span style={{ width: 13, flexShrink: 0 }} />}
+                                  <div style={{ minWidth: 0, flex: 1 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 700, color: fd.record ? C.text : C.muted }}>
+                                      {fd.name}{fd.town ? <span style={{ fontWeight: 500, color: C.muted }}> · {fd.town}</span> : null}
+                                    </div>
+                                    {/* THE ACCOUNTS THEMSELVES, AS LINKS.
+                                        Oliver, 10 Sep 2026, about a different
+                                        panel: "you can add the link to its
+                                        evidence. So I can fact-check it." A
+                                        handle nobody can open is not reviewable,
+                                        and this is the panel where opening it is
+                                        the entire act of reviewing. */}
+                                    {fd.record && (
+                                      <div style={{ fontSize: 11, color: C.muted, marginTop: 4, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                                        {fd.record.accounts.map((a, k) => (
+                                          <a key={k} href={a.url} target="_blank" rel="noreferrer" style={{ color: C.gold, textDecoration: "underline" }}>
+                                            {a.platform}/{a.handle}{a.verified ? " ✓" : ""}
+                                          </a>
+                                        ))}
+                                      </div>
+                                    )}
+                                    <div style={{ fontSize: 10.8, color: C.muted, marginTop: 3, lineHeight: 1.55 }}>
+                                      {fd.error ? `Nothing was written for this one: ${fd.error}. A failed call is not a "no page", so it stays in the queue.`
+                                        : fd.needsSearch ? "Its own site links no accounts, so it moves to the search list above. Nothing has been spent on it yet."
+                                        : describeFinding(fd)}
+                                    </div>
+                                    {/* The endpoint's own sentence, shown where
+                                        it applies. A search is a candidate and
+                                        saying so beside the tick is the whole
+                                        difference between a review and a rubber
+                                        stamp. */}
+                                    {fd.review && <div style={{ fontSize: 10.8, color: "#FFB347", marginTop: 3 }}>{fd.review}</div>}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {(socialFound || []).some(fd => socialCanWrite(fd)) && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
+                              <button onClick={applySocialSweep} disabled={!!socialWriting || !!socialRunning}
+                                style={{ background: C.gold, border: `1px solid ${C.gold}`, color: C.onGold, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                {socialWriting ? `Saving ${socialWriting.done}/${socialWriting.total}…` : `Keep ${socialChosen.size} account record${socialChosen.size === 1 ? "" : "s"}`}
+                              </button>
+                              <div style={{ fontSize: 10.5, color: C.muted }}>
+                                Rows where nothing was found are stamped with today's date too, so the next run does not pay for the same no.
+                              </div>
+                              {socialWriting?.failed?.length > 0 && (
+                                <div style={{ fontSize: 10.5, color: "#FFB347" }}>{socialWriting.failed.length} failed: {socialWriting.failed.slice(0, 3).join("; ")}</div>
                               )}
                             </div>
                           )}
@@ -26121,6 +26396,30 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
       {studioSession && (() => {
         const openDetail = eventDetail || townDetail || nightlifeDetail || freeDetail || foodDetail;
         const openKind = eventDetail ? "event" : townDetail ? "town" : nightlifeDetail ? "nightlife" : freeDetail ? "free" : foodDetail ? "food" : null;
+        // ── ONLY OVER AN ENTRY, WHICH IS WHERE IT IS FOR ────────────
+        //
+        // Oliver, 14 Sep 2026, with a photograph of his own phone: "I got an
+        // issue on the phone btw.. just remove it and only have it on blogs",
+        // and then, when I asked which thing: "It blocks the red send button".
+        //
+        // It does, and on a phone there is no way round it. This launcher is a
+        // 52px circle fixed at right 16, bottom 16, and the Detour send button
+        // sits in that same corner, so one lands on the other. On a laptop the
+        // two miss each other by a few hundred pixels, which is why it shipped
+        // and why it took his phone to find.
+        //
+        // The gate was `studioSession` and nothing else, so it floated over
+        // every screen in the app for a signed-in founder, including the one
+        // screen whose own control lives in that corner. It is a tool for
+        // arguing with a PUBLISHED ENTRY, so it belongs over a published entry
+        // and nowhere else.
+        //
+        // The draft half loses nothing. The same component is mounted inline in
+        // the Studio editor, where the work is, for the reason written above
+        // that mount: "It just lived behind a small ✦ in the screen corner, so
+        // from inside the editor there was nothing to suggest the draft could
+        // be argued with."
+        if (!openDetail) return null;
         // SECOND TARGET (Oliver, 7 Aug: "an AI I can write to AFTER THE DRAFT").
         // studioDraftText, not studioDraft, is the source of truth: it is what
         // publishDraft actually reads, and he edits it by hand. Correcting the

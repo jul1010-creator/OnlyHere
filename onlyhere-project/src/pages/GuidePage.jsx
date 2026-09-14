@@ -2183,8 +2183,26 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                     {day.glance.recommendedStay && (
                       <div style={{ marginTop: 3 }}><span style={{ color: C.gold, fontWeight: 700 }}>{day.glance.recommendedStay}</span></div>
                     )}
+                    {/* ── A BUTTON, BECAUSE IT WAS BEING READ AS A CAPTION ──
+                        Oliver, 14 Sep 2026, relaying the first person to read
+                        one of these guides who did not build the app: "the
+                        affiliate links are quite small, according to my friend."
+
+                        Measured off the live page before touching it: 12.5px
+                        gold text, no background, no border, no padding, 18px
+                        tall, sitting directly under a paragraph in a similar
+                        weight. Nothing about it said it was a thing you press.
+                        It was a footnote and she read it as one.
+
+                        Outlined rather than filled. He asked for it to "shine
+                        up a bit", and a page carrying three solid gold buttons
+                        reads as advertising, which costs more trust than the
+                        click is worth. A border, a tint and real padding are
+                        enough to move it from prose into the class of things
+                        that do something. */}
                     {stayBookingUrl && (
-                      <a href={stayBookingUrl} target="_blank" rel="noreferrer" style={{ display: "block", marginTop: 5, color: C.gold, fontWeight: 700, textDecoration: "none" }}>
+                      <a href={stayBookingUrl} target="_blank" rel="noreferrer"
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, marginRight: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
                         🔎 {day.glance.recommendedStay ? `See ${day.glance.recommendedStay} on Booking.com` : `Search stays near ${day.glance.stayArea}`} ↗
                       </a>
                     )}
@@ -2197,8 +2215,12 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                         first run, which is the argument for shared doors in one
                         sentence. First day only: the sentence is the same on
                         all seven and a reader learns to scroll past a repeat. */}
+                    {/* The same shape, so the two sit beside each other as a
+                        pair of doors rather than as a link and its follow-up,
+                        and wrap onto two lines on a phone. */}
                     {stayTripUrl && (
-                      <a href={stayTripUrl} target="_blank" rel="noreferrer sponsored nofollow" style={{ display: "block", marginTop: 4, color: C.gold, fontWeight: 700, textDecoration: "none" }}>
+                      <a href={stayTripUrl} target="_blank" rel="noreferrer sponsored nofollow"
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
                         🏨 Compare hotels on Trip.com ↗
                       </a>
                     )}
@@ -2368,16 +2390,35 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               const town = stops.map(s => stopTown(s)).find(Boolean) || "";
               const anchor = stops.map(s => resolveStopCoords(s, guide)).find(p => p && Number.isFinite(p.lat));
               return (
-                <div style={{ marginTop: 18, background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "12px 14px" }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>{addInTitle(dayNo)}</div>
+                /* ── AND THE ADD-ON SHE NEVER SAW ────────────────────
+                   Oliver, 14 Sep 2026: "she didn't even notice the 'add on'
+                   that you can do."
+
+                   THE DASHED BORDER WAS THE WHOLE BUG. A dashed outline means
+                   one thing everywhere on the web, an empty slot waiting to be
+                   filled, and this box is the opposite: it is the only place on
+                   the page where the reader can change the plan. She did not
+                   skip it, it did not look like anything.
+
+                   Solid, and tinted in the colour this page already uses for a
+                   thing you can act on, so it reads as part of the guide rather
+                   than as a gap in it. */
+                <div style={{ marginTop: 18, background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 12, padding: "13px 15px" }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>✦ {addInTitle(dayNo)}</div>
                   <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.55, margin: "3px 0 9px" }}>{ADD_IN_SUB}</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {offers.map(cat => {
                       const key = `${dayIdx}:${cat.key}`;
                       const on = addInOpen === key;
                       return (
+                        /* ── AND THE PILLS HAD NO SURFACE ──────────────
+                           11.5px grey on nothing, inside a 0.67px hairline in
+                           C.border, which is one shade off the box behind them.
+                           A control has to look raised or bordered enough to be
+                           worth a finger. Filled, in the page's own ground, with
+                           a gold edge and the text at full strength. */
                         <button key={cat.key} onClick={() => setAddInOpen(on ? null : key)}
-                          style={{ background: on ? `${C.gold}22` : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? C.gold : C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          style={{ background: on ? `${C.gold}26` : C.bg, border: `1px solid ${on ? C.gold : `${C.gold}55`}`, color: on ? C.gold : C.text, borderRadius: 100, padding: "7px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                           {cat.label}
                         </button>
                       );

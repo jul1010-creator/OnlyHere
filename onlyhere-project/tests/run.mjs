@@ -63,7 +63,7 @@ writeFileSync(entry, `
   export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
   export { TICKET_HUNT_PROMPT, ticketHuntUrls } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
-  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, partnerMerchant, linkLabel, affiliateHref, affiliateNote, isAffiliateHref, isGetyourguideUrl, isGetyourguideProductUrl, getyourguideUrl, getyourguideActive, getyourguideDisclosure, bikeRentalFits, tourMerchant, isBajabikesUrl, isBajabikesProductUrl, isBajabikesRental, bajabikesSlug, bajabikesUrl, bajabikesActive, bajabikesDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
+  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, partnerMerchant, destinationIn, linkLabel, affiliateHref, affiliateNote, isAffiliateHref, isGetyourguideUrl, isGetyourguideProductUrl, getyourguideUrl, getyourguideActive, getyourguideDisclosure, bikeRentalFits, tourMerchant, isBajabikesUrl, isBajabikesProductUrl, isBajabikesRental, bajabikesSlug, bajabikesUrl, bajabikesActive, bajabikesDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isWegotripUrl, wegotripUrl, wegotripBrowseUrl, wegotripActive, wegotripDisclosure, tripcomActive } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { TOWN_TYPES, townNameOf, audioFor, audioLine, ticketFor, unmatchedProducts, wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO, TICKET as WEGO_TICKET } from ${JSON.stringify(join(root, "src/utils/wegotripMatch.js"))};
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
@@ -206,6 +206,9 @@ writeFileSync(entry, `
   export { ARRIVAL_TYPES, hasArrivalField } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK, CHARACTERISATION_FIELDS, REPORT_FIELDS } from ${JSON.stringify(join(root, "src/utils/checkScope.js"))};
   export { accountIn, accountsOnPage, accountFits, socialRecord, asUrl, OWN_PAGE, LINKED, NAMED } from ${JSON.stringify(join(root, "src/utils/socialAccounts.js"))};
+  export { searchCandidates, websiteInPageDetails } from ${JSON.stringify(join(root, "src/utils/socialAccounts.js"))};
+  export { socialOf, socialAge, askFor, socialVerdict, socialPlan, describeSocialPlan, socialWriteFor, canWrite as socialCanWrite, preTicked as socialPreTicked, describeFinding as describeSocialFinding, HOW_WORDS as SOCIAL_HOW_WORDS, ACCOUNT_FRESH_DAYS, NOTHING_FOUND_DAYS, REQUESTS_PER_SEARCH, HAVE as SOCIAL_HAVE, ASK_PAGE as SOCIAL_ASK_PAGE, ASK_SEARCH as SOCIAL_ASK_SEARCH, ASKED as SOCIAL_ASKED, CANNOT as SOCIAL_CANNOT } from ${JSON.stringify(join(root, "src/utils/socialSweep.js"))};
+  export { cleanLength, answerLengthBlock, lengthLabel, ANSWER_LENGTHS, DEFAULT_LENGTH, SHORT as ANSWER_SHORT, LONG as ANSWER_LONG } from ${JSON.stringify(join(root, "src/utils/answerLength.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, RESERVED_THEME, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
@@ -31825,6 +31828,165 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       ok("with the line that says Gemlyx will go and look", /\{ADD_IN_SUB\}/.test(gp));
       ok("and the door at the bottom says what it does, not only where it goes",
          /Ask Gemlyx to add one to day \{dayNo\}/.test(gp));
+
+      // ── AND IT LANDED THEM ON THE FRONT DOOR ────────────────────
+      //
+      // Oliver, 14 Sep 2026: "The 'add' sends you right back to the front
+      // page." Reproduced on the live site: the question DID arrive, "What is
+      // worth seeing in Haderslev on day 1?" was sitting in the composer, and
+      // the traveller was looking at the country picker. The feature worked and
+      // was invisible, which is the worst of the three available outcomes,
+      // because nothing looks broken enough to report.
+      //
+      // `entered` gates the front door and nothing arriving by a client-side
+      // navigate ever set it. A traveller coming back from their own guide
+      // entered several screens ago.
+      {
+        const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+        const at = app.indexOf("const seed = String(location.state?.detourAsk");
+        ok("the seeded question still arrives in the composer", at > 0);
+        const block = app.slice(at, at + 400);
+        ok("and the front door is taken down on the way in", /setEntered\(true\);/.test(block));
+        ok("and the tab it names is the chat", /goTab\("ai"\);/.test(block));
+        ok("and the state is cleared so a refresh does not put it back",
+           /navigate\(location\.pathname, \{ replace: true, state: null \}\)/.test(block));
+        // DECLARED BELOW `entered`, for the reason the address effect states in
+        // capitals: reading that const from above its declaration took the
+        // whole front page out once, with "Cannot access 'entered' before
+        // initialization". The effect moved rather than the declaration.
+        ok("the effect sits below the const it now reads",
+           app.indexOf("const [entered, setEntered] = useState(false);") < at);
+      }
+
+      // ── AND SHE STILL DID NOT SEE IT ────────────────────────────
+      //
+      // Oliver, 14 Sep 2026, relaying the first person to read one of these
+      // guides who did not build the app: "she didn't even notice the 'add on'
+      // that you can do."
+      //
+      // Everything above is about the WORDS, and the words were right. What she
+      // was looking at was a dashed outline, which means one thing everywhere on
+      // the web: an empty slot waiting to be filled. This box is the opposite of
+      // that, so the border was telling her to skip the only control on the page
+      // that changes the plan.
+      ok("the box is not drawn as an empty slot waiting to be filled",
+         !/border: `1px dashed \$\{C\.border\}`, borderRadius: 12, padding: "12px 14px" \}\}>\s*<div style=\{\{ fontSize: 12\.5, fontWeight: 700, color: C\.text \}\}>\{addInTitle/.test(gp));
+      ok("it carries the colour this page uses for something you can act on",
+         /border: `1px solid \$\{C\.gold\}44`, borderRadius: 12[^\n]*\n[^\n]*\{addInTitle\(dayNo\)\}/.test(gp));
+      // AND THE PILLS HAD NO SURFACE: 11.5px grey on nothing, inside a hairline
+      // one shade off the box behind it. A control has to look worth a finger.
+      ok("and the three choices are filled rather than drawn in a hairline",
+         /background: on \? `\$\{C\.gold\}26` : C\.bg, border: `1px solid \$\{on \? C\.gold : `\$\{C\.gold\}55`\}`/.test(gp));
+
+      // ── THE SAME COMPLAINT, ONE LINE UP ─────────────────────────
+      //
+      // "the affiliate links are quite small, according to my friend." Measured
+      // off the live guide before it was touched: 12.5px gold text, no
+      // background, no border, no padding, 18px tall, under a paragraph in a
+      // similar weight. It was a footnote and she read it as one.
+      //
+      // OUTLINED, NOT FILLED. He asked for it to shine "a bit", and a page
+      // carrying three solid gold buttons reads as advertising, which costs more
+      // trust than the click is worth.
+      ok("the stay link is a button rather than a caption",
+         /background: `\$\{C\.gold\}1a`, border: `1px solid \$\{C\.gold\}66`, color: C\.gold, borderRadius: 100, padding: "8px 14px", fontSize: 13/.test(gp));
+      is("both stay doors are drawn the same, so neither reads as the other's afterthought",
+         (gp.match(/background: `\$\{C\.gold\}1a`, border: `1px solid \$\{C\.gold\}66`, color: C\.gold, borderRadius: 100, padding: "8px 14px", fontSize: 13/g) || []).length, 2);
+      ok("and neither is the old bare text link",
+         !/style=\{\{ display: "block", marginTop: 5, color: C\.gold, fontWeight: 700, textDecoration: "none" \}\}/.test(gp));
+
+      // ── AND A PROGRAMME THAT CLOSED RENDERS NOTHING ─────────────
+      //
+      // Oliver, 14 Sep 2026: "Autoeurope cars affiliate has closed by the way..
+      // we need an alternative." carRentalUrl only asks whether the string looks
+      // like a URL, and a short link for a closed programme still looks like
+      // one, so the button would keep rendering and keep carrying a disclosure
+      // saying it is paid. A paid link that pays nobody is the shape config.js
+      // spends three paragraphs refusing.
+      {
+        const cfg = readFileSync(join(root, "src/config.js"), "utf8");
+        const val = (cfg.match(/export const CAR_RENTAL_LINK = "([^"]*)"/) || [])[1];
+        ok("the car link is either empty or a real url, never a dead short link kept for tidiness",
+           val === "" || /^https:\/\//.test(val));
+        ok("and it is not the closed programme", !/autoeurope/i.test(String(val)));
+        // The replacement was named in this file eighteen days before it was
+        // needed, and the check that settles a car programme here is inventory
+        // rather than rate. Re-run on discovercars.com on 14 Sep 2026:
+        // Copenhagen, Billund, Aalborg, Aarhus, Esbjerg and the four airports.
+        ok("the file says where the next one comes from", /DiscoverCars/.test(cfg));
+        // AND THE TWO CAVEATS THAT TURNED OUT TO BE FALSE stay in the file as
+        // corrections rather than being deleted. Oliver, 14 Sep 2026: "There is
+        // an English translation button." Checked properly after he said so:
+        // hejoscar.dk declares hreflang en-dk pointing at /en, which is a full
+        // English site with the booking search on it, and the English locations
+        // page lists 150 branches including aalborg-airport, billund and
+        // kastrup. Both of my reasons to hedge were wrong, and a reader of this
+        // file a month from now needs to know that more than it needs tidiness.
+        ok("and the corrections to it are recorded rather than quietly removed",
+           /WERE WRONG/.test(cfg) && /hreflang/.test(cfg) && /aalborg-airport/.test(cfg));
+        ok("and the label for it already exists, so a paste is the whole change",
+           /discovercars: "DiscoverCars"/.test(readFileSync(join(root, "src/utils/affiliates.js"), "utf8")));
+      }
+
+      // ── AND THE THIRD NETWORK, BEFORE THE LINK EXISTS ───────────
+      //
+      // Oliver, 14 Sep 2026: "I'm gonna seek for Oscar's Biludlejning! I was
+      // granted permission for adtraction."
+      //
+      // Asserted BEFORE there is a link to assert, because the failure is
+      // silent: an Adtraction link pasted into config.js while isPartnerLink
+      // does not know the host renders as an ordinary link, with no disclosure
+      // under it and no sponsored rel on it. A reader would see a paid link
+      // presented as an unpaid one, which is what public/privacy.html promises
+      // does not happen.
+      {
+        const { isPartnerLink, partnerMerchant, partnerDisclosure, destinationIn, linkLabel } = M;
+        const oscar = "https://track.adtraction.com/t/t?a=1553261&as=1602233&t=2&tk=1&url=https%3A%2F%2Fhejoscar.dk%2F";
+        ok("an adtraction link is a paid link", isPartnerLink(oscar));
+        ok("and it says so", partnerDisclosure(oscar).length > 0);
+        // ONE HOST, EVERY MERCHANT. Travelpayouts puts the programme in the
+        // first label of the host; Adtraction puts every advertiser behind
+        // track.adtraction.com, so the rule that reads the host would print
+        // "Book on Track" on all of them. The merchant is in the url parameter.
+        is("the merchant is read from where it is, not from the network's host",
+           partnerMerchant(oscar), "Oscar Biludlejning");
+        is("so the button names the company", linkLabel(oscar), "Book on Oscar Biludlejning");
+        is("the destination is decoded rather than pattern matched",
+           destinationIn(oscar), "https://hejoscar.dk/");
+        // A DEEP LINK IS THE SAME LINK. `url` is the {url} template shape this
+        // file already uses twice, so one branch is reachable later.
+        is("a deep link into one branch names the same merchant",
+           partnerMerchant("https://track.adtraction.com/t/t?a=1&t=2&tk=1&url=https%3A%2F%2Fhejoscar.dk%2Fbiludlejning-aalborg"),
+           "Oscar Biludlejning");
+        // AND AN UNREADABLE ONE GETS THE HONEST GENERIC LABEL rather than a
+        // guess, exactly as an unknown Travelpayouts programme does.
+        is("a link with no destination on it is still paid and still unnamed",
+           [isPartnerLink("https://track.adtraction.com/t/t?a=1&t=2&tk=1"),
+            partnerMerchant("https://track.adtraction.com/t/t?a=1&t=2&tk=1")], [true, ""]);
+        is("and junk in the parameter names nobody",
+           [destinationIn("https://track.adtraction.com/t/t?url=%2Frelative"), destinationIn("not a url")], ["", ""]);
+        // A PLAIN REFERENCE TO OSCAR IN PROSE IS NOT A PAID LINK. The same rule
+        // GetYourGuide and Baja Bikes get: the tracking is what makes it paid.
+        ok("hejoscar.dk on its own is an ordinary link", !isPartnerLink("https://hejoscar.dk/"));
+      }
+
+      // ── AND THE CHECKOUT LINKS IN "WHAT YOU PAY" ────────────────
+      //
+      // The same complaint as the stay links, one block up, and the same class
+      // of thing: 12px gold text with no background, border or padding, under a
+      // line of prose in a similar weight. Every link in that block is the
+      // checkout for a line the reader has already decided to pay for.
+      {
+        const costs = readFileSync(join(root, "src/components/CostsBlock.jsx"), "utf8");
+        ok("a checkout in What you pay is a button rather than a caption",
+           /background: `\$\{C\.gold\}1a`, border: `1px solid \$\{C\.gold\}66`, color: C\.gold, borderRadius: 100/.test(costs));
+        ok("and not the old bare text link",
+           !/style=\{\{ display: "inline-block", marginTop: 3, fontSize: 12, color: C\.gold, fontWeight: 700, textDecoration: "none" \}\}/.test(costs));
+        // The disclosure is still printed from the links on the page rather
+        // than typed, so a dressed-up button cannot outrun its own sentence.
+        ok("and it still prints its disclosure off the links that are there",
+           /partnerDisclosure\(partnered\[0\]\)/.test(costs));
+      }
       ok("and only about what the day is short of", /addInOffers\(day, \{ kindOf: addInKind \}\)/.test(gp));
       ok("and hands the question over naming the day",
          /navigate\("\/", \{ state: \{ detourAsk: addInSeed\(cat, \{ town, dayNo \}\) \} \}\)/.test(gp));
@@ -49700,6 +49862,279 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       is("the record is dated", rec.at, "2026-09-14");
       is("and holds one account per platform", rec.accounts.map(a => a.platform), ["facebook", "instagram"]);
       is("and nothing at all is nothing, rather than an empty shell", socialRecord([]), null);
+
+      // ── AND THE REQUEST SHAPE, WHICH WAS GUESSED AND IS NOW READ ──
+      //
+      // 14 Sep 2026. The morning handoff said it in these words: "the API
+      // Direct request shape is my reading of their docs and is unverified".
+      // It was wrong in four places at once, the host, the path, the parameter
+      // name and the paging, so the paid tier would have returned nothing
+      // forever and looked like a country with no Facebook pages in it.
+      //
+      // Read off their documentation instead, and what is there is better than
+      // what was guessed at: an endpoint PER PLATFORM, so a page search returns
+      // pages rather than posts that mention a name. Two list shapes, and this
+      // is the reader that turns both into the one thing accountFits takes.
+      const { searchCandidates, websiteInPageDetails } = M;
+      // GET /v1/facebook/pages?query= -> results[]
+      const fb = searchCandidates({ results: [
+        { name: "Ribe VikingeCenter", url: "https://www.facebook.com/ribevikingecenter", is_verified: true },
+        { name: "Del denne side", url: "https://www.facebook.com/sharer/sharer.php?u=x" },
+      ], count: 2 });
+      is("a facebook page search yields the page and drops the share button",
+         fb.map(c => `${c.account.platform}/${c.account.handle}`), ["facebook/ribevikingecenter"]);
+      is("the platform's own readable name travels with the handle", fb[0].name, "Ribe VikingeCenter");
+      ok("and the tick is carried", fb[0].verified === true);
+      // GET /v1/instagram/users?query= -> users[], which is a DIFFERENT key, and
+      // a reader that knew only about `results` would read every Instagram
+      // answer as empty.
+      const ig = searchCandidates({ users: [
+        { username: "ribevikingecenter", full_name: "Ribe VikingeCenter", url: "https://instagram.com/ribevikingecenter", is_private: false },
+        { username: "someoneelse", full_name: "Privat", url: "https://instagram.com/someoneelse", is_private: true },
+      ] });
+      // A PRIVATE ACCOUNT IS DROPPED. Not because it is not theirs, but because
+      // the whole point of storing a handle is that a later check can read what
+      // it posts, and a private account announces to nobody we can ask.
+      is("an instagram user search reads `users`, and a private account is not stored",
+         ig.map(c => c.account.handle), ["ribevikingecenter"]);
+      is("neither list carries a bio link, so nothing is invented for one", [fb[0].bioLinks, ig[0].bioLinks], [[], []]);
+      // GET /v1/facebook/page?url= is the one call that can settle a named
+      // candidate, because it returns the website that page says it has.
+      is("the page details call gives back the site the page claims",
+         websiteInPageDetails({ page: { name: "Ribe VikingeCenter", website: "ribevikingecenter.dk" } }),
+         "https://ribevikingecenter.dk/");
+      is("and a page with no website is an empty string rather than a broken url",
+         websiteInPageDetails({ page: { name: "x", website: null } }), "");
+      // Which is what turns `named` into `linked`, the only remote reading that
+      // needs no opinion at all.
+      is("a settled bio link is the reason that needs no judgement",
+         accountFits({ platform: "facebook", handle: "ribevc" },
+           { name: "Ribe VikingeCenter", website: "https://ribevikingecenter.dk",
+             bioLinks: [websiteInPageDetails({ page: { website: "ribevikingecenter.dk" } })] }), LINKED);
+    }
+
+    // ── AND WHICH ROWS ARE WORTH ASKING ABOUT ───────────────────────
+    //
+    // Oliver, 14 Sep 2026: "I want you to get a sweep done for everything.. a
+    // search for every attraction and event's own social media."
+    //
+    // socialAccounts.js decides what an account IS. This decides which rows are
+    // asked, in what order, and what the panel says BEFORE anything is spent.
+    // sweeps.js's rule two is the whole design, because the two tiers do not
+    // cost the same thing: reading a row's own footer is free and gives the
+    // stronger answer, and only a row with no website costs money.
+    {
+      const { socialVerdict, socialPlan: plan, describeSocialPlan, socialWriteFor, socialCanWrite,
+              socialPreTicked, describeSocialFinding, socialAge,
+              SOCIAL_HAVE, SOCIAL_ASK_PAGE, SOCIAL_ASK_SEARCH, SOCIAL_ASKED, SOCIAL_CANNOT,
+              ACCOUNT_FRESH_DAYS, NOTHING_FOUND_DAYS, REQUESTS_PER_SEARCH } = M;
+      // Declared here rather than reached for: this block sits a long way from
+      // either of the two the file already holds, and a suite that silently
+      // read an out-of-scope one would pass without checking anything.
+      const DASH = new RegExp("[" + String.fromCharCode(0x2013, 0x2014, 0x2212, 0x2015) + "]");
+      const BANNED = /\b(?:actually|truly|genuinely|genuine|simply)\b/i;
+      const today = new Date(2026, 8, 14);
+      const row = (id, payload, type = "festival") => ({ id, type, payload });
+      const verdictOf = (p, type) => socialVerdict(row(1, p, type), today).verdict;
+
+      is("a row with a website is read off its own footer, which costs nothing",
+         verdictOf({ name: "Ribe VikingeCenter", town: "Ribe", website: "https://ribevikingecenter.dk" }),
+         SOCIAL_ASK_PAGE);
+      // THE CASE THE PAID TIER EXISTS FOR. The events audit found the Naestved
+      // row stuck because a festival with no site on file is refused by every
+      // existing tier on every run, and a festival with no site still has a
+      // Facebook page.
+      is("a row with no website at all is the one that needs a search",
+         verdictOf({ name: "Naestved Madfestival", town: "Naestved" }), SOCIAL_ASK_SEARCH);
+      is("a row with no name cannot be asked about and says so",
+         verdictOf({ town: "Ribe", website: "https://x.dk" }), SOCIAL_CANNOT);
+      // ALREADY ANSWERED, AND THE ANSWER AGES. An account that moved is a fact
+      // that ages, exactly like a ticket stamp, so the record goes back in the
+      // queue on its own rather than answering from 2026 forever.
+      const have = { name: "X", website: "https://x.dk", __social: { at: "2026-09-01", how: "own-page", accounts: [{ platform: "facebook", handle: "x", url: "https://facebook.com/x" }] } };
+      is("a fresh record is not asked about again", verdictOf(have), SOCIAL_HAVE);
+      is("and the age is read off the record rather than guessed", socialAge(have, today), 13);
+      const stale = { ...have, __social: { ...have.__social, at: "2024-01-01" } };
+      ok("a record older than a year goes back in the queue", ACCOUNT_FRESH_DAYS === 365 && verdictOf(stale) === SOCIAL_ASK_PAGE);
+      // A NO EXPIRES FASTER THAN A YES. A festival with no page in September has
+      // one in January, the week it starts selling tickets.
+      is("a recent no is left alone so the next run does not pay for it twice",
+         verdictOf({ name: "Y", __socialSweep: { at: "2026-08-20", found: false } }), SOCIAL_ASKED);
+      ok("and an old one is asked again",
+         NOTHING_FOUND_DAYS === 120 && verdictOf({ name: "Y", __socialSweep: { at: "2026-01-01", found: false } }) === SOCIAL_ASK_SEARCH);
+
+      // THE ORDER DECIDES WHO GOT THE MONEY, because a run can be stopped half
+      // way. An event still ahead is the row whose facts move and the one the
+      // chat plans around this month.
+      const rows = [
+        row(1, { name: "Finished", date: "2026-06-01", dateEnd: "2026-06-02" }),
+        row(2, { name: "Ahead", date: "2026-12-01", dateEnd: "2026-12-02" }),
+      ];
+      is("an event still ahead is searched before one that has finished",
+         plan(rows, today).paid.map(p => p.name), ["Ahead", "Finished"]);
+
+      // WHAT THE PANEL SAYS BEFORE A PENNY IS SPENT, in requests rather than in
+      // a guess at a bill, with the free half named separately from the paid
+      // one, because most of the library costs nothing and he should see that.
+      const mixed = plan([
+        row(1, { name: "Has a site", website: "https://a.dk" }),
+        row(2, { name: "Has none" }),
+        row(3, { name: "Has none either" }),
+      ], today);
+      const said = describeSocialPlan(mixed);
+      ok("the sentence names the free half first", said.indexOf("free") < said.indexOf("search"));
+      ok("and the paid half in requests", said.includes(`${2 * REQUESTS_PER_SEARCH} requests`));
+      is("nothing to do says so rather than offering a run",
+         describeSocialPlan(plan([row(1, { name: "Z", __socialSweep: { at: "2026-09-10", found: false } })], today)),
+         "Nothing here can be asked about. Every row is either stamped from a recent look or has no name.");
+
+      // ── AND A FAILURE IS NOT A NO ─────────────────────────────────
+      // The lesson the affiliate sweep wrote down after a quota ran out half way
+      // through a run: a call that failed looks exactly like "this place has no
+      // page", and stamping it as one hides the row for four months.
+      is("a failed call writes nothing at all",
+         socialWriteFor({ id: 1, name: "X", error: "the endpoint answered 429" }), null);
+      // And neither does a row the FREE pass could not answer, because nobody
+      // has asked it the second question yet.
+      is("nor does a row the free pass has only passed along",
+         socialWriteFor({ id: 1, name: "X", needsSearch: true }), null);
+      is("a row that was looked at and had nothing is stamped, and nothing else",
+         socialWriteFor({ id: 7, name: "X", record: null, at: "2026-09-14" }),
+         { id: 7, set: { __socialSweep: { at: "2026-09-14", found: false } } });
+      const rec = { at: "2026-09-14", how: "own-page", accounts: [{ platform: "facebook", handle: "x", url: "https://facebook.com/x" }] };
+      is("and a find writes the record and the stamp together, so one press cannot leave half of it",
+         socialWriteFor({ id: 7, name: "X", record: rec }),
+         { id: 7, set: { __social: rec, __socialSweep: { at: "2026-09-14", found: true } } });
+      ok("both are things canWrite allows and the two refusals are not",
+         socialCanWrite({ record: rec }) && !socialCanWrite({ error: "x" }) && !socialCanWrite({ needsSearch: true }));
+
+      // PRE-TICKED ONLY WHERE NOTHING WAS JUDGED. An account off the place's own
+      // footer is theirs by construction. A search result is a candidate, and
+      // the endpoint says so in its own reply, so pre-ticking one would turn a
+      // review into a rubber stamp.
+      is("the page tier is pre-ticked and the search tier is not",
+         socialPreTicked([
+           { id: 1, record: { how: "own-page", accounts: [] } },
+           { id: 2, record: { how: "named", accounts: [] } },
+           { id: 3, record: { how: "linked", accounts: [] } },
+         ]), [1]);
+      // The reason is shown rather than summarised, for sweeps.js's fourth rule:
+      // a green tick over a row is a lie at exactly the moment somebody is
+      // deciding whether to take it.
+      ok("and every row's line carries the reason it was kept",
+         describeSocialFinding({ record: rec }).includes("theirs")
+         && describeSocialFinding({ record: null }) === "Nothing found.");
+
+      // ── RULE FIVE, WHICH THIS ALLOW-LIST HAS EATEN EIGHT FIELDS TO
+      //    LEARN ────────────────────────────────────────────────────
+      // A sweep may only write a field shapeForLive already carries. Both are
+      // named there in the same commit as the sweep, which is what the comment
+      // above that function asks for and what was not done four times running.
+      {
+        const shaped = stripComments(readFileSync(join(root, "src/utils/studioContent.js"), "utf8"));
+        ok("__social survives publish", /__social:\s*\{/.test(shaped));
+        ok("and so does its stamp, which is what makes the sweep cheaper each run",
+           /__socialSweep:\s*\{ at: String\(t\.__socialSweep\.at\), found: !!t\.__socialSweep\.found \}/.test(shaped));
+      }
+
+      // ── AND THE FREE PASS MUST NOT BE ABLE TO SPEND ───────────────
+      //
+      // Without the tier gate, a row WITH a website whose footer links nothing
+      // falls straight through into the paid tier, and a panel that promised
+      // "this half is free" would have bought searches nobody was asked about.
+      {
+        const api = readFileSync(join(root, "api/social-find.js"), "utf8");
+        ok("the endpoint stops at the free tier when asked to",
+           /if \(only === "page"\) \{/.test(api) && /needsSearch: true/.test(api));
+        // The shape, read rather than guessed. If API Direct moves any of these
+        // the tier goes quiet rather than loud, which is why they are pinned.
+        ok("and the paid tier asks the endpoints their docs describe",
+           api.includes("https://apidirect.io") && api.includes("/v1/facebook/pages")
+           && api.includes("/v1/instagram/users") && api.includes("query"));
+        ok("with the key in the header their docs name", /"X-API-Key": key/.test(api));
+        ok("it still writes nothing", !/PATCH|supabase\.from|INSERT/i.test(api));
+        const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+        ok("the free button asks for the free tier and the paid one does not",
+           /findSocial\(free, "page"\)/.test(app) && /findSocial\(paid, ""\)/.test(app));
+        ok("and the panel is in the maintenance column with the other sweeps",
+           app.includes("Find each place's own social accounts"));
+      }
+      ok("the sweep source carries no dash", !DASH.test(readFileSync(join(root, "src/utils/socialSweep.js"), "utf8")));
+      ok("nor a banned word", !BANNED.test(stripComments(readFileSync(join(root, "src/utils/socialSweep.js"), "utf8")).replace(/"[^"\n]*"/g, "")));
+    }
+
+    // ── AND HOW LONG AN ANSWER IS ALLOWED TO BE ─────────────────────
+    //
+    // Oliver, 14 Sep 2026, after watching somebody who did not build this use
+    // it: "We need a 'long' / 'Short' answers. Because my friend don't like
+    // these long replies." Then, in the three words that are the whole
+    // specification: "She wants simplicity."
+    //
+    // The prompt already half agreed with her. It has carried "GET TO THE
+    // POINT. Most replies should be short and concrete" for weeks, and the
+    // reply she was reading ran to five paragraphs with an aside about a
+    // discount app in the middle of it. A rule that asks for brevity in one
+    // sentence and then hands the model nine other things it must cover is a
+    // preference rather than a rule, and the model resolves it the way models
+    // do.
+    {
+      const { cleanLength, answerLengthBlock, lengthLabel, ANSWER_LENGTHS, DEFAULT_LENGTH, ANSWER_SHORT, ANSWER_LONG } = M;
+      const DASH = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+      const BANNED = /\b(?:actually|truly|genuinely|genuine|simply)\b/i;
+      is("there are two settings and no third", ANSWER_LENGTHS, [ANSWER_SHORT, ANSWER_LONG]);
+      // SHORT IS THE DEFAULT, and the reason is the person who complained: she
+      // is the first traveller to use this who did not build it. The one who
+      // wants the long version says so in one tap and keeps that choice.
+      is("and short is what a newcomer gets", DEFAULT_LENGTH, ANSWER_SHORT);
+      is("anything unreadable falls back to it rather than to nothing",
+         [cleanLength(""), cleanLength(null), cleanLength("medium"), cleanLength(ANSWER_LONG)],
+         [ANSWER_SHORT, ANSWER_SHORT, ANSWER_SHORT, ANSWER_LONG]);
+      // ── A BUDGET, NOT MORE ENCOURAGEMENT ──────────────────────────
+      // Sentences, because a model counts sentences reliably and guesses at
+      // words. And the question is carved OUT of the budget: a short setting
+      // that swallowed the question would turn a seven slot brief into a guess.
+      const short = answerLengthBlock(ANSWER_SHORT);
+      ok("the short setting states a countable budget", /Three sentences at most/.test(short));
+      ok("and leaves room for the question the brief still needs",
+         /plus one question at the end when you still need something/.test(short));
+      ok("and outranks the other rules about what a reply may contain, or it is one voice among nine",
+         /outranks every other instruction/.test(short));
+      // NAMING WHAT TO LOSE is the half the existing line was missing. Every
+      // item here is a thing the long replies were observed doing.
+      ok("it names what to cut rather than only asking for less",
+         /What to cut, in this order/.test(short) && /recap/.test(short) && /reasoning behind a recommendation/.test(short)
+         && /discount/.test(short) && /closing offer/.test(short));
+      // AND THE FAILURE MODE THE BUDGET INVITES. A paragraph with the spaces
+      // taken out is neither short nor simple, and "simplicity" was the word
+      // she used.
+      ok("and refuses the dense sentence a budget invites", /rather than compressing/.test(short));
+      ok("a request for more is answered in full, then it goes back", /then go back to short/.test(short));
+      const long = answerLengthBlock(ANSWER_LONG);
+      ok("the full setting is not licence to pad", /not licence to pad/.test(long));
+      ok("and it does not contradict the rules above it", /still hold/.test(long));
+      // "Full" rather than "Long" on the button, because nobody picks the
+      // option labelled long.
+      is("the buttons read Short and Full", [lengthLabel(ANSWER_SHORT), lengthLabel(ANSWER_LONG)], ["Short", "Full"]);
+      is("neither block carries a dash", [short, long].filter(b => DASH.test(b)), []);
+      is("nor a banned word", [short, long].filter(b => BANNED.test(b)), []);
+
+      // ── AND IT HAS TO REACH THE MODEL AND THE SCREEN ──────────────
+      {
+        const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+        ok("the chosen setting is in the chat prompt", /\$\{answerLengthBlock\(answerLength\)\}/.test(app));
+        ok("read from storage on the first render, so a returning session does not arrive long and correct itself",
+           /useState\(\(\) => readAnswerLength\(\)\)/.test(app));
+        ok("and a tap stores it as well as setting it", /setAnswerLength\(storeAnswerLength\(m\)\)/.test(app));
+        // ABOVE THE BOX, NOT IN A SETTINGS SCREEN. The complaint is about the
+        // reply she is looking at, so the control sits where she is looking.
+        ok("the control sits above the composer",
+           app.indexOf("[ANSWER_SHORT, ANSWER_LONG].map") < app.indexOf("Tell me about your trip"));
+        // OUTSIDE the row that only appears after a message, or the one
+        // setting a newcomer wants would be invisible until she had already
+        // read a long reply.
+        ok("and outside the row that only appears after a message",
+           app.indexOf("[ANSWER_SHORT, ANSWER_LONG].map") < app.lastIndexOf("aiMessages.length > 1 && ("));
+      }
     }
     // AND WHAT MUST SURVIVE. The frame has to sit immediately in front of the
     // name, so a sentence that merely contains one of those words elsewhere
@@ -55678,6 +56113,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         percentLine({ known: { origin: { value: "billund" } }, vague: [] }),
       ];
       is("nothing the app says to a traveller carries a dash", lines.filter(l => DASH.test(String(l || ""))), []);
+      // ── AND THE SEPARATOR HE ASKED FOR, PINNED ──────────────────
+      //
+      // Oliver, 14 Sep 2026, reading the fixed line on his own screen: "'3 of
+      // 7, 4 still to go' I actually prefer a 'dash' over the 'comma' so 3 of 7
+      // - 4 still to go". The comma was my substitution when the em dash came
+      // out, not his. It is pinned here so it cannot drift back on the next
+      // pass over this file, and it is a HYPHEN, which is a different character
+      // from the two the line above bans.
+      is("and the count is separated the way he asked for",
+         progressLine({ total: 7, done: 3, open: ["a", "b", "c", "d"] }), "3 of 7 - 4 still to go");
     }
 
     is("the options listed here are the ones the question prints",

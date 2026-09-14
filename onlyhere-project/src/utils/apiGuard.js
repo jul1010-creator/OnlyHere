@@ -106,6 +106,12 @@ export const STUDIO_ONLY_ENDPOINTS = [
   "places-locate",
   "tickets",
   "commons-photo",
+  // 14 Sep 2026. Added in the same commit as the social sweep, because this
+  // list is not documentation: five blocks of the suite are driven off it, and
+  // an endpoint that spends money and is left off is one that gets none of
+  // them. It is founder-gated in its own file either way; being named here is
+  // what makes the suite check that the gate is still there next month.
+  "social-find",    // API Direct requests, priced per call
 ];
 
 // Resolve a bearer token with Supabase. Lifted from api/ask.js rather than

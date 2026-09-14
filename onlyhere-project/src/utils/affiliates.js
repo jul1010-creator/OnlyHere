@@ -605,6 +605,25 @@ export const carRentalActive = () => !!carRentalUrl();
 const PARTNER_HOSTS = [
   "tpx.li", "tp.media", "tp.st",
   "ticketmaster.evyy.net", "impact.com", "pxf.io",
+  // ── ADTRACTION, THE THIRD NETWORK ─────────────────────────────────
+  //
+  // Oliver, 14 Sep 2026: "I'm gonna seek for Oscar's Biludlejning! I was
+  // granted permission for adtraction."
+  //
+  // Added the moment the network was, and BEFORE the link exists, because the
+  // failure this list prevents is silent: an Adtraction link pasted into
+  // config.js while this array does not know the host renders as an ordinary
+  // link, with no disclosure under it and no sponsored rel on it. The reader
+  // sees a paid link presented as an unpaid one, which is the exact thing
+  // public/privacy.html promises does not happen.
+  //
+  // Confirmed shape rather than guessed at, after a request shape was guessed
+  // wrong this morning and was wrong in four places at once:
+  //   https://track.adtraction.com/t/t?a=<id>&as=<sub>&t=2&tk=1&url=<target>
+  // `url` carries the destination, which is the {url} template shape this file
+  // already uses for Tiqets and Ticketmaster, so a deep link into one Oscar
+  // branch is available later if Oscar allows deeplinking.
+  "adtraction.com",
 ];
 
 export const isPartnerLink = (url) => {
@@ -685,6 +704,14 @@ const PARTNER_MERCHANTS = {
   autoeurope: "AutoEurope",
   discovercars: "DiscoverCars",
   rentalcars: "Rentalcars",
+  // ── AND THE DANISH ONE, 14 SEP 2026 ──────────────────────────────
+  // Oscar Biludlejning, hejoscar.dk, through Adtraction. Keyed on the
+  // DESTINATION host rather than on the network's, for the reason written into
+  // partnerMerchant: every Adtraction link shares one host, so the merchant is
+  // in the url parameter and nowhere else. He has been chasing this one since
+  // 9 September because it is the most Danish inventory on any list: 145
+  // branches against AutoEurope's fifteen pickup points.
+  hejoscar: "Oscar Biludlejning",
   kiwi: "Kiwi.com",
   aviasales: "Aviasales",
   wegotrip: "WeGoTrip",
@@ -764,10 +791,47 @@ export const isAffiliateHref = (url) => {
 
 
 
+// ── WHAT A TRACKING LINK IS POINTING AT ─────────────────────────────
+//
+// A network link carries its destination in a query parameter, and that
+// parameter is the only place the merchant's name appears. Decoded rather than
+// pattern-matched, because a destination is percent-encoded and a regex over
+// the encoded form would read "hejoscar" out of one link and nothing out of the
+// next one that happened to encode a slash differently.
+//
+// Returns "" rather than throwing on a malformed link, for the same reason
+// asUrl does everywhere else in this codebase: a bad href is one empty string
+// here and never a half parsed guess later.
+export const destinationIn = (url) => {
+  try {
+    const u = new URL(String(url || "").trim());
+    const target = u.searchParams.get("url") || u.searchParams.get("ulp") || "";
+    return /^https?:\/\//i.test(target) ? target : "";
+  } catch { return ""; }
+};
+
 export const partnerMerchant = (url) => {
   if (!isPartnerLink(url)) return "";
   const h = hostOf(url);
   if (!h) return "";
+  // ── ONE NETWORK WHERE THE HOST NAMES NOBODY ───────────────────────
+  //
+  // Every Travelpayouts link is <programme>.tpx.li, so the first label IS the
+  // merchant. Every Adtraction link is track.adtraction.com, whatever it sells,
+  // so the first label is "track" and the rule above would print "Book on
+  // Track" on every one of them. That is the failure the comment over
+  // PARTNER_MERCHANTS warns about, arriving through a door it did not expect.
+  //
+  // The merchant is in the `url` parameter, which is where Adtraction puts the
+  // destination, so it is read from there and looked up the same way. A link
+  // with no readable destination gets the honest generic label rather than a
+  // guess, exactly as an unknown Travelpayouts programme does.
+  if (h === "adtraction.com" || h.endsWith(".adtraction.com")) {
+    const dest = destinationIn(url);
+    const destHost = dest ? hostOf(dest) : "";
+    const label = destHost ? destHost.replace(/^www\./i, "").split(".")[0].toLowerCase() : "";
+    return PARTNER_MERCHANTS[label] || "";
+  }
   const first = h.split(".")[0].toLowerCase();
   // A bare programme host with no subdomain names nothing: booking.com?aid= is
   // recognised as paid by its parameter and its first label is the merchant

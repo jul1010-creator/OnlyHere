@@ -688,6 +688,42 @@ export const shapeForLive = (type, t) => {
   if (t?.__ticketSweep?.at) {
     out = { ...out, __ticketSweep: { at: String(t.__ticketSweep.at), found: !!t.__ticketSweep.found, ...(t.__ticketSweep.url ? { url: String(t.__ticketSweep.url) } : {}) } };
   }
+  // ── AND THE PLACE'S OWN SOCIAL ACCOUNTS, WHICH WOULD HAVE BEEN
+  //    THE NINTH ────────────────────────────────────────────────────
+  //
+  // Added in the SAME commit as utils/socialSweep.js, which is what the
+  // paragraph six fields up asks for and what was not done four times running:
+  // "if a draft computes a field, look here before believing it ships."
+  //
+  // Stored and NEVER rendered, on the same terms as __hours. Nothing on the
+  // site reads it, deliberately. It exists so a later check can ask the account
+  // the place actually runs instead of asking the internet about a name, and so
+  // a redraft does not pay for the same search twice.
+  //
+  // The DATE is the whole point again. An account that moved, or a venue that
+  // opened an Instagram since, is a fact that ages, and a handle with no date
+  // on it is the same quiet lie the ticket stamps were given dates to avoid.
+  // `how` travels with it because the three readings are not worth the same:
+  // an account read off the place's own footer is theirs by construction, and
+  // one a search named is a candidate somebody looked at.
+  if (t?.__social?.at && Array.isArray(t.__social.accounts) && t.__social.accounts.length) {
+    out = { ...out, __social: {
+      at: String(t.__social.at),
+      how: String(t.__social.how || ""),
+      accounts: t.__social.accounts.slice(0, 6).map(a => ({
+        platform: String(a?.platform || ""), handle: String(a?.handle || ""), url: String(a?.url || ""),
+        ...(a?.title ? { title: String(a.title) } : {}),
+        ...(a?.verified ? { verified: true } : {}),
+      })).filter(a => a.platform && a.handle),
+    } };
+  }
+  // And the stamp, for the reason __tourSweep's is here: a row told "this place
+  // has no page" would lose that on its next redraft and be paid for all over
+  // again. This one is the difference between a sweep that gets cheaper each
+  // run and one that never does.
+  if (t?.__socialSweep?.at) {
+    out = { ...out, __socialSweep: { at: String(t.__socialSweep.at), found: !!t.__socialSweep.found } };
+  }
   // ── WHAT LANGUAGE THE THING ITSELF RUNS IN ────────────────────────
   // Oliver, 15 Aug 2026: "I wonder if we should make people aware that an event
   // might have a great language barrier." Carried on the same terms as __hours

@@ -31,7 +31,7 @@
 //    with no site still has a Facebook page. Costs a fraction of a penny, and
 //    the answer needs a reason attached (see accountFits), because a search can
 //    hand back any account in Denmark whose name is close.
-import { accountsOnPage, accountIn, accountFits, socialRecord, asUrl, OWN_PAGE } from "../src/utils/socialAccounts.js";
+import { accountsOnPage, accountFits, socialRecord, asUrl, searchCandidates, websiteInPageDetails, OWN_PAGE } from "../src/utils/socialAccounts.js";
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
 
 // The markup, not the readable text. readPage.js strips tags, and a footer icon
@@ -61,28 +61,66 @@ const rawPage = async (url) => {
   } finally { clearTimeout(t); }
 };
 
-// ── THE SECOND TIER ─────────────────────────────────────────────────
-// One search, its results read through the same account reader as the page
-// tier, and every candidate given a reason by accountFits or dropped. `link` is
-// whatever the result carries as the account's own outbound link, which is the
-// field that turns a guess into a fact when it points at the site we hold.
-const API_DIRECT = "https://api.apidirect.io/v1/search";
-const askApiDirect = async (key, { name, town }) => {
-  const q = [name, town, "official"].filter(Boolean).join(" ");
+// ── THE SECOND TIER, WITH THE SHAPE READ RATHER THAN GUESSED ────────
+//
+// The first version of this file asked `api.apidirect.io/v1/search?q=`. That
+// was my reading of their docs and the handoff said so in those words: "the API
+// Direct request shape is my reading of their docs and is unverified". It was
+// wrong in four places at once, the host, the path, the parameter name and the
+// paging, so the tier would have returned nothing forever and looked like a
+// country with no Facebook pages in it.
+//
+// Read off their documentation on 14 Sep 2026, and it is better than what was
+// guessed at: there is an endpoint PER PLATFORM, so a page search returns pages
+// rather than posts that mention a name. Base https://apidirect.io, one
+// X-API-Key header, `query` as the parameter, and a list under `results` for
+// Facebook and under `users` for Instagram.
+//
+//   GET /v1/facebook/pages?query=      pages, with is_verified
+//   GET /v1/instagram/users?query=     profiles, with is_private
+//   GET /v1/facebook/page?url=         one page's own details, including the
+//                                      website it says it has
+//
+// Facebook and Instagram only, deliberately. Those two are where a Danish
+// venue announces a season, and every extra platform is another request per row
+// on a sweep that runs over the whole library. X, TikTok and YouTube can be
+// added in one line each if a row ever turns out to need them.
+const API_DIRECT = "https://apidirect.io";
+const askApiDirect = async (key, path, params) => {
+  const qs = new URLSearchParams(params).toString();
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), RAW_TIMEOUT_MS);
   try {
-    const r = await fetch(`${API_DIRECT}?q=${encodeURIComponent(q)}&limit=20`, {
+    const r = await fetch(`${API_DIRECT}${path}?${qs}`, {
       signal: ctrl.signal,
       headers: { "X-API-Key": key, "Accept": "application/json" },
     });
-    if (!r.ok) return { ok: false, why: `API Direct returned ${r.status}` };
-    const body = await r.json();
-    const rows = Array.isArray(body?.results) ? body.results : Array.isArray(body?.data) ? body.data : [];
-    return { ok: true, rows };
+    if (!r.ok) return { ok: false, why: `API Direct returned ${r.status} on ${path}` };
+    return { ok: true, body: await r.json() };
   } catch (e) {
-    return { ok: false, why: e?.name === "AbortError" ? "API Direct did not answer in time" : String(e?.message || e) };
+    return { ok: false, why: e?.name === "AbortError" ? `API Direct did not answer in time on ${path}` : String(e?.message || e) };
   } finally { clearTimeout(t); }
+};
+
+// ── AND THE ONE CALL THAT TURNS A GUESS INTO A FACT ──────────────────
+//
+// Neither list endpoint carries the account's own outbound link, and that link
+// is the whole of the `linked` reason: an account whose own page says it lives
+// at the website we already hold for this row is theirs, with nothing to judge.
+// So a candidate that got only as far as `named`, on a row where we DO hold a
+// website, is worth one more request to settle.
+//
+// ONE, and only on Facebook, and only for the first candidate. Two reasons.
+// The cost is per request and this sweep runs over a whole library, and a row
+// with no website on file, which is the case this tier exists for, has nothing
+// to compare a bio link against, so the call cannot answer anything there and
+// is never made.
+const settleByWebsite = async (key, candidate, website) => {
+  if (!website || candidate.account.platform !== "facebook") return null;
+  const got = await askApiDirect(key, "/v1/facebook/page", { url: candidate.account.url });
+  if (!got.ok) return null;
+  const site = websiteInPageDetails(got.body);
+  return site ? [site] : null;
 };
 
 export default async function handler(req, res) {
@@ -105,6 +143,16 @@ export default async function handler(req, res) {
   const name = String(req.query.name || "").trim();
   const town = String(req.query.town || "").trim();
   const website = String(req.query.website || "").trim();
+  // ── A FREE RUN MUST NOT BE ABLE TO SPEND ────────────────────────
+  //
+  // Without this, a row WITH a website whose footer links nothing falls
+  // straight through into the paid tier, and the panel that promised "this
+  // half is free" would have bought searches nobody was asked about. The whole
+  // arrangement in socialSweep.js is that the cost is said out loud before it
+  // is spent, and a fall-through defeats it silently, which is the worst way to
+  // defeat it. `tier=page` stops at the free tier and reports what happened, so
+  // the rows whose page had nothing come back as a SECOND, priced press.
+  const only = String(req.query.tier || "").trim();
   if (!name) return res.status(400).json({ error: "Provide a ?name=" });
 
   const tried = [];
@@ -129,34 +177,62 @@ export default async function handler(req, res) {
     tried.push({ tier: "own-page", skipped: "no website on this row" });
   }
 
+  if (only === "page") {
+    tried.push({ tier: "api-direct", skipped: "this run was the free tier only" });
+    return res.status(200).json({ record: null, tried, needsSearch: true });
+  }
+
   // TIER TWO: a search, only where the first tier had nothing to read.
   const key = process.env.API_DIRECT_KEY;
   if (!key) {
     tried.push({ tier: "api-direct", skipped: "API_DIRECT_KEY is not set" });
     return res.status(200).json({ record: null, tried });
   }
-  const hit = await askApiDirect(key, { name, town });
-  if (!hit.ok) {
-    tried.push({ tier: "api-direct", failed: hit.why });
-    return res.status(200).json({ record: null, tried });
-  }
 
-  // Every result through the same reader as the page tier, then a reason or
-  // nothing. `how` is the weakest reason among the accounts kept, so a record
-  // is never described as stronger than its softest part.
+  // The town is in the query because two Danish venues share a name more often
+  // than a search engine expects, and it is left OUT of the Instagram query
+  // because a handle rarely carries one and the extra word costs recall.
+  const q = [name, town].filter(Boolean).join(" ");
+  const asked = [
+    { platform: "facebook", path: "/v1/facebook/pages", params: { query: q } },
+    { platform: "instagram", path: "/v1/instagram/users", params: { query: name } },
+  ];
+
   const kept = [];
   let how = null;
-  for (const row of hit.rows) {
-    const a = accountIn(row?.url || row?.link || "");
-    if (!a) continue;
-    const bioLinks = [row?.website, row?.external_url, row?.bio_link, row?.link_in_bio].filter(Boolean);
-    const fits = accountFits(a, { name, website, bioLinks });
-    if (!fits) continue;
-    kept.push(a);
-    // "named" is weaker than "linked", so it wins the label whenever it appears.
-    if (!how || fits === "named") how = fits;
+  let anyAnswered = false;
+  for (const a of asked) {
+    const hit = await askApiDirect(key, a.path, a.params);
+    if (!hit.ok) { tried.push({ tier: "api-direct", platform: a.platform, failed: hit.why }); continue; }
+    anyAnswered = true;
+    const candidates = searchCandidates(hit.body);
+    let keptHere = 0;
+    for (const c of candidates) {
+      let fits = accountFits(c.account, { name, website, bioLinks: c.bioLinks });
+      // A candidate the search named but could not link is worth one more
+      // request, and only where there is a website to settle it against.
+      if (fits === "named" && website && !keptHere) {
+        const links = await settleByWebsite(key, c, website);
+        if (links) fits = accountFits(c.account, { name, website, bioLinks: links }) || fits;
+      }
+      if (!fits) continue;
+      // The platform's own display name, kept beside the handle, because
+      // "ribevc" is unreadable and "Ribe VikingeCenter" is the thing a person
+      // recognises in a table of a hundred rows. The tick is carried the same
+      // way and decides nothing: verified says the platform checked who runs
+      // the account, not that it is the business on this row.
+      kept.push({ ...c.account, ...(c.name ? { title: c.name } : {}), ...(c.verified ? { verified: true } : {}) });
+      keptHere += 1;
+      if (!how || fits === "named") how = fits;
+      // One per platform. A search hands back every account in Denmark whose
+      // name is close, and a table offering a person four Facebook pages to
+      // choose between is a table nobody finishes.
+      break;
+    }
+    tried.push({ tier: "api-direct", platform: a.platform, results: candidates.length, kept: keptHere });
   }
-  tried.push({ tier: "api-direct", results: hit.rows.length, kept: kept.length });
+  if (!anyAnswered) return res.status(200).json({ record: null, tried });
+
   return res.status(200).json({
     record: kept.length ? socialRecord(kept, { how }) : null,
     tried,

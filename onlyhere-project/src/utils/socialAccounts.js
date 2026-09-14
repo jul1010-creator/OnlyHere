@@ -229,3 +229,67 @@ export const socialRecord = (accounts, { how = OWN_PAGE, at = new Date() } = {})
   list.forEach(a => { if (!byPlatform.has(a.platform)) byPlatform.set(a.platform, a); });
   return { at: day, how, accounts: [...byPlatform.values()] };
 };
+
+// ── WHAT A SEARCH HANDS BACK, IN ONE SHAPE ──────────────────────────
+//
+// Added 14 Sep 2026, after the request shape was READ rather than guessed. The
+// first version of api/social-find.js asked `api.apidirect.io/v1/search?q=`,
+// which was my reading of their docs and was wrong in four places at once: the
+// host, the path, the parameter name and the paging. The handoff said it was
+// unverified. It was.
+//
+// What is there is better than one generic search, and it is the
+// reason this reader exists: API Direct has an endpoint per platform, so a
+// Facebook PAGE search returns pages rather than posts that mention a name.
+// Verified, from their own docs:
+//
+//   GET /v1/facebook/pages?query=   -> { results: [{ name, url, profile_url,
+//                                        facebook_id, image_url, is_verified }] }
+//   GET /v1/instagram/users?query=  -> { users:   [{ username, full_name, url,
+//                                        user_id, is_verified, is_private }] }
+//   GET /v1/facebook/page?url=      -> { page: { name, website, address, ... } }
+//
+// Two list shapes, `results` and `users`, and neither carries the account's own
+// outbound link. So this normalises both into the one thing accountFits reads,
+// and the bio link arrives separately from the page-details call, which is the
+// only call in the chain that can turn a guess into a fact.
+//
+// A PRIVATE ACCOUNT IS DROPPED. Not because it is not theirs, but because the
+// whole point of storing a handle is that a later check can read what it posts,
+// and a private account announces its winter hours to nobody we can ask. A
+// record holding one would promise a check that can never run.
+export const searchCandidates = (body) => {
+  const rows = Array.isArray(body?.results) ? body.results
+    : Array.isArray(body?.users) ? body.users
+    : Array.isArray(body?.data) ? body.data
+    : [];
+  const out = [];
+  for (const row of rows) {
+    if (row?.is_private === true) continue;
+    const account = accountIn(row?.url || row?.profile_url || row?.link || "");
+    if (!account) continue;
+    out.push({
+      account,
+      // The name the platform holds, which is not the handle and is often the
+      // readable one: "Ribe VikingeCenter" against a handle of "ribevc".
+      name: String(row?.name || row?.full_name || row?.title || row?.username || "").trim(),
+      // Carried, never a reason. Verified says the platform checked WHO runs
+      // this account, not that it is the business on this row, and a tick that
+      // decided anything would be a score wearing a badge. It is shown, and a
+      // person decides with it.
+      verified: row?.is_verified === true || row?.verified === true,
+      bioLinks: [row?.website, row?.external_url, row?.bio_link, row?.link_in_bio].filter(Boolean),
+    });
+  }
+  return out;
+};
+
+// The page-details call takes a page URL and gives back the website that page
+// says it has. That is the one field in the whole search tier that needs no
+// opinion: if it points at the site we already hold for this row, the account
+// is theirs. Pulled out here so the shape is asserted without a network.
+export const websiteInPageDetails = (body) => {
+  const w = body?.page?.website ?? body?.website ?? "";
+  const u = asUrl(w);
+  return u ? u.toString() : "";
+};
