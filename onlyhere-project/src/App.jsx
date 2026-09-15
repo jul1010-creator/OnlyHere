@@ -16527,6 +16527,41 @@ If the conversation only covers a single day or a few stops with no explicit day
         arch: [42, 22, 18],
         shrooms: [[13.6, 63.5, 7], [95.3, 57.5, 6.5], [70.6, 70.7, 7]] };
 
+  // ── WHAT COMES OUT OF THE GATE ─────────────────────────────────────
+  //
+  // Oliver, 15 Sep: "I don't really like the 'Gold Light'. I want some magical
+  // swirl." The old transition was one radial wash growing until it covered the
+  // screen, which is honest about what it is doing and reads as a flashbulb.
+  //
+  // These are the strands. Each row is [radius, arc length, start angle, stroke
+  // width, delay, how far it turns], drawn as one circle with a dash pattern so
+  // a "strand" is a single path and not a shape anybody has to rasterise. Fixed
+  // values rather than Math.random: a transition that comes out differently
+  // every time cannot be judged, tested, or tuned, and the eye reads 0.82s of
+  // motion as a shape, not as a seed. Radii and lengths are deliberately uneven
+  // so the ring never resolves into a wheel with spokes.
+  const GATE_STRANDS = [
+    [58, 34, 0, 5, 0, 210], [70, 22, 140, 3.4, 0.05, 170], [46, 46, 250, 6.5, 0.02, 250],
+    [84, 16, 60, 2.4, 0.08, 150], [62, 28, 200, 4, 0.11, 230], [94, 12, 320, 2, 0.06, 130],
+  ];
+  // [angle it leaves on, how far out it gets, delay]. Same argument for fixing
+  // them, and few enough that the whole gate is 6 paths plus 14 dots: every one
+  // of them moves on transform and opacity only, which is the rule the old wash
+  // was obeying and the reason it never stuttered.
+  //
+  // THE DISTANCE IS IN vmax AND MUST STAY THAT WAY. A percentage inside
+  // translateX resolves against the element's OWN width, and these elements are
+  // .3vmax dots, so "50%" would have sent a speck of dust a seventh of a
+  // millimetre and the whole layer would have looked like it was not running.
+  // The wash is 13vmax of radius, so these are roughly a third to two thirds of
+  // the way out to its edge.
+  const GATE_SPARKS = [
+    [12, "4.4vmax", 0.04], [47, "7.5vmax", 0.12], [83, "5.3vmax", 0], [119, "8.6vmax", 0.18],
+    [151, "4.8vmax", 0.07], [188, "7.9vmax", 0.15], [214, "5.9vmax", 0.02], [246, "9.1vmax", 0.1],
+    [272, "5.1vmax", 0.2], [301, "7.2vmax", 0.05], [329, "6.2vmax", 0.14], [355, "8.2vmax", 0.09],
+    [64, "6.5vmax", 0.22], [235, "6.8vmax", 0.17],
+  ];
+
   // ── PARALLAX AND BREATHING ─────────────────────────────────────────
   // Written straight onto the element as CSS variables rather than through
   // React state: this updates on every pointer move and every tilt event, and
@@ -25998,6 +26033,19 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               {/* The id moved to the Solo Travel category section above, so
                   there is exactly one #ess-solo on the page and the chip lands
                   on the published rows rather than on this fixed block. */}
+              {/* ── ON TIPS, NOT ON ESSENTIALS ─────────────────────────
+                  Oliver, 15 Sep: "the 'Find a local, if you can' in essentials,
+                  move to tips.. it's really not an essential." He is right by
+                  the definition the two pages already carry at the top of this
+                  block: Essentials is what costs you money on the day, Tips is
+                  what makes the trip better. Nobody is stranded for want of a
+                  Dane to drink with.
+
+                  It was rendering on BOTH tabs, since this fixed block sits
+                  below the rows and had no onTips condition of its own. So this
+                  is a move, not a copy: one guard takes it off Essentials and
+                  leaves it where it belongs. */}
+              {onTips && (
               <div style={{ marginBottom: 20, scrollMarginTop: 90 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Traveling Solo?</div>
                 <div style={{ background: C.surface, borderRadius: 14, padding: "16px", border: `1px solid ${C.border}` }}>
@@ -26010,6 +26058,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   </div>
                 </div>
               </div>
+              )}
 
               {/* FAQ */}
               <div id="ess-faq" style={{ marginBottom: 20, scrollMarginTop: 90 }}>
@@ -26457,12 +26506,51 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             .gxa-leaving .gxa-front { animation: gxaStepFront .78s cubic-bezier(.36,0,.62,.5) forwards; }
             .gxa-leaving .gxa-choose, .gxa-leaving .gxa-topbar { opacity:0 !important; transition: opacity .18s ease-in !important; }
             /* The gate itself. Pinned to the arch, sized in vmax so it is
-               guaranteed to cover any screen shape by the time it is done. */
-            .gxa-portal { position:absolute; left:var(--gx-ax,50%); top:var(--gx-ay,31%); width:26vmax; height:26vmax;
-              margin:-13vmax 0 0 -13vmax; border-radius:50%; pointer-events:none; z-index:40; opacity:0; transform:scale(.12);
+               guaranteed to cover any screen shape by the time it is done.
+
+               ── AND SINCE 15 SEP IT SWIRLS (Oliver: "I don't really like the
+               'Gold Light'. I want some magical swirl") ──────────────────
+               The wash is still here and still does the one job that cannot be
+               dropped: it goes white and covers the swap. What changed is what
+               happens in front of it for the first two thirds of a second, and
+               the constraint from the note above is unchanged, because it is
+               the reason the zoom was thrown away in the first place. Nothing
+               here rasterises a bitmap and nothing filters or blurs. Six SVG
+               paths and fourteen dots move on transform and opacity alone,
+               which is the cheapest thing a compositor does, and they are gone
+               before the white has finished arriving.
+
+               The wash now starts .2s late and runs a touch shorter. Leading
+               with it would have washed out the strands before anybody saw one,
+               which is how a swirl becomes a flashbulb with extra steps. */
+            .gxa-gate { position:absolute; left:var(--gx-ax,50%); top:var(--gx-ay,31%); width:0; height:0;
+              pointer-events:none; z-index:40; }
+            .gxa-gate > * { position:absolute; left:0; top:0; transform-origin:50% 50%; }
+            .gxa-portal { width:26vmax; height:26vmax;
+              margin:-13vmax 0 0 -13vmax; border-radius:50%; opacity:0; transform:scale(.12);
               background:radial-gradient(circle, #FFFFFF 0%, #FFF6DF 26%, rgba(255,226,160,.92) 46%, rgba(255,205,120,.55) 64%, transparent 78%); }
-            .gxa-leaving .gxa-portal { animation: gxaPortal .78s cubic-bezier(.5,0,.72,.42) forwards; }
-            @keyframes gxaPortal { 0% { opacity:0; transform:scale(.12); } 18% { opacity:.95; } 100% { opacity:1; transform:scale(9); } }
+            .gxa-leaving .gxa-portal { animation: gxaPortal .78s cubic-bezier(.5,0,.72,.42) .2s forwards; }
+            @keyframes gxaPortal { 0% { opacity:0; transform:scale(.12); } 18% { opacity:.45; } 100% { opacity:1; transform:scale(9); } }
+            /* A strand. The dash pattern makes the arc, the rotation makes it a
+               swirl, and the scale carries it off the edge of the screen. */
+            .gxa-strand { width:26vmax; height:26vmax; margin:-13vmax 0 0 -13vmax; opacity:0;
+              transform:rotate(var(--gxa-rot,0deg)) scale(.06); will-change:transform, opacity; }
+            .gxa-leaving .gxa-strand { animation: gxaStrand .82s cubic-bezier(.42,0,.7,.45) var(--gxa-d,0s) forwards; }
+            @keyframes gxaStrand {
+              0%   { opacity:0; transform:rotate(var(--gxa-rot,0deg)) scale(.06); }
+              14%  { opacity:1; }
+              64%  { opacity:1; }
+              100% { opacity:0; transform:rotate(calc(var(--gxa-rot,0deg) + var(--gxa-spin,200deg))) scale(7); }
+            }
+            /* Dust, pulled out of the arch on the same turn as the strands. */
+            .gxa-spark { width:.3vmax; height:.3vmax; margin:-.15vmax 0 0 -.15vmax; border-radius:50%;
+              background:#FFE9BC; box-shadow:0 0 .7vmax .1vmax rgba(255,214,140,.9); opacity:0; }
+            .gxa-leaving .gxa-spark { animation: gxaSpark .82s cubic-bezier(.3,0,.6,.5) var(--gxa-d,0s) forwards; }
+            @keyframes gxaSpark {
+              0%   { opacity:0; transform:rotate(var(--gxa-a,0deg)) translateX(1vmax) scale(.5); }
+              18%  { opacity:1; }
+              100% { opacity:0; transform:rotate(calc(var(--gxa-a,0deg) + 170deg)) translateX(var(--gxa-r,50%)) scale(1.4); }
+            }
             @keyframes gxaStepIn { to { transform: scale(1.04); } }
             @keyframes gxaStepFront { to { transform: scale(1.09); } }
             /* OPENING SPLASH, corner-flight version (restored per Oliver: darkness,
@@ -26527,6 +26615,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               .gxa-why { opacity:1 !important; transform:none !important; }
               .gxa-card, .gxa-card::after, .gxa-cardphoto, .gxa-live { animation: none !important; }
               .gxa-leaving, .gxa-leaving .gxa-kb, .gxa-leaving .gxa-front, .gxa-leaving .gxa-portal { animation: none !important; }
+              /* The swirl is the part somebody who asked for less motion asked
+                 to be spared, so it is not merely stopped, it is not drawn. A
+                 stopped strand is a gold streak parked across the arch. */
+              .gxa-strand, .gxa-spark { display: none !important; }
               .gxa-choose, .gxa-topbar { transition: none !important; }
               .gxa-fly { opacity: 0 !important; }
               .gxa-choose, .gxa-topbar { opacity: 1 !important; }
@@ -26609,7 +26701,38 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   the arch opening of whichever painting is on screen, so it
                   opens where the path is and not in the middle of a
                   tree. */}
-              <div className="gxa-portal" style={{ "--gx-ax": `${LANDING_ART.arch[0] + LANDING_ART.arch[2] / 2}%`, "--gx-ay": `${LANDING_ART.arch[1] + LANDING_ART.arch[2] * 0.42}%` }} />
+              {/* The gate. One wrapper pinned to the archway, everything inside
+                  it centred on that point, so the strands, the dust and the
+                  wash all come out of the same place rather than each carrying
+                  its own copy of the coordinates. */}
+              <div className="gxa-gate" style={{ "--gx-ax": `${LANDING_ART.arch[0] + LANDING_ART.arch[2] / 2}%`, "--gx-ay": `${LANDING_ART.arch[1] + LANDING_ART.arch[2] * 0.42}%` }}>
+                {/* One gradient, referenced by every strand. Six copies of the
+                    same definition is six things to keep in step. */}
+                <svg width="0" height="0" aria-hidden="true" style={{ position: "absolute" }}>
+                  <defs>
+                    <linearGradient id="gxaStrandGold" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0" stopColor="#FFF6DF" stopOpacity="0" />
+                      <stop offset="0.3" stopColor="#FFE2A0" />
+                      <stop offset="0.72" stopColor="#E0AE4E" />
+                      <stop offset="1" stopColor="#FFF6DF" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+                {GATE_STRANDS.map(([r, span, rot, w, d, spin], i) => (
+                  <svg key={i} className="gxa-strand" viewBox="0 0 200 200" fill="none" aria-hidden="true"
+                    style={{ "--gxa-rot": `${rot}deg`, "--gxa-spin": `${spin}deg`, "--gxa-d": `${d}s` }}>
+                    {/* pathLength=100 so the dash pattern is a percentage of the
+                        circle and the arc length does not change with radius. */}
+                    <circle cx="100" cy="100" r={r} stroke="url(#gxaStrandGold)" strokeWidth={w}
+                      strokeLinecap="round" pathLength="100" strokeDasharray={`${span} 100`} />
+                  </svg>
+                ))}
+                {GATE_SPARKS.map(([a, out, d], i) => (
+                  <i key={i} className="gxa-spark" aria-hidden="true"
+                    style={{ "--gxa-a": `${a}deg`, "--gxa-r": out, "--gxa-d": `${d}s` }} />
+                ))}
+                <div className="gxa-portal" />
+              </div>
               {LANDING_ART.shrooms.map(([x, y, s], i) => (
                 <div key={i} className="gxa-shroom" style={{ left: `${x - s / 2}%`, top: `${y - s * 0.916}%`, width: `${s}%`, aspectRatio: "1", background: "radial-gradient(circle, rgba(110,225,255,0.4) 0%, rgba(90,190,240,0.14) 48%, transparent 72%)", animationDelay: `${i * 2.1}s` }} />
               ))}

@@ -40,13 +40,24 @@
 //
 // (c) IS THE ONE THAT LOOKS LIKE A MISTAKE AND IS NOT. The carve-out means the
 // mechanism may not REQUIRE identification for that category of offence, so on
-// the report topic the email address becomes optional, and the form says what
-// leaving it blank costs: nobody can be told what was decided. Everywhere else
-// on this page it stays required, because Oliver's own sentence starts with
-// "mail you write from" and a support request nobody can answer is not support.
+// the report topic the email address was already optional, and the form says
+// what leaving it blank costs: nobody can be told what was decided.
 // Article 16(4) ties the two together and confirms the reading: the duty to
 // confirm receipt applies "where the notice contains the electronic contact
 // details".
+//
+// ── AND AS OF 15 SEP NOBODY IS ASKED FOR AN ADDRESS AT ALL ──────────
+//
+// Oliver: "I just want their mail gone. There is no need for them to enter
+// their mail. They can write their name, but should be optional." So the box is
+// gone from the page and `email` is no longer a field a person fills in. The
+// column stays and is still written, because a signed-in account HAS an
+// address and Feedback needs an account: it rides along from the session
+// without being retyped, which is the one case where a reply was ever likely.
+// A signed-out message therefore arrives with no way to answer it, and the
+// receipt says so at the moment it is sent rather than leaving somebody
+// waiting for a reply that cannot come. That is his call to make and it is
+// made; `name` is what the page asks for now, and it is optional.
 //
 // NOT LEGAL ADVICE. The reading is written down so a lawyer can check it rather
 // than rediscover it, which is the same standing as EU_COMPLIANCE_24AUG.md.
@@ -128,6 +139,9 @@ export const messagePrompt = (topic) => MESSAGE_PROMPT[topic] || MESSAGE_PROMPT_
 // 16(2)(a) asks for a substantiated explanation rather than an accusation.
 export const MESSAGE_MIN = 15;
 export const MESSAGE_MAX = 4000;
+// Long enough for any real name with a title and a company after it, short
+// enough that the box cannot be used as a second message field.
+export const NAME_MAX = 80;
 export const EMAIL_MAX = 254; // RFC 5321 path limit, and the one every mail host enforces
 
 const said = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
@@ -181,12 +195,21 @@ export const supportProblems = (form = {}) => {
   if (!topic) out.push({ field: "topic", message: "Choose what this is about." });
   else if (!isTopic(topic)) out.push({ field: "topic", message: "Choose what this is about." });
 
-  // The Article 16(2)(c) carve-out, and the only place on this page where an
-  // address is optional.
-  if (!email) {
-    if (!reporting) out.push({ field: "email", message: "We need an address to reply to." });
-  } else if (!looksLikeEmail(email)) {
+  // NOBODY IS ASKED FOR AN ADDRESS ANY MORE, so a missing one cannot be a
+  // fault. The check that survives is the format one, because the field still
+  // exists on the object: it is filled from the session, and a stored address
+  // that is not an address is worse than none at all. Article 16(2)(c) is
+  // satisfied either way, since the mechanism now requires identification from
+  // nobody on any topic.
+  if (email && !looksLikeEmail(email)) {
     out.push({ field: "email", message: "That does not look like an email address." });
+  }
+
+  // A name is optional and free text, so the only thing that can be wrong with
+  // it is length. Capped rather than trimmed silently: a person who pasted
+  // something into the wrong box should be told, not have it cut in half.
+  if (said(form.name).length > NAME_MAX) {
+    out.push({ field: "name", message: `A name longer than ${NAME_MAX} characters is probably not a name.` });
   }
 
   if (!message) out.push({ field: "message", message: "Tell us what you would like to say." });
@@ -243,7 +266,10 @@ export const supportPayload = (form = {}, { reference, at } = {}) => {
   const row = {
     reference: reference || supportReference(),
     topic,
+    // Not typed by anybody since 15 Sep: this is the session's address on a
+    // signed-in message and null on every other one.
     email: email || null,
+    name: said(form.name) || null,
     message: String(form.message ?? "").trim(),
     created_at: at || new Date().toISOString(),
   };
@@ -277,6 +303,7 @@ export const supportMailto = (form = {}, reference = "") => {
   const to = topic === "privacy" ? PRIVACY_EMAIL : SUPPORT_EMAIL;
   const subject = `Gemlyx${reference ? ` ${reference}` : ""}: ${topicLabel(topic) || "Support"}`;
   const lines = [
+    said(form.name) ? `Name: ${said(form.name)}` : "",
     said(form.email) ? `From: ${said(form.email)}` : "",
     topic === REPORT_TOPIC && said(form.url) ? `Content reported: ${said(form.url)}` : "",
     topic === REPORT_TOPIC && form.goodFaith ? GOOD_FAITH_STATEMENT : "",
@@ -294,26 +321,36 @@ export const supportMailto = (form = {}, reference = "") => {
 //
 // AND IT MAY NOT SAY MORE THAN IS TRUE. Nothing in this app sends email: the
 // only mail Gemlyx has ever sent is Supabase's own signup confirmation, through
-// Supabase's SMTP. So this does not say "we have emailed you a copy", does not
-// promise a response within any number of hours, and does not say "our team".
-// One person reads this inbox and the sentence says so. The same rule the
-// weather strip and the ticket refusals already follow, arriving at the one
-// screen where the temptation to sound like a company is strongest.
+// Supabase's SMTP. So this does not say "we have emailed you a copy" and does
+// not promise a response within any number of hours.
+//
+// WHAT CHANGED ON 15 SEP is the voice, at Oliver's instruction: "I want to
+// pretend that my company is a team. I find it more trustworthy if it sounds
+// like we're multiple. So just stick to some simple 'The Gemlyx team read all
+// feedback.'" His call, and it is a normal thing for a company to say. The two
+// promises that cost something if they are untrue are untouched: no claim that
+// mail was sent, and no time.
+//
+// The line that has to stay is the one about an address, because it is the only
+// thing on this screen a person can act on: no address means no answer, and
+// they find that out here rather than by waiting.
 export const supportReceipt = (form = {}, reference = "") => {
   const reporting = said(form.topic) === REPORT_TOPIC;
-  const anonymous = reporting && !said(form.email);
+  const anonymous = !said(form.email);
   return {
     reference,
     title: reporting ? "Report received" : "Message received",
     lines: [
       `Your reference is ${reference}. Quote it if you write again.`,
       reporting
-        ? "Gemlyx is run by one person, who reads every report and decides on it. Nothing is removed automatically."
-        : "Gemlyx is run by one person, who reads everything that arrives here.",
+        ? "The Gemlyx team read every report and decide on it. Nothing is removed automatically."
+        : "The Gemlyx team read all feedback.",
       anonymous
-        ? "You did not leave an address, so there is no way to tell you what was decided."
-        : "A reply comes from a person, not a system, so it will not be instant.",
-    ],
+        ? (reporting
+            ? "There is no address on this report, so there is no way to tell you what was decided."
+            : "There is no address on this message, so there is no way to write back. Quote the reference if you write again.")
+        : "",
+    ].filter(Boolean),
   };
 };
 
@@ -336,12 +373,18 @@ create table if not exists public.gemlyx_support (
   reference   text not null,
   topic       text not null,
   email       text,
+  name        text,
   message     text not null,
   url         text,
   good_faith  boolean,
   handled     boolean not null default false,
   created_at  timestamptz not null default now()
 );
+
+-- The name column arrived after the table did, so an install that already ran
+-- the block above needs this one line and nothing else. The form works without
+-- it: the insert retries without the field rather than losing the message.
+alter table public.gemlyx_support add column if not exists name text;
 
 create index if not exists gemlyx_support_created_idx on public.gemlyx_support (created_at desc);
 create index if not exists gemlyx_support_reference_idx on public.gemlyx_support (reference);

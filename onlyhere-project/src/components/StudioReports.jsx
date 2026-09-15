@@ -108,6 +108,11 @@ export const StudioReports = ({ rows, loading, error, filter, onFilter, onReload
                 <span style={{ fontSize: 11, fontWeight: 700, color: C.gold }}>{topicLabel(row.topic)}</span>
                 <span style={{ fontSize: 10.5, color: C.muted }}>{reportAge(row.created_at)}</span>
                 {row.reference && <span style={{ fontSize: 10.5, color: C.muted }}>· {row.reference}</span>}
+                {/* Optional, and the only thing the page asks a person for
+                    besides the message itself since 15 Sep. Shown before the
+                    address because on most rows it is the only one of the two
+                    there is. */}
+                {row.name && <span style={{ fontSize: 10.5, color: C.light }}>· {row.name}</span>}
                 {row.email && (
                   // A mailto, because the commonest next action on a report is
                   // answering the person who sent it, and copying an address

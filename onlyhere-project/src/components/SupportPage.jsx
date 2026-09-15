@@ -36,10 +36,14 @@
 //
 // ── THREE. IT DOES NOT SAY MORE THAN IS TRUE ────────────────────────
 //
-// No "our team". No "within 24 hours". No "we have emailed you a copy", because
-// nothing in this app sends email. One person reads this and the confirmation
-// says so. The temptation to sound like a company is strongest on exactly this
-// screen, and the whole product is built on not doing that.
+// No "within 24 hours". No "we have emailed you a copy", because nothing in
+// this app sends email. Those two are promises that cost something when they
+// are untrue, and they stay out.
+//
+// The company voice is Oliver's call and he made it on 15 Sep: the page says
+// "The Gemlyx team read all feedback." He is not claiming a support desk or a
+// response time, which is what would have been the problem, and the trader
+// identity that the law does want named is in terms.html, where it belongs.
 import { useState, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { C } from "../utils/theme";
@@ -50,12 +54,12 @@ import { getStoredSession } from "../utils/auth";
 import { withContext, readBrowserFacts } from "../utils/problemContext";
 import { GemlyxLogo } from "./GemlyxLogo";
 import {
-  SUPPORT_TOPICS, REPORT_TOPIC, PROBLEM_TOPIC, GOOD_FAITH_STATEMENT, MESSAGE_MAX, isTopic,
+  SUPPORT_TOPICS, REPORT_TOPIC, PROBLEM_TOPIC, GOOD_FAITH_STATEMENT, MESSAGE_MAX, NAME_MAX, isTopic,
   messagePrompt, supportProblems, problemFor, supportPayload, supportReference,
   supportMailto, supportReceipt, SUPPORT_TABLE, SUPPORT_EMAIL, PRIVACY_EMAIL,
 } from "../utils/support";
 
-const EMPTY = { email: "", topic: "", message: "", url: "", goodFaith: false };
+const EMPTY = { email: "", name: "", topic: "", message: "", url: "", goodFaith: false };
 
 const field = {
   width: "100%",
@@ -172,17 +176,36 @@ export const SupportPage = () => {
     const sent = form.topic === PROBLEM_TOPIC
       ? { ...form, message: withContext(form.message, readBrowserFacts({ version: APP_VERSION })) }
       : form;
+    // ── THE COLUMN IS NEWER THAN THE TABLE ──────────────────────────
+    //
+    // `name` arrived on 15 Sep and the one-line migration is in
+    // SUPPORT_SETUP_SQL, which is his to run. PostgREST answers a row naming an
+    // unknown column with 400, so between the push and the migration EVERY
+    // message with a name in it would have taken the mailto fallback: a person
+    // who filled in the optional box would be the one whose message did not
+    // arrive, which is the wrong way round.
+    //
+    // So the insert is tried once as written and, if it fails with a name on
+    // it, once more without that field. The name is not lost either way, since
+    // the mailto fallback carries it, and a second attempt only ever happens on
+    // a failure that already cost the person nothing.
+    const post = (row) => fetch(`${SUPABASE_URL}/rest/v1/${SUPPORT_TABLE}`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify(row),
+    });
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/${SUPPORT_TABLE}`, {
-        method: "POST",
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          "Content-Type": "application/json",
-          Prefer: "return=minimal",
-        },
-        body: JSON.stringify(supportPayload(sent, { reference })),
-      });
+      const row = supportPayload(sent, { reference });
+      let res = await post(row);
+      if (!res.ok && row.name) {
+        const { name, ...withoutName } = row;
+        res = await post(withoutName);
+      }
       // ── AND NOT INTO AN INBOX, AS OF 15 SEP ─────────────────────
       //
       // This used to post the same message to api/report-problem, which mailed
@@ -265,8 +288,7 @@ export const SupportPage = () => {
     <form onSubmit={submit} noValidate>
       <h1 style={{ fontSize: 26, fontWeight: 800, margin: "0 0 10px" }}>Contact Gemlyx</h1>
       <p style={{ fontSize: 14, lineHeight: 1.6, color: C.muted, margin: "0 0 26px" }}>
-        Gemlyx is run by one person. Everything sent here is read by them, and a reply comes from them, so it
-        will not be instant.
+        The Gemlyx team read all feedback.
       </p>
 
       <div style={{ marginBottom: 20 }}>
@@ -308,18 +330,27 @@ export const SupportPage = () => {
         </div>
       )}
 
+      {/* ── NO ADDRESS BOX ────────────────────────────────────────────
+          Oliver, 15 Sep: "I just want their mail gone. There is no need for
+          them to enter their mail. They can write their name, but should be
+          optional."
+
+          The address is not asked for anywhere on this page now. A signed-in
+          message still carries the account's address, filled in from the
+          session in the state above and never shown, so Feedback, which needs
+          an account, is still answerable. Everything else arrives with no way
+          to reply, and the receipt says that at the moment it is sent.
+
+          A label and a control, nothing underneath. */}
       <div style={{ marginBottom: 20 }}>
-        <Label htmlFor="sup-email"
-          hint={reporting
-            ? "Optional on a report. Leave it blank to report anonymously, and nobody can tell you what was decided."
-            : "The address a reply goes to."}>
-          Your email {reporting ? <span style={{ fontWeight: 400, color: C.muted }}>(optional)</span> : null}
+        <Label htmlFor="sup-name">
+          Your name <span style={{ fontWeight: 400, color: C.muted }}>(optional)</span>
         </Label>
-        <input id="sup-email" type="email" value={form.email} onChange={set("email")}
-          autoComplete="email" placeholder="you@example.com"
-          aria-invalid={!!fault("email")} aria-describedby={fault("email") ? "sup-email-fault" : undefined}
+        <input id="sup-name" type="text" value={form.name} onChange={set("name")}
+          autoComplete="name" maxLength={NAME_MAX}
+          aria-invalid={!!fault("name")} aria-describedby={fault("name") ? "sup-name-fault" : undefined}
           style={field} />
-        <Fault id="sup-email-fault" text={fault("email")} />
+        <Fault id="sup-name-fault" text={fault("name")} />
       </div>
 
       {reporting && (

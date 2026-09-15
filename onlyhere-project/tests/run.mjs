@@ -100,7 +100,7 @@ writeFileSync(entry, `
   export { cleanOffer, offerProblems, offerLive, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
   export { AI_DISCLOSURE, aiDisclosure, aiDisclosureFor, AI_CHAT_SURFACES } from ${JSON.stringify(join(root, "src/utils/aiDisclosure.js"))};
   export { splitReport, sortReports, filterReports, reportAge, isHandled, unhandledCount, INBOX_SETUP_SQL, FILTERS as INBOX_FILTERS, topicLabel as inboxTopicLabel } from ${JSON.stringify(join(root, "src/utils/supportInbox.js"))};
-  export { SUPPORT_TOPICS, REPORT_TOPIC, topicIds, topicLabel, isTopic, GOOD_FAITH_STATEMENT, messagePrompt, MESSAGE_MIN, MESSAGE_MAX, looksLikeEmail, looksLikeUrl, supportProblems, problemFor, supportReference, supportPayload, supportMailto, supportReceipt, SUPPORT_TABLE, SUPPORT_SETUP_SQL, SUPPORT_EMAIL, PRIVACY_EMAIL } from ${JSON.stringify(join(root, "src/utils/support.js"))};
+  export { SUPPORT_TOPICS, REPORT_TOPIC, topicIds, topicLabel, isTopic, GOOD_FAITH_STATEMENT, messagePrompt, MESSAGE_MIN, MESSAGE_MAX, NAME_MAX, looksLikeEmail, looksLikeUrl, supportProblems, problemFor, supportReference, supportPayload, supportMailto, supportReceipt, SUPPORT_TABLE, SUPPORT_SETUP_SQL, SUPPORT_EMAIL, PRIVACY_EMAIL } from ${JSON.stringify(join(root, "src/utils/support.js"))};
   export { SAFETY_CLAIM_FIELDS, claimIsSupported, unsupportedSafetyClaims, safetyClaimNote } from ${JSON.stringify(join(root, "src/utils/safetyClaims.js"))};
   export { hasEntrySources, missingSourcesNote, lastCheckedAt, lastCheckedLabel, pricedNote, pricedLine } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
   export { rowStamp, rowStampIsEdit, stampLabel, hasSources, sortRows, SORTS } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
@@ -44429,7 +44429,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     SUPPORT_TOPICS, REPORT_TOPIC, topicIds, isTopic, GOOD_FAITH_STATEMENT,
     messagePrompt, MESSAGE_MIN, MESSAGE_MAX, looksLikeEmail, looksLikeUrl,
     supportProblems, problemFor, supportReference, supportPayload, supportMailto,
-    supportReceipt, SUPPORT_SETUP_SQL, SUPPORT_EMAIL, PRIVACY_EMAIL,
+    supportReceipt, SUPPORT_SETUP_SQL, SUPPORT_EMAIL, PRIVACY_EMAIL, NAME_MAX,
   } = M;
   const faults = (form) => supportProblems(form).map(p => p.field).sort();
   const OK = { email: "a@b.dk", topic: "question", message: "The ferry time on the Aeroe page looks wrong to me." };
@@ -44443,12 +44443,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // ── WHAT A GOOD FORM LOOKS LIKE, AND EVERY WAY A BAD ONE FAILS ─────
   is("a complete message has nothing wrong with it", faults(OK), []);
-  is("an empty form names all three fields at once", faults({}), ["email", "message", "topic"]);
+  is("an empty form names both fields at once", faults({}), ["message", "topic"]);
   // Named individually, because "returns some problems" is satisfied by a
   // function that returns the same problem three times.
   is("a missing topic is named", faults({ ...OK, topic: "" }), ["topic"]);
   is("a topic nobody offered is refused", faults({ ...OK, topic: "refund" }), ["topic"]);
-  is("a missing address is named", faults({ ...OK, email: "" }), ["email"]);
+  // ── AND A MISSING ADDRESS IS NOT A FAULT (Oliver, 15 Sep) ──────────
+  // "I just want their mail gone. There is no need for them to enter their
+  // mail." Nobody is asked, so nobody can have left it out. The format check
+  // survives because the field is still written from the session.
+  is("a missing address is fine now", faults({ ...OK, email: "" }), []);
+  is("and so is a form that never had one", faults({ topic: "question", message: OK.message }), []);
   is("an address that is a name is refused", faults({ ...OK, email: "Oliver" }), ["email"]);
   is("a missing message is named", faults({ ...OK, message: "" }), ["message"]);
   is("and one too short to answer", faults({ ...OK, message: "hi" }), ["message"]);
@@ -44457,11 +44462,19 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and one exactly at the minimum", faults({ ...OK, message: "y".repeat(MESSAGE_MIN) }).length === 0);
   // Both faults reported, not the first. Somebody who left two boxes empty is
   // told both rather than being sent round the loop twice.
-  is("two faults come back as two", faults({ topic: "question", email: "", message: "" }), ["email", "message"]);
+  is("two faults come back as two", faults({ topic: "question", email: "Oliver", message: "" }), ["email", "message"]);
   ok("and every fault carries a sentence, not just a field name",
      supportProblems({}).every(p => typeof p.message === "string" && p.message.length > 8));
   ok("problemFor picks the right one out",
-     problemFor(supportProblems({}), "email").length > 0 && problemFor(supportProblems(OK), "email") === "");
+     problemFor(supportProblems({ ...OK, email: "Oliver" }), "email").length > 0 && problemFor(supportProblems(OK), "email") === "");
+
+  // ── THE NAME, WHICH IS OPTIONAL AND IS THE ONLY THING ASKED FOR ────
+  // "They can write their name, but should be optional." So the only way a
+  // name can be wrong is by being long enough that it is not a name.
+  is("no name is no problem", faults({ ...OK, name: "" }), []);
+  is("and a name is no problem either", faults({ ...OK, name: "Oliver Verhein Hoffmann" }), []);
+  is("a name at the cap is fine", faults({ ...OK, name: "n".repeat(NAME_MAX) }), []);
+  is("one past it is named", faults({ ...OK, name: "n".repeat(NAME_MAX + 1) }), ["name"]);
 
   // ── THE EMAIL TEST IS LOOSE ON PURPOSE ─────────────────────────────
   // Rejecting a real address is worse than accepting a wrong one: the cost of
@@ -44574,9 +44587,25 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("every receipt shows the reference", all.every((r, i) => r.lines.join(" ").includes(`GX-${i + 1}`)));
     ok("none of them claims an email was sent", !/we (have )?(sent|emailed)|check your (inbox|email)|confirmation email/i.test(text));
     ok("none of them promises a time", !/\b\d+\s*(hour|hours|day|days|working day|business day)\b/i.test(text));
-    ok("and none of them says 'our team'", !/\bour team\b|\bthe team\b/i.test(text));
-    ok("the report receipt says a person decides, not a system",
-       /one person|a person/i.test(supportReceipt(REPORT, "GX-2").lines.join(" ")));
+    // ── THE VOICE IS HIS CALL, THE PROMISES ARE NOT ────────────────
+    // 15 Sep: "I want to pretend that my company is a team... So just stick to
+    // some simple 'The Gemlyx team read all feedback.'" Saying "team" is a
+    // normal thing for a company to say and costs nobody anything. Claiming
+    // mail was sent, or a response time, is a promise that can be broken, and
+    // those two assertions above are untouched.
+    ok("the plain receipt says the team reads it",
+       /The Gemlyx team read all feedback\./.test(supportReceipt(OK, "GX-1").lines.join(" ")));
+    ok("and no receipt says one person any more", !/one person/i.test(text));
+    ok("the report receipt still says a decision is made and nothing is automatic",
+       /team/i.test(supportReceipt(REPORT, "GX-2").lines.join(" "))
+       && /nothing is removed automatically/i.test(supportReceipt(REPORT, "GX-2").lines.join(" ")));
+    // A message with no address on it cannot be answered, whatever its topic,
+    // now that nobody is asked for one. Saying so is the whole reason this line
+    // exists, and it used to be reachable only on a report.
+    ok("a message with no address is told so too",
+       /no address/i.test(supportReceipt({ ...OK, email: "" }, "GX-4").lines.join(" ")));
+    ok("and one with an address is not",
+       !/no address/i.test(supportReceipt(OK, "GX-5").lines.join(" ")));
     // The Article 16(2)(c) carve-out has a cost and the person taking it has to
     // be told what it is, at the moment they have taken it.
     ok("an anonymous report is told nobody can reply to it",
@@ -62885,6 +62914,35 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // here will reach for the same wrong thing.
   ok("the route passes nothing", /<Route path=\{SUPPORT_PATH\} element=\{<SupportPage \/>\} \/>/.test(appF));
   ok("and the page reads the session itself", /const session = getStoredSession\(\);/.test(supF));
+
+  // ── NO ADDRESS BOX, AND A NAME INSTEAD (Oliver, 15 Sep) ─────────
+  //
+  // "I just want their mail gone. There is no need for them to enter their
+  // mail. They can write their name, but should be optional."
+  //
+  // Read off the raw source with a code-shaped pattern rather than through
+  // stripNonCode, which blanks JSX bodies and string contents and would have
+  // made every one of these pass against nothing. See the trap recorded on
+  // 10 Aug.
+  ok("there is no address input on the page", !/id="sup-email"/.test(supF));
+  ok("nor an email type anywhere on it", !/type="email"/.test(supF));
+  ok("a name box is there instead", /id="sup-name"/.test(supF));
+  ok("and it is capped where the rule lives, not at a number typed twice",
+     /maxLength=\{NAME_MAX\}/.test(supF));
+  ok("the page says the team reads it", /The Gemlyx team read all feedback\./.test(supF));
+  ok("and no longer says one person", !/run by one person/.test(supF));
+  // The address still reaches the row on a signed-in message: Feedback needs an
+  // account, and that is the one case where an answer was ever possible.
+  ok("the session address still fills the field", /email: String\(userEmail \|\| ""\)/.test(supF));
+  // ── AND THE COLUMN THAT DOES NOT EXIST YET CANNOT EAT A MESSAGE ─
+  //
+  // `name` needs one line of SQL he has not run at the moment this ships.
+  // PostgREST rejects an unknown column with 400, so without the retry the
+  // person who filled in the optional box is the one whose message is lost.
+  ok("a failed insert is tried again without the name",
+     /if \(!res\.ok && row\.name\)/.test(supF) && /const \{ name, \.\.\.withoutName \} = row;/.test(supF));
+  ok("and the migration is written down where the table is",
+     /add column if not exists name text/i.test(M.SUPPORT_SETUP_SQL));
   // Synchronous, so the form does not flash "needs an account" at somebody who
   // has one while a refresh round trip finishes.
   ok("synchronously, so nothing flashes", !/await getSession\(\)/.test(supF));
