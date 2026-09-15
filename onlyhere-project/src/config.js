@@ -55,7 +55,47 @@ export const GOOGLE_SIGN_IN = false;
 // in the morning. What is NOT the same is the silence. The Studio login panel
 // renders a warning while this is empty, so the open state cannot be the state he
 // ships in without having read a sentence about it.
-export const FOUNDER_IDS = String(import.meta?.env?.VITE_FOUNDER_IDS || "");
+// ── AND IT HAS TO BE SPELLED EXACTLY LIKE THIS ──────────────────────
+//
+// 15 Sep 2026, first deploy. The panel warned that VITE_FOUNDER_IDS was not
+// set, on a build where it WAS set, and the gate was open to everybody.
+//
+// This line read `import.meta?.env?.VITE_FOUNDER_IDS`, and the optional
+// chaining was the whole fault. Vite does not evaluate this at runtime: it
+// substitutes the exact TEXT `import.meta.env.VITE_FOUNDER_IDS` with the
+// value, at build time, by matching that expression. Two question marks make it
+// a different expression, so nothing matched, nothing was replaced, and what
+// shipped was a real runtime lookup:
+//
+//   String(((C4=(I4=import.meta)==null?void 0:I4.env)==null?void 0:C4.VITE_FOUNDER_IDS)||"")
+//
+// No browser defines `.env` on import.meta, so that lookup answered undefined
+// and FOUNDER_IDS was "". isFounder treats an empty list as open, so the Studio
+// door stood open on the live site while the code meant to shut it looked
+// correct in the editor, and the panel cheerfully reported the variable as not
+// set on a build where it was set.
+//
+// ── AND THE TEST THAT NEARLY MISSED IT ──────────────────────────────
+//
+// Worth recording, because the wrong answer was convincing. A fixture built with
+// the variable set showed BOTH shapes producing the value, which said the
+// optional chaining was innocent. It was not: that fixture had both lines in one
+// file, the exact-match line pulled the env object into the module, and the
+// minifier then folded the optional chain against it. Split into two files, one
+// shape each, the old one ships no value at all and the new one ships the
+// string. A fixture that contains the fix is not a test of the bug.
+//
+// The optional chaining was there so tests/run.mjs could import this file under
+// plain node, where import.meta.env is undefined. A try/catch buys the same
+// safety without touching the expression: node throws on the property access and
+// lands in the catch, and Vite replaces the text before there is anything to
+// throw. The suite pins the spelling now, because this failure is invisible in
+// source and only shows up in a bundle.
+const readFounderIds = () => {
+  try { return import.meta.env.VITE_FOUNDER_IDS || ""; }
+  catch { return ""; }   // plain node, no bundler: there is no list
+};
+export const FOUNDER_IDS = String(readFounderIds());
 
 // ── PAID PLANS, WHICH DO NOT EXIST YET ──────────────────────────────
 //

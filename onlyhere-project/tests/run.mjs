@@ -62558,8 +62558,32 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // screen says yes while the endpoints say no.
   ok("the screen gates on the same predicate the endpoints do",
      /import \{ isFounder \} from "\.\/utils\/apiGuard";/.test(appS));
+  // ── SPELLED EXACTLY, BECAUSE VITE MATCHES TEXT NOT MEANING ──────
+  //
+  // 15 Sep 2026. This pinned `import.meta?.env?.VITE_FOUNDER_IDS` and passed on
+  // a build where the gate was open to the whole internet. Vite substitutes the
+  // value by matching the literal text `import.meta.env.VITE_FOUNDER_IDS` at
+  // build time; two question marks are a different string, so nothing matched,
+  // no value reached the bundle, and an empty list means open.
+  //
+  // The failure is invisible in source. The file reads correctly, the suite was
+  // green, and the only place the truth existed was the minified bundle. So the
+  // spelling itself is the rule now, in both directions: the exact expression
+  // must be present, and the optional-chained form must not be anywhere in this
+  // file.
   ok("and reads its list from configuration rather than a typed-in id",
-     /export const FOUNDER_IDS = String\(import\.meta\?\.env\?\.VITE_FOUNDER_IDS \|\| ""\);/.test(cfg));
+     /return import\.meta\.env\.VITE_FOUNDER_IDS \|\| "";/.test(cfg));
+  // stripComments, because the paragraph above the fix quotes the broken form
+  // while explaining why it is gone. Reading it raw finds the bug report and
+  // calls it the bug, which is a shape this suite has now hit five times.
+  ok("spelled the one way Vite substitutes, with no optional chaining to break the match",
+     !/import\.meta\s*\?\./.test(stripComments(cfg)));
+  // And still importable under plain node, where import.meta.env is undefined
+  // and the property access throws. That is what the optional chaining was
+  // buying, and a catch buys it without touching the expression.
+  ok("and the node path is a catch rather than a different expression",
+     /catch \{ return ""; \}/.test(cfg));
+  ok("so the suite can load it at all", typeof M.FOUNDER_IDS === "string");
 
   // ── THE LOGIN ───────────────────────────────────────────────────
   {
