@@ -16395,6 +16395,18 @@ If the conversation only covers a single day or a few stops with no explicit day
   // `leaving` runs the animation; `entered` flips when it finishes, so the
   // landing stays mounted for exactly as long as it is still visible.
   const [leaving, setLeaving] = useState(false);
+  // ── AND THE OTHER HALF OF THE SWAP ────────────────────────────────
+  //
+  // Oliver, 15 Sep 2026: "after the 'swirvl', we gotta have a better fade into
+  // the Denmark explore page." He is describing a seam that has always been
+  // there. The white wash lives INSIDE the landing, so at the moment the landing
+  // unmounts the white disappears in one frame and the explore page is simply
+  // there. Every frame of the transition was on the leaving side and the
+  // arriving side was a cut.
+  //
+  // `arriving` is that missing half: a white layer of its own, on the app side,
+  // that the explore page fades up through.
+  const [arriving, setArriving] = useState(false);
   const enterDenmark = () => {
     if (leaving) return;
     const reduce = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -16403,9 +16415,19 @@ If the conversation only covers a single day or a few stops with no explicit day
     // A timer rather than animationend because the animation runs on a child,
     // and a backgrounded tab must not be able to strand someone on a half-lit
     // landing page forever.
-    // 700ms, against the 780ms portal: the swap happens while the screen is
-    // already white, so the landing is never seen disappearing.
-    setTimeout(() => { setEntered(true); window.scrollTo(0, 0); }, 700);
+    // 980ms, against a wash that now starts .3s late and runs .74s, so it is
+    // fully white at 1040ms. The old 700ms was tuned for the old timing and,
+    // after the swirl slowed the wash down, was landing the swap while the
+    // screen was only about six tenths white: the landing was visible
+    // disappearing, which is the thing this timer exists to prevent.
+    setTimeout(() => {
+      setEntered(true);
+      setArriving(true);
+      window.scrollTo(0, 0);
+      // Long enough to cover the fade below and no longer: a layer left mounted
+      // over the app is a layer that can swallow a tap.
+      setTimeout(() => setArriving(false), 680);
+    }, 980);
   };
   // ── AND THE WAY BACK OUT ──────────────────────────────────────────
   //
@@ -16537,12 +16559,22 @@ If the conversation only covers a single day or a few stops with no explicit day
   // width, delay, how far it turns], drawn as one circle with a dash pattern so
   // a "strand" is a single path and not a shape anybody has to rasterise. Fixed
   // values rather than Math.random: a transition that comes out differently
-  // every time cannot be judged, tested, or tuned, and the eye reads 0.82s of
-  // motion as a shape, not as a seed. Radii and lengths are deliberately uneven
-  // so the ring never resolves into a wheel with spokes.
+  // every time cannot be judged, tested, or tuned, and the eye reads under a
+  // second of motion as a shape, not as a seed. Radii and lengths are
+  // deliberately uneven so the ring never resolves into a wheel with spokes.
+  //
+  // SECOND PASS, 15 Sep, after Oliver saw the first: "it's not very great. It
+  // needs to be more prominent in color, and it needs to be much more
+  // centered." Both were true. The strokes were thin enough to read as hairline
+  // scratches over a painting that is already busy, the gradient topped out at
+  // the interface gold, which is a colour chosen to sit quietly behind text, and
+  // the whole thing was pinned to the archway, which put it off centre and
+  // half behind the stone. So: thicker, two more strands, a deeper amber, and
+  // the gate moved to the middle of the screen.
   const GATE_STRANDS = [
-    [58, 34, 0, 5, 0, 210], [70, 22, 140, 3.4, 0.05, 170], [46, 46, 250, 6.5, 0.02, 250],
-    [84, 16, 60, 2.4, 0.08, 150], [62, 28, 200, 4, 0.11, 230], [94, 12, 320, 2, 0.06, 130],
+    [58, 38, 0, 5, 0, 210], [70, 26, 140, 3.5, 0.05, 170], [46, 50, 250, 7, 0.02, 250],
+    [84, 20, 60, 2.6, 0.08, 150], [62, 32, 200, 4.2, 0.11, 230], [94, 15, 320, 2.2, 0.06, 130],
+    [100, 12, 20, 1.8, 0.13, 120], [36, 58, 180, 6, 0.04, 280],
   ];
   // [angle it leaves on, how far out it gets, delay]. Same argument for fixing
   // them, and few enough that the whole gate is 6 paths plus 14 dots: every one
@@ -16559,7 +16591,8 @@ If the conversation only covers a single day or a few stops with no explicit day
     [12, "4.4vmax", 0.04], [47, "7.5vmax", 0.12], [83, "5.3vmax", 0], [119, "8.6vmax", 0.18],
     [151, "4.8vmax", 0.07], [188, "7.9vmax", 0.15], [214, "5.9vmax", 0.02], [246, "9.1vmax", 0.1],
     [272, "5.1vmax", 0.2], [301, "7.2vmax", 0.05], [329, "6.2vmax", 0.14], [355, "8.2vmax", 0.09],
-    [64, "6.5vmax", 0.22], [235, "6.8vmax", 0.17],
+    [64, "6.5vmax", 0.22], [235, "6.8vmax", 0.17], [100, "9.6vmax", 0.08], [168, "5.6vmax", 0.19],
+    [289, "8.8vmax", 0.12], [340, "4.9vmax", 0.06],
   ];
 
   // ── PARALLAX AND BREATHING ─────────────────────────────────────────
@@ -26191,7 +26224,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
   );
 
   return (
-    <div className="app-root" style={{ fontFamily: "'Inter', sans-serif", background: C.bg, width: "100%", color: C.text, position: "relative", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div className={`app-root${arriving ? " gx-arriving" : ""}`} style={{ fontFamily: "'Inter', sans-serif", background: C.bg, width: "100%", color: C.text, position: "relative", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <style>{`
         /* The font link lives in index.html now, in the head, where the
            browser's preload scanner can find it before any JavaScript runs. It
@@ -26342,6 +26375,27 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           .gx-topnav-ai { display: inline-flex; }
           .gx-nav-in-menu { display: none !important; }
         }
+        /* ── ARRIVING IN DENMARK ─────────────────────────────────
+           The white the wash left behind, handed over to the app side so the
+           explore page fades up through it instead of appearing under a cut.
+           Warm rather than pure white at the edges, because the wash it
+           continues is warm and a seam between two whites is more visible than
+           either of them.
+
+           Opacity only, on both halves. A transform here would make this
+           element a containing block for every fixed child of app-root, which
+           is the header, and the header sliding for two thirds of a second
+           would be a worse bug than the seam it fixed. */
+        .gx-arrive { position: fixed; inset: 0; z-index: 1900; pointer-events: none;
+          background: radial-gradient(circle at 50% 50%, #FFFFFF 0%, #FFF8E8 55%, #FFEFD2 100%);
+          animation: gxArrive .64s cubic-bezier(.33, 0, .2, 1) forwards; }
+        @keyframes gxArrive { 0% { opacity: 1; } 45% { opacity: .55; } 100% { opacity: 0; } }
+        .gx-arriving { animation: gxArriveScene .52s ease-out both; }
+        @keyframes gxArriveScene { from { opacity: .78; } to { opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) {
+          .gx-arrive { display: none !important; }
+          .gx-arriving { animation: none !important; }
+        }
         .products-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         @media (min-width: 600px) { .products-grid { grid-template-columns: 1fr 1fr 1fr; } }
         @media (min-width: 900px) { .products-grid { grid-template-columns: 1fr 1fr 1fr 1fr; } }
@@ -26360,6 +26414,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           photo (the Little Mermaid) and its own line — each country gets
           its own. Served from a 2x-upscaled export (front-page-2x.jpg) to
           cut the phone blur from the 1024px original. */}
+      {/* The arriving half of the gate. See the enterDenmark comment: this is
+          the white the landing used to take with it when it unmounted. */}
+      {arriving && <div className="gx-arrive" aria-hidden="true" />}
+
       {!entered && (
         <div className={`gxa-root${leaving ? " gxa-leaving" : ""}${introInstant ? " gxa-instant" : ""}`} style={{ position: "fixed", inset: 0, zIndex: 2000, overflow: "hidden", background: "#0F0D08" }}>
           <style>{`
@@ -26525,29 +26583,51 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                The wash now starts .2s late and runs a touch shorter. Leading
                with it would have washed out the strands before anybody saw one,
                which is how a swirl becomes a flashbulb with extra steps. */
-            .gxa-gate { position:absolute; left:var(--gx-ax,50%); top:var(--gx-ay,31%); width:0; height:0;
+            /* ── THE PAINTING GETS OUT OF THE WAY ───────────────────────
+               Gold light on a painting that is already lit gold reads as paint,
+               not as light: tested over the real artwork and the first bolder
+               pass came out looking like marker pen drawn over the arch. Two
+               things fix it and neither is a brighter colour. The strands blend
+               with mix-blend-mode screen, so they ADD to what is under them the
+               way light does (spelled out in words here because a backtick in
+               this comment would end the template literal the whole stylesheet
+               lives in). And this layer takes the scene down about half a stop while
+               they turn, then lifts as the wash arrives. */
+            .gxa-dim { position:absolute; inset:0; background:#0A0906; opacity:0; z-index:39; pointer-events:none; }
+            .gxa-leaving .gxa-dim { animation: gxaDim .86s ease-out forwards; }
+            @keyframes gxaDim { 0% { opacity:0; } 30% { opacity:.52; } 70% { opacity:.52; } 100% { opacity:.25; } }
+            /* CENTRED, not on the arch, from the second pass. The vars are kept
+               so the position is still one number in one place, and both now
+               say the middle of the screen. */
+            .gxa-gate { position:absolute; left:var(--gx-ax,50%); top:var(--gx-ay,50%); width:0; height:0;
               pointer-events:none; z-index:40; }
             .gxa-gate > * { position:absolute; left:0; top:0; transform-origin:50% 50%; }
             .gxa-portal { width:26vmax; height:26vmax;
               margin:-13vmax 0 0 -13vmax; border-radius:50%; opacity:0; transform:scale(.12);
-              background:radial-gradient(circle, #FFFFFF 0%, #FFF6DF 26%, rgba(255,226,160,.92) 46%, rgba(255,205,120,.55) 64%, transparent 78%); }
-            .gxa-leaving .gxa-portal { animation: gxaPortal .78s cubic-bezier(.5,0,.72,.42) .2s forwards; }
-            @keyframes gxaPortal { 0% { opacity:0; transform:scale(.12); } 18% { opacity:.45; } 100% { opacity:1; transform:scale(9); } }
+              background:radial-gradient(circle, #FFFFFF 0%, #FFF6DF 24%, rgba(255,214,130,.9) 44%, rgba(240,168,60,.5) 62%, transparent 78%); }
+            /* Later and fainter early on than the first pass. The wash is what
+               covers the swap, but it was also drowning the colour it was
+               supposed to be arriving behind. */
+            .gxa-leaving .gxa-portal { animation: gxaPortal .74s cubic-bezier(.5,0,.72,.42) .3s forwards; }
+            @keyframes gxaPortal { 0% { opacity:0; transform:scale(.12); } 22% { opacity:.3; } 100% { opacity:1; transform:scale(9); } }
             /* A strand. The dash pattern makes the arc, the rotation makes it a
-               swirl, and the scale carries it off the edge of the screen. */
-            .gxa-strand { width:26vmax; height:26vmax; margin:-13vmax 0 0 -13vmax; opacity:0;
+               swirl, and the scale carries it off the edge of the screen. Each
+               one is drawn twice inside its own SVG: a wide soft halo at .3 and
+               the bright core on top. Two paths in one element rather than two
+               elements, so the glow costs nothing the compositor has to track. */
+            .gxa-strand { mix-blend-mode:screen; width:26vmax; height:26vmax; margin:-13vmax 0 0 -13vmax; opacity:0;
               transform:rotate(var(--gxa-rot,0deg)) scale(.06); will-change:transform, opacity; }
-            .gxa-leaving .gxa-strand { animation: gxaStrand .82s cubic-bezier(.42,0,.7,.45) var(--gxa-d,0s) forwards; }
+            .gxa-leaving .gxa-strand { animation: gxaStrand .86s cubic-bezier(.42,0,.7,.45) var(--gxa-d,0s) forwards; }
             @keyframes gxaStrand {
               0%   { opacity:0; transform:rotate(var(--gxa-rot,0deg)) scale(.06); }
-              14%  { opacity:1; }
-              64%  { opacity:1; }
+              12%  { opacity:1; }
+              68%  { opacity:1; }
               100% { opacity:0; transform:rotate(calc(var(--gxa-rot,0deg) + var(--gxa-spin,200deg))) scale(7); }
             }
-            /* Dust, pulled out of the arch on the same turn as the strands. */
-            .gxa-spark { width:.3vmax; height:.3vmax; margin:-.15vmax 0 0 -.15vmax; border-radius:50%;
-              background:#FFE9BC; box-shadow:0 0 .7vmax .1vmax rgba(255,214,140,.9); opacity:0; }
-            .gxa-leaving .gxa-spark { animation: gxaSpark .82s cubic-bezier(.3,0,.6,.5) var(--gxa-d,0s) forwards; }
+            /* Dust, pulled out of the middle on the same turn as the strands. */
+            .gxa-spark { mix-blend-mode:screen; width:.42vmax; height:.42vmax; margin:-.21vmax 0 0 -.21vmax; border-radius:50%;
+              background:#FFE08A; box-shadow:0 0 1vmax .16vmax rgba(255,193,77,.95); opacity:0; }
+            .gxa-leaving .gxa-spark { animation: gxaSpark .86s cubic-bezier(.3,0,.6,.5) var(--gxa-d,0s) forwards; }
             @keyframes gxaSpark {
               0%   { opacity:0; transform:rotate(var(--gxa-a,0deg)) translateX(1vmax) scale(.5); }
               18%  { opacity:1; }
@@ -26620,7 +26700,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               /* The swirl is the part somebody who asked for less motion asked
                  to be spared, so it is not merely stopped, it is not drawn. A
                  stopped strand is a gold streak parked across the arch. */
-              .gxa-strand, .gxa-spark { display: none !important; }
+              .gxa-strand, .gxa-spark, .gxa-dim { display: none !important; }
               .gxa-choose, .gxa-topbar { transition: none !important; }
               .gxa-fly { opacity: 0 !important; }
               .gxa-choose, .gxa-topbar { opacity: 1 !important; }
@@ -26707,16 +26787,24 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   it centred on that point, so the strands, the dust and the
                   wash all come out of the same place rather than each carrying
                   its own copy of the coordinates. */}
-              <div className="gxa-gate" style={{ "--gx-ax": `${LANDING_ART.arch[0] + LANDING_ART.arch[2] / 2}%`, "--gx-ay": `${LANDING_ART.arch[1] + LANDING_ART.arch[2] * 0.42}%` }}>
-                {/* One gradient, referenced by every strand. Six copies of the
-                    same definition is six things to keep in step. */}
+              {/* Under the gate, over the painting. See .gxa-dim. */}
+              <div className="gxa-dim" />
+              <div className="gxa-gate" style={{ "--gx-ax": "50%", "--gx-ay": "50%" }}>
+                {/* One gradient, referenced by every strand. Eight copies of the
+                    same definition is eight things to keep in step.
+                    The stops are the second pass: the old one ended at C.gold,
+                    which is the interface gold and is deliberately quiet, so the
+                    swirl came out the colour of a button. This runs pale gold to
+                    amber to burnt orange, which is a colour nothing else on the
+                    landing uses. */}
                 <svg width="0" height="0" aria-hidden="true" style={{ position: "absolute" }}>
                   <defs>
                     <linearGradient id="gxaStrandGold" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0" stopColor="#FFF6DF" stopOpacity="0" />
-                      <stop offset="0.3" stopColor="#FFE2A0" />
-                      <stop offset="0.72" stopColor="#E0AE4E" />
-                      <stop offset="1" stopColor="#FFF6DF" stopOpacity="0" />
+                      <stop offset="0" stopColor="#FFF3CF" stopOpacity="0" />
+                      <stop offset="0.18" stopColor="#FFE9A8" />
+                      <stop offset="0.46" stopColor="#FFC24D" />
+                      <stop offset="0.76" stopColor="#E8912A" />
+                      <stop offset="1" stopColor="#FFD98A" stopOpacity="0" />
                     </linearGradient>
                   </defs>
                 </svg>
@@ -26724,7 +26812,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <svg key={i} className="gxa-strand" viewBox="0 0 200 200" fill="none" aria-hidden="true"
                     style={{ "--gxa-rot": `${rot}deg`, "--gxa-spin": `${spin}deg`, "--gxa-d": `${d}s` }}>
                     {/* pathLength=100 so the dash pattern is a percentage of the
-                        circle and the arc length does not change with radius. */}
+                        circle and the arc length does not change with radius.
+                        The first circle is the halo: same path, triple width,
+                        low opacity. It is what makes the strand read as light
+                        rather than as a drawn line. */}
+                    <circle cx="100" cy="100" r={r} stroke="url(#gxaStrandGold)" strokeWidth={w * 2.6}
+                      strokeLinecap="round" pathLength="100" strokeDasharray={`${span} 100`} opacity="0.3" />
                     <circle cx="100" cy="100" r={r} stroke="url(#gxaStrandGold)" strokeWidth={w}
                       strokeLinecap="round" pathLength="100" strokeDasharray={`${span} 100`} />
                   </svg>

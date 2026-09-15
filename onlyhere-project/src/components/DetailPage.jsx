@@ -26,6 +26,7 @@ import { branchPoints, branchesOf, hasBranches, branchLine, branchLabel } from "
 import { offerView, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
 import { saveLabel, saveHint, planFromSavedLabel } from "../utils/savedTrip";
 import { HowWeKnow } from "./HowWeKnow";
+import { SocialSection } from "./SocialSection";
 import { JourneyCard } from "./JourneyCard";
 import { showsJourneyForKind, journeyOriginForKind } from "../utils/journeyScope";
 import { audioLine } from "../utils/wegotripMatch";
@@ -1467,6 +1468,15 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           style={{ display: "block", textAlign: "center", background: color, color: "#fff", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 700, textDecoration: "none" }}>
           ↗ {uiT("entry.directions", lang)}
         </a>
+
+        {/* ── THE SOCIAL MEDIA SECTION ──────────────────────────────
+            Oliver, 15 Sep: a section at the bottom, like the Instagram embed,
+            that is NOT part of the draft. Below the directions button so the
+            one thing a reader came for is not pushed down by it, and above the
+            feedback block so the page still ends on the two things that are
+            addressed to us rather than to the place. Renders nothing at all
+            until the sweep has found accounts for this row. */}
+        <SocialSection item={item} />
 
         {/* ── REPORTING AND REVIEWING, ABOVE THE PUBLIC COMMENTS ────
             Oliver, 1 Sep 2026. Deliberately ABOVE ReviewsSection and visually

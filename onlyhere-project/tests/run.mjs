@@ -214,6 +214,9 @@ writeFileSync(entry, `
   export { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK, CHARACTERISATION_FIELDS, REPORT_FIELDS } from ${JSON.stringify(join(root, "src/utils/checkScope.js"))};
   export { accountIn, accountsOnPage, accountFits, socialRecord, asUrl, OWN_PAGE, LINKED, NAMED } from ${JSON.stringify(join(root, "src/utils/socialAccounts.js"))};
   export { searchCandidates, websiteInPageDetails } from ${JSON.stringify(join(root, "src/utils/socialAccounts.js"))};
+  export { platformLabel, socialSourceLine } from ${JSON.stringify(join(root, "src/utils/socialAccounts.js"))};
+  export { DATE_TIER, DATE_TIER_LABEL, canSetADate, dateTierOf, reconcileDate, dateAuthorityProblems, probeWindow, readProbe, probeNote, eventCheckProblems, PROBE_PAD_DAYS } from ${JSON.stringify(join(root, "src/utils/dateAuthority.js"))};
+  export { ldDay, ldBlocks, eventsInPage, eventForName, claimFromEvent } from ${JSON.stringify(join(root, "src/utils/eventLd.js"))};
   export { socialOf, socialAge, askFor, socialVerdict, socialPlan, describeSocialPlan, socialWriteFor, canWrite as socialCanWrite, preTicked as socialPreTicked, describeFinding as describeSocialFinding, HOW_WORDS as SOCIAL_HOW_WORDS, ACCOUNT_FRESH_DAYS, NOTHING_FOUND_DAYS, REQUESTS_PER_SEARCH, HAVE as SOCIAL_HAVE, ASK_PAGE as SOCIAL_ASK_PAGE, ASK_SEARCH as SOCIAL_ASK_SEARCH, ASKED as SOCIAL_ASKED, CANNOT as SOCIAL_CANNOT } from ${JSON.stringify(join(root, "src/utils/socialSweep.js"))};
   export { cleanLength, answerLengthBlock, lengthLabel, ANSWER_LENGTHS, DEFAULT_LENGTH, SHORT as ANSWER_SHORT, LONG as ANSWER_LONG } from ${JSON.stringify(join(root, "src/utils/answerLength.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
@@ -63077,6 +63080,211 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 
   ok("no dash in any of it",
      !DASH.test(inbox) && !DASH.test(panel) && !DASH.test(supF));
+}
+
+// ── PASS 102: THE SWEEP REACHES A READER ────────────────────────────
+//
+// Oliver, 15 Sep 2026: "I'd like to have the social media accounts displayed on
+// the blogs btw. So I guess you can put that into the sweep." Then: "Can you
+// just make a section at the bottom of the drafts like I have instagram videos
+// and pictures? So something that is not part of the draft, but a 'social
+// media' section."
+//
+// The sweep already wrote `__social` and shapeForLive already carried it. What
+// did not exist was anything that DREW it, which is this codebase's recurring
+// bug rather than a new one: a feature that works, costs money to run, and is
+// invisible. These assertions exist so it cannot go quiet again.
+{
+  const page = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  const sec = readFileSync(join(root, "src/components/SocialSection.jsx"), "utf8");
+  const live = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  const { platformLabel, socialSourceLine, OWN_PAGE, NAMED, LINKED } = M;
+
+  ok("the entry page imports the section", /import \{ SocialSection \} from "\.\/SocialSection";/.test(page));
+  ok("and renders it", /<SocialSection item=\{item\} \/>/.test(page));
+  // Not part of the draft: it has to sit AFTER the article blocks and after the
+  // provenance block, not inside the map that renders the body.
+  ok("below the article, not inside it",
+     page.indexOf("<SocialSection") > page.indexOf("<HowWeKnow item={item} />"));
+  ok("and above the feedback block, so the page still ends on the reader's turn",
+     page.indexOf("<SocialSection") < page.indexOf("<ArticleFeedback"));
+
+  // The field has to survive publication or the section renders on drafts and
+  // never on the live site. shapeForLive is where this project has lost a
+  // feature twice.
+  ok("the record still reaches a published row", /__social: \{/.test(live));
+
+  // ── A LABEL PER PLATFORM, AND NOTHING FOR ONE WE DO NOT KNOW ────
+  ["facebook", "instagram", "x", "tiktok", "youtube", "linkedin"]
+    .forEach(k => ok(`${k} has a label`, platformLabel(k).length > 0));
+  ok("an unknown platform renders nothing rather than undefined", platformLabel("myspace") === "");
+  ok("and neither does an empty one", platformLabel("") === "" && platformLabel(undefined) === "");
+
+  // ── AND IT SAYS WHICH OF THE THREE READINGS IT WAS ─────────────
+  const named = socialSourceLine({ how: NAMED, at: "2026-09-15" });
+  ok("a name match says it is not confirmed", /not confirmed/i.test(named));
+  ok("and carries the date it was checked", named.includes("2026-09-15"));
+  ok("an own-page find does not claim to be unconfirmed",
+     !/not confirmed/i.test(socialSourceLine({ how: OWN_PAGE, at: "2026-09-15" })));
+  ok("a linked find says what the link proves",
+     /link back/i.test(socialSourceLine({ how: LINKED, at: "2026-09-15" })));
+
+  // ── THE SECTION REFUSES HALF A RECORD ──────────────────────────
+  // It renders from the database, so every field is checked rather than
+  // trusted, and an http or javascript url never becomes a link.
+  ok("only https urls are drawn", sec.includes("/^https:\\/\\//i.test(a.url)"));
+  ok("an empty list renders nothing at all", /if \(!accounts\.length\) return null;/.test(sec));
+  ok("the links carry no affiliate dress", /rel="noreferrer"/.test(sec) && !/sponsored/.test(sec));
+  const DASH = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+  ok("no dash in the new component", !DASH.test(sec));
+}
+
+// ── PASS 103: WHICH SOURCE WINS ON A DATE ───────────────────────────
+//
+// Oliver, 15 Sep 2026: "Facebook page says that the event is starting the 20th..
+// instagram says 23th, and website says 26th... I think we need to set a
+// priority." He chose official wins, conflict flagged, and Facebook events yes,
+// Instagram captions no.
+//
+// What the API can do turned out to decide half the design: /v1/facebook/events
+// filters on a date range and returns no date, and no endpoint takes an event id
+// and returns its details. So Facebook confirms or contradicts a window and can
+// never set a date, and the real machine-readable date was schema.org JSON-LD on
+// pages this pipeline already fetches, which nothing had ever read.
+//
+// NOTHING IN THIS PASS IS WIRED INTO THE PUBLISH GATE YET. It ships dark on
+// purpose: Fable reviews it on Friday before the call site goes in. That is
+// written down in HANDOFF_15SEP_AFTERNOON.md and these assertions are what Fable
+// is reading against.
+{
+  const {
+    DATE_TIER, canSetADate, dateTierOf, reconcileDate, dateAuthorityProblems,
+    probeWindow, readProbe, eventCheckProblems,
+    ldDay, ldBlocks, eventsInPage, eventForName, claimFromEvent,
+  } = M;
+  const SITE = "https://www.roskilde-festival.dk";
+  const find = readFileSync(join(root, "api/social-find.js"), "utf8");
+  const auth = readFileSync(join(root, "src/utils/dateAuthority.js"), "utf8");
+
+  // ── WHAT KIND OF SOURCE IS THIS ────────────────────────────────
+  is("a ticket system is the top tier", dateTierOf("https://billetlugen.dk/event/123", { officialSite: SITE }), DATE_TIER.TICKET);
+  is("the official site is second", dateTierOf(SITE + "/program", { officialSite: SITE }), DATE_TIER.OFFICIAL);
+  is("and so is a subdomain of it", dateTierOf("https://tickets.roskilde-festival.dk/x", { officialSite: SITE }), DATE_TIER.OFFICIAL);
+  // A filled-in form and a caption are not the same evidence, which is the one
+  // place this ranking departs from what he first sketched.
+  is("a facebook EVENT is its own tier", dateTierOf("https://www.facebook.com/events/1244862964486663/?acontext=x", { officialSite: SITE }), DATE_TIER.FACEBOOK_EVENT);
+  is("a facebook PAGE is not", dateTierOf("https://www.facebook.com/roskildefestival", { officialSite: SITE }), DATE_TIER.SOCIAL_TEXT);
+  is("instagram is a caption", dateTierOf("https://instagram.com/roskildefestival", { officialSite: SITE }), DATE_TIER.SOCIAL_TEXT);
+  is("x too, for what it is worth in Denmark", dateTierOf("https://x.com/roskilde", { officialSite: SITE }), DATE_TIER.SOCIAL_TEXT);
+  is("a stranger's blog ranks nowhere", dateTierOf("https://someblog.dk/post", { officialSite: SITE }), DATE_TIER.UNKNOWN);
+  ok("and only two tiers may ever set a date",
+     canSetADate(DATE_TIER.TICKET) && canSetADate(DATE_TIER.OFFICIAL)
+     && !canSetADate(DATE_TIER.FACEBOOK_EVENT) && !canSetADate(DATE_TIER.SOCIAL_TEXT) && !canSetADate(DATE_TIER.UNKNOWN));
+
+  // ── HIS OWN SCENARIO, RUN ──────────────────────────────────────
+  {
+    const his = reconcileDate([
+      { date: "2026-07-20", url: "https://www.facebook.com/events/99/", at: "2026-09-15T10:00:00Z" },
+      { date: "2026-07-23", url: "https://instagram.com/x", at: "2026-09-15T11:00:00Z" },
+      { date: "2026-07-26", url: SITE + "/program", at: "2026-09-01T08:00:00Z" },
+    ], { officialSite: SITE });
+    is("the website wins over both socials", his.date, "2026-07-26");
+    // The social claims are NEWER, and losing anyway is the whole decision:
+    // recency is a tiebreak inside a tier and never across tiers.
+    ok("and being newer does not save them", his.conflicts.length === 0 && his.flags.length === 2);
+  }
+  {
+    const t = reconcileDate([
+      { date: "2026-07-26", url: SITE + "/program", at: "2026-09-14T08:00:00Z" },
+      { date: "2026-07-24", url: "https://billetlugen.dk/e/1", at: "2026-09-10T08:00:00Z" },
+    ], { officialSite: SITE });
+    is("the ticket page outranks the site even when older", t.date, "2026-07-24");
+    ok("and the disagreement is kept, not swallowed", t.conflicts.length === 1);
+  }
+  is("inside one tier the newest does win",
+     reconcileDate([
+       { date: "2026-07-26", url: SITE + "/a", at: "2026-09-01T00:00:00Z" },
+       { date: "2026-07-27", url: SITE + "/b", at: "2026-09-14T00:00:00Z" },
+     ], { officialSite: SITE }).date, "2026-07-27");
+
+  // ── AND WHAT STUDIO IS TOLD ────────────────────────────────────
+  {
+    const probs = dateAuthorityProblems({
+      website: SITE, name: "Roskilde",
+      __dateClaims: [
+        { date: "2026-07-26", url: SITE + "/program", at: "2026-09-14T08:00:00Z" },
+        { date: "2026-07-24", url: "https://billetlugen.dk/e/1", at: "2026-09-10T08:00:00Z" },
+        { date: "2026-07-20", url: "https://instagram.com/x", at: "2026-09-15T10:00:00Z" },
+      ],
+    });
+    ok("two date-setting sources disagreeing is high", probs.some(p => p.severity === "high"));
+    ok("a social disagreement is a note, not a blocker", probs.some(p => p.severity === "note"));
+    ok("every problem names the field it is about", probs.every(p => p.field === "date"));
+  }
+  is("no claims, no problems", dateAuthorityProblems({ __dateClaims: [] }), []);
+
+  // ── THE FACEBOOK PROBE, WHICH MAY NOT SET A DATE ───────────────
+  is("the window pads two days each side", probeWindow({ date: "2026-07-25", dateEnd: "2026-07-27" }), { from: "2026-07-23", to: "2026-07-29" });
+  ok("a row with no date has no window", probeWindow({}) === null);
+  is("a hit inside the window confirms", readProbe({ inWindow: 2 }), "confirmed");
+  // The distinction that matters: an empty window on its own says nothing,
+  // because plenty of Danish events are not on Facebook at all.
+  is("an empty window alone is absent, not moved", readProbe({ inWindow: 0 }), "absent");
+  is("empty window plus a hit outside it is moved", readProbe({ inWindow: 0, wide: 3 }), "moved");
+  is("nothing anywhere is absent", readProbe({ inWindow: 0, wide: 0 }), "absent");
+  ok("only a move is worth interrupting him", eventCheckProblems({ __eventCheck: { verdict: "moved", at: "2026-09-15" }, name: "X" }).length === 1
+     && eventCheckProblems({ __eventCheck: { verdict: "confirmed" } }).length === 0
+     && eventCheckProblems({ __eventCheck: { verdict: "absent" } }).length === 0);
+  // Source-level, because the rule is easier to break than to state: nothing in
+  // this file may write a date.
+  ok("the probe never returns a date field", !/\bstartDate\b/.test(find.slice(find.indexOf("event-window"), find.indexOf("event-window") + 2600)));
+  ok("the endpoint is a mode on the existing function, not a thirteenth one",
+     /String\(req\.query\.check \|\| ""\) === "event-window"/.test(find));
+  ok("and it refuses a window that is not two real days",
+     /Provide \?from= and \?to= as YYYY-MM-DD\./.test(find));
+  ok("the wide search only runs when it can change the answer",
+     /got\.n === 0 && String\(req\.query\.wide \|\| ""\) === "1"/.test(find));
+  ok("nothing in the authority file writes a date onto a row",
+     !/__dateClaims\s*=|\.date\s*=\s*/.test(auth.replace(/\/\/[^\n]*/g, "")));
+
+  // ── THE DATE THAT WAS ON THE PAGE ALL ALONG ────────────────────
+  is("an iso datetime is a day", ldDay("2026-07-25T10:00+02:00"), "2026-07-25");
+  is("a bare day is a day", ldDay("2026-07-25"), "2026-07-25");
+  // Parsed by shape, not by new Date(): a European ordering would otherwise be
+  // a guess in one engine and an Invalid Date in another.
+  is("a european ordering is refused", ldDay("25/07/2026"), "");
+  is("and an impossible month is refused", ldDay("2026-13-25"), "");
+  {
+    const html = `
+      <script type="application/ld+json">{ not json at all </script>
+      <script type="application/ld+json">{"@context":"https://schema.org","@graph":[
+        {"@type":"Organization","name":"Roskilde"},
+        {"@type":["Event"],"name":"Roskilde Festival 2026","startDate":"2026-06-27T12:00+02:00","endDate":"2026-07-04","eventStatus":"https://schema.org/EventScheduled"}]}</script>
+      <script type="application/ld+json">{"@type":"Event","name":"Warm Up","startDate":"2026-06-20","subEvent":{"@type":"Event","name":"Warm Up Day Two","startDate":"2026-06-21"}}</script>`;
+    const found = eventsInPage(html, SITE + "/program");
+    ok("one broken block does not lose the good ones", found.length === 3);
+    ok("an event inside an @graph is read", found.some(e => e.name === "Roskilde Festival 2026" && e.date === "2026-06-27" && e.dateEnd === "2026-07-04"));
+    ok("and a subEvent is read too", found.some(e => e.name === "Warm Up Day Two" && e.date === "2026-06-21"));
+    ok("cancelled and postponed are carried", found.some(e => e.status === "EventScheduled"));
+    ok("the claim's url is the page, not the event's own link", found.every(e => e.url === SITE + "/program"));
+    ok("an exact name wins", eventForName(found, "Roskilde Festival 2026").date === "2026-06-27");
+    ok("a longer page name still matches the row", eventForName(found, "Roskilde Festival").date === "2026-06-27");
+    ok("an exact match beats a longer sibling", eventForName(found, "Warm Up").date === "2026-06-20");
+    const two = [
+      { name: "Aalborg Karneval Day One", date: "2026-05-22", dateEnd: "", status: "", url: SITE },
+      { name: "Aalborg Karneval Day Two", date: "2026-05-23", dateEnd: "", status: "", url: SITE },
+    ];
+    // A wrong match is worse than no match: this is how a festival gets another
+    // festival's dates.
+    ok("two plausible matches is no match", eventForName(two, "Aalborg Karneval Day") === null);
+    ok("and a name too short to be distinctive matches nothing", eventForName(two, "Day") === null);
+    const claim = claimFromEvent(found[0]);
+    ok("a claim carries a date, a url and when it was seen", !!claim.date && !!claim.url && !!claim.at);
+    ok("and an empty event makes no claim", claimFromEvent(null) === null && claimFromEvent({}) === null);
+  }
+  ok("no dash in either new file",
+     !new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]").test(auth)
+     && !new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]").test(readFileSync(join(root, "src/utils/eventLd.js"), "utf8")));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

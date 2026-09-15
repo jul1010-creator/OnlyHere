@@ -142,6 +142,72 @@ export default async function handler(req, res) {
 
   const name = String(req.query.name || "").trim();
   const town = String(req.query.town || "").trim();
+
+  // ── THE EVENT WINDOW PROBE ──────────────────────────────────────
+  //
+  // Oliver, 15 Sep 2026, on conflicting dates: ticket page first, official site
+  // second, and he asked what Facebook can add. This is the honest answer.
+  //
+  // /v1/facebook/events takes a query and FILTERS on start_date and end_date.
+  // It returns event_id, title, url, count and pages. NO DATE COMES BACK, and
+  // no documented endpoint takes an event id or url and returns its details, so
+  // this can confirm or contradict a window we already believe and can never
+  // supply a date. Checked against their docs on 15 Sep rather than assumed,
+  // because this file's own history is that the assumed shape was wrong in four
+  // places at once.
+  //
+  // It is a separate mode on this function rather than a new file: api/ is a
+  // function count, and a thirteenth serverless function is a deploy decision
+  // rather than a feature.
+  if (String(req.query.check || "") === "event-window") {
+    const from = String(req.query.from || "").trim();
+    const to = String(req.query.to || "").trim();
+    const day = /^\d{4}-\d{2}-\d{2}$/;
+    if (!name) return res.status(400).json({ error: "Provide a ?name=" });
+    if (!day.test(from) || !day.test(to)) {
+      return res.status(400).json({ error: "Provide ?from= and ?to= as YYYY-MM-DD." });
+    }
+    const probeKey = process.env.API_DIRECT_KEY;
+    if (!probeKey) return res.status(200).json({ checked: { from, to }, inWindow: null, skipped: "API_DIRECT_KEY is not set" });
+
+    // The shape of the list is read defensively on purpose. `count` is
+    // documented and the array's name is not, so this counts whichever of the
+    // three it finds and reports which one answered. A wrong guess here would
+    // read as "no event found", which is the reading that must never be
+    // invented.
+    const countIn = (body) => {
+      if (!body || typeof body !== "object") return { n: 0, via: "nothing" };
+      for (const field of ["events", "results", "data"]) {
+        if (Array.isArray(body[field])) return { n: body[field].length, via: field };
+      }
+      if (Number.isFinite(Number(body.count))) return { n: Number(body.count), via: "count" };
+      return { n: 0, via: "unrecognised" };
+    };
+
+    const q = [name, town].filter(Boolean).join(" ");
+    const inside = await askApiDirect(probeKey, "/v1/facebook/events", { query: q, start_date: from, end_date: to, pages: 1 });
+    if (!inside.ok) return res.status(200).json({ checked: { from, to }, inWindow: null, failed: inside.why });
+    const got = countIn(inside.body);
+
+    // The wide search is the difference between "moved" and "not on Facebook at
+    // all", and it costs a second request, so it is only run when it can change
+    // the answer: the window was empty AND the caller asked for it.
+    let wide = null, wideVia = null;
+    if (got.n === 0 && String(req.query.wide || "") === "1") {
+      const all = await askApiDirect(probeKey, "/v1/facebook/events", { query: q, pages: 1 });
+      if (all.ok) { const w = countIn(all.body); wide = w.n; wideVia = w.via; }
+    }
+    return res.status(200).json({
+      checked: { from, to, query: q },
+      inWindow: got.n,
+      wide,
+      // Named so a future reading of an unexpected payload is a fact in the
+      // response rather than a silent zero.
+      read: { inWindow: got.via, wide: wideVia },
+      requests: 1 + (wide === null ? 0 : 1),
+    });
+  }
+
   const website = String(req.query.website || "").trim();
   // ── A FREE RUN MUST NOT BE ABLE TO SPEND ────────────────────────
   //

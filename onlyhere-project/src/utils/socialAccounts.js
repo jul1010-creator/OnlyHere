@@ -185,6 +185,39 @@ export const accountsOnPage = (html) => {
 // Anything weaker is not returned at all.
 export const OWN_PAGE = "own-page", LINKED = "linked", NAMED = "named";
 
+// ── WHAT A PLATFORM IS CALLED WHERE A READER SEES IT ────────────────
+//
+// Beside the list it labels rather than in the component that renders it: this
+// file already learned that lesson with the handles, and a second copy of a
+// name list somewhere else is a drift waiting to happen. A key with no label
+// here renders nothing at all, which is the safe direction: a new platform
+// added to PLATFORMS above shows up as a missing chip rather than as the word
+// "undefined" on a published page.
+const PLATFORM_LABELS = {
+  facebook: "Facebook", instagram: "Instagram", x: "X",
+  tiktok: "TikTok", youtube: "YouTube", linkedin: "LinkedIn",
+};
+export const platformLabel = (key) => PLATFORM_LABELS[String(key || "").toLowerCase()] || "";
+
+// ── AND HOW WE CAME TO BELIEVE IT IS THEIRS ─────────────────────────
+//
+// The record carries `how` and a date, and both exist to be SHOWN. An account
+// found in the venue's own footer and an account matched because its handle
+// looks like the venue's name are not the same claim, and a page that presents
+// them identically is making the weaker one sound like the stronger.
+//
+// NAMED is the one that needed an opinion, so it says so in words a reader can
+// act on rather than in a word only this codebase knows.
+export const socialSourceLine = (record) => {
+  const how = String(record?.how || "");
+  const at = String(record?.at || "");
+  const when = at ? ` Checked ${at}.` : "";
+  if (how === OWN_PAGE) return `Linked from their own website.${when}`;
+  if (how === LINKED) return `These accounts link back to the website we hold for this place.${when}`;
+  if (how === NAMED) return `Matched by name, so this one is not confirmed.${when}`;
+  return when.trim();
+};
+
 const squash = (v) => fold(String(v || "")).replace(/[^a-z0-9]/g, "");
 
 export const accountFits = (account, { name = "", website = "", bioLinks = [] } = {}) => {
