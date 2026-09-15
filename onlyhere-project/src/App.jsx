@@ -16415,11 +16415,14 @@ If the conversation only covers a single day or a few stops with no explicit day
     // A timer rather than animationend because the animation runs on a child,
     // and a backgrounded tab must not be able to strand someone on a half-lit
     // landing page forever.
-    // 980ms, against a wash that now starts .3s late and runs .74s, so it is
-    // fully white at 1040ms. The old 700ms was tuned for the old timing and,
-    // after the swirl slowed the wash down, was landing the swap while the
-    // screen was only about six tenths white: the landing was visible
-    // disappearing, which is the thing this timer exists to prevent.
+    // 1040ms, which is exactly when the wash finishes: it starts .3s late and
+    // runs .74s. The old 700ms was tuned for the old timing and, after the swirl
+    // slowed the wash down, was landing the swap while the screen was only about
+    // six tenths white, so the landing was visible disappearing, which is the
+    // thing this timer exists to prevent. 980 was the first correction and was
+    // still 60ms early: rendered frame by frame, the painting still had a ghost
+    // in it at 980 and the arriving layer is solid, so the swap read as a small
+    // jump to brighter. The two whites only meet cleanly at the end.
     setTimeout(() => {
       setEntered(true);
       setArriving(true);
@@ -16427,7 +16430,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       // Long enough to cover the fade below and no longer: a layer left mounted
       // over the app is a layer that can swallow a tap.
       setTimeout(() => setArriving(false), 680);
-    }, 980);
+    }, 1040);
   };
   // ── AND THE WAY BACK OUT ──────────────────────────────────────────
   //
@@ -26561,9 +26564,34 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                costs the GPU almost nothing, so this cannot stutter the way the
                zoom did, and the white-out covers the swap completely. */
             .gxa-root { transform-origin: 50% 46%; }
+            /* ── AND THE SCENE GOES WITH IT ──────────────────────────
+               Oliver, 15 Sep: "I think fading out the first screen as well
+               would be good." He is right, and it is the last hard edge left in
+               this transition. The painting held full strength until the moment
+               it unmounted; everything that softened the swap was painted ON TOP
+               of a scene that never moved.
+
+               Held at full strength for the first third, so the strands are
+               turning over a lit painting rather than over a fade, and gone by
+               the time the wash is white. Opacity only, for the same reason as
+               the arriving half: a transform here would re-parent every fixed
+               child of this layer. */
             .gxa-leaving { pointer-events:none; }
+            /* THE PAINTING FADES, THE GATE DOES NOT. Fading the whole layer was
+               the obvious version and it is wrong, because the wash lives inside
+               it: the white that is supposed to cover the swap faded with
+               everything else and the explore page showed through eighty
+               milliseconds early. Rendered frame by frame to catch it. So the
+               fade is on the painted layers only, and the gate on top of them
+               keeps full strength. */
+            .gxa-leaving .gxa-layer,
+            .gxa-leaving .gxa-glow,
+            .gxa-leaving .gxa-archlight,
+            .gxa-leaving .gxa-shroom,
+            .gxa-leaving .gxa-fly { animation: gxaSceneOut .9s cubic-bezier(.4,0,.75,.4) forwards !important; }
+            @keyframes gxaSceneOut { 0% { opacity:1; } 34% { opacity:1; } 100% { opacity:0; } }
             .gxa-leaving .gxa-kb { animation: gxaStepIn .78s cubic-bezier(.36,0,.62,.5) forwards; }
-            .gxa-leaving .gxa-front { animation: gxaStepFront .78s cubic-bezier(.36,0,.62,.5) forwards; }
+            .gxa-leaving .gxa-front { animation: gxaStepFront .78s cubic-bezier(.36,0,.62,.5) forwards, gxaSceneOut .9s cubic-bezier(.4,0,.75,.4) forwards; }
             .gxa-leaving .gxa-choose, .gxa-leaving .gxa-topbar { opacity:0 !important; transition: opacity .18s ease-in !important; }
             /* The gate itself. Pinned to the arch, sized in vmax so it is
                guaranteed to cover any screen shape by the time it is done.

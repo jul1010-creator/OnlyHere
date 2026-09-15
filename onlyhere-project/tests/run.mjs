@@ -63155,6 +63155,26 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("only https urls are drawn", sec.includes("/^https:\\/\\//i.test(a.url)"));
   ok("an empty list renders nothing at all", /if \(!accounts\.length\) return null;/.test(sec));
   ok("the links carry no affiliate dress", /rel="noreferrer"/.test(sec) && !/sponsored/.test(sec));
+
+  // ── THE MARKS ARE THE PLATFORMS' OWN ───────────────────────────
+  //
+  // Oliver, 15 Sep: "icons = logos". A hand-traced logo is a distorted
+  // trademark, so these come from simple-icons, the CC0 set that publishes each
+  // platform's official glyph, unmodified. The assertion is that no path data is
+  // typed into this file: the moment somebody pastes a `d="M12 0C5.37..."` in
+  // here, that is a hand-copied mark and this fails.
+  ok("the glyphs come from the official set",
+     /import \{ siFacebook, siInstagram, siX, siTiktok, siYoutube \} from "simple-icons";/.test(sec));
+  ok("and no path data is written into the component", !/d="M[\d.]/.test(sec));
+  ok("it is a declared dependency, so the build cannot ship without it",
+     !!JSON.parse(readFileSync(join(root, "package.json"), "utf8")).dependencies["simple-icons"]);
+  // LinkedIn has no glyph in the set. A platform without one has to fall back to
+  // its name rather than drawing an empty circle.
+  ok("a platform with no glyph falls back to its name", /\{glyph \? \(/.test(sec) && /\) : name\}/.test(sec));
+  // The handle left the visible chip when the chips became circles, so it has to
+  // be somewhere a screen reader and a hover can still find it.
+  ok("the handle survives in the label", /aria-label=\{label\}/.test(sec) && /title=\{label\}/.test(sec));
+  ok("the mark takes its colour from the state, not from the brand", /fill="currentColor"/.test(sec));
   const DASH = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
   ok("no dash in the new component", !DASH.test(sec));
 }

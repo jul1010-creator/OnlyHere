@@ -21,16 +21,38 @@
 // inside the part of the page that promises every claim was checked. The
 // Instagram embed already sits outside the article for the same reason.
 //
-// ── AND IT SAYS HOW IT KNOWS ────────────────────────────────────────
+// ── THE MARKS ───────────────────────────────────────────────────────
 //
-// The record carries `how` and a date. An account found in the venue's own
-// footer is a fact; an account matched because its handle resembles the venue's
-// name is a guess, and the sweep stores which of the two it was. The line under
-// the chips says so in words, and a name-matched record says outright that it
-// is not confirmed. Same rule as the ticket links and the frozen facts: where
-// something is estimated, the page says so.
+// Oliver, same day: "can you change the 'social medias' to their icons? To make
+// it look more modern", and then "icons = logos".
+//
+// These are the real marks, and they are NOT drawn here by hand. They come from
+// `simple-icons`, the CC0 set that publishes each platform's official glyph, so
+// the shapes are the platforms' own rather than somebody's approximation of
+// them. That matters beyond neatness: a hand-traced logo is a distorted
+// trademark, which is the one version of this that is a problem.
+//
+// Two conditions come with using them and both are met here. The shapes are
+// unmodified, and they are used to link to those platforms and nothing else.
+// Monochrome is deliberate: every brand's guidelines allow a single-colour mark,
+// and six full-colour logos in a row on a page this warm would look like an
+// advertising strip rather than a footer.
+//
+// LINKEDIN HAS NO GLYPH IN THE SET, so it falls back to its name in a pill. A
+// missing icon is a fallback, never a blank chip.
 import { C } from "../utils/theme";
 import { platformLabel, socialSourceLine, NAMED } from "../utils/socialAccounts";
+import { siFacebook, siInstagram, siX, siTiktok, siYoutube } from "simple-icons";
+
+// Keyed by the platform strings socialAccounts.js already uses, so a platform
+// added there shows up here as a name in a pill rather than as nothing.
+const GLYPH = {
+  facebook: siFacebook,
+  instagram: siInstagram,
+  x: siX,
+  tiktok: siTiktok,
+  youtube: siYoutube,
+};
 
 // The record is written by the sweep, but it arrives from the database, which
 // means it arrives as whatever is in the column. Every field is checked here
@@ -50,33 +72,50 @@ export const SocialSection = ({ item }) => {
 
   const unconfirmed = String(record?.how || "") === NAMED;
   const note = socialSourceLine(record);
+  const tint = unconfirmed ? C.light : C.gold;
+  const edge = unconfirmed ? C.border : `${C.gold}55`;
 
   return (
     <div style={{ marginTop: 22, marginBottom: 18 }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>
         Social media
       </div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {accounts.map((a, i) => (
-          // rel="noreferrer" and nothing else: these are not affiliate links and
-          // must not be dressed as any. Opening in a new tab because the reader
-          // is in the middle of an entry and a social profile is a detour.
-          <a key={i} href={a.url} target="_blank" rel="noreferrer"
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 6,
-              background: C.surface, border: `1px solid ${unconfirmed ? C.border : `${C.gold}55`}`,
-              color: unconfirmed ? C.light : C.gold, borderRadius: 100,
-              padding: "7px 14px", fontSize: 12, fontWeight: 700, textDecoration: "none",
-            }}>
-            {platformLabel(a.platform)}
-            {/* The handle, because two Facebook pages for the same town are a
-                real thing and the reader is the one who can tell them apart. */}
-            {a.handle ? <span style={{ fontWeight: 400, color: C.muted }}>@{a.handle}</span> : null}
-          </a>
-        ))}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        {accounts.map((a, i) => {
+          const glyph = GLYPH[String(a.platform).toLowerCase()];
+          const name = platformLabel(a.platform);
+          // The handle is in the label rather than beside the mark: a row of
+          // circles reads as one object, and a row of circles with text after
+          // each one reads as a list of links wearing decorations.
+          const label = a.handle ? `${name}, @${a.handle}` : name;
+          return (
+            // rel="noreferrer" and nothing else: these are not affiliate links
+            // and must not be dressed as any. A new tab because the reader is in
+            // the middle of an entry and a profile is a detour.
+            <a key={i} href={a.url} target="_blank" rel="noreferrer" title={label} aria-label={label}
+              style={glyph ? {
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: 38, height: 38, borderRadius: "50%",
+                background: C.surface, border: `1px solid ${edge}`, color: tint, textDecoration: "none",
+              } : {
+                display: "inline-flex", alignItems: "center", gap: 6,
+                background: C.surface, border: `1px solid ${edge}`, color: tint,
+                borderRadius: 100, padding: "9px 14px", fontSize: 12, fontWeight: 700, textDecoration: "none",
+              }}>
+              {glyph ? (
+                // viewBox 0 0 24 24 is the set's own, and the path is theirs
+                // unchanged. currentColor so the two states above are the only
+                // place a colour is decided.
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true" focusable="false">
+                  <path d={glyph.path} />
+                </svg>
+              ) : name}
+            </a>
+          );
+        })}
       </div>
       {note ? (
-        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 8 }}>{note}</div>
+        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 10 }}>{note}</div>
       ) : null}
     </div>
   );
