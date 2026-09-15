@@ -62,6 +62,13 @@
 // message describes none of them, and a person who cannot find their own case
 // picks the first entry, which makes the field noise.
 export const SUPPORT_TOPICS = [
+  // ── FIRST, BECAUSE IT IS A BETA ──────────────────────────────────
+  // Oliver, 15 Sep 2026: "considering it's going to be beta.. we need to create
+  // a 'report problems' button." During a beta the commonest reason a stranger
+  // opens this page is that something broke, and a person who cannot find their
+  // own case picks the first entry. So the first entry is the one they want,
+  // which is also the one he most needs to receive.
+  { id: "problem", label: "Something is broken" },
   { id: "question", label: "A question about a trip or a place" },
   { id: "wrong", label: "Something on a page is wrong or out of date" },
   { id: "account", label: "Account, sign-in or a saved guide" },
@@ -76,6 +83,11 @@ export const SUPPORT_TOPICS = [
 // this the DSA one" asks it here.
 export const REPORT_TOPIC = "report";
 
+// The beta bug topic, named here for the same reason: two places ask "is this
+// the one that should carry what the browser could see", and neither should do
+// it with a string literal.
+export const PROBLEM_TOPIC = "problem";
+
 export const topicIds = () => SUPPORT_TOPICS.map(t => t.id);
 export const topicLabel = (id) => (SUPPORT_TOPICS.find(t => t.id === id) || {}).label || "";
 export const isTopic = (id) => topicIds().includes(String(id || ""));
@@ -89,6 +101,11 @@ export const GOOD_FAITH_STATEMENT =
 // What the message box asks for, per topic. Article 16(2)(a) wants a
 // SUBSTANTIATED explanation, and "Tell us what's wrong" does not ask for one.
 export const MESSAGE_PROMPT = {
+  // THE THREE QUESTIONS A BUG REPORT HAS TO ANSWER, asked out loud, because
+  // "it didn't work" is what arrives when nobody asks. Which screen and what
+  // they expected are the two the app cannot work out for itself; the rest is
+  // attached automatically. See utils/problemContext.js.
+  problem: "What were you doing, what happened, and what did you expect instead? We attach which page you were on and which browser you used, so you do not have to.",
   report: "Explain why you believe this content is illegal. Be specific: what it says, and which law or right it breaks.",
   wrong: "What does the page say, and what is true? A link to where you saw it helps.",
   privacy: "Tell us what you would like us to do. A copy of your data, a correction, or deletion.",

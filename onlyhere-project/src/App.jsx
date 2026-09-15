@@ -41,6 +41,7 @@ import { seenFromTrip, observeTrip, observedForPrompt } from "./utils/profileLea
 // flag is not the same kind of fact as anything in profileLearning.
 import { currentTrip, tripStatusForPrompt } from "./utils/tripStatus";
 import { AboutMePage, meSectionFor } from "./components/AboutMePage";
+import { PROBLEM_TOPIC } from "./utils/support";
 import { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, NUDGE_KEY, PROFILE_NUDGE_KEY } from "./utils/accountNudge";
 import { sweepAll, sweepRow, deepCheckPlan, checkAge } from "./utils/factSweep";
 import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filterRows, stampLabel, rowStampIsEdit, hasSources, SORTS } from "./utils/manageGroups";
@@ -283,7 +284,7 @@ import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
 import { getSession, getStoredSession, captureRedirectSession, signOut as authSignOut, deleteMyData } from "./utils/auth";
 import { fetchCloudSaves, pushCloudSaves, mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink, syncFailureNote, SYNC } from "./utils/userSaves";
 import { toggleBeen, isBeen, beenNote, withoutBeen, excludedBeen } from "./utils/beenThere";
-import { fetchBeen, pushBeen, mergeBeen, cleanBeen } from "./utils/beenSync";
+import { fetchBeen, pushBeen, mergeBeen, cleanBeen, BEEN_SETUP_SQL } from "./utils/beenSync";
 import { stashUnsynced, takeStash, dropStash } from "./utils/deviceStash";
 import { loadImageCredits, allImageCredits, licenseUrl, creditIsRequired } from "./utils/imageCredits";
 import { PhotoCredit } from "./components/PhotoCredit";
@@ -12583,10 +12584,32 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       //
       // Same merge rule as the saves for the same reason: neither list is more
       // correct, so both are kept.
+      // ── THE HELD BEEN LIST COMES BACK WHATEVER THE COLUMN SAYS ───
+      //
+      // takeStash above READ AND REMOVED the whole record, places, guides and
+      // been together. The been half was then merged only inside the branch
+      // below that runs when fetchBeen returns a list, so on a database with no
+      // been column, which is the live one today, the record was deleted and
+      // that half of it was dropped on the floor. The person signed out with a
+      // failed sync, signed back in, and the been marks the stash existed to
+      // rescue were gone for good.
+      //
+      // Written back to the device first, unconditionally. Whether the account
+      // can also hold it is a separate question, asked below.
+      if (heldBack?.been?.length) {
+        const restored = mergeBeen(readLocal("gemlyx_been"), heldBack.been);
+        setBeenList(prev => mergeBeen(prev, restored));
+        try { localStorage.setItem("gemlyx_been", JSON.stringify(restored)); } catch { /* private mode */ }
+      }
       const fromCloud = await fetchBeen(userSession);
-      if (fromCloud?.missingColumn) setBeenColumnMissing(true);
+      if (fromCloud?.missingColumn) {
+        setBeenColumnMissing(true);
+        // Named in the console as well as on the account page, because the
+        // console is where the 400 appears and a person looking at that 400
+        // should find the answer beside it rather than in a different screen.
+        console.warn(`[gemlyx] the been list cannot sync: gemlyx_user_data has no been column. Run this once in the Supabase SQL editor:\n${BEEN_SETUP_SQL}`);
+      }
       else if (fromCloud?.been) {
-        // The been list was stashed with the rest and comes back with it.
         const localBeen = mergeBeen(readLocal("gemlyx_been"), heldBack?.been || []);
         let finalBeen = mergeBeen(localBeen, fromCloud.been);
         setBeenList(prev => { finalBeen = mergeBeen(prev, finalBeen); return finalBeen; });
@@ -12603,7 +12626,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // visibly kept at sign in, or the person has no way to know it was, and
       // `gained` cannot do it: the stash is merged into localPlaces above, so
       // it counts as already-here rather than as recovered.
-      const heldCount = (heldBack?.places?.length || 0) + (heldBack?.guides?.length || 0);
+      const heldCount = (heldBack?.places?.length || 0) + (heldBack?.guides?.length || 0) + (heldBack?.been?.length || 0);
       showToast(!pushed ? "Signed in, but your saves could not be sent to your account"
         : heldCount > 0 ? `Signed in · ${heldCount} saved ${heldCount === 1 ? "item" : "items"} held on this device is back in your account`
         : gained > 0 ? `Signed in · ${gained} saved ${gained === 1 ? "item" : "items"} restored` : "Signed in · saves synced", pushed ? 2600 : 3600);
@@ -12634,18 +12657,52 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   // unknown until the first push lands, and "we cannot reach your account" is
   // not a thing to say to somebody whose account is fine.
   const [cloudSyncOk, setCloudSyncOk] = useState(true);
+  // ── THE SAME ANSWER, READABLE AFTER AN AWAIT ──────────────────────
+  //
+  // handleSignOut is re-created every render and now SUSPENDS for seconds, at
+  // the confirm dialog. The invocation that is waiting holds the cloudSyncOk
+  // from the render the button was pressed in, and the debounced push 1.2
+  // seconds later can flip it to false while that question is still on screen.
+  // The sign out would then read `true`, skip the rescue and the stash, and
+  // clear saves that never reached the account, while telling the person they
+  // are in it.
+  //
+  // A ref because a ref is the same object across renders. Written wherever the
+  // state is written, so the two cannot disagree.
+  const cloudSyncOkRef = useRef(true);
+  const noteCloudSync = (ok) => { cloudSyncOkRef.current = !!ok; setCloudSyncOk(!!ok); };
+  // ── AND THE BEEN LIST HAS ITS OWN ANSWER ──────────────────────────
+  //
+  // cloudSyncOk is set only by pushCloudSaves, which writes saved_places and
+  // saved_guides and NOT been: been has its own writer, whose result was thrown
+  // away except for the schema flag. So one boolean about two lists was deciding
+  // the fate of three, and on the live site today, where the been column does
+  // not exist, it says "synced" while been has never synced at all. Signing out
+  // then cleared every been mark somebody had made, unstashed, under a toast
+  // saying their saves were safe in their account.
+  const beenSyncOkRef = useRef(true);
   const pushTimerRef = useRef(null);
   useEffect(() => {
     if (!userSession?.token || !syncedOnceRef.current) return;
     clearTimeout(pushTimerRef.current);
     pushTimerRef.current = setTimeout(() => {
-      pushCloudSaves(userSession, savedPlaces, savedGuides).then(setCloudSyncOk);
+      pushCloudSaves(userSession, savedPlaces, savedGuides).then(noteCloudSync);
       // Its own write, matching its own read. A missing column is recorded and
       // never retried in a loop: it will not appear until somebody runs the
       // migration, and asking again every twelve hundred milliseconds is how a
       // schema gap becomes a bill.
       if (!beenColumnMissing) {
-        pushBeen(userSession, beenList).then(r => { if (r?.missingColumn) setBeenColumnMissing(true); });
+        pushBeen(userSession, beenList).then(r => {
+          if (r?.missingColumn) setBeenColumnMissing(true);
+          // Recorded rather than discarded. See beenSyncOkRef: this is the only
+          // thing that knows whether the been half reached the account, and
+          // sign out has to ask it before deciding the list is safe to clear.
+          beenSyncOkRef.current = r?.ok === true;
+        });
+      } else {
+        // A column that does not exist is not a sync that succeeded, and the
+        // clearing decision must not read it as one.
+        beenSyncOkRef.current = false;
       }
     }, 1200);
     return () => clearTimeout(pushTimerRef.current);
@@ -12805,8 +12862,18 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   // Promise-shaped so the callers keep the shape they already had:
   // `if (!(await askConfirm(...))) return`. See components/ConfirmSheet.jsx.
   const [confirmAsk, setConfirmAsk] = useState(null);
+  // The resolver of whatever question is currently on screen, held outside
+  // React state so a second ask can settle the first one instead of losing it.
+  // Without this, two taps in one frame replace the record, the first promise
+  // is never resolved, and the caller awaiting it, handleSignOut or onDelete,
+  // simply stops for ever.
+  const confirmPending = useRef(null);
   const askConfirm = (text, confirmLabel, opts = {}) =>
-    new Promise((resolve) => setConfirmAsk({ text, confirmLabel, resolve, ...opts }));
+    new Promise((resolve) => {
+      if (confirmPending.current) confirmPending.current(false);
+      confirmPending.current = resolve;
+      setConfirmAsk({ text, confirmLabel, resolve, at: Date.now(), ...opts });
+    });
   // The resolver is read out of state and called AFTER the clear, not inside a
   // setState updater. An updater can be run more than once, and resolving a
   // promise twice silently keeps the first answer, which is the kind of bug
@@ -12814,6 +12881,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   const answerConfirm = (yes) => {
     const pending = confirmAsk;
     setConfirmAsk(null);
+    confirmPending.current = null;
     pending?.resolve(!!yes);
   };
 
@@ -12910,11 +12978,40 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     // ONE: A LAST PUSH before the token dies. If that lands, nothing was ever
     // at risk. Before authSignOut, necessarily, since signing out takes the
     // token away.
-    let landed = cloudSyncOk;
-    if (!landed) {
-      try { landed = await pushCloudSaves(userSession, savedPlaces, savedGuides); }
-      catch { landed = false; }
+    // ── READ AFTER THE QUESTION, NOT BEFORE IT ──────────────────────
+    //
+    // Everything below is about what is on this device RIGHT NOW, and the
+    // confirm dialog above means "now" can be seconds after this function
+    // started. The three lists are re-read from localStorage, which every save
+    // path writes synchronously and which the sign-in merge already trusts for
+    // exactly this reason, and the sync answers come from refs rather than from
+    // a closure captured before the person had even said yes.
+    const nowLocal = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } };
+    const places = nowLocal("gemlyx_saved_places");
+    const guides = nowLocal("gemlyx_saved_guides");
+    const been = nowLocal("gemlyx_been");
+
+    // ── ALL THREE LISTS, NOT TWO OF THEM ────────────────────────────
+    //
+    // pushCloudSaves carries places and guides. been has its own writer and its
+    // own answer, and asking only the first one is how the been list came to be
+    // cleared on a device where it had never synced once: the column does not
+    // exist on the live database today, so been has never reached an account,
+    // while cloudSyncOk sat at true and called the whole thing safe.
+    let savesLanded = cloudSyncOkRef.current;
+    if (!savesLanded) {
+      try { savesLanded = await pushCloudSaves(userSession, places, guides); }
+      catch { savesLanded = false; }
     }
+    let beenLanded = beenSyncOkRef.current && !beenColumnMissing;
+    if (!beenLanded && !beenColumnMissing) {
+      // Worth one last try for the same reason the saves get one: the token is
+      // alive for another line or two. Not attempted when the column is
+      // missing, because that is a certainty rather than a chance.
+      try { beenLanded = (await pushBeen(userSession, been))?.ok === true; }
+      catch { beenLanded = false; }
+    }
+    const landed = savesLanded && beenLanded;
     // TWO: if it did not land, the copy is held under this ACCOUNT'S id rather
     // than deleted. Oliver, 14 Sep, choosing between three ways of resolving his
     // own two rules: keep them for the owner only. The next person on this
@@ -12924,7 +13021,8 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     //
     // Also before authSignOut: userSession is what carries the id, and the line
     // below sets it to null.
-    const held = landed ? false : stashUnsynced(userSession?.userId, { places: savedPlaces, guides: savedGuides, been: beenList });
+    const toHold = { places, guides, been };
+    let held = landed ? false : stashUnsynced(userSession?.userId, toHold);
     await authSignOut();
     setUserSession(null);
     syncedOnceRef.current = false;
@@ -12936,6 +13034,17 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     // the guide builder reads all three.
     setUserProfile(null);
     clearDeviceSaves();
+    // ── AND IF THE HOLD FAILED, TRY AGAIN IN THE SPACE IT FREED ─────
+    //
+    // stashUnsynced writes a copy while the originals are still in storage, so
+    // for a moment it needs twice the room, and a saved guide carries its whole
+    // itinerary. A full browser is exactly the case where holding the copy
+    // mattered, and it was the one case where the copy was written last and
+    // therefore not written at all.
+    //
+    // The lists are still in memory here, so the retry costs nothing and runs
+    // against a quota that has just been given the originals back.
+    if (!landed && !held) held = stashUnsynced(userSession?.userId, toHold);
     // Three outcomes and three sentences, because "held on this device for you"
     // and "gone" are different things to be told and the difference is whether
     // localStorage accepted the write. stashUnsynced returns that answer rather
@@ -26555,12 +26664,27 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               // in on this machine. Conditional rather than disabled, because a
               // row that cannot do anything is still a row to read.
               ...(userSession ? [{ id: "logout", label: uiT("menu.signOut", uiLang), ico: "out", action: "logout" }] : []),
+              // ── THE BETA ROW ────────────────────────────────────────
+              // Oliver, 15 Sep 2026: "considering it's going to be beta.. we
+              // need to create a 'report problems' button."
+              //
+              // Above Support rather than inside it, because they are different
+              // acts. Support is somebody with a question, which is a thing
+              // people know how to look for; this is somebody who has just hit
+              // a wall and whose patience is already spent, and a row they have
+              // to guess is behind another row is one they do not press.
+              //
+              // It goes to the support page with the topic already chosen, so
+              // the first thing they meet is the box to type in rather than a
+              // dropdown asking them to classify their own bad experience.
+              { id: "problem", label: uiT("menu.problem", uiLang), ico: "bulb", action: "problem" },
               { id: "support", label: uiT("menu.support", uiLang), ico: "mail", action: "mail" },
             ].map((item, i) => (
               <button key={item.id}
                 onClick={() => {
                   setShowMenu(false);
-                  if (item.action === "mail") window.open("mailto:hello@gemlyxtravel.com");
+                  if (item.action === "problem") navigate(`${SUPPORT_PATH}?topic=${PROBLEM_TOPIC}`);
+                  else if (item.action === "mail") window.open("mailto:hello@gemlyxtravel.com");
                   // handleSignOut, not a bare authSignOut: it is the one that
                   // pushes anything unsynced, releases the device copy and says
                   // which of those happened. Calling the raw one here would
@@ -27290,7 +27414,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         savedGuides={savedGuides}
         savedPlaces={savedPlaces}
         cloudSyncOk={cloudSyncOk}
-        setupSql={profileSetupSql}
+        // ── BOTH MIGRATIONS, NOT JUST THE ONE THAT SPEAKS UP ────────
+        //
+        // The profile column has had this surface since August. The been column
+        // has been answering 400 to every read and write on the live site for
+        // weeks with nobody told, because the code handles it so well that it is
+        // invisible: the retry loop stops, nothing crashes, and the been list
+        // works on the device and never syncs. Handled quietly is how a fault
+        // survives, so it now uses the surface that already existed.
+        setupSql={[profileSetupSql, beenColumnMissing ? BEEN_SETUP_SQL : ""].filter(Boolean).join("\n")  || null}
         deleting={accountBusy}
         // An unknown id in the address falls back to the first section rather
         // than rendering an empty shell, because /me/nonsense is a link somebody

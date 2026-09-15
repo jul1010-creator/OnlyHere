@@ -30,23 +30,40 @@ export const ConfirmSheet = ({ ask, onAnswer, cancelLabel = "Cancel" }) => {
   // stray tap both land on the safe one, which is the right default for a
   // question whose yes cannot be undone.
   const cancelRef = useRef(null);
+  // onAnswer is a new closure on every render of the app around this, so having
+  // it in the dependency list re-ran this effect constantly: the listener was
+  // rebound and, worse, focus was taken back to Cancel under a keyboard user who
+  // had tabbed away from it, every time anything unrelated re-rendered. Held in
+  // a ref and depended on by `ask` alone, which is the thing that actually
+  // changes when a new question opens.
+  const answerRef = useRef(onAnswer);
+  answerRef.current = onAnswer;
   useEffect(() => {
     if (!ask) return;
     cancelRef.current?.focus();
     // Escape answers no. A dialog with no keyboard way out is one people get
     // stuck in, and there is no browser chrome around this one to rescue them.
-    const key = (e) => { if (e.key === "Escape") onAnswer(false); };
+    const key = (e) => { if (e.key === "Escape") answerRef.current?.(false); };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [ask, onAnswer]);
+  }, [ask]);
 
   if (!ask) return null;
 
   // 1200 clears DetailPage at 970 and the credits sheet at 300. A confirm that
   // opens behind the screen it was asked from is worse than no confirm.
   return (
+    // ── THE BACKDROP IGNORES THE TAP THAT OPENED IT ────────────────
+    //
+    // This sheet exists because native dialogs are unreliable in the webview an
+    // Instagram link opens in. The people it was built for are on phones, and an
+    // ordinary double-tap on Sign out puts the second tap on a backdrop that was
+    // not there when they started tapping. That answers no, the button appears
+    // to do nothing, and the failure looks exactly like the one being fixed.
+    //
+    // 400ms covers a double-tap and is far short of a decision.
     <div role="dialog" aria-modal="true" aria-label={ask.title || ask.text}
-      onClick={() => onAnswer(false)}
+      onClick={() => { if (Date.now() - (ask.at || 0) > 400) onAnswer(false); }}
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()}
         style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 16, width: "100%", maxWidth: 420, padding: "22px 20px 18px", boxShadow: "0 18px 50px rgba(0,0,0,0.45)" }}>

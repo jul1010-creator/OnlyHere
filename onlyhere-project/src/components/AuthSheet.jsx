@@ -103,6 +103,9 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   // state, because the check and the set happen inside one handler and a
   // setState would not be visible to the next press.
   const autoSentRef = useRef("");
+  // Bumped whenever the sheet is opened. A submit that started under an earlier
+  // number is stale and stays silent. See the reset effect.
+  const runRef = useRef(0);
   const [now, setNow] = useState(() => Date.now());
   // The other deliberate way out, since the backdrop is no longer one. Bound
   // only while the sheet is open, so it cannot swallow Escape from anything else.
@@ -171,6 +174,16 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
     setEmail(""); setPassword(""); setConfirm("");
     setAnswers(EMPTY_PROFILE);
     setSentTo(""); setResendAt(0);
+    // busy was the one flag this reset forgot, and the sheet is hidden rather
+    // than unmounted, so nothing else cleared it: close the sheet mid-request
+    // and reopen it, and the button sat disabled reading "Working…" over a
+    // blank form until a fetch nobody was waiting for finally settled.
+    setBusy(false);
+    // Anything already in flight belongs to the sheet that was just closed. It
+    // must not write its answer into this one, which is how a freshly reset
+    // form jumped to "Check your email" for the address somebody typed a minute
+    // earlier. Every write after an await checks this number first.
+    runRef.current += 1;
     // Cleared with the rest of the sheet, so closing it and coming back is a
     // fresh start for this too. The guard is against a run of presses in one
     // sitting, not a permanent refusal to ever send again.
@@ -295,9 +308,17 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
       }
     }
     setBusy(true); setError(null); setNotice(null);
+    // The number this attempt belongs to. Every write below an await asks
+    // whether the sheet has been closed and reopened since, because an answer
+    // that arrives for a sheet nobody is looking at must not land on the one
+    // they are: closing mid-submit and reopening used to jump the freshly reset
+    // form to "Check your email" for an address typed a minute earlier.
+    const run = runRef.current;
+    const stale = () => runRef.current !== run;
     try {
       if (mode === "reset") {
         await sendPasswordReset(email);
+        if (stale()) return;
         setNotice(uiT("auth.resetSent", lang));
       } else if (mode === "up") {
         // The name goes to Supabase as user metadata as well as into the
@@ -316,6 +337,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         // find out who has an account. Without this the person is shown "check
         // your inbox" and waits for a mail nobody sent. Sent to the sign-in
         // screen with the address still in the box, rather than merely told.
+        if (stale()) return;
         if (alreadyRegistered) {
           setMode("in");
           setConfirm("");
@@ -347,6 +369,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         // out, no error, nothing on screen. Exactly the silent failure the OAuth
         // path was rewritten to stop, on the other door.
         const signedIn = await signInWithPassword(email, password);
+        if (stale()) return;
         if (!signedIn) { setError(uiT("auth.noSession", lang)); setBusy(false); return; }
         onSignedIn(signedIn);
       }
@@ -368,6 +391,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
       // 400 carries several other messages that are worth passing through as
       // they are: "Email not confirmed" is a real instruction, and replacing it
       // with this one would be a lie.
+      if (stale()) return;
       const said = String(e.message || e);
       // ── AND ONE OF THEM IS NOT AN ERROR BUT AN UNFINISHED SIGNUP ──
       //
@@ -399,9 +423,14 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         // handler and a setState would not be visible to the next press.
         // Address-keyed, so correcting a typo and trying again still sends.
         if (autoSentRef.current !== to) {
-          autoSentRef.current = to;
           try {
             await resendConfirmation(to);
+            // MARKED AFTER THE SEND, NOT BEFORE IT. Assigned first, a refusal
+            // from Supabase's hourly limit still recorded the address as
+            // handled, so no later attempt in that sitting would ever retry it
+            // and the person was left on a screen waiting for a mail that had
+            // been refused.
+            autoSentRef.current = to;
             setError(null);
           } catch (again) {
             setError(String(again?.message || again));
@@ -417,7 +446,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
       }
       setError(/invalid login credentials/i.test(said) ? uiT("auth.badLogin", lang) : said);
     }
-    setBusy(false);
+    if (!stale()) setBusy(false);
   };
 
   const label = uiT({ in: "auth.signIn", up: "auth.createAccount", reset: "auth.sendReset", newpass: "auth.setNewPass" }[mode], lang);
@@ -544,7 +573,11 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
                 the screen back to the form with everything still in it, so a
                 mistyped address is a two-character repair rather than filling
                 the whole thing in again. */}
-            <button style={linkBtn} onClick={() => { setSentTo(""); setError(null); setNotice(null); }}>
+            {/* autoSentRef too, or coming back here is a screen that says a
+                link is on its way and sends nothing. Pressing this is a person
+                saying "that was not what I meant", and the next attempt has to
+                be treated as a first one. */}
+            <button style={linkBtn} onClick={() => { setSentTo(""); setError(null); setNotice(null); autoSentRef.current = ""; }}>
               {uiT("auth.wrongAddress", lang)}
             </button>
           </div>

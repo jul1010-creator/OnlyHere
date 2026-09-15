@@ -158,6 +158,7 @@ writeFileSync(entry, `
   export { placesNamedIn, rejectedIn, correctedTo, CHAT_PLACE_CAP } from ${JSON.stringify(join(root, "src/utils/chatPlaces.js"))};
   export { isOwnRoute, RETURN_PARAM, captureRedirectSession, startGoogleSignIn } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
   export { stashUnsynced, takeStash, dropStash } from ${JSON.stringify(join(root, "src/utils/deviceStash.js"))};
+  export { problemContext, contextBlock, withContext, CONTEXT_DIVIDER, CONTEXT_HEADING } from ${JSON.stringify(join(root, "src/utils/problemContext.js"))};
   export { GOOGLE_SIGN_IN } from ${JSON.stringify(join(root, "src/config.js"))};
   export { writeInLanguage } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { guideLanguage, languageOfProse, ruledOutLanguages, briefSentences, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS, MARKER_FLOOR, MARKER_MARGIN } from ${JSON.stringify(join(root, "src/utils/travellerLanguage.js"))};
@@ -1810,7 +1811,17 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // The sign-in merge read state from a closure captured before the pending
     // guide was claimed, then wrote it back with a plain value, deleting the
     // guide the person had just signed in to keep, on every device.
-    ok("the sign-in merge reads the freshest local list", /const localPlaces = readLocal\("gemlyx_saved_places"\);/.test(app));
+    // THE RULE IS WHERE THE INPUT COMES FROM, not the shape of the line. On
+    // 15 Sep the stash was folded in here, so the merge input became
+    // mergeSaves(readLocal(...), heldBack.places, ...) and this went red on code
+    // that still does the one thing it cares about: read the list back off
+    // localStorage, which every save path writes synchronously, rather than
+    // trusting the closure. Both halves are read now, because a future edit that
+    // drops readLocal is the failure, and one that wraps it is not.
+    ok("the sign-in merge reads the freshest local list",
+       /readLocal\("gemlyx_saved_places"\)/.test(app) && /readLocal\("gemlyx_saved_guides"\)/.test(app));
+    ok("and never from the closure it started with",
+       !/const localPlaces = savedPlaces;/.test(app) && !/mergeSaves\(savedPlaces, cloud\.places/.test(app));
     ok("and writes it back functionally", /setSavedGuides\(prev => \{ finalGuides = mergeSaves/.test(app));
     ok("a refused cloud write is no longer reported as synced", /could not be sent to your account/.test(app));
   }
@@ -15795,7 +15806,28 @@ is("missing licence does not require credit", creditIsRequired({}), false);
      /\["How we are paid", AFFILIATES_PATH, false\][\s\S]{0,200}"\/terms\.html", true[\s\S]{0,80}"\/privacy\.html", true/.test(page));
   ok("from the Legal section itself", /const legalSection[\s\S]{0,1500}terms\.html/.test(page));
   // Reproducing either would be a second copy to keep in step with the first.
-  ok("neither is reproduced on the page", page.length < 40000);
+  //
+  // MEASURED PROPERLY ON 15 SEP. This was `page.length < 40000`, a proxy that
+  // says nothing about whether the legal text is on the page: it goes red when
+  // an unrelated section is added, which is what happened when Saved trips moved
+  // here, and it would stay green if somebody pasted in half the terms and
+  // deleted a component to make room. So it reads the actual question now: does
+  // any long run of the two documents appear in this file. 120 characters is
+  // well past a shared phrase like "Privacy Policy" and well short of a
+  // paragraph worth duplicating.
+  {
+    const legalText = (f) => readFileSync(join(root, "public", f), "utf8")
+      .replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    const copied = [];
+    for (const doc of ["terms.html", "privacy.html"]) {
+      const text = legalText(doc);
+      for (let i = 0; i + 120 <= text.length; i += 40) {
+        const run = text.slice(i, i + 120);
+        if (page.includes(run)) { copied.push(`${doc}: ${run.slice(0, 60)}…`); break; }
+      }
+    }
+    is("neither is reproduced on the page", copied, []);
+  }
 }
 
 
@@ -24147,6 +24179,28 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // label, which is what the allow-list is for.
   is("a programme we do not hold is not named", M.partnerMerchant("https://getrentacar.tpx.li/KyhVj8Bg"), "");
 
+  // ── AND NO KEY IS WRITTEN TWICE IN THAT TABLE ────────────────────
+  //
+  // bajabikes was in PARTNER_MERCHANTS twice until 15 Sep 2026. Both copies
+  // carried the same name, so nothing ever printed wrong and nothing looked
+  // broken, which is exactly why it survived a week on the beta list.
+  //
+  // It matters because of what a repeated key in an object literal does: the
+  // last one silently wins. Edit the first copy and your change does nothing,
+  // with no error and no failing test to explain it. This is the test that
+  // would have explained it, so it reads the source rather than the built
+  // object, which cannot see a duplicate at all by the time it exists.
+  {
+    const affSrc = stripComments(readFileSync(join(root, "src/utils/affiliates.js"), "utf8"));
+    const table = affSrc.slice(affSrc.indexOf("const PARTNER_MERCHANTS = {"));
+    const body = table.slice(0, table.indexOf("};"));
+    const keys = [...body.matchAll(/^\s{2}([A-Za-z_$][\w$]*):/gm)].map(m => m[1]);
+    const seen = new Set();
+    const twice = keys.filter(k => (seen.has(k) ? true : (seen.add(k), false)));
+    is("no merchant is written down twice", twice, []);
+    ok("and the table was actually found", keys.length > 5);
+  }
+
   // ── GETYOURGUIDE, WHICH TRACKS ON ITS OWN DOMAIN ─────────────────
   //
   // Oliver, 9 Sep 2026: "I got affiliate link from getyourguide.dk". The link he
@@ -29682,8 +29736,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and there is a way to fix it",
      /uiT\("auth\.wrongAddress", lang\)/.test(sheetS)
      && M.UI_STRINGS["auth.wrongAddress"].en === "Wrong address? Go back");
+  // autoSentRef is cleared with them since 15 Sep. Pressing this is a person
+  // saying "that was not what I meant", so the next attempt has to be treated as
+  // a first one, or the screen promises a link it will not send.
   ok("which clears back to the form with the answers still in it",
-     /onClick=\{\(\) => \{ setSentTo\(""\); setError\(null\); setNotice\(null\); \}\}/.test(sheetS));
+     /onClick=\{\(\) => \{ setSentTo\(""\); setError\(null\); setNotice\(null\); autoSentRef\.current = ""; \}\}/.test(sheetS));
 
   // ── SENDING IT AGAIN ────────────────────────────────────────────
   ok("there is a resend", /export const resendConfirmation = async \(email\) => \{/.test(authS));
@@ -31238,6 +31295,223 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
        /catch \(again\) \{\s*setError\(String\(again\?\.message \|\| again\)\);/.test(codeE));
   }
 
+  // ── A REPORT BUTTON THAT ARRIVES SOMEWHERE, 15 SEP 2026 ─────────
+  //
+  // Oliver, past one in the morning: "considering it's going to be beta.. we
+  // need to create a 'report problems' button. We'll get another resend for
+  // that."
+  //
+  // THE BUTTON WAS THE EASY HALF. Two things decide whether it is worth having:
+  // what arrives with the report, and whether it reaches a person on the day it
+  // was written. The page already existed and already wrote a row to
+  // gemlyx_support, so neither of those was true.
+  {
+    const { problemContext, contextBlock, withContext, CONTEXT_DIVIDER } = M;
+    const facts = {
+      route: "/#/guide/abc", viewport: "390x844", userAgent: "Mozilla/5.0 (iPhone)",
+      language: "da-DK", version: "v2.87", signedIn: true, savedGuides: 3,
+    };
+    // ── WHICH PAGE, WHICH BROWSER, HOW WIDE ───────────────────────
+    // Every one of these has been the answer to a real bug in this project. The
+    // blank page on 15 Sep was a width question; the avatar reading "?" for
+    // every signed-in person was a signed-in question.
+    is("the report carries what he would otherwise have to ask for",
+       problemContext(facts).map(r => r[0]).join(","),
+       "Page,Screen,Browser,Language,Build,Signed in,Saved guides");
+    // A yes or a no, never the word "false" at somebody.
+    ok("signed in is written as a word", contextBlock({ signedIn: false }).includes("Signed in: no"));
+    // AND IT IS A YES OR A NO RATHER THAN A WHO. A bug report is not a reason
+    // to collect more about a person than the page already had, and this lands
+    // in an inbox rather than in a system with access control.
+    const whole = contextBlock(facts);
+    ok("and never says who they are", !/@/.test(whole) && !/userId|token|user_id/i.test(whole));
+    // Nothing known means nothing appended, rather than a heading over a blank.
+    is("an empty context adds nothing at all", withContext("it broke", {}), "it broke");
+    ok("and a real one is divided from their own words",
+       withContext("it broke", facts).startsWith("it broke\n\n" + CONTEXT_DIVIDER));
+    // A field somebody else controls is a field somebody else can make
+    // enormous, so every one of them is capped.
+    ok("a hostile user agent cannot fill the email",
+       contextBlock({ userAgent: "x".repeat(5000) }).length < 400);
+
+    // ── ATTACHED ONLY WHERE IT BELONGS ────────────────────────────
+    // Every other message on that page is somebody telling us about themselves
+    // or about a page. Collecting their browser to answer a partnership enquiry
+    // would be taking more than the conversation needs.
+    const sup = stripComments(readFileSync(join(root, "src/components/SupportPage.jsx"), "utf8"));
+    ok("the browser facts go on the bug topic and no other",
+       /form\.topic === PROBLEM_TOPIC\s*\?\s*\{ \.\.\.form, message: withContext\(/.test(sup));
+    // The row is the record; the mail is what reaches a person on the day.
+    ok("and the message is also sent to an inbox", /fetch\("\/api\/report-problem"/.test(sup));
+    // NOT AWAITED. The row is already written by the line above, so whether the
+    // mail goes is not something a person filling in a form should wait for.
+    ok("without making anybody wait for it", /\}\)\.catch\(\(\) => \{ \/\* the row is written/.test(
+       readFileSync(join(root, "src/components/SupportPage.jsx"), "utf8")));
+    // A button that says what it is about should not then ask what it is about.
+    ok("arriving from the button skips the dropdown",
+       /isTopic\(asked\) \? \{ \.\.\.EMPTY, topic: asked \}/.test(sup));
+    ok("and an unknown topic in the address is refused rather than shown",
+       /const asked = String\(params\.get\("topic"\) \|\| ""\);/.test(sup));
+
+    // ── THE ENDPOINT IS NOT AN OPEN RELAY ─────────────────────────
+    //
+    // It sends mail on behalf of anybody who can load the site and it cannot be
+    // founder-gated, because it is for readers. What keeps it safe is that a
+    // caller controls nothing that matters: the recipient and the sender are
+    // constants, the subject is built from a topic that must be on a known
+    // list, and the only free text is capped.
+    const rp = stripComments(readFileSync(join(root, "api/report-problem.js"), "utf8"));
+    // \b after "to", or this matches body.topic four lines down and reports the
+    // endpoint as an open relay because it reads a topic.
+    ok("the recipient cannot be chosen by the caller",
+       /const TO = "hello@gemlyxtravel\.com";/.test(rp)
+       && !/body\.to\b|req\.query\.to\b|body\.recipient/.test(rp));
+    ok("nor the sender", /const FROM = "Gemlyx <noreply@gemlyxtravel\.com>";/.test(rp));
+    ok("the topic must be one we know", /TOPICS\.includes\(String\(body\.topic \|\| ""\)\)/.test(rp));
+    // A newline in a field that reaches a subject line is how somebody adds
+    // their own Bcc.
+    ok("and nothing reaching the subject can carry a newline", /replace\(\/\[\\n\\t\]\+\/g, " "\)/.test(rp));
+    // reply_to cannot redirect anything, since `to` is a constant. What it can
+    // do is fail: Resend answers 422 to a malformed address and refuses the
+    // whole message with it, so one stray character in the email box would cost
+    // the report rather than just the reply path.
+    ok("a malformed reply address costs the reply, not the report",
+       /const from = \/\^\[\^@\\s\]\+@\[\^@\\s\]\+\\\.\[\^@\\s\]\+\$\/\.test\(said\) \? said : "";/.test(rp));
+    ok("it is POST only and still refuses a request not from the site",
+       /req\.method !== "POST"/.test(rp) && /requestIsFromSite\(req\.headers\)/.test(rp));
+    // ── AND IT DEGRADES ───────────────────────────────────────────
+    // RESEND_API_KEY is a variable he has to add. A report button that breaks
+    // because a key is missing would be the one part of this product that fails
+    // at the exact moment somebody is telling us something else is broken.
+    ok("a missing key is answered rather than thrown",
+       /if \(!key\) \{[\s\S]{0,300}emailed: false/.test(rp));
+    ok("and the reason a send failed is logged rather than shown to a stranger",
+       /console\.warn\(`\[gemlyx\] support mail refused/.test(rp)
+       && !/return res\.status\(200\)\.json\(\{ ok: true, emailed: false, why: detail/.test(rp));
+    // Readers use it, so it must not be on the list that demands a founder.
+    ok("and it is not gated to the founder, which would lock out every reader",
+       !M.STUDIO_ONLY_ENDPOINTS.includes("report-problem") && !/isFounder/.test(rp));
+
+    // ── REACHABLE, WHICH IS THE POINT OF CALLING IT A BUTTON ──────
+    const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("there is a row for it in the menu",
+       /\{ id: "problem", label: uiT\("menu\.problem", uiLang\), ico: "bulb", action: "problem" \}/.test(appR));
+    ok("and it opens the page with the topic already chosen",
+       /navigate\(`\$\{SUPPORT_PATH\}\?topic=\$\{PROBLEM_TOPIC\}`\)/.test(appR));
+    // Above Support rather than inside it: they are different acts, and a row
+    // somebody has to guess is behind another row is one they do not press.
+    ok("above Support rather than hidden inside it",
+       appR.indexOf('id: "problem"') < appR.indexOf('id: "support"'));
+    // "Something is broken" rather than "Report a problem": the first is what
+    // the person is thinking, the second is what a company would call it.
+    ok("and it is named the way a person would say it",
+       M.UI_STRINGS["menu.problem"].en === "Something is broken");
+  }
+
+  // ── AND ASKED AT THE ONE MOMENT THEY HAVE AN OPINION ────────────
+  //
+  // Oliver, 15 Sep 2026: "And also a 'Satisfied with the buiild? We appreciate
+  // any feedback.' After a guide has been created."
+  //
+  // The timing is the idea and it is his. A feedback link in a footer is
+  // answered by nobody, because nobody arrives at a footer holding a fresh
+  // opinion. Somebody who has just watched a guide be built has one, for about
+  // thirty seconds.
+  {
+    const gf = readFileSync(join(root, "src/components/GuideFeedback.jsx"), "utf8");
+    const gfCode = stripComments(gf);
+    const gp = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+    // His words, because he wrote them and they are better than the ones a
+    // product would use.
+    ok("it asks what he asked", /Satisfied with the build\?/.test(gf) && /We appreciate any feedback\./.test(gf));
+
+    // ── ONLY THE PERSON WHO BUILT IT ──────────────────────────────
+    // freshGuide is the trip arriving in router state, which happens for the
+    // builder and never for a shared link opened cold. A stranger sent a guide
+    // in WhatsApp built nothing, so asking them is a question about somebody
+    // else's work.
+    ok("and only of the person who built the guide",
+       /\{freshGuide && \(\s*<GuideFeedback/.test(gp));
+
+    // ── ONCE ──────────────────────────────────────────────────────
+    // A product that keeps asking the same question is one people learn to
+    // scroll past, and the second ask is worth less while costing more.
+    // ── AND NOT UNDER A KEY EVERY GUIDE SHARES ────────────────────
+    // The first version keyed on guideId with the title as a fallback, and the
+    // block renders only when freshGuide is set, which GuidePage defines as
+    // exactly `freshGuide && !guideId`. So guideId was undefined for its entire
+    // audience and an untitled guide produced the bare prefix: one key shared by
+    // every untitled guide, where dismissing once silenced all of them.
+    ok("it is remembered per guide rather than globally",
+       /const askedKeyFor = \(guideId, title\) => \{/.test(gfCode)
+       && /const part = id \|\| name;/.test(gfCode));
+    ok("and nothing distinctive means nothing written down",
+       /if \(!part\) return "";/.test(gfCode)
+       && /const remember = \(key\) => \{\s*if \(!key\) return;/.test(gfCode)
+       && /export const alreadyAsked = \(key\) => \{\s*if \(!key\) return false;/.test(gfCode));
+    // Read at mount, not per render, or it could vanish under somebody who is
+    // halfway through a sentence.
+    ok("and the decision is taken once, at mount",
+       /useState\(\(\) => alreadyAsked\(key\)\)/.test(gfCode));
+    // Dismissing counts as answered. Without a way out that is not an answer,
+    // the only ways to make it go away are to answer or to ignore it for ever,
+    // and the second teaches people to ignore the next one too.
+    ok("there is a way out that is not an answer",
+       /No thanks/.test(gf) && /onClick=\{\(\) => \{ remember\(key\); setSent\(true\); \}\}/.test(gfCode));
+    // localStorage is a per-device convenience and is allowed to be forgotten.
+    // It must never be the reason a guide page fails to render.
+    ok("and a browser that refuses storage still shows the guide",
+       /catch \{ return false; \}/.test(gfCode) && /catch \{ \/\* private mode/.test(gf));
+
+    // ── IT REACHES THE SAME INBOX AS THE BUG REPORTS ──────────────
+    ok("the answer is sent where he will read it",
+       /fetch\("\/api\/report-problem"/.test(gp) && /topic: "feedback"/.test(gp));
+    // A yes with no words is still an answer and has to survive an empty box.
+    ok("a yes with nothing typed is still an answer",
+       /Satisfied with the build: \$\{answer === "yes" \? "yes" : "not really"\}/.test(gp));
+    // Same facts as a bug report, for the same reason: so nothing is asked
+    // twice. And the guide's own name, which is the thing he would ask first.
+    ok("and carries the guide and what the app could see",
+       /message: withContext\(/.test(gp) && /Guide: \$\{title \|\| "untitled"\}/.test(gp));
+    // Real buttons, so the block is reachable from a keyboard like the rest of
+    // the page, and aria-pressed because the gold border is the only other
+    // thing saying which one is chosen.
+    ok("it is built from real buttons with their state announced",
+       /<button type="button"/.test(gf) && /aria-pressed=\{answer === "yes"\}/.test(gfCode));
+    ok("and the box is tied to its label", /htmlFor="gx-guide-feedback"/.test(gfCode) && /id="gx-guide-feedback"/.test(gfCode));
+    // A thank you they have earned is not withheld over a failed post.
+    ok("a failed send still thanks them", /catch \{ \/\* a thank you they have earned/.test(gf));
+  }
+
+  // ── A MIGRATION NOBODY WAS EVER TOLD ABOUT ──────────────────────
+  //
+  // 15 Sep 2026, in the console on the live site: every been read and write
+  // answering 400. The code had handled it correctly since August. missingColumn
+  // is detected, the retry loop stops, nothing crashes, and the been list works
+  // on the device and never reaches the account.
+  //
+  // Handled well enough to be invisible is how a fault survives for weeks. The
+  // SQL that fixes it existed only as a comment at the top of beenSync.js, and a
+  // comment cannot be shown to anybody.
+  {
+    const bs = readFileSync(join(root, "src/utils/beenSync.js"), "utf8");
+    const appB = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the migration is a value rather than a comment",
+       /export const BEEN_SETUP_SQL = "alter table gemlyx_user_data add column if not exists been jsonb;";/.test(bs));
+    // The account page has had this surface since the profile column had the
+    // same problem. Reusing it beats building a second one.
+    ok("and it reaches the surface the profile column already uses",
+       /setupSql=\{\[profileSetupSql, beenColumnMissing \? BEEN_SETUP_SQL : ""\]/.test(appB));
+    // BOTH, not whichever is checked first. Two missing columns is a state this
+    // project has actually been in.
+    ok("both migrations can be shown at once, not one of them",
+       /\.filter\(Boolean\)\.join\("\\n"\)/.test(appB));
+    // The console is where the 400 appears, so the answer belongs beside it
+    // rather than on a screen somebody would have to think to open.
+    ok("and it is named where the error actually shows up",
+       /console\.warn\(`\[gemlyx\] the been list cannot sync/.test(appB));
+  }
+
   // ── WHOSE THE UNSYNCED COPY IS ──────────────────────────────────
   //
   // Two of Oliver's rules collided on 14 Sep and this is where they stop.
@@ -31319,8 +31593,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const outH = appH.slice(soH, appH.indexOf("const handleDeleteAccount", soH));
     // Only when the push did not land. A stash written on every sign out is a
     // copy of the account sitting on the device for no reason.
+    // The lists are re-read from localStorage rather than taken from the render
+    // the button was pressed in, because the confirm dialog means seconds can
+    // pass in between and a debounced save can land in them.
     ok("held only when the last push did not land",
-       /const held = landed \? false : stashUnsynced\(userSession\?\.userId, \{ places: savedPlaces, guides: savedGuides, been: beenList \}\);/.test(outH));
+       /let held = landed \? false : stashUnsynced\(userSession\?\.userId, toHold\);/.test(outH)
+       && /const toHold = \{ places, guides, been \};/.test(outH));
     // Before authSignOut, because userSession carries the id and the next line
     // sets it to null.
     ok("and stashed before the session is thrown away",
@@ -31340,9 +31618,19 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // A promise made at sign out has to be visibly kept at sign in. `gained`
     // cannot do it: the stash is merged into localPlaces, so it counts as
     // already-here rather than as recovered.
+    // been counted too, since 15 Sep: it is stashed with the rest, so a rescue
+    // that was entirely been marks used to report nothing at all.
     ok("and the person is told the promise was kept",
-       /const heldCount = \(heldBack\?\.places\?\.length \|\| 0\) \+ \(heldBack\?\.guides\?\.length \|\| 0\);/.test(appH)
+       /const heldCount = \(heldBack\?\.places\?\.length \|\| 0\) \+ \(heldBack\?\.guides\?\.length \|\| 0\) \+ \(heldBack\?\.been\?\.length \|\| 0\);/.test(appH)
        && /held on this device is back in your account/.test(appH));
+    // ── AND THE BEEN HALF COMES BACK WHATEVER THE COLUMN SAYS ─────
+    // takeStash reads and REMOVES the whole record. The been half was merged
+    // only inside the branch that runs when fetchBeen returns a list, so on a
+    // database with no been column, which is the live one, the record was
+    // deleted and that half was dropped on the floor.
+    ok("and the held been marks are restored before the column is even asked",
+       /if \(heldBack\?\.been\?\.length\) \{[\s\S]{0,400}localStorage\.setItem\("gemlyx_been"/.test(appH)
+       && appH.indexOf("if (heldBack?.been?.length)") < appH.indexOf("const fromCloud = await fetchBeen"));
     ok("and deleting the account drops it", /dropStash\(live\.userId\);/.test(appH));
   }
 
@@ -31400,7 +31688,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // THE RESOLVER IS CALLED OUTSIDE THE STATE UPDATER. An updater can run more
     // than once, and resolving a promise twice silently keeps the first answer.
     ok("and answers once, outside the state updater",
-       /const pending = confirmAsk;\s*setConfirmAsk\(null\);\s*pending\?\.resolve\(!!yes\);/.test(appO));
+       /const pending = confirmAsk;\s*setConfirmAsk\(null\);\s*confirmPending\.current = null;\s*pending\?\.resolve\(!!yes\);/.test(appO));
+    // ── AND A SECOND QUESTION SETTLES THE FIRST ───────────────────
+    // Two taps in one frame replaced the record, and the promise the first ask
+    // returned was never resolved: the caller awaiting it, handleSignOut or
+    // onDelete, simply stopped for ever.
+    ok("a second ask does not orphan the first",
+       /if \(confirmPending\.current\) confirmPending\.current\(false\);/.test(appO));
     {
       const cs = readFileSync(join(root, "src/components/ConfirmSheet.jsx"), "utf8");
       // Above DetailPage at 970. A confirm that opens behind the screen it was
@@ -31408,7 +31702,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       ok("it opens above every other layer", /zIndex: 1200/.test(cs));
       // Escape answers no. There is no browser chrome around this one to
       // rescue somebody who gets stuck in it.
-      ok("there is a keyboard way out", /e\.key === "Escape"\) onAnswer\(false\)/.test(cs));
+      ok("there is a keyboard way out", /e\.key === "Escape"\) answerRef\.current\?\.\(false\)/.test(cs));
+    // onAnswer is a new closure every render of the app around this, so having
+    // it in the dependency list re-ran the effect constantly and took focus back
+    // to Cancel under a keyboard user who had tabbed away from it.
+    ok("and it does not re-steal focus on every unrelated render",
+       /\}, \[ask\]\);/.test(cs) && /answerRef\.current = onAnswer;/.test(cs));
+    // An ordinary mobile double-tap put the second tap on a backdrop that was
+    // not there when the tapping started, which answered no and made the button
+    // look dead: the failure this sheet exists to cure.
+    ok("and the tap that opened it cannot close it",
+       /if \(Date\.now\(\) - \(ask\.at \|\| 0\) > 400\) onAnswer\(false\)/.test(cs));
       // The dangerous button is not focused on open, so Enter and a stray tap
       // both land on the safe one.
       ok("and the safe answer is the one that holds focus", /cancelRef\.current\?\.focus\(\)/.test(cs));
@@ -31424,8 +31728,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // moment they are trying to get in.
     {
       const sheetR = stripComments(readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8"));
+      // MARKED AFTER THE SEND. Assigned first, a refusal from Supabase's hourly
+      // limit still recorded the address as handled, so nothing in that sitting
+      // would retry it and the person waited for a mail that had been refused.
       ok("the unasked-for confirmation is sent once per address",
-         /if \(autoSentRef\.current !== to\) \{\s*autoSentRef\.current = to;/.test(sheetR));
+         /if \(autoSentRef\.current !== to\) \{[\s\S]{0,160}await resendConfirmation\(to\);[\s\S]{0,500}autoSentRef\.current = to;/.test(sheetR));
+      ok("and going back clears it, so the next try is a first one",
+         /setSentTo\(""\); setError\(null\); setNotice\(null\); autoSentRef\.current = "";/.test(sheetR));
       // A ref, not state: the check and the set happen inside one handler and a
       // setState would not be visible to the next press.
       ok("held in a ref, because state would not reach the next press",
@@ -32454,7 +32763,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
            !/to also remove the sign-in record/.test(me));
         ok("it sits with Sign out rather than under About me",
            me.indexOf("Sign out\n        </button>") < me.indexOf("Delete my account"));
-        ok("and the confirm names everything that goes", /your login all go/.test(app));
+        // ── THE SENTENCE MOVED INTO THE CATALOGUE, 15 SEP ──────────
+        // It was an English paragraph inside window.confirm in App.jsx, on a
+        // screen whose every other word is translated. The confirm is the app's
+        // own sheet now and the words come from uiLanguage, so reading App.jsx
+        // for them finds nothing. The RULE is that the question names everything
+        // that goes, not that the words live in a particular file, so it is read
+        // where they live and in every language they ship in.
+        ok("and the confirm names everything that goes",
+           /your login all go/.test(M.UI_STRINGS["auth.confirmDelete"].en)
+           && ["en", "da", "de"].every(c => (M.UI_STRINGS["auth.confirmDelete"]?.[c] || "").length > 60));
       }
 
       // ── AND WHOSE SAVES THOSE WERE ──────────────────────────────
@@ -32522,9 +32840,23 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         // first is safe to demand.
         ok("clearing has no exception, whatever the sync state",
            !/heldOnlyHere/.test(app));
+        // Against the lists as they are NOW, re-read from localStorage, because
+        // the confirm dialog means seconds can pass between the press and this.
         ok("because one last push is tried while the token is still alive",
-           /landed = await pushCloudSaves\(userSession, savedPlaces, savedGuides\)/.test(out)
+           /savesLanded = await pushCloudSaves\(userSession, places, guides\)/.test(out)
            && out.indexOf("pushCloudSaves") < out.indexOf("await authSignOut()"));
+        // ── ALL THREE LISTS, NOT TWO OF THEM ────────────────────────
+        // been has its own writer and its own answer. Asking only about places
+        // and guides is how the been list came to be cleared on a device where
+        // it had never synced once, the column not existing on the live
+        // database, under a toast saying the saves were safe in the account.
+        ok("and the been list is asked about separately",
+           /beenLanded = \(await pushBeen\(userSession, been\)\)\?\.ok === true;/.test(out)
+           && /const landed = savesLanded && beenLanded;/.test(out));
+        // A stash that could not be written is not a reason to delete the only
+        // copy, and the quota it failed on has just had the originals returned.
+        ok("and a failed hold is retried in the space the clearing freed",
+           /if \(!landed && !held\) held = stashUnsynced\(userSession\?\.userId, toHold\);/.test(out));
         ok("and a push that did not land is said out loud rather than swallowed",
            /did not land, so anything saved since then is not in it/.test(out));
         // Deleting the account clears the same things, and never had the
@@ -42923,8 +43255,19 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      /This browser refused to store the guide/.test(app));
 
   // ── AND THE PUSH RESULT IS READ ─────────────────────────────────
-  ok("pushCloudSaves' answer reaches state", /pushCloudSaves\(userSession, savedPlaces, savedGuides\)\.then\(setCloudSyncOk\)/.test(app));
-  ok("which starts optimistic", /useState\(true\);\s*\n\s*const pushTimerRef/.test(app));
+  // noteCloudSync rather than setCloudSyncOk since 15 Sep: the answer goes to a
+  // ref as well as to state, because handleSignOut now suspends at a confirm
+  // dialog and the invocation waiting there would otherwise read the value from
+  // the render the button was pressed in. The rule is that the push result is
+  // recorded rather than discarded, which is what this reads.
+  ok("pushCloudSaves' answer reaches state",
+     /pushCloudSaves\(userSession, savedPlaces, savedGuides\)\.then\(noteCloudSync\)/.test(app)
+     && /const noteCloudSync = \(ok\) => \{ cloudSyncOkRef\.current = !!ok; setCloudSyncOk\(!!ok\); \};/.test(app));
+  ok("which starts optimistic", /const \[cloudSyncOk, setCloudSyncOk\] = useState\(true\);/.test(app));
+  // been has a separate writer whose result was thrown away except for the
+  // schema flag, so one boolean about two lists decided the fate of three.
+  ok("the been push is recorded too", /beenSyncOkRef\.current = r\?\.ok === true;/.test(app));
+  ok("and a missing column is not read as a success", /beenSyncOkRef\.current = false;/.test(app));
   // Read where somebody goes to ask the question, rather than raised as a
   // toast that the save toast's own clear timer would wipe 900ms later.
   // The account screen is a page now, not a modal in App.jsx. Same rule: this is
@@ -44184,7 +44527,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // Only a 2xx means stored. A table that does not exist yet answers with a
     // 404 that JSON.parse would read as a body, and the message would be lost.
     ok("only a real success is treated as sent", /res\.ok \? .*supportReceipt/.test(page) || /if \(res\.ok\) setDone\(\{ ok: true/.test(page));
-    ok("and every other outcome keeps the message", (page.match(/supportMailto\(form, reference\)/g) || []).length === 2);
+    // Two outcomes that are not a 2xx: a refused insert and a thrown fetch. Both
+    // have to hand the person their own words back.
+    //
+    // COUNTED ON THE CALL, NOT ON ITS ARGUMENT. This read
+    // supportMailto(form, reference) and went red on 15 Sep when the argument
+    // became `sent`, which is the same message with the browser facts appended
+    // on the bug topic. That was the point of the change: a report falling all
+    // the way through to somebody's own mail client should not be worth less
+    // than one that reached the table.
+    is("and every other outcome keeps the message",
+       (page.match(/setDone\(\{ ok: false, mailto: supportMailto\(/g) || []).length, 2);
     ok("the failure screen says nothing was recorded", /Nothing was recorded/.test(page));
 
     // ── AND THE POLICY HAS TO KNOW THE PAGE EXISTS ────────────────
@@ -55185,7 +55538,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // menu.paid came off this list on 14 Sep with its key, and menu.faq stayed on
   // it without its row: the row went, the Essentials tab heading that uses the
   // same key did not. menu.signOut joined it the same night.
-  const MENU_KEYS = ["menu.navigate", "menu.saved", "menu.faq", "menu.credits", "menu.support", "menu.account", "menu.signIn", "menu.signOut"];
+  const MENU_KEYS = ["menu.navigate", "menu.saved", "menu.faq", "menu.credits", "menu.support", "menu.account", "menu.signIn", "menu.signOut", "menu.problem"];
   is("every menu row is in the catalogue", MENU_KEYS.filter(k => !UI_STRINGS[k]), []);
   is("and every one of them is written in all three",
      MENU_KEYS.filter(k => !["en", "da", "de"].every(c => String(UI_STRINGS[k]?.[c] || "").trim())), []);
@@ -56291,14 +56644,30 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("and a still badge is what somebody who asked for less motion gets",
        /prefers-reduced-motion: reduce\) \{ \.gx-pulse \{ animation: none/.test(appW));
     // Clicking the row is reading them: one press, not one cross per notice.
-    ok("opening saved trips marks them read", /readTripChanges\(\); goTab\("home"\)/.test(appW));
+    //
+    // THE DESTINATION CHANGED ON 15 SEP and the rule did not. This row used to
+    // open the Explore tab and scroll to an anchor two thirds down it; saved
+    // trips is its own page now, so `goTab("home")` is gone. What still has to
+    // be true is that reaching them is what marks them read, so that is what
+    // this reads: readTripChanges runs, and it runs on the way to that page.
+    ok("opening saved trips marks them read",
+       /readTripChanges\(\); navigate\(`\$\{ABOUT_ME_PATH\}\/trips`\)/.test(appW));
     ok("which is what the badge counts",
        /const unreadTripChanges = unreadAlerts\(weatherAlerts, weatherRead\)\.length;/.test(appW));
     // The account rows are the part that needs an account. Everything the burger
     // held is still there without one, or a phone would lose its navigation.
-    // stripComments blanks rather than deletes, so this distance is measured in
-    // the original source and the paragraphs explaining the change sit inside it.
-    ok("the account rows only exist when there is an account", /\{userSession && \([\s\S]{0,2600}uiT\("menu\.saved", uiLang\)/.test(appW));
+    //
+    // WINDOWED BY MARKER, NOT BY 2600 CHARACTERS. stripComments blanks rather
+    // than deletes, so every paragraph written inside that block still counts
+    // toward the distance, and the note explaining the 15 Sep change pushed the
+    // row past the end. The block ends where the Theme heading begins, which is
+    // the first thing outside it, so that is the edge it reads now.
+    {
+      const gate = appW.indexOf("{userSession && (");
+      const signedInOnly = appW.slice(gate, appW.indexOf('uiT("header.theme", uiLang)', gate));
+      ok("the account rows only exist when there is an account",
+         gate > -1 && /uiT\("menu\.saved", uiLang\)/.test(signedInOnly));
+    }
     // A count with no words beside it is a red dot. The button says what it is
     // counting, which is the one line alertCountLine has always been for.
     ok("and the button says what the count is about", /alertCountLine\(unreadTripChanges\)/.test(appW));

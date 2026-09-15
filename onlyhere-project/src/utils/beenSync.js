@@ -16,11 +16,24 @@
 // So it reads and writes on its own, exactly the way profile.js does, and a
 // missing column can only ever cost the been list.
 //
-// The column, when he adds it:
-//   alter table gemlyx_user_data add column if not exists been jsonb;
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 import { getSession } from "./auth";
 import { BEEN_CAP, BEEN_KINDS } from "./beenThere";
+
+// ── THE MIGRATION, AS A STRING RATHER THAN A COMMENT ────────────────
+//
+// This was two lines of comment at the top of this file, and on 15 Sep 2026 the
+// console on the live site was answering 400 to every been read and write. The
+// code had handled it correctly the whole time: missingColumn is detected, the
+// retry loop stops, nothing crashes, and the been list quietly works on the
+// device and never syncs.
+//
+// That is the failure mode this project keeps finding and keeps writing down.
+// Handled well enough to be invisible, so nobody is told, so it is still true
+// weeks later. A comment cannot be shown to anybody; a constant can, and the
+// account page already has the surface for exactly this, built for the profile
+// column when it had the same problem.
+export const BEEN_SETUP_SQL = "alter table gemlyx_user_data add column if not exists been jsonb;";
 
 const headers = (session) => ({
   apikey: SUPABASE_KEY,

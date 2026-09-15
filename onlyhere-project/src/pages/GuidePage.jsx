@@ -65,6 +65,9 @@ import { shareMessage, shareTitle } from "../utils/share";
 import { returnLeg, describeReturn, REACH_FAR, overnightMove, describeOvernightMove, sameMode, howForReader } from "../utils/routeOrder";
 import { stayTextProblem } from "../utils/accommodation";
 import { GUIDE_RIGHTS_SHORT, copyrightLine } from "../utils/rights";
+import { GuideFeedback } from "../components/GuideFeedback";
+import { withContext, readBrowserFacts } from "../utils/problemContext";
+import { APP_VERSION } from "../config";
 import { guideHero, heroCaption } from "../utils/guideHero";
 import { PhotoCredit } from "../components/PhotoCredit";
 
@@ -2534,6 +2537,47 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             </div>
           );
         })()}
+
+        {/* ── ASKED OF THE PERSON WHO BUILT IT, AND ONLY THEM ──────
+            Oliver, 15 Sep 2026: "a 'Satisfied with the buiild? We appreciate
+            any feedback.' After a guide has been created."
+
+            freshGuide is the test for "they built this": GuidePage receives the
+            trip in router state when the builder arrives, and null when a
+            stranger opens a shared link cold. Somebody sent a guide in WhatsApp
+            did not build anything, so asking them is a question about
+            somebody else's work.
+
+            Above the rights line rather than below it, because the last thing
+            on a page is where the small print goes and this is a question. */}
+        {freshGuide && (
+          <GuideFeedback
+            // guideId is undefined for a just-built guide, which is the only
+            // case this renders in, so the title is what actually identifies it
+            // and the component says so rather than pretending otherwise.
+            guideId={guideId}
+            title={guide?.title}
+            onSend={({ answer, note, title }) => fetch("/api/report-problem", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                topic: "feedback",
+                // A just-built guide has no id yet, so the title is the only
+                // handle on it. Sending an empty reference made every feedback
+                // mail about a guide he could not identify.
+                reference: guideId || String(guide?.title || "").slice(0, 40),
+                // The answer first, because a yes with no words is still an
+                // answer and has to survive an empty box. The guide's name and
+                // the browser facts ride along for the same reason they do on a
+                // bug report: so nothing has to be asked twice.
+                message: withContext(
+                  `Satisfied with the build: ${answer === "yes" ? "yes" : "not really"}\nGuide: ${title || "untitled"}\n\n${note || "(no note)"}`,
+                  readBrowserFacts({ version: APP_VERSION }),
+                ),
+              }),
+            })}
+          />
+        )}
 
         <div style={{ marginTop: 28, paddingTop: 14, borderTop: `1px solid ${C.border}`, maxWidth: 620 }}>
           <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.65 }}>

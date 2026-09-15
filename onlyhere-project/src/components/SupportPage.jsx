@@ -41,12 +41,13 @@
 // says so. The temptation to sound like a company is strongest on exactly this
 // screen, and the whole product is built on not doing that.
 import { useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { C } from "../utils/theme";
-import { SUPABASE_URL, SUPABASE_KEY } from "../config";
+import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION } from "../config";
+import { withContext, readBrowserFacts } from "../utils/problemContext";
 import { GemlyxLogo } from "./GemlyxLogo";
 import {
-  SUPPORT_TOPICS, REPORT_TOPIC, GOOD_FAITH_STATEMENT, MESSAGE_MAX,
+  SUPPORT_TOPICS, REPORT_TOPIC, PROBLEM_TOPIC, GOOD_FAITH_STATEMENT, MESSAGE_MAX, isTopic,
   messagePrompt, supportProblems, problemFor, supportPayload, supportReference,
   supportMailto, supportReceipt, SUPPORT_TABLE, SUPPORT_EMAIL, PRIVACY_EMAIL,
 } from "../utils/support";
@@ -80,7 +81,19 @@ const Label = ({ htmlFor, children, hint }) => (
 
 export const SupportPage = () => {
   const navigate = useNavigate();
-  const [form, setForm] = useState(EMPTY);
+  // ── ARRIVING WITH THE TOPIC ALREADY CHOSEN ──────────────────────
+  //
+  // The Report a problem row in the menu comes here as /support?topic=problem.
+  // Somebody who pressed a button that says what it is about should not then be
+  // asked what it is about, and during a beta that dropdown is the one step
+  // between a stranger noticing a bug and giving up on telling anybody.
+  //
+  // isTopic, not the raw parameter: ?topic=nonsense is a URL somebody can type,
+  // and an unknown value would leave the select showing nothing while the form
+  // insisted a topic was required.
+  const [params] = useSearchParams();
+  const asked = String(params.get("topic") || "");
+  const [form, setForm] = useState(() => (isTopic(asked) ? { ...EMPTY, topic: asked } : EMPTY));
   const [sending, setSending] = useState(false);
   // null while composing, then one of: { ok: true, receipt } | { ok: false, mailto }
   const [done, setDone] = useState(null);
@@ -100,6 +113,16 @@ export const SupportPage = () => {
     if (problems.length) return;
     setSending(true);
     const reference = supportReference();
+    // ── WHAT THE APP COULD SEE, ATTACHED RATHER THAN ASKED FOR ──────
+    //
+    // Only on the bug topic. Every other message on this page is a person
+    // telling us something about themselves or about a page, and collecting
+    // their browser and screen size to answer a partnership enquiry would be
+    // taking more than the conversation needs. See utils/problemContext.js for
+    // what is in it and, more to the point, what is deliberately not.
+    const sent = form.topic === PROBLEM_TOPIC
+      ? { ...form, message: withContext(form.message, readBrowserFacts({ version: APP_VERSION })) }
+      : form;
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/${SUPPORT_TABLE}`, {
         method: "POST",
@@ -109,15 +132,35 @@ export const SupportPage = () => {
           "Content-Type": "application/json",
           Prefer: "return=minimal",
         },
-        body: JSON.stringify(supportPayload(form, { reference })),
+        body: JSON.stringify(supportPayload(sent, { reference })),
       });
+      // ── AND INTO AN INBOX, NOT ONLY INTO A TABLE ─────────────────
+      //
+      // Oliver, 15 Sep 2026: "We'll get another resend for that." The row is
+      // the record; this is the part that reaches a person on the day it
+      // happens. During a beta a report he reads on Thursday is a report about
+      // a bug that lost him Monday's readers.
+      //
+      // NOT AWAITED INTO THE OUTCOME BELOW, and that is the whole design. The
+      // message is already stored by the line above. Whether the mail goes is
+      // not something a person filling in this form should be made to wait for
+      // or be told about, and api/report-problem.js answers 200 with
+      // emailed:false rather than failing when the key is missing.
+      fetch("/api/report-problem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: sent.topic, message: sent.message, email: sent.email, reference }),
+      }).catch(() => { /* the row is written; this is the second copy */ });
       // A 2xx is the only thing that means stored. Everything else, including a
       // table that does not exist yet and a policy that refuses the insert,
       // takes the path that does not lose the message.
+      // `sent` on the mailto too, so a report that falls all the way through to
+      // the person's own mail client still carries what the app could see. The
+      // fallback existing is no reason for it to be worth less.
       if (res.ok) setDone({ ok: true, receipt: supportReceipt(form, reference) });
-      else setDone({ ok: false, mailto: supportMailto(form, reference) });
+      else setDone({ ok: false, mailto: supportMailto(sent, reference) });
     } catch {
-      setDone({ ok: false, mailto: supportMailto(form, reference) });
+      setDone({ ok: false, mailto: supportMailto(sent, reference) });
     } finally { setSending(false); }
   };
 

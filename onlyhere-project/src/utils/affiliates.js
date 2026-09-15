@@ -700,7 +700,12 @@ const PARTNER_MERCHANTS = {
   // lost the decision on 26 August, on inventory rather than rate: 10% and a
   // 90-day cookie, the best pair on his page, of cars that are not in Denmark.
   getyourguide: "GetYourGuide",
-  bajabikes: "Baja Bikes",
+  // bajabikes WAS WRITTEN HERE A SECOND TIME and is gone, 15 Sep 2026. Both
+  // copies said "Baja Bikes", so the duplicate never printed a wrong name and
+  // nothing ever looked broken, which is why it sat on the beta list for a week
+  // rather than being fixed. It is still worth removing: a repeated key in an
+  // object literal is silently the last one that wins, so the day somebody edits
+  // the first copy their change does nothing, with no error to explain it.
   autoeurope: "AutoEurope",
   discovercars: "DiscoverCars",
   rentalcars: "Rentalcars",

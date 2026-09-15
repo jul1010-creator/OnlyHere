@@ -169,6 +169,12 @@ export const UI_STRINGS = {
   "menu.credits":  { en: "Photo credits", da: "Fotokreditering",     de: "Bildnachweise" },
   // Danish borrows "support" for a paid helpdesk. This is a person answering
   // his own email, which is "hjælp".
+  // ── THE BETA ROW, 15 SEP 2026 ─────────────────────────────────────
+  // "Something is broken" rather than "Report a problem", because the first is
+  // what the person is thinking and the second is what a company would call it.
+  // A row that repeats the reader's own sentence back to them is the one they
+  // press when they are already annoyed.
+  "menu.problem":  { en: "Something is broken", da: "Noget virker ikke", de: "Etwas ist kaputt" },
   "menu.support":  { en: "Support",       da: "Hjælp",               de: "Hilfe" },
   "menu.account":  { en: "Account",       da: "Konto",               de: "Konto" },
   // ── AND THE WAY BACK OUT ──────────────────────────────────────────
