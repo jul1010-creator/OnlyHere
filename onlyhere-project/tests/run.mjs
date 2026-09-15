@@ -55387,6 +55387,26 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // constraintNote, repairWorked and violationsOfKind came off this list on
     // 13 Sep 2026: generateGuide audits the freshly built guide with them.
     "src/utils/costLedger.js:linkGaps",
+    // ── WRITTEN 15 SEP, DARK UNTIL FABLE HAS READ IT ────────────────
+    //
+    // These seven are the date-authority work, and they are on this list on
+    // purpose rather than by neglect. Oliver has too few credits to run Fable
+    // today and is saving for Friday, and the instruction is that the API
+    // Direct pipeline work is reviewed before it ships. So the modules and
+    // their tests are here, nothing calls them, and the publish gate does not
+    // know they exist: pushing them changes no behaviour.
+    //
+    // THE SECOND ASSERTION BELOW IS WHY THIS IS SAFE. The list may only shrink,
+    // so the day the call site goes into the publish gate, these names have to
+    // come off or the suite fails. They cannot be quietly forgotten, which is
+    // the exact fate this whole list exists to prevent.
+    "src/utils/dateAuthority.js:dateAuthorityProblems",
+    "src/utils/dateAuthority.js:eventCheckProblems",
+    "src/utils/dateAuthority.js:probeWindow",
+    "src/utils/dateAuthority.js:readProbe",
+    "src/utils/eventLd.js:claimFromEvent",
+    "src/utils/eventLd.js:eventForName",
+    "src/utils/eventLd.js:eventsInPage",
     "src/utils/entryAudit.js:describeNameFit",
     "src/utils/entryAudit.js:nameFit",
     "src/utils/entryPrice.js:bookingChip",
