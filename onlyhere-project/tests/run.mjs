@@ -62622,6 +62622,35 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and is keyed on the token rather than the session object", /\}, \[studioSession\?\.access_token\]\);/.test(verify));
   }
 
+  // ── AND THE PANEL IS NOT DRAWN AT ALL FOR ANYBODY ELSE ──────────
+  //
+  // Oliver, 15 Sep 2026, with a screenshot of the Content Studio login taken
+  // while signed in on a second account: "this has to be gone for users that is
+  // not me.. this is another account."
+  //
+  // The login check above was not enough on its own. It decided WHO at the
+  // moment somebody pressed Log in, so a beta tester who typed /#studio was
+  // still shown a panel headed "Content Studio", told "Only you can publish",
+  // and given two boxes to try their own password in. What they learn from that
+  // is the shape of the admin surface and that it takes credentials they
+  // already have. The door was locked and the door was still a door.
+  {
+    ok("the door is a question about the reader signed in now",
+       /const studioDoorOpen = isFounder\(userSession\?\.userId \|\| "", FOUNDER_IDS\);/.test(appS));
+    ok("and the login panel is not rendered without it",
+       /\{isStudio && !studioSession && studioDoorOpen && \(/.test(appS));
+    // SIGNED OUT COUNTS AS NOT HIM once the list is set, so the panel is
+    // invisible rather than merely unusable. That is the whole difference
+    // between this and the check above it.
+    ok("a signed out visitor is not him either", isFounder("", "his-id") === false);
+    ok("a reader on another account is not him", isFounder("someone-else", "his-id") === false);
+    ok("and he is", isFounder("his-id", "his-id") === true);
+    // The tool itself still renders off studioSession, so being signed out as a
+    // READER does not throw him out of a Studio he is already logged in to.
+    ok("an existing studio session is not lost to the reader gate",
+       /\{isStudio && studioSession && \(/.test(appS));
+  }
+
   // ── EMPTY MEANS OPEN, WHICH IS ONLY SAFE IF IT IS VISIBLE ───────
   // Same rule as isFounder, kept identical so the two cannot disagree: an unset
   // list lets anybody signed in through, because the alternative is locking him

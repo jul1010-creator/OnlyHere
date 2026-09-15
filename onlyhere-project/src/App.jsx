@@ -12424,6 +12424,48 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   // chat. Local storage stays exactly as it was, as the offline store and the
   // store for signed-out people; an account is a sync layer on top of it.
   const [userSession, setUserSession] = useState(() => getStoredSession());
+
+  // ── AND WHETHER THE STUDIO DOOR IS EVEN DRAWN ────────────────────
+  //
+  // Oliver, 15 Sep 2026, with a screenshot of the Content Studio login panel
+  // taken while signed in on a second account: "this has to be gone for users
+  // that is not me.. this is another account."
+  //
+  // He is right, and the gate written earlier tonight did not do this. It
+  // checked WHO at the moment somebody pressed Log in, so a beta tester who
+  // typed /#studio was still shown a panel headed "Content Studio", told "Only
+  // you can publish", and handed two boxes to try their own password in. The
+  // door was locked and the door was still a door.
+  //
+  // What a stranger learns from that panel is the shape of the admin surface,
+  // that it lives on this domain, and that it takes the same credentials they
+  // already have. None of it is a breach and all of it is an invitation.
+  //
+  // ── ASKED OF THE READER SESSION, WHICH IS THE ONE THAT EXISTS ────
+  //
+  // There is no Studio session yet, by definition: this decides whether to
+  // offer one. So the question is put to the account they are signed in as
+  // NOW, which for every beta reader is an account with a user id, checked
+  // against the same list the endpoints use.
+  //
+  // SIGNED OUT COUNTS AS NOT HIM once the list is set. isFounder("") against a
+  // non-empty list is false, so /#studio renders nothing at all for a signed
+  // out visitor. That costs him one step, signing in as a reader first with the
+  // same account he opens Studio with, and it is the step that makes the panel
+  // invisible rather than merely unusable. A door somebody has to be let
+  // through to see is worth more than a locked one they can stand in front of.
+  //
+  // An unset list still lets everybody through, exactly as isFounder does
+  // everywhere else, because the alternative is hiding Studio from him on a
+  // deploy he makes at four in the morning. The amber warning on the panel is
+  // what stops that state shipping unnoticed.
+  //
+  // OR an existing Studio session, so somebody already logged in does not lose
+  // the tool by being signed out as a reader in the same browser. That session
+  // has been verified against Supabase rather than taken at its word; see the
+  // effect beside studioSession.
+  const studioDoorOpen = isFounder(userSession?.userId || "", FOUNDER_IDS);
+
   const [authOpen, setAuthOpen] = useState(false);
   // Why the sheet opened, so it can say what THIS person is about to get
   // instead of describing accounts in the abstract. "guide" is the save gate.
@@ -19456,7 +19498,7 @@ ${languageBlock()}`;
                     Mention who's traveling: kids, budget, a car. The more Gemlyx knows, the better the plan.
                   </div>
                 )}
-                {isStudio && !studioSession && (
+                {isStudio && !studioSession && studioDoorOpen && (
                   <div style={{ background: C.surface, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "20px", marginTop: 18 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: C.gold, fontFamily: "'Fraunces', serif", marginBottom: 4 }}>🔒 Content Studio — log in</div>
                     <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, marginBottom: 14 }}>Only you can publish. Log in with your Gemlyx admin account.</div>
