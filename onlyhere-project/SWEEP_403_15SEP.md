@@ -56,21 +56,37 @@ Two ids, and they agree at every point except the one that matters.
 entry, and an EMPTY list means everybody passes. So a 403 for a real signed-in
 account can only mean the list is non-empty and your id is not in it.
 
-## The fix
+## The fix, done 15 Sep at your word
 
-Set `GEMLYX_FOUNDER_IDS` to exactly:
+`GEMLYX_FOUNDER_IDS` is now exactly:
 
 ```
 467fb712-e3e9-4d43-b1b8-e4e1bb32b76d
 ```
 
-for Production and Preview, then redeploy, because a Vercel function reads the
-value the deployment was built with. Then press the sweep again.
+Secret, Production and Preview, unchanged in every other respect, followed by a
+production redeploy of the current build (`Redeploy of G4aYLB2dw`, Ready in 30s),
+because a Vercel function reads the value the deployment was built with.
 
-The variable is marked sensitive, so neither of us can read what is in there now.
-Overwriting is the only way to find out, and the likely candidates are an email
-where a UUID belongs, a second account's id, or the value of another variable
-pasted one row too high.
+What was in there before is gone and neither of us ever saw it: the variable is
+marked sensitive, so the edit box opens empty and overwriting was the only move.
+Whatever it was, it was not your id.
+
+### Verified after the redeploy, same browser, same session
+
+| call | before | after |
+| --- | --- | --- |
+| `/api/social-find` free tier | 403 refused | **200**, `{"record":null,"tried":[...],"needsSearch":true}` |
+| `/api/link-alive` | 403 refused | **400** `That host is not one this check covers.` |
+
+The 400 is the endpoint working: it got past the gate and then told the truth
+about the URL I handed it, which was gemlyxtravel.com itself.
+
+The 200 on Skanderborg Festival is also worth reading rather than skimming. It
+says `no website on this row` for the free tier and `this run was the free tier
+only` for the paid one, with `needsSearch: true`. So that row never had a page to
+read, and finding its socials will cost an API Direct search. The queue was not
+lying to you and the rows are still there to re-run.
 
 ## Worth knowing afterwards
 

@@ -29709,10 +29709,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // repainted into the same grey as everything else.
   {
     const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
-    const composer = appF.slice(appF.indexOf('placeholder="Tell me about your trip') - 400, appF.indexOf('placeholder="Tell me about your trip'));
+    // Anchored on the composer's own placeholder, which Oliver rewrote on
+    // 15 Sep. Kept as a copy string rather than a class because the class is
+    // what these two assertions are testing FOR.
+    const COMPOSER = 'placeholder="Let Gemlyx know what you\'re looking for"';
+    const composer = appF.slice(appF.indexOf(COMPOSER) - 400, appF.indexOf(COMPOSER));
+    ok("the composer placeholder is where the suite thinks it is", appF.includes(COMPOSER));
     ok("the composer keeps its own border", /className="gx-plain"/.test(composer));
     // And it must still HAVE one, or opting out means opting into nothing.
-    const after = appF.slice(appF.indexOf('placeholder="Tell me about your trip'), appF.indexOf('placeholder="Tell me about your trip') + 400);
+    const after = appF.slice(appF.indexOf(COMPOSER), appF.indexOf(COMPOSER) + 400);
     // 2px, matching the rule it opted out of. At 1.5px it floored to one device
     // pixel and the one deliberately loud field on the page became the thinnest.
     ok("which is a real one, and no thinner than the rest", /border: `2px solid \$\{C\.accent\}`/.test(after));
@@ -44503,7 +44508,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // address before it will take that report does not comply, and this is the
   // assertion that stops somebody tidying the two branches into one.
   is("16(2)(c): a report may be made anonymously", faults({ ...REPORT, email: "" }), []);
-  is("but every other topic still needs an address", faults({ ...OK, email: "" }), ["email"]);
+  // And since 15 Sep so may every other topic, because the page stopped asking
+  // for an address at all. The carve-out was the narrow case; it is now the
+  // whole page, which satisfies 16(2)(c) by a wider margin than before.
+  is("and so may every other topic now", faults({ ...OK, email: "" }), []);
   // And a bad address is still a bad address even where one is optional: an
   // unreachable reply-to is worse than none, because he would try it.
   is("an anonymous report may not carry a broken address", faults({ ...REPORT, email: "not an address" }), ["email"]);
@@ -44519,7 +44527,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // so "everything in the form" is the wrong write. Same rule as shapeForLive.
   {
     const row = supportPayload({ ...OK, is_admin: true, handled: true, id: 7, evil: "x" }, { reference: "GX-AAAAAA", at: "2026-08-25T00:00:00.000Z" });
-    is("only the named fields reach the database", Object.keys(row).sort(), ["created_at", "email", "message", "reference", "topic"]);
+    is("only the named fields reach the database", Object.keys(row).sort(), ["created_at", "email", "message", "name", "reference", "topic"]);
     ok("so nothing a stranger invented rides along", !("is_admin" in row) && !("evil" in row) && !("id" in row) && !("handled" in row));
     // No `page`: a second collection point bought for a fact the person can type.
     ok("and there is no quiet record of where they came from", !("page" in row));
@@ -51331,7 +51339,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         // ABOVE THE BOX, NOT IN A SETTINGS SCREEN. The complaint is about the
         // reply she is looking at, so the control sits where she is looking.
         ok("the control sits above the composer",
-           app.indexOf("[ANSWER_SHORT, ANSWER_LONG].map") < app.indexOf("Tell me about your trip"));
+           app.indexOf("[ANSWER_SHORT, ANSWER_LONG].map") < app.indexOf("Let Gemlyx know what you're looking for"));
         // OUTSIDE the row that only appears after a message, or the one
         // setting a newcomer wants would be invisible until she had already
         // read a long reply.

@@ -19589,7 +19589,9 @@ ${languageBlock()}`;
                       is the field the field-affordance rule in theme.js was modelled ON
                       rather than one it should repaint. See that comment. */}
                   <input className="gx-plain" value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendAI()}
-                    placeholder="Tell me about your trip, and I'll find the Denmark most travelers miss…"
+                    /* Oliver, 15 Sep. The old line was the assistant talking about
+                       itself in the box the traveller is about to type in. */
+                    placeholder="Let Gemlyx know what you're looking for"
                     style={{ flex: 1, border: `2px solid ${C.accent}`, borderRadius: 100, padding: "11px 16px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
                   <button onClick={sendAI} disabled={aiLoading} style={{ background: C.accent, border: "none", borderRadius: 100, width: 44, height: 44, cursor: "pointer", fontSize: 16, flexShrink: 0, color: C.onAccent }}>↗</button>
                 </div>
@@ -25583,7 +25585,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     else folded behind a "fine-tune" toggle so the page reads calm. */}
                 <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px 16px" }}>
                   <div style={{ fontSize: 16, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 4 }}>When are you coming?</div>
-                  <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.55, marginBottom: 14 }}>Real dates mean Gemlyx checks the actual weather and what's on while you're here. Everything else is optional, or just type in the chat below.</div>
+                  <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.55, marginBottom: 14 }}>Providing Gemlyx with as much information as possible will help determine weather, events, and the best attractions for the season.</div>
 
                   <div className="detour-2col" style={{ marginBottom: 14 }}>
                     <DateTimePicker
