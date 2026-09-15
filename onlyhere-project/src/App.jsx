@@ -33,7 +33,7 @@ import { nightlifeTowns } from "./data/nightlifeTowns";
 import { nightlifeStreets } from "./data/nightlifeStreets";
 import { repairBody, headingsOf, bodyProblems, priceProblems, auditPublished, describeAudit } from "./utils/publishedRepair";
 import { blockingCoordProblems, coordProblems, coordAudit, describeCoordAudit } from "./utils/coordCheck";
-import { fetchProfile, saveProfile, takeHeldProfile, profileForPrompt, isBlank as profileIsBlank, homeCurrency } from "./utils/profile";
+import { fetchProfile, saveProfile, takeHeldProfile, claimSignupCarry, profileForPrompt, isBlank as profileIsBlank, homeCurrency } from "./utils/profile";
 // The half of the account that learns rather than being typed. See
 // utils/profileLearning.js for the four rules it has to obey.
 import { seenFromTrip, observeTrip, observedForPrompt } from "./utils/profileLearning";
@@ -92,7 +92,11 @@ import { roadTrips, seasonalItineraries } from "./data/roadtrips";
 import { WEATHER_CITIES } from "./data/mapShapes";
 import { cities, allProducts, campingSpots, PRODUCT_COORDS } from "./data/shop";
 
-import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION, PAID_PLANS_LIVE } from "./config";
+import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION, PAID_PLANS_LIVE, FOUNDER_IDS } from "./config";
+// The SAME predicate the api/ handlers gate on, imported rather than rewritten.
+// Two copies of an allow-list rule is two rules, and the day they disagree the
+// screen says yes while the endpoints say no, or the reverse, which is worse.
+import { isFounder } from "./utils/apiGuard";
 import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, isOnOrUpcoming, soonestFirst, hasFinished, externalHref, weatherIcon,
   isInDenmark, travelLabel, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, readerView, seededShuffle, daysUntil, detectLegMode, haversineKm, scanForAITells, priceBand, PRICE_BANDS,
@@ -270,6 +274,7 @@ import { linkPatch } from "./utils/affiliateAudit";
 import { EntryLink } from "./components/EntryLink";
 import { AuthSheet } from "./components/AuthSheet";
 import { ConfirmSheet } from "./components/ConfirmSheet";
+import { DeleteAccountSheet, deleteReasonMessage } from "./components/DeleteAccountSheet";
 import { ProfileSheet } from "./components/ProfileSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
 import { C, THEMES, THEME_ORDER, applyTheme, storedTheme } from "./utils/theme";
@@ -281,7 +286,7 @@ import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel,
 import { EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts } from "./utils/eventTypes";
 import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, MARKS } from "./utils/sweeps";
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
-import { getSession, getStoredSession, captureRedirectSession, signOut as authSignOut, deleteMyData } from "./utils/auth";
+import { getSession, getStoredSession, captureRedirectSession, fetchSignupCarry, clearSignupCarry, signOut as authSignOut, deleteMyData } from "./utils/auth";
 import { fetchCloudSaves, pushCloudSaves, mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink, syncFailureNote, SYNC } from "./utils/userSaves";
 import { toggleBeen, isBeen, beenNote, withoutBeen, excludedBeen } from "./utils/beenThere";
 import { fetchBeen, pushBeen, mergeBeen, cleanBeen, BEEN_SETUP_SQL } from "./utils/beenSync";
@@ -1547,9 +1552,81 @@ function GemlyxApp() {
     setPlaceSaving(false);
   };
 
+  // ── RESTORED ONLY IF IT IS STILL HIS ────────────────────────────
+  //
+  // Oliver, 15 Sep 2026: "releasing a beta, how do I avoid people getting inside
+  // my studio?" The login below is the front door and this is the one that was
+  // standing open behind it: a stored session was read back and trusted on every
+  // cold load without anybody asking whose it was.
+  //
+  // A session written before VITE_FOUNDER_IDS was set, by an account that is now
+  // outside the list, would otherwise keep working for as long as that browser
+  // kept the key. Checked here, so turning the list on takes effect on the next
+  // load rather than on the next login.
+  //
+  // userId is read with a fallback to nothing, and isFounder on "" against a
+  // non-empty list is false, so a session stored by the version of this code
+  // that did not record an id is refused rather than waved through. That costs
+  // him one login after this deploys and is the right way round: an unknown
+  // session is not the same as a permitted one.
   const [studioSession, setStudioSession] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("gemlyx_studio_session") || "null"); } catch { return null; }
+    try {
+      const stored = JSON.parse(localStorage.getItem("gemlyx_studio_session") || "null");
+      if (!stored) return null;
+      if (!isFounder(stored.userId || "", FOUNDER_IDS)) {
+        try { localStorage.removeItem("gemlyx_studio_session"); } catch { /* private mode */ }
+        return null;
+      }
+      return stored;
+    } catch { return null; }
   });
+  // ── AND THE STORED ID IS CHECKED AGAINST THE TOKEN, NOT TRUSTED ───
+  //
+  // Oliver, 15 Sep 2026, reading the gate above: "if a hacker gets that ID,
+  // can't he figure out a way to get through to my studio?"
+  //
+  // Not through the login: that reads the id off the TOKEN Supabase just
+  // issued, so passing it needs his password, and a user id is not a password.
+  //
+  // The restore was a different matter, and he was right to ask. It read
+  // `stored.userId` out of localStorage and believed it. Anybody who knew the
+  // id could have written the key by hand, with their own reader token beside
+  // it, and the Studio would have mounted. Every request it then made would
+  // have been refused by row level security and by the founder gate on the
+  // api/ handlers, so nothing could be published or spent, but they would have
+  // been looking at the tool, and "it refuses everything you click" is not the
+  // answer to give somebody about their own admin screen.
+  //
+  // So the claim is checked against the one thing that cannot be forged: the
+  // token is sent to Supabase and the id comes back from Supabase. A session
+  // that fails it is cleared.
+  //
+  // FAILS OPEN ON A NETWORK ERROR, deliberately. Only a definite answer clears
+  // anything, because the alternative is being signed out of Studio by a bad
+  // connection on a train. This layer is a courtesy: the locks that hold are
+  // GEMLYX_FOUNDER_IDS on the endpoints and the policies on gemlyx_content, and
+  // neither of them is reachable from a browser at all.
+  useEffect(() => {
+    const token = studioSession?.access_token;
+    if (!token || !String(FOUNDER_IDS || "").trim()) return;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` },
+        });
+        if (!alive || !r.ok) return;
+        const u = await r.json();
+        if (!alive || !u?.id) return;
+        if (isFounder(String(u.id), FOUNDER_IDS)) return;
+        try { localStorage.removeItem("gemlyx_studio_session"); } catch { /* private mode */ }
+        setStudioSession(null);
+      } catch { /* a connection this session cannot make is not an answer */ }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studioSession?.access_token]);
+
   // ── THE ONLY PLACE A STUDIO REQUEST GETS ITS HEADERS ──────────────
   // Declared here, next to the session it reads, because twelve call sites
   // spread over 2,800 lines used to interpolate the token by hand and every one
@@ -1774,7 +1851,31 @@ function GemlyxApp() {
       });
       const data = await res.json();
       if (!res.ok || !data.access_token) { setLoginError(data.error_description || data.msg || "Login failed — check email and password."); setLoginLoading(false); return; }
-      const session = { access_token: data.access_token, refresh_token: data.refresh_token, email: data.user?.email || loginEmail.trim() };
+      // ── A VALID PASSWORD IS NOT AN ANSWER TO "WHICH ACCOUNT" ────
+      //
+      // This endpoint is the same /token?grant_type=password every reader signs
+      // in through, on the same project, so a beta tester typing their own email
+      // and password here got a real token and, until this check, the whole
+      // Studio. The password was never the thing that was wrong; the question
+      // being asked was.
+      //
+      // Refused BEFORE anything is written to localStorage. Storing first and
+      // checking after would leave the key behind for the restore above to find.
+      //
+      // The message does not say why. Somebody who is not the founder does not
+      // need to be told that an allow-list exists or that theirs is a valid
+      // Gemlyx login, which is the same reasoning as the one error for a wrong
+      // password and an unknown address on the reader sheet.
+      const who = String(data.user?.id || "");
+      if (!isFounder(who, FOUNDER_IDS)) {
+        setLoginError("That account cannot open Studio.");
+        setLoginPassword("");
+        setLoginLoading(false);
+        return;
+      }
+      // userId recorded so the restore above has something to check. It was not
+      // stored before because nothing asked.
+      const session = { access_token: data.access_token, refresh_token: data.refresh_token, email: data.user?.email || loginEmail.trim(), userId: who };
       localStorage.setItem("gemlyx_studio_session", JSON.stringify(session));
       setStudioSession(session);
       setLoginPassword("");
@@ -12470,7 +12571,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   useEffect(() => {
     let alive = true;
     (async () => {
-      const { session: fromRedirect, error: redirectError, recovery } = await captureRedirectSession();
+      const { session: fromRedirect, error: redirectError, recovery, confirmed } = await captureRedirectSession();
       if (!alive) return;
       if (redirectError) {
         setToast(redirectError);
@@ -12487,6 +12588,32 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
         // email and password the only path, it was the single way back into a
         // locked account and it was a button that did nothing.
         if (recovery) { setRecoverySession(fromRedirect); setAuthMode("newpass"); }
+        // ── AND A CONFIRMED ADDRESS SAYS SO ────────────────────────
+        //
+        // Oliver, 15 Sep 2026: "It should just send you back to the site saying
+        // 'mail confirmed!' Right now, it returns you to the website, where you
+        // once again have to give your name, age, and gender."
+        //
+        // Two faults in one sentence and this is the smaller one. The person was
+        // sent away from the site to do a thing, did it, came back, and was told
+        // nothing whatsoever. Every other outcome on this path already had a
+        // message: an expired link, a cancelled Google sign in, a session with no
+        // id. Success was the only one that arrived silently, which is the one
+        // that most needed saying, because somebody who is not told an action
+        // worked assumes it did not and tries to sign up again.
+        //
+        // A TOAST, NOT A SCREEN. They are signed in and standing on the site they
+        // wanted. Putting a page in front of that would be making them press one
+        // more button to be allowed to arrive.
+        //
+        // Guarded on recovery, which cannot be true at the same time (the flags
+        // come from one `type`), but written out because the two branches sit
+        // next to each other and a later edit to either should not be able to
+        // put "mail confirmed" over the set-a-new-password screen.
+        else if (confirmed) {
+          setToast(uiT("auth.mailConfirmed", uiLang));
+          setTimeout(() => { setToast(null); }, 5000);
+        }
         return;
       }
       // Refreshes an expiring token, or clears a dead one, so the UI never shows
@@ -12803,7 +12930,16 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       const held = takeHeldProfile();
       if (held) {
         const wrote = await saveProfile(userSession, held);
-        if (wrote.ok) { setUserProfile(held); return; }
+        if (wrote.ok) {
+          setUserProfile(held);
+          // The copy on the auth row has done its job and is not needed again.
+          // Unawaited and unchecked on purpose: it makes the token a little
+          // smaller and nothing depends on it, and the claim below only ever
+          // runs against a blank row, so a copy left behind cannot overwrite
+          // anything somebody edits later. See clearSignupCarry.
+          clearSignupCarry(userSession);
+          return;
+        }
         if (wrote.missingColumn) { setProfileSetupSql("alter table gemlyx_user_data add column if not exists profile jsonb;"); return; }
       }
       const res = await fetchProfile(userSession);
@@ -12840,6 +12976,51 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // always answering: a blank typed half means the questionnaire is still
       // worth offering. Separating the two is the whole fix.
       if (res.profile && !profileIsBlank(res.profile)) return;
+
+      // ── ASK THE ACCOUNT BEFORE ASKING THE PERSON AGAIN ──────────
+      //
+      // Oliver, 15 Sep 2026: "it returns you to the website, where you once
+      // again have to give your name, age, and gender. That is a major flaw."
+      //
+      // He is right and the diagnosis is three lines above this one. takeHeldProfile
+      // reads localStorage, localStorage is per browser, and a confirmation link
+      // is opened from a mail client, which means a DIFFERENT browser for most
+      // people: Gmail's webview on Android, Safari because the link came out of
+      // iOS Mail, or a phone at all because the laptop is in another room. In
+      // every one of those the hold is not there, this row is blank, and the
+      // questionnaire opens on somebody who answered it ten minutes ago.
+      //
+      // So the answers also travel with the ACCOUNT, in the auth row's metadata,
+      // and this is where they are collected. See signupCarry in utils/profile.js
+      // for what is sent and what is deliberately left out of it.
+      //
+      // ── WHY IT IS DOWN HERE AND NOT UP THERE WITH THE HOLD ──────
+      //
+      // This is a network call, and putting it beside takeHeldProfile would mean
+      // every signed-in person paid for it on every cold load, for a rescue that
+      // only matters to somebody with no typed profile. Every early return above
+      // is a person who does not need it. By this line we have established that
+      // the row has nothing typed in it and that the alternative is opening a
+      // six-field sheet, so one request is plainly the cheaper of the two.
+      //
+      // Not gated on `held` being absent either: a hold that was read and then
+      // failed to save is consumed and gone, and this is the only thing left
+      // that still knows the answers.
+      const carried = claimSignupCarry(await fetchSignupCarry(userSession));
+      if (carried) {
+        const wrote = await saveProfile(userSession, carried);
+        if (wrote.ok) {
+          setUserProfile(carried);
+          clearSignupCarry(userSession);
+          return;
+        }
+        if (wrote.missingColumn) { setProfileSetupSql("alter table gemlyx_user_data add column if not exists profile jsonb;"); return; }
+        // A failed write falls through to the question, which is the honest
+        // outcome: nothing was stored, so nothing was remembered, and asking is
+        // better than a profile page that is silently empty. The metadata is
+        // still there and the next load tries again.
+      }
+
       const verdict = shouldAskProfile({
         signedIn: true, hasProfile: false,
         state: readStored(PROFILE_NUDGE_KEY),
@@ -12861,6 +13042,44 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   //
   // Promise-shaped so the callers keep the shape they already had:
   // `if (!(await askConfirm(...))) return`. See components/ConfirmSheet.jsx.
+  // ── AND THE ONE QUESTION THAT IS NOT A YES OR A NO ───────────────
+  //
+  // Oliver, 15 Sep 2026: "there should be a 'Why do you want to delete your
+  // account?'" Delete gets its own sheet rather than a flag on askConfirm,
+  // because askConfirm resolves a boolean and two other callers rely on that.
+  // See components/DeleteAccountSheet.jsx for why the question sits on the
+  // confirm itself rather than in front of it.
+  const [deleteAsk, setDeleteAsk] = useState(false);
+
+  // ── SENT WITHOUT THEIR NAME ON IT, AND WITHOUT WAITING ───────────
+  //
+  // No email, no reference, no user id. Every other caller of this endpoint
+  // attaches something so he can reply; this one must not. The person is in the
+  // act of asking to be forgotten, and filing a note about them, keyed to them,
+  // at that exact moment would break the promise the button in front of them is
+  // making. A reason is useful in aggregate, and in aggregate is how it gets
+  // read.
+  //
+  // keepalive, because the next thing that happens is a navigation and a delete.
+  // An ordinary fetch is cancelled when the page it was started from goes, which
+  // is precisely the shape of this call: fire, leave, never look back. Awaiting
+  // it instead would put a network round trip between somebody and an erasure
+  // they have already confirmed, which is the delay this whole design refuses.
+  //
+  // Nothing is sent at all when there is nothing to say. See deleteReasonMessage.
+  const sendDeleteReason = (answer) => {
+    const message = deleteReasonMessage(answer);
+    if (!message) return;
+    try {
+      fetch("/api/report-problem", {
+        method: "POST",
+        keepalive: true,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: "account", message }),
+      }).catch(() => { /* the deletion is the thing that matters, not this */ });
+    } catch { /* a browser that refuses keepalive is not a reason to block a delete */ }
+  };
+
   const [confirmAsk, setConfirmAsk] = useState(null);
   // The resolver of whatever question is currently on screen, held outside
   // React state so a second ask can settle the first one instead of losing it.
@@ -19241,6 +19460,20 @@ ${languageBlock()}`;
                   <div style={{ background: C.surface, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "20px", marginTop: 18 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: C.gold, fontFamily: "'Fraunces', serif", marginBottom: 4 }}>🔒 Content Studio — log in</div>
                     <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, marginBottom: 14 }}>Only you can publish. Log in with your Gemlyx admin account.</div>
+                    {/* ── THE OPEN STATE, SAID OUT LOUD ──────────────────
+                        An empty allow-list lets any signed-in account in, which
+                        is the right default for a tool with one user and the
+                        wrong one for a beta with two hundred. The rule is in
+                        config.js; this is the part that makes it impossible to
+                        ship without having read it. It renders for readers too,
+                        and that is fine: it tells them nothing the bundle does
+                        not already say, and the only person who reaches this
+                        panel by accident is somebody who typed /#studio. */}
+                    {!String(FOUNDER_IDS || "").trim() && (
+                      <div style={{ fontSize: 10.5, color: "#FFB347", lineHeight: 1.6, marginBottom: 12, border: "1px solid #FFB34755", borderRadius: 9, padding: "9px 11px" }}>
+                        VITE_FOUNDER_IDS is not set, so any Gemlyx account can open Studio. Set it in Vercel to your Supabase user id before the beta, and set GEMLYX_FOUNDER_IDS beside it.
+                      </div>
+                    )}
                     <input value={loginEmail} onChange={e => setLoginEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && studioLogin()}
                       placeholder="Email" type="email"
                       style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", marginBottom: 8, boxSizing: "border-box" }} />
@@ -27382,6 +27615,21 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
       {/* Above everything, including DetailPage at 970, because a confirm that
           opens behind the screen it was asked from is worse than none. */}
       <ConfirmSheet ask={confirmAsk} onAnswer={answerConfirm} cancelLabel={uiT("auth.cancel", uiLang)} />
+      {/* ── THE REASON GOES BEFORE THE ACCOUNT DOES ──────────────────
+          Sent first, while there is still a session and still a page. A moment
+          later the rows are gone, the login is gone and the person is on the
+          home screen, and anything not already in flight by then is lost.
+
+          The sheet is closed before either call, so a slow delete cannot leave
+          a dialog sitting over a screen that is already changing underneath it. */}
+      <DeleteAccountSheet open={deleteAsk} lang={uiLang}
+        onCancel={() => setDeleteAsk(false)}
+        onConfirm={(answer) => {
+          setDeleteAsk(false);
+          sendDeleteReason(answer);
+          navigate("/");
+          handleDeleteAccount();
+        }} />
 
       <AuthSheet open={(authOpen && !userSession) || !!recoverySession} onSignedIn={handleSignedIn}
         lang={uiLang}
@@ -27451,11 +27699,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         // catalogue: it was typed into this file in English, on a screen whose
         // every other word is translated. danger paints the yes red rather than
         // gold, because this is the one answer in the app that cannot be undone.
-        onDelete={async () => {
-          if (!(await askConfirm(uiT("auth.confirmDelete", uiLang), uiT("auth.deleteYes", uiLang), { danger: true }))) return;
-          navigate("/");
-          handleDeleteAccount();
-        }} />
+        // Opens the delete sheet rather than the shared confirm, because this
+        // one asks a question as well as posing one. The sheet carries the same
+        // consequences sentence from the same catalogue key, so the two did not
+        // drift apart when they stopped being the same component.
+        onDelete={() => setDeleteAsk(true)} />
 
       {/* ── THE ACCOUNT PANEL IS GONE ───────────────────────────────
           Oliver, 23 Aug 2026, with a red cross drawn across the whole of it:

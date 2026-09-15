@@ -21,7 +21,7 @@ const write = (session) => {
   try {
     if (session) localStorage.setItem(SESSION_KEY, JSON.stringify(session));
     else localStorage.removeItem(SESSION_KEY);
-  } catch { /* private mode — the session just won't survive a reload */ }
+  } catch { /* private mode, so the session just won't survive a reload */ }
 };
 
 // ── AND THE PICTURE THE PROVIDER ALREADY SENT ───────────────────────
@@ -137,6 +137,56 @@ export const getSession = async () => {
 
 export const getStoredSession = readStored;   // synchronous, for first paint only
 
+// ── THE ONE METADATA FIELD THIS APP OWNS ────────────────────────────
+// Named rather than inlined at the three call sites, because a string typed
+// out three times is a string that gets typed differently once, and the
+// failure would be silent: a read that finds nothing looks exactly like a
+// signup that carried nothing.
+export const SIGNUP_CARRY_KEY = "gx_signup";
+
+// Reads the answers back off the auth row. Used only when the device has no
+// hold of its own, which is the cross-browser confirmation case.
+//
+// Returns null for every failure, including a network one, because the caller's
+// fallback is to ask the questions again and that is a survivable outcome. It
+// must never be able to throw into the sign-in path.
+export const fetchSignupCarry = async (session) => {
+  const token = session?.token;
+  if (!token) return null;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) return null;
+    const u = await r.json();
+    const held = u?.user_metadata?.[SIGNUP_CARRY_KEY];
+    return held && typeof held === "object" && !Array.isArray(held) ? held : null;
+  } catch { return null; }
+};
+
+// ── AND TAKEN BACK OUT ONCE IT HAS A ROW TO LIVE IN ─────────────────
+//
+// Best effort, and the caller does not wait on the outcome. If this fails the
+// answers sit in the metadata unread: the claim only ever runs when the profile
+// row is blank, so a stale copy cannot overwrite anything somebody edited
+// later. Clearing it is tidiness and a smaller token, not correctness.
+//
+// null rather than a delete, because GoTrue merges the object it is given
+// rather than replacing it, so a missing key leaves the old value in place and
+// only an explicit null removes it.
+export const clearSignupCarry = async (session) => {
+  const token = session?.token;
+  if (!token) return false;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      method: "PUT",
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ data: { [SIGNUP_CARRY_KEY]: null } }),
+    });
+    return r.ok;
+  } catch { return false; }
+};
+
 // ── THE NAME TRAVELS WITH THE SIGNUP, FOR THE EMAIL ─────────────────
 //
 // Oliver, 22 Aug 2026, wanting the confirmation mail to open "Hi [Name],".
@@ -157,9 +207,55 @@ export const getStoredSession = readStored;   // synchronous, for first paint on
 // Trimmed and capped at the same 60 characters the form allows, and omitted
 // entirely when empty rather than sent as "", so the template's own
 // {{ if .Data.name }} check has something honest to test.
-export const signUpWithPassword = async (email, password, name = "") => {
+//
+// ── AND SO DO THE ANSWERS, BECAUSE THE INBOX IS A DIFFERENT BROWSER ──
+//
+// Oliver, 15 Sep 2026: "it returns you to the website, where you once again
+// have to give your name, age, and gender. That is a major flaw."
+//
+// The answers WERE being kept. holdProfile writes them to localStorage and the
+// effect in App.jsx claims them on the first session. That works perfectly in
+// the one case it was tested in: sign up in a tab, confirm in the same tab.
+//
+// It is not the case most people are in. A confirmation link is opened from a
+// mail client, and a mail client opens links in its own browser: Gmail on
+// Android has a webview, the iOS Mail app opens Safari, and somebody who signs
+// up on a laptop reads the mail on a phone. localStorage is per origin PER
+// BROWSER, so in every one of those the hold is simply not there, the profile
+// row comes back blank, and the questionnaire opens. He answered six questions
+// and was asked them again by a product that had already been told.
+//
+// A device is the wrong place to keep something that has to survive leaving the
+// device. So the answers travel WITH the signup, in the one store that follows
+// the account rather than the browser: GoTrue's user metadata, which is written
+// here and readable from any session the confirmation produces, anywhere.
+//
+// ── WHAT IS DEPOSITED THERE, AND WHAT IS DELIBERATELY NOT ──────────
+//
+// The caller decides, and passes a subset. See signupCarry in utils/profile.js
+// for the list and the argument. Two reasons it is a subset rather than the
+// profile:
+//
+// ONE, user metadata is copied into the JWT claims, so everything put here is
+// added to the Authorization header of every single request the app makes for
+// as long as that token lives. Six hundred characters of free text in every
+// header is a real cost paid on every call.
+//
+// TWO, and this is the one that decides it: the auth row is not the profile
+// row, privacy.html says where each thing is held, and quietly copying a phone
+// number and a postal address into a second store is exactly the kind of drift
+// that makes a privacy promise untrue. Those two fields, and the free-text
+// description, stay in gemlyx_user_data where the policy says they are.
+//
+// The local hold is still the primary path and still carries everything. This
+// is the rescue for the round trip that leaves the browser behind.
+export const signUpWithPassword = async (email, password, name = "", carry = null) => {
   const clean = String(name || "").trim().slice(0, 60);
-  const data = await post(withReturn("signup"), { email: email.trim(), password, ...(clean ? { data: { name: clean } } : {}) });
+  // Sent under one key rather than spread across the metadata object, so
+  // clearing it later is one field and so nothing here can collide with a
+  // claim GoTrue defines itself.
+  const meta = { ...(clean ? { name: clean } : {}), ...(carry && typeof carry === "object" ? { [SIGNUP_CARRY_KEY]: carry } : {}) };
+  const data = await post(withReturn("signup"), { email: email.trim(), password, ...(Object.keys(meta).length ? { data: meta } : {}) });
   // With email confirmation ON in Supabase, signup returns a user but no token.
   // That is not an error, it means "go and check your inbox", and the caller
   // needs to be able to tell the two apart.
@@ -275,11 +371,11 @@ const withUser = async (session) => {
 // ASYNC NOW, and the caller must await it. See fault one above: returning before
 // the user id has arrived is what broke every cloud call for the whole visit.
 export const captureRedirectSession = async () => {
-  if (typeof window === "undefined") return { session: null, error: null, recovery: false };
+  if (typeof window === "undefined") return { session: null, error: null, recovery: false, confirmed: false };
   const hash = window.location.hash || "";
   const isToken = hash.includes("access_token");
   const isError = hash.includes("error=") || hash.includes("error_description=");
-  if (!isToken && !isError) return { session: null, error: null, recovery: false };
+  if (!isToken && !isError) return { session: null, error: null, recovery: false, confirmed: false };
 
   const params = new URLSearchParams(hash.slice(1));
   // ── AND IT IS NOT ONLY GOOGLE THAT COMES BACK THIS WAY ───────────
@@ -290,6 +386,31 @@ export const captureRedirectSession = async () => {
   // missing user id fixed above was never a Google-only fault; it broke email
   // confirmation too, on the only sign-in path that exists today.
   const type = params.get("type") || "";
+
+  // ── AND CONFIRMING AN ADDRESS IS NOT AN ORDINARY SIGN IN EITHER ───
+  //
+  // Oliver, 15 Sep 2026: "It should just send you back to the site saying
+  // 'mail confirmed!'"
+  //
+  // Recovery has had a flag since 14 Sep for exactly this reason: the fragment
+  // knows what kind of return this is and the caller cannot work it out
+  // afterwards, because by then it is holding a session that looks like every
+  // other session. A signup confirmation had no flag at all, so the one moment
+  // the person was waiting to be told about, the moment the thing they were
+  // asked to go and do actually worked, arrived as a silent home page.
+  //
+  // Somebody who is not told an action succeeded assumes it failed, and the
+  // recovery move for "my confirmation did not work" is to sign up again, which
+  // is the dead end the alreadyRegistered branch in signUpWithPassword exists to
+  // catch. Saying so is one line here and saves both.
+  //
+  // "signup" ONLY. GoTrue also sends recovery, invite, magiclink and
+  // email_change through this same shape, and three of those are not a
+  // confirmed address. email_change is, but it deserves its own sentence rather
+  // than being told "mail confirmed" when what changed was which address the
+  // account has; there is no email change screen in this app yet, so it is left
+  // for the day there is one.
+  const isConfirmation = type === "signup";
 
   // The address bar is cleaned in both cases, success and failure, so a token
   // never sits in history and an error never survives a refresh.
@@ -305,13 +426,14 @@ export const captureRedirectSession = async () => {
     // A reset link that has already been used or has expired is the commonest
     // error anybody will see here, and "otp_expired" is not a sentence.
     if (/expired|invalid/i.test(desc) && /recovery/i.test(type + desc)) {
-      return { session: null, recovery: false, error: "That password reset link has expired or has already been used. Ask for a new one." };
+      return { session: null, recovery: false, confirmed: false, error: "That password reset link has expired or has already been used. Ask for a new one." };
     }
     // Supabase sends these URL-encoded with plus signs for spaces.
     const said = desc.replace(/\+/g, " ").trim();
     return {
       session: null,
       recovery: false,
+      confirmed: false,
       error: said
         ? `Google sign in did not complete: ${said}`
         : "Google sign in did not complete. Nothing was changed on your account.",
@@ -323,7 +445,7 @@ export const captureRedirectSession = async () => {
     refresh_token: params.get("refresh_token"),
     expires_in: params.get("expires_in"),
   });
-  if (!session) return { session: null, recovery: false, error: "That sign in link came back without a usable session." };
+  if (!session) return { session: null, recovery: false, confirmed: false, error: "That sign in link came back without a usable session." };
   write(session);
 
   const full = await withUser(session);
@@ -337,14 +459,14 @@ export const captureRedirectSession = async () => {
     // spent, and the person was left "signed in" with a session every cloud call
     // refuses. They then need a second reset link, from a sender that allows two
     // an hour. `type` said what this was before the network was involved.
-    return { session: full, recovery: type === "recovery", error: "Signed in, but your account could not be identified. Reload the page and try again." };
+    return { session: full, recovery: type === "recovery", confirmed: isConfirmation, error: "Signed in, but your account could not be identified. Reload the page and try again." };
   }
   // RECOVERY IS NOT A SIGN IN, even though it arrives as one. The token is real
   // and the person is authenticated, but they got here by saying they had
   // forgotten their password, so handing them a signed-in home page and nothing
   // else leaves the thing they came to do undone. Flagged for the caller to open
   // the set-a-new-password screen.
-  return { session: full, recovery: type === "recovery", error: null };
+  return { session: full, recovery: type === "recovery", confirmed: isConfirmation, error: null };
 };
 
 // ── AND THEN ACTUALLY SETTING ONE ───────────────────────────────────

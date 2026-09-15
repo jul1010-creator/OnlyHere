@@ -116,7 +116,7 @@ export const birthYear = (profile) => {
 // This subtracted calendar years, which is not an age: somebody born on 31
 // December 2001 was reported as 25 on 22 August 2026, when they are 24. That is
 // wrong for roughly a third of the year for anyone sitting on a band boundary,
-// which is 24/25, 34/35, 49/50 and 64/65 — the four places the band actually
+// which is 24/25, 34/35, 49/50 and 64/65, the four places the band actually
 // changes what the model is told.
 //
 // It also made the whole of Oliver's 22 August change pointless at the one place
@@ -620,6 +620,74 @@ export const takeHeldProfile = () => {
     const p = cleanProfile(JSON.parse(raw));
     return isBlank(p) ? null : p;
   } catch { return null; }   // unparseable is the same as absent
+};
+
+// ── THE PART OF THE ANSWER THAT TRAVELS WITH THE ACCOUNT ────────────
+//
+// holdProfile above keeps everything, on the device, and that is the right
+// primary: it is free, it is instant, and it covers the case where somebody
+// confirms in the tab they signed up in.
+//
+// It covers nothing else. A confirmation link is opened from a mail client, and
+// mail clients open links in their own browser. localStorage is per browser, so
+// for anybody who reads the mail on their phone, or in Gmail's webview, or in
+// Safari because the link came out of iOS Mail, the hold is not there. Oliver
+// hit it on 15 Sep and named it correctly as a major flaw: he had answered the
+// questions and was asked them again.
+//
+// So a subset also goes to GoTrue's user metadata, which follows the ACCOUNT
+// and is readable from whatever browser the confirmation lands in. See
+// signUpWithPassword and fetchSignupCarry in utils/auth.js.
+//
+// ── WHY A SUBSET, WHICH IS THE ONLY INTERESTING DECISION HERE ───────
+//
+// Not to save bytes for their own sake. Two reasons, and the second is the one
+// that settles it:
+//
+// ONE. GoTrue copies user metadata into the JWT claims, so every field listed
+// here is added to the Authorization header of every request the app makes for
+// the life of that token. DESCRIPTION_MAX is 600 characters. Six hundred
+// characters on every call, to carry a field that is optional and that its
+// owner can retype in ten seconds, is a bad trade.
+//
+// TWO. public/privacy.html sets out what Gemlyx holds and where. phone and
+// address are named there as living on the profile row. Copying them into the
+// auth row as a side effect of a bug fix would make that document quietly
+// untrue, which is a thing this codebase has a rule about and a thing a Danish
+// business should not do to a page it asks people to read.
+//
+// So: the three he named, the enums around them, and the record of the terms
+// they accepted. Everything excluded is either free text, contact detail, or
+// learned rather than typed, and all of it still reaches the row by the ordinary
+// path whenever the device hold survives.
+export const CARRY_FIELDS = ["name", "bornDate", "bornYear", "country", "ageBand", "sex", "replyLength", "company", "pace", "interests", "transport", "style", "termsVersion", "termsAcceptedAt"];
+
+// Empty values are dropped rather than sent as "", so the metadata object is
+// only as big as the answers actually given and an untouched optional field
+// costs nothing in the token.
+export const signupCarry = (p) => {
+  const c = cleanProfile(p);
+  const out = {};
+  for (const k of CARRY_FIELDS) {
+    const v = c[k];
+    if (Array.isArray(v)) { if (v.length) out[k] = v; }
+    else if (String(v ?? "").trim()) out[k] = v;
+  }
+  return Object.keys(out).length ? out : null;
+};
+
+// The way back in. cleanProfile is what makes this safe to trust: the metadata
+// is writable by the account holder, so what comes back is treated exactly like
+// a pasted form body rather than like something we wrote. Every enum is checked
+// against its own list and anything unrecognised is dropped, which is the same
+// path a hand-edited localStorage hold already goes through.
+//
+// Returns null for a blank result, so the caller's check stays "is there
+// anything here" rather than having to know this shape.
+export const claimSignupCarry = (raw) => {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const p = cleanProfile(raw);
+  return isBlank(p) ? null : p;
 };
 
 // ── THE COLUMN HAS TO EXIST, AND SAY SO WHEN IT DOES NOT ─────────────

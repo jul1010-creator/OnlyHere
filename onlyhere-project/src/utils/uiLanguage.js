@@ -440,7 +440,17 @@ export const UI_STRINGS = {
   "auth.checkEmail":    { en: "Check your email",   da: "Tjek din mail",        de: "Sieh in deine Mails" },
   "auth.linkOnWay":     { en: "A confirmation link is on its way to", da: "Et bekræftelseslink er på vej til", de: "Ein Bestätigungslink ist unterwegs an" },
   "auth.openIt":        { en: "Open it and you are in. It can take a minute or two, and it does sometimes land in spam.", da: "Åbn det, så er du inde. Der kan gå et minut eller to, og det ender nogle gange i spam.", de: "Öffne ihn und du bist drin. Es kann ein oder zwei Minuten dauern, und manchmal landet er im Spam." },
-  "auth.sameBrowser":   { en: "The answers you just gave are kept on this device. Confirm in this same browser and they come with you.", da: "De svar, du lige har givet, bliver på denne enhed. Bekræft i den samme browser, så følger de med.", de: "Die Antworten, die du gerade gegeben hast, bleiben auf diesem Gerät. Bestätige im selben Browser, dann kommen sie mit." },
+  // Reworded 15 Sep 2026. It used to say "confirm in this same browser and they
+  // come with you", which was an honest description of a limitation and also an
+  // instruction most people cannot follow: the mail opens where the mail opens.
+  // The answers now travel with the account, so the sentence no longer has to
+  // ask anything of them. See signupCarry in utils/profile.js.
+  "auth.sameBrowser":   { en: "The answers you just gave are saved. Open the link from anywhere, on any device.", da: "De svar, du lige har givet, er gemt. Åbn linket hvor som helst, på enhver enhed.", de: "Die Antworten, die du gerade gegeben hast, sind gespeichert. Öffne den Link wo du willst, auf jedem Gerät." },
+  // ── AND THE ONE THING THEY WERE WAITING TO BE TOLD ────────────────
+  // Oliver, 15 Sep 2026: "It should just send you back to the site saying 'mail
+  // confirmed!'" Shown as a toast on the return, not a screen: the address is
+  // confirmed, they are signed in, and the right place for them is the site.
+  "auth.mailConfirmed": { en: "Mail confirmed. You are signed in.", da: "Mail bekræftet. Du er logget ind.", de: "E-Mail bestätigt. Du bist angemeldet." },
   "auth.sending":       { en: "Sending…",           da: "Sender…",              de: "Wird gesendet…" },
   "auth.sendAgain":     { en: "Send it again",      da: "Send igen",            de: "Nochmal senden" },
   "auth.sendAgainIn":   { en: "Send it again in",   da: "Send igen om",         de: "Nochmal senden in" },
@@ -496,6 +506,14 @@ export const UI_STRINGS = {
   "auth.confirmDelete": { en: "Delete your Gemlyx account? Your saved places, your guides, your details and your login all go, on this device and in your account, and this cannot be undone.", da: "Vil du slette din Gemlyx-konto? Dine gemte steder, dine guider, dine oplysninger og dit login forsvinder alle sammen, både på denne enhed og i din konto, og det kan ikke fortrydes.", de: "Dein Gemlyx-Konto löschen? Deine gespeicherten Orte, deine Reisen, deine Angaben und dein Login verschwinden alle, auf diesem Gerät und in deinem Konto, und das lässt sich nicht rückgängig machen." },
   "auth.deleteYes":     { en: "Delete account",  da: "Slet konto",           de: "Konto löschen" },
   "auth.cancel":        { en: "Cancel",          da: "Fortryd",              de: "Abbrechen" },
+  // ── THE QUESTION ON THE WAY OUT ───────────────────────────────────
+  // Oliver, 15 Sep 2026: "there should be a 'Why do you want to delete your
+  // account?'" Asked on the confirm itself rather than as a step in front of
+  // it, and the second line is the part that keeps it honest. See
+  // components/DeleteAccountSheet.jsx.
+  "auth.whyLeaving":    { en: "Why do you want to delete your account?", da: "Hvorfor vil du slette din konto?", de: "Warum möchtest du dein Konto löschen?" },
+  "auth.whyOptional":   { en: "Optional, and sent without your name on it. Delete works either way.", da: "Valgfrit, og sendes uden dit navn på. Sletningen sker uanset hvad.", de: "Freiwillig, und ohne deinen Namen gesendet. Das Löschen passiert so oder so." },
+  "auth.whyPlaceholder":{ en: "Anything you want to add", da: "Noget du vil tilføje", de: "Möchtest du etwas hinzufügen" },
   "auth.confirmFirst":  { en: "This account still needs its email confirmed. Open the link we sent, or send it again below.", da: "Kontoen mangler stadig at få bekræftet mailen. Åbn linket, vi sendte, eller send det igen nedenfor.", de: "Für dieses Konto fehlt noch die Bestätigung der E-Mail. Öffne den Link, den wir geschickt haben, oder sende ihn unten erneut." },
   // ── WRITTEN TO BE TRUE EVEN IF THE DETECTION IS WRONG ─────────────
   //

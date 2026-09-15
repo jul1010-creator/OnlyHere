@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 // The questions themselves live in one place, shared with ProfileSheet.
 import { ProfileQuestions } from "./ProfileQuestions";
-import { EMPTY_PROFILE, saveProfile, holdProfile, missingRequired, REQUIRED_LABEL, underMinimumAge, MIN_ACCOUNT_AGE, TERMS_VERSION } from "../utils/profile";
+import { EMPTY_PROFILE, saveProfile, holdProfile, signupCarry, missingRequired, REQUIRED_LABEL, underMinimumAge, MIN_ACCOUNT_AGE, TERMS_VERSION } from "../utils/profile";
 import { C } from "../utils/theme";
 import { t as uiT, DEFAULT_UI_LANGUAGE } from "../utils/uiLanguage";
 import { signInWithPassword, signUpWithPassword, sendPasswordReset, startGoogleSignIn, updatePassword, resendConfirmation } from "../utils/auth";
@@ -330,7 +330,13 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         // default would claim every row had agreed to whatever version happens
         // to be current when it was next read.
         const accepted = acceptedNow(answers);
-        const { session, needsConfirmation, alreadyRegistered } = await signUpWithPassword(email, password, answers.name);
+        // ── THE ANSWERS GO WITH THE SIGNUP, NOT ONLY WITH THE DEVICE ─
+        //
+        // A fourth argument, and it is the fix for the flaw Oliver reported on
+        // 15 Sep: holdProfile below keeps these on this browser, and a
+        // confirmation link is opened in a different one more often than not.
+        // signupCarry decides what is safe to send. See utils/profile.js.
+        const { session, needsConfirmation, alreadyRegistered } = await signUpWithPassword(email, password, answers.name, signupCarry(accepted));
         // ── THE ADDRESS WAS ALREADY TAKEN, AND IT SAID 200 ──────────
         // See signUpWithPassword: Supabase answers a repeat signup with a
         // user-shaped 200 and no session, so that the form cannot be used to

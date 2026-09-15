@@ -20,6 +20,43 @@ export const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdX
 // suite asserts they stay that way rather than rotting while switched off.
 export const GOOGLE_SIGN_IN = false;
 
+// ── WHO IS ALLOWED INTO STUDIO, AS OPPOSED TO WHO IS SIGNED IN ──────
+//
+// Oliver, 15 Sep 2026, a few days before the beta goes to two hundred people:
+// "releasing a beta, how do I avoid people getting inside my studio?"
+//
+// The honest answer at the time was that nothing stopped them. studioLogin POSTs
+// an email and a password to the SAME Supabase project the readers sign up on,
+// and if a token comes back it stores the session and mounts the Studio. Until
+// this week that was defensible for the reason written in utils/apiGuard.js:
+// "any signed-in account passes today, because Studio is already behind a login
+// and nobody else has one." Every word of that is true and the last clause stops
+// being true the day the beta link is posted.
+//
+// So the login checks WHO, not just whether. Supabase user ids, comma separated.
+//
+// ── SET IN TWO PLACES, ON PURPOSE ───────────────────────────────────
+//
+// This one is VITE_FOUNDER_IDS and it gates the screen. GEMLYX_FOUNDER_IDS, a
+// separate Vercel variable read by the api/ handlers, gates the money. They are
+// deliberately not the same variable: anything with the VITE_ prefix is compiled
+// INTO the bundle and is readable by anybody who opens devtools, so it can only
+// ever be a courtesy layer. A gate a determined person can read is not a gate.
+//
+// The real locks are the server one and the row level security policies on
+// gemlyx_content. This stops a curious beta tester who types /#studio, which is
+// the realistic threat, and it stops nobody else.
+//
+// ── EMPTY MEANS OPEN, AND SAYS SO OUT LOUD ──────────────────────────
+//
+// Same rule as isFounder in utils/apiGuard.js, and kept identical so the two
+// cannot disagree: an unset list lets anybody signed in through, because the
+// alternative is locking him out of his own Studio on a deploy he makes at four
+// in the morning. What is NOT the same is the silence. The Studio login panel
+// renders a warning while this is empty, so the open state cannot be the state he
+// ships in without having read a sentence about it.
+export const FOUNDER_IDS = String(import.meta?.env?.VITE_FOUNDER_IDS || "");
+
 // ── PAID PLANS, WHICH DO NOT EXIST YET ──────────────────────────────
 //
 // Oliver, 24 August 2026, designing the Gemlyx offer field: "it will only be

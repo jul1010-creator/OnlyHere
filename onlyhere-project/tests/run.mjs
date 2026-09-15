@@ -157,6 +157,10 @@ writeFileSync(entry, `
   export { decodePastedText, looksPercentEncoded } from ${JSON.stringify(join(root, "src/utils/pastedText.js"))};
   export { placesNamedIn, rejectedIn, correctedTo, CHAT_PLACE_CAP } from ${JSON.stringify(join(root, "src/utils/chatPlaces.js"))};
   export { isOwnRoute, RETURN_PARAM, captureRedirectSession, startGoogleSignIn } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
+  export { SIGNUP_CARRY_KEY, fetchSignupCarry, clearSignupCarry } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
+  export { CARRY_FIELDS, signupCarry, claimSignupCarry } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
+  export { DELETE_REASONS, deleteReasonMessage, NOTE_MAX as DELETE_NOTE_MAX } from ${JSON.stringify(join(root, "src/components/DeleteAccountSheet.jsx"))};
+  export { FOUNDER_IDS } from ${JSON.stringify(join(root, "src/config.js"))};
   export { stashUnsynced, takeStash, dropStash } from ${JSON.stringify(join(root, "src/utils/deviceStash.js"))};
   export { problemContext, contextBlock, withContext, CONTEXT_DIVIDER, CONTEXT_HEADING } from ${JSON.stringify(join(root, "src/utils/problemContext.js"))};
   export { GOOGLE_SIGN_IN } from ${JSON.stringify(join(root, "src/config.js"))};
@@ -29466,9 +29470,19 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   //   renew and asking supaFetch would be circular;
   //   gemlyx_suggestions, craft_items and craft_requests are READER-FACING and
   //   must work signed out, so they carry the anon key on purpose.
+  //
+  // A SIXTH JOINED ON 15 SEP, and it belongs here for the same reason as the
+  // first two. /auth/v1/user is the check that a stored Studio session really
+  // belongs to the founder, and its whole job is to ask Supabase who a token
+  // is. Routing it through supaFetch would hand it a token that had been
+  // refreshed on the way, which is to say it would be asking about a different
+  // string than the one it is there to interrogate. It also must not trigger a
+  // refresh: a session being thrown out is not a session worth renewing first.
+  //
   // Anything else appearing in this list is the bug growing back.
   const bareSupabase = [...app16.matchAll(/[^a-zA-Z]fetch\(`\$\{SUPABASE_URL\}([^`]*)`/g)].map(m => m[1]);
   is("every founder-gated Supabase call goes through it", bareSupabase, [
+    "/auth/v1/user",
     "/auth/v1/token?grant_type=refresh_token",
     "/auth/v1/token?grant_type=password",
     "/rest/v1/gemlyx_suggestions",
@@ -31082,7 +31096,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // The caller has to actually await it, or none of the above matters.
   {
     const appA = readFileSync(join(root, "src/App.jsx"), "utf8");
-    ok("and the app awaits the capture", /const \{ session: fromRedirect, error: redirectError, recovery \} = await captureRedirectSession\(\);/.test(appA));
+    // The FIELD LIST is not the rule. This pinned all three names and broke the
+    // day a fourth was added for the mail-confirmed toast, which is the third
+    // time a test in this file has failed for correctly describing yesterday.
+    // What matters here is that the call is awaited at all: see fault one in
+    // utils/auth.js, where returning before the user id arrived broke every
+    // cloud call for the whole visit. The individual fields are pinned by the
+    // blocks that own them.
+    ok("and the app awaits the capture", /const \{[^}]*\} = await captureRedirectSession\(\);/.test(appA));
+    ok("and takes the session off it", /\{[^}]*session: fromRedirect[^}]*\} = await captureRedirectSession\(\);/.test(appA));
   }
 
   // ── A FAILED SIGN IN USED TO BE SILENT ───────────────────────────
@@ -31673,8 +31695,24 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("neither reader confirm goes through the browser's own dialog",
        !/window\.confirm/.test(outCode)
        && !/window\.confirm\("Delete your Gemlyx account/.test(stripComments(appO)));
-    ok("deleting asks through the same sheet",
-       /await askConfirm\(uiT\("auth\.confirmDelete", uiLang\), uiT\("auth\.deleteYes", uiLang\), \{ danger: true \}\)/.test(appO));
+    // ── DELETE MOVED TO A SHEET OF ITS OWN, 15 SEP ────────────────
+    // "there should be a 'Why do you want to delete your account?'" A question
+    // does not fit a component whose whole contract is a boolean, and
+    // ConfirmSheet has two other callers, so delete got its own. The rule this
+    // block defends never changed: deleting asks first, and it asks in the app
+    // rather than through the browser's dialog.
+    const delSrc = readFileSync(join(root, "src/components/DeleteAccountSheet.jsx"), "utf8");
+    ok("deleting asks through a sheet of its own",
+       /onDelete=\{\(\) => setDeleteAsk\(true\)\}/.test(appO)
+       && /<DeleteAccountSheet open=\{deleteAsk\}/.test(appO));
+    // AND IT KEPT THE SAME TWO SENTENCES. The consequences paragraph and the
+    // button label are the part somebody reads before an irreversible act, and
+    // the risk of a new component is that they get retyped in English on the
+    // way across. Same catalogue keys, so they cannot.
+    ok("and that sheet says the same two things from the same catalogue",
+       /uiT\("auth\.confirmDelete", lang\)/.test(delSrc)
+       && /uiT\("auth\.deleteYes", lang\)/.test(delSrc));
+    ok("and it is not the browser's dialog either", !/window\.confirm/.test(stripComments(delSrc)));
     // AND THE DELETE SENTENCE IS FINALLY TRANSLATED. It was an English
     // paragraph typed into App.jsx, on a screen whose every other word comes
     // from the catalogue, at the one moment it mattered most.
@@ -31827,9 +31865,20 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the claim on the far side still exists", /const held = takeHeldProfile\(\);/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
     // And the promise made on the email branch matched what happened.
     ok("the notice no longer says saved when it means held", !/your answers are saved/.test(sheetA));
+    // ── AND IT NO LONGER ASKS SOMETHING THEY CANNOT DO ────────────
+    // This used to pin the words "kept on this device", which described a real
+    // limitation honestly: the answers were in localStorage and localStorage is
+    // per browser. The sentence went on to say "confirm in this same browser and
+    // they come with you", which is an instruction nobody can follow, because a
+    // confirmation link opens wherever the mail client opens it. Oliver hit it
+    // on 15 Sep and called it a major flaw.
+    //
+    // The answers travel with the ACCOUNT now (see signupCarry), so the promise
+    // is unconditional and the assertion pins the absence of the condition.
     ok("it says where they are",
        /uiT\("auth\.sameBrowser", lang\)/.test(sheetA)
-       && /kept on this device/.test(M.UI_STRINGS["auth.sameBrowser"].en));
+       && ["en", "da", "de"].every(c => !/same browser|samme browser|selben browser/i.test(M.UI_STRINGS["auth.sameBrowser"][c]))
+       && /any device/i.test(M.UI_STRINGS["auth.sameBrowser"].en));
   }
 
   // ── A RESET LINK THAT FINALLY FINISHES ───────────────────────────
@@ -42433,16 +42482,21 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // is less than everything, so these two assertions passed loudest when the
   // call they anchor on had been renamed out from under them. That is exactly
   // what happened on 22 Aug when the signature grew a third argument.
-  const signupCall = auth.indexOf("await signUpWithPassword(email, password, answers.name)");
+  // GREW A FOURTH ARGUMENT ON 15 SEP, exactly as the paragraph above warned it
+  // would: the answers now travel with the signup as well as being held on the
+  // device. Anchored on the open paren rather than the whole call, so the next
+  // argument costs a comment rather than four failures.
+  const signupCall = auth.indexOf("await signUpWithPassword(email, password, answers.name,");
   ok("the signup call was found at all", signupCall >= 0);
   ok("the answers are in hand before the account is made",
      auth.indexOf("const gaps = missingRequired(answers);") >= 0 && auth.indexOf("const gaps = missingRequired(answers);") < signupCall);
   // AND THE NAME GOES WITH IT. Supabase's confirm-signup template can only read
   // the auth row, so a name that lives only in gemlyx_user_data can never reach
   // the greeting in the email.
-  ok("the name travels to Supabase as metadata", /export const signUpWithPassword = async \(email, password, name = ""\) => \{/.test(readFileSync(join(root, "src/utils/auth.js"), "utf8")));
+  ok("the name travels to Supabase as metadata", /export const signUpWithPassword = async \(email, password, name = "", carry = null\) => \{/.test(readFileSync(join(root, "src/utils/auth.js"), "utf8")));
   ok("as user metadata, which is the only thing the template can see",
-     /\.\.\.\(clean \? \{ data: \{ name: clean \} \} : \{\}\)/.test(readFileSync(join(root, "src/utils/auth.js"), "utf8")));
+     /\.\.\.\(clean \? \{ name: clean \} : \{\}\)/.test(readFileSync(join(root, "src/utils/auth.js"), "utf8"))
+     && /\.\.\.\(Object\.keys\(meta\)\.length \? \{ data: meta \} : \{\}\)/.test(readFileSync(join(root, "src/utils/auth.js"), "utf8")));
   // Omitted rather than sent empty, so the template's {{ if .Data.name }} has
   // something honest to test.
   ok("and an empty name is left out rather than sent blank",
@@ -55745,8 +55799,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // never on the sheet. Reading the pair keeps the rule and stops the next
   // account string outside the sheet from being a false failure.
   const authApp = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // ── AND A THIRD PLACE, FOR THE SAME REASON AS THE SECOND ─────────
+  // auth.confirmOut lives in App.jsx because logging out happens there. The
+  // five delete strings live in DeleteAccountSheet.jsx because deleting happens
+  // there. The rule is that no auth string is orphaned; it was never that the
+  // sheet is the only screen allowed to talk about an account.
+  const authDel = readFileSync(join(root, "src/components/DeleteAccountSheet.jsx"), "utf8");
   is("every auth key is rendered by the sheet or by the app around it",
-     AUTH_KEYS.filter(k => !authSrc.includes(`"${k}"`) && !authApp.includes(`"${k}"`)), []);
+     AUTH_KEYS.filter(k => !authSrc.includes(`"${k}"`) && !authApp.includes(`"${k}"`) && !authDel.includes(`"${k}"`)), []);
   ok("and the sheet imports the reader",
      /import \{ t as uiT, DEFAULT_UI_LANGUAGE \} from "\.\.\/utils\/uiLanguage";/.test(authSrc));
   // A default of English rather than "", so a caller that passes nothing gets
@@ -62225,6 +62285,355 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("the source carries no dash", !DASH.test(readFileSync(join(root, "src/utils/chatPromises.js"), "utf8")));
     ok("nor a banned word outside the rule that names one", !BANNED.test(src.replace(/"[^"\n]*"/g, "")));
   }
+}
+
+// ── PASS 97: THE ANSWERS SURVIVE THE INBOX, AND THE RETURN SAYS SO ──
+//
+// Oliver, 15 Sep 2026: "So the confirm works now.. but it works akwardly. It
+// should just send you back to the site saying 'mail confirmed!' Right now, it
+// returns you to the website, where you once again have to give your name, age,
+// and gender. That is a major flaw."
+//
+// Two faults in one paragraph. This pass covers both and the shape of the bug
+// is worth writing down, because it is the third time this project has shipped
+// it: something was kept on the DEVICE that had to survive leaving the device.
+// gemlyx_pending_guide_save had it, the Google profile hold had it, and the
+// signup answers had it. localStorage is per browser, and a confirmation link
+// is opened by a mail client, which is a different browser for most people.
+{
+  const auth = readFileSync(join(root, "src/utils/auth.js"), "utf8");
+  const prof = readFileSync(join(root, "src/utils/profile.js"), "utf8");
+  const appC = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const { signupCarry, claimSignupCarry, CARRY_FIELDS, SIGNUP_CARRY_KEY, cleanProfile, isBlank, EMPTY_PROFILE } = M;
+  // Block scoped, like every other copy in this file. His rule from August:
+  // no em dash and no en dash anywhere in the source.
+  const DASH = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+
+  // ── WHAT TRAVELS ────────────────────────────────────────────────
+  const answered = { ...EMPTY_PROFILE, name: "Oliver", bornDate: "1998-04-12", sex: "Man", country: "DK", interests: ["Food"], phone: "+45 12 34 56 78", address: "Nørrebrogade 1, København", description: "I travel with my girlfriend and we like small towns." };
+  const carried = signupCarry(answered);
+  // The three he named, which are the three the form makes mandatory.
+  ok("the name goes", carried.name === "Oliver");
+  ok("the date of birth goes", carried.bornDate === "1998-04-12");
+  ok("and the gender goes", carried.sex === "Man");
+  // ── AND WHAT DELIBERATELY DOES NOT ──────────────────────────────
+  //
+  // Two separate arguments, and the second is the one that decides it.
+  //
+  // GoTrue copies user metadata into the JWT claims, so anything here rides in
+  // the Authorization header of every request for the life of the token, and
+  // DESCRIPTION_MAX is 600 characters.
+  //
+  // More importantly, public/privacy.html names phone and address as living on
+  // the profile row. Copying them into the auth row as a side effect of a bug
+  // fix would make that page quietly untrue, which is the kind of drift this
+  // codebase has a rule about.
+  is("a phone number is not copied into the auth row", carried.phone, undefined);
+  is("nor a postal address", carried.address, undefined);
+  is("nor six hundred characters of free text", carried.description, undefined);
+  is("nor anything the app noticed rather than was told", carried.learned, undefined);
+  is("and the list says so in one place rather than at each call site",
+     CARRY_FIELDS.filter(k => ["phone", "address", "description", "learned"].includes(k)), []);
+  // Every field named in the list is a real profile field, or it is silently
+  // carrying nothing and nobody would ever find out.
+  is("every carried field is one cleanProfile knows",
+     CARRY_FIELDS.filter(k => !(k in EMPTY_PROFILE)), []);
+
+  // Empty answers are dropped rather than sent as "", so an untouched optional
+  // field costs nothing in the token.
+  ok("empty answers are left out", !("company" in carried) && !("pace" in carried));
+  ok("and nothing at all sends nothing at all", signupCarry(EMPTY_PROFILE) === null);
+  ok("which is not the same as an empty object, so the caller's check stays simple",
+     signupCarry({}) === null);
+
+  // ── THE WAY BACK IN TREATS IT AS INPUT, NOT AS OURS ─────────────
+  //
+  // The metadata is writable by the account holder through GoTrue's own user
+  // endpoint. What comes back is cleaned exactly like a pasted form body.
+  const hostile = claimSignupCarry({ name: "x".repeat(400), sex: "Attack Helicopter", interests: ["Food", "not-a-real-interest"], learned: { anything: 1 } });
+  ok("an unrecognised gender is dropped rather than stored", hostile.sex === "");
+  ok("an unrecognised interest is dropped", hostile.interests.every(i => i !== "not-a-real-interest"));
+  ok("and a long name is capped", hostile.name.length <= 60);
+  ok("nothing blank comes back as a profile", claimSignupCarry({}) === null);
+  ok("nor does rubbish", claimSignupCarry(null) === null && claimSignupCarry("hello") === null && claimSignupCarry([1, 2]) === null);
+  // Round trip: what is deposited is what is claimed.
+  const back = claimSignupCarry(carried);
+  ok("what goes out comes back", back.name === "Oliver" && back.bornDate === "1998-04-12" && back.sex === "Man");
+  ok("and comes back non-blank, so the caller stops asking", !isBlank(back));
+
+  // ── ONE KEY, NAMED ONCE ─────────────────────────────────────────
+  // A string typed at three call sites is a string that gets typed differently
+  // once, and the failure is silent: a read that finds nothing looks exactly
+  // like a signup that carried nothing.
+  ok("the metadata key is a constant", typeof SIGNUP_CARRY_KEY === "string" && SIGNUP_CARRY_KEY.length > 0);
+  is("and it is never spelled out by hand",
+     (auth.match(/"gx_signup"/g) || []).length, 1);
+  ok("the write uses it", /\[SIGNUP_CARRY_KEY\]: carry/.test(auth));
+  ok("the read uses it", /user_metadata\?\.\[SIGNUP_CARRY_KEY\]/.test(auth));
+  ok("and the clear uses it", /\[SIGNUP_CARRY_KEY\]: null/.test(auth));
+  // null rather than a delete: GoTrue MERGES the data object it is given, so a
+  // missing key leaves the old value in place and only an explicit null removes
+  // it. Getting this wrong would look like it worked.
+  ok("clearing sends null rather than omitting the key", /body: JSON\.stringify\(\{ data: \{ \[SIGNUP_CARRY_KEY\]: null \} \}\)/.test(auth));
+  ok("and does it with a PUT, which is the only verb that writes it", /method: "PUT",[\s\S]{0,260}\[SIGNUP_CARRY_KEY\]: null/.test(auth));
+
+  // ── NEITHER READ NOR CLEAR MAY BREAK A SIGN IN ──────────────────
+  // The caller's fallback is to ask the questions again, which is survivable.
+  // Throwing into the sign-in path is not.
+  {
+    const body = auth.slice(auth.indexOf("export const fetchSignupCarry"), auth.indexOf("export const clearSignupCarry"));
+    ok("the read swallows everything", /catch \{ return null; \}/.test(body));
+    ok("and answers null for a session with no token", /if \(!token\) return null;/.test(body));
+    const cbody = auth.slice(auth.indexOf("export const clearSignupCarry"), auth.indexOf("export const clearSignupCarry") + 800);
+    ok("the clear swallows everything too", /catch \{ return false; \}/.test(cbody));
+  }
+
+  // ── AND IT IS ACTUALLY SENT ─────────────────────────────────────
+  const sheetC = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
+  ok("the signup sends the carry", /signUpWithPassword\(email, password, answers\.name, signupCarry\(accepted\)\)/.test(sheetC));
+  // The DEVICE hold is still there and still the primary. This is a rescue for
+  // the round trip that leaves the browser behind, not a replacement, and
+  // deleting the local path would lose every optional answer for everybody.
+  ok("and the device still holds the full answer as before", /else holdProfile\(accepted\);/.test(sheetC));
+
+  // ── CLAIMED ONLY WHEN THE ROW HAS NOTHING TYPED IN IT ───────────
+  //
+  // Ordering is the whole cost argument. Put beside takeHeldProfile it would be
+  // a network call every signed-in person pays on every cold load; put here it
+  // is paid only by somebody who would otherwise be shown a six-field sheet.
+  {
+    const eff = appC.slice(appC.indexOf("const held = takeHeldProfile();"), appC.indexOf("if (verdict.show) setProfileOpen(true);"));
+    ok("the claim exists", /const carried = claimSignupCarry\(await fetchSignupCarry\(userSession\)\);/.test(eff));
+    ok("and it runs after the row has been read and found blank",
+       eff.indexOf("if (res.profile && !profileIsBlank(res.profile)) return;") < eff.indexOf("const carried = claimSignupCarry"));
+    ok("and before anybody is asked anything",
+       eff.indexOf("const carried = claimSignupCarry") < eff.indexOf("const verdict = shouldAskProfile"));
+    ok("what it finds is written to the row", /const wrote = await saveProfile\(userSession, carried\);/.test(eff));
+    ok("and shown, so the account page is not silently empty", /setUserProfile\(carried\);/.test(eff));
+    // A failed write falls THROUGH to the question rather than returning. Nothing
+    // was stored, so nothing was remembered, and asking is the honest outcome.
+    ok("a missing column is still reported rather than swallowed",
+       (eff.match(/wrote\.missingColumn/g) || []).length >= 2);
+    // Cleared on BOTH successful paths, or the metadata sits in the JWT for the
+    // life of the account for everybody who confirmed in the same browser.
+    is("the copy on the auth row is dropped once it has a row to live in",
+       (eff.match(/clearSignupCarry\(userSession\)/g) || []).length, 2);
+  }
+
+  // ── AND THE RETURN FINALLY SAYS SOMETHING ───────────────────────
+  //
+  // Every other outcome on this path already had a message: an expired link, a
+  // cancelled Google sign in, a session with no id. Success was the only one
+  // that arrived silently, and it is the one most worth saying, because
+  // somebody who is not told an action worked assumes it did not and signs up
+  // again, which is the dead end alreadyRegistered exists to catch.
+  ok("the capture knows a confirmation from a sign in", /const isConfirmation = type === "signup";/.test(auth));
+  // signup ONLY. recovery, invite and magiclink come through the same shape and
+  // three of them are not a confirmed address.
+  ok("and recovery is not one", !/isConfirmation = type === "recovery"/.test(auth));
+  ok("every way out of the capture answers the question",
+     (auth.slice(auth.indexOf("export const captureRedirectSession")).match(/confirmed:/g) || []).length >= 6);
+  ok("the app reads it", /recovery, confirmed \} = await captureRedirectSession\(\);/.test(appC));
+  ok("and says so in the reader's language rather than in English typed into App.jsx",
+     /setToast\(uiT\("auth\.mailConfirmed", uiLang\)\)/.test(appC));
+  ok("the sentence exists in all three", ["en", "da", "de"].every(c => String(M.UI_STRINGS["auth.mailConfirmed"]?.[c] || "").trim()));
+  // A toast, not a screen. They are signed in and standing on the site they
+  // wanted; a page in front of that is one more button to be allowed to arrive.
+  ok("it is a toast that clears itself", /setToast\(uiT\("auth\.mailConfirmed", uiLang\)\);[\s\S]{0,120}setToast\(null\)/.test(appC));
+  // The two branches sit next to each other and must stay exclusive: "mail
+  // confirmed" over the set-a-new-password screen would be a lie about what
+  // just happened.
+  ok("and never over the recovery screen", /if \(recovery\) \{[^}]*\}\s*[\s\S]{0,1600}else if \(confirmed\) \{/.test(appC));
+
+  ok("no dash in any of it", !DASH.test(auth) && !DASH.test(prof));
+}
+
+// ── PASS 98: WHY THEY ARE LEAVING, ASKED WITHOUT STANDING IN THE WAY ─
+//
+// Oliver, 15 Sep 2026: "there should be a 'Why do you want to delete your
+// account?'"
+//
+// The interesting rule here is not that the question exists. It is that the
+// question is not allowed to cost anything. An extra step in front of erasure
+// is not a neutral product choice for a Danish business: GDPR article 17 gives
+// them the right, and the guidance on dark patterns is specific about steps
+// inserted to slow somebody down. The question rides on the confirm they were
+// already going to see.
+{
+  const del = readFileSync(join(root, "src/components/DeleteAccountSheet.jsx"), "utf8");
+  const appD = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const { deleteReasonMessage, DELETE_REASONS, DELETE_NOTE_MAX } = M;
+  // Block scoped, like every other copy in this file. His rule from August:
+  // no em dash and no en dash anywhere in the source.
+  const DASH = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+
+  // ── NOTHING IS REQUIRED ─────────────────────────────────────────
+  // If any of these could block, the question would be an obstacle.
+  ok("no reason and no note is not an error, it is a message that is not sent",
+     deleteReasonMessage({}) === "" && deleteReasonMessage() === "" && deleteReasonMessage({ reason: "", note: "   " }) === "");
+  ok("a reason alone is enough", deleteReasonMessage({ reason: "broken" }).includes("Something did not work"));
+  ok("words alone are enough", deleteReasonMessage({ note: "the guide builder hung" }).includes("the guide builder hung"));
+  ok("and an unknown reason id is dropped rather than echoed", !deleteReasonMessage({ reason: "<script>" }).includes("script"));
+  ok("a note is capped", deleteReasonMessage({ note: "x".repeat(5000) }).length < DELETE_NOTE_MAX + 200);
+  ok("and flattened, so it cannot be used to forge lines in the email",
+     !/\n/.test(deleteReasonMessage({ note: "one\ntwo\nthree" }).split("In their words: ")[1]));
+
+  // ── AND NOTHING SAYS WHO ────────────────────────────────────────
+  //
+  // This is the one message in the product where attaching an identity would be
+  // actively wrong: the person is in the act of asking to be forgotten. Every
+  // other caller of this endpoint sends an email or a reference so he can reply.
+  // This one must not.
+  {
+    const send = appD.slice(appD.indexOf("const sendDeleteReason ="), appD.indexOf("const [confirmAsk, setConfirmAsk]"));
+    ok("the reason is posted", /fetch\("\/api\/report-problem"/.test(send));
+    ok("under a topic the endpoint allows", /topic: "account"/.test(send));
+    is("and the body carries nothing but the topic and the words",
+       (stripComments(send).match(/\b(email|reference|userId|userSession)\b/g) || []), []);
+    // keepalive, because the next thing that happens is a navigation and a
+    // delete. An ordinary fetch is cancelled with the page that started it.
+    ok("it survives the navigation that follows it", /keepalive: true/.test(send));
+    // NOT awaited. A round trip between somebody and an erasure they have
+    // already confirmed is the delay this whole design refuses.
+    ok("and nothing waits for it", !/await fetch\("\/api\/report-problem"/.test(send));
+    ok("nothing to say sends nothing at all", /if \(!message\) return;/.test(send));
+  }
+
+  // ── SENT BEFORE THE ACCOUNT GOES, OR IT IS NEVER SENT ───────────
+  // A moment later the rows are gone, the login is gone and the person is on
+  // the home screen.
+  ok("the reason goes first", appD.indexOf("sendDeleteReason(answer);") < appD.indexOf("navigate(\"/\");\n          handleDeleteAccount();"));
+  ok("and the sheet is shut before either", appD.indexOf("setDeleteAsk(false);\n          sendDeleteReason") >= 0);
+
+  // ── THE SHEET ITSELF ────────────────────────────────────────────
+  ok("the question is asked", /uiT\("auth\.whyLeaving", lang\)/.test(del));
+  ok("and it says out loud that it is optional", /uiT\("auth\.whyOptional", lang\)/.test(del));
+  ok("in words that promise the delete happens anyway",
+     /either way/i.test(M.UI_STRINGS["auth.whyOptional"].en));
+  ok("and that it is not filed against them", /without your name/i.test(M.UI_STRINGS["auth.whyOptional"].en));
+  // Choosing again clears it. Without that there is no way back to having said
+  // nothing, and a choice that cannot be unmade is one somebody was talked into.
+  ok("a chosen reason can be unchosen", /setReason\(reason === r\.id \? "" : r\.id\)/.test(del));
+  // No "prefer not to say" pill: choosing nothing already says it, and a button
+  // for declining makes answering feel expected.
+  ok("and there is no button for declining to answer",
+     !DELETE_REASONS.some(r => /prefer not|rather not|no comment/i.test(r.label)));
+  ok("every reason has an id and a label", DELETE_REASONS.every(r => r.id && r.label));
+  is("and the ids are distinct", DELETE_REASONS.length, new Set(DELETE_REASONS.map(r => r.id)).size);
+  // Cancel is focused, never Delete, and Escape gets out. Same two rules as
+  // ConfirmSheet, which learned both the hard way on 14 Sep.
+  ok("cancel is the one that is focused", /cancelRef\.current\?\.focus\(\);/.test(del));
+  ok("escape answers no", /if \(e\.key === "Escape"\)/.test(del));
+  ok("the backdrop ignores the tap that opened it", /Date\.now\(\) - openedAt\.current > 400/.test(del));
+  ok("and the yes is red rather than gold", /#E57373/.test(del));
+  ok("no dash in it", !DASH.test(del));
+}
+
+// ── PASS 99: AND THE STUDIO DOOR, BEFORE TWO HUNDRED PEOPLE ARRIVE ──
+//
+// Oliver, 15 Sep 2026: "releasing a beta, how do I avoid people getting inside
+// my studio?"
+//
+// The answer at the time was that nothing stopped them. studioLogin POSTs to
+// the SAME /token?grant_type=password every reader signs in through, on the
+// same Supabase project, and a token coming back was treated as the answer to a
+// question nobody had asked: not whether the password is right, but whose
+// account it is.
+//
+// What this pass defends is the check. The real locks are GEMLYX_FOUNDER_IDS on
+// the api/ handlers and the row level security policies on gemlyx_content;
+// anything with a VITE_ prefix is compiled into the bundle and readable in
+// devtools, so this layer stops a curious beta tester and nobody else. That is
+// worth having and worth being honest about.
+{
+  const appS = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const cfg = readFileSync(join(root, "src/config.js"), "utf8");
+  const { isFounder } = M;
+  // Block scoped, like every other copy in this file. His rule from August:
+  // no em dash and no en dash anywhere in the source.
+  const DASH = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+
+  // The predicate is the one the endpoints use, imported rather than rewritten.
+  // Two copies of an allow-list rule is two rules, and the day they disagree the
+  // screen says yes while the endpoints say no.
+  ok("the screen gates on the same predicate the endpoints do",
+     /import \{ isFounder \} from "\.\/utils\/apiGuard";/.test(appS));
+  ok("and reads its list from configuration rather than a typed-in id",
+     /export const FOUNDER_IDS = String\(import\.meta\?\.env\?\.VITE_FOUNDER_IDS \|\| ""\);/.test(cfg));
+
+  // ── THE LOGIN ───────────────────────────────────────────────────
+  {
+    const login = appS.slice(appS.indexOf("const studioLogin = async"), appS.indexOf("const studioLogin = async") + 3000);
+    ok("the login asks who, not only whether", /if \(!isFounder\(who, FOUNDER_IDS\)\)/.test(login));
+    // Refused BEFORE anything is written. Storing first and checking after
+    // leaves the key behind for the restore to find.
+    ok("and refuses before anything is stored",
+       login.indexOf("if (!isFounder(who, FOUNDER_IDS))") < login.indexOf("localStorage.setItem(\"gemlyx_studio_session\""));
+    ok("the id is recorded, so the restore has something to check", /userId: who/.test(login));
+    // The message does not say why. Somebody who is not the founder does not
+    // need to be told that an allow-list exists, or that theirs is a valid
+    // Gemlyx login. Same reasoning as the one error for a wrong password.
+    ok("and the refusal explains nothing", /setLoginError\("That account cannot open Studio\."\)/.test(login));
+  }
+
+  // ── AND THE SESSION ALREADY IN THE BROWSER ──────────────────────
+  // A session written before the list was set would otherwise keep working for
+  // as long as that browser kept the key.
+  {
+    const restore = appS.slice(appS.indexOf("const [studioSession, setStudioSession] = useState"), appS.indexOf("const [studioSession, setStudioSession] = useState") + 900);
+    ok("a stored session is checked on every cold load", /if \(!isFounder\(stored\.userId \|\| "", FOUNDER_IDS\)\)/.test(restore));
+    ok("and a refused one is cleared rather than left to be found again", /localStorage\.removeItem\("gemlyx_studio_session"\)/.test(restore));
+    // isFounder("") against a non-empty list is false, so a session stored by
+    // the version that did not record an id is refused rather than waved
+    // through. That costs one login and is the right way round.
+    ok("an unknown session is not a permitted one", isFounder("", "some-id") === false);
+  }
+
+  // ── AND THE STORED ID IS NOT TAKEN AT ITS WORD ──────────────────
+  //
+  // Oliver, 15 Sep 2026: "if a hacker gets that ID, can't he figure out a way to
+  // get through to my studio?" Through the login, no: that reads the id off the
+  // token Supabase just issued, so passing it needs the password. Through the
+  // restore, yes, and he was right. It read userId out of localStorage and
+  // believed it, so anybody who knew the id could write the key by hand with
+  // their own reader token beside it.
+  //
+  // Checked against the one thing a browser cannot forge: the token goes to
+  // Supabase and the id comes back from Supabase.
+  {
+    const verify = appS.slice(appS.indexOf("// ── AND THE STORED ID IS CHECKED AGAINST THE TOKEN"), appS.indexOf("// ── THE ONLY PLACE A STUDIO REQUEST GETS ITS HEADERS"));
+    ok("the stored session is verified against Supabase rather than against itself",
+       /fetch\(`\$\{SUPABASE_URL\}\/auth\/v1\/user`/.test(verify));
+    ok("with the token it claims to hold", /Authorization: `Bearer \$\{token\}`/.test(verify));
+    // stripComments, because the paragraph above the fix says "stored.userId"
+    // while explaining why it is gone. Reading it raw finds the bug report and
+    // calls it the bug, which is a shape this suite has now hit four times.
+    ok("and the answer comes from the response, not from the stored field",
+       /isFounder\(String\(u\.id\), FOUNDER_IDS\)/.test(verify) && !/stored\.userId/.test(stripComments(verify)));
+    ok("a session that fails is cleared from the browser", /localStorage\.removeItem\("gemlyx_studio_session"\)/.test(verify) && /setStudioSession\(null\)/.test(verify));
+    // FAILS OPEN on a network error. Only a definite answer clears anything,
+    // because the alternative is being signed out of Studio by a bad connection
+    // on a train, and this layer was never the thing holding the door.
+    ok("but a connection it cannot make is not an answer", /catch \{ \/\* a connection this session cannot make is not an answer \*\/ \}/.test(verify));
+    ok("and a refused lookup is left alone too", /if \(!alive \|\| !r\.ok\) return;/.test(verify));
+    // Nothing to check when the list is unset, which is the open state the
+    // panel already warns about. One request, not one per render.
+    ok("it does not run when there is no list to check against", /if \(!token \|\| !String\(FOUNDER_IDS \|\| ""\)\.trim\(\)\) return;/.test(verify));
+    ok("and is keyed on the token rather than the session object", /\}, \[studioSession\?\.access_token\]\);/.test(verify));
+  }
+
+  // ── EMPTY MEANS OPEN, WHICH IS ONLY SAFE IF IT IS VISIBLE ───────
+  // Same rule as isFounder, kept identical so the two cannot disagree: an unset
+  // list lets anybody signed in through, because the alternative is locking him
+  // out of his own Studio on a deploy he makes at four in the morning.
+  ok("an unset list still lets him in", isFounder("anyone", "") === true);
+  ok("a set list lets only the named in", isFounder("mine", "mine,other") === true && isFounder("theirs", "mine,other") === false);
+  // So the open state is said out loud, on the panel, where it cannot be shipped
+  // without being read.
+  ok("and the open state warns on the login panel", /VITE_FOUNDER_IDS is not set, so any Gemlyx account can open Studio/.test(appS));
+  ok("only while it is actually unset", /\{!String\(FOUNDER_IDS \|\| ""\)\.trim\(\) && \(/.test(appS));
+  ok("and it names the server variable too, because that is the one that matters",
+     /GEMLYX_FOUNDER_IDS/.test(appS));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
