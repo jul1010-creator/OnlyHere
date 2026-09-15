@@ -26,33 +26,20 @@
 // Oliver, same day: "can you change the 'social medias' to their icons? To make
 // it look more modern", and then "icons = logos".
 //
-// These are the real marks, and they are NOT drawn here by hand. They come from
-// `simple-icons`, the CC0 set that publishes each platform's official glyph, so
-// the shapes are the platforms' own rather than somebody's approximation of
-// them. That matters beyond neatness: a hand-traced logo is a distorted
-// trademark, which is the one version of this that is a problem.
-//
-// Two conditions come with using them and both are met here. The shapes are
-// unmodified, and they are used to link to those platforms and nothing else.
-// Monochrome is deliberate: every brand's guidelines allow a single-colour mark,
-// and six full-colour logos in a row on a page this warm would look like an
-// advertising strip rather than a footer.
+// These are the real marks and they are NOT drawn here by hand. They live in
+// src/data/brandGlyphs.js, copied unchanged out of simple-icons, and that file
+// carries the licence, the version and the conditions. It is a local file rather
+// than a dependency because the dependency broke his push twice: a build cannot
+// resolve a package that has not been installed, and the pre-push hook builds.
 //
 // LINKEDIN HAS NO GLYPH IN THE SET, so it falls back to its name in a pill. A
 // missing icon is a fallback, never a blank chip.
 import { C } from "../utils/theme";
 import { platformLabel, socialSourceLine, NAMED } from "../utils/socialAccounts";
-import { siFacebook, siInstagram, siX, siTiktok, siYoutube } from "simple-icons";
-
 // Keyed by the platform strings socialAccounts.js already uses, so a platform
-// added there shows up here as a name in a pill rather than as nothing.
-const GLYPH = {
-  facebook: siFacebook,
-  instagram: siInstagram,
-  x: siX,
-  tiktok: siTiktok,
-  youtube: siYoutube,
-};
+// added there and missing here shows up as a name in a pill rather than as
+// nothing at all.
+import { BRAND_GLYPHS } from "../data/brandGlyphs";
 
 // The record is written by the sweep, but it arrives from the database, which
 // means it arrives as whatever is in the column. Every field is checked here
@@ -82,7 +69,7 @@ export const SocialSection = ({ item }) => {
       </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         {accounts.map((a, i) => {
-          const glyph = GLYPH[String(a.platform).toLowerCase()];
+          const glyph = BRAND_GLYPHS[String(a.platform).toLowerCase()];
           const name = platformLabel(a.platform);
           // The handle is in the label rather than beside the mark: a row of
           // circles reads as one object, and a row of circles with text after

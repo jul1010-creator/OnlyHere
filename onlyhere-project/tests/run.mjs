@@ -215,6 +215,7 @@ writeFileSync(entry, `
   export { accountIn, accountsOnPage, accountFits, socialRecord, asUrl, OWN_PAGE, LINKED, NAMED } from ${JSON.stringify(join(root, "src/utils/socialAccounts.js"))};
   export { searchCandidates, websiteInPageDetails } from ${JSON.stringify(join(root, "src/utils/socialAccounts.js"))};
   export { platformLabel, socialSourceLine } from ${JSON.stringify(join(root, "src/utils/socialAccounts.js"))};
+  export { BRAND_GLYPHS } from ${JSON.stringify(join(root, "src/data/brandGlyphs.js"))};
   export { DATE_TIER, DATE_TIER_LABEL, canSetADate, dateTierOf, reconcileDate, dateAuthorityProblems, probeWindow, readProbe, probeNote, eventCheckProblems, PROBE_PAD_DAYS } from ${JSON.stringify(join(root, "src/utils/dateAuthority.js"))};
   export { ldDay, ldBlocks, eventsInPage, eventForName, claimFromEvent } from ${JSON.stringify(join(root, "src/utils/eventLd.js"))};
   export { socialOf, socialAge, askFor, socialVerdict, socialPlan, describeSocialPlan, socialWriteFor, canWrite as socialCanWrite, preTicked as socialPreTicked, describeFinding as describeSocialFinding, HOW_WORDS as SOCIAL_HOW_WORDS, ACCOUNT_FRESH_DAYS, NOTHING_FOUND_DAYS, REQUESTS_PER_SEARCH, HAVE as SOCIAL_HAVE, ASK_PAGE as SOCIAL_ASK_PAGE, ASK_SEARCH as SOCIAL_ASK_SEARCH, ASKED as SOCIAL_ASKED, CANNOT as SOCIAL_CANNOT } from ${JSON.stringify(join(root, "src/utils/socialSweep.js"))};
@@ -63163,11 +63164,29 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // platform's official glyph, unmodified. The assertion is that no path data is
   // typed into this file: the moment somebody pastes a `d="M12 0C5.37..."` in
   // here, that is a hand-copied mark and this fails.
-  ok("the glyphs come from the official set",
-     /import \{ siFacebook, siInstagram, siX, siTiktok, siYoutube \} from "simple-icons";/.test(sec));
+  ok("the glyphs come from the vendored set",
+     /import \{ BRAND_GLYPHS \} from "\.\.\/data\/brandGlyphs";/.test(sec));
   ok("and no path data is written into the component", !/d="M[\d.]/.test(sec));
-  ok("it is a declared dependency, so the build cannot ship without it",
-     !!JSON.parse(readFileSync(join(root, "package.json"), "utf8")).dependencies["simple-icons"]);
+  {
+    // ── AND IT IS A FILE, NOT A DEPENDENCY ───────────────────────
+    //
+    // It was an npm dependency for an hour and broke two pushes: the build
+    // cannot resolve a package nobody has installed, and the pre-push hook
+    // builds. Nothing in this repo may reintroduce that without also getting
+    // the install into the flow.
+    const glyphs = readFileSync(join(root, "src/data/brandGlyphs.js"), "utf8");
+    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    ok("simple-icons is not a dependency", !pkg.dependencies["simple-icons"] && !pkg.devDependencies["simple-icons"]);
+    ok("nothing imports it either", !/from "simple-icons"/.test(sec) && !/from "simple-icons"/.test(glyphs));
+    // Provenance, because a copied asset with no source recorded is the kind of
+    // thing nobody can check later.
+    ok("the file says where the marks came from", /simple-icons/.test(glyphs) && /CC0/.test(glyphs));
+    ok("and which version", /16\.31\.0/.test(glyphs));
+    const { BRAND_GLYPHS } = M;
+    ["facebook", "instagram", "x", "tiktok", "youtube"].forEach(k =>
+      ok(`${k} has a real path`, typeof BRAND_GLYPHS[k]?.path === "string" && BRAND_GLYPHS[k].path.length > 100));
+    ok("linkedin is deliberately absent", !BRAND_GLYPHS.linkedin);
+  }
   // LinkedIn has no glyph in the set. A platform without one has to fall back to
   // its name rather than drawing an empty circle.
   ok("a platform with no glyph falls back to its name", /\{glyph \? \(/.test(sec) && /\) : name\}/.test(sec));
