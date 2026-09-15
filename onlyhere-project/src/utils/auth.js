@@ -11,6 +11,9 @@ import { avatarFromUser } from "./accountAvatar";
 // talks to Supabase this way everywhere else, and adding the SDK for four calls
 // would put a large dependency in the bundle for no benefit.
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
+// theme.js imports nothing that reaches back here, so this is safe. It is the
+// only place the theme key is spelled, so the two ends cannot drift apart.
+import { storedTheme, THEME_PARAM } from "./theme";
 
 const SESSION_KEY = "gemlyx_user_session";   // deliberately NOT the studio key
 
@@ -87,11 +90,36 @@ export const isOwnRoute = (h) => /^#(\/[a-z0-9/-]*|studio)$/i.test(String(h || "
 // the project's Redirect URLs, and silently uses the Site URL when it does not,
 // so this is half of the fix and Authentication > URL Configuration is the
 // other half. Written down because the failure is invisible from the code.
+//
+// ── AND THE THEME GOES WITH IT, FOR THE SAME REASON ─────────────────
+//
+// Oliver, 15 Sep 2026: "when you click confirm, it comes back to the page with
+// a changed theme to dark. That is unproffesionel."
+//
+// The route was already carried across because a hash router loses it. The
+// theme is the same problem one layer down: it lives in localStorage, a
+// confirmation link opens in the mail client's browser, and a browser that has
+// never been here has no key to read. So somebody browsing in Warm taps the
+// button and arrives on the navy one, and the site looks like it cannot make up
+// its mind.
+//
+// One parameter fixes it with no network call and no visible swap, because
+// storedTheme reads it during the first render rather than in an effect. See
+// utils/theme.js.
+//
+// It rides on the reset link and the Google redirect too, since all three go
+// through here, and those have exactly the same problem for exactly the same
+// reason.
 const returnUrl = () => {
   if (typeof window === "undefined") return "";
   const url = new URL(`${window.location.origin}${window.location.pathname}`);
   const back = window.location.hash;
   if (isOwnRoute(back)) url.searchParams.set(RETURN_PARAM, back);
+  // storedTheme rather than the live palette object: this has to be the KEY
+  // that names a theme, and it must be one theme.js will recognise on the way
+  // back in, which is the check it does there.
+  const theme = storedTheme();
+  if (theme) url.searchParams.set(THEME_PARAM, theme);
   return url.toString();
 };
 // GoTrue reads redirect_to off the QUERY STRING on these endpoints, not out of
@@ -417,6 +445,10 @@ export const captureRedirectSession = async () => {
   const search = new URLSearchParams(window.location.search);
   const back = search.get(RETURN_PARAM) || "";
   search.delete(RETURN_PARAM);
+  // Already read and stored by storedTheme during the first render, so it has
+  // done its job before this line runs and leaving it in the address bar would
+  // only put it into a URL somebody might share.
+  search.delete(THEME_PARAM);
   const q = search.toString();
   const restore = isOwnRoute(back) ? back : "";
   history.replaceState(null, "", window.location.pathname + (q ? `?${q}` : "") + restore);

@@ -150,7 +150,7 @@ writeFileSync(entry, `
   export { fieldProvenance, correctionProvenance, entrySources, untracedFields, describeProvenance, readerCorrection, readerCorrections, isCheckerVoice, readerUncertainty, readerUncertainties, READER_UNCERTAINTY_LIMIT } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
   export { ALLOWED_ORIGINS, originOf, isAllowedOrigin, requestIsFromSite, NOT_FROM_SITE, STUDIO_ONLY_ENDPOINTS, resolveUser, isFounder } from ${JSON.stringify(join(root, "src/utils/apiGuard.js"))};
   export { citationUrls, askOpenAI, askClaude } from ${JSON.stringify(join(root, "src/utils/aiClient.js"))};
-  export { THEMES, THEME_ORDER, DEFAULT_THEME } from ${JSON.stringify(join(root, "src/utils/theme.js"))};
+  export { THEMES, THEME_ORDER, DEFAULT_THEME, storedTheme, THEME_PARAM } from ${JSON.stringify(join(root, "src/utils/theme.js"))};
   export { layoutBody, trimCaption } from ${JSON.stringify(join(root, "src/utils/articleLayout.js"))};
   export { instagramTarget, isEmbeddablePost } from ${JSON.stringify(join(root, "src/components/InstagramEmbed.jsx"))};
   export { EXAMPLE_GUIDE, EXAMPLE_GUIDE_PATH, EXAMPLE_GUIDE_NOTE, exampleGuideProblems, hasExampleGuide } from ${JSON.stringify(join(root, "src/data/exampleGuide.js"))};
@@ -62687,6 +62687,91 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("only while it is actually unset", /\{!String\(FOUNDER_IDS \|\| ""\)\.trim\(\) && \(/.test(appS));
   ok("and it names the server variable too, because that is the one that matters",
      /GEMLYX_FOUNDER_IDS/.test(appS));
+}
+
+// ── PASS 100: THE THEME SURVIVES THE ROUND TRIP THROUGH THE INBOX ───
+//
+// Oliver, 15 Sep 2026: "when you click confirm, it comes back to the page with
+// a changed theme to dark. That is unproffesionel."
+//
+// Third time this exact shape has bitten this project in one night, and it is
+// worth naming as a shape rather than as three bugs: something kept on the
+// DEVICE, and a confirmation link that does not open on that device. The signup
+// answers had it, the profile row had it, and the theme had it. localStorage is
+// per browser; a mail client opens links in its own.
+//
+// He browses in Warm, taps a button in an email, and arrives on the navy one,
+// which reads as the site having two personalities rather than as a setting he
+// cannot see.
+{
+  const { THEMES, DEFAULT_THEME, storedTheme, THEME_PARAM } = M;
+  const th = readFileSync(join(root, "src/utils/theme.js"), "utf8");
+  const authT = readFileSync(join(root, "src/utils/auth.js"), "utf8");
+  const appT = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // A stub of its own rather than reusing withWindow above, because that one
+  // exists to drive captureRedirectSession and returns its result.
+  const withUrl = (search, seeded) => {
+    const store = seeded ? { gemlyx_theme: seeded } : {};
+    const prior = { w: globalThis.window, l: globalThis.localStorage };
+    globalThis.window = { location: { search } };
+    globalThis.localStorage = { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; }, removeItem: k => { delete store[k]; } };
+    try { return { got: storedTheme(), store }; }
+    finally { globalThis.window = prior.w; globalThis.localStorage = prior.l; }
+  };
+
+  // ── THE LINK WINS, WHICH IS THE WHOLE POINT ─────────────────────
+  is("a theme on the link is the one that is used", withUrl(`?${THEME_PARAM}=warm`).got, "warm");
+  // Even against a browser that already had a different answer: the link is the
+  // more recent statement of what this person was looking at.
+  is("and it beats a stale key in this browser", withUrl(`?${THEME_PARAM}=warm`, "light").got, "warm");
+  // Written down as it is read, so the rest of the session and the next visit
+  // agree without the parameter having to survive in the address bar.
+  is("and it is kept, so nothing swaps back later", withUrl(`?${THEME_PARAM}=warm`).store.gemlyx_theme, "warm");
+
+  // ── AND NOTHING ELSE CHANGES ────────────────────────────────────
+  is("no parameter still reads the browser", withUrl("", "light").got, "light");
+  is("and an empty browser still gets the default", withUrl("").got, DEFAULT_THEME);
+
+  // ── A URL IS SOMETHING ANYBODY CAN EDIT ─────────────────────────
+  // An unknown key would paint the app from an undefined palette, which is a
+  // blank screen rather than a wrong colour. Checked against THEMES, exactly as
+  // the localStorage path already was.
+  is("a theme nobody has heard of is ignored", withUrl(`?${THEME_PARAM}=made-up`).got, DEFAULT_THEME);
+  is("and does not overwrite what the browser had", withUrl(`?${THEME_PARAM}=made-up`, "warm").got, "warm");
+  is("an empty parameter is not a theme", withUrl(`?${THEME_PARAM}=`).got, DEFAULT_THEME);
+  // The three real ones all survive, so this does not quietly work for one.
+  is("every offered theme can make the trip",
+     Object.keys(THEMES).filter(k => withUrl(`?${THEME_PARAM}=${k}`).got !== k), []);
+
+  // ── READ BEFORE THE FIRST PAINT, NOT AFTER IT ───────────────────
+  //
+  // captureRedirectSession runs in an effect, which is after the first paint.
+  // Reading the theme there would show the wrong one and then swap it, and a
+  // visible swap is the thing being complained about. Doing it one frame later
+  // is not a fix. The useState initialiser runs during the first render.
+  ok("the theme is chosen by the first render", /useState\(\(\) => storedTheme\(\)\)/.test(appT));
+  ok("and storedTheme is what reads the link", /const carried = themeFromUrl\(\);/.test(th));
+
+  // ── PUT ON THE LINK AT THE OTHER END ────────────────────────────
+  ok("every return URL carries it", /url\.searchParams\.set\(THEME_PARAM, theme\);/.test(authT));
+  // returnUrl is shared by signup, resend, recover and the Google redirect, so
+  // all four are fixed by one line. That sharing is deliberate: three call
+  // sites getting redirect_to right and one not is how the reset link went a
+  // month without landing anywhere.
+  ok("which means the reset link and the Google return get it too",
+     (authT.match(/withReturn\("/g) || []).length >= 3 && /startGoogleSignIn[\s\S]{0,400}returnUrl\(\)/.test(authT));
+  // The KEY is spelled in one place and imported, so the two ends cannot drift.
+  is("the parameter name is written once", (authT.match(/"gx_theme"/g) || []).length, 0);
+  ok("and imported from the file that owns it", /import \{ storedTheme, THEME_PARAM \} from "\.\/theme";/.test(authT));
+
+  // ── AND TAKEN OFF THE ADDRESS BAR ON ARRIVAL ────────────────────
+  // It has done its job before captureRedirectSession runs, and leaving it
+  // there only puts it into a URL somebody might share.
+  ok("it does not linger in the address bar", /search\.delete\(THEME_PARAM\);/.test(authT));
+
+  const DASH = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+  ok("no dash in either file", !DASH.test(th) && !DASH.test(authT));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

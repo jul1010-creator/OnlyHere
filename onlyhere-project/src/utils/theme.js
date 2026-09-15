@@ -124,7 +124,51 @@ const STORAGE_KEY = "gemlyx_theme";
 // right, then applyTheme swaps it if the person has chosen otherwise.
 export const C = { ...THEMES[DEFAULT_THEME] };
 
+// ── AND THE LINK CAN CARRY IT, BECAUSE THE DEVICE CANNOT ────────────
+//
+// Oliver, 15 Sep 2026: "when you click confirm, it comes back to the page with
+// a changed theme to dark. That is unproffesionel."
+//
+// He is right and the cause is the same one that lost the signup answers: a
+// preference kept on the DEVICE, and a confirmation link that does not open on
+// that device. localStorage is per browser, mail clients open links in their
+// own, so the key is simply not there and this falls to DEFAULT_THEME. Somebody
+// browsing in Warm taps a button and lands on the navy one, which reads as the
+// site having two personalities rather than as a setting they cannot see.
+//
+// So the theme travels ON THE LINK. utils/auth.js puts it on every URL it asks
+// Supabase to send somebody back to, and this is the end that reads it.
+//
+// ── WHY HERE RATHER THAN IN THE RETURN HANDLER ──────────────────────
+//
+// captureRedirectSession runs in an effect, which is after the first paint, so
+// reading it there would show the wrong theme and then swap it. A visible swap
+// is the thing being complained about; doing it a frame later is not a fix.
+// This function is called by the useState initialiser during the FIRST render,
+// before anything is on screen.
+//
+// Written to localStorage as it is read, so the rest of the session, and the
+// next visit in this browser, agree with it without the parameter having to
+// survive in the address bar.
+export const THEME_PARAM = "gx_theme";
+
+const themeFromUrl = () => {
+  try {
+    if (typeof window === "undefined") return "";
+    const v = new URLSearchParams(window.location.search).get(THEME_PARAM) || "";
+    // Checked against THEMES rather than trusted: this arrives in a URL anybody
+    // can edit, and an unknown key would paint the app with an undefined
+    // palette, which is a blank screen rather than a wrong colour.
+    return THEMES[v] ? v : "";
+  } catch { return ""; }
+};
+
 export const storedTheme = () => {
+  const carried = themeFromUrl();
+  if (carried) {
+    try { localStorage.setItem(STORAGE_KEY, carried); } catch { /* private mode: it still applies for this visit */ }
+    return carried;
+  }
   try {
     const v = localStorage.getItem(STORAGE_KEY);
     return THEMES[v] ? v : DEFAULT_THEME;
