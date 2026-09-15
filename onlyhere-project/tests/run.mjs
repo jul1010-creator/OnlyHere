@@ -99,6 +99,7 @@ writeFileSync(entry, `
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { cleanOffer, offerProblems, offerLive, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
   export { AI_DISCLOSURE, aiDisclosure, aiDisclosureFor, AI_CHAT_SURFACES } from ${JSON.stringify(join(root, "src/utils/aiDisclosure.js"))};
+  export { splitReport, sortReports, filterReports, reportAge, isHandled, unhandledCount, INBOX_SETUP_SQL, FILTERS as INBOX_FILTERS, topicLabel as inboxTopicLabel } from ${JSON.stringify(join(root, "src/utils/supportInbox.js"))};
   export { SUPPORT_TOPICS, REPORT_TOPIC, topicIds, topicLabel, isTopic, GOOD_FAITH_STATEMENT, messagePrompt, MESSAGE_MIN, MESSAGE_MAX, looksLikeEmail, looksLikeUrl, supportProblems, problemFor, supportReference, supportPayload, supportMailto, supportReceipt, SUPPORT_TABLE, SUPPORT_SETUP_SQL, SUPPORT_EMAIL, PRIVACY_EMAIL } from ${JSON.stringify(join(root, "src/utils/support.js"))};
   export { SAFETY_CLAIM_FIELDS, claimIsSupported, unsupportedSafetyClaims, safetyClaimNote } from ${JSON.stringify(join(root, "src/utils/safetyClaims.js"))};
   export { hasEntrySources, missingSourcesNote, lastCheckedAt, lastCheckedLabel, pricedNote, pricedLine } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
@@ -31363,12 +31364,24 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const sup = stripComments(readFileSync(join(root, "src/components/SupportPage.jsx"), "utf8"));
     ok("the browser facts go on the bug topic and no other",
        /form\.topic === PROBLEM_TOPIC\s*\?\s*\{ \.\.\.form, message: withContext\(/.test(sup));
-    // The row is the record; the mail is what reaches a person on the day.
-    ok("and the message is also sent to an inbox", /fetch\("\/api\/report-problem"/.test(sup));
-    // NOT AWAITED. The row is already written by the line above, so whether the
-    // mail goes is not something a person filling in a form should wait for.
-    ok("without making anybody wait for it", /\}\)\.catch\(\(\) => \{ \/\* the row is written/.test(
-       readFileSync(join(root, "src/components/SupportPage.jsx"), "utf8")));
+    // ── AND NOT TO AN INBOX ANY MORE, AS OF 15 SEP ───────────────
+    //
+    // This pinned a second POST to api/report-problem, which mailed the message
+    // to hello@. Oliver, later the same day: "all the reports should go to
+    // Oliververhein@gmail.com's account. So not on the mail, but in a report
+    // fixes tab for studio."
+    //
+    // The row was always the record. What the mail added was a copy with no
+    // state: it cannot be marked handled, it competes with everything else in
+    // an inbox, and answering one means finding it again. The Studio panel
+    // reads the rows instead, so the second copy is a thing to remove rather
+    // than a thing to keep in step.
+    //
+    // Asserted as ABSENT rather than deleted, because a half-removed second
+    // path is worse than either: it would send mail he has stopped reading.
+    ok("the message is not also mailed anywhere", !/api\/report-problem/.test(sup));
+    ok("the row is still what records it",
+       /fetch\(`\$\{SUPABASE_URL\}\/rest\/v1\/\$\{SUPPORT_TABLE\}`/.test(sup));
     // A button that says what it is about should not then ask what it is about.
     ok("arriving from the button skips the dropdown",
        /isTopic\(asked\) \? \{ \.\.\.EMPTY, topic: asked \}/.test(sup));
@@ -31424,10 +31437,27 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // somebody has to guess is behind another row is one they do not press.
     ok("above Support rather than hidden inside it",
        appR.indexOf('id: "problem"') < appR.indexOf('id: "support"'));
-    // "Something is broken" rather than "Report a problem": the first is what
-    // the person is thinking, the second is what a company would call it.
+    // ── RENAMED TO Feedback, 15 SEP ──────────────────────────────
+    //
+    // It read "Something is broken", which was the right name while the row was
+    // a panic button for any stranger. Oliver: "don't call it 'something is
+    // broken' call it 'Feedback'."
+    //
+    // The row is behind an account now, so its audience is people who have
+    // committed something rather than people who have just hit a wall, and the
+    // old name quietly turned away the half of them who think the thing works
+    // and is dull. That half is the more useful one during a beta.
     ok("and it is named the way a person would say it",
-       M.UI_STRINGS["menu.problem"].en === "Something is broken");
+       M.UI_STRINGS["menu.problem"].en === "Feedback");
+    // The topic it lands on says the same word, or the button tells somebody
+    // they pressed the wrong thing one step in.
+    ok("and the topic it opens agrees with the button",
+       M.topicLabel("problem") === "Feedback");
+    // The ID is untouched. It is written on every row already in the table and
+    // is what the context block, the message prompt and the Studio panel key
+    // on; renaming an id to match a label is how stored rows stop matching the
+    // code that reads them.
+    ok("while the stored id is left alone", M.topicIds().includes("problem"));
   }
 
   // ── AND ASKED AT THE ONE MOMENT THEY HAVE AN OPINION ────────────
@@ -31485,9 +31515,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("and a browser that refuses storage still shows the guide",
        /catch \{ return false; \}/.test(gfCode) && /catch \{ \/\* private mode/.test(gf));
 
-    // ── IT REACHES THE SAME INBOX AS THE BUG REPORTS ──────────────
+    // ── IT REACHES THE SAME PLACE AS THE FEEDBACK MESSAGES ───────
+    // The same table and the same shape, so the Studio panel reads one list
+    // rather than two. It mailed this until 15 Sep; see the note in GuidePage.
     ok("the answer is sent where he will read it",
-       /fetch\("\/api\/report-problem"/.test(gp) && /topic: "feedback"/.test(gp));
+       /rest\/v1\/\$\{SUPPORT_TABLE\}/.test(gp) && /topic: "feedback"/.test(gp));
+    ok("and not to an inbox he has stopped reading", !/api\/report-problem/.test(gp));
+    // reference is `not null` on the table. An untitled guide from somebody who
+    // had not saved it would have had the whole row refused, and that is the
+    // case where the feedback is most likely to be about what went wrong.
+    ok("an untitled guide still produces a row", /\|\| "untitled guide"/.test(gp));
     // A yes with no words is still an answer and has to survive an empty box.
     ok("a yes with nothing typed is still an answer",
        /Satisfied with the build: \$\{answer === "yes" \? "yes" : "not really"\}/.test(gp));
@@ -55596,11 +55633,30 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("every menu row is in the catalogue", MENU_KEYS.filter(k => !UI_STRINGS[k]), []);
   is("and every one of them is written in all three",
      MENU_KEYS.filter(k => !["en", "da", "de"].every(c => String(UI_STRINGS[k]?.[c] || "").trim())), []);
-  // A column pasted from English is not a translation. Only the nav has an
-  // exemption list and none of these is on it.
+  // A column pasted from English is not a translation.
+  //
+  // ── ONE EXEMPTION, AND IT HAS TO EARN IT ────────────────────────
+  //
+  // Same shape as GUIDE_SAME below and nav.tips before it: the exemption
+  // declares the WORD that justifies it and the next assertion checks the
+  // columns still hold exactly that word. So an exemption cannot quietly turn
+  // into cover for a column somebody forgot to translate.
+  //
+  // menu.problem became "Feedback" on 15 Sep at Oliver's request. Danish and
+  // German both use the English word, unchanged and unremarkable, so all three
+  // columns are the same string and none of them is untranslated. The rule this
+  // check defends is "somebody pasted English into the Danish column", and a
+  // loanword is not that.
+  const MENU_SAME = { "menu.problem": "Feedback" };
+  const menuSameOk = (k, c) => MENU_SAME[k] !== undefined && UI_STRINGS[k][c] === MENU_SAME[k];
   is("and none of them is English wearing a Danish label",
-     MENU_KEYS.filter(k => UI_STRINGS[k].da === UI_STRINGS[k].en), []);
-  is("nor a German one", MENU_KEYS.filter(k => UI_STRINGS[k].de === UI_STRINGS[k].en), []);
+     MENU_KEYS.filter(k => UI_STRINGS[k].da === UI_STRINGS[k].en && !menuSameOk(k, "da")), []);
+  is("nor a German one",
+     MENU_KEYS.filter(k => UI_STRINGS[k].de === UI_STRINGS[k].en && !menuSameOk(k, "de")), []);
+  // The exemption is spent on the word it was granted for and nothing else.
+  is("and the exemption still holds the word that earned it",
+     Object.entries(MENU_SAME).filter(([k, word]) =>
+       !["en", "da", "de"].every(c => UI_STRINGS[k][c] === word)), []);
   const appMenu = readFileSync(join(root, "src/App.jsx"), "utf8");
   is("and every one is actually rendered from it",
      MENU_KEYS.filter(k => !appMenu.includes(`uiT("${k}", uiLang)`)), []);
@@ -62772,6 +62828,189 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 
   const DASH = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
   ok("no dash in either file", !DASH.test(th) && !DASH.test(authT));
+}
+
+// ── PASS 101: FEEDBACK NEEDS AN ACCOUNT, AND LANDS WHERE HE WORKS ───
+//
+// Oliver, 15 Sep 2026, with a screenshot of the menu: "The 'something is
+// broken' should only be visible for people with accounts. If you don't have an
+// account, you cannot report. And all the reports should go to
+// Oliververhein@gmail.com's account. So not on the mail, but in a report fixes
+// tab for studio."
+{
+  const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const supF = readFileSync(join(root, "src/components/SupportPage.jsx"), "utf8");
+  const inbox = readFileSync(join(root, "src/utils/supportInbox.js"), "utf8");
+  const panel = readFileSync(join(root, "src/components/StudioReports.jsx"), "utf8");
+  const { splitReport, sortReports, filterReports, reportAge, unhandledCount, isHandled, INBOX_SETUP_SQL, inboxTopicLabel } = M;
+  const DASH = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+
+  // ── THE ROW IS NOT THERE WHEN THERE IS NO ACCOUNT ───────────────
+  ok("the menu row is spread in only for a session",
+     /\.\.\.\(userSession \? \[\{ id: "problem"/.test(appF));
+
+  // ── AND THE PAGE DOES NOT RELY ON THE ROW BEING HIDDEN ──────────
+  //
+  // /support?topic=problem is a URL anybody can type, and the topic is also
+  // reachable from the dropdown on the page itself. A hidden button is not a
+  // gate; it is a button that is hidden.
+  ok("the page decides it for itself",
+     /const needsAccount = form\.topic === PROBLEM_TOPIC && !signedIn;/.test(supF));
+  ok("the submit refuses before it validates anything else",
+     /if \(needsAccount\) return;/.test(supF));
+  ok("and the button is off while it holds", /disabled=\{sending \|\| needsAccount\}/.test(supF));
+
+  // ── AND IT IS THE BUG TOPIC ONLY, WHICH IS THE POINT ────────────
+  //
+  // REPORT_TOPIC is the legal content notice and PROBLEM_TOPIC is the bug
+  // report: two different things wearing a similar word, and this codebase has
+  // both. A person telling a Danish business that something on its site is
+  // unlawful must not first be made to register with it, and the same goes for
+  // the privacy topic, which is the route named in the privacy policy.
+  ok("the legal report route is not gated",
+     !/form\.topic === REPORT_TOPIC && !signedIn/.test(supF));
+  ok("nor the privacy one", !/privacy[\s\S]{0,40}!signedIn/.test(supF));
+  // The Support row in the menu stays out of the conditional for the same
+  // reason. It is the address in the privacy policy.
+  ok("and Support is still there for everybody",
+     /\{ id: "support", label: uiT\("menu\.support", uiLang\), ico: "mail", action: "mail" \}/.test(appF)
+     && !/\.\.\.\(userSession \? \[\{ id: "support"/.test(appF));
+
+  // ── THE PAGE READS ITS OWN SESSION ──────────────────────────────
+  //
+  // The first attempt passed signedIn down from App. The Routes block that
+  // renders this page sits OUTSIDE GemlyxApp, so there was nothing there to
+  // pass, and tests/tdz.mjs caught it as four unresolved identifiers before it
+  // could ever run. Kept as an assertion because the next person to want a prop
+  // here will reach for the same wrong thing.
+  ok("the route passes nothing", /<Route path=\{SUPPORT_PATH\} element=\{<SupportPage \/>\} \/>/.test(appF));
+  ok("and the page reads the session itself", /const session = getStoredSession\(\);/.test(supF));
+  // Synchronous, so the form does not flash "needs an account" at somebody who
+  // has one while a refresh round trip finishes.
+  ok("synchronously, so nothing flashes", !/await getSession\(\)/.test(supF));
+  // They are signed in and we know the address. A box somebody has to retype is
+  // a box some of them leave empty, which costs the reply.
+  ok("the address is prefilled", /email: String\(userEmail \|\| ""\)/.test(supF));
+
+  // ── WHAT THEY WROTE, SEPARATED FROM WHAT THE APP ATTACHED ───────
+  //
+  // withContext glues the browser facts to the end of the message under a
+  // divider, because a column would have needed a migration. That trade leaves
+  // this: the halves have to be told apart again to be read.
+  {
+    const said = "The map went blank on my phone";
+    const joined = `${said}\n\n${M.CONTEXT_DIVIDER || "---- sent by Gemlyx ----"}\nWhat the app could see\nPage: /#/guide/x`;
+    const out = splitReport(joined);
+    is("the message is what they wrote", out.said, said);
+    ok("and the facts come back separately", /Page: \/#\/guide\/x/.test(out.context));
+    // Split, not stripped: the facts are the whole reason a report is
+    // actionable, and hiding them would throw away the answer to "which
+    // browser" to save four lines.
+    ok("nothing is thrown away", out.context.length > 0);
+  }
+  is("a message with no facts attached is left whole", splitReport("just this").said, "just this");
+  is("and reports no context rather than a divider", splitReport("just this").context, "");
+  is("rubbish does not throw", splitReport(null).said, "");
+
+  // ── ORDER: WHAT IS LEFT TO DO, NEWEST FIRST ─────────────────────
+  //
+  // Not simply newest first. The list exists to be worked through, and
+  // something already dealt with should not keep the top of the screen because
+  // it happened to arrive last.
+  {
+    const rows = [
+      { id: 1, handled: true, created_at: "2026-09-15T06:00:00Z" },
+      { id: 2, handled: false, created_at: "2026-09-14T06:00:00Z" },
+      { id: 3, handled: false, created_at: "2026-09-15T05:00:00Z" },
+    ];
+    is("unhandled first, newest inside that", sortReports(rows).map(r => r.id), [3, 2, 1]);
+    is("and the count is what is still waiting", unhandledCount(rows), 2);
+    is("open shows only those", filterReports(rows, "open").map(r => r.id), [3, 2]);
+    is("all shows everything, still in order", filterReports(rows, "all").map(r => r.id), [3, 2, 1]);
+    // A row whose date cannot be read sorts LAST, not first. A broken timestamp
+    // taking the top of the list every time is the shape where one bad row
+    // hides every good one.
+    const withBad = [...rows, { id: 4, handled: false, created_at: "not a date" }];
+    is("a row with no usable date does not take the top", sortReports(withBad)[0].id, 3);
+    is("nor does it vanish", sortReports(withBad).map(r => r.id).includes(4), true);
+    ok("rubbish in the list does not throw", sortReports([null, undefined, ...rows]).length === 3);
+  }
+  is("an empty inbox is not an error", sortReports(null), []);
+  is("and counts as nothing waiting", unhandledCount(null), 0);
+
+  // ── AGE IN WORDS, SO IT IS READ RATHER THAN DECODED ─────────────
+  {
+    const now = Date.parse("2026-09-15T12:00:00Z");
+    is("seconds", reportAge("2026-09-15T11:59:30Z", now), "just now");
+    is("minutes", reportAge("2026-09-15T11:30:00Z", now), "30 min ago");
+    is("one hour is singular", reportAge("2026-09-15T11:00:00Z", now), "1 hour ago");
+    is("hours", reportAge("2026-09-15T09:00:00Z", now), "3 hours ago");
+    is("one day is singular", reportAge("2026-09-14T12:00:00Z", now), "1 day ago");
+    is("days", reportAge("2026-09-12T12:00:00Z", now), "3 days ago");
+    is("and a date it cannot read says nothing rather than NaN", reportAge("whenever", now), "");
+  }
+
+  // ── A LABEL THAT MOVED, AND AN ID THAT DID NOT ──────────────────
+  // "Something is broken" became "Feedback" on 15 Sep. Rows written before that
+  // carry the id, so the panel must resolve the id, and a row carrying an id
+  // nobody recognises shows the id rather than being filed under Other, which
+  // would be tidy and a lie about what somebody chose.
+  is("a known topic shows its current label", inboxTopicLabel("problem"), "Feedback");
+  is("an unknown one shows itself", inboxTopicLabel("from-an-older-build"), "from-an-older-build");
+  is("and an empty one says so", inboxTopicLabel(""), "No topic");
+
+  // ── THE PANEL READS WITH HIS TOKEN, NOT THE PUBLIC KEY ──────────
+  //
+  // This is the whole reason the panel can exist. gemlyx_support has an insert
+  // policy and NO select policy for anon, deliberately: the anon key is in the
+  // bundle, so a readable support table would publish every message anybody has
+  // ever sent to anyone who opened devtools.
+  ok("reports are read through supaFetch",
+     /supaFetch\(`\$\{SUPABASE_URL\}\/rest\/v1\/\$\{SUPPORT_TABLE\}\?select=/.test(appF));
+  ok("and never with the anon key",
+     !/apikey: SUPABASE_KEY[\s\S]{0,200}gemlyx_support\?select=/.test(appF));
+  ok("the SQL opens select to one account",
+     /for select to authenticated/.test(INBOX_SETUP_SQL)
+     && /auth\.jwt\(\) ->> 'email'::text\) = 'oliververhein@gmail\.com'/.test(INBOX_SETUP_SQL));
+  ok("and update, so handled can be written", /for update to authenticated/.test(INBOX_SETUP_SQL));
+  // with check as well as using, or the update policy lets a row be edited into
+  // one the policy would not have allowed.
+  is("both halves of the update are pinned",
+     (INBOX_SETUP_SQL.match(/oliververhein@gmail\.com/g) || []).length, 3);
+
+  // ── AND A 204 IS NOT PROOF THAT ANYTHING WAS WRITTEN ────────────
+  //
+  // A PATCH filtered to a row RLS refuses answers 204, exactly as a successful
+  // one does. This project already has that written down: "a PATCH filtered to
+  // an id that matches nothing returns 204 whether the write was allowed or
+  // blocked by RLS, so that probe proves nothing in either direction."
+  //
+  // Checking res.ok would have reported success every time on a project where
+  // the update policy had never been run. The tick would appear and nothing
+  // would be saved.
+  ok("the handled write asks for the row back", /Prefer: "return=representation"/.test(appF));
+  ok("and treats an empty answer as a refusal",
+     /if \(!Array\.isArray\(back\) \|\| !back\.length\) throw new Error/.test(appF));
+  ok("and puts the row back when it fails", /setReportRows\(before\);/.test(appF));
+
+  // ── THE MISSING POLICY IS SAID OUT LOUD ─────────────────────────
+  //
+  // Without a select policy the table answers 200 and an empty array, which
+  // looks exactly like "no reports yet". That silent shape has shipped three
+  // times in this project already: gemlyx_research, the been column and the
+  // profile column.
+  ok("an empty read offers the SQL", /setReportNeedsSql\(list\.length === 0\)/.test(appF));
+  ok("and the panel renders it", /setupSql && \(/.test(panel));
+
+  // ── THE PANEL OPENS ON WHAT IS LEFT TO DO ───────────────────────
+  ok("the default filter is open", /useState\("open"\)/.test(appF));
+  // Loaded when opened rather than on mount: this panel is on every Studio
+  // visit and most of them are not about reports.
+  ok("and it loads when opened, not on every studio visit",
+     /setReportsOpen\(v => !v\); if \(!reportsOpen\) loadReports\(\);/.test(appF));
+
+  ok("no dash in any of it",
+     !DASH.test(inbox) && !DASH.test(panel) && !DASH.test(supF));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

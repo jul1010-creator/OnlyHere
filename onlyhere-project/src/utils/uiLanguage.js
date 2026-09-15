@@ -174,7 +174,18 @@ export const UI_STRINGS = {
   // what the person is thinking and the second is what a company would call it.
   // A row that repeats the reader's own sentence back to them is the one they
   // press when they are already annoyed.
-  "menu.problem":  { en: "Something is broken", da: "Noget virker ikke", de: "Etwas ist kaputt" },
+  // ── RENAMED 15 SEP 2026 ───────────────────────────────────────────
+  // Oliver: "don't call it 'something is broken' call it 'Feedback'."
+  //
+  // It reads better and it is also more accurate about what the row now is.
+  // "Something is broken" invites one kind of message and quietly turns away
+  // the person who thinks the thing works and is dull, or nearly right, which
+  // during a beta is the more useful half of what he needs to hear. The row is
+  // behind an account now, so it is a channel for people who have committed
+  // something rather than a panic button for strangers.
+  //
+  // The word is the same in all three. Danish and German both use it.
+  "menu.problem":  { en: "Feedback", da: "Feedback", de: "Feedback" },
   "menu.support":  { en: "Support",       da: "Hjælp",               de: "Hilfe" },
   "menu.account":  { en: "Account",       da: "Konto",               de: "Konto" },
   // ── AND THE WAY BACK OUT ──────────────────────────────────────────

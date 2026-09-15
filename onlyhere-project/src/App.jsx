@@ -274,6 +274,9 @@ import { linkPatch } from "./utils/affiliateAudit";
 import { EntryLink } from "./components/EntryLink";
 import { AuthSheet } from "./components/AuthSheet";
 import { ConfirmSheet } from "./components/ConfirmSheet";
+import { StudioReports } from "./components/StudioReports";
+import { filterReports, INBOX_SETUP_SQL } from "./utils/supportInbox";
+import { SUPPORT_TABLE } from "./utils/support";
 import { DeleteAccountSheet, deleteReasonMessage } from "./components/DeleteAccountSheet";
 import { ProfileSheet } from "./components/ProfileSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
@@ -1883,6 +1886,7 @@ function GemlyxApp() {
     setLoginLoading(false);
   };
   // ── Manage Published: list everything Studio has published, with delete.
+  const [reportsOpen, setReportsOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
   // Which category groups are expanded in Manage Published. Seeded from the
   // rows once they load, so the ones with something wrong open themselves and
@@ -1999,6 +2003,92 @@ function GemlyxApp() {
   };
 
   const [editingId, setEditingId] = useState(null); // id of the row being edited, or null for a fresh draft
+  // ── THE REPORTS PANEL ───────────────────────────────────────────
+  //
+  // Oliver, 15 Sep 2026: "all the reports should go to Oliververhein@gmail.com's
+  // account. So not on the mail, but in a report fixes tab for studio."
+  //
+  // Reads gemlyx_support with the STUDIO token rather than the anon key, which
+  // is the whole reason this can exist: the table has no select policy for anon
+  // on purpose, because the anon key is in the bundle and a readable support
+  // table would publish every message anybody has ever sent. See INBOX_SETUP_SQL.
+  const [reportRows, setReportRows] = useState(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState(null);
+  const [reportFilter, setReportFilter] = useState("open");
+  // Shown only once a read has come back empty AND nothing has ever been seen,
+  // because "no select policy" and "no reports yet" are the same answer from
+  // PostgREST: an empty array and a 200. Guessing wrong in the other direction
+  // would put a block of SQL above an empty inbox for ever.
+  const [reportNeedsSql, setReportNeedsSql] = useState(false);
+
+  const loadReports = async () => {
+    if (!studioSession) return;
+    setReportLoading(true);
+    setReportError(null);
+    try {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/${SUPPORT_TABLE}?select=id,reference,topic,email,message,url,handled,created_at&order=created_at.desc&limit=200`);
+      if (!res.ok) {
+        // A refusal is worth saying out loud. The silent case is the empty one
+        // below, which is the one that needs the SQL.
+        const body = await res.text().catch(() => "");
+        setReportError(/relation .* does not exist/i.test(body)
+          ? "The gemlyx_support table does not exist yet. Run SUPPORT_SETUP_SQL first."
+          : "Reports could not be read just now.");
+        setReportRows([]);
+        setReportLoading(false);
+        return;
+      }
+      const rows = await res.json();
+      const list = Array.isArray(rows) ? rows : [];
+      setReportRows(list);
+      setReportNeedsSql(list.length === 0);
+    } catch {
+      setReportError("Reports could not be read just now.");
+      setReportRows([]);
+    }
+    setReportLoading(false);
+  };
+
+  // ── HANDLED, WRITTEN THROUGH AND SHOWN IMMEDIATELY ──────────────
+  //
+  // The row is updated optimistically and put back if the write is refused.
+  // Ticking something off is the one interaction in this panel that has to feel
+  // instant, because it is done twelve times in a row, and a round trip between
+  // the tap and the tick turns working through a list into waiting through one.
+  const setReportHandled = async (row, next) => {
+    const id = row?.id;
+    if (id == null) return;
+    const before = reportRows;
+    setReportRows(list => (list || []).map(r => (r.id === id ? { ...r, handled: next } : r)));
+    try {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/${SUPPORT_TABLE}?id=eq.${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        // ── return=representation, AND THAT IS THE WHOLE POINT ────
+        //
+        // A PATCH filtered to a row that RLS refuses answers 204, which is
+        // exactly what a successful one answers. Checking res.ok would report
+        // success every single time on a project where the update policy had
+        // never been run, and the tick would appear, and nothing would be
+        // saved. This project has a note about that already: "a PATCH filtered
+        // to an id that matches nothing returns 204 whether the write was
+        // allowed or blocked by RLS, so that probe proves nothing in either
+        // direction."
+        //
+        // Asking for the row back is what makes the difference visible: a
+        // refused update returns an empty array.
+        headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ handled: !!next }),
+      });
+      if (!res.ok) throw new Error("refused");
+      const back = await res.json().catch(() => null);
+      if (!Array.isArray(back) || !back.length) throw new Error("nothing was written");
+    } catch {
+      setReportRows(before);
+      setReportError("That could not be saved. The update policy may not be in place yet.");
+    }
+  };
+
   const loadManageItems = async () => {
     if (!studioSession) return;
     setManageLoading(true);
@@ -19559,6 +19649,21 @@ ${languageBlock()}`;
                           style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                           {redraftOpen ? "Hide" : "🔄 Needs Redraft"}
                         </button>
+                        {/* ── REPORTS ──────────────────────────────────
+                            Oliver, 15 Sep 2026: "all the reports should go to
+                            Oliververhein@gmail.com's account. So not on the
+                            mail, but in a report fixes tab for studio."
+
+                            First in this row, ahead of Manage Published, because
+                            during a beta the thing most worth reading before he
+                            starts writing is what broke for somebody else since
+                            yesterday. Loads on open rather than on mount: this
+                            panel is on every Studio visit and most of them are
+                            not about reports. */}
+                        <button onClick={() => { setReportsOpen(v => !v); if (!reportsOpen) loadReports(); }}
+                          style={{ background: reportsOpen ? `${C.gold}22` : "none", border: `1px solid ${reportsOpen ? C.gold : C.border}`, color: reportsOpen ? C.gold : C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                          {reportsOpen ? "Hide" : "📮 Reports"}
+                        </button>
                         <button onClick={() => { setManageOpen(v => !v); if (!manageOpen) loadManageItems(); }}
                           style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                           {manageOpen ? "Hide" : "📋 Manage Published"}
@@ -19573,6 +19678,21 @@ ${languageBlock()}`;
                 </button>
                       </div>
                     </div>
+
+                    {/* filterReports does the ordering as well as the filtering:
+                        unhandled first, newest first inside each half. See
+                        utils/supportInbox.js for why that beats newest first. */}
+                    {reportsOpen && (
+                      <StudioReports
+                        rows={filterReports(reportRows || [], reportFilter)}
+                        loading={reportLoading}
+                        error={reportError}
+                        filter={reportFilter}
+                        onFilter={setReportFilter}
+                        onReload={loadReports}
+                        onHandled={setReportHandled}
+                        setupSql={reportNeedsSql ? INBOX_SETUP_SQL : null} />
+                    )}
 
                     {/* Random guide (test): composes a randomized real-place trip brief and
                         runs it straight through the real guide pipeline with zero chat calls
@@ -26952,7 +27072,26 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               // It goes to the support page with the topic already chosen, so
               // the first thing they meet is the box to type in rather than a
               // dropdown asking them to classify their own bad experience.
-              { id: "problem", label: uiT("menu.problem", uiLang), ico: "bulb", action: "problem" },
+              //
+              // ── AND ONLY FOR SOMEBODY WITH AN ACCOUNT ─────────────
+              //
+              // Oliver, 15 Sep 2026: "The 'something is broken' should only be
+              // visible for people with accounts. If you don't have an account,
+              // you cannot report."
+              //
+              // Two reasons it is the right line to draw, and neither is about
+              // keeping people out. A report is only worth having if he can
+              // answer it or tie it to what happened, and an anonymous one from
+              // a stranger who has since closed the tab is a sentence with
+              // nothing behind it. And an open report box on a public site with
+              // 200 people on it is a form anybody on the internet can post
+              // into, which is a spam surface he would end up reading.
+              //
+              // SUPPORT STAYS OPEN, deliberately, and that is not an
+              // inconsistency. Support is the address in the privacy policy,
+              // and somebody exercising a right over their data must not have
+              // to hold an account to ask. See public/privacy.html.
+              ...(userSession ? [{ id: "problem", label: uiT("menu.problem", uiLang), ico: "bulb", action: "problem" }] : []),
               { id: "support", label: uiT("menu.support", uiLang), ico: "mail", action: "mail" },
             ].map((item, i) => (
               <button key={item.id}
@@ -28276,6 +28415,11 @@ export default function Gemlyx() {
       {hasExampleGuide() && (
         <Route path={EXAMPLE_GUIDE_PATH} element={<GuidePage guide={EXAMPLE_GUIDE} />} />
       )}
+      {/* Propless on purpose. This Routes block is the router shell, outside
+          GemlyxApp, so userSession does not exist here: the TDZ scanner caught
+          the first attempt at passing it down. SupportPage reads its own
+          session, which is the right shape for a standalone page anyway. It
+          already reads its own search params for the same reason. */}
       <Route path={SUPPORT_PATH} element={<SupportPage />} />
       <Route path={AFFILIATES_PATH} element={<AffiliatesPage />} />
       <Route path="/guide/new" element={<GuidePage />} />

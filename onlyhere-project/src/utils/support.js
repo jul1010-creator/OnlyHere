@@ -68,7 +68,15 @@ export const SUPPORT_TOPICS = [
   // opens this page is that something broke, and a person who cannot find their
   // own case picks the first entry. So the first entry is the one they want,
   // which is also the one he most needs to receive.
-  { id: "problem", label: "Something is broken" },
+  // Renamed with the menu row on 15 Sep. A button that says Feedback landing on
+  // a form whose topic says "Something is broken" tells somebody they pressed
+  // the wrong thing, which is how a form loses the person one step in.
+  //
+  // The ID does not change. It is written on every row already in the table and
+  // is what the context block, the message prompt and the Studio panel all key
+  // on; renaming an id to match a label is how stored rows stop matching the
+  // code that reads them.
+  { id: "problem", label: "Feedback" },
   { id: "question", label: "A question about a trip or a place" },
   { id: "wrong", label: "Something on a page is wrong or out of date" },
   { id: "account", label: "Account, sign-in or a saved guide" },

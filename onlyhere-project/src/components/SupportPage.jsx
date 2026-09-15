@@ -44,6 +44,9 @@ import { useState, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { C } from "../utils/theme";
 import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION } from "../config";
+// Synchronous, for the reason in the note in the component: the form must not
+// flash a "needs an account" block at somebody who already has one.
+import { getStoredSession } from "../utils/auth";
 import { withContext, readBrowserFacts } from "../utils/problemContext";
 import { GemlyxLogo } from "./GemlyxLogo";
 import {
@@ -79,8 +82,41 @@ const Label = ({ htmlFor, children, hint }) => (
   </div>
 );
 
+// ── AND ONE TOPIC NOW NEEDS AN ACCOUNT ──────────────────────────────
+//
+// Oliver, 15 Sep 2026: "The 'something is broken' should only be visible for
+// people with accounts. If you don't have an account, you cannot report."
+//
+// The menu row is hidden for a signed out visitor, and a hidden row is not a
+// gate: /support?topic=problem is a URL anybody can type, and the topic is also
+// reachable from the dropdown on this page. So the rule lives here, where the
+// form is, rather than only where the button was.
+//
+// THE BUG TOPIC ONLY. "Report content" is the legal notice route and stays open
+// to anybody, because a person telling a Danish business that something on its
+// site is unlawful must not first be made to register with it. Same for the
+// privacy topic and the same reasoning as the Support row in the menu.
 export const SupportPage = () => {
   const navigate = useNavigate();
+  // ── ITS OWN SESSION, NOT ONE PASSED DOWN ────────────────────────
+  //
+  // The first version took signedIn and userEmail as props, and the Routes
+  // block that renders this page sits OUTSIDE GemlyxApp, so there was nothing
+  // there to pass. The scanner in tests/tdz.mjs caught it as four unresolved
+  // identifiers before it ever ran.
+  //
+  // Reading it here is the better shape regardless. This is a standalone page
+  // on its own route; it already reads its own search params, and a page that
+  // works on its own cannot be broken by where it is mounted.
+  //
+  // getStoredSession rather than getSession: synchronous, so the form does not
+  // flash a "needs an account" block at somebody who has one while a refresh
+  // round trip finishes. An expired token still reads as signed in here, and
+  // that is the right trade: the insert goes with the anon key either way, so
+  // the worst case is a stale session seeing a form it is welcome to use.
+  const session = getStoredSession();
+  const signedIn = !!session?.token;
+  const userEmail = session?.email || "";
   // ── ARRIVING WITH THE TOPIC ALREADY CHOSEN ──────────────────────
   //
   // The Report a problem row in the menu comes here as /support?topic=problem.
@@ -93,7 +129,14 @@ export const SupportPage = () => {
   // insisted a topic was required.
   const [params] = useSearchParams();
   const asked = String(params.get("topic") || "");
-  const [form, setForm] = useState(() => (isTopic(asked) ? { ...EMPTY, topic: asked } : EMPTY));
+  // Prefilled from the session rather than asked for again. They are signed in,
+  // we already know the address, and a box somebody has to retype is a box some
+  // of them leave empty, which costs the reply. Still editable: a person may
+  // want an answer somewhere else.
+  const [form, setForm] = useState(() => ({
+    ...(isTopic(asked) ? { ...EMPTY, topic: asked } : EMPTY),
+    email: String(userEmail || ""),
+  }));
   const [sending, setSending] = useState(false);
   // null while composing, then one of: { ok: true, receipt } | { ok: false, mailto }
   const [done, setDone] = useState(null);
@@ -103,6 +146,9 @@ export const SupportPage = () => {
   const [tried, setTried] = useState(false);
 
   const reporting = form.topic === REPORT_TOPIC;
+  // The one topic that needs an account. Not `reporting`: that is the legal
+  // content notice, which is a different thing wearing a similar word.
+  const needsAccount = form.topic === PROBLEM_TOPIC && !signedIn;
   const problems = useMemo(() => supportProblems(form), [form]);
   const fault = (f) => (tried ? problemFor(problems, f) : "");
   const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
@@ -110,6 +156,9 @@ export const SupportPage = () => {
   const submit = async (e) => {
     e.preventDefault();
     setTried(true);
+    // Checked here as well as hidden in the UI, because the button is not the
+    // rule. A form that is merely not shown is one a stale tab still submits.
+    if (needsAccount) return;
     if (problems.length) return;
     setSending(true);
     const reference = supportReference();
@@ -134,23 +183,20 @@ export const SupportPage = () => {
         },
         body: JSON.stringify(supportPayload(sent, { reference })),
       });
-      // ── AND INTO AN INBOX, NOT ONLY INTO A TABLE ─────────────────
+      // ── AND NOT INTO AN INBOX, AS OF 15 SEP ─────────────────────
       //
-      // Oliver, 15 Sep 2026: "We'll get another resend for that." The row is
-      // the record; this is the part that reaches a person on the day it
-      // happens. During a beta a report he reads on Thursday is a report about
-      // a bug that lost him Monday's readers.
+      // This used to post the same message to api/report-problem, which mailed
+      // it to hello@. Oliver, later the same day: "all the reports should go to
+      // Oliververhein@gmail.com's account. So not on the mail, but in a report
+      // fixes tab for studio."
       //
-      // NOT AWAITED INTO THE OUTCOME BELOW, and that is the whole design. The
-      // message is already stored by the line above. Whether the mail goes is
-      // not something a person filling in this form should be made to wait for
-      // or be told about, and api/report-problem.js answers 200 with
-      // emailed:false rather than failing when the key is missing.
-      fetch("/api/report-problem", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: sent.topic, message: sent.message, email: sent.email, reference }),
-      }).catch(() => { /* the row is written; this is the second copy */ });
+      // He is right, and the mail was the weaker half anyway. A report in an
+      // inbox has no state: it cannot be marked handled, it sits among
+      // everything else competing for the same attention, and answering one
+      // means finding it again. The row can be read in Studio, sorted, and
+      // ticked off, which is what a beta actually needs.
+      //
+      // The row was always the record. This only stops the second copy.
       // A 2xx is the only thing that means stored. Everything else, including a
       // table that does not exist yet and a policy that refuses the insert,
       // takes the path that does not lose the message.
@@ -234,6 +280,34 @@ export const SupportPage = () => {
         <Fault id="sup-topic-fault" text={fault("topic")} />
       </div>
 
+      {/* ── THE ONE TOPIC THAT NEEDS AN ACCOUNT ──────────────────────
+          Placed under the topic picker rather than replacing the page,
+          because it has to appear the moment somebody CHANGES the dropdown
+          to Feedback, not only when they arrive on that topic. Everything
+          below stays on screen: a form that vanishes reads as a fault, and
+          they may pick another topic instead.
+
+          It says why. "You need an account" with no reason reads as a wall;
+          the reason is that a report he cannot answer or tie to an account
+          is not worth much to either end. */}
+      {needsAccount && (
+        <div style={{ marginBottom: 20, background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 6 }}>
+            Feedback needs an account
+          </div>
+          <div style={{ fontSize: 13, lineHeight: 1.6, color: C.light, marginBottom: 12 }}>
+            So we can write back to you, and so a fix can be tied to what you were doing. It takes a moment and nothing else on this page needs one.
+          </div>
+          {/* Home, rather than opening a sheet this page cannot reach. Signing
+              in there makes the Feedback row appear in the menu, so the way
+              back is the way they came rather than a step to remember. */}
+          <button type="button" onClick={() => navigate("/")}
+            style={{ background: C.gold, border: "none", color: C.onGold, borderRadius: 10, padding: "10px 18px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+            Go to Gemlyx and sign in
+          </button>
+        </div>
+      )}
+
       <div style={{ marginBottom: 20 }}>
         <Label htmlFor="sup-email"
           hint={reporting
@@ -281,8 +355,11 @@ export const SupportPage = () => {
         </div>
       )}
 
-      <button type="submit" disabled={sending}
-        style={{ background: C.accent, color: C.onAccent, border: "none", borderRadius: 10, padding: "13px 22px", fontSize: 14, fontWeight: 700, cursor: sending ? "default" : "pointer", opacity: sending ? 0.6 : 1, fontFamily: "'Inter', sans-serif" }}>
+      {/* Disabled rather than hidden while the account is missing. A button that
+          disappears leaves somebody looking for it; one that is visibly off,
+          under a block that says why, has already answered the question. */}
+      <button type="submit" disabled={sending || needsAccount}
+        style={{ background: C.accent, color: C.onAccent, border: "none", borderRadius: 10, padding: "13px 22px", fontSize: 14, fontWeight: 700, cursor: (sending || needsAccount) ? "default" : "pointer", opacity: (sending || needsAccount) ? 0.6 : 1, fontFamily: "'Inter', sans-serif" }}>
         {sending ? "Sending" : reporting ? "Send report" : "Send message"}
       </button>
 

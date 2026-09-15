@@ -19,6 +19,9 @@ import { currentUiLanguage, isUiLanguage, t as uiT } from "../utils/uiLanguage";
 // keeps following the picker.
 import { entryWord } from "../utils/entryWords";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
+// The table name, from the file that owns it, so the guide feedback row and a
+// Feedback message from the support page cannot end up in two places.
+import { SUPPORT_TABLE } from "../utils/support";
 import { GemlyxLoader, GemlyxMark } from "../components/GemlyxLogo";
 import { TypewriterText } from "../components/TypewriterText";
 import { DetailPage } from "../components/DetailPage";
@@ -2557,15 +2560,44 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             // and the component says so rather than pretending otherwise.
             guideId={guideId}
             title={guide?.title}
-            onSend={({ answer, note, title }) => fetch("/api/report-problem", {
+            // ── TO THE TABLE, NOT TO AN INBOX, AS OF 15 SEP ─────
+            //
+            // This posted to api/report-problem, which mailed it. Oliver:
+            // "all the reports should go to Oliververhein@gmail.com's account.
+            // So not on the mail, but in a report fixes tab for studio."
+            //
+            // Same row and same table as a Feedback message from the support
+            // page, so the Studio panel reads one list rather than two. The
+            // anon key is what writes it: gemlyx_support is insert-only to
+            // anon and authenticated, and carries no select policy at all, so
+            // writing with the public key publishes nothing.
+            //
+            // Unawaited and unchecked, exactly as before. GuideFeedback thanks
+            // them either way, on purpose: a thank you they have earned is not
+            // withheld over a failed post, and there is nothing they could do
+            // about it if it were.
+            onSend={({ answer, note, title }) => fetch(`${SUPABASE_URL}/rest/v1/${SUPPORT_TABLE}`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                apikey: SUPABASE_KEY,
+                Authorization: `Bearer ${SUPABASE_KEY}`,
+                "Content-Type": "application/json",
+                Prefer: "return=minimal",
+              },
               body: JSON.stringify({
                 topic: "feedback",
+                created_at: new Date().toISOString(),
                 // A just-built guide has no id yet, so the title is the only
                 // handle on it. Sending an empty reference made every feedback
                 // mail about a guide he could not identify.
-                reference: guideId || String(guide?.title || "").slice(0, 40),
+                //
+                // AND IT CANNOT BE EMPTY NOW. reference is `not null` on the
+                // table, so an untitled guide from somebody who had not saved
+                // it would have had the whole row refused, which is the one
+                // case where the feedback is most likely to be about the thing
+                // that went wrong. "untitled guide" is a worse handle than a
+                // name and an infinitely better one than a lost row.
+                reference: guideId || String(guide?.title || "").slice(0, 40) || "untitled guide",
                 // The answer first, because a yes with no words is still an
                 // answer and has to survive an empty box. The guide's name and
                 // the browser facts ride along for the same reason they do on a
