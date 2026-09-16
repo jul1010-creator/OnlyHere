@@ -92,6 +92,9 @@ export const UI_STRINGS = {
   "nav.food":        { en: "Food",            da: "Mad",            de: "Essen" },
   "nav.nightlife":   { en: "Nightlife",       da: "Natteliv",       de: "Nachtleben" },
   "nav.visits":      { en: "Towns",           da: "Byer",           de: "Städte" },
+  // Øer, not Øerne. The definite form would name a specific set of islands and
+  // this page is the general one.
+  "nav.islands":     { en: "Islands",         da: "Øer",            de: "Inseln" },
   // The product name, untranslated in all three. See the note above.
   "nav.ai":          { en: "✦ Gemlyx Detour", da: "✦ Gemlyx Detour", de: "✦ Gemlyx Detour" },
 

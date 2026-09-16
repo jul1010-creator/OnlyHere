@@ -61,8 +61,12 @@ export const parentTownOf = (p) => String(p?.city || p?.town || townOfLocation(p
 // quietly left off this screen. Craft keeps its own _src even though it is
 // DISPLAYED under Attractions: openStopDetail routes "Read more" by _src, and
 // renaming it here would send a craft click to the wrong detail page.
-export const previewPools = ({ towns = [], freeEntrance = [], foodSpots = [], nightlifeSpots = [], craftItemsFallback = [], events = [], majorEvents = [] } = {}) => [
+export const previewPools = ({ towns = [], islands = [], freeEntrance = [], foodSpots = [], nightlifeSpots = [], craftItemsFallback = [], events = [], majorEvents = [] } = {}) => [
   ...towns.map(p => ({ ...p, _src: "town" })),
+  // Its own _src, never "town". openStopDetail routes a "Read more" click by
+  // _src, so an island filed as a town would open the town detail view with an
+  // island in it.
+  ...islands.map(p => ({ ...p, _src: "island" })),
   ...freeEntrance.map(p => ({ ...p, _src: "free" })),
   ...foodSpots.map(p => ({ ...p, _src: "food" })),
   ...nightlifeSpots.map(p => ({ ...p, _src: "nightlife" })),

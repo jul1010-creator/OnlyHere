@@ -47,7 +47,12 @@ export const JOURNEY_ORIGINS = ["origin", "town"];
 
 // Named `origin` rather than `copenhagen`, because helpers.js already calls it
 // TRAVEL_ORIGIN and a second name for the same place is how two of them drift.
-const FROM_THE_ORIGIN = ["town"];
+// island joins town on 16 Sep 2026, and for the same reason town is here: an
+// island IS the destination, so "how far is it from the middle of its own town"
+// is not a question, and the one a reader has is how long it takes to get there
+// from where the country's trains and planes actually land. Measuring an island
+// from its own centre would have printed a journey of a few hundred metres.
+const FROM_THE_ORIGIN = ["town", "island"];
 
 // nightTown: his words, above.
 // essential: tax-free shopping is not somewhere with a coordinate. It was
@@ -81,8 +86,8 @@ export const showsJourney = (type) => !!journeyOriginFor(type);
 // nothing: placeUrl.js records that "nightTown and essential are absent on
 // purpose: neither opens as a page in the app", so no kind maps to them. The
 // stored journey on an old nightTown row simply stops being rendered anywhere.
-const KIND_ORIGIN = { town: "origin" };
-const RENDER_KINDS = ["town", "event", "free", "food", "nightlife", "craft"];
+const KIND_ORIGIN = { town: "origin", island: "origin" };
+const RENDER_KINDS = ["town", "event", "free", "food", "nightlife", "craft", "island"];
 
 export const journeyOriginForKind = (kind) => {
   const k = String(kind || "").trim();

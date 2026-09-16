@@ -46,11 +46,15 @@ export const BEEN_CAP = 300;
 // Kinds that can be marked at all. craft and product are objects to buy rather
 // than places to stand, and "I have been to a smoked herring" is not a fact
 // about anybody's trip.
-export const BEEN_KINDS = ["town", "free", "food", "nightlife", "event"];
+// island joins on 16 Sep 2026. An island is somewhere you stand, which is the
+// test this list applies, and it belongs in CONTEXT_KINDS below for the same
+// reason a town does: it is a base, and having been there once does not mean a
+// guide should stop routing you to it.
+export const BEEN_KINDS = ["town", "island", "free", "food", "nightlife", "event"];
 
 // Kinds a mark does NOT exclude. See the block above: a town is where you sleep
 // and an event is a different event next year.
-export const CONTEXT_KINDS = ["town", "event"];
+export const CONTEXT_KINDS = ["town", "island", "event"];
 export const EVENT_IS_A_PLACE = false;
 
 const clean = (v) => String(v ?? "").trim();

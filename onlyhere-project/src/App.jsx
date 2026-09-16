@@ -27,6 +27,7 @@ import { denmarkFacts } from "./data/denmarkFacts";
 import { orderFor, nextSeed, advancePos, factAt } from "./utils/factRotation";
 import { events, majorEvents, vikingEvents, undatedEvents } from "./data/events";
 import { towns, TOWN_COORDS } from "./data/towns";
+import { islands } from "./data/islands";
 import { freeEntrance } from "./data/freeEntrance";
 import { nightlifeSpots } from "./data/nightlife";
 import { nightlifeTowns } from "./data/nightlifeTowns";
@@ -254,6 +255,7 @@ import { resolveUncertainties, CONFIRM_FORMAT } from "./utils/uncertaintyResolve
 import AccountAvatar from "./components/AccountAvatar";
 import ReadMore from "./components/ReadMore";
 import { dateClaimProblems } from "./utils/dateClaims";
+import { aiCredit } from "./utils/aiImages";
 import { proposals as waitingProposals, describeProposals, writeFor, MOVE as WAIT_MOVE } from "./utils/undatedSweep";
 import { socialPlan as buildSocialPlan, describeSocialPlan, socialWriteFor, preTicked as socialPreTicked, describeFinding, canWrite as socialCanWrite, REQUESTS_PER_SEARCH } from "./utils/socialSweep";
 import { avatarUrl } from "./utils/accountAvatar";
@@ -1138,6 +1140,17 @@ function GemlyxApp() {
   // openStopDetail for why it is one flag rather than a second state per type.
   const [entryWindowed, setEntryWindowed] = useState(false);
   const [townDetail, setTownDetail] = useState(null);
+  const [islandDetail, setIslandDetail] = useState(null);
+  // ── THE ISLANDS PAGE HAS TWO CONTROLS AND NOT TEN ─────────────
+  //
+  // The Towns page carries five facets because it holds hundreds of rows. There
+  // are about seventy Danish islands anybody visits and there will be far fewer
+  // here, so a filter bar would be furniture. A search box, and the one question
+  // a reader of THIS page actually asks: can I drive there, or is there a boat
+  // to catch. That question is answered off `fixedLink`, which is a real field
+  // and not an inference.
+  const [islandSearch, setIslandSearch] = useState("");
+  const [islandLink, setIslandLink] = useState(null);
   const [nightlifeDetail, setNightlifeDetail] = useState(null);
   const [freeDetail, setFreeDetail] = useState(null);
   const [foodDetail, setFoodDetail] = useState(null);
@@ -1343,6 +1356,28 @@ function GemlyxApp() {
   const [placeDraft, setPlaceDraft] = useState({ placeKind: "", partOf: "", dayTripFrom: "", island: "" });
   const [placeSaving, setPlaceSaving] = useState(false);
   const [placeError, setPlaceError] = useState(null);
+  // ── TURNING A PUBLISHED TOWN INTO AN ISLAND ────────────────
+  //
+  // Oliver, 16 Sep 2026: "Let me be able to change Præstø and Samsø from towns..
+  // so I save money." The research is the expensive part and it is already
+  // bought: the prose, the photo, the coordinate, the sources and every glance
+  // field carry across untouched, because the island shape was written to match
+  // the town shape field for field wherever the two mean the same thing.
+  //
+  // WHAT IT REFUSES TO CARRY IS placeKind. city/town/village/area answers how
+  // big a settlement is, an island is not a settlement, and a stray placeKind
+  // would put the converted row through isArea() on a page that does not filter
+  // on it.
+  //
+  // AND IT ASKS FOR THE CROSSING BEFORE IT WILL SAVE, because a converted town
+  // is the one island entry guaranteed to have been researched without anybody
+  // asking about a ferry. Converting silently would produce an island page whose
+  // At a Glance has no crossing in it, which is the emptiest possible version of
+  // the one thing this type exists for.
+  const [islandConvertId, setIslandConvertId] = useState(null);
+  const [islandConvert, setIslandConvert] = useState({ fixedLink: "", ferryOperator: "", ferryFrom: "", ferryTo: "", crossingGlance: "", offSeasonGlance: "" });
+  const [islandConvertSaving, setIslandConvertSaving] = useState(false);
+  const [islandConvertError, setIslandConvertError] = useState(null);
 
   // ── EDITING THE BLOG ITSELF ───────────────────────────────────────
   // Oliver, 13 Aug 2026: "Can you make the studio able to go into the blog
@@ -1526,6 +1561,77 @@ function GemlyxApp() {
     setPlaceEditId(v => v === row.id ? null : row.id);
     setPlaceDraft({ placeKind: cleanPlaceKind(pl.placeKind), partOf: String(pl.partOf || ""), dayTripFrom: String(pl.dayTripFrom || ""), island: String(pl.island || "") });
     setPlaceError(null);
+  };
+
+  const openIslandConvert = (row) => {
+    const pl = row.payload || {};
+    setIslandConvertId(v => v === row.id ? null : row.id);
+    // Pre-filled from the row where the row already knows, which it sometimes
+    // does: a town ON an island carries `island`, and a converted row keeps it
+    // only when it names a BIGGER island, never itself.
+    setIslandConvert({
+      fixedLink: String(pl.fixedLink || ""), ferryOperator: String(pl.ferryOperator || ""),
+      ferryFrom: String(pl.ferryFrom || ""), ferryTo: String(pl.ferryTo || ""),
+      crossingGlance: String(pl.crossingGlance || ""), offSeasonGlance: String(pl.offSeasonGlance || ""),
+    });
+    setIslandConvertError(null);
+  };
+
+  // ── THE CONVERSION ITSELF ────────────────────────────
+  //
+  // One PATCH, changing `type` and `payload` together, because the two are one
+  // fact: a payload carrying crossing fields under type "town" is a row nothing
+  // renders, and a type of "island" over a payload with placeKind in it is a
+  // row that renders wrongly. Either alone is a half-converted entry.
+  //
+  // THE LOCAL ARRAYS ARE NOT HAND-MOVED. removeLiveRow drops the row's claim in
+  // mergedIds and mergedKeys, and refreshLiveContent then re-merges it from
+  // scratch, which is how it lands in `islands` rather than in `towns`. Moving
+  // it by hand between two module arrays is the same work with one more place
+  // to get it wrong. Same pattern as the undated release at the date gate.
+  const saveIslandConvert = async (row) => {
+    const said = (v) => String(v || "").trim();
+    // A bridge OR a full crossing. Not neither, and a half-named crossing is
+    // not a crossing: one port on its own is unusable, because Danish islands
+    // are routinely served from two or three mainland harbours.
+    const hasLink = !!said(islandConvert.fixedLink);
+    const hasCrossing = !!(said(islandConvert.ferryFrom) && said(islandConvert.ferryTo));
+    if (!hasLink && !hasCrossing) {
+      setIslandConvertError("An island page needs either a fixed link or both ends of the crossing. Name the bridge, or name the mainland port and the island port. Take them from the operator's own page.");
+      return;
+    }
+    setIslandConvertSaving(true); setIslandConvertError(null);
+    const { placeKind, ...carried } = (row.payload || {});
+    const payload = {
+      ...carried,
+      fixedLink: said(islandConvert.fixedLink), ferryOperator: said(islandConvert.ferryOperator),
+      ferryFrom: said(islandConvert.ferryFrom), ferryTo: said(islandConvert.ferryTo),
+      crossingGlance: said(islandConvert.crossingGlance), offSeasonGlance: said(islandConvert.offSeasonGlance),
+      // An island's `island` field names the LARGER island it belongs to. A town
+      // on Ærø carries island "Ærø"; Ærø itself must not, or it appears under its
+      // own filter as a thing on itself.
+      island: cleanIsland(carried.island) === cleanIsland(carried.name) ? "" : cleanIsland(carried.island),
+      // The photo folder changes with the type, and a path is not a picture: the
+      // old file stays where it is and a new one has to be put at the new path.
+      // Said in the toast rather than silently repointed.
+      photo: `/islands/${slugify(String(carried.name || ""))}.jpg`,
+    };
+    try {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(row.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ type: "island", payload }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setIslandConvertError(studioErrorMessage("this entry", res.status, body)); setIslandConvertSaving(false); return; }
+      setManageItems(prev => (prev || []).map(r => r.id === row.id ? { ...r, type: "island", payload } : r));
+      setIslandConvertId(null);
+      removeLiveRow(Number(row.id), "town");
+      await refreshLiveContent();
+      bumpLiveContent(v => v + 1);
+      showToast(`${payload.name} is an island now. Put a photo at public/islands/${slugify(String(payload.name || ""))}.jpg — the old town photo is still at its old path.`, 5200);
+    } catch (e) { setIslandConvertError(String(e.message || e)); }
+    setIslandConvertSaving(false);
   };
 
   // PATCHES THE THREE FIELDS, NOT THE PAYLOAD. Sending the whole object back
@@ -2552,7 +2658,18 @@ function GemlyxApp() {
     setMediaBusy(false);
   };
 
-  const uploadMediaFiles = async (row, fileList) => {
+  // ── TWO DOORS, BECAUSE ONE OF THEM HAS TO DECLARE ITSELF ──────────
+  //
+  // Oliver, 15 Sep 2026: "I will start creating AI photos for places that I
+  // can't find pictures for... according to EU laws, I believe I need to
+  // explicitly state that the picture is AI."
+  //
+  // He is right: AI Act Article 50(4), in force since 2 August 2026, and the
+  // reasoning is written out in utils/aiImages.js. The disclosure cannot be a
+  // checkbox somebody forgets, so it is the DOOR: the AI button writes the flag
+  // onto every picture in that batch, and there is no way to upload through it
+  // without it. The ordinary button is unchanged and writes nothing.
+  const uploadMediaFiles = async (row, fileList, { ai = false } = {}) => {
     const files = Array.from(fileList || []);
     if (!files.length || mediaBusy) return;
     setMediaBusy(true); setMediaError(null);
@@ -2560,9 +2677,12 @@ function GemlyxApp() {
       const slugBase = slugify(row.payload?.name || "item");
       const newBlocks = [];
       let firstUrl = null;
+      // The flag rides on the credit, which is the one thing already carried
+      // with a picture through shapeForLive, the hero field and the body block.
+      const credit = ai ? aiCredit() : null;
       for (let i = 0; i < files.length; i++) {
         const url = await uploadToMedia(files[i], mediaPathFor(files[i], row.type, slugBase, i));
-        newBlocks.push({ type: "image", src: url });
+        newBlocks.push({ type: "image", src: url, ...(credit ? { credit } : {}) });
         if (!firstUrl) firstUrl = url;
       }
       const p = row.payload || {};
@@ -2590,7 +2710,10 @@ function GemlyxApp() {
       // cannot change it in three places and miss the fourth. That miss is what
       // this comment block is about. See utils/heroPhoto.js.
       const replacing = await heroNeedsReplacing(p.photo, { loads: imageLoads });
-      await patchContentPayload(row, { ...p, ...heroPatch(replacing, firstUrl), blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), ...newBlocks] });
+      // heroPatch attaches the credit only when this picture actually takes the
+      // card, which is what keeps a disclosure from ending up on somebody
+      // else's photograph.
+      await patchContentPayload(row, { ...p, ...heroPatch(replacing, firstUrl, credit || undefined), blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), ...newBlocks] });
     } catch (e) { setMediaError(String(e?.message || e)); }
     setMediaBusy(false);
   };
@@ -3439,7 +3562,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // it: with no coordinate here the next lookup runs, and after that Google
       // Places, which in that very run answered correctly.
       const settlementRefused = (hit, asked) => {
-        if (!hit || !geocodeIsASettlement(hit) || sType === "town" || sType === "nightTown") return false;
+        if (!hit || !geocodeIsASettlement(hit) || sType === "town" || sType === "island" || sType === "nightTown") return false;
         decide("whether Nominatim's coordinate is about this place", {
           winner: "nothing",
           loser: `Nominatim's "${String(hit.found || "").slice(0, 70)}" (${hit.kind})`,
@@ -3645,6 +3768,11 @@ Say which answer came from which source, so a fact from a vouched page and a fac
 
       const cfg = {
         town: { queries: [`${name} Denmark travel guide history attractions what makes it special`, `${name} Denmark getting there by train best time to visit where to stay what travelers say`, `${name} reddit r/Denmark r/travel what locals visitors really think`, `${name} quora google reviews honest opinion worth it`] },
+        // THE OPERATOR IS THE FIRST QUERY, not the tourist board, because the
+        // tourist board has contradicted the operator before and lost. The
+        // second asks what the winter timetable does, which is the fact most
+        // island pages leave out and the one that ruins a February day trip.
+        island: { queries: [`${name} ø Denmark færge overfart sejlplan operatør havn priser`, `${name} island Denmark ferry from which port crossing time car booking`, `${name} Denmark island what to do cycling harbours how long to stay`, `${name} ø vinter færge afgange reddit r/Denmark worth it`] },
         festival: { queries: [`${name} festival Denmark 2026 dates tickets prices lineup official website`, `${name} festival Denmark atmosphere who goes accommodation nearest station`, `${name} reddit r/Denmark experience worth it crowds queue`, `${name} quora google reviews honest opinion worth it`] },
         free: { queries: [`${name} free entry what makes it special history opening hours`, `${name} Denmark visitor tips things to know best time to visit`, `${name} Denmark getting there how to reach`, `${name} reddit r/Denmark hidden gem overrated worth it`, `${name} quora google reviews honest opinion overrated`] },
         food: { queries: [`${name} Denmark what to order menu prices history`, `${name} Denmark best time to visit busy hours local tips address`, `${name} reddit r/Denmark r/food worth it locals think`, `${name} quora google reviews honest opinion`] },
@@ -3671,6 +3799,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       const daName = otherNameFor(name, { includeSights: true });
       const daWords = {
         town: "seværdigheder praktisk information hvad kan man lave åbningstider",
+        island: "færge overfart sejlplan afgange havn priser bil",
         festival: "billetter datoer program praktisk information",
         free: "åbningstider gratis adgang praktisk information",
         food: "menukort priser åbningstider anmeldelse",
@@ -3931,7 +4060,12 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // Derived from the partition at the top of this file now.
       if (PLACES_THAT_ARE_AN_AREA.includes(sType)) {
         try {
-          const oq = sType === "town"
+          const oq = sType === "island"
+            // An island's official site is the OPERATOR's, every time. The
+            // island's own tourist board is a marketing page and has
+            // contradicted the timetable it was describing.
+            ? `"${name}" færge operatør officiel sejlplan afgange priser ferry operator timetable`
+            : sType === "town"
             // For a town the useful "official site" is rarely the town itself.
             // It is the sites of the things IN it: the castle, the church, the
             // ferry, the bus operator. Those are what decide a getting-there or
@@ -4452,6 +4586,12 @@ VIBE/LOCATION FACTS: its exact address or a real nearby landmark, why locals go 
 FOOD MECHANICS FACTS: ${sType === "foodStreet" ? "what vendors/stalls are there, the range of cuisines/dishes on offer, how it's organized (indoor hall, outdoor stalls, etc.)" : "how the food is made — cooking method (stone-baked, flame-grilled, slow-cooked, hand-rolled), specific real dishes people order"}.
 REALITY CHECK FACTS: real current prices, typical wait times, seating situation, anything else logistically true.
 If you can't find something for a bucket, leave it out rather than guessing. Short facts only, no essay, no flowing sentences — ChatGPT handles the actual writing.`
+          : sType === "island"
+          ? `Using real, current web search, find accurate facts about the Danish island "${name}", and organize them into exactly three labeled groups — do not write prose, just sort real facts you find into these buckets:
+CHARACTER/FIT FACTS: where it lies, roughly how big it is, how many people live there, what it is known for, who it suits and who it does not.
+WHAT TO DO FACTS: real named harbours, villages, roads and things a visitor does there. Whether it is realistically covered by bike, by car or on foot, and how long it takes to cross.
+CROSSING FACTS, THE MOST IMPORTANT BUCKET: first, whether there is a BRIDGE, causeway or tunnel you can drive or cycle over, and between which two places. If there is no fixed link, then the ferry: which company runs it, WHICH MAINLAND PORT it leaves from and WHICH PORT ON THE ISLAND it arrives at, how long the crossing takes, what a car costs, how far ahead a car has to be booked in summer, and what the winter timetable does to the last sailing. Take these from the OPERATOR'S own page. If a tourist board page and the operator disagree, report the operator and say the two disagree.
+If you can't find something for a bucket, leave it out rather than guessing. An unanswered crossing is a real and useful answer; a guessed port is not. Short facts only, no essay, no flowing sentences — ChatGPT handles the actual writing.`
           : sType === "town"
           ? `Using real, current web search, find accurate facts about the town "${name}" in Denmark, and organize them into exactly three labeled groups — do not write prose, just sort real facts you find into these buckets:
 CHARACTER/FIT FACTS: founding date or defining historical fact, its region, what kind of place it is, who it suits. IMPORTANT: if the town has more than one relevant historical date (e.g. an older institution, monastery, or building founded there vs. the town itself later being granted official status such as market-town/købstad rights), list each as its own separate fact with its own date — do not merge them into a single date or imply one caused the other unless your source explicitly says so.
@@ -6337,7 +6477,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       );
       if (draftResult.error) throw new Error(draftResult.error);
       let t = await parseClaudeJSON(draftResult.text, 8192);
-      const noContentField = (sType === "food" || sType === "foodStreet") ? !t.vibeLocation : sType === "town" ? !t.characterAndFit : sType === "essential" ? (!t.desc || !t.howTo) : !t.desc;
+      const noContentField = (sType === "food" || sType === "foodStreet") ? !t.vibeLocation : (sType === "town" || sType === "island") ? !t.characterAndFit : sType === "essential" ? (!t.desc || !t.howTo) : !t.desc;
       if (!t.name || noContentField) throw new Error("empty");
       // Verify the route to the AI's own highlighted attraction specifically —
       // this is the actual bug behind the Gentofte/Ordrupgaard case: the frozen-
@@ -6347,7 +6487,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       // checked against anything real. Not a silent rewrite of free-form prose
       // (unsafe) — a clear, verified warning so the specific real station is
       // right there to swap in by hand before publishing.
-      if (sType === "town" && t.highlight) {
+      if ((sType === "town" || sType === "island") && t.highlight) {
         try {
           const hlCoords = await geocodePlace(t.highlight);
           if (hlCoords && frozenGeo) {
@@ -6517,7 +6657,14 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       const slug = slugify(name);
       const stamp = new Date().toLocaleString("en-GB", { month: "short", year: "numeric" });
       let code = "";
-      if (sType === "town") {
+      // An island gets its own branch for the same reason every other type
+      // does: the chain ends in a bare else that writes NIGHTLIFE code, so a
+      // type without a branch silently produces paste-ready code for the wrong
+      // array. There is an assertion on exactly that.
+      if (sType === "island") {
+        const nextId = Math.max(0, ...islands.map(x => x.id)) + 1;
+        code = `// 1) Ctrl+F for \`const islands = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, photo: "/islands/${slug}.jpg", region: ${J(t.region)}, emoji: ${J(t.emoji || "\u26f4")}, tag: ${J(t.tag)}, desc: ${J(t.characterAndFit)}, highlight: ${J(t.highlight)}, travelTime: ${J(t.travelTime)}, mapHint: ${J(t.mapHint || t.name + ", Denmark")}, nomiPotential: ${J(t.nomiPotential || "Medium")}, tier: ${J(t.tier)}, fixedLink: ${J(t.fixedLink || "")}, ferryOperator: ${J(t.ferryOperator || "")}, ferryFrom: ${J(t.ferryFrom || "")}, ferryTo: ${J(t.ferryTo || "")}, crossingGlance: ${J(t.crossingGlance || "")}, offSeasonGlance: ${J(t.offSeasonGlance || "")}, partOf: ${J(t.partOf || "")}, dayTripFrom: ${J(t.dayTripFrom || "")}, island: ${J(cleanIsland(t.island))}, recommendedStayGlance: ${J(t.recommendedStayGlance)}, bestTimeGlance: ${J(t.bestTimeGlance)}, accommodationGlance: ${J(t.accommodationGlance)}, typicalCosts: ${J(t.typicalCosts)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([[`What to Do on ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/islands/${slug}.jpg\n// 3) VERIFY the crossing before committing. The operator's own page, not the tourist board.`;
+      } else if (sType === "town") {
         const nextId = Math.max(0, ...towns.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const towns = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, photo: "/towns/${slug}.jpg", region: ${J(t.region)}, emoji: ${J(t.emoji || "📍")}, tag: ${J(t.tag)}, desc: ${J(t.characterAndFit)}, highlight: ${J(t.highlight)}, travelTime: ${J(t.travelTime)}, mapHint: ${J(t.mapHint || t.name + ", Denmark")}, nomiPotential: ${J(t.nomiPotential || "Medium")}, tier: ${J(t.tier)}, placeKind: ${J(t.placeKind || "")}, partOf: ${J(t.partOf || "")}, dayTripFrom: ${J(t.dayTripFrom || "")}, island: ${J(cleanIsland(t.island))}, recommendedStayGlance: ${J(t.recommendedStayGlance)}, bestTimeGlance: ${J(t.bestTimeGlance)}, accommodationGlance: ${J(t.accommodationGlance)}, typicalCosts: ${J(t.typicalCosts)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([[`What to Do in ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Ctrl+F for \`const TOWN_COORDS\` and paste right after the { :\n${J(t.name)}: [${Number.isFinite(Number(t.lat)) ? Number(t.lat).toFixed(3) : "??"}, ${Number.isFinite(Number(t.lon)) ? Number(t.lon).toFixed(3) : "??"}],\n\n// 3) Add a photo at public/towns/${slug}.jpg\n// 4) VERIFY every fact before committing — especially highlight, travelTime, dates and coordinates.`;
       } else if (sType === "festival") {
@@ -6959,7 +7106,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       if (frozenGeo) {
         if (typeof t.lat !== "undefined") t.lat = frozenGeo.lat;
         if (typeof t.lon !== "undefined") t.lon = frozenGeo.lon;
-      } else if (["town", "festival", "free", "booking", "food", "foodStreet"].includes(sType) && (t.lat || t.lon)) {
+      } else if (["town", "island", "festival", "free", "booking", "food", "foodStreet"].includes(sType) && (t.lat || t.lon)) {
         // Geocoding failed, so nothing will override at publish either, and any
         // number sitting in lat/lon right now is the model's own. That is the one
         // case where a wrong coordinate genuinely ships, so it is dropped rather
@@ -9126,6 +9273,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
   // above (same generateArea pipeline, just auto-run one at a time).
   const DISCOVER_TYPE_LABEL = {
     town: "small Danish towns worth a detour — real, lesser-known places, not the famous cities everyone already covers",
+    island: "Danish islands worth a trip in their own right, the ones with a real crossing and a reason to stay, not the mainland peninsulas",
     festival: "festivals, markets, or one-off events happening in Denmark",
     free: "free-entrance attractions in Denmark",
     food: "individual restaurants or food spots in Denmark",
@@ -9141,7 +9289,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     // propose a name the memory already holds, and the duplicate gate in
     // publishDraft must refuse one: a festival published under a name that is
     // already waiting is the Bork case, four rows deep.
-    town: towns, festival: [...events, ...majorEvents, ...vikingEvents, ...undatedEvents], free: freeEntrance,
+    town: towns, island: islands, festival: [...events, ...majorEvents, ...vikingEvents, ...undatedEvents], free: freeEntrance,
     food: foodSpots, foodStreet: foodSpots, night: nightlifeSpots, nightStreet: nightlifeStreets, booking: craftItems, nightTown: nightlifeTowns, essential: essentials,
   });
 
@@ -11225,7 +11373,7 @@ ${researchRules("festival", ev)}`
   //
   // nightTown is absent on purpose and stays absent: its schema has no price
   // field, so there is nothing for the panel to write into.
-  const PRICE_FIELD_BY_TYPE = { town: "typicalCosts", free: "extraCosts", food: "price", foodStreet: "price", festival: "ticketInfo", booking: "price", night: "priceNote", nightStreet: "priceNote", essential: "price" };
+  const PRICE_FIELD_BY_TYPE = { town: "typicalCosts", island: "typicalCosts", free: "extraCosts", food: "price", foodStreet: "price", festival: "ticketInfo", booking: "price", night: "priceNote", nightStreet: "priceNote", essential: "price" };
   const saveManualPriceField = (fieldName, rawValue) => {
     const value = rawValue.trim();
     if (!value) return;
@@ -11630,7 +11778,7 @@ ${researchRules("festival", ev)}`
         // tools/image-finder). public/free/ has never existed, so every path
         // this map has ever written for an attraction pointed at a folder that
         // is not there, and six perfectly good images sat orphaned beside it.
-        const folder = { town: "towns", festival: "events", free: "attractions", food: "food", foodStreet: "food", night: "nightlife", nightStreet: "nightlife-streets", nightTown: "nightlife", booking: "craft", essential: "essentials" }[studioType] || "towns";
+        const folder = { town: "towns", island: "islands", festival: "events", free: "attractions", food: "food", foodStreet: "food", night: "nightlife", nightStreet: "nightlife-streets", nightTown: "nightlife", booking: "craft", essential: "essentials" }[studioType] || "towns";
         shaped.photo = `/${folder}/${studioPhotoName}`;
       }
       // Force-override with the real pre-computed values from generateArea, regardless
@@ -14006,7 +14154,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   //
   // WHY A HASH: the site is a static SPA on Vercel with no rewrite rules, so a
   // real path like /town/ribe would 404 on a hard refresh. A hash cannot.
-  const ENTRY_SETTERS = { town: setTownDetail, event: setEventDetail, food: setFoodDetail, nightlife: setNightlifeDetail, free: setFreeDetail, craft: setCraftDetail };
+  const ENTRY_SETTERS = { town: setTownDetail, island: setIslandDetail, event: setEventDetail, food: setFoodDetail, nightlife: setNightlifeDetail, free: setFreeDetail, craft: setCraftDetail };
   // ── AND THE WINDOW GOES WITH THEM ────────────────────────────────
   //
   // Found by an adversarial review, 9 Sep 2026. entryWindowed was cleared in
@@ -14038,7 +14186,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   const entryPath = (item, kind) => entryPathForKind(kind, item?.name) || entryHash(item, kind);
 
   const openEntryNow = eventDetail || townDetail || nightlifeDetail || freeDetail || foodDetail || craftDetail || null;
-  const openEntryKind = eventDetail ? "event" : townDetail ? "town" : nightlifeDetail ? "nightlife" : freeDetail ? "free" : foodDetail ? "food" : craftDetail ? "craft" : null;
+  const openEntryKind = eventDetail ? "event" : townDetail ? "town" : islandDetail ? "island" : nightlifeDetail ? "nightlife" : freeDetail ? "free" : foodDetail ? "food" : craftDetail ? "craft" : null;
 
   // Push when one opens. Guarded on the address so re-renders cannot stack up
   // duplicate history entries, which would need several presses of back to
@@ -14124,10 +14272,10 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
   const deepLinkDone = useRef(false);
   useEffect(() => {
     if (typeof window === "undefined" || deepLinkDone.current) return;
-    const m = window.location.hash.match(/^#\/(town|event|food|nightlife|free|craft)\/([a-z0-9-]+)$/i);
+    const m = window.location.hash.match(/^#\/(town|island|event|food|nightlife|free|craft)\/([a-z0-9-]+)$/i);
     if (!m) return;
     const [, kind, slug] = m;
-    const pools = { town: towns, event: [...events, ...majorEvents, ...vikingEvents], food: foodSpots, nightlife: nightlifeSpots, free: freeEntrance, craft: craftItems };
+    const pools = { town: towns, island: islands, event: [...events, ...majorEvents, ...vikingEvents], food: foodSpots, nightlife: nightlifeSpots, free: freeEntrance, craft: craftItems };
     // Lowercased on both sides: the address may arrive with different casing
     // from a copy-paste or a link shortener, and a shared link that silently
     // opens nothing is worse than one that errors.
@@ -14202,6 +14350,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       food: foodSpots,
       nightlife: [...nightlifeSpots, ...nightlifeStreets],
       craft: craftItems,
+      island: islands,
     };
     const found = findBySlug(pools[kind] || [], entrySlug);
     if (!found) return;              // still loading, try again on the next version
@@ -14240,6 +14389,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     nightlife: setNightlifeDetail,
     nightlifeStreet: setNightlifeDetail,
     town: setTownDetail,
+    island: setIslandDetail,
     event: setEventDetail,
     craft: setCraftDetail,
   };
@@ -15068,7 +15218,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       {
         const promised = readPromises(
           overrideConvoText ? [] : aiMessages.slice(1),
-          previewPools({ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }),
+          previewPools({ towns, islands, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }),
           { ownWords: saidByTravellerForGuide, tapped: turnedDown, pickedEvents },
         );
         const audit = (g) => brokenPromises(promised, g?.days);
@@ -16211,6 +16361,57 @@ If the conversation only covers a single day or a few stops with no explicit day
   const [intakeArrival, setIntakeArrival] = useState("");
   const departurePickerRef = useRef(null);
   const [intakeDeparture, setIntakeDeparture] = useState("");
+
+  // ── THE DATES MOVED TO THE FRONT DOOR ──────────────────────────────
+  //
+  // Oliver, 16 Sep 2026: "over the 'plan my trip'.. put dates of arrival and
+  // departure. So when people click 'arrival and departure' and then click
+  // 'Plan my trip', it instantly puts them to Gemlyx detour with a pre-filled
+  // arrival and departure date written in. It's because people tend to miss
+  // this AI planner."
+  //
+  // THERE IS NO SECOND COPY OF THE DATES. The two fields in the hero write
+  // into intakeArrival and intakeDeparture, which are the same two values the
+  // Detour intake reads and writes. So "pre-filled" is not a hand-off that can
+  // drift: the hero and the planner are looking at ONE value, and picking a
+  // date on the front page IS filling the planner in. The obvious alternative,
+  // a pair of hero-only states copied across on click, is how an app ends up
+  // showing a traveller two different arrival dates for one trip.
+  //
+  // NATIVE <input type="date"> IN THE HERO, AND THE CUSTOM CALENDAR IN THE
+  // INTAKE, AND THAT IS DELIBERATE RATHER THAN SLOPPY. The hero is
+  // overflow:hidden (it has to be: a full-bleed video sits in it), and it lives
+  // inside the tab strip, which carries a live translateX. A transformed
+  // ancestor is a containing block for position:fixed, so inside this box
+  // NEITHER an absolute dropdown NOR a fixed sheet can get out: the custom
+  // calendar would be sliced off at the hero's edge. A native picker is drawn
+  // by the browser outside the document entirely and cannot be clipped by
+  // either. It still refuses past days, because min= is set, and on a phone it
+  // opens the OS date wheel, which is a better control than anything here.
+  //
+  // The intake stores "YYYY-MM-DDTHH:MM" — local, no timezone suffix. See the
+  // note in DateTimePicker's commit() for why that shape and not toISOString:
+  // toISOString converts to UTC first and silently moves the hour, and every
+  // `new Date(...)` downstream in this app parses these as local time.
+  const heroDayNow = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const heroDayOf = (v) => String(v || "").slice(0, 10);
+  // A time already chosen in the intake SURVIVES a date change made out here.
+  // Somebody who set a 22:40 landing in Detour and then corrected the day in
+  // the hero has not asked to be put back to noon.
+  const heroTimeOf = (v) => String(v || "").slice(11, 16) || "12:00";
+  const heroSetArrival = (day) => {
+    const next = day ? `${day}T${heroTimeOf(intakeArrival)}` : "";
+    setIntakeArrival(next);
+    // A departure before the arrival is not a trip. It is CLEARED rather than
+    // quietly moved, because moving somebody's departure date for them is the
+    // kind of help that gets discovered at an airport.
+    if (next && intakeDeparture && new Date(intakeDeparture) < new Date(next)) setIntakeDeparture("");
+  };
+  const heroSetDeparture = (day) => setIntakeDeparture(day ? `${day}T${heroTimeOf(intakeDeparture)}` : "");
+
   const [intakeStartPoint, setIntakeStartPoint] = useState("");
   const [intakeBudgetText, setIntakeBudgetText] = useState("");
   const [intakeInterest, setIntakeInterest] = useState([]);
@@ -17135,7 +17336,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     // on off the list, and a line that could still promise it is the same
     // line-versus-list contradiction one option over.
     const matchedForWhy = matchedPlaces(forMatch, previewPools({
-      towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
+      towns, islands, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
     }), { days, wanted, themes, mode: modeForWhy, budget: budgetForWhy, saidByTraveller: saidByTravellerOnly, turnedDown });
     // _notAsked as well as _leaving. A row held back is a row not on the
     // screen, and naming one of those is the same failure as naming one they
@@ -17391,7 +17592,12 @@ If the conversation only covers a single day or a few stops with no explicit day
   // Oliver, 30 Aug 2026: "some things are essentials while others are tips."
   // Tips sits directly after Essentials because the two are one shelf split in
   // half, and a reader who guesses wrong should find the other one next door.
-  const TAB_ORDER = ["home", "essentials", "tips", "attractions", "events", "food", "nightlife", "visits", "ai"];
+  // ── THE NINTH PAGE SITS NEXT TO THE EIGHTH, AND THAT IS THE POINT ──
+  // Islands goes immediately after Towns because the two are the destination
+  // pages and a reader looking for one is often looking for the other. The
+  // order here is also the swipe order, so a wrong position is felt as a wrong
+  // gesture rather than seen as a wrong list.
+  const TAB_ORDER = ["home", "essentials", "tips", "attractions", "events", "food", "nightlife", "visits", "islands", "ai"];
   // Single source of truth for nav labels — same order as TAB_ORDER, so swipe and nav can never drift apart again.
   // Redesign pass: emoji removed from nav — `ico` names map to the drawn icon
   // set in components/Icon.jsx, rendered next to the plain-text label.
@@ -17413,6 +17619,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     { id: "food", label: uiT("nav.food", uiLang), ico: "utensils" },
     { id: "nightlife", label: uiT("nav.nightlife", uiLang), ico: "beer" },
     { id: "visits", label: uiT("nav.visits", uiLang), ico: "town" },
+    { id: "islands", label: uiT("nav.islands", uiLang), ico: "island" },
     { id: "ai", label: uiT("nav.ai", uiLang), ico: null },
   ];
   const [slideDir, setSlideDir] = useState(null);
@@ -17723,6 +17930,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     if (q.length < 2) return [];
     const pools = [
       ...towns.map(p => ({ ...p, _src: "town", _kindLabel: "Town", _where: p.region })),
+      ...islands.map(p => ({ ...p, _src: "island", _kindLabel: "Island", _where: p.region })),
       ...[...events, ...majorEvents, ...vikingEvents].map(p => ({ ...p, _src: "event", _kindLabel: "Event", _where: p.town })),
       ...foodSpots.map(p => ({ ...p, _src: "food", _kindLabel: "Food", _where: p.location || p.city })),
       ...nightlifeSpots.map(p => ({ ...p, _src: "nightlife", _kindLabel: "Nightlife", _where: p.location || p.city })),
@@ -19027,7 +19235,7 @@ ${languageBlock()}`;
                       which is the rule the whole feature turns on. */}
                   {(() => {
                   const pools = withoutBeen(previewPools({
-                    towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
+                    towns, islands, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
                   }), beenList);
                   const theirWords = aiMessages.filter(x => x.role === "user" && !x.isError).map(x => x.text).join("\n");
                   // ── AND EACH PLACE IS INTRODUCED ONCE ─────────────
@@ -20328,6 +20536,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                       📍 Kind
                                     </button>
                                   )}
+                                  {/* Only on a town, and only one direction. An
+                                      island converted back to a town would keep
+                                      crossing fields the town shape drops on the
+                                      next publish, so the way back is a redraft
+                                      rather than a button that half works. */}
+                                  {row.type === "town" && (
+                                    <button onClick={() => openIslandConvert(row)}
+                                      style={{ background: islandConvertId === row.id ? `${C.gold}22` : "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
+                                      ⛴ Make it an island
+                                    </button>
+                                  )}
                                   {/* ── NOT WHILE A DRAFT IS RUNNING ────────────
                             Fable's catch. Neither this nor the queue's Open was
                             disabled during a run, so: start "Draft it", open
@@ -20510,6 +20729,48 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 );
                               })()}
 
+                              {islandConvertId === row.id && (() => {
+                                const pl = row.payload || {};
+                                const fld = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 12, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", width: "100%", boxSizing: "border-box" };
+                                const lbl = { fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 5 };
+                                const F = ({ k, label, hint }) => (
+                                  <div>
+                                    <div style={lbl}>{label}</div>
+                                    <input value={islandConvert[k]} onChange={e => setIslandConvert(d => ({ ...d, [k]: e.target.value }))} placeholder={hint} style={fld} />
+                                  </div>
+                                );
+                                return (
+                                  <div style={{ background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 10, padding: "12px", marginBottom: 10 }}>
+                                    <div style={{ fontSize: 12, color: C.text, lineHeight: 1.65, marginBottom: 10 }}>
+                                      <b>{pl.name} becomes an island entry.</b> The prose, the photo credit, the coordinate, the sources and every glance field come across as they are, so there is nothing to research again except the crossing. Its size ("{cleanPlaceKind(pl.placeKind) || "town"}") is dropped, because an island is not a settlement.
+                                    </div>
+                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 }}>
+                                      <F k="fixedLink" label="Bridge or causeway" hint="Road bridge from Funen via Siø" />
+                                      <F k="ferryOperator" label="Operator" hint="Molslinjen" />
+                                      <F k="ferryFrom" label="From (mainland)" hint="Kalundborg" />
+                                      <F k="ferryTo" label="To (on the island)" hint="Ballen" />
+                                      <F k="crossingGlance" label="Crossing, one line" hint="Kalundborg to Ballen, about 1h" />
+                                      <F k="offSeasonGlance" label="Off season" hint="Fewer sailings Nov to Mar" />
+                                    </div>
+                                    <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 9 }}>
+                                      From the operator's own page, never the island's tourist board. Leave a box empty rather than guessing: an empty field prints nothing, and a wrong port sends somebody to the wrong harbour.
+                                    </div>
+                                    {islandConvertError && (
+                                      <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.55, marginTop: 9 }}>{islandConvertError}</div>
+                                    )}
+                                    <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
+                                      <button disabled={islandConvertSaving} onClick={() => saveIslandConvert(row)}
+                                        style={{ background: C.gold, border: "none", color: C.onGold, borderRadius: 100, padding: "7px 15px", fontSize: 11.5, fontWeight: 800, cursor: islandConvertSaving ? "default" : "pointer", opacity: islandConvertSaving ? 0.6 : 1 }}>
+                                        {islandConvertSaving ? "Converting\u2026" : "Convert to an island"}
+                                      </button>
+                                      <button onClick={() => setIslandConvertId(null)}
+                                        style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "7px 15px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                               {placeEditId === row.id && (() => {
                                 const pl = row.payload || {};
                                 const preview = { name: pl.name, ...placeDraft };
@@ -20618,10 +20879,23 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                         onChange={e => { uploadMediaFiles(row, e.target.files); e.target.value = ""; }}
                                         style={{ display: "none" }} />
                                     </label>
+                                    {/* The AI door. Separate button rather than a tick
+                                        beside the other one: a disclosure that depends on
+                                        remembering to tick something is a disclosure that
+                                        goes missing. See utils/aiImages.js. */}
+                                    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: mediaBusy ? "default" : "pointer", opacity: mediaBusy ? 0.6 : 1, marginRight: 8 }}>
+                                      ✦ Upload AI picture
+                                      <input type="file" accept="image/*" multiple disabled={mediaBusy}
+                                        onChange={e => { uploadMediaFiles(row, e.target.files, { ai: true }); e.target.value = ""; }}
+                                        style={{ display: "none" }} />
+                                    </label>
                                     <button onClick={() => findCommonsPhotos(row, p.name || "")} disabled={mediaBusy}
                                       style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                       🔎 Find on Wikimedia
                                     </button>
+                                    <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
+                                      A picture uploaded through the AI button is labelled as generated wherever it appears. Required since 2 August 2026 for images of real places.
+                                    </div>
 
                                     {/* WIKIMEDIA PHOTO FINDER. Everything listed here is already
                                         licence-checked server-side, and the credit shown is the one
@@ -20944,7 +21218,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     })()}
 
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                      {[["town", "🏘 Town"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["foodStreet", "🍜 Food Street"], ["night", "🍺 Nightlife"], ["nightStreet", "🍻 Bar street"], ["nightTown", "🌃 Nightlife (Town)"], ["booking", "🔨 Workshop"], ["essential", "🧭 Essential"]].map(([k, label]) => (
+                      {[["town", "🏘 Town"], ["island", "⛴ Island"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["foodStreet", "🍜 Food Street"], ["night", "🍺 Nightlife"], ["nightStreet", "🍻 Bar street"], ["nightTown", "🌃 Nightlife (Town)"], ["booking", "🔨 Workshop"], ["essential", "🧭 Essential"]].map(([k, label]) => (
                         <button key={k} onClick={() => { setStudioType(k); setStudioResult(null); setStudioError(null); }}
                           style={{ background: studioType === k ? C.gold : "none", border: `1px solid ${studioType === k ? C.gold : C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, color: studioType === k ? "#000" : C.light, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                           {label}
@@ -20953,7 +21227,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     </div>
                     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                       <input value={studioTown} onChange={e => setStudioTown(e.target.value)} onKeyDown={e => e.key === "Enter" && generateArea()}
-                        placeholder={{ town: "Town name, e.g. Ringkøbing", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", foodStreet: "Market or street name + city, e.g. Reffen Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade", nightStreet: "Street name + city, e.g. Gothersgade Copenhagen", nightTown: "Town name, e.g. Aarhus", essential: "What a visitor has to sort out, e.g. Rejsebillet app or Tax-free shopping" }[studioType] || "Name"}
+                        placeholder={{ town: "Town name, e.g. Ringkøbing", island: "Island name, e.g. Sejerø", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", foodStreet: "Market or street name + city, e.g. Reffen Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade", nightStreet: "Street name + city, e.g. Gothersgade Copenhagen", nightTown: "Town name, e.g. Aarhus", essential: "What a visitor has to sort out, e.g. Rejsebillet app or Tax-free shopping" }[studioType] || "Name"}
                         style={{ flex: 1, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
                       <button onClick={() => generateArea()} disabled={studioLoading}
                         style={{ background: C.gold, border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 12, fontWeight: 700, color: C.onGold, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
@@ -22436,7 +22710,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       const norm = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, "").trim();
                       const typedNorm = norm(typed);
                       const sourceArrays = {
-                        town: towns, festival: [...events, ...majorEvents], free: freeEntrance,
+                        town: towns, island: islands, festival: [...events, ...majorEvents], free: freeEntrance,
                         food: foodSpots, foodStreet: foodSpots, night: nightlifeSpots, nightStreet: nightlifeStreets, booking: craftItems, nightTown: nightlifeTowns, essential: essentials,
                       };
                       const arr = sourceArrays[studioType] || [];
@@ -23155,6 +23429,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             <li><b>Town/region attached to a station or address</b> — the station name itself can be right while the town is wrong (Denmark has similarly-named places in different regions).</li>
                             {studioType === "festival" && <li><b>Major vs. Local scale</b> — a judgment call the AI made; double-check it matches how well-known this is.</li>}
                             {studioType === "town" && <li><b>Map coordinates (lat/lon)</b> — check the pin would land on the right town.</li>}
+                            {studioType === "island" && <>
+                              <li><b>Map coordinates (lat/lon)</b> — check the pin would land on the island, not on the mainland port.</li>
+                              {/* The crossing is the one thing on this page that
+                                  strands somebody. It is checked by hand, against
+                                  the operator, every time. */}
+                              <li><b>The crossing</b> — operator, both port names and the sailing time, read off the operator's own page. A tourist board does not count.</li>
+                              <li><b>The bridge question</b> — if there is a fixed link, it is named; if there is not, nothing on the page suggests you can drive there.</li>
+                            </>}
                             {(studioType === "food" || studioType === "foodStreet" || studioType === "night" || studioType === "booking") && <li><b>Prices and opening details</b> — can go stale fast; verify the place still operates as described.</li>}
                             <li><b>Named sub-venues/stages</b> (e.g. a specific stage or room name) — the AI has invented a plausible-sounding fake name before. Verify any specific venue name exists.</li>
                             <li><b>Prices</b> — check the currency and the actual number. A converted price is a guess, not a fact.</li>
@@ -23638,8 +23920,49 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <h1 style={{ fontSize: "clamp(32px, 5.5vw, 50px)", fontWeight: 600, fontFamily: "'Fraunces', serif", color: "#fff", lineHeight: 1.1, margin: "0 0 12px", textShadow: "0 2px 24px rgba(0,0,0,0.55)" }}>
                     Beyond the<br />guidebooks<span style={{ color: C.gold }}>.</span>
                   </h1>
-                  <div style={{ fontSize: 15, color: "rgba(255,255,255,0.85)", marginBottom: 22, textShadow: "0 1px 10px rgba(0,0,0,0.5)", maxWidth: 420 }}>Hidden gems across the whole country, and this is how you find them.</div>
-                  <button onClick={() => { goTab("ai"); window.scrollTo(0, 0); }}
+                  <div style={{ fontSize: 15, color: "rgba(255,255,255,0.85)", marginBottom: 18, textShadow: "0 1px 10px rgba(0,0,0,0.5)", maxWidth: 420 }}>Hidden gems across the whole country, and this is how you find them.</div>
+
+                  {/* ── ARRIVAL AND DEPARTURE, ON THE FRONT PAGE ──────
+                      Why the dates are here at all, why they are native
+                      inputs, and why there is no second copy of them: see
+                      heroSetArrival, where they are declared.
+
+                      This row is the reason the planner gets found. The button
+                      under it has always been there and, in Oliver's words,
+                      people tend to miss it: a red button promising a plan is
+                      an advert, and two date fields are a thing you are already
+                      halfway through. Filling them in IS starting the plan. */}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginBottom: 16 }}>
+                    {[
+                      { key: "arrival", label: "Arrival", value: heroDayOf(intakeArrival), min: heroDayNow(), onPick: heroSetArrival },
+                      { key: "departure", label: "Departure", value: heroDayOf(intakeDeparture), min: heroDayOf(intakeArrival) || heroDayNow(), onPick: heroSetDeparture },
+                    ].map(f => (
+                      // The <label> WRAPS the input, so the word above it is the
+                      // field's accessible name and its tap target, rather than
+                      // decoration sitting near an unnamed box.
+                      <label key={f.key}
+                        style={{ display: "block", textAlign: "left", background: "rgba(10,15,30,0.55)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 12, padding: "7px 12px", backdropFilter: "blur(8px)", cursor: "pointer" }}>
+                        <span style={{ display: "block", fontSize: 9, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", color: "rgba(255,255,255,0.65)", marginBottom: 2 }}>{f.label}</span>
+                        {/* colorScheme dark so the browser draws its own
+                            calendar icon and its own picker in dark, instead of
+                            a black glyph on a dark field. */}
+                        <input type="date" value={f.value} min={f.min} onChange={e => f.onPick(e.target.value)}
+                          // An empty field still prints its format (dd/mm/yyyy,
+                          // or whatever the reader's browser uses), and at full
+                          // white that placeholder competes with the headline
+                          // and reads as a date somebody already chose. Dimmed
+                          // until it holds one, so "filled in" is visible from
+                          // across the screen.
+                          style={{ background: "none", border: "none", outline: "none", padding: 0, color: f.value ? "#fff" : "rgba(255,255,255,0.72)", fontSize: 13.5, fontWeight: 600, fontFamily: "'Inter', sans-serif", colorScheme: "dark", cursor: "pointer", minWidth: 116 }} />
+                      </label>
+                    ))}
+                  </div>
+
+                  {/* setDetourTab BEFORE goTab, and it is not decoration: the
+                      intake lives on the sightseeing row only, so a reader who
+                      last looked at Road Trips would otherwise arrive at Detour
+                      with their dates filled in on a row that is not showing. */}
+                  <button onClick={() => { setDetourTab("sightseeing"); goTab("ai"); window.scrollTo(0, 0); }}
                     style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "13px 26px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 24px rgba(226,59,78,0.4)" }}>
                     ✦ Plan my trip
                   </button>
@@ -25455,6 +25778,115 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           )}
 
           {/* ── AI (dedicated page) ─────────────────────────────── */}
+          {/* ── ISLANDS ─────────────────────────────────
+              Oliver, 16 Sep 2026: "I think we should make 'islands' their own
+              navigation. Instead of being part of towns. There are alot of
+              islands. So make such a navigation."
+
+              This page is deliberately plainer than Towns. Towns carries five
+              facets because it holds hundreds of rows; there are not hundreds
+              of Danish islands anybody visits. A search box and one real
+              question, and the real question on this page is the crossing.
+
+              THE EMPTY STATE IS NOT AN OVERSIGHT. The day this ships there are
+              no published islands, and a page that renders a heading over
+              nothing reads as broken. It says what is true instead. */}
+          {tab === "islands" && (
+            <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
+              <div style={{ marginBottom: 18, paddingTop: 8 }}>
+                <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>Islands</h2>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark is about four hundred islands and you can land on far fewer than that. These are the ones worth the crossing, with the operator, both ports and the sailing time checked against the company that runs the boat.</div>
+              </div>
+
+              {islands.length === 0 ? (
+                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "22px 18px", maxWidth: 560 }}>
+                  <div style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 8 }}>No islands published yet.</div>
+                  <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7 }}>
+                    This page is live and empty, which is the honest state rather than a fault. Islands are researched and published one at a time like everything else here, and the first ones will appear as soon as their crossings have been checked.
+                  </div>
+                </div>
+              ) : (<>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
+                  <input value={islandSearch} onChange={e => setIslandSearch(e.target.value)}
+                    placeholder="Search an island"
+                    style={{ flex: "1 1 220px", minWidth: 0, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "10px 16px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                  {/* Reading `fixedLink`, which the draft either states or leaves
+                      empty. An island with an empty fixedLink is filed under
+                      "ferry" because that is what an unstated bridge means in
+                      Denmark: there is no bridge. The reverse inference, calling
+                      a place bridgeless in PROSE because nobody wrote it down, is
+                      the one this page must never make, and it does not: the chip
+                      narrows a list, it does not print a claim. */}
+                  {[{ id: "bridge", label: "─ Bridge or causeway" }, { id: "ferry", label: "⛴ Ferry only" }].map(o => (
+                    <Pill key={o.id} label={o.label} active={islandLink === o.id} onClick={() => setIslandLink(islandLink === o.id ? null : o.id)} />
+                  ))}
+                </div>
+                {(() => {
+                  const q = String(islandSearch || "").trim().toLowerCase();
+                  const shown = islands.filter(i => {
+                    const hasLink = !!String(i.fixedLink || "").trim();
+                    if (islandLink === "bridge" && !hasLink) return false;
+                    if (islandLink === "ferry" && hasLink) return false;
+                    if (!q) return true;
+                    return [i.name, i.region, i.tag, i.ferryFrom, i.ferryTo, i.ferryOperator]
+                      .some(v => String(v || "").toLowerCase().includes(q));
+                  }).sort(byName);
+                  if (!shown.length) return (
+                    <div style={{ textAlign: "center", padding: "36px 16px" }}>
+                      <div style={{ fontSize: 15, color: C.light, fontFamily: "'Fraunces', serif", marginBottom: 8 }}>Nothing published matches that.</div>
+                      <button onClick={() => { setIslandSearch(""); setIslandLink(null); }}
+                        style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
+                        Clear
+                      </button>
+                    </div>
+                  );
+                  return (
+                    <div className="towns-grid">
+                      {shown.map(isle => (
+                        <div key={isle.id} onClick={() => setIslandDetail(isle)} style={{ cursor: "pointer" }}>
+                          <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <PhotoPlate photo={isle.photo} name={isle.name} color={C.gold} />
+                            {/* An island is not in TOWN_COORDS, so the locator is
+                                handed the island's own published coordinate
+                                instead of a name to look up. */}
+                            <div style={{ position: "absolute", top: 8, right: 8, width: 68, height: 68, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.4)", pointerEvents: "none" }}>
+                              <DKLocator town={isle.name} point={isle.__lat != null && isle.__lon != null ? [isle.__lat, isle.__lon] : null} color={C.gold} />
+                            </div>
+                            {(() => {
+                              const b = tierBadge(isle);
+                              if (!b) return null;
+                              return (
+                                <div style={{ position: "absolute", top: 8, left: 8, maxWidth: "60%", background: b.bg, color: b.fg, fontSize: 9.5, fontWeight: 800, padding: "4px 10px", borderRadius: 100, letterSpacing: 0.4, textTransform: "uppercase", boxShadow: "0 2px 10px rgba(0,0,0,0.45)", border: b.caution ? "1px solid rgba(255,255,255,0.22)" : "none" }}>
+                                  {b.label}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                          <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}><EntryLink type="island" name={isle.name}>{isle.name}</EntryLink></div>
+                          <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{dotJoin(isle.region, travelLabel(userCoords, isle, isle.travelTime))}</div>
+                          {/* THE CROSSING IS THE CARD'S SECOND LINE, above the
+                              hook and the description, because on this page it is
+                              the fact somebody came for. Nothing renders when the
+                              fields are empty: an unchecked crossing prints
+                              nothing rather than a hedge. */}
+                          {(isle.fixedLink || isle.crossingGlance) && (
+                            <div style={{ fontSize: 11, color: C.light, marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                              <span style={{ fontSize: 12 }}>{isle.fixedLink ? "─" : "⛴"}</span>
+                              <span>{isle.fixedLink || isle.crossingGlance}</span>
+                            </div>
+                          )}
+                          <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{isle.tag}</div>
+                          <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{(isle.desc || "").slice(0, 90)}{(isle.desc || "").length > 90 ? "…" : ""}</div>
+                          {isle.gemlyxFind && <div style={{ fontSize: 11, color: C.gold, lineHeight: 1.5, marginTop: 5 }}><b>✦ Gemlyx Find:</b> {isle.gemlyxFind.slice(0, 80)}{isle.gemlyxFind.length > 80 ? "…" : ""}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </>)}
+            </div>
+          )}
+
           {tab === "ai" && (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 22, paddingTop: 8, textAlign: "center" }}>
@@ -27422,6 +27854,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           festival closes the town page and opens that event's real entry, so the
           traveler lands on the full page with dates, tickets and directions
           rather than a dead-end list item. */}
+      {/* The island's own page. Same component, same props, one kind apart:
+          DetailPage branches on kind and the island branch is right above the
+          town one. onOpenEvent closes this page before opening the event, which
+          is the same handoff a town does, because two stacked detail views is a
+          state this app has been in before and it is not recoverable by Back. */}
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={islandDetail} onClose={closeEntry} kind="island" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={islandDetail && isPlaceSaved("island", islandDetail.id)} onToggleSave={islandDetail ? () => toggleSavePlace("island", islandDetail, islandDetail.region) : null} hasBeen={!!islandDetail && isBeenHere("island", islandDetail.id)} onToggleBeen={islandDetail ? () => toggleBeenHere("island", islandDetail, islandDetail.region) : null} onOpenEvent={(e) => { setIslandDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} hasBeen={!!townDetail && isBeenHere("town", townDetail.id)} onToggleBeen={townDetail ? () => toggleBeenHere("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} hasBeen={!!nightlifeDetail && isBeenHere("nightlife", nightlifeDetail.id)} onToggleBeen={nightlifeDetail ? () => toggleBeenHere("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} hasBeen={!!freeDetail && isBeenHere("free", freeDetail.id)} onToggleBeen={freeDetail ? () => toggleBeenHere("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
@@ -27443,7 +27881,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           Gemlyx Detour. */}
       {(() => {
         const reading = eventDetail || townDetail || nightlifeDetail || freeDetail || foodDetail || craftDetail;
-        const readingKind = eventDetail ? "event" : townDetail ? "town" : nightlifeDetail ? "nightlife" : freeDetail ? "free" : foodDetail ? "food" : craftDetail ? "craft" : null;
+        const readingKind = eventDetail ? "event" : townDetail ? "town" : islandDetail ? "island" : nightlifeDetail ? "nightlife" : freeDetail ? "free" : foodDetail ? "food" : craftDetail ? "craft" : null;
         if (!reading) return null;
         // ── AND THE FOUNDER IS ALREADY SIGNED IN, ELSEWHERE ─────────
         //
@@ -27533,7 +27971,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
       {studioSession && (() => {
         const openDetail = eventDetail || townDetail || nightlifeDetail || freeDetail || foodDetail;
-        const openKind = eventDetail ? "event" : townDetail ? "town" : nightlifeDetail ? "nightlife" : freeDetail ? "free" : foodDetail ? "food" : null;
+        const openKind = eventDetail ? "event" : townDetail ? "town" : islandDetail ? "island" : nightlifeDetail ? "nightlife" : freeDetail ? "free" : foodDetail ? "food" : null;
         // ── ONLY OVER AN ENTRY, WHICH IS WHERE IT IS FOR ────────────
         //
         // Oliver, 14 Sep 2026, with a photograph of his own phone: "I got an

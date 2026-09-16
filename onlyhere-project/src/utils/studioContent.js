@@ -75,6 +75,20 @@ export const cleanCredit = (c) => {
     sourceUrl: String(c.sourceUrl || "").trim().slice(0, 400),
     license: String(c.license || "").trim().slice(0, 80),
   };
+  // ── THE AI FLAG IS NOT A STRING AND IS NOT OPTIONAL ──────────────
+  //
+  // Added 15 Sep 2026 with the AI picture upload. This allow-list is the exact
+  // place a flag like this gets eaten: everything above is a string, the
+  // filter below is "does any string have content", and a boolean passing
+  // through neither would have been dropped silently on publication. The
+  // disclosure the AI Act asks for is the one thing on a picture that may not
+  // go missing between the draft and the live page, so it is carried here and
+  // asserted in the suite.
+  //
+  // `true` only, never a truthy value: "false" is a non-empty string and would
+  // otherwise have marked a photograph as generated.
+  const ai = c.ai === true;
+  if (ai) return { ...out, ai: true };
   return Object.values(out).some(Boolean) ? out : null;
 };
 // "Things to Know" must be exactly 3 bullets per the editorial template. The AI
@@ -113,6 +127,51 @@ export const bulletsBlock = (heading, raw) => {
 // allow-list does not reach the database. Adding a field to a prompt is not
 // shipping it. This function is the only insert path into gemlyx_content.
 const shapeForLiveFields = (type, t) => {
+  // ── THE ISLAND, WHICH IS A TOWN'S FIELDS PLUS THE DOOR ──────────
+  //
+  // Deliberately the same field names as the town branch below wherever the two
+  // mean the same thing, and that is not laziness: Oliver wanted to convert
+  // published towns into islands without paying for the research again
+  // ("Let me be able to change Præstø and Samsø from towns.. so I save money"),
+  // and a conversion is only free if the shapes agree. Every field that lines
+  // up here is a field the converter carries across untouched.
+  //
+  // WHAT AN ISLAND HAS THAT A TOWN DOES NOT is the crossing, and it is stored
+  // as separate fields rather than left inside prose. A sailing time buried in
+  // a paragraph cannot be checked, cannot be shown in At a Glance, and cannot
+  // be found again when the operator changes it. See the island prompt in
+  // studioPrompts.js for why both ports are required and why a bridge is asked
+  // about first.
+  //
+  // NO placeKind. city/town/village/area answers "how big is this settlement",
+  // and an island is not a settlement. geography.js:306 makes the same argument
+  // from the other side. An island that carried placeKind would be swept into
+  // isArea() and would vanish from its own page.
+  if (type === "island") return { name: t.name, photo: `/islands/${slugify(t.name)}.jpg`, region: t.region || "", emoji: t.emoji || "⛴", tag: t.tag || "", desc: t.characterAndFit, highlight: t.highlight || "", travelTime: t.travelTime || "", mapHint: t.mapHint || `${t.name}, Denmark`, nomiPotential: t.nomiPotential || "Medium", tier: t.tier || "", __lat: Number(t.lat) || null, __lon: Number(t.lon) || null,
+    // The crossing. Every one of these defaults to an empty string on purpose:
+    // an empty crossing field prints nothing, and nothing is the honest state
+    // when the operator's own page was not in the research. A default here
+    // would be a claim about a boat.
+    fixedLink: t.fixedLink || "", ferryOperator: t.ferryOperator || "", ferryFrom: t.ferryFrom || "", ferryTo: t.ferryTo || "", crossingGlance: t.crossingGlance || "", offSeasonGlance: t.offSeasonGlance || "",
+    // partOf is carried and dayTripFrom is carried, both for the same reason
+    // the town branch carries them: the Areas grouping and the "somewhere you
+    // visit rather than sleep" line read these two fields by name.
+    partOf: t.partOf || "", dayTripFrom: t.dayTripFrom || "",
+    // An island's OWN island field names the bigger island or group it belongs
+    // to, never itself. Christiansø is on Ertholmene; Samsø is on nothing. It
+    // goes through the same cleaner as a town's so the Island filter reads one
+    // vocabulary across both types.
+    island: cleanIsland(t.island),
+    themes: Array.isArray(t.themes) ? t.themes.slice(0, 3) : [],
+    // nearestStation is carried and is NOT asked for in the prompt, exactly as
+    // for a town: the value written here is the arrival point the routing
+    // measured, and on an island that is usually the ferry berth. See
+    // ARRIVAL_TYPES in utils/helpers.js.
+    nearestStation: t.nearestStation || "", recommendedStayGlance: t.recommendedStayGlance || "", bestTimeGlance: t.bestTimeGlance || "", accommodationGlance: t.accommodationGlance || "", typicalCosts: t.typicalCosts || "", gemlyxFind: t.gemlyxFind || "",
+    blogBody: [
+      ...bbData([[`What to Do on ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]]),
+      ...bulletsBlock("Things to Know", t.thingsToKnow),
+    ] };
   if (type === "town") return { name: t.name, photo: `/towns/${slugify(t.name)}.jpg`, region: t.region || "", emoji: t.emoji || "📍", tag: t.tag || "", desc: t.characterAndFit, highlight: t.highlight || "", travelTime: t.travelTime || "", mapHint: t.mapHint || `${t.name}, Denmark`, nomiPotential: t.nomiPotential || "Medium", tier: t.tier || "", __lat: Number(t.lat) || null, __lon: Number(t.lon) || null,
     // THIS IS AN ALLOW-LIST, and a field missing from it does not reach the
     // database. placeKind/partOf/dayTripFrom were added to the drafting prompt,

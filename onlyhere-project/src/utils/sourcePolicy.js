@@ -116,10 +116,30 @@ export const cleanNote = (v) => clean(v).replace(/\s+/g, " ").slice(0, 160);
 // foodStreet already made this exact move for food, and it made it as a FLAG on
 // an ordinary food row, which is why a food street has never been able to list
 // what is on it. This one is a type of its own so that it can.
-export const CONTENT_TYPES = ["town", "festival", "free", "food", "foodStreet", "night", "nightStreet", "nightTown", "booking", "essential"];
+// ── AND AN ISLAND IS NOT A TOWN, WHICH IS A DIFFERENT CLAIM FROM THE
+//     ONE geography.js MAKES ─────────────────────────────────────────
+//
+// geography.js:306 argues, correctly, that "island" must not be a value in
+// PLACE_KINDS: "Sejero IS an island; AEroskobing is a town ON one. One field
+// answers both." That argument is about a town's SIZE and it still stands. The
+// `island` FIELD on a town row is untouched by this type and keeps doing its
+// job.
+//
+// This type answers a question that field cannot: what is the page ABOUT
+// Bornholm? Not a town on Bornholm, not a tag on Ronne, but the island itself,
+// which has a crossing, an operator, a season and a reason to stay three days.
+// Oliver, 16 Sep 2026: "I think we should make 'islands' their own navigation.
+// Instead of being part of towns. There are alot of islands."
+//
+// It is deliberately LAST in this list. Every per-type table in the repo is
+// keyed rather than ordered, but three test anchors read the FIRST literal of a
+// block, so appending is the one position that cannot move somebody else's
+// anchor.
+export const CONTENT_TYPES = ["town", "festival", "free", "food", "foodStreet", "night", "nightStreet", "nightTown", "booking", "essential", "island"];
 export const TYPE_LABEL = {
   "": "Everything", town: "Towns", festival: "Events", free: "Attractions", food: "Food",
   foodStreet: "Food streets", night: "Nightlife", nightStreet: "Bar streets", nightTown: "Nightlife towns", booking: "Workshops", essential: "Essentials",
+  island: "Islands",
   // ── A LABEL FOR A TYPE THAT IS DELIBERATELY NOT DRAFTABLE ─────────
   // "undated" is a real row type in gemlyx_content and is deliberately NOT in
   // CONTENT_TYPES above: nothing drafts one from scratch and no source can be
@@ -477,8 +497,13 @@ export const SRC_FOR_TYPE = {
   nightTown: "nightlife",
   booking: "craft",
   essential: null,
+  // Its own render source rather than borrowing "town". An island that rendered
+  // as a town would be filed under Towns in global search, counted as a town in
+  // the guide pools, and measured the way a town is measured. Every one of
+  // those is a wrong answer, and each would have been found separately.
+  island: "island",
 };
-export const PLACE_SOURCES = ["town", "event", "food", "nightlife", "free", "craft"];
+export const PLACE_SOURCES = ["town", "event", "food", "nightlife", "free", "craft", "island"];
 export const srcForType = (type) => (Object.prototype.hasOwnProperty.call(SRC_FOR_TYPE, type) ? SRC_FOR_TYPE[type] : null);
 
 // ── "VISITCOPENHAGEN IS A GOOD SOURCE BUT PROBABLY NOT FOR AARHUS" ──
@@ -749,6 +774,11 @@ export const QUERY_WORDS = {
   nightStreet: "barer natteliv lukketid udeliv bargade nightlife bars closing",
   nightTown: "natteliv bydele studerende nightlife areas crowd scene",
   booking: "værksted booking priser workshop booking prices",
+  // Every word here is a word a page about AN ISLAND would use and a page about
+  // a town would not. "faerge", "overfart" and "sejlplan" are what an operator
+  // calls its own pages; a town's tourist page says none of them. No word from
+  // the town line is repeated, which is the property the suite checks.
+  island: "færge overfart sejlplan afgange havn øen ferry crossing timetable sailings harbour",
 };
 
 // ── "I WANNA PUT TIVOLI.DK INTO EVENTS FOR COPENHAGEN.. THIS WILL
@@ -1083,6 +1113,7 @@ export const DISCOVER_WORDS = {
   nightTown: "natteliv udeliv nightlife towns",
   booking: "værksteder kurser oplevelser workshops courses experiences",
   essential: "praktisk information turist gældende priser practical visitor information",
+  island: "øer småøerne danske øer øhop besøg en ø danish islands island hopping",
 };
 
 // ONE call, not one per domain, and that is deliberate rather than a saving.

@@ -495,7 +495,13 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                   letting somebody find it by marking Copenhagen and watching
                   their trip stay the same. */}
               {hasBeen
-                ? (kind === "town"
+                ? (kind === "island"
+                    // Same argument as a town, one boat further out: an island
+                    // you have been to is still a base and still a destination,
+                    // so a guide keeps routing you there and fills the days
+                    // with what you did not do.
+                    ? "Marked as somewhere you have been. Your guides will still cross to it and still base you here, and will fill the days with things you have not done."
+                    : kind === "town"
                     ? "Marked as somewhere you have been. Your guides will still route you here and still base you here, and will fill the days with things you have not done."
                     : "Marked as somewhere you have been. Gemlyx will leave it out of new guides.")
                 : saveHint(isSaved, savedCount)}
@@ -524,7 +530,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           </div>
         )}
 
-        {(kind === "event" || kind === "town") && item.tier && (
+        {(kind === "event" || kind === "town" || kind === "island") && item.tier && (
           <div style={{ marginBottom: 12 }}>
             {(() => {
               const t = item.tier.toLowerCase();
@@ -984,6 +990,54 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
 
             Restaurants and markets both, since for a market the figure was a
             single nationwide constant and said even less than the guess. */}
+        {/* ── THE ISLAND, WHOSE At a Glance LEADS WITH THE CROSSING ──
+            The order of these rows is the order the questions get asked. On a
+            town page the first question is where it sits; on an island it is
+            how you get on and off it, and whether that changes in November.
+
+            NO ARRIVAL ROW, for the same reason a town has none: nearestStation
+            is carried on the row and is the measured arrival point, which on an
+            island is usually the berth the ferry lands at, and printing "nearest
+            stop: Ballen Havn" on the page about Ballen's own island answers
+            nothing. See ARRIVAL_TYPES in utils/helpers.js.
+
+            EVERY ROW IS ITS OWN FIELD AND RENDERS ONLY WHEN FILLED. An island
+            drafted without the operator's page in front of it prints no
+            crossing at all, which is the honest result. AtAGlanceCard drops a
+            row with an empty value. */}
+        {kind === "island" && (
+          <>
+            <AtAGlanceCard lang={lang} rows={[
+              // A fixed link outranks a ferry, because if you can drive there
+              // the sailing time is not the answer to "how do I get there".
+              item.fixedLink ? { icon: "\u2500", label: "Fixed link", value: item.fixedLink } : null,
+              item.crossingGlance ? { icon: "\u26f4", label: "Crossing", value: item.crossingGlance } : null,
+              item.ferryOperator ? { icon: "\ud83c\udfe2", label: "Operator", value: item.ferryOperator } : null,
+              // Both ends, never one: a single port name is not usable, because
+              // Danish islands are commonly served from two or three mainland
+              // harbours and which one you want depends on where you started.
+              //
+              // AND ONLY WHEN THE LINE ABOVE HAS NOT ALREADY SAID IT. A
+              // crossingGlance reading "Kalundborg to Ballen, about 1h" over a
+              // Ports row reading "Kalundborg to Ballen" is the same fact
+              // printed twice, which reads as two facts. The row earns its
+              // place when the ports are known and the one-line summary is not.
+              (!item.crossingGlance && item.ferryFrom && item.ferryTo) ? { icon: "\u2693", label: "Ports", value: `${item.ferryFrom} to ${item.ferryTo}` } : null,
+              item.offSeasonGlance ? { icon: "\u2744\ufe0f", label: "Off season", value: item.offSeasonGlance } : null,
+              { icon: "\ud83d\udecf\ufe0f", label: "Recommended Stay", value: item.recommendedStayGlance },
+              { icon: "\u2600\ufe0f", label: "Best Time", value: item.bestTimeGlance },
+              { icon: "\ud83c\udfe8", label: "Accommodation", value: item.accommodationGlance },
+              { icon: "\ud83d\udcb0", label: "Typical Costs", value: item.typicalCosts },
+            ].filter(Boolean)} />
+            {item.highlight && (
+              <div style={{ background: `${C.gold}10`, border: `1px solid ${C.gold}33`, borderRadius: 14, padding: "14px 16px", marginBottom: 18 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 6 }}>The one thing</div>
+                <div style={{ fontSize: 13.5, color: C.text, lineHeight: 1.65 }}>{item.highlight}</div>
+              </div>
+            )}
+          </>
+        )}
+
         {kind === "food" && (
           <AtAGlanceCard lang={lang} rows={[
             { icon: "🍽️", label: "Serves", value: item.category },

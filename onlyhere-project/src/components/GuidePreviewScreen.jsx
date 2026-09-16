@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { previewReportRow, travellerTurns, feedbackProblem } from "../utils/articleFeedback";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
+// Imported rather than taken as a prop, unlike `towns`: this screen already
+// receives eleven arrays and the module singleton is the same object either way.
+import { islands } from "../data/islands";
 import { C } from "../utils/theme";
 import { testTravelerLine, getEventDate } from "../utils/helpers";
 import { matchedPlaces, previewPools, mentionsPlace, wantedCategories, groupKeyOf, parentTownOf, tripAnchorFor, eventReachBand, tripPoints } from "../utils/previewMatch";
@@ -102,6 +105,7 @@ const COVERAGE_TITLE = {
 const CATEGORY_SECTIONS = [
   { src: "town", label: "Major Cities", match: p => p.isMajorCity },
   { src: "town", label: "Towns", match: p => !p.isMajorCity },
+  { src: "island", label: "Islands" },
   { src: "free", label: "Attractions" },
   { src: "food", label: "Food & Drink" },
   { src: "nightlife", label: "Nightlife" },
@@ -423,7 +427,7 @@ export const GuidePreviewScreen = ({
   // pass opening on a region GEMLYX named. See matchedPlaces: his Aalborg brief
   // named no region at all, and Ribe arrived through the word "Jutland" in the
   // app's own reply.
-  const matched = matchedPlaces(convoText, previewPools({ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted, themes, mode, budget, saidByTraveller, turnedDown });
+  const matched = matchedPlaces(convoText, previewPools({ towns, islands, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted, themes, mode, budget, saidByTraveller, turnedDown });
   // ── AND WHAT WAS LEFT OUT IS SAID, NOT SWALLOWED ──────────────────
   //
   // previewMatch.js has claimed since 26 Aug that "the guide says out loud

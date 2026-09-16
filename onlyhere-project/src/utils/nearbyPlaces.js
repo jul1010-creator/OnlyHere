@@ -94,7 +94,9 @@ export const SAME_VISIT_LIMIT = 5;
 export const placedLibrary = (pools = {}, { includeTowns = false } = {}) => {
   const out = [];
   Object.entries(pools).forEach(([kind, rows]) => {
-    if ((kind === "town" && !includeTowns) || !Array.isArray(rows)) return;
+    // An island follows the town rule: it is the big neighbouring thing that is
+    // useful on an entry's mini-map and noise in a guide's own place list.
+    if (((kind === "town" || kind === "island") && !includeTowns) || !Array.isArray(rows)) return;
     rows.forEach(r => {
       const c = placeCoords(r);
       const name = clean(r?.name);

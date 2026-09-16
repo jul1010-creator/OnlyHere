@@ -114,6 +114,12 @@ export const ENTRY_KINDS = [
   { seg: "food", types: ["food", "foodStreet"], kind: "food" },
   { seg: "nightlife", types: ["night", "nightStreet"], kind: "nightlife" },
   { seg: "workshop", types: ["booking"], kind: "craft" },
+  // An island needs a segment of its own because the segment-less shape is
+  // already taken: /denmark/<slug> means town, and /denmark/samsoe would then
+  // be ambiguous the first time an island and a town share a name, which in
+  // Denmark is the normal case rather than the edge one (Ærø has Ærøskøbing,
+  // Fanø the island and Fanø the parish). /denmark/island/<slug> says which.
+  { seg: "island", types: ["island"], kind: "island" },
 ];
 
 // A Studio type to its public URL segment. A town answers "" because its path

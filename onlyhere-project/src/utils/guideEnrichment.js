@@ -17,6 +17,7 @@
 import { craftItemsFallback } from "../data/craft";
 import { events, majorEvents, vikingEvents } from "../data/events";
 import { towns, TOWN_COORDS } from "../data/towns";
+import { islands } from "../data/islands";
 import { freeEntrance } from "../data/freeEntrance";
 import { nightlifeSpots } from "../data/nightlife";
 import { nightlifeStreets } from "../data/nightlifeStreets";
@@ -112,7 +113,10 @@ export const placeCoords = (row) => {
 // else. Every other tier drops it, the stop reaches Nominatim like any other
 // unplaced venue, and if that fails it still lands on the town centre through
 // townFallbackFor, which says out loud that it is approximate.
-const TOWN_ROW = (p) => p?._src === "town";
+// An island is the same shape of answer as a town for this rule: a stop called
+// "Samsø" is the island, and a stop that merely SITS on Samsø must not match
+// the island row and be pinned to its harbour.
+const TOWN_ROW = (p) => p?._src === "town" || p?._src === "island";
 export const lookupRealPlace = (name) => {
   if (!name) return null;
   const pools = [
@@ -133,6 +137,7 @@ export const lookupRealPlace = (name) => {
     ...nightlifeStreets.map(p => ({ ...p, _src: "nightlifeStreet" })),
     ...[...events, ...majorEvents, ...vikingEvents].map(p => ({ ...p, _src: "event" })),
     ...towns.map(p => ({ ...p, _src: "town" })),
+    ...islands.map(p => ({ ...p, _src: "island" })),
   ].filter(p => p?.name);
   // Mutual containment is equality once both sides are folded and spaced, so
   // this is a Danish-letter-aware exact match without a second comparison rule.

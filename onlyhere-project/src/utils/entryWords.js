@@ -105,6 +105,15 @@ const GLANCE = {
   // in Danish, which is the row directly above it on some entries.
   "Recommended Stay": { da: "Anbefalet varighed",   de: "Empfohlene Dauer" },
   "Best Time":        { da: "Bedste tidspunkt",     de: "Beste Zeit" },
+  // ── THE ISLAND ROWS ────────────────────────────────
+  // "Fast forbindelse" is what the Danish road authority calls a bridge or
+  // causeway you can drive over, and it is the phrase a Dane looking for one
+  // would search. "Overfart" is the crossing itself, not the boat.
+  "Fixed link":       { da: "Fast forbindelse",     de: "Feste Verbindung" },
+  "Crossing":         { da: "Overfart",             de: "Überfahrt" },
+  "Operator":         { da: "Rederi",               de: "Reederei" },
+  "Ports":            { da: "Havne",                de: "Häfen" },
+  "Off season":       { da: "Uden for sæsonen",     de: "Außerhalb der Saison" },
   // A restaurant row. "Serverer" is the verb and reads oddly as a label; the
   // word both languages put on a menu is the cuisine.
   "Serves":           { da: "Køkken",               de: "Küche" },

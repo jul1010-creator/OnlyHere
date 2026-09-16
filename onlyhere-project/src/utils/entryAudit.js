@@ -1563,6 +1563,11 @@ export const LIKELY_GLANCE = {
   festival: ["nearestStation", "ticketInfo", "camping", "travelTime", "accommodationTip"],
   free: ["nearestStation", "ticketsGlance", "accessibility", "extraCosts"],
   town: ["nearestStation", "travelTime", "accommodationGlance", "recommendedStayGlance"],
+  // The crossing fields are the island's glance box, so a missing one is the
+  // omission worth naming. fixedLink is deliberately absent: an island with no
+  // bridge correctly has nothing there, and listing it would make the normal
+  // case look like a gap.
+  island: ["crossingGlance", "ferryOperator", "travelTime", "recommendedStayGlance", "accommodationGlance"],
   booking: ["nearestStation", "price", "priceNote", "travelTime"],
   food: ["price", "location"],
   night: ["crowd", "priceNote", "location"],

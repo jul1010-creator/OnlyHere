@@ -61,7 +61,12 @@ export const CURRENT_HEADINGS = [
 
 // A town's first heading carries the town's name, so it can never be a fixed
 // string. Matched by shape instead.
-export const DYNAMIC_HEADING = /^What to Do in .+/;
+//
+// "on" as well as "in" since 16 Sep 2026, for the island type: you do things IN
+// a town and ON an island, and writing "What to Do in Samsø" to save a regex
+// would have put a small piece of wrong English at the top of every island
+// page. The preposition is the only difference and the name still follows.
+export const DYNAMIC_HEADING = /^What to Do (?:in|on) .+/;
 
 // ── WHAT AN OLD ROW SAYS, AND WHAT IT SHOULD SAY ────────────────────
 // Every one of these is a heading this app genuinely used to write. The

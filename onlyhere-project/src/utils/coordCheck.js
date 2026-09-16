@@ -110,6 +110,10 @@ export const coordProblems = (payload, type = "") => {
     // degrade to the town centre, which is worse than it sounds but is not
     // nothing, so it is not raised to the same level.
     if (type === "town") out.push({ severity: "high", kind: "missing", detail: "No coordinate stored, so this town has no map pin and cannot be measured against anything." });
+    // An island degrades WORSE than a town, not better: there is no town centre
+    // to fall back to, so an island with no coordinate has no pin, no distance
+    // and no locator on its own card.
+    else if (type === "island") out.push({ severity: "high", kind: "missing", detail: "No coordinate stored, so this island has no map pin, no locator on its card and cannot be measured against anything." });
     return out;
   }
 

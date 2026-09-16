@@ -216,6 +216,7 @@ writeFileSync(entry, `
   export { searchCandidates, websiteInPageDetails } from ${JSON.stringify(join(root, "src/utils/socialAccounts.js"))};
   export { platformLabel, socialSourceLine } from ${JSON.stringify(join(root, "src/utils/socialAccounts.js"))};
   export { BRAND_GLYPHS } from ${JSON.stringify(join(root, "src/data/brandGlyphs.js"))};
+  export { AI_LABEL, isAiImage, aiCredit } from ${JSON.stringify(join(root, "src/utils/aiImages.js"))};
   export { DATE_TIER, DATE_TIER_LABEL, canSetADate, dateTierOf, reconcileDate, dateAuthorityProblems, probeWindow, readProbe, probeNote, eventCheckProblems, PROBE_PAD_DAYS } from ${JSON.stringify(join(root, "src/utils/dateAuthority.js"))};
   export { ldDay, ldBlocks, eventsInPage, eventForName, claimFromEvent } from ${JSON.stringify(join(root, "src/utils/eventLd.js"))};
   export { socialOf, socialAge, askFor, socialVerdict, socialPlan, describeSocialPlan, socialWriteFor, canWrite as socialCanWrite, preTicked as socialPreTicked, describeFinding as describeSocialFinding, HOW_WORDS as SOCIAL_HOW_WORDS, ACCOUNT_FRESH_DAYS, NOTHING_FOUND_DAYS, REQUESTS_PER_SEARCH, HAVE as SOCIAL_HAVE, ASK_PAGE as SOCIAL_ASK_PAGE, ASK_SEARCH as SOCIAL_ASK_SEARCH, ASKED as SOCIAL_ASKED, CANNOT as SOCIAL_CANNOT } from ${JSON.stringify(join(root, "src/utils/socialSweep.js"))};
@@ -3110,7 +3111,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ok("the entry page carries the button", /onToggleBeen/.test(detail));
     // Save is "I want to go" and been is "I have gone", and somewhere can
     // honestly be both, so neither toggle may clear the other.
-    is("and it is a separate toggle from Save", (appHrs.match(/onToggleBeen=\{/g) || []).length, 5);
+    is("and it is a separate toggle from Save", (appHrs.match(/onToggleBeen=\{/g) || []).length, 6);
     ok("and the town rule is said on the page rather than left to be discovered",
        /still route you here and still base you here/.test(detail));
     const guideBuildSlice = readFileSync(join(root, "src/App.jsx"), "utf8");
@@ -3361,7 +3362,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // A town's heading carries the town's name in both generators, spelled two
     // different ways (a template hole here, a real name there). Both collapse
     // to one token so the comparison is about the SET, not the interpolation.
-    const norm = (hs) => [...new Set(hs.map(h => /\$\{|^What to Do in /.test(h) ? "<the town's own heading>" : h))].sort();
+    const norm = (hs) => [...new Set(hs.map(h => /\$\{|^What to Do (?:in|on) /.test(h) ? "<the town's own heading>" : h))].sort();
     // A club and a bar are one type with two bodies, so the publish side is
     // asked for both and the codegen's ternary is compared against the union.
     const publishHeads = (type) => norm([...new Set([
@@ -12975,6 +12976,10 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("a town heading is recognised", bodyProblems({ blogBody: [
     { type: "heading", content: "What to Do in Ribe" }, { type: "heading", content: "The Reality Check" }] }), []);
   ok("and the dynamic rule is what recognises it", DYNAMIC_HEADING.test("What to Do in Ribe"));
+  // You do things IN a town and ON an island, and the island type writes the
+  // second. Both are the same heading with the same name after it.
+  ok("and it recognises an island's preposition too", DYNAMIC_HEADING.test("What to Do on Sams\u00f8"));
+  ok("without swallowing anything else that starts the same way", !DYNAMIC_HEADING.test("What to Do about the ferry"));
   // An entry with no long-form body is not broken, it just has no body.
   is("a card-only row is not reported", bodyProblems({ blogBody: [] }), []);
 
@@ -16286,6 +16291,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // Whichever field the guard requires for this type must be in its schema.
     const required = t === "food" || t === "foodStreet" ? "vibeLocation"
       : t === "town" ? "characterAndFit"
+      // An island writes the same first paragraph a town does, under the same
+      // name, which is what makes converting one into the other free.
+      : t === "island" ? "characterAndFit"
       : t === "essential" ? "desc"
       : "desc";
     ok(`${t}: the schema asks for the field the code refuses a draft without (${required})`,
@@ -20520,7 +20528,12 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // EVERY TYPE A VISITOR PAYS FOR SAYS WHAT IT COSTS. town, nightTown and
   // nightStreet-the-editorial-page are about a place rather than an admission,
   // so they are named as the exceptions rather than left to be inferred.
-  const NO_PRICE_BY_DESIGN = ["town", "nightTown"];
+  // island joins them 16 Sep 2026 and it is the closest call of the three: a
+  // ferry fare is real money. It carries typicalCosts, exactly as a town does,
+  // and the prompt tells it to put the car fare there, which is asserted just
+  // below rather than left implied. What it has no equivalent of is an
+  // ADMISSION, which is what PRICE_FIELDS is a list of.
+  const NO_PRICE_BY_DESIGN = ["town", "nightTown", "island"];
   const PRICE_FIELDS = ["price", "priceNote", "ticketInfo", "ticketsGlance", "extraCosts"];
   const silent = [];
   for (const t of CONTENT_TYPES) {
@@ -20534,6 +20547,10 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
 
   // THE ONE FROM THE REPORT, by name, so it cannot quietly go away again.
   ok("a bar is asked what a night there costs", /"priceNote"/.test(String(prompts.night || "")));
+  // The exception above is only honest if the island is asked for the fare
+  // somewhere, and it is: typicalCosts, named with the car on the boat.
+  ok("an island still says what the crossing costs", /"typicalCosts"/.test(String(prompts.island || "")));
+  ok("and it is told the car fare belongs there", /car fare on the ferry/i.test(String(prompts.island || "")));
   ok("and told to leave it empty rather than invent one",
     /never a plausible-sounding number and never a vague tier/.test(String(prompts.night || "")));
   const bar = shapeForLive("night", { name: "Train", desc: "d", priceNote: "Tickets from 250 DKK" }) || {};
@@ -28805,7 +28822,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // Used on the lists a person actually browses, one per content type that has
     // a page. Counted rather than spot-checked, because the value of this is
     // coverage: one linked list leaves the rest of the site orphaned.
-    is("every place list links its titles", (appU.match(/<EntryLink type=/g) || []).length, 6);
+    // 7 since 16 Sep 2026: the Islands grid is the seventh place list.
+    is("every place list links its titles", (appU.match(/<EntryLink type=/g) || []).length, 7);
     ok("towns are linked", /<EntryLink type="town" name=\{town\.name\}>/.test(appU));
     ok("attractions and workshops are linked", /<EntryLink type=\{item\._kind === "free" \? "free" : "booking"\}/.test(appU));
     ok("food places and food streets are linked", /<EntryLink type=\{spot\.isFoodStreet \? "foodStreet" : "food"\}/.test(appU));
@@ -32984,8 +33002,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         // ONE PER DOCUMENT, and that is why the page titles are h2: the pager
         // keeps all nine pages mounted at once, so an h1 per page would put
         // nine of them in one document.
-        is("and the six page titles are second-level headings under it",
-           (app.match(/<h2 style=\{\{ fontSize: 34,/g) || []).length, 6);
+        // Seven since the Islands page. The rule is unchanged: one h1 in the
+        // document, every page title an h2 under it.
+        is("and the page titles are second-level headings under it",
+           (app.match(/<h2 style=\{\{ fontSize: 34,/g) || []).length, 7);
         // margin: 0, because a heading carries a browser default margin and
         // both of these sit in boxes where that would move them.
         ok("neither reintroduces the browser's default margin",
@@ -36601,7 +36621,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // whitespace after stripping. The assertion below is therefore that the fallback
   // exists and is empty, checked in two halves: the shape survives stripping, and
   // shapeForLive's own output is the real proof that what it falls back to is "".
-  is("both types still have a fallback there", (sc.match(/tier: t\.tier \|\|/g) || []).length, 2);
+  // Three since the island type, which carries a tier for the same reason a
+  // town does and falls back to the same empty string rather than to a rank.
+  is("every type that carries a tier still has a fallback there", (sc.match(/tier: t\.tier \|\|/g) || []).length, 3);
   is("and it is the empty string, measured on the output", shapeForLive("town", { name: "X", tier: "" }).tier, "");
 
   const findings = auditEntry({ type: "festival", payload: shaped }).findings || [];
@@ -53483,9 +53505,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // list copied four times." So the props go on in a single shared prefix.
   const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
   is("every detail page gets the buttons",
-     (appF.match(/<DetailPage windowed=\{entryWindowed\} lang=\{uiLang\} paid=\{hasPaidPlan\(userProfile\)\} signedIn=\{!!userSession\} onNeedAccount=/g) || []).length, 5);
+     (appF.match(/<DetailPage windowed=\{entryWindowed\} lang=\{uiLang\} paid=\{hasPaidPlan\(userProfile\)\} signedIn=\{!!userSession\} onNeedAccount=/g) || []).length, 6);
   is("and none is left without them",
-     (appF.match(/<DetailPage /g) || []).length, 5);
+     (appF.match(/<DetailPage /g) || []).length, 6);
 
   const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   ok("the buttons render on the page", /<ArticleFeedback itemType=\{kind\} itemName=\{item\.name\}/.test(detail));
@@ -53800,14 +53822,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // difference between "only towns" and "towns and whatever else somebody adds
   // to the same list later". This is the assertion that fails if a second type
   // is ever quietly measured from Copenhagen.
-  is("only towns are measured from Copenhagen", TYPES_MEASURED_FROM_THE_ORIGIN, ["town"]);
+  // An island joins a town here on 16 Sep 2026 and for the same reason: it IS
+  // the destination, so there is no town centre to measure it from and the
+  // question a reader has is how far it is from where the trains land.
+  is("towns and islands are measured from Copenhagen", TYPES_MEASURED_FROM_THE_ORIGIN, ["town", "island"]);
   is("and exactly two types are refused a journey", TYPES_WITHOUT_A_JOURNEY, ["nightTown", "essential"]);
   // Derived on both sides. If a content type is added tomorrow it lands here
   // without anyone editing this line, which is the property being pinned:
   // "the rest" is a rule, not a list somebody has to remember to extend.
   is("and the rest are measured from their own town centre",
      TYPES_MEASURED_FROM_THEIR_TOWN,
-     CONTENT_TYPES.filter(t => t !== "town" && t !== "nightTown" && t !== "essential"));
+     CONTENT_TYPES.filter(t => t !== "town" && t !== "island" && t !== "nightTown" && t !== "essential"));
 
   // The one that needed asking. A reader planning a day in Billund wants the
   // drive they are about to make, not the one they already made.
@@ -53840,9 +53865,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // a Copenhagen Metro M3 leg, Rådhuspladsen to Gammel Strand, for streets in
   // Odense and Aarhus. Under this rule those cards render again — but the wrong
   // stored origin is overwritten on the row, which the next block asserts.
-  is("a town's page is the only one measured from Copenhagen",
-     ["town", "event", "free", "food", "nightlife", "craft"].map(journeyOriginForKind),
-     ["origin", "town", "town", "town", "town", "town"]);
+  is("a town's page and an island's are the ones measured from Copenhagen",
+     ["town", "island", "event", "free", "food", "nightlife", "craft"].map(journeyOriginForKind),
+     ["origin", "origin", "town", "town", "town", "town", "town"]);
   // An unknown kind gets silence rather than a guess — the same direction as
   // every other absence in this app.
   is("a kind nobody placed shows nothing", showsJourneyForKind("something-new"), false);
@@ -54630,7 +54655,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // accepted on `if (coords)`. Google's branch fifty lines below has refused
   // exactly this since the Rungsted fix, and it is the one that runs SECOND.
   ok("a settlement is refused for anything that is not a town",
-     /if \(!hit \|\| !geocodeIsASettlement\(hit\) \|\| sType === "town" \|\| sType === "nightTown"\) return false;/.test(appN));
+     /if \(!hit \|\| !geocodeIsASettlement\(hit\) \|\| sType === "town" \|\| sType === "island" \|\| sType === "nightTown"\) return false;/.test(appN));
   ok("and the refusal is a decision in the log, not a silence",
      /decide\("whether Nominatim's coordinate is about this place"/.test(appN));
   ok("both geocode attempts go through it",
@@ -56224,7 +56249,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the NAV_ITEMS array is findable at all", navStart > 0);
     const navSlice = app.slice(navStart, app.indexOf("];", navStart));
     const navIds = [...navSlice.matchAll(/\{ id: "([a-z]+)", label: uiT\("nav\.([a-z]+)"/g)];
-    is("every page in the nav is translated", navIds.length, 9);
+    // Ten since the Islands page went in beside Towns on 16 Sep 2026.
+    is("every page in the nav is translated", navIds.length, 10);
     ok("every nav entry names a key that exists", navIds.every(m => UI_KEYS.includes(`nav.${m[2]}`)));
     ok("and inside NAV_ITEMS the id and the key agree", navIds.every(m => m[1] === m[2]));
     // Across the whole file, every uiT key that is referenced has to exist.
@@ -62376,7 +62402,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("it reads the thread the traveller saw, greeting sliced off, and nothing at all for a composed test brief",
        /readPromises\(\s*overrideConvoText \? \[\] : aiMessages\.slice\(1\),/.test(block));
     ok("through the same published pools the chat map and the preview read",
-       /previewPools\(\{ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents \}\)/.test(block));
+       /previewPools\(\{ towns, islands, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents \}\)/.test(block));
     ok("with the traveller's own words, the tapped Nos and the event ticks, so every void rule has its input",
        /\{ ownWords: saidByTravellerForGuide, tapped: turnedDown, pickedEvents \}/.test(block));
     is("exactly one extra call, never a loop", (block.match(/await askClaude\(/g) || []).length, 1);
@@ -63344,6 +63370,289 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("no dash in either new file",
      !new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]").test(auth)
      && !new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]").test(readFileSync(join(root, "src/utils/eventLd.js"), "utf8")));
+}
+
+// ── PASS 104: A GENERATED PICTURE HAS TO SAY SO ─────────────────────
+//
+// Oliver, 15 Sep 2026: "I will start creating AI photos for places that I can't
+// find pictures for... according to EU laws, I believe I need to explicitly
+// state that the picture is AI. I might be wrong."
+//
+// He was right. AI Act Article 50(4) has applied since 2 August 2026 and puts
+// the duty on the deployer: a generated image that resembles an existing place
+// and would pass for authentic must be disclosed clearly, visibly, and at first
+// exposure. utils/aiImages.js writes out the reading.
+//
+// These assertions exist because the disclosure has three places it could go
+// missing, and two of them have eaten a feature in this project before: the
+// allow-list in cleanCredit, the component that decides whether a credit is
+// worth drawing, and the door that writes the flag in the first place.
+{
+  const { AI_LABEL, isAiImage, aiCredit, cleanCredit } = M;
+  const pc = readFileSync(join(root, "src/components/PhotoCredit.jsx"), "utf8");
+  const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const ai = readFileSync(join(root, "src/utils/aiImages.js"), "utf8");
+
+  // ── THE FLAG ITSELF ─────────────────────────────────────────────
+  ok("a generated credit is recognised", isAiImage({ ai: true }));
+  // `true` only. "false" is a non-empty string and would otherwise mark a
+  // photograph as generated, which is the wrong direction to be wrong in.
+  ok("and a truthy value is not enough", !isAiImage({ ai: "false" }) && !isAiImage({ ai: 1 }));
+  ok("nothing is not a generated credit", !isAiImage(null) && !isAiImage({}) && !isAiImage("ai"));
+  ok("the door writes the flag", aiCredit().ai === true);
+  ok("and names itself without inventing a photographer",
+     aiCredit().source === "AI image" && !aiCredit().photographer);
+
+  // ── THE ALLOW-LIST, WHERE THIS WOULD HAVE BEEN EATEN ────────────
+  //
+  // cleanCredit keeps four strings and dropped anything else. A credit whose
+  // only content is the flag looked empty to it, so the disclosure would have
+  // been dropped on publication: the picture reaches the live page and the
+  // label does not.
+  ok("a flag-only credit survives shaping", cleanCredit({ ai: true })?.ai === true);
+  ok("and the flag survives beside a real credit",
+     cleanCredit({ photographer: "Someone", ai: true })?.ai === true);
+  ok("a photograph is not marked generated", !cleanCredit({ photographer: "Someone" })?.ai);
+  ok("and an empty credit is still nothing", cleanCredit({}) === null);
+
+  // ── THE COMPONENT DRAWS IT, AND DRAWS IT FIRST ──────────────────
+  ok("the credit component knows about generated pictures", /isAiImage/.test(pc) && /AI_LABEL/.test(pc));
+  // The old test for "is there a credit worth drawing" asked whether any of the
+  // four strings had content, and a generated picture has none of them.
+  ok("a generated picture counts as a credit even when empty otherwise",
+     /const typed = credit && \(generated \|\| credit\.photographer/.test(pc));
+  ok("and the label leads rather than trailing the attribution",
+     pc.indexOf("{generated && (") < pc.indexOf("Made with AI"));
+
+  // ── AND THE DOOR ────────────────────────────────────────────────
+  //
+  // A tick box beside the ordinary upload would be a disclosure that depends on
+  // remembering. It is a separate button, and it cannot upload without the flag.
+  ok("Studio has a second upload door", /✦ Upload AI picture/.test(appF));
+  ok("which always writes the flag", /uploadMediaFiles\(row, e\.target\.files, \{ ai: true \}\)/.test(appF));
+  ok("and the ordinary door still writes nothing",
+     /uploadMediaFiles\(row, e\.target\.files\); e\.target\.value = ""/.test(appF));
+  ok("the flag reaches the body blocks and the hero",
+     /const credit = ai \? aiCredit\(\) : null;/.test(appF)
+     && /heroPatch\(replacing, firstUrl, credit \|\| undefined\)/.test(appF));
+
+  // The reading is written down where somebody can check it, the same way
+  // support.js writes down its Article 16 reading.
+  ok("the law is recorded, not just obeyed", /Article 50\(4\)/.test(ai) && /2 August 2026/.test(ai));
+  ok("and it says plainly that it is not legal advice", /NOT LEGAL ADVICE/.test(ai));
+  const DASH = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+  ok("no dash in the new file", !DASH.test(ai));
+}
+
+// -- PASS 105: THE DATES ARE ON THE FRONT PAGE, AND THERE IS ONE SET OF THEM --
+//
+// Oliver, 16 Sep 2026: "over the 'plan my trip'.. put dates of arrival and
+// departure. So when people click 'arrival and departure' and then click 'Plan
+// my trip', it instantly puts them to Gemlyx detour with a pre-filled arrival
+// and departure date written in. It's because people tend to miss this AI
+// planner."
+//
+// The whole feature is one idea: the hero fields ARE the intake fields. Every
+// assertion below defends that single sentence, because the obvious way to
+// build this is a pair of hero-only states copied across on the click, and that
+// version works on the day it ships and drifts the first time somebody edits a
+// date on one screen and reads it on the other.
+{
+  const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // -- ONE SET OF DATES, NOT TWO --------------------------------------
+  //
+  // Counted rather than eyeballed: a second useState holding an arrival is the
+  // exact shape of the bug this is written to prevent, and it would be added by
+  // somebody who never reads this comment.
+  is("there is exactly one arrival state in the app",
+     (appF.match(/const \[[A-Za-z]*[Aa]rrival, set[A-Za-z]+\] = useState/g) || []).length, 1);
+  is("and exactly one departure state",
+     (appF.match(/const \[[A-Za-z]*[Dd]eparture, set[A-Za-z]+\] = useState/g) || []).length, 1);
+  ok("the hero reads the intake's own arrival",
+     /value: heroDayOf\(intakeArrival\), min: heroDayNow\(\), onPick: heroSetArrival/.test(appF));
+  ok("and the intake's own departure",
+     /value: heroDayOf\(intakeDeparture\)/.test(appF) && /onPick: heroSetDeparture/.test(appF));
+  // The planner's own pickers still bind to the same two values, so "pre-filled"
+  // is not a copy that has to be kept in step: it is the same state, read twice.
+  ok("and the planner is still looking at the same two values",
+     /value=\{intakeArrival\}/.test(appF) && /value=\{intakeDeparture\}/.test(appF));
+
+  // -- NATIVE INPUTS, ON PURPOSE --------------------------------------
+  //
+  // The hero is overflow:hidden and sits inside the transformed tab strip, so a
+  // dropdown calendar gets cut off at the hero's edge and a fixed sheet is
+  // positioned against the strip rather than the window. A native picker is
+  // drawn outside the document and cannot be clipped by either. If somebody
+  // later swaps these for the custom DateTimePicker, this fails and the comment
+  // above heroSetArrival explains why it did.
+  ok("the hero dates are native controls",
+     /<input type="date" value=\{f\.value\} min=\{f\.min\}/.test(appF));
+  ok("past days are refused before the picker opens", /min: heroDayNow\(\)/.test(appF));
+  ok("and a departure cannot be earlier than the arrival",
+     /min: heroDayOf\(intakeArrival\) \|\| heroDayNow\(\)/.test(appF));
+
+  // -- THE SHAPE THE REST OF THE APP PARSES ---------------------------
+  //
+  // "YYYY-MM-DDTHH:MM", local, no timezone suffix. DateTimePicker.commit writes
+  // exactly this and says why; a hero that wrote a bare day would hand
+  // tripWindow and fetchGuideWeather a string they read as UTC midnight.
+  ok("the hero writes the intake's own string shape",
+     /`\$\{day\}T\$\{heroTimeOf\(intakeArrival\)\}`/.test(appF)
+     && /`\$\{day\}T\$\{heroTimeOf\(intakeDeparture\)\}`/.test(appF));
+  ok("and a time already chosen in the planner is kept",
+     /String\(v \|\| ""\)\.slice\(11, 16\) \|\| "12:00"/.test(appF));
+  // Cleared, never quietly moved. Rewriting somebody's departure date for them
+  // is the kind of help that gets discovered at an airport.
+  ok("a departure before the arrival is cleared rather than moved",
+     /new Date\(intakeDeparture\) < new Date\(next\)\) setIntakeDeparture\(""\)/.test(appF));
+
+  // -- AND IT LANDS WHERE THE DATES ARE SHOWING -----------------------
+  //
+  // The intake lives on the sightseeing row only. Without this line a reader
+  // who last looked at Road Trips arrives at Detour with their dates filled in
+  // on a row that is not on screen, which reads as the dates having been lost.
+  ok("Plan my trip opens the row that owns the intake",
+     /setDetourTab\("sightseeing"\); goTab\("ai"\); window\.scrollTo\(0, 0\);/.test(appF));
+  ok("and the button is still the button", /✦ Plan my trip/.test(appF));
+}
+
+// -- PASS 106: AN ISLAND IS ITS OWN THING, AND THE CROSSING IS WHY -----------
+//
+// Oliver, 16 Sep 2026: "I think we should make 'islands' their own navigation.
+// Instead of being part of towns. There are alot of islands." And, an hour
+// later: "Let me be able to change Praesto and Samso from towns.. so I save
+// money."
+//
+// The generic registration checks above already walk CONTENT_TYPES, so the
+// eleven tables that need an island entry are covered without a word here.
+// What this pass defends is the three things that are specific to this type and
+// that nothing else would notice:
+//
+//   1. the FIELD and the TYPE are different things and both still work,
+//   2. the crossing never gets invented, in any of the four places it could be,
+//   3. the conversion carries the research and drops what does not apply.
+{
+  const { shapeForLive, studioPrompts, CONTENT_TYPES, srcForType, PLACE_SOURCES, journeyOriginFor,
+          segForType, entryUrlPath, parseEntryUrl, TAB_HASH, ENTRY_WORDS, UI_STRINGS, UI_CODES } = M;
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  const live = readFileSync(join(root, "src/utils/liveContent.js"), "utf8");
+  const geo = readFileSync(join(root, "src/utils/geography.js"), "utf8");
+  const prompt = String(studioPrompts("Testisle").island || "");
+
+  // -- 1. THE FIELD SURVIVED THE TYPE --------------------------------
+  //
+  // geography.js:306 argues that "island" must NOT be a value in PLACE_KINDS,
+  // because "Sejero IS an island; AEroskobing is a town ON one. One field
+  // answers both." Adding an island TYPE is a different claim and does not
+  // retire that field. If a later pass ever deletes the field thinking the type
+  // replaced it, every town on an island loses which island it is on.
+  ok("the argument against island-as-a-size is still on the record",
+     /island is not a size/i.test(geo));
+  ok("and a town still carries which island it is on",
+     Object.prototype.hasOwnProperty.call(shapeForLive("town", { name: "T", characterAndFit: "c", island: "Ærø" }) || {}, "island"));
+  is("cleaned the same way on both types",
+     shapeForLive("island", { name: "I", characterAndFit: "c", island: "on Ærø" })?.island,
+     shapeForLive("town", { name: "T", characterAndFit: "c", island: "on Ærø" })?.island);
+
+  // An island is not a settlement, so it carries no size. placeKind on an
+  // island row would put it through isArea() and drop it off its own page.
+  ok("an island has no placeKind",
+     !Object.prototype.hasOwnProperty.call(shapeForLive("island", { name: "I", characterAndFit: "c", placeKind: "town" }) || {}, "placeKind"));
+  ok("and the prompt does not ask for one", !/"placeKind"/.test(prompt));
+
+  // -- 2. THE CROSSING IS NEVER INVENTED -----------------------------
+  //
+  // Four places could put a boat somewhere there is none: the shape's defaults,
+  // the prompt, the page, and the converter. All four are checked.
+  const bare = shapeForLive("island", { name: "Probe Isle", characterAndFit: "c" }) || {};
+  const CROSSING = ["fixedLink", "ferryOperator", "ferryFrom", "ferryTo", "crossingGlance", "offSeasonGlance"];
+  is("every crossing field reaches the database",
+     CROSSING.filter(f => !Object.prototype.hasOwnProperty.call(bare, f)), []);
+  // shapeForLive is the only insert path into gemlyx_content, and a default
+  // here would be a claim about a boat rather than a missing value.
+  is("and an unresearched crossing stores nothing rather than something",
+     CROSSING.filter(f => bare[f] !== ""), []);
+  ok("the prompt asks for the bridge before the ferry",
+     prompt.indexOf("fixedLink") < prompt.indexOf("ferryOperator"));
+  ok("and asks for BOTH ends of the crossing",
+     /"ferryFrom"/.test(prompt) && /"ferryTo"/.test(prompt));
+  ok("and says to take it from the operator rather than the tourist board",
+     /operator/i.test(prompt) && /tourist board/i.test(prompt));
+  ok("and tells it to leave the field empty rather than guess",
+     /EMPTY if unconfirmed/.test(prompt));
+  // The page prints a row only when the field is filled, so an island drafted
+  // without the operator's page shows no crossing at all.
+  ok("the page draws each crossing row only when it has one",
+     /item\.crossingGlance \? \{ icon:/.test(detail) && /item\.ferryOperator \? \{ icon:/.test(detail));
+  ok("and the ports render only when both are known, and only when unsaid",
+     /\(!item\.crossingGlance && item\.ferryFrom && item\.ferryTo\) \? \{ icon:/.test(detail));
+  // The labels a reader meets on that card are in the catalogue like every
+  // other glance label. An English word on a Danish page is the bug this
+  // mirrors the rest of the app to avoid.
+  is("every island glance label is translated",
+     ["Fixed link", "Crossing", "Operator", "Ports", "Off season"].filter(l => !Object.keys(ENTRY_WORDS).includes(l)), []);
+
+  // -- 3. THE CONVERSION ---------------------------------------------
+  //
+  // The point of it is that the research is already bought, so the two shapes
+  // have to agree field for field wherever they mean the same thing. If they
+  // ever drift, converting silently drops whatever the island shape forgot.
+  const townish = { name: "X", characterAndFit: "c", whatToDo: "w", gettingThereReality: "g", region: "R", tag: "t", highlight: "h", travelTime: "1h", nomiPotential: "High", tier: "Worth Considering", lat: 55.5, lon: 11.1, recommendedStayGlance: "A day", bestTimeGlance: "May", accommodationGlance: "a", typicalCosts: "100 DKK", gemlyxFind: "f", thingsToKnow: ["a", "b", "c"], themes: ["history"] };
+  const asTown = shapeForLive("town", townish) || {};
+  const asIsle = shapeForLive("island", townish) || {};
+  // emoji is deliberately NOT in this list: a town with none falls back to a
+  // pin and an island to a ferry, which is the one default that should differ.
+  // A converted row is unaffected either way, since it arrives carrying the
+  // emoji it was published with and the fallback never fires.
+  const CARRIED = ["name", "region", "tag", "desc", "highlight", "travelTime", "mapHint", "nomiPotential", "tier", "__lat", "__lon", "partOf", "dayTripFrom", "island", "themes", "nearestStation", "recommendedStayGlance", "bestTimeGlance", "accommodationGlance", "typicalCosts", "gemlyxFind"];
+  is("everything a town and an island both mean is carried under the same name",
+     CARRIED.filter(f => JSON.stringify(asTown[f]) !== JSON.stringify(asIsle[f])), []);
+  // The photo path is the one field that MUST differ, and the toast says so,
+  // because a path is not a picture and the old file stays where it was.
+  ok("the photo moves folder", asIsle.photo === "/islands/x.jpg" && asTown.photo === "/towns/x.jpg");
+  ok("and the founder is told to put a file there", /the old town photo is still at its old path/.test(app));
+  // One PATCH, both halves. A payload with crossing fields under type "town"
+  // renders nowhere; a type of "island" over a payload with placeKind renders
+  // wrongly. Either alone is a half-converted row.
+  ok("the type and the payload change together",
+     /body: JSON\.stringify\(\{ type: "island", payload \}\)/.test(app));
+  ok("and placeKind is dropped on the way through",
+     /const \{ placeKind, \.\.\.carried \} = \(row\.payload \|\| \{\}\);/.test(app));
+  // A converted town is the one island entry certain to have been researched
+  // without anybody asking about a ferry, so the converter refuses to save
+  // until somebody has.
+  ok("it refuses to convert without a link or both ports",
+     /if \(!hasLink && !hasCrossing\) \{/.test(app));
+  ok("and one port on its own is not a crossing",
+     /const hasCrossing = !!\(said\(islandConvert\.ferryFrom\) && said\(islandConvert\.ferryTo\)\);/.test(app));
+  // An island's own `island` field names the BIGGER island it belongs to, so a
+  // converted row must not end up filed as a thing on itself.
+  ok("an island is never put on itself",
+     /cleanIsland\(carried\.island\) === cleanIsland\(carried\.name\) \? "" :/.test(app));
+
+  // -- 4. AND IT IS A PLACE OF ITS OWN EVERYWHERE ---------------------
+  ok("island is a content type", CONTENT_TYPES.includes("island"));
+  is("with its own render source, not a town's", srcForType("island"), "island");
+  ok("which is a real render source", PLACE_SOURCES.includes("island"));
+  is("measured from Copenhagen like a town", journeyOriginFor("island"), "origin");
+  // Its own URL segment: /denmark/<slug> already means town, and in Denmark an
+  // island and a town sharing a name is the normal case, not the edge one.
+  is("and its own URL segment", segForType("island"), "island");
+  is("an island address is built from it", entryUrlPath("island", "Samsø"), "/denmark/island/samso");
+  is("and reads back as an island", parseEntryUrl("/denmark/island/samso")?.kind, "island");
+  is("a town address is untouched by it", entryUrlPath("town", "Ribe"), "/denmark/ribe");
+  is("the page has its own address", TAB_HASH.islands, "islands");
+  is("and its own word in every language",
+     UI_CODES.filter(c => !String(UI_STRINGS["nav.islands"]?.[c] || "").trim()), []);
+  // It is its own array in the merge chain. Sharing the towns array would have
+  // put Bornholm in the Towns grid, in the town search pool and in every guide
+  // pool that asks for towns, and each would have been found separately.
+  ok("a published island is merged into its own array",
+     /else if \(row\.type === "island"\) islands\.push\(\{ id, \.\.\.item \}\);/.test(live));
+  ok("and the page says so plainly while there are none",
+     /No islands published yet\./.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

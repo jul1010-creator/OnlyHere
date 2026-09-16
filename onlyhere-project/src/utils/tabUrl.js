@@ -31,6 +31,7 @@ export const TAB_HASH = {
   food: "food",
   nightlife: "nightlife",
   visits: "towns",
+  islands: "islands",
   ai: "detour",
 };
 

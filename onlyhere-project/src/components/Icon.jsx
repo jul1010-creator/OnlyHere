@@ -23,6 +23,11 @@ const ICONS = {
   utensils: P("M7 3v7a2 2 0 0 0 2 2v9 M11 3v7a2 2 0 0 1-2 2 M7 3v4 M16 3c-1.7 0-3 2-3 5v5h3v8 M16 3v18"),
   beer: P("M6 5h9v16H6z M6 9h-.5A1.5 1.5 0 0 0 4 10.5v0 M15 9h2a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2 M9 9v8 M12 9v8 M6 5c0-1.1 2-2 4.5-2S15 3.9 15 5"),
   town: P("M3 21h18 M5 21V10l4-4 4 4v11 M13 21V13l4-3 3 3v8 M8 21v-4h2v4"),
+  // Land with water under it and something standing on it. Drawn rather than
+  // borrowed: the nav set is one hand, and a stock island glyph beside these
+  // would read as a sticker. The waves are the bottom line so it stays legible
+  // at 15px, where the mound alone looks like a hill.
+  island: P("M4 19.4c1.4 0 1.4 1.3 2.7 1.3s1.4-1.3 2.7-1.3 1.4 1.3 2.7 1.3 1.4-1.3 2.7-1.3 1.4 1.3 2.7 1.3 1.4-1.3 2.7-1.3 M6.6 17.2c1.2-3 3.1-4.5 5.4-4.5s4.2 1.5 5.4 4.5z M12 12.7V4 M12 4l3.8 1.9L12 7.8"),
   car: P("M5 16l1.2-4.5A2 2 0 0 1 8.1 10h7.8a2 2 0 0 1 1.9 1.5L19 16 M4 16h16v4h-2a1.5 1.5 0 0 1-3 0H9a1.5 1.5 0 0 1-3 0H4z"),
   map: P("M9 4L4 6v14l5-2 6 2 5-2V4l-5 2-6-2z M9 4v14 M15 6v14"),
   calendar: P("M5 6h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z M8 3v5 M16 3v5 M4 11h16"),
@@ -87,7 +92,7 @@ const EMOJI_MAP = {
   "🍺": "beer", "🍻": "beer", "🌃": "night",
   "🚗": "car", "🚐": "car", "🚲": "bike", "🚶": "walk",
   "🚆": "train", "🚂": "train", "🚇": "train", "⛴": "ferry", "⛴️": "ferry",
-  "⛺": "tent", "🏘": "town", "🏘️": "town", "🏰": "town",
+  "⛺": "tent", "🏘": "town", "🏘️": "town", "🏰": "town", "⛴": "island", "⛴️": "island", "🏝": "island", "🏝️": "island",
   "🎟": "ticket", "🎟️": "ticket", "🆓": "free",
   "📍": "pin", "🗺": "map", "🗺️": "map", "🧭": "compass",
   "📖": "book", "💡": "bulb", "🔍": "search", "🔎": "search",

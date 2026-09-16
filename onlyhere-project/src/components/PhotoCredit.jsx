@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { C } from "../utils/theme";
 import { loadImageCredits, creditFor, licenseUrl } from "../utils/imageCredits";
+import { AI_LABEL, isAiImage } from "../utils/aiImages";
 
 // The caption that sits under a photo: who took it, where it came from, and
 // under what licence, with the licence name linked to its real deed.
@@ -22,24 +23,57 @@ export const PhotoCredit = ({ photo, credit, align = "left", style }) => {
   const [, bump] = useState(0);
   useEffect(() => { let alive = true; loadImageCredits().then(() => { if (alive) bump(v => v + 1); }); return () => { alive = false; }; }, []);
 
-  const typed = credit && (credit.photographer || credit.source || credit.license || credit.sourceUrl) ? credit : null;
+  // ── AN AI PICTURE IS A CREDIT EVEN WITH NOTHING ELSE IN IT ───────
+  //
+  // The old test asked whether any of the four credit strings had content, and
+  // a generated picture has none of them: nobody took it, there is no source
+  // page and there is no licence. Under that test the disclosure the AI Act
+  // asks for would have been dropped for being an empty credit, which is the
+  // one case where saying nothing is not an option. See utils/aiImages.js.
+  const generated = isAiImage(credit);
+  const typed = credit && (generated || credit.photographer || credit.source || credit.license || credit.sourceUrl) ? credit : null;
   const entry = typed || creditFor(photo);
   if (!entry) return null;
+  // What is left to say after the chip. On a generated picture `source` is the
+  // words "AI image", which the chip has already said better, so it does not
+  // count: without this, an uploaded AI picture reads "AI-generated image  Made
+  // with AI AI image".
+  const said = generated ? entry.photographer : (entry.photographer || entry.source);
+  const more = said || entry.license || entry.sourceUrl;
 
   const url = licenseUrl(entry.license);
   const linkStyle = { color: C.light, textDecoration: "underline" };
 
   return (
     <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, textAlign: align, ...style }}>
-      Photo:{" "}
+      {/* ── THE DISCLOSURE, FIRST AND IN ITS OWN CHIP ─────────────────
+          Article 50(4) wants it clear and distinguishable, visible without any
+          action by the reader, at first exposure. So it leads, it is not folded
+          into the credit sentence, and it is drawn as a chip rather than as
+          more grey small print that the eye skips with the rest of the
+          attribution. */}
+      {generated && (
+        <span style={{
+          display: "inline-flex", alignItems: "center", gap: 4, verticalAlign: "middle",
+          background: `${C.gold}1F`, border: `1px solid ${C.gold}66`, color: C.gold,
+          borderRadius: 100, padding: "2px 8px", fontSize: 10, fontWeight: 700,
+          letterSpacing: 0.3, marginRight: said ? 6 : 0,
+        }}>✦ {AI_LABEL}</span>
+      )}
+      {/* A generated picture with nothing else on it stops here: there is no
+          photographer to credit and "Photo: source" under an invented image
+          would be a second claim nobody can check. */}
+      {!more ? null : (
+        <>
+      {generated ? "Made with AI" : "Photo:"}{" "}
       {entry.sourceUrl ? (
         <a href={entry.sourceUrl} target="_blank" rel="noreferrer" style={linkStyle}>
-          {entry.photographer || entry.source || "source"}
+          {said || "source"}
         </a>
-      ) : (
-        <span>{entry.photographer || entry.source || "source"}</span>
-      )}
-      {entry.photographer && entry.source ? ` / ${entry.source}` : ""}
+      ) : said ? (
+        <span>{said}</span>
+      ) : null}
+      {!generated && entry.photographer && entry.source ? ` / ${entry.source}` : ""}
       {entry.license ? (
         <>
           {" · "}
@@ -50,6 +84,8 @@ export const PhotoCredit = ({ photo, credit, align = "left", style }) => {
           )}
         </>
       ) : null}
+        </>
+      )}
     </div>
   );
 };

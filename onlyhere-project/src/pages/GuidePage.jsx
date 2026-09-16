@@ -39,6 +39,7 @@ import { stopCard } from "../utils/mapStops";
 import { markMany, canBeMarked, dayVisitRows } from "../utils/beenThere";
 import { cleanBeen } from "../utils/beenSync";
 import { towns } from "../data/towns";
+import { islands } from "../data/islands";
 import { freeEntrance } from "../data/freeEntrance";
 import { foodSpots } from "../data/food";
 import { nightlifeSpots } from "../data/nightlife";
@@ -606,7 +607,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
 
   const mapLibrary = useMemo(
     () => placedLibrary(previewPools({
-      towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
+      towns, islands, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
     })),
     [libraryTick],
   );

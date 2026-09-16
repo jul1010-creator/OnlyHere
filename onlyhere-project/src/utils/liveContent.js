@@ -44,6 +44,7 @@
 // the component, so must the guard.
 import { events, majorEvents, undatedEvents } from "../data/events";
 import { towns, TOWN_COORDS } from "../data/towns";
+import { islands } from "../data/islands";
 import { freeEntrance } from "../data/freeEntrance";
 import { nightlifeSpots } from "../data/nightlife";
 import { nightlifeTowns } from "../data/nightlifeTowns";
@@ -166,7 +167,14 @@ const doLoad = async () => {
         if (frame) TOWN_COORDS[item.name] = [frame.lat, frame.lon];
         else if (item.__lat != null || item.__lon != null || item.lat != null || item.lon != null)
           badFrames.push(`${item.name} (row id ${row.id})`);
-      } else if (row.type === "festival") (item.__scale === "Major" ? majorEvents : events).push({ id, ...item });
+      }
+      // An island is its own array and NOT pushed into towns, which is the
+      // whole point of the type. Sharing the towns array would have put
+      // Bornholm in the Towns grid, in the town search pool and in every guide
+      // pool that asks for towns, and each of those would have been found
+      // separately and fixed separately.
+      else if (row.type === "island") islands.push({ id, ...item });
+      else if (row.type === "festival") (item.__scale === "Major" ? majorEvents : events).push({ id, ...item });
       else if (row.type === "free") freeEntrance.push({ id, ...item });
       else if (row.type === "food" || row.type === "foodStreet") foodSpots.push({ id, ...item });
       else if (row.type === "night") nightlifeSpots.push({ id, ...item });
@@ -296,6 +304,7 @@ export const refreshLiveContent = async (onBookingRow) => {
 // behaviour, so the worst case is today.
 const ARRAY_FOR = {
   town: towns,
+  island: islands,
   free: freeEntrance,
   food: foodSpots,
   foodStreet: foodSpots,
