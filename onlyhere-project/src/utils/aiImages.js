@@ -39,7 +39,50 @@
 // one thing that most needs saying out loud. If the label ever feels like it is
 // spoiling a page, the honest fix is fewer generated pictures, not a quieter
 // label.
-export const AI_LABEL = "AI-generated image";
+// ── THE DISCLOSURE IS THE CREDIT, NOT A BADGE BESIDE ONE ───────
+//
+// Oliver, 16 Sep 2026: "Just setup the AI as credits. Like 'AI-assimilation of
+// [draft]'."
+//
+// So the line reads like every other credit under a photograph on this site,
+// and answers the same question a photographer's name answers: where did this
+// picture come from. "AI-generated image", which is what this said first, is a
+// warning label, and a warning label under a picture the site chose to publish
+// reads as an apology for it.
+//
+// ── AND "IMPRESSION" IS THE WORD, BECAUSE OF WHAT THESE ARE ────
+//
+// Oliver, an hour later: "the pictures are based off the atmosphere, area, and
+// overall theme." That changes the right word and it changes it in the
+// direction of MORE disclosure, not less. These are not renderings of one
+// building from photographs of it; they are mood pieces, and a reader who takes
+// one for a photograph has been told something about a place that nobody
+// checked. This project's whole argument is that a traveller is never left
+// standing somewhere the page misdescribed.
+//
+// "Impression" is the word that carries it. It is what a painter's caption says
+// and it means evocative rather than documentary, so "AI impression of Ribe"
+// tells a reader both things at once: a machine made it, and it is not a
+// photograph of the place. "Assimilation", his first word, means absorbing
+// something into a larger whole, which is not what happened and reads oddly in
+// English.
+//
+// It still satisfies 50(4) on its own terms. The duty is that a reader can tell
+// the picture is artificially generated, clearly and at first exposure, and the
+// line leads with AI. The chip, the position and the gold are unchanged.
+//
+// AI_LABEL is the form with no subject. It is not the normal case and should
+// stay rare: a credit that cannot name what it is a picture OF has lost the one
+// thing that makes it a credit rather than a disclaimer.
+export const AI_LEAD = "AI impression of";
+export const AI_LABEL = "AI impression";
+
+// The line a reader meets. Built here rather than in the component, so the one
+// place that decides the wording is the one place that records why.
+export const aiLabel = (credit) => {
+  const subject = String(credit?.subject || "").trim();
+  return subject ? `${AI_LEAD} ${subject}` : AI_LABEL;
+};
 
 // The flag rides on the CREDIT object rather than beside it, because the credit
 // is already the one thing carried with a picture everywhere: shapeForLive
@@ -53,4 +96,13 @@ export const isAiImage = (credit) =>
 // What gets written when he uploads through the AI door. `source` is filled in
 // so a row still reads as something rather than as an empty credit, and the
 // photographer field is deliberately left alone: nobody took this picture.
-export const aiCredit = (extra = {}) => ({ ...extra, source: "AI image", ai: true });
+//
+// `subject` is what the picture is OF, and the upload door fills it in from the
+// draft's own name, so he never types it. An empty subject is stored as absent
+// rather than as an empty string, because cleanCredit's allow-list would carry
+// the empty string through and the label would then read "AI impression of "
+// with nothing after it.
+export const aiCredit = ({ subject = "", ...extra } = {}) => {
+  const said = String(subject || "").trim().slice(0, 120);
+  return { ...extra, ...(said ? { subject: said } : {}), source: "AI image", ai: true };
+};

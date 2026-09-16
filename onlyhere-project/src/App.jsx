@@ -2679,7 +2679,10 @@ function GemlyxApp() {
       let firstUrl = null;
       // The flag rides on the credit, which is the one thing already carried
       // with a picture through shapeForLive, the hero field and the body block.
-      const credit = ai ? aiCredit() : null;
+      // The subject comes off the draft rather than out of a box he has to
+      // fill: the picture is of the thing the entry is about, every time, and a
+      // credit line nobody has to type is a credit line nobody forgets.
+      const credit = ai ? aiCredit({ subject: row.payload?.name }) : null;
       for (let i = 0; i < files.length; i++) {
         const url = await uploadToMedia(files[i], mediaPathFor(files[i], row.type, slugBase, i));
         newBlocks.push({ type: "image", src: url, ...(credit ? { credit } : {}) });

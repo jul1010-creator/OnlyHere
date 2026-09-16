@@ -9,7 +9,7 @@ marker afterwards.
 
 ## 0. THIS PUSH WAS RUN BEFORE IT WAS HANDED TO YOU
 
-**17,261 assertions passed, 0 failed, and `vite build` is green.**
+**17,271 assertions passed, 0 failed, and `vite build` is green.**
 
 This is new, and it is the useful part of tonight. The whole project now runs in
 the cloud sandbox: the src and api trees, the tests and the four root files the
@@ -53,13 +53,26 @@ What shipped:
 - **A second upload door in Studio**, `✦ Upload AI picture`. Not a tick box
   beside the ordinary upload: a tick box is a disclosure that depends on
   remembering, and this one cannot upload without setting the flag.
-- **`PhotoCredit` leads with a gold `✦ AI-generated image` chip** and drops the
-  now-redundant "AI image" source line underneath it.
-- **`cleanCredit` carries the flag.** This is the part that would have eaten the
-  feature silently: the allow-list keeps four strings, a credit whose only
-  content is the flag looked empty to it, and the label would have been dropped
-  at publication while the picture went live. That is the third time this
-  allow-list has been the danger, so there is an assertion on it now.
+- **The disclosure reads as a credit, not a warning label.** Your call, 16 Sep:
+  *"Just setup the AI as credits. Like 'AI-assimilation of [draft]'."* So the
+  gold chip under the picture sits where a photographer's name would go, and the
+  redundant "AI image" source line underneath is gone. The subject comes off the
+  draft's own name at upload, so you never type it and it cannot be forgotten.
+- **The word is "impression", and that is because of what these pictures are.**
+  You then said they are "based off the atmosphere, area, and overall theme",
+  which moves the wording toward MORE disclosure rather than less: these are
+  mood pieces, not renderings of one building, and a reader who takes one for a
+  photograph has been told something about a place that nobody checked. That is
+  the stranding this project spends its whole time avoiding. *Impression* is the
+  word a painter's caption uses and it means evocative rather than documentary,
+  so `✦ AI impression of Ribe` tells a reader both things at once: a machine
+  made it, and it is not a photograph. It still satisfies 50(4), because the
+  duty is that a reader can tell the picture is artificially generated at first
+  exposure, and the line leads with AI.
+  It is one constant, `AI_LEAD` in `utils/aiImages.js`, and the assertions are
+  written against the constant rather than the words, so you can argue about the
+  wording without breaking anything. Two of them hold whatever you pick: the
+  line starts with AI, and it never claims to be a photograph.
 
 **One decision left for you, and it is a real one.** The entry page is labelled.
 The hero thumbnail on a list card is not, and a card is also "first exposure" —

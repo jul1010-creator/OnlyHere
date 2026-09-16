@@ -216,7 +216,7 @@ writeFileSync(entry, `
   export { searchCandidates, websiteInPageDetails } from ${JSON.stringify(join(root, "src/utils/socialAccounts.js"))};
   export { platformLabel, socialSourceLine } from ${JSON.stringify(join(root, "src/utils/socialAccounts.js"))};
   export { BRAND_GLYPHS } from ${JSON.stringify(join(root, "src/data/brandGlyphs.js"))};
-  export { AI_LABEL, isAiImage, aiCredit } from ${JSON.stringify(join(root, "src/utils/aiImages.js"))};
+  export { AI_LABEL, AI_LEAD, aiLabel, isAiImage, aiCredit } from ${JSON.stringify(join(root, "src/utils/aiImages.js"))};
   export { DATE_TIER, DATE_TIER_LABEL, canSetADate, dateTierOf, reconcileDate, dateAuthorityProblems, probeWindow, readProbe, probeNote, eventCheckProblems, PROBE_PAD_DAYS } from ${JSON.stringify(join(root, "src/utils/dateAuthority.js"))};
   export { ldDay, ldBlocks, eventsInPage, eventForName, claimFromEvent } from ${JSON.stringify(join(root, "src/utils/eventLd.js"))};
   export { socialOf, socialAge, askFor, socialVerdict, socialPlan, describeSocialPlan, socialWriteFor, canWrite as socialCanWrite, preTicked as socialPreTicked, describeFinding as describeSocialFinding, HOW_WORDS as SOCIAL_HOW_WORDS, ACCOUNT_FRESH_DAYS, NOTHING_FOUND_DAYS, REQUESTS_PER_SEARCH, HAVE as SOCIAL_HAVE, ASK_PAGE as SOCIAL_ASK_PAGE, ASK_SEARCH as SOCIAL_ASK_SEARCH, ASKED as SOCIAL_ASKED, CANNOT as SOCIAL_CANNOT } from ${JSON.stringify(join(root, "src/utils/socialSweep.js"))};
@@ -27761,8 +27761,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // A public-domain file has no author and is still worth crediting: the reader
   // is better served by "Public domain" under the picture than by nothing.
   is("a licence with no author is still a credit", cleanCredit({ license: "CC0" })?.license, "CC0");
-  is("and the four fields are the ones the renderer reads",
-     Object.keys(cleanCredit(CREDIT) || {}), ["photographer", "source", "sourceUrl", "license"]);
+  // Five since 16 Sep 2026: `subject` is what a generated picture is OF and is
+  // the whole of its credit line, so it is on the allow-list with the rest.
+  is("and the fields are the ones the renderer reads",
+     Object.keys(cleanCredit(CREDIT) || {}), ["photographer", "source", "sourceUrl", "license", "subject"]);
 }
 
 // ── THE WIKI HALF OF THE DRAFT PHOTO PANEL ─────────────────────────
@@ -63388,7 +63390,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 // allow-list in cleanCredit, the component that decides whether a credit is
 // worth drawing, and the door that writes the flag in the first place.
 {
-  const { AI_LABEL, isAiImage, aiCredit, cleanCredit } = M;
+  const { AI_LABEL, AI_LEAD, aiLabel, isAiImage, aiCredit, cleanCredit } = M;
   const pc = readFileSync(join(root, "src/components/PhotoCredit.jsx"), "utf8");
   const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
   const ai = readFileSync(join(root, "src/utils/aiImages.js"), "utf8");
@@ -63416,7 +63418,36 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("and an empty credit is still nothing", cleanCredit({}) === null);
 
   // ── THE COMPONENT DRAWS IT, AND DRAWS IT FIRST ──────────────────
-  ok("the credit component knows about generated pictures", /isAiImage/.test(pc) && /AI_LABEL/.test(pc));
+  ok("the credit component knows about generated pictures", /isAiImage/.test(pc) && /aiLabel/.test(pc));
+  // ── THE DISCLOSURE READS AS A CREDIT ───────────────────
+  //
+  // Oliver, 16 Sep 2026: "Just setup the AI as credits. Like 'AI-assimilation of
+  // [draft]'." So the line names what the picture is OF, the way a
+  // photographer's name does, rather than standing over it as a warning.
+  //
+  // And then: "the pictures are based off the atmosphere, area, and overall
+  // theme", which is why the word is "impression" rather than a word that
+  // claims the picture is OF one building. See the note in utils/aiImages.js.
+  // The assertions below are written against the constants rather than the
+  // words, so the wording can be argued about without breaking them, but these
+  // two hold whatever it is changed to.
+  ok("the line says it is AI before it says anything else",
+     AI_LABEL.startsWith("AI") && AI_LEAD.startsWith("AI"));
+  ok("and it never claims the picture is a photograph",
+     !/photo/i.test(AI_LABEL) && !/photo/i.test(AI_LEAD));
+  is("the label names what the picture is of", aiLabel({ subject: "Ribe Cathedral" }), `${AI_LEAD} Ribe Cathedral`);
+  is("and says what it is even with nothing to name", aiLabel({}), AI_LABEL);
+  ok("which still tells a reader it is AI either way", /^AI/.test(AI_LABEL) && /^AI/.test(AI_LEAD));
+  // A trailing lead with nothing after it is the failure this shape invites.
+  ok("it never trails off after the lead", !aiLabel({ subject: "   " }).endsWith("of"));
+  // The subject comes off the draft, so he never types it and never forgets it.
+  is("the upload door takes the subject from the draft", aiCredit({ subject: "Ribe" }).subject, "Ribe");
+  ok("and stores no subject rather than an empty one", !("subject" in aiCredit({ subject: "  " })));
+  ok("the door reads the draft's own name",
+     /aiCredit\(\{ subject: row\.payload\?\.name \}\)/.test(appF));
+  // Same allow-list trap as the flag: a subject missing from cleanCredit comes
+  // back from publication as a label with nothing after it.
+  is("and the subject survives shaping", cleanCredit({ ai: true, subject: "Ribe" })?.subject, "Ribe");
   // The old test for "is there a credit worth drawing" asked whether any of the
   // four strings had content, and a generated picture has none of them.
   ok("a generated picture counts as a credit even when empty otherwise",
@@ -63433,7 +63464,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("and the ordinary door still writes nothing",
      /uploadMediaFiles\(row, e\.target\.files\); e\.target\.value = ""/.test(appF));
   ok("the flag reaches the body blocks and the hero",
-     /const credit = ai \? aiCredit\(\) : null;/.test(appF)
+     /const credit = ai \? aiCredit\(\{ subject: row\.payload\?\.name \}\) : null;/.test(appF)
      && /heroPatch\(replacing, firstUrl, credit \|\| undefined\)/.test(appF));
 
   // The reading is written down where somebody can check it, the same way

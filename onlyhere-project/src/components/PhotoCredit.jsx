@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { C } from "../utils/theme";
 import { loadImageCredits, creditFor, licenseUrl } from "../utils/imageCredits";
-import { AI_LABEL, isAiImage } from "../utils/aiImages";
+import { aiLabel, isAiImage } from "../utils/aiImages";
 
 // The caption that sits under a photo: who took it, where it came from, and
 // under what licence, with the licence name linked to its real deed.
@@ -36,8 +36,9 @@ export const PhotoCredit = ({ photo, credit, align = "left", style }) => {
   if (!entry) return null;
   // What is left to say after the chip. On a generated picture `source` is the
   // words "AI image", which the chip has already said better, so it does not
-  // count: without this, an uploaded AI picture reads "AI-generated image  Made
-  // with AI AI image".
+  // count: without this, an uploaded AI picture would print its chip, then the
+  // made-with lead, then the words "AI image", all saying one thing three
+  // times.
   const said = generated ? entry.photographer : (entry.photographer || entry.source);
   const more = said || entry.license || entry.sourceUrl;
 
@@ -58,7 +59,7 @@ export const PhotoCredit = ({ photo, credit, align = "left", style }) => {
           background: `${C.gold}1F`, border: `1px solid ${C.gold}66`, color: C.gold,
           borderRadius: 100, padding: "2px 8px", fontSize: 10, fontWeight: 700,
           letterSpacing: 0.3, marginRight: said ? 6 : 0,
-        }}>✦ {AI_LABEL}</span>
+        }}>✦ {aiLabel(credit)}</span>
       )}
       {/* A generated picture with nothing else on it stops here: there is no
           photographer to credit and "Photo: source" under an invented image

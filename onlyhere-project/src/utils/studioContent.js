@@ -74,6 +74,11 @@ export const cleanCredit = (c) => {
     source: String(c.source || "").trim().slice(0, 80),
     sourceUrl: String(c.sourceUrl || "").trim().slice(0, 400),
     license: String(c.license || "").trim().slice(0, 80),
+    // What a generated picture is a picture OF, which is the whole of its
+    // credit line. Same allow-list trap as the flag below: a field missing from
+    // here never reaches the database, and the label would have come back from
+    // publication reading "AI impression" with nothing after it.
+    subject: String(c.subject || "").trim().slice(0, 120),
   };
   // ── THE AI FLAG IS NOT A STRING AND IS NOT OPTIONAL ──────────────
   //
