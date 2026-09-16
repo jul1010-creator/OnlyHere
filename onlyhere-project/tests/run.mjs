@@ -63517,8 +63517,30 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // drawn outside the document and cannot be clipped by either. If somebody
   // later swaps these for the custom DateTimePicker, this fails and the comment
   // above heroSetArrival explains why it did.
+  // ── STILL NATIVE, AND NOW INVISIBLE ────────────────────
+  //
+  // The control is the browser's, because nothing else can open inside a
+  // transformed, overflow-hidden hero. What a reader sees is drawn to match
+  // the Detour intake field, so the browser's own "dd-mm-åååå" placeholder in
+  // the browser's own metrics never reaches the page.
   ok("the hero dates are native controls",
-     /<input type="date" value=\{f\.value\} min=\{f\.min\}/.test(appF));
+     /<input ref=\{ref\} type="date" value=\{value\} min=\{min\} aria-label=\{label\}/.test(appF));
+  ok("and the control is laid over the field rather than hidden from it",
+     /position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0/.test(appF));
+  ok("a click anywhere on the field opens the picker",
+     /ref\.current\?\.showPicker\?\.\(\)/.test(appF));
+  // showPicker throws without a user gesture and does not exist in older
+  // Safari, and the input underneath is a real one, so the throw is caught
+  // rather than allowed to break the click.
+  ok("and a browser without it falls through to the input itself",
+     /try \{ ref\.current\?\.showPicker\?\.\(\); \} catch/.test(appF));
+  ok("the field reads its date the way the intake does",
+     /toLocaleDateString\("en-GB", \{ day: "numeric", month: "short", year: "numeric" \}\)[\s\S]{0,40}: "Select date"/.test(appF));
+  // Declared at module scope. A component declared inside the render is a new
+  // type on every render, which remounts it, which would close the picker and
+  // drop focus the moment anything else on the page changed.
+  ok("and the field is one component, declared once",
+     /^const HeroDateField = \(\{ label, value, min, onPick \}\) => \{/m.test(appF));
   ok("past days are refused before the picker opens", /min: heroDayNow\(\)/.test(appF));
   ok("and a departure cannot be earlier than the arrival",
      /min: heroDayOf\(intakeArrival\) \|\| heroDayNow\(\)/.test(appF));

@@ -774,6 +774,71 @@ const researchRules = (type, where) => {
   return `${RESEARCH_SOURCE_RULES}${both}${area}${sourceRulesBlock(founderSources, type, where)}`;
 };
 
+// ── THE DATE FIELD ON THE FRONT PAGE ─────────────────────
+//
+// Oliver, 16 Sep 2026, seeing the first version live: "The explore one gotta
+// look more like the one at the gemlyx detour page.. it looks waaay too old
+// school."
+//
+// He is right, and the reason is specific rather than cosmetic. A bare
+// <input type="date"> renders the BROWSER's control: its own placeholder in its
+// own format, which on his Danish Chrome is the literal string "dd-mm-åååå",
+// in the browser's own metrics. Nothing about that can be styled. It is a
+// Windows form control sitting inside a photograph.
+//
+// So the native input is still there and still doing the work, and it is
+// INVISIBLE. What a reader sees is a field drawn to match the intake field in
+// Detour: the same geometry, the same label above it, the same "Select date"
+// in muted text until there is one, and the same "2 Oct 2026" afterwards,
+// formatted by DateTimePicker's own displayText rule so the two screens never
+// spell a date two ways.
+//
+// WHY NOT JUST USE DateTimePicker HERE. Because it cannot open. The hero is
+// overflow:hidden and sits inside the tab strip, which carries a live
+// translateX, and a transformed ancestor is a containing block for
+// position:fixed, so neither its dropdown nor a fixed sheet can escape this
+// box. The calendar would be sliced off at the hero's edge. A native picker is
+// drawn by the browser outside the document and cannot be clipped by either.
+//
+// showPicker() is what opens it from a click anywhere on the field rather than
+// only on the browser's own little icon, which is now invisible. It throws
+// without a user gesture and does not exist in older Safari, so it is wrapped:
+// the input underneath is still a real focusable date input, so a browser
+// without showPicker falls back to typing into it, and a keyboard user reaches
+// it by Tab either way.
+const HeroDateField = ({ label, value, min, onPick }) => {
+  const [lit, setLit] = useState(false);
+  const ref = useRef(null);
+  // The same wording and the same format as the Detour intake field, on
+  // purpose: these are the same two values and they should read the same.
+  const shown = value
+    ? new Date(`${value}T12:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+    : "Select date";
+  const open = () => { try { ref.current?.showPicker?.(); } catch { /* no gesture, or no support: the input below is still real */ } };
+  return (
+    <div style={{ flex: "1 1 180px", maxWidth: 220, minWidth: 0, textAlign: "left" }}>
+      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", color: "rgba(255,255,255,0.7)", marginBottom: 6, textShadow: "0 1px 6px rgba(0,0,0,0.6)" }}>{label}</div>
+      <div onClick={open}
+        style={{
+          position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+          background: "rgba(10,15,30,0.55)", backdropFilter: "blur(8px)",
+          border: `1px solid ${lit ? C.gold : `${C.gold}55`}`, borderRadius: 10,
+          padding: "10px 12px", cursor: "pointer", transition: "border-color 0.15s ease",
+        }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: value ? "#fff" : "rgba(255,255,255,0.6)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{shown}</span>
+        <Ico name="calendar" size={14} color={value ? C.gold : "rgba(255,255,255,0.5)"} />
+        {/* The real control, laid over the field and invisible. opacity rather
+            than display:none or visibility:hidden, both of which stop
+            showPicker() from having anywhere to anchor its calendar. */}
+        <input ref={ref} type="date" value={value} min={min} aria-label={label}
+          onChange={e => onPick(e.target.value)}
+          onFocus={() => setLit(true)} onBlur={() => setLit(false)}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, border: "none", padding: 0, margin: 0, cursor: "pointer", colorScheme: "dark", fontFamily: "'Inter', sans-serif" }} />
+      </div>
+    </div>
+  );
+};
+
 // The original component (previously the default export) is now mounted as the
 // "/" route below, with a new "/guide/:guideId" route alongside it for the
 // full-page shareable guide view — see INTEGRATION.md for why this is the one
@@ -23935,29 +24000,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       people tend to miss it: a red button promising a plan is
                       an advert, and two date fields are a thing you are already
                       halfway through. Filling them in IS starting the plan. */}
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginBottom: 16 }}>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", alignItems: "flex-end", marginBottom: 18, width: "100%", maxWidth: 420 }}>
                     {[
                       { key: "arrival", label: "Arrival", value: heroDayOf(intakeArrival), min: heroDayNow(), onPick: heroSetArrival },
                       { key: "departure", label: "Departure", value: heroDayOf(intakeDeparture), min: heroDayOf(intakeArrival) || heroDayNow(), onPick: heroSetDeparture },
                     ].map(f => (
-                      // The <label> WRAPS the input, so the word above it is the
-                      // field's accessible name and its tap target, rather than
-                      // decoration sitting near an unnamed box.
-                      <label key={f.key}
-                        style={{ display: "block", textAlign: "left", background: "rgba(10,15,30,0.55)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 12, padding: "7px 12px", backdropFilter: "blur(8px)", cursor: "pointer" }}>
-                        <span style={{ display: "block", fontSize: 9, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", color: "rgba(255,255,255,0.65)", marginBottom: 2 }}>{f.label}</span>
-                        {/* colorScheme dark so the browser draws its own
-                            calendar icon and its own picker in dark, instead of
-                            a black glyph on a dark field. */}
-                        <input type="date" value={f.value} min={f.min} onChange={e => f.onPick(e.target.value)}
-                          // An empty field still prints its format (dd/mm/yyyy,
-                          // or whatever the reader's browser uses), and at full
-                          // white that placeholder competes with the headline
-                          // and reads as a date somebody already chose. Dimmed
-                          // until it holds one, so "filled in" is visible from
-                          // across the screen.
-                          style={{ background: "none", border: "none", outline: "none", padding: 0, color: f.value ? "#fff" : "rgba(255,255,255,0.72)", fontSize: 13.5, fontWeight: 600, fontFamily: "'Inter', sans-serif", colorScheme: "dark", cursor: "pointer", minWidth: 116 }} />
-                      </label>
+                      <HeroDateField key={f.key} label={f.label} value={f.value} min={f.min} onPick={f.onPick} />
                     ))}
                   </div>
 
