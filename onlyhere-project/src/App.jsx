@@ -154,7 +154,8 @@ import { readableOn } from "./utils/readableColor";
 // The judgement half of the community feeds. Every rule about what a group post
 // says is in there, pure and tested with no network; this file does the state,
 // the table and the panel. See utils/communityFeeds.js.
-import { cleanFeed, feedUrlProblem, groupIdIn, postsIn, candidatesIn, dedupeCandidates, newCandidates, sweepCost } from "./utils/communityFeeds";
+import { cleanFeed, feedUrlProblem, feedKindOf, groupIdIn, pageNameIn, postsIn, candidatesIn, dedupeCandidates, newCandidates, sweepCost } from "./utils/communityFeeds";
+import { parsePretend, readPretend, writePretend, pretendBanner } from "./utils/pretendLocation";
 import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, ISLANDS_SCOPE, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive, isNeverOwnSite, isNeverASource } from "./utils/sourcePolicy";
 import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn, danishAddressIn } from "./utils/regions";
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
@@ -736,7 +737,8 @@ create policy "auth all gemlyx_sources" on gemlyx_sources for all to authenticat
 const FEEDS_SQL = `create table if not exists gemlyx_feeds (
   id bigserial primary key,
   name text not null,
-  group_id text not null,
+  kind text default 'group',
+  group_id text default '',
   url text not null,
   place text default '',
   note text,
@@ -745,6 +747,10 @@ const FEEDS_SQL = `create table if not exists gemlyx_feeds (
   created_at timestamptz default now()
 );
 alter table gemlyx_feeds enable row level security;
+-- Added 17 Sep with pages, so the script stays safe to re-run on a table that
+-- was created before them. Same pattern as applies_place on gemlyx_sources.
+alter table gemlyx_feeds add column if not exists kind text default 'group';
+alter table gemlyx_feeds alter column group_id drop not null;
 
 drop policy if exists "auth all gemlyx_feeds" on gemlyx_feeds;
 create policy "auth all gemlyx_feeds" on gemlyx_feeds for all to authenticated using (true) with check (true);`;
@@ -1267,19 +1273,74 @@ function GemlyxApp() {
   const [nightlifeDetail, setNightlifeDetail] = useState(null);
   const [freeDetail, setFreeDetail] = useState(null);
   const [foodDetail, setFoodDetail] = useState(null);
-  const [userCoords, setUserCoords] = useState(null); // null | "denied" | "requesting" | { lat, lon }
+  const [realCoords, setRealCoords] = useState(null); // null | "denied" | "requesting" | { lat, lon }
+
+  // ── STANDING SOMEWHERE ELSE ──────────────────────────────────────
+  //
+  // Oliver, 17 Sep 2026: "In order for me to test this, you need to create a
+  // studio that allows me to 'pretend' i'm in certain areas. Like a VPN."
+  //
+  // His browser is in Nørresundby every day of the year, and every feature about
+  // where a reader is standing is therefore untestable from his desk. So the
+  // COORDINATE moves and nothing else does: `userCoords` below is the effective
+  // one, and the dozen places that read it, the near-you ranking, travelLabel,
+  // the craft sort, the events strip, are untouched. A flag instead would be a
+  // second code path only he ever runs, which is a test rig that passes while
+  // the real one breaks. See utils/pretendLocation.js.
+  const [pretendAt, setPretendAt] = useState(() => readPretend(typeof window !== "undefined" ? window.localStorage : null));
+  const userCoords = pretendAt ? { lat: pretendAt.lat, lon: pretendAt.lon } : realCoords;
+  // Everywhere the app holds a coordinate for: the hand-checked town table, and
+  // every published row that carries a pin. The published half is what makes an
+  // island reachable here at all, since TOWN_COORDS has never heard of Sejerø.
+  const pretendPlaces = useMemo(() => {
+    const out = new Map();
+    Object.entries(TOWN_COORDS).forEach(([name, [lat, lon]]) => out.set(name, { name, lat, lon }));
+    [...towns, ...islands, ...events, ...majorEvents, ...freeEntrance, ...foodSpots, ...nightlifeSpots].forEach(r => {
+      const lat = Number(r?.__lat ?? r?.lat), lon = Number(r?.__lon ?? r?.lon);
+      if (r?.name && Number.isFinite(lat) && Number.isFinite(lon) && !out.has(r.name)) out.set(r.name, { name: r.name, lat, lon });
+    });
+    return [...out.values()].sort((a, b) => a.name.localeCompare(b.name, "da"));
+    // liveContentVersion, NOT the arrays. They are module-level singletons that
+    // liveContent.js mutates IN PLACE, so their identity never changes and a
+    // dependency on them would compute this once, before anything published had
+    // loaded, and never again. The counter is how the rest of this component
+    // already watches those arrays. See the note above bumpLiveContent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveContentVersion]);
+
+  const applyPretend = () => {
+    const found = parsePretend(pretendTyped, pretendPlaces);
+    if (!found) {
+      // NAMED, not "invalid". The two ways to miss are completely different
+      // problems and only one of them is a typo.
+      setPretendError(/\d/.test(pretendTyped)
+        ? `That is not a coordinate inside Denmark. It wants something like 55.95, 11.15.`
+        : `Nothing on file is called "${pretendTyped.trim()}". Try a published town or island, or paste the coordinate.`);
+      return;
+    }
+    setPretendError("");
+    setPretendPlace(found);
+    setPretendTyped("");
+    showToast(`Standing in ${found.name}`, 3000);
+  };
+
+  const setPretendPlace = (value) => {
+    const saved = writePretend(typeof window !== "undefined" ? window.localStorage : null, value);
+    setPretendAt(saved);
+    return saved;
+  };
 
   const requestLocation = () => {
-    if (!navigator.geolocation) { setUserCoords("denied"); return; }
-    setUserCoords("requesting");
+    if (!navigator.geolocation) { setRealCoords("denied"); return; }
+    setRealCoords("requesting");
     setLocationLoading(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setUserCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        setRealCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
         setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setLocationLoading(false);
       },
-      () => { setUserCoords("denied"); setLocationLoading(false); },
+      () => { setRealCoords("denied"); setLocationLoading(false); },
       { timeout: 8000 }
     );
   };
@@ -10039,6 +10100,9 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   // The group list, and the candidate queue a sweep leaves behind. The queue is
   // state and not a table on purpose: a candidate is a thing to look at once,
   // and anything worth keeping becomes a draft, which has a table already.
+  const [pretendOpen, setPretendOpen] = useState(false);
+  const [pretendTyped, setPretendTyped] = useState("");
+  const [pretendError, setPretendError] = useState("");
   const [feedsOpen, setFeedsOpen] = useState(false);
   const [feedRows, setFeedRows] = useState([]);
   const [feedError, setFeedError] = useState(null);
@@ -10307,20 +10371,45 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     // in an address that is perfectly correct and simply has no number in it.
     const problem = feedUrlProblem(newFeedUrl);
     if (problem) { setFeedError(problem); return; }
-    const groupId = groupIdIn(newFeedUrl);
-    if (feedRows.some(r => String(r.group_id) === groupId)) {
-      setFeedError(`That group is already on the list${feedRows.find(r => String(r.group_id) === groupId)?.name ? ` as ${feedRows.find(r => String(r.group_id) === groupId).name}` : ""}.`);
+    const kind = feedKindOf(newFeedUrl);
+    const handle = pageNameIn(newFeedUrl);
+    const url = kind === "group" ? `https://www.facebook.com/groups/${groupIdIn(newFeedUrl)}` : `https://www.facebook.com/${handle}`;
+    if (feedRows.some(r => String(r.url || "").toLowerCase() === url.toLowerCase())) {
+      setFeedError(`That is already on the list${feedRows.find(r => String(r.url || "").toLowerCase() === url.toLowerCase())?.name ? ` as ${feedRows.find(r => String(r.url || "").toLowerCase() === url.toLowerCase()).name}` : ""}.`);
       return;
     }
     setFeedBusy(true); setFeedError(null);
+    // ── A PAGE'S NUMBER, ONCE, HERE ─────────────────────────────────
+    // /v1/facebook/page/posts takes a numeric id and a page URL carries a name.
+    // Resolved on ADD rather than on every sweep, because the answer never
+    // changes, and refused rather than stored half-done: a row with no id would
+    // sit in the list looking correct and fail silently every week.
+    let groupId = kind === "group" ? groupIdIn(newFeedUrl) : "";
+    if (kind === "page") {
+      try {
+        const idRes = await studioFetch(`/api/social-find?check=page-id&url=${encodeURIComponent(url)}`);
+        const idData = await idRes.json().catch(() => null);
+        groupId = String(idData?.id || "").trim();
+        if (!groupId) {
+          setFeedError(`Facebook did not give a page id for ${handle}. ${idData?.failed || idData?.skipped || "It may be a personal profile rather than a page, and a profile cannot be read this way."}`);
+          setFeedBusy(false);
+          return;
+        }
+      } catch (e) {
+        setFeedError(`Could not look up that page: ${String(e?.message || e)}`);
+        setFeedBusy(false);
+        return;
+      }
+    }
     try {
       const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_feeds`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Prefer: "return=representation" },
         body: JSON.stringify({
-          name: newFeedName.trim().slice(0, 80) || `Group ${groupId}`,
+          name: newFeedName.trim().slice(0, 80) || (kind === "page" ? handle : `Group ${groupId}`),
+          kind,
           group_id: groupId,
-          url: `https://www.facebook.com/groups/${groupId}`,
+          url,
           place: cleanPlace(newFeedPlace),
           enabled: true,
         }),
@@ -10370,7 +10459,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   // go and look, and a reader still never sees a date that no citable page
   // carries. See the header of utils/communityFeeds.js.
   const sweepFeeds = async () => {
-    const live = feedRows.map(cleanFeed).filter(f => f && f.enabled);
+    const live = feedRows.map(cleanFeed).filter(f => f && f.enabled && !f.needsId);
     if (!live.length) { setFeedError("No groups are switched on."); return; }
     setFeedError(null);
     setFeedSweep({ running: true, done: 0, total: live.length, found: 0, failed: [], candidates: [] });
@@ -10381,7 +10470,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
       const feed = live[i];
       setFeedSweep(s => ({ ...s, done: i, name: feed.name }));
       try {
-        const res = await studioFetch(`/api/social-find?check=group-posts&group=${encodeURIComponent(feed.groupId)}`);
+        const res = await studioFetch(`/api/social-find?check=group-posts&kind=${feed.kind}&group=${encodeURIComponent(feed.groupId)}`);
         const data = await res.json().catch(() => null);
         if (!res.ok || data?.failed || data?.skipped) {
           failed.push({ name: feed.name, why: data?.failed || data?.skipped || `the request returned ${res.status}` });
@@ -20420,6 +20509,10 @@ ${languageBlock()}`;
                   style={{ background: sourcesOpen ? `${C.gold}22` : "none", border: `1px solid ${sourcesOpen ? C.gold : C.border}`, color: sourcesOpen ? C.gold : C.light, borderRadius: 100, padding: "6px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                   🔗 Research sources
                 </button>
+                <button onClick={() => { setPretendOpen(o => !o); }}
+                  style={{ background: pretendAt ? "#7C4DFF33" : pretendOpen ? `${C.gold}22` : "none", border: `1px solid ${pretendAt ? "#B39DFF" : pretendOpen ? C.gold : C.border}`, color: pretendAt ? "#B39DFF" : pretendOpen ? C.gold : C.light, borderRadius: 100, padding: "6px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  🧭 {pretendAt ? `In ${pretendAt.name}` : "Pretend I'm somewhere"}
+                </button>
                 <button onClick={() => { setFeedsOpen(o => !o); if (!feedsOpen) loadFeeds(); }}
                   style={{ background: feedsOpen ? `${C.gold}22` : "none", border: `1px solid ${feedsOpen ? C.gold : C.border}`, color: feedsOpen ? C.gold : C.light, borderRadius: 100, padding: "6px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                   📣 Community groups
@@ -20676,6 +20769,47 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 </div>
               )}
 
+              {/* ── THE VPN, WHICH IS A COORDINATE AND NOTHING ELSE ──────
+                  Every place the app asks "where is the reader" reads one
+                  value. This moves that value. Nothing downstream is told. */}
+              {pretendOpen && (
+                <div style={{ background: C.surface, border: "1px dashed #B39DFF66", borderRadius: 12, padding: "14px", marginBottom: 14 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "#B39DFF" }}>🧭 Pretend you are somewhere else</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 3, lineHeight: 1.6, marginBottom: 11 }}>
+                    Type a town or island, or paste a coordinate like 55.95, 11.15. Everything that reads where you are standing follows it: travel
+                    times, nearest first, the live events strip, and the community notices. It is your browser only, nobody else sees it, and it stays
+                    until you turn it off.
+                  </div>
+                  {pretendError && <div style={{ fontSize: 11.5, color: "#FFB347", marginBottom: 9, lineHeight: 1.5 }}>{pretendError}</div>}
+                  <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+                    <input value={pretendTyped} onChange={e => setPretendTyped(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") applyPretend(); }}
+                      list="gemlyx-pretend-places" placeholder="Sejerø, Aarhus, 55.95, 11.15"
+                      style={{ flex: 1, minWidth: 200, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                    <datalist id="gemlyx-pretend-places">
+                      {pretendPlaces.map(p => <option key={p.name} value={p.name} />)}
+                    </datalist>
+                    <button onClick={applyPretend} disabled={!pretendTyped.trim()}
+                      style={{ background: pretendTyped.trim() ? "#7C4DFF33" : C.bg, border: `1px solid ${pretendTyped.trim() ? "#B39DFF" : C.border}`, color: pretendTyped.trim() ? "#B39DFF" : C.muted, borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, cursor: pretendTyped.trim() ? "pointer" : "default", flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
+                      Stand there
+                    </button>
+                    {pretendAt && (
+                      <button onClick={() => { setPretendPlace(null); setPretendTyped(""); setPretendError(""); }}
+                        style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
+                        Go home
+                      </button>
+                    )}
+                  </div>
+                  {/* THE PLACES IT KNOWS, counted rather than listed: the
+                      datalist is the list, and a number is the useful part of
+                      "will it find the island I am about to type". */}
+                  <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>
+                    {pretendPlaces.length} places have a coordinate on file. Anywhere else, paste the numbers.
+                    {pretendAt && <span style={{ color: "#B39DFF" }}> Right now the whole site thinks you are in {pretendAt.name}.</span>}
+                  </div>
+                </div>
+              )}
+
               {/* ── THE COMMUNITY GROUPS ────────────────────────────────
                   Oliver, 17 Sep 2026: "I've been in contact with someone from a
                   community at Sejerø that hosts events... Is it possible for me
@@ -20692,8 +20826,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     A sweep reads the recent posts in each group, finds the ones carrying a date that has not happened yet, and leaves them here as
                     candidates. Nothing is written and nothing is published: a post is a lead, so "Draft this" hands it to the ordinary event pipeline,
                     which still has to find the event on a page it is allowed to quote before a reader sees anything.
-                    {" "}<b>Public groups only.</b> A private group cannot be read by anything running on a server, whether or not you are a member, so keep
-                    those here for the link and open them yourself.
+                    {" "}Pages and public groups. A <b>page</b> is what a tourist board, a harbour or a museum runs, and it is public by definition. A
+                    <b> private group</b> cannot be read by anything running on a server, whether or not you are a member, so keep those here for the
+                    link and paste their posts below.
                   </div>
 
                   {feedError === "MISSING_TABLE" ? (
@@ -20716,6 +20851,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               style={{ fontSize: 12, color: C.text, fontWeight: 600, textDecoration: "none", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {row.name} ↗
                             </a>
+                            {/* WHICH OF THE TWO, said on the row. A page and a
+                                group behave differently enough to be worth one
+                                word: a page is public by definition and a group
+                                may be closed tomorrow. */}
+                            <span style={{ fontSize: 10, fontWeight: 700, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 100, padding: "2px 8px", flexShrink: 0 }}>
+                              {row.kind === "page" ? "page" : "group"}
+                            </span>
                             {row.place && (
                               <span style={{ fontSize: 10, fontWeight: 700, color: "#8AB4F8", background: "#8AB4F818", border: "1px solid #8AB4F844", borderRadius: 100, padding: "2px 9px", flexShrink: 0 }}>
                                 📍 {row.place}
@@ -20736,7 +20878,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
                         <input value={newFeedUrl} onChange={e => setNewFeedUrl(e.target.value)}
                           onKeyDown={e => { if (e.key === "Enter") addFeed(); }}
-                          placeholder="facebook.com/groups/125246204312244"
+                          placeholder="facebook.com/visitsamsoe, or a group link"
                           style={{ flex: 1, minWidth: 200, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
                         <input value={newFeedName} onChange={e => setNewFeedName(e.target.value)}
                           onKeyDown={e => { if (e.key === "Enter") addFeed(); }}
@@ -28952,6 +29094,21 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           wait down. Same guideBuildStage the overlay reads, so there is one
           source of progress and the bar cannot claim a different stage from the
           screen it came from. Tapping it brings the full wait back. */}
+      {/* ── THE ONE THING THAT MAKES THE VPN SAFE ──────────────────
+          A coordinate quietly stuck on Sejerø makes every travel time on the
+          site wrong, and wrong in a way that reads as a bug rather than as a
+          setting. So it says so, on every page, in a colour that is not the
+          brand's, with the way out on the same line. A test mode you cannot see
+          is a bug you have not found yet. See utils/pretendLocation.js. */}
+      {pretendAt && (
+        <div style={{ position: "fixed", left: 12, bottom: 12, zIndex: 965, display: "flex", alignItems: "center", gap: 9, background: "#2A1F4D", border: "1px solid #B39DFF", color: "#E6DDFF", borderRadius: 100, padding: "8px 10px 8px 14px", fontSize: 11.5, fontWeight: 700, fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 22px rgba(0,0,0,0.5)", maxWidth: "calc(100vw - 24px)" }}>
+          <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>🧭 {pretendBanner(pretendAt)}</span>
+          <button onClick={() => setPretendPlace(null)}
+            style={{ background: "#B39DFF", border: "none", color: "#1A1030", borderRadius: 100, padding: "4px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+            Go home
+          </button>
+        </div>
+      )}
       {guideModal === "loading" && guideMinimized && (
         <div onClick={() => setGuideMinimized(false)}
           style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 940, background: C.surface, borderTop: `1px solid ${C.gold}44`, padding: "10px 16px 12px", cursor: "pointer", boxShadow: "0 -4px 20px rgba(0,0,0,0.35)" }}>

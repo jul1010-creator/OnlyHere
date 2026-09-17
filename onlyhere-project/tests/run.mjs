@@ -73,7 +73,8 @@ writeFileSync(entry, `
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel, eventLastDay } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
-  export { groupIdIn, feedUrlProblem, cleanFeed, postsIn, postedDay, datesInPost, timeInPost, candidatesIn, dedupeCandidates, alreadyPublished, newCandidates, sweepCost, PAGES_PER_FEED, CENTS_PER_PAGE } from ${JSON.stringify(join(root, "src/utils/communityFeeds.js"))};
+  export { parsePretend, cleanPretend, readPretend, writePretend, pretendBanner, findPlace, PRETEND_KEY } from ${JSON.stringify(join(root, "src/utils/pretendLocation.js"))};
+  export { groupIdIn, pageNameIn, feedKindOf, FEED_KINDS, feedUrlProblem, cleanFeed, postsIn, postedDay, datesInPost, timeInPost, candidatesIn, dedupeCandidates, alreadyPublished, newCandidates, sweepCost, PAGES_PER_FEED, CENTS_PER_PAGE } from ${JSON.stringify(join(root, "src/utils/communityFeeds.js"))};
   export { scopeTier, ISLANDS_SCOPE, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM, islandOf, statedIsland, namedIslandOf, islandsPresent, ISLAND_BY_KOMMUNE, ISLAND_LABEL } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES, distinctThemes } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
@@ -1058,6 +1059,84 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     /claimCitation\(c\) \|\| soleUrl/.test(corr) && !/soleUrl \|\| claimCitation/.test(corr));
 }
 
+// ── STANDING SOMEWHERE ELSE ─────────────────────────────────────────
+//
+// Oliver, 17 Sep 2026: "In order for me to test this, you need to create a
+// studio that allows me to 'pretend' i'm in certain areas. Like a VPN."
+{
+  const { parsePretend, cleanPretend, readPretend, writePretend, pretendBanner, PRETEND_KEY } = M;
+  const PLACES = [
+    { name: "Sejerø", lat: 55.8892, lon: 11.1436 },
+    { name: "Aarhus", lat: 56.1629, lon: 10.2039 },
+    { name: "Aarhus Festuge", lat: 56.16, lon: 10.2 },
+  ];
+
+  is("a place by name", parsePretend("Sejerø", PLACES), { name: "Sejerø", lat: 55.8892, lon: 11.1436 });
+  is("case does not matter", parsePretend("sejerø", PLACES)?.name, "Sejerø");
+  // THE SHORTEST MATCH WINS, or typing "aar" lands on the festival rather than
+  // on the city it is named after.
+  is("a prefix finds the shortest match", parsePretend("aar", PLACES)?.name, "Aarhus");
+  // A coordinate is the escape hatch for anywhere the library has never heard
+  // of, which for the small islands is most of them.
+  is("a coordinate as typed", parsePretend("55.95, 11.15", PLACES)?.lat, 55.95);
+  is("with Danish decimal commas and a space", parsePretend("55,95 11,15", PLACES)?.lon, 11.15);
+  // ── AND IT HAS TO BE IN DENMARK ─────────────────────────────────
+  // Every consumer of this coordinate is gated on isInDenmark, so one outside
+  // it would be accepted, stored, shown as "pretending", and then change
+  // nothing on any page. That is the worst shape a setting can have.
+  is("Paris is not somewhere this app can stand", parsePretend("48.85, 2.35", PLACES), null);
+  is("and an unknown name is refused rather than guessed", parsePretend("Narnia", PLACES), null);
+  is("nothing typed is nothing", parsePretend("", PLACES), null);
+  is("a stored value out of Denmark is dropped on read", cleanPretend({ name: "x", lat: 48.85, lon: 2.35 }), null);
+
+  // ── IT SURVIVES A RELOAD, BECAUSE HE WILL RELOAD ────────────────
+  {
+    const store = (() => {
+      const map = new Map();
+      return { getItem: k => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, v), removeItem: k => map.delete(k) };
+    })();
+    writePretend(store, { name: "Sejerø", lat: 55.8892, lon: 11.1436 });
+    is("it is stored under one key", JSON.parse(store.getItem(PRETEND_KEY)).name, "Sejerø");
+    is("and comes back", readPretend(store)?.name, "Sejerø");
+    writePretend(store, null);
+    is("clearing it removes it", readPretend(store), null);
+    // A storage that throws, which is a private window, must not take the page
+    // down with it.
+    const angry = { getItem: () => { throw new Error("no"); }, setItem: () => { throw new Error("no"); }, removeItem: () => { throw new Error("no"); } };
+    is("a browser that refuses storage reads as not pretending", readPretend(angry), null);
+    is("and writing to one still returns the value", writePretend(angry, { name: "Sejerø", lat: 55.8892, lon: 11.1436 })?.name, "Sejerø");
+  }
+
+  is("the banner names the place, not the numbers", pretendBanner({ name: "Sejerø", lat: 55.8892, lon: 11.1436 }), "Pretending you are in Sejerø");
+  is("and says nothing when nothing is set", pretendBanner(null), "");
+
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    // ── ONE COORDINATE, AND NOTHING DOWNSTREAM IS TOLD ────────────
+    // The dozen readers of userCoords are untouched: what moves is the value,
+    // not the question. A flag instead would be a second code path that only he
+    // ever runs, which is a test rig that passes while the real one breaks.
+    ok("the effective coordinate is the pretend one when set",
+      /const userCoords = pretendAt \? \{ lat: pretendAt\.lat, lon: pretendAt\.lon \} : realCoords;/.test(app));
+    ok("and the browser's own answer is kept separately", /const \[realCoords, setRealCoords\] = useState\(null\);/.test(app));
+    ok("so geolocation writes the real one", !/setUserCoords\(/.test(app));
+    // ── AND IT IS IMPOSSIBLE TO FORGET ────────────────────────────
+    // A coordinate stuck on an island makes every travel time wrong in a way
+    // that reads as a bug rather than as a setting.
+    // The window is 700 because the chip carries its own style object between
+    // the guard and the sentence, and this pins that the sentence is inside the
+    // guard rather than how long the styling is.
+    ok("it says so on every page", /\{pretendAt && \([\s\S]{0,700}pretendBanner\(pretendAt\)/.test(app));
+    ok("with the way out on the same line", /\{pretendBanner\(pretendAt\)\}<\/span>[\s\S]{0,400}Go home/.test(app));
+    // The places it can stand in include published rows, or no island is
+    // reachable: TOWN_COORDS has never heard of Sejerø.
+    ok("published rows are places it can stand in", /\[\.\.\.towns, \.\.\.islands, \.\.\.events, \.\.\.majorEvents, \.\.\.freeEntrance, \.\.\.foodSpots, \.\.\.nightlifeSpots\]\.forEach/.test(app));
+    // liveContentVersion, not the arrays: they are module-level singletons
+    // mutated in place, so a dependency on them computes once and never again.
+    ok("and the list is rebuilt when live content lands", /\}, \[liveContentVersion\]\);/.test(app));
+  }
+}
+
 // ── THE COMMUNITY GROUPS ────────────────────────────────────────────
 //
 // Oliver, 17 Sep 2026: "I've been in contact with someone from a community at
@@ -1067,7 +1146,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 // And then whenever I click the 'refresh events'... it will scroll into these
 // groups that is listed on my studio and check for date?"
 {
-  const { groupIdIn, feedUrlProblem, cleanFeed, postsIn, postedDay, datesInPost,
+  const { groupIdIn, pageNameIn, feedKindOf, feedUrlProblem, cleanFeed, postsIn, postedDay, datesInPost,
           timeInPost, candidatesIn, dedupeCandidates, alreadyPublished, newCandidates, sweepCost } = M;
 
   // ── THE ID, WHICH IS THE ONLY THING THE API TAKES ───────────────
@@ -1081,13 +1160,44 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("a named group has no id in it", groupIdIn("https://www.facebook.com/groups/sejeroe-nyt"), "");
   ok("and the message says what to paste instead",
     /Open the group, click About/.test(feedUrlProblem("https://www.facebook.com/groups/sejeroe-nyt")));
-  ok("a non-Facebook link says only groups work", /Only Facebook groups/.test(feedUrlProblem("https://sejeroe.dk/kalender")));
+  ok("a non-Facebook link says what it does read",
+    /This reads Facebook pages and groups/.test(feedUrlProblem("https://sejeroe.dk/kalender")));
   is("and a good one has no problem", feedUrlProblem("https://www.facebook.com/groups/125246204312244"), "");
   // Stored canonical, so the same group pasted two ways is one row.
   is("the stored url is the canonical one",
     cleanFeed({ url: "https://www.facebook.com/groups/125246204312244/posts/1?ref=x" }).url,
     "https://www.facebook.com/groups/125246204312244");
   is("a row with no usable link is not a feed", cleanFeed({ url: "sejeroe.dk" }), null);
+
+  // ── AND A PAGE IS NOT A GROUP ───────────────────────────────────
+  //
+  // Oliver, 17 Sep 2026: "https://www.facebook.com/visitsamsoe I can't use
+  // this.. include profiles please." He is right and it is the more useful
+  // half: a tourist board, a harbour or a museum runs a PAGE, and a page is
+  // public by definition.
+  is("a page address is a page", feedKindOf("https://www.facebook.com/visitsamsoe"), "page");
+  is("a group address is still a group", feedKindOf("https://www.facebook.com/groups/125246204312244"), "group");
+  is("and its handle comes out", pageNameIn("https://www.facebook.com/visitsamsoe"), "visitsamsoe");
+  is("with a trailing path", pageNameIn("https://www.facebook.com/visitsamsoe/posts/1"), "visitsamsoe");
+  is("a page link is accepted", feedUrlProblem("https://www.facebook.com/visitsamsoe"), "");
+  // FACEBOOK'S OWN ROUTES ARE NOT PAGES. /groups/ is handled above, and the
+  // rest would each become a "page" called events or watch, which would be
+  // stored, looked up and fail forever while looking correct in the list.
+  is("a bare profile route is not a page", feedKindOf("https://www.facebook.com/profile.php?id=123"), "");
+  is("nor is the events route", feedKindOf("https://www.facebook.com/events/123"), "");
+  is("nor the marketplace", pageNameIn("https://www.facebook.com/marketplace/item/1"), "");
+  // ── AND A PAGE CARRIES ITS NUMBER SEPARATELY ────────────────────
+  // /v1/facebook/page/posts takes a numeric id and the address carries a name,
+  // so the id is resolved once on add and stored. A row without one is a real
+  // state and says so, rather than being dropped or swept with an empty id.
+  {
+    const fresh = cleanFeed({ url: "https://www.facebook.com/visitsamsoe", name: "Visit Samsø" });
+    is("a page keeps its readable address", fresh.url, "https://www.facebook.com/visitsamsoe");
+    is("and knows it has no id yet", fresh.needsId, true);
+    const resolved = cleanFeed({ url: "https://www.facebook.com/visitsamsoe", name: "Visit Samsø", group_id: "123456789" });
+    is("once resolved it is ready", resolved.needsId, false);
+    is("and a group never needs one", cleanFeed({ url: "https://www.facebook.com/groups/125246204312244" }).needsId, false);
+  }
 
   // ── READING WHAT THE PROVIDER SENDS ─────────────────────────────
   // Documented fields, read defensively, because this codebase's own history is
@@ -1203,6 +1313,16 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // function count and a new file there is a deploy decision.
     ok("the group read is a mode on social-find", /check \|\| ""\) === "group-posts"/.test(api));
     ok("and it is the documented endpoint", /"\/v1\/facebook\/group\/posts", \{ group_id: group, pages: 1 \}/.test(api));
+    // The page endpoint, same parameters and the same response, so postsIn and
+    // everything after it reads one thing.
+    ok("a page reads the page endpoint", /"\/v1\/facebook\/page\/posts", \{ page_id: group, pages: 1 \}/.test(api));
+    ok("and the caller says which", /const asPage = String\(req\.query\.kind \|\| ""\) === "page";/.test(api));
+    // The id lookup, once, on add.
+    ok("a page's number is resolved through page details", /askApiDirect\(idKey, "\/v1\/facebook\/page", \{ url \}\)/.test(api));
+    ok("and a page with no readable id is refused rather than stored",
+      /that page has no readable id, which usually means it is a personal profile/.test(api));
+    ok("the sweep passes the kind", /check=group-posts&kind=\$\{feed\.kind\}/.test(app));
+    ok("and never sweeps a page whose id is missing", /f\.enabled && !f\.needsId/.test(app));
     ok("with the id demanded as a number", api.includes("/^\\d{5,}$/.test(group)"));
     ok("the panel is wired", /const sweepFeeds = async \(\) => \{/.test(app));
     // ── AND THE BUTTON CAN BE SEEN ────────────────────────────────

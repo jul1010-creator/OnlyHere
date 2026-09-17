@@ -181,16 +181,50 @@ export default async function handler(req, res) {
   // IT RETURNS POSTS AND NOTHING ELSE. Every judgement about what is an event,
   // what date it is on and whether it already happened is
   // src/utils/communityFeeds.js, pure and tested with no network.
+  // ── AND THE ID BEHIND A PAGE'S NAME ───────────────────────────────
+  //
+  // Oliver, 17 Sep 2026: "https://www.facebook.com/visitsamsoe I can't use
+  // this.. include profiles please."
+  //
+  // /v1/facebook/page/posts takes a NUMERIC page id and a page URL carries a
+  // name. The page-details call is the documented way across, and it runs ONCE,
+  // when he adds the page, because the answer never changes. A lookup per sweep
+  // would be a second request every time for the same number.
+  if (String(req.query.check || "") === "page-id") {
+    const url = String(req.query.url || "").trim();
+    if (!/^https?:\/\/(?:www\.)?facebook\.com\//i.test(url)) {
+      return res.status(400).json({ error: "Provide ?url= as a facebook.com page address." });
+    }
+    const idKey = process.env.API_DIRECT_KEY;
+    if (!idKey) return res.status(200).json({ url, id: "", skipped: "API_DIRECT_KEY is not set" });
+    const got = await askApiDirect(idKey, "/v1/facebook/page", { url });
+    if (!got.ok) return res.status(200).json({ url, id: "", failed: got.why });
+    const page = got.body?.page || got.body || {};
+    // Read defensively across the names this provider uses for the same number.
+    const id = String(page.facebook_id || page.page_id || page.id || "").trim();
+    return res.status(200).json({
+      url, id: /^\d{5,}$/.test(id) ? id : "",
+      name: String(page.name || "").trim(),
+      failed: /^\d{5,}$/.test(id) ? "" : "that page has no readable id, which usually means it is a personal profile rather than a page",
+    });
+  }
+
   if (String(req.query.check || "") === "group-posts") {
     const group = String(req.query.group || "").trim();
     if (!/^\d{5,}$/.test(group)) {
       return res.status(400).json({ error: "Provide ?group= as the numeric group id." });
     }
+    // Which of the two endpoints, decided by the caller rather than guessed
+    // here. Same parameters and the same response shape, so everything after
+    // this line is identical and postsIn reads one thing.
+    const asPage = String(req.query.kind || "") === "page";
     const feedKey = process.env.API_DIRECT_KEY;
     if (!feedKey) return res.status(200).json({ group, posts: [], skipped: "API_DIRECT_KEY is not set" });
     // One page. A village group does not post fifty times a week, and page two
     // is last month, which candidatesIn would drop anyway for being in the past.
-    const got = await askApiDirect(feedKey, "/v1/facebook/group/posts", { group_id: group, pages: 1 });
+    const got = asPage
+      ? await askApiDirect(feedKey, "/v1/facebook/page/posts", { page_id: group, pages: 1 })
+      : await askApiDirect(feedKey, "/v1/facebook/group/posts", { group_id: group, pages: 1 });
     if (!got.ok) return res.status(200).json({ group, posts: [], failed: got.why });
     const body = got.body || {};
     const posts = Array.isArray(body.posts) ? body.posts

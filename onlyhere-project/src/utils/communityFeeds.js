@@ -43,6 +43,47 @@ import { isPastDate } from "./eventDates";
 // serves vanity slugs, /groups/sejeroe-nyt, and NOTHING can turn one of those
 // into an id without asking Facebook, so a slug is refused with a sentence that
 // says what to paste instead rather than stored as a row that fails forever.
+// ── AND A PAGE IS NOT A GROUP ───────────────────────────────────────
+//
+// Oliver, 17 Sep 2026: "https://www.facebook.com/visitsamsoe I can't use this..
+// include profiles please."
+//
+// He is right and it is the more useful half. A tourist board, a harbour, a
+// museum, a festival: those are PAGES, they are public by definition, and they
+// are where a place announces itself. A village group is where people talk.
+//
+// Two differences, and only one of them is real work. The endpoint is
+// /v1/facebook/page/posts rather than /group/posts, same parameters and the
+// same response, so postsIn and everything after it is untouched. The other is
+// that a page URL is a NAME, facebook.com/visitsamsoe, and the endpoint takes a
+// numeric id. That is resolved once, when he adds it, through the page-details
+// call this codebase already uses, and stored on the row. A lookup per sweep
+// would be a second request every time for an answer that never changes.
+export const FEED_KINDS = ["group", "page"];
+
+// Everything that is not a person, a group, or one of Facebook's own routes. A
+// profile URL and a page URL are the same shape, and the app cannot tell them
+// apart from the address alone, which is fine: the page-details call answers it
+// and a personal profile simply returns nothing to read.
+const NOT_A_PAGE = new Set([
+  "groups", "events", "pages", "profile.php", "people", "watch", "marketplace",
+  "story.php", "photo.php", "permalink.php", "sharer", "login", "help", "settings",
+]);
+
+export const pageNameIn = (url) => {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+  const m = /(?:facebook\.com|fb\.com)\/([A-Za-z0-9._-]{3,})/i.exec(raw);
+  if (!m) return "";
+  const name = m[1].replace(/\/+$/, "");
+  return NOT_A_PAGE.has(name.toLowerCase()) ? "" : name;
+};
+
+export const feedKindOf = (url) => {
+  if (groupIdIn(url)) return "group";
+  return pageNameIn(url) ? "page" : "";
+};
+
 export const groupIdIn = (url) => {
   const raw = String(url || "").trim();
   if (!raw) return "";
@@ -54,24 +95,34 @@ export const groupIdIn = (url) => {
 
 export const feedUrlProblem = (url) => {
   const raw = String(url || "").trim();
-  if (!raw) return "Paste the group's link.";
+  if (!raw) return "Paste the link.";
   if (groupIdIn(raw)) return "";
   if (/facebook\.com\/groups\//i.test(raw)) {
     return "That group link uses a name rather than a number. Open the group, click About, and copy the link from there: it looks like facebook.com/groups/125246204312244.";
   }
-  if (/facebook\.com/i.test(raw)) return "That is a Facebook link but not a group. Only groups can be read this way.";
-  return "Only Facebook groups can be read this way, and the link needs the numeric form, like facebook.com/groups/125246204312244.";
+  if (pageNameIn(raw)) return "";
+  if (/facebook\.com/i.test(raw)) return "That is a Facebook link, but not a page or a group. A page looks like facebook.com/visitsamsoe and a group like facebook.com/groups/125246204312244.";
+  return "This reads Facebook pages and groups. A page looks like facebook.com/visitsamsoe and a group like facebook.com/groups/125246204312244.";
 };
 
 export const cleanFeed = (row) => {
   const url = String(row?.url || row?.group_url || "").trim();
-  const groupId = groupIdIn(url);
-  if (!groupId) return null;
+  const kind = feedKindOf(url);
+  if (!kind) return null;
+  const groupId = kind === "group" ? groupIdIn(url) : String(row?.group_id || "").trim();
+  // A page keeps its readable address and carries the numeric id separately,
+  // because the id is what the endpoint wants and the name is what he typed and
+  // will recognise in a list. A page whose id has not been resolved yet is a
+  // real state and says so rather than being dropped.
+  const handle = kind === "page" ? pageNameIn(url) : "";
   return {
     id: row?.id ?? null,
+    kind,
     name: String(row?.name || "").trim().slice(0, 80),
-    url: `https://www.facebook.com/groups/${groupId}`,
+    url: kind === "group" ? `https://www.facebook.com/groups/${groupId}` : `https://www.facebook.com/${handle}`,
+    handle,
     groupId,
+    needsId: kind === "page" && !/^\d{5,}$/.test(groupId),
     // The same scope vocabulary the research sources use, so "Sejerø" and the
     // Islands scope both mean here what they mean there. cleanPlace is applied
     // by the caller, which owns that import.
