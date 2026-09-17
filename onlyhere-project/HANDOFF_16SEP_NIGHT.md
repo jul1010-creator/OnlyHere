@@ -229,7 +229,82 @@ point it at, so this is the only place the check happens.
 - **Audio walks stay town-only**, unchanged: `wegotripMatch`'s `TOWN_TYPES` is
   still `["town"]` and the reason is written there.
 
-## 4. Still waiting on you
+## 4. FOR FABLE, ADDED TO THE PIPELINE REVIEW
+
+Oliver, 16 Sep 2026: *"put into note that Fable has to put into future events
+that Facebook websites might publish the ticket links. So their Facebook site
+has to be searched through when events get the weekly update."*
+
+This is a NEW item on the Fable list in `HANDOFF_15SEP_AFTERNOON.md` section 0,
+and it is a real gap. Today a Facebook page cannot reach an event at any stage:
+`NEVER_A_SOURCE` in `sourcePolicy.js` matches facebook and instagram, so a page
+found during research is refused, and `settlingStrength` in
+`uncertaintyResolve.js` returns WEAK for the same domains, so a Facebook post
+cannot settle a caveat either. The social sweep finds accounts and writes them
+to `__social` for the section at the bottom of the entry. It never runs during a
+draft and it never reads a post.
+
+For a small Danish event, the Facebook page is often where the ticket link is
+published first, and sometimes the only place it is published at all.
+
+**Where it belongs: the weekly update, not the draft.** `api/update-events-check.js`
+already walks the published events and asks whether each is still happening, on
+that date, at that ticket status. That is the pass Oliver runs weekly from
+Studio, and it is the right place for this, because a ticket link that appears
+three weeks after publication is exactly the kind of change that pass exists to
+catch.
+
+What Fable has to settle, and the distinction is the whole question:
+
+- **A LINK IS NOT A CLAIM.** `NEVER_A_SOURCE` exists to stop a Facebook caption
+  becoming a fact in research prose. A ticket URL found on a Facebook page is a
+  different object: it is an address to follow, and what it leads to can be
+  checked on its own terms by `ticketLink.js`, which already knows what a real
+  Tiqets, Ticketmaster or WeGoTrip ticket URL looks like. So the carve-out can
+  be narrow: Facebook may SURFACE a candidate link, and the link only survives
+  if `isBookableTicketUrl` recognises the destination. Facebook never supplies a
+  price, a date or a sentence.
+- **Which endpoint, and at what cost.** `/v1/facebook/page` returns page details
+  including `website`; `/v1/facebook/page/posts` returns captions with
+  timestamps. Requests per event, counted before anything is spent, behind the
+  same explicit press as the paid sweep, same as the rest of the API Direct
+  work.
+- **What happens to a link that is not recognised.** It must not be written onto
+  the row. The honest result is a note for Oliver in the update report saying a
+  candidate was found and could not be verified, in the same shape the update
+  pass already reports a date change.
+- **The affiliate rule still applies.** `affiliateRoster.js` and the ticket
+  policy decide which links may reach a reader at all. A link found on Facebook
+  does not get a pass around that, and this must not become a side door for one.
+
+## 5. A SECOND FABLE ITEM, AND IT IS THE URGENT ONE
+
+`FOR_FABLE_16SEP_CHECKER.md`, written from your run log export.
+
+Short version. "Aalborg St." on a Copenhagen event is not a checker bug, it is
+step 1 of the run: the geocode that happens BEFORE the research took the
+organiser's address in Aalborg and everything downstream inherited it, including
+which region the founder sources were scoped to. TinderBox has the same failure
+through Nominatim, and its own log line prints the contradiction out loud:
+"scoped to Odense, in Storkobenhavn, on Zealand".
+
+I checked oktoberfestdk.dk myself: it is the event's own site, it says
+Radhuspladsen with metro access, and its "Fra 50 kr." is admission. So your guess
+about the 50 kr being a parking fee is the one thing in there that is working
+correctly, and it would have been easy to break it fixing the rest.
+
+One fix went in tonight: the panel printed "Not applied, a source says otherwise"
+over every rejection, including a page that could not be read and a page that
+agreed with the correction. It says "Not applied" now and the evidence underneath
+carries the reason, which it was already doing correctly.
+
+The decision itself is still wrong and that part is Fable's, because it sits in
+the middle of the publish path. The note lays out three stacked causes, and the
+one worth his hour is this: `nearestStation` is a measured field, so the
+assistant is structurally unable to correct it, which is right until the
+coordinate it was measured from is wrong, and then it is a trap.
+
+## 6. Still waiting on you
 
 - `alter table public.gemlyx_support add column if not exists name text;` in
   Supabase. The insert retries without the field if the column is missing, so

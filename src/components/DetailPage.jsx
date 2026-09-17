@@ -20,7 +20,7 @@ import { ReviewsSection } from "./ReviewsSection";
 import { ArticleFeedback } from "./ArticleFeedback";
 import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
-import { ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote, isWegotripUrl } from "../utils/affiliates";
+import { ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote, isWegotripUrl, outboundLink } from "../utils/affiliates";
 import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl, isTourUrl, sameShop, priceSourceHost } from "../utils/ticketLink";
 import { branchPoints, branchesOf, hasBranches, branchLine, branchLabel } from "../utils/branches";
 import { offerView, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
@@ -798,14 +798,30 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                           </div>
                           {row.desc && <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginTop: 4 }}>{row.desc}</div>}
                           {row.price && <div style={{ fontSize: 11.5, color: C.muted, marginTop: 4 }}>{row.price}</div>}
+                          {/* ── THE SECOND PLACE AN ESSENTIAL IS DRAWN ─────
+                              and until 16 Sep 2026 the one that drew a raw href
+                              with no disclosure on it. Nothing published today
+                              reaches it with a paid link, because a national row
+                              never appears on a town page and every paid row is
+                              national, so this was one Studio placement away
+                              from printing an undisclosed affiliate link rather
+                              than an actual bug. The same door as the Essentials
+                              card, so it cannot become one. */}
                           {links.length > 0 && (
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 7 }}>
-                              {links.map(l => (
-                                <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer"
-                                  style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, textDecoration: "none", border: `1px solid ${C.border}`, borderRadius: 100, padding: "5px 11px" }}>
-                                  {l.label || uiT("entry.website", lang)} →
-                                </a>
-                              ))}
+                              {links.map(l => {
+                                const out = outboundLink(l.url);
+                                if (!out.href) return null;
+                                return (
+                                  <span key={l.url} style={{ display: "inline-flex", flexDirection: "column", gap: 3 }}>
+                                    <a href={out.href} target="_blank" rel={`noopener ${out.rel}`}
+                                      style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, textDecoration: "none", border: `1px solid ${C.border}`, borderRadius: 100, padding: "5px 11px" }}>
+                                      {l.label || uiT("entry.website", lang)} →
+                                    </a>
+                                    {out.note && <span style={{ fontSize: 10, color: C.muted, lineHeight: 1.5, maxWidth: 260 }}>{out.note}</span>}
+                                  </span>
+                                );
+                              })}
                             </div>
                           )}
                         </div>

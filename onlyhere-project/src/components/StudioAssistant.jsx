@@ -198,8 +198,25 @@ export const StudioAssistant = ({ session, supaFetch, readPage, item, kind, draf
     const lines = result.claims.map(c => {
       const mark = c.verdict === "confirmed" ? "✅" : c.verdict === "rejected" ? "❌" : c.verdict === "asserted" ? "✍️" : "❓";
       const head = `${mark} ${c.field}: ${c.says}`;
+      // ── THE HEADLINE HAS TO BE TRUE OF THIS REJECTION ─────────
+      //
+      // Oliver, 16 Sep 2026, on two rejections in one sitting: a TinderBox
+      // ticket link refused with "a source says otherwise" whose own evidence
+      // said shop.tinderbox.dk "could not be read... so nothing was concluded
+      // from it", and an Oktoberfest station refused with the same sentence
+      // over evidence that ends "supports the proposed correction".
+      //
+      // Both evidence lines were accurate. The HEADLINE was a hardcoded claim
+      // printed over every rejection whatever the reason, so a page that was
+      // unreadable and a page that agreed both came out as a source saying
+      // otherwise. correction.js already has a guard for a verdict that argues
+      // against its own reasoning; this is the same failure one layer up, in
+      // the one line nothing was comparing against anything.
+      //
+      // So the headline says only what is true of every rejection, and the
+      // evidence underneath, which was right all along, says which kind it is.
       const why = c.verdict === "rejected"
-        ? `\n   Not applied, a source says otherwise. ${c.evidence}`
+        ? `\n   Not applied. ${c.evidence}`
         : c.verdict === "unresolved"
         // ── "8 ON MY WORD IS ALOT.. THIS IS FROM GEMINI" ─────────
         // Oliver, 6 Sep 2026. An unresolved claim out of a PASTED fact-check is

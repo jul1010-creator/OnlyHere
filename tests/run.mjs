@@ -63,7 +63,7 @@ writeFileSync(entry, `
   export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
   export { TICKET_HUNT_PROMPT, ticketHuntUrls } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
-  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, partnerMerchant, destinationIn, linkLabel, affiliateHref, affiliateNote, isAffiliateHref, isGetyourguideUrl, isGetyourguideProductUrl, getyourguideUrl, getyourguideActive, getyourguideDisclosure, bikeRentalFits, tourMerchant, isBajabikesUrl, isBajabikesProductUrl, isBajabikesRental, bajabikesSlug, bajabikesUrl, bajabikesActive, bajabikesDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
+  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, partnerMerchant, destinationIn, linkLabel, outboundLink, affiliateHref, affiliateNote, isAffiliateHref, isGetyourguideUrl, isGetyourguideProductUrl, getyourguideUrl, getyourguideActive, getyourguideDisclosure, bikeRentalFits, tourMerchant, isBajabikesUrl, isBajabikesProductUrl, isBajabikesRental, bajabikesSlug, bajabikesUrl, bajabikesActive, bajabikesDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isWegotripUrl, wegotripUrl, wegotripBrowseUrl, wegotripActive, wegotripDisclosure, tripcomActive } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { TOWN_TYPES, townNameOf, audioFor, audioLine, ticketFor, unmatchedProducts, wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO, TICKET as WEGO_TICKET } from ${JSON.stringify(join(root, "src/utils/wegotripMatch.js"))};
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
@@ -24591,9 +24591,24 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("and for nothing at all", partnerDisclosure(null), "");
 
   // ── WIRED INTO ESSENTIALS AND INTO THE GUIDE ─────────────────────
-  const paid = ESSENTIALS_FOR_TEST.filter(e => isPartnerLink(e.link));
-  is("exactly one essentials row carries a paid link", paid.length, 1);
-  is("and it is the tickets one", paid[0]?.category, "Sightseeing");
+  //
+  // ── COUNTED THROUGH linksOf AND THROUGH THE WRAPPER, 16 SEP 2026 ─
+  //
+  // This asked isPartnerLink(e.link), which answers about ONE link that is
+  // ALREADY tracked. The Copenhagen Card is neither: it carries two links in
+  // `links`, and the paid one is stored as its destination and wrapped at
+  // render. Asked the old way, this would have reported one paid row on the day
+  // two shipped, and the two prose rules below would have stopped applying to
+  // the row that most needed them. A census that cannot see the second row is
+  // worse than no census.
+  const paidLinksOf = (row) => M.linksOf(row).map(l => M.outboundLink(l.url)).filter(o => !!o.note);
+  const paid = ESSENTIALS_FOR_TEST.filter(r => paidLinksOf(r).length);
+  is("exactly two essentials rows carry a paid link", paid.length, 2);
+  ok("and both of them are in Sightseeing", paid.every(r => r.category === "Sightseeing"));
+  ok("every paid link is disclosed where it is drawn",
+    paid.every(r => paidLinksOf(r).every(o => /commission/.test(o.note))));
+  ok("and none of them is labelled the official site",
+    paid.every(r => paidLinksOf(r).every(o => o.label !== "Official site")));
   // ── AND IT SAYS SO IN ITS OWN WORDS ──────────────────────────────
   // Oliver, 16 Aug 2026: "can you please point out that this is one of our
   // affiliates? Just so people is aware of why we use this random lesser known
@@ -24608,23 +24623,60 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // that keeps the paid link honest rather than merely disclosed.
   paid.forEach(row => ok(`the ${row.name} row still points at the official site first`,
     /own site|official site/i.test(`${row.howTo || ""} ${row.tip || ""}`)));
-  // id 5 is the Copenhagen Card, which Tiqets also sells. It still points at
-  // the official site: quietly rewriting an existing recommendation into a paid
-  // one is the thing the front of this app exists not to do.
+  // ── id 5, THE COPENHAGEN CARD, 16 SEP 2026 ──────────────────────
+  //
+  // Oliver: "Can you put an affiliate link on the Copenhagen Card, please. From
+  // Tiqets."
+  //
+  // What was asserted here was that this row still pointed at the official site
+  // and was not paid, and the reason given was that quietly rewriting a
+  // recommendation into a paid one is the thing the front of this app exists not
+  // to do. The word doing the work in that sentence is QUIETLY, so the row keeps
+  // the official site, keeps it FIRST, and says the partnership in its own
+  // prose. What is asserted is the order and the honesty, not the absence.
   const cph = ESSENTIALS_FOR_TEST.find(e => e.id === 5);
-  ok("the Copenhagen Card row still points at the official site", /copenhagencard\.com/.test(cph?.link || ""));
-  is("and is not a paid link", isPartnerLink(cph?.link), false);
+  const cphLinks = M.linksOf(cph);
+  is("the Copenhagen Card offers two ways to buy it", cphLinks.length, 2);
+  ok("the card's own site is the first of them", /copenhagencard\.com/.test(cphLinks[0]?.url || ""));
+  is("and nothing is disclosed over it, because it earns nothing", M.outboundLink(cphLinks[0].url).note, "");
+  is("it is not called a partner link either", isPartnerLink(cphLinks[0].url), false);
+  // THE PRODUCT PAGE, not the category page and not the browse link. A category
+  // page drops the reader on a list of Copenhagen attractions to find the card
+  // in, which is the distinction tiqetsPageKind exists to draw.
+  ok("the second is the Tiqets product page", M.isTiqetsProductUrl(cphLinks[1]?.url || ""));
+  is("and it is a product page rather than a category one", M.tiqetsPageKind(cphLinks[1].url), "product");
+  // STORED AS THE DESTINATION, WRAPPED AT RENDER. That is what makes the link
+  // go quietly back to being an ordinary one the day the programme ends, with
+  // no edit to the data file and no disclosure left over a link that no longer
+  // earns.
+  is("it is stored untracked", isPartnerLink(cphLinks[1].url), false);
+  ok("and it is tracked by the time it is rendered", M.isAffiliateHref(cphLinks[1].url));
+  ok("with the commission said under it", /commission/.test(M.outboundLink(cphLinks[1].url).note));
+  is("and Tiqets named on the button rather than called the official site",
+    M.outboundLink(cphLinks[1].url).label, "Book on Tiqets");
   // Every essentials id is unique, or the React key collides and one row
   // silently replaces another.
   is("no two essentials share an id",
     new Set(ESSENTIALS_FOR_TEST.map(e => e.id)).size, ESSENTIALS_FOR_TEST.length);
 
   const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the essentials card prints the disclosure", /partnerDisclosure\(item\.link\)/.test(appSrc));
+  const affSrc = readFileSync(join(root, "src/utils/affiliates.js"), "utf8");
+  // ── ONE DOOR, ASKED FOR IN ONE CALL ─────────────────────────────
+  // These pinned partnerDisclosure(item.link) and a rel computed in App.jsx,
+  // which is exactly how the merged branch on the same card ended up with
+  // neither. The four answers are computed together now, so what is pinned is
+  // that both branches ASK, and that the rule itself lives where it cannot be
+  // half-copied.
+  ok("the essentials card asks one function for the whole link", /const \{ href, label, note, rel \} = outboundLink\(item\.link\);/.test(appSrc));
+  ok("and the merged branch asks the same one", /const out = outboundLink\(l\.url\);/.test(appSrc));
   // rel gains sponsored and nofollow when it is tracked. That is what Google
   // asks for on a paid link and is the difference between an affiliate link and
   // an undisclosed ad.
-  ok("and marks a tracked link sponsored", /const rel = note \? "noreferrer sponsored nofollow" : "noreferrer";/.test(appSrc));
+  ok("and a tracked link is marked sponsored", /rel: note \? "noreferrer sponsored nofollow" : "noreferrer",/.test(affSrc));
+  // WRAPPED FIRST, ASKED SECOND. Asking the raw url says "ordinary link,
+  // official site, no disclosure" about a link that is about to earn.
+  ok("the label and the sentence are asked of the wrapped link",
+    /const href = safe \? \(affiliateHref\(safe\) \|\| safe\) : null;[\s\S]{0,120}const note = href \? partnerDisclosure\(href\) : "";/.test(affSrc));
   // ── AND EVERY BRANCH GETS IT, WHICH IS THE BUG THAT WAS HERE ─────
   // 16 Aug: the disclosure and the sponsored rel were computed INSIDE one of
   // three branches, and a plain web link never takes that branch. So the Tiqets
@@ -24641,7 +24693,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // The label is a claim about whose site it is. Tiqets is not the official
     // site of Tivoli, and this branch said it was.
     ok("no branch calls a tracked link the official site", !/Official site ↗/.test(block));
-    ok("the label comes from the link itself", /const label = linkLabel\(item\.link\);/.test(block));
+    ok("the label comes from the link itself", /const \{ href, label, note, rel \} = outboundLink\(item\.link\);/.test(block));
+    // And the href is the WRAPPED one. Rendering externalHref(item.link) beside
+    // a label and a disclosure computed from the wrapped link would describe a
+    // paid link and send the reader down an unpaid one.
+    ok("and every anchor points at the wrapped href", !/<a href=\{externalHref\(item\.link\)\}/.test(block));
     // COMPUTED IS NOT PRINTED. A disclosure read into a const and never
     // rendered is a paid link with nothing under it, which is what was on the
     // page this morning.
@@ -24662,6 +24718,63 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is("a merchant name in an ordinary host names nothing", partnerMerchant("https://tiqets.example.com/x"), "");
     is("and it is still the official site", linkLabel("https://tiqets.example.com/x"), "Official site");
     is("nothing is the official site of nothing in particular", linkLabel(""), "Official site");
+
+    // ── AND THE ONE SHAPE THIS FILE ITSELF BUILDS ─────────────────
+    //
+    // 16 Sep 2026. Every assertion above tests a link somebody PASTED. The
+    // shape affiliateHref GENERATES is tp.media/r?...&u=<destination>, whose
+    // first host label is "tp", and that named nobody: the deep link Gemlyx
+    // creates for every attraction on the site was the one link on the site
+    // that could not say which merchant it went to. It read "Partner site",
+    // which is honest and useless, on the exact links a reader most wants to
+    // recognise before they click.
+    const deepTiq = M.affiliateHref("https://www.tiqets.com/en/copenhagen-attractions-c113/tickets-for-copenhagen-card-discover-p1068607/");
+    ok("the wrapper produces a tp.media link", /^https:\/\/tp\.media\//.test(deepTiq));
+    is("which is a partner link", M.isPartnerLink(deepTiq), true);
+    is("and it knows the merchant behind it", partnerMerchant(deepTiq), "Tiqets");
+    is("so the button names Tiqets", linkLabel(deepTiq), "Book on Tiqets");
+    // The destination is read out of `u`, which is the parameter Travelpayouts
+    // uses and the one this codebase's own template writes.
+    ok("the destination is readable out of the link", /tiqets\.com/.test(M.destinationIn(deepTiq)));
+    // A NETWORK LINK GOING SOMEWHERE WE HOLD NO PROGRAMME WITH IS STILL NOT
+    // NAMED. The destination is a lookup, not a source of names, or the first
+    // link to an unknown shop prints that shop as a Gemlyx partner merchant.
+    is("an unknown destination names nobody",
+      partnerMerchant("https://tp.media/r?marker=1&u=" + encodeURIComponent("https://www.example.com/x")), "");
+    is("and reads as a partner link without a merchant",
+      linkLabel("https://tp.media/r?marker=1&u=" + encodeURIComponent("https://www.example.com/x")), "Partner site");
+
+    // ── outboundLink, THE FOUR ANSWERS TOGETHER ───────────────────
+    //
+    // The single-link branch of the Essentials card had all four right and the
+    // merged branch, forty lines above it on the same card, had two of them
+    // wrong: a raw href that would not have paid, and no disclosure. Both ask
+    // this now, so there is no version of one that can be right while the other
+    // is wrong.
+    const outTiq = M.outboundLink("https://www.tiqets.com/en/copenhagen-attractions-c113/tickets-for-copenhagen-card-discover-p1068607/");
+    is("a destination link comes back tracked", outTiq.href, deepTiq);
+    is("named", outTiq.label, "Book on Tiqets");
+    ok("disclosed", /commission/.test(outTiq.note));
+    is("and marked sponsored", outTiq.rel, "noreferrer sponsored nofollow");
+    const outPlain = M.outboundLink("https://www.copenhagencard.com");
+    is("an ordinary link is left exactly as it came in", outPlain.href, "https://www.copenhagencard.com");
+    is("called the official site", outPlain.label, "Official site");
+    is("said nothing about money", outPlain.note, "");
+    // AND NOT MARKED SPONSORED, which is the same false statement in the other
+    // direction: nofollow on a link nobody paid for.
+    is("and not marked sponsored", outPlain.rel, "noreferrer");
+    // An already-tracked short link is not double-wrapped, or the click is
+    // counted twice and the reader is bounced through two redirects.
+    is("a link that is already tracked is passed through",
+      M.outboundLink("https://tiqets.tpx.li/gjhkxmoh").href, "https://tiqets.tpx.li/gjhkxmoh");
+    ok("and still disclosed", /commission/.test(M.outboundLink("https://tiqets.tpx.li/gjhkxmoh").note));
+    // A bare host is a link a drafted essential really carries, and externalHref
+    // is the one function that decides whether it is one.
+    is("a bare host gets its scheme", M.outboundLink("visitdenmark.com").href, "https://visitdenmark.com");
+    // NOTHING TO LINK TO MEANS NO ANCHOR, not an anchor pointing nowhere.
+    is("junk is not a link", M.outboundLink("javascript:alert(1)").href, null);
+    is("nor is nothing at all", M.outboundLink("").href, null);
+    is("and neither is disclosed", [M.outboundLink("javascript:alert(1)").note, M.outboundLink("").note], ["", ""]);
   }
   // ── AND THE BROWSE ROW IS GONE, REPLACED BY AN INVOICE ──────────
   //
@@ -48867,6 +48980,49 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("a merged card draws its operators", /\{isMerged\(item\) && \(/.test(app));
     ok("each with its own link", /linksOf\(item\)\.map\(\(l, li\) =>/.test(app));
     ok("and its Android store link where there is one", /l\.android && \(/.test(app));
+    // ── AND A LINK IN A LIST IS STILL A LINK, 16 SEP 2026 ─────────
+    //
+    // This branch drew `href={externalHref(l.url)}` with `rel="noreferrer"` and
+    // asked linkLabel about the UNWRAPPED url. On the Copenhagen Card, which is
+    // a two-link row and is therefore drawn HERE rather than in the branch that
+    // had this right, that is a reseller link that pays nothing, carries no
+    // disclosure and calls itself the official site. Three failures on one
+    // anchor, all three already solved forty lines down the same file.
+    {
+      const start = app.indexOf("{isMerged(item) && (");
+      const block = app.slice(start, app.indexOf("{item.link && (() => {", start));
+      ok("the merged block was found", start > 0 && block.length > 300);
+      ok("no merged link is drawn untracked", !/href=\{externalHref\(l\.url\)\}/.test(block));
+      ok("nor labelled off the unwrapped url", !/linkLabel\(l\.url\)/.test(block));
+      ok("no anchor in it carries a bare rel", !/rel="noreferrer"/.test(block));
+      // COMPUTED IS NOT PRINTED, the rule the other branch already carries.
+      ok("and the disclosure is printed under the link", /\{out\.note && <div style=\{\{[^}]*\}\}>\{out\.note\}<\/div>\}/.test(block));
+    }
+    // ── THE SECOND PLACE AN ESSENTIAL IS DRAWN ────────────────────
+    // The local-essentials block on a town page renders the same rows. Nothing
+    // published today reaches it with a paid link, because a national row never
+    // appears on a town page and both paid rows are national, so this was one
+    // Studio placement away from an undisclosed affiliate link rather than an
+    // actual bug. Same door, so it cannot become one.
+    {
+      const detail = stripComments(readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8"));
+      ok("the local essentials block uses the same door", /const out = outboundLink\(l\.url\);/.test(detail));
+      ok("and prints what it earns", /\{out\.note && <span style=\{\{[^}]*\}\}>\{out\.note\}<\/span>\}/.test(detail));
+      ok("no local essential link is drawn raw", !/<a key=\{l\.url\} href=\{l\.url\}/.test(detail));
+    }
+    // ── AND `android` SURVIVES THE MAPPER ─────────────────────────
+    // The renderer above has drawn `{l.android && ...}` since the merge, and
+    // linksOf never carried the field, so that branch was unreachable: the DSB
+    // entry on "Getting a Ticket" has a Google Play URL and has shown the iOS
+    // link only. Asserted on the real row, because a fixture would have passed
+    // on the day the live one did not.
+    {
+      const ticket = essentials.find(r => /Getting a Ticket/i.test(r.name));
+      const dsb = linksOf(ticket).find(l => /DSB/i.test(l.label));
+      ok("the DSB entry keeps its Android link", /play\.google\.com/.test(dsb?.android || ""));
+      is("and a link with no Android one says so with an empty string",
+        linksOf(ticket).find(l => /Rejsekort/i.test(l.label))?.android, "");
+    }
   }
 }
 

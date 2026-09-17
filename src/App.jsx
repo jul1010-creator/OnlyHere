@@ -99,7 +99,7 @@ import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION, PAID_PLANS_LIVE, FOUNDER_IDS }
 // screen says yes while the endpoints say no, or the reverse, which is worse.
 import { isFounder } from "./utils/apiGuard";
 import {
-  getSeason, getEventDate, isUpcoming, isCurrentlyLive, isOnOrUpcoming, soonestFirst, hasFinished, externalHref, weatherIcon,
+  getSeason, getEventDate, isUpcoming, isCurrentlyLive, isOnOrUpcoming, soonestFirst, hasFinished, weatherIcon,
   isInDenmark, travelLabel, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, readerView, seededShuffle, daysUntil, detectLegMode, haversineKm, scanForAITells, priceBand, PRICE_BANDS,
   getEnclosingJSONStringBounds, nextWeekdayTimestamp,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
@@ -222,7 +222,10 @@ import { buildChatReport, chatReportFilename } from "./utils/chatReport";
 import { openingThread, withTestBrief, withoutTestBrief, loadThread, saveThread, clearThread } from "./utils/chatThread";
 import { downloadReport } from "./utils/previewReport";
 import { briefThemes , essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, fitsBrief, preferenceRowState, PREF_READY, PREF_NO_ACCOUNT } from "./utils/interestFit";
-import { partnerDisclosure, linkLabel, affiliateHref } from "./utils/affiliates";
+// outboundLink, and no longer partnerDisclosure or linkLabel beside it: both
+// render sites on the Essentials card asked for those separately and one of
+// them forgot two of the four. See outboundLink in utils/affiliates.js.
+import { affiliateHref, outboundLink } from "./utils/affiliates";
 import { sweepPlan, describeSweepPlan, ticketProposal, describeTicketFindings, affiliateWriteFor, agentLabel, FOUND as AFF_FOUND, RESWEEP_DAYS } from "./utils/affiliateSweep";
 import { wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO } from "./utils/wegotripMatch";
 import { CHECKED_ON as WEGO_CHECKED_ON, WEGOTRIP_SOURCE } from "./data/wegotrip";
@@ -26551,26 +26554,58 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           introduce a field they do not need. */}
                       {isMerged(item) && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 4 }}>
-                          {linksOf(item).map((l, li) => (
-                            <div key={li} style={{ background: C.bg, borderRadius: 8, padding: "9px 11px" }}>
-                              <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-                                <span style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>{l.label}</span>
-                                {l.note && <span style={{ fontSize: 11, color: C.muted, lineHeight: 1.5 }}>{l.note}</span>}
+                          {linksOf(item).map((l, li) => {
+                            // ── AND A LINK IN A LIST IS STILL A LINK ───────
+                            //
+                            // This branch drew a bare href with rel="noreferrer"
+                            // and asked linkLabel about the UNWRAPPED url, while
+                            // the single-link branch forty lines down wrapped,
+                            // disclosed and marked its one link correctly. Two
+                            // renderers on the same card, one of them right.
+                            //
+                            // So the Copenhagen Card, which needs the card's own
+                            // site AND Tiqets and is therefore drawn here, would
+                            // have shipped a reseller link that paid nothing,
+                            // carried no disclosure and called itself the
+                            // official site. outboundLink answers all four at
+                            // once and both branches now ask it, so there is no
+                            // longer a version of this that can be right in one
+                            // place and wrong in the other.
+                            const out = outboundLink(l.url);
+                            return (
+                              <div key={li} style={{ background: C.bg, borderRadius: 8, padding: "9px 11px" }}>
+                                <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                                  <span style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>{l.label}</span>
+                                  {l.note && <span style={{ fontSize: 11, color: C.muted, lineHeight: 1.5 }}>{l.note}</span>}
+                                </div>
+                                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 5, flexWrap: "wrap" }}>
+                                  {out.href && (
+                                    <a href={out.href} target="_blank" rel={out.rel}
+                                      style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>
+                                      {out.label} ↗
+                                    </a>
+                                  )}
+                                  {/* An app store link is never a partner link,
+                                      and the label on it is the store rather
+                                      than the merchant, so it keeps its own
+                                      anchor. It goes through outboundLink all
+                                      the same: the day one of these is a
+                                      tracked link, nobody has to notice. */}
+                                  {l.android && (
+                                    <a href={outboundLink(l.android).href} target="_blank" rel={outboundLink(l.android).rel}
+                                      style={{ fontSize: 11.5, fontWeight: 700, color: C.muted, textDecoration: "none" }}>
+                                      Android ↗
+                                    </a>
+                                  )}
+                                </div>
+                                {/* COMPUTED IS NOT PRINTED, the same rule the
+                                    single-link branch carries: a disclosure read
+                                    into a const and never rendered is a paid
+                                    link with nothing under it. */}
+                                {out.note && <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.5, marginTop: 6, maxWidth: 320 }}>{out.note}</div>}
                               </div>
-                              <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 5, flexWrap: "wrap" }}>
-                                <a href={externalHref(l.url)} target="_blank" rel="noreferrer"
-                                  style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>
-                                  {linkLabel(l.url)} ↗
-                                </a>
-                                {l.android && (
-                                  <a href={externalHref(l.android)} target="_blank" rel="noreferrer"
-                                    style={{ fontSize: 11.5, fontWeight: 700, color: C.muted, textDecoration: "none" }}>
-                                    Android ↗
-                                  </a>
-                                )}
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                       {item.link && (() => {
@@ -26602,9 +26637,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         // nofollow whenever the link is tracked, which is what
                         // Google asks for and is the difference between an
                         // affiliate link and an undisclosed ad.
-                        const note = partnerDisclosure(item.link);
-                        const label = linkLabel(item.link);
-                        const rel = note ? "noreferrer sponsored nofollow" : "noreferrer";
+                        // ── ASKED OF THE WRAPPED LINK, 16 SEP 2026 ─────────
+                        // These three were computed off item.link RAW, which is
+                        // correct for every row written so far because each of
+                        // them stores a link that is already tracked. It stops
+                        // being correct the moment a row stores the destination
+                        // instead: affiliateHref would wrap it at render, and
+                        // these three would be answering about a different URL
+                        // from the one in the href. outboundLink wraps first and
+                        // answers about the result, which is the same answer on
+                        // every existing row and the right one on the next.
+                        const { href, label, note, rel } = outboundLink(item.link);
                         return (
                           <div>
                             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -26619,7 +26662,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   Decided by the host, the same way the label above
                                   is. See storeKindOf. */}
                               {storeKindOf(item.link) === "web" && !item.linkAndroid ? (
-                                <a href={externalHref(item.link)} target="_blank" rel={rel}
+                                <a href={href} target="_blank" rel={rel}
                                   style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "7px 14px", fontSize: 12, fontWeight: 700, color: C.gold, textDecoration: "none" }}>
                                   {label} ↗
                                 </a>
@@ -26629,7 +26672,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   <StoreBadge type="android" href={item.linkAndroid} />
                                 </>
                               ) : (
-                                <a href={externalHref(item.link)} target="_blank" rel={rel}
+                                <a href={href} target="_blank" rel={rel}
                                   style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, color: C.light, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
                                   🌐 {label} ↗
                                 </a>

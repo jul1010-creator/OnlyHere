@@ -528,7 +528,86 @@ const MONTH_WORDS = [
 // its own abbreviation.
 const MONTH_RE = MONTH_WORDS.map((alts, i) => [new RegExp(`\\b(?:${alts})\\b`, "i"), i]);
 
-// ── WHICH MONTHS DOES A PIECE OF TEXT NAME ──────────────────────────
+// ── ASKING THE WORLD WHETHER THE DATE IS THE DATE ───────────
+//
+// Oliver, 16 Sep 2026: "it would be a good idea for the build to reconfirm that
+// the blog's date is indeed correct. By researching the event with the exact
+// date in the research... like if the blog says 05/07 2027 for Roskilde
+// Festival, then it searches actively for Roskilde 05/07/2027."
+//
+// The date checks that exist all read pages the run happened to open, which
+// answers "does the operator say this" and cannot answer "does anybody else".
+// That gap is visible in his own Oktoberfest run: the operator's page stated no
+// date at all, the log said so plainly, and the entry published 17 to 19
+// September anyway with nothing else ever asked.
+//
+// THE DATE IS THE QUERY, which is the whole idea and the reason this is cheap.
+// A search for the name alone returns the same pages the research already read.
+// A search for the name AND the exact day returns the pages that carry that
+// day, and their absence is itself worth knowing.
+//
+// BOTH SPELLINGS, because a Danish listing writes 05/07/2027 or 5. juli 2027
+// and an English one writes 5 July 2027, and a query in one shape ranks pages
+// in that shape. The month table is the one already in this file rather than a
+// fourth copy of the same twelve words.
+const DA_MONTH = ["januar", "februar", "marts", "april", "maj", "juni", "juli", "august", "september", "oktober", "november", "december"];
+const EN_MONTH = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+const partsOf = (iso) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || "").trim());
+  if (!m) return null;
+  const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return { y, mo, d };
+};
+
+// "5. juli 2027". The full stop after the day is the Danish ordinal and it is
+// how a Danish page writes it.
+export const danishDay = (iso) => {
+  const p = partsOf(iso);
+  return p ? `${p.d}. ${DA_MONTH[p.mo - 1]} ${p.y}` : "";
+};
+
+// "5 July 2027".
+export const englishDay = (iso) => {
+  const p = partsOf(iso);
+  return p ? `${p.d} ${EN_MONTH[p.mo - 1]} ${p.y}` : "";
+};
+
+// "05/07/2027", the numeric shape he wrote it in. Day first, because this is
+// Denmark and a query in the American order finds the American reading of it.
+export const numericDay = (iso) => {
+  const p = partsOf(iso);
+  return p ? `${String(p.d).padStart(2, "0")}/${String(p.mo).padStart(2, "0")}/${p.y}` : "";
+};
+
+// The searches, in the order worth paying for. Quoted, so a search engine has
+// to match the phrase rather than scatter the words across a page that mentions
+// the festival and, separately, some July.
+//
+// The name is quoted for the same reason: "TinderBox" unquoted matches a shop
+// at an airport, which this pipeline has already proved it can do.
+export const dateProbeQueries = (name, town, dateStart, dateEnd) => {
+  const who = String(name || "").trim();
+  if (!who) return [];
+  const where = String(town || "").trim();
+  const start = String(dateStart || "").trim();
+  const end = String(dateEnd || "").trim();
+  const out = [];
+  const add = (q) => { if (q && !out.includes(q)) out.push(q); };
+
+  // Danish first: the pages that carry a Danish festival's dates are Danish.
+  if (danishDay(start)) add(`"${who}" "${danishDay(start)}"`);
+  if (numericDay(start)) add(`"${who}"${where ? ` ${where}` : ""} ${numericDay(start)}`);
+  if (englishDay(start)) add(`"${who}" "${englishDay(start)}"`);
+  // The end of a range only when it is a different day. A one-day event asking
+  // twice about the same day is a wasted call.
+  if (end && end !== start && danishDay(end)) add(`"${who}" "${danishDay(end)}"`);
+  return out;
+};
+
+// ── WHICH MONTHS DOES A PIECE OF TEXT NAME ──────────────────
+//
 //
 // Oliver, 16 August 2026: "In Studio, I'd like to be able to search for events
 // specifically happening in a specific month. Like, right now, it's filled with

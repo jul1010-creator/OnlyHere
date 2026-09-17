@@ -34,6 +34,14 @@ second opinion:
   panel, and behind the same explicit press as the paid sweep.
 - Whether any of it can strand a traveller. A wrong date in a built guide is the
   one error here that costs somebody a day of their trip.
+- **THE TICKET LINK ON A FACEBOOK PAGE.** Added 16 Sep by Oliver: "Facebook
+  websites might publish the ticket links. So their Facebook site has to be
+  searched through when events get the weekly update." It belongs in
+  `api/update-events-check.js`, not in the draft, and the carve-out has to stay
+  narrower than the one for dates: Facebook may SURFACE a candidate URL, and the
+  URL only survives if `isBookableTicketUrl` in `ticketLink.js` recognises what
+  it points at. Facebook supplies no price, no date and no sentence. Full note in
+  `HANDOFF_16SEP_NIGHT.md` section 4.
 
 ## 1. What the API actually returns, checked against their docs today
 

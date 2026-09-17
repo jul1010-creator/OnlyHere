@@ -41,7 +41,7 @@
 // are the intersection with the keys the draft ACTUALLY HAS. A type that gains
 // a glance field gets it extracted with no edit here, and a type that never had
 // one is never asked about it.
-import { GLANCE_FIELDS } from "./entryAudit";
+import { GLANCE_FIELDS, pricesIn } from "./entryAudit";
 import { MEASURED_FIELDS } from "./correction";
 import { looksUntranslated, danishWordsIn } from "./languageBarrier";
 import { FALSE_FRIEND_RULE } from "./literalDanish";
@@ -196,6 +196,66 @@ const digitsOf = (s) => (String(s || "").match(/\d[\d.,]*/g) || [])
   .map(n => n.replace(/[.,](?=\d{3}\b)/g, "").replace(/[.,]$/, ""))
   .filter(Boolean);
 
+// ── AND A PRICE HAS TO BE TRACEABLE TO A PAGE, NOT TO THE BLOB ───
+//
+// Oliver, 16 Sep 2026: a TinderBox draft published "3-day ticket 250 DKK;
+// 1-day ticket 120 DKK" for a major Danish festival, and the run log shows the
+// pipeline catching it three separate times and shipping it anyway:
+//
+//   "NOT FROM THE OFFICIAL SITE: 250 DKK, 120 DKK. These figures do not appear
+//    anywhere in the official site's own text."
+//   "no page that was read states this figure, so there is no page to show a
+//    reader."
+//
+// And beside those, in the same log, the decision that put them there:
+//
+//   "ticketInfo: believed the research (extracted), overruled the writer
+//    ('2027 weekend tickets are on sale through an external ticket shop; no
+//    price listed on the official site.')
+//    rule: A value stated on a page beats one composed by a writer, and a value
+//    nobody stated stays empty."
+//
+// The writer was RIGHT. The shop could not be read, the writer said so, and the
+// extraction overruled that honest sentence with two figures, under a rule
+// whose own second half says a value nobody stated stays empty.
+//
+// ── WHY THE GUARD ABOVE DID NOT CATCH IT ────────────────────────────
+//
+// numbersTraceable checks the digits against `research`, which is the whole
+// merged blob: every Tavily snippet, every Perplexity sentence, every title.
+// tracePrices, which runs later and found the problem, checks against the PAGES
+// THAT WERE OPENED. Two different meanings of "stated on a page", and the gap
+// between them is the hole: "250" and "120" are ordinary numbers that appear in
+// a blob of Danish search results for a hundred reasons that are not a ticket
+// price, and either one matches a distance, a capacity or a room number.
+//
+// So a figure that is MONEY gets the stricter corpus and the stricter shape: it
+// has to appear as a PRICE on a page this run actually read. pricesIn is the
+// same reader tracePrices uses, so the two gates finally mean the same thing,
+// and a number that is money in the draft has to have been money on a page.
+//
+// Refused rather than repaired, exactly like the untranslated case above: the
+// writer's own value is still in `prev`, written by a model that read the same
+// research, and on this very run that value was the correct one.
+const moneyIn = (text) => {
+  const out = new Set();
+  pricesIn(text).forEach(p => {
+    if (Number.isFinite(p.lo)) out.add(p.lo);
+    if (Number.isFinite(p.hi)) out.add(p.hi);
+  });
+  return out;
+};
+
+export const moneyTraceable = (value, pages) => {
+  const want = [...moneyIn(value)];
+  // No money in the value is not a failure. numbersTraceable still has the
+  // digits, and freeClaimTraceable still has the word "free".
+  if (!want.length) return { ok: true, missing: [] };
+  const have = moneyIn(pages);
+  const missing = want.filter(n => !have.has(n));
+  return { ok: missing.length === 0, missing };
+};
+
 export const numbersTraceable = (value, research) => {
   const want = digitsOf(value);
   if (!want.length) return { ok: true, missing: [] };
@@ -245,7 +305,7 @@ export const freeClaimTraceable = (value, research) => {
   return { ok: FREE_AT_THE_DOOR.test(String(research || "")) };
 };
 
-export const mergeGlance = (draft, values, fields, research = "") => {
+export const mergeGlance = (draft, values, fields, research = "", pages = "") => {
   const before = draft || {};
   const out = { ...before };
   const changed = [], kept = [], blocked = [], rejected = [];
@@ -290,6 +350,17 @@ export const mergeGlance = (draft, values, fields, research = "") => {
       if (!freeClaimTraceable(next, research).ok) {
         rejected.push({ field: f, value: next, missing: ["free"] });
         continue;
+      }
+      // And the stricter corpus for money. See moneyTraceable above. Only when
+      // pages were read, on the same discipline as `if (research)`: with none,
+      // refusing every figure would be accusing an extraction of something
+      // nothing in this run could know.
+      if (pages) {
+        const money = moneyTraceable(next, pages);
+        if (!money.ok) {
+          rejected.push({ field: f, value: next, missing: money.missing.map(n => `${n} as a price`) });
+          continue;
+        }
       }
     }
     // ── AND AN EXTRACTION MUST NOT DELETE A STATED AMOUNT ──────────

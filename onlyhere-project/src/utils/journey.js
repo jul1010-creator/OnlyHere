@@ -54,7 +54,7 @@ import { MAX_FACT_AGE_MONTHS } from "./pageScan";
 // an eighth copy, below, and it was missing "boat" and "sail" exactly as the
 // others had been. geo.js makes the argument in one line: two lists of Danish
 // transport nouns will always drift, and one list read twice cannot.
-import { FERRY_TEXT } from "./helpers";
+import { FERRY_TEXT, arrivalRow } from "./helpers";
 
 const mins = (s) => (Number.isFinite(Number(s?.mins)) ? Number(s.mins) : 0);
 
@@ -99,6 +99,27 @@ export const journeyParts = (steps, totalMinutes) => {
     // the name was in the response the whole time: you get off ride i at
     // rides[i].to and onto ride i+1 there.
     interchanges: rides.slice(0, -1).map(s => s.to || "").filter(Boolean),
+    // ── THE WALK AT THE FAR END, WHICH IS WHAT MAKES A STOP A STOP ──
+    //
+    // Oliver, 16 Sep 2026: "I'm not sure if 'nearest station' is always great..
+    // some places have train stations being hours away."
+    //
+    // `onFoot` above is every step of walking in the whole journey, including
+    // the one in Copenhagen at the start, so it cannot answer "how far is this
+    // place from the stop it arrives at". This can: it is the walking AFTER the
+    // last ride, and it is the number that decides whether an arrival point is
+    // the way you get there or a name on a map an hour away.
+    //
+    // Zero is a real answer and means the route ends at the stop itself. Null
+    // means there was no ride at all, so there is no arrival stop to speak of:
+    // a drive or a walk-only route has none, and inventing one from the nearest
+    // thing on the map is the bug arrivalStop's own note is about.
+    lastWalk: (() => {
+      let lastRide = -1;
+      list.forEach((s, i) => { if (s.mode === "transit" && mins(s) > 0) lastRide = i; });
+      if (lastRide < 0) return null;
+      return list.slice(lastRide + 1).filter(s => s.mode === "walking").reduce((n, s) => n + mins(s), 0);
+    })(),
     longest: longest ? { mins: mins(longest), vehicle: vehicleWord(longest.vehicle), line: longest.line || "", from: longest.from || "", to: longest.to || "" } : null,
     // ── AND EVERY LEG, IN ORDER, WHICH IS THE ACTUAL GUIDE ──────────
     //
@@ -190,6 +211,53 @@ export const arrivalStop = (parts) => {
   // name is bracketed keeps it rather than becoming an empty string.
   const bare = last.replace(/\s*\([^)]*\)\s*$/, "").trim();
   return bare || last;
+};
+
+// ── AND WHETHER THAT STOP IS WORTH PRINTING AT ALL ───────────
+//
+// Oliver, 16 Sep 2026, on the "nearest station" row: "some places have train
+// stations being hours away.. so it should really be changed to nearest stop..
+// or deleted all together."
+//
+// The LABEL was not the problem. arrivalRow has read the value and picked
+// between Nearest Station, Nearest Bus Stop, Ferry Terminal, Nearest Airport
+// and Nearest Metro since 7 August, and renaming all of them "stop" would have
+// made a ferry terminal read as a bus stop, which is worse. The problem is
+// DISTANCE: "Nearest Station: Struer" is true and useless when Struer is 70 km
+// away, and a reader scanning a glance card has no way to know which kind of
+// true it is.
+//
+// So the row is now earned rather than assumed, and it is earned by a
+// MEASUREMENT rather than by a judgement:
+//
+//   NO MEASURED JOURNEY, NO ROW. A stop nobody measured a route to is the
+//   model's guess about a map, which is the exact value that produced the
+//   complaint. The journey card below still shows whatever was measured.
+//
+//   TOO FAR TO WALK, NO ROW. Past the limit the stop is not how you arrive, it
+//   is a town somewhere else, and the Reality Check paragraph is where that
+//   belongs in prose.
+//
+//   OTHERWISE IT SAYS THE WALK. "Ribe St., 8 min walk" answers in four words
+//   the question the old row left open.
+//
+// The limit is its own number and is deliberately NOT SHORT_WALK_MINUTES, which
+// is 10 and answers a different question: 10 is where the walk IS the
+// connection and the draft may not send a reader to a journey planner. A
+// twenty minute walk from the station is still how you get there; it is just
+// something to plan for. Past about twenty-five nobody walks it.
+export const ARRIVAL_WALK_LIMIT = 25;
+
+export const arrivalGlanceRow = (item, kind) => {
+  const value = String(item?.nearestStation || "").trim();
+  if (!value) return null;
+  const parts = journeyFromStored(item?.__journey);
+  const walk = parts && Number.isFinite(Number(parts.lastWalk)) ? Number(parts.lastWalk) : null;
+  if (walk === null || walk > ARRIVAL_WALK_LIMIT) return null;
+  const base = arrivalRow(value, kind);
+  // Zero minutes is the route ending at the stop, and "0 min walk" reads as a
+  // measurement error rather than as good news. The name alone is the answer.
+  return walk > 0 ? { ...base, value: `${base.value}, ${walk} min walk` } : base;
 };
 
 // The block handed to the writer. Every figure carries the name of what it

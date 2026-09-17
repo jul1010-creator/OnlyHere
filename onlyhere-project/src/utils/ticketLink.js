@@ -858,9 +858,63 @@ const agentName = (agent) =>
 // Returns null rather than a best guess when nothing matches. A Tickets button
 // that is absent is a page with one fewer button. A Tickets button that is
 // wrong is a reader who paid for something else.
-export const pickTicketUrl = (results, { name, town, where = "" } = {}) => {
+// ── AND WHICH EDITION THE PAGE IS SELLING ──────────────────
+//
+// Oliver, 16 Sep 2026, reading a TinderBox run: "it even added a ticketmaster
+// link from 2022." The run log agrees, in the system's own confident words:
+//
+//   39. Ask ticketmaster.dk directly
+//   got: https://www.ticketmaster.dk/event/partout-tinderbox-2022-billetter/484597
+//        — bookable, and vetted as being about this place
+//
+// It IS about this place. That is the whole of what was vetted. The draft was
+// for June 2027 and the link sells a festival that finished four years ago, and
+// the year was sitting in the URL in plain digits the whole time.
+//
+// A stale ticket link is the worst kind of wrong link on this site: it is
+// bookable, it looks right, and a reader can reach a checkout on it. Worse than
+// no link by a wide margin, which is why this refuses rather than ranks.
+//
+// ONLY A YEAR IN THE PATH, and only a plausible edition year. A number in a
+// query string is a tracking parameter, and the id at the end of a Ticketmaster
+// path (484597) is not a date. Both are excluded by looking at the path
+// segments alone and at the 20xx range.
+const YEAR_IN_PATH = /(?:^|[^0-9])(20[0-9]{2})(?:[^0-9]|$)/g;
+
+export const urlYears = (url) => {
+  let path = "";
+  try { path = new URL(String(url)).pathname; } catch { path = String(url || "").split(/[?#]/)[0]; }
+  const out = new Set();
+  YEAR_IN_PATH.lastIndex = 0;
+  let m;
+  while ((m = YEAR_IN_PATH.exec(path)) !== null) {
+    const y = Number(m[1]);
+    // 2015 to 2099: old enough to catch a stale link, narrow enough that a
+    // product code like 2048 in some other slot is unlikely to read as a year.
+    if (y >= 2015 && y <= 2099) out.add(y);
+    YEAR_IN_PATH.lastIndex = m.index + 1;
+  }
+  return [...out];
+};
+
+// True when the URL names a year and NONE of the years it names is the one the
+// draft is about. A URL with no year is not refused: most ticket pages carry
+// none, and refusing those would leave every event without a link.
+export const wrongEdition = (url, year) => {
+  const want = Number(year);
+  if (!Number.isFinite(want) || want < 2015) return false;
+  const found = urlYears(url);
+  return found.length > 0 && !found.includes(want);
+};
+
+export const pickTicketUrl = (results, { name, town, where = "", year = null } = {}) => {
   const list = (Array.isArray(results) ? results : []).filter(r => r?.url);
-  const ok = list.filter(r => ticketMatches(r, { name, town, where }));
+  const matched = list.filter(r => ticketMatches(r, { name, town, where }));
+  // The edition filter runs AFTER the identity filter, so the log can still say
+  // "none both bookable and about this place" when that is what happened, and
+  // this only ever removes pages that were about the right place and the wrong
+  // year.
+  const ok = matched.filter(r => !wrongEdition(r.url, year));
   if (!ok.length) return null;
   // Unchanged for Tiqets: a venue page wins a tie because it shows every ticket
   // rather than choosing one for the reader.

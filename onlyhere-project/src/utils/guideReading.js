@@ -373,6 +373,37 @@ export const bookingActions = (guide, lookupRealPlace) => {
   if (days.some(d => d.glance?.stayArea || d.glance?.recommendedStay)) {
     out.push({ what: "Somewhere to sleep", why: "Small Danish towns have very few rooms, and the good ones go first in summer." });
   }
+
+  // ── AND WHEN THE WATER IS CROSSED MORE THAN ONCE ────────────
+  //
+  // Oliver, 16 Sep 2026: "If ships are used multiple times (like travelling
+  // around different islands) then warn at the beginning under the things
+  // people have to know."
+  //
+  // The per-day ferry lines above are about BOOKING a crossing, one at a time,
+  // and each is right on its own. This is about the thing that only exists when
+  // there are several: they are a chain. A missed sailing does not cost an
+  // hour, it moves everything after it, and on most Danish islands the next
+  // chance is tomorrow. That risk is not visible in any single line, which is
+  // why it goes first rather than fourth.
+  //
+  // LEGS, NOT DAYS, and that is the case worth catching: a day trip out to an
+  // island and back is two crossings on one day, and the RETURN is the sailing
+  // people miss. Counting days would have scored that trip as one and said
+  // nothing about the only leg that strands anybody.
+  //
+  // Two or more, because one crossing has no chain to break and already has its
+  // own line above.
+  const ferryLegs = days.reduce((n, d) => n + (d.glance?.legs || []).filter(l => isFerryText(l?.how)).length, 0);
+  if (ferryLegs >= 2) {
+    // unshift, so it is the first thing in the card. Everything else here is
+    // something to book; this is something to plan the days around, and it is
+    // useless once the days are fixed.
+    out.unshift({
+      what: `This trip crosses water ${ferryLegs === 2 ? "twice" : `${ferryLegs} times`}`,
+      why: "Every crossing is a timetable, and the last sailing of the day is early outside high summer. Miss one and the rest of the trip moves with it, because on most Danish islands the next chance is the next day. Check each operator's own last departure before you fix the days around it.",
+    });
+  }
   return out;
 };
 
