@@ -73,7 +73,7 @@ writeFileSync(entry, `
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel, eventLastDay } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
-  export { scopeTier, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
+  export { scopeTier, ISLANDS_SCOPE, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM, islandOf, statedIsland, namedIslandOf, islandsPresent, ISLAND_BY_KOMMUNE, ISLAND_LABEL } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES, distinctThemes } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { tierBadge, TIER_TONE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
@@ -18846,6 +18846,44 @@ rmSync(dir, { recursive: true, force: true });
   is("Tønder as a town", scopeTier("Tønder"), "town");
   is("and blank as everywhere", scopeTier(""), "everywhere");
 
+  // ── AND THE FOURTH TIER, WHICH IS NOT A PLACE ────────────────────
+  //
+  // Oliver, 17 Sep 2026, with rundtidanmark.dk/alle-danmarks-oer in hand: "I
+  // need you to make me able to add 'Islands' to the research sources as a
+  // region." It is not a region: its members are scattered across every region
+  // on the map, so no list of kommuner can hold them.
+  is("Islands is its own tier", scopeTier("Islands"), "islands");
+  is("and it stores canonical whatever he types", cleanPlace("islands"), "Islands");
+  is("in Danish too", cleanPlace("Danmarks øer"), "Islands");
+  is("and folded, so the spelling without the slash still lands", cleanPlace("danmarks oer"), "Islands");
+  // ── THE WORD THAT IS REFUSED, AND WHY ────────────────────────────
+  // In Danish, Island IS Iceland. And a source about ONE island belongs scoped
+  // to that island by name, where it reaches the island's own entry, the towns
+  // on it and anything that uses it as a base.
+  is("the singular is not this tier", scopeTier("Island"), "town");
+  is("and a named island is a town-tier scope", scopeTier("Ærø"), "town");
+  // ── WHAT AN ISLANDS SOURCE FIRES ON ──────────────────────────────
+  const aeroe = { name: "Ærøskøbing", region: "Sydfyn", part: "Funen", island: "Ærø" };
+  const samsoFest = { name: "Samsø Festival", region: "Østjylland", island: "Samsø" };
+  const aarhus = { name: "Aarhus", region: "Østjylland", part: "Jutland" };
+  ok("rundtidanmark reaches a town on an island", placeMatches("Islands", aeroe));
+  ok("and a festival on one, which is not an island entry", placeMatches("Islands", samsoFest));
+  ok("and stays off Aarhus", !placeMatches("Islands", aarhus));
+  ok("and off a draft nothing could place", !placeMatches("Islands", { name: "Somewhere" }));
+  // THE FALLBACK THAT WOULD HAVE MADE THIS USELESS. islandOf answers the part
+  // of the country when it cannot name an island, so Copenhagen comes back
+  // "Zealand" — true, and it would have put this source on most drafts in the
+  // country. The context carries namedIslandOf, which stops one tier earlier.
+  ok("a Zealand draft is not an island draft", !placeMatches("Islands", { name: "Copenhagen", part: "Zealand", region: "Storkøbenhavn" }));
+  // AND NO TEXT FALLBACK. Research about any Danish coast says "islands"
+  // constantly, and the loose test would attach this source to most drafts in
+  // the country at four searches a time.
+  ok("the research text cannot unlock it",
+     !placeMightMatch("Islands", { name: "Skagen", text: "boats leave for the islands every hour" }, "town"));
+  ok("not even on a draft nothing has placed",
+     !placeMightMatch("Islands", { name: "Somewhere", text: "one of the Danish islands" }, "festival"));
+  ok("while a real island draft still passes the loose test", placeMightMatch("Islands", aeroe, "town"));
+
   // ── WHAT A SØNDERJYLLAND SOURCE ACTUALLY FIRES ON ────────────────
   const romo = { name: "Rømø Sandskulptur", region: "Sønderjylland", part: "Jutland" };
   const skagen = { name: "Skagen Festival", region: "Nordjylland", part: "Jutland" };
@@ -18969,6 +19007,26 @@ rmSync(dir, { recursive: true, force: true });
   ok("the picker offers the regions", /\{REGION_NAMES\.map\(x => <option key=\{x\} value=\{x\}>region/.test(appR));
   ok("and the row says which tier it was understood as", /const tier = scopeTier\(row\.applies_place\);/.test(appR));
   ok("and names the kommuner behind a region", /kommunerIn\(row\.applies_place\)/.test(appR));
+  // ── AND THE ONE TIER NOTHING ABOUT THE WORD WOULD SUGGEST ────────
+  // A scope he cannot type is a scope that does not exist, and "Islands" is not
+  // a place name, so it has to be offered rather than merely accepted.
+  ok("the picker offers the islands scope", /<option value=\{ISLANDS_SCOPE\}>/.test(appR));
+  ok("and the box says so", /only for… \(Islands, a region, a town, or Jutland\)/.test(appR));
+  ok("and the row labels that tier in words", /islands: "any island"/.test(appR));
+  // ── AND THE DRAFT CARRIES THE FIELD IT MATCHES ON ────────────────
+  // The scope asks ctx.island and nothing else, so a context builder that does
+  // not set it is the scope matching nothing, quietly, forever.
+  ok("the draft works out whether it is on an island",
+     /const islandHere = \(\) => \(sType === "island" \? name : namedIslandOf\(\{ island: knownIsland \}, placed\?\.kommune \|\| ""\)\);/.test(appR));
+  // BOTH builders, or the source reaches the prompt and never gets searched.
+  is("and both context builders carry it", (appR.match(/island: islandHere\(\),/g) || []).length, 2);
+  // namedIslandOf, never islandOf: the fallback would make Copenhagen an island.
+  // The word boundary is load-bearing. Without it this matched `_island:
+  // islandOf(` on the attractions filter, which is a different field on a
+  // different page and is RIGHT to use the fallback: that control has one
+  // geography row and must leave nothing unreachable.
+  ok("the island in a source context is a named one, not the landmass fallback",
+     !/\bisland: islandOf\(/.test(appR));
 }
 
 // ── REACHING EVERY SOURCE HE HAS ADDED ─────────────────────────────

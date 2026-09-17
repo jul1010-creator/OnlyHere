@@ -151,7 +151,7 @@ import { branchesOf, branchCandidates, branchFromCandidate, mergeBranches, branc
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance, staleUncertainties, describeStale } from "./utils/glanceExtract";
 import { showsJourney, journeyOriginFor, journeyOriginPoint, IS_THE_CENTRE_KM } from "./utils/journeyScope";
 import { readableOn } from "./utils/readableColor";
-import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive, isNeverOwnSite, isNeverASource } from "./utils/sourcePolicy";
+import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, ISLANDS_SCOPE, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive, isNeverOwnSite, isNeverASource } from "./utils/sourcePolicy";
 import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn, danishAddressIn } from "./utils/regions";
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
 import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoice";
@@ -3554,6 +3554,13 @@ Say which answer came from which source, so a fact from a vouched page and a fac
     // from the moment it shipped. It now has to live even higher, because the
     // location lookup below runs before that block exists at all.
     let draftTown = "";
+    // ── AND WHETHER IT IS ON AN ISLAND, KEPT THE SAME WAY ───────────
+    // Beside draftTown and for the identical reason: it is read off the
+    // published row inside the location block below, which closes long before
+    // either context builder runs. A source scoped to Islands matches on this
+    // and on nothing else, so losing it here is the scope silently matching
+    // nothing, which is the shape this file keeps finding.
+    let knownIsland = "";
     // ── AND THE NAME A LOOKUP RESOLVES, KEPT ────────────────────────
     // Beside draftTown because it has the same lifetime: found before the
     // research runs, needed long after it. Oliver's Jomfru Ane Gade draft came
@@ -3619,6 +3626,9 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       const existingRow = (manageItems || []).find(r => r?.type === sType && samePlaceName(r?.payload?.name, name));
       const knownRow = existingRow?.payload || null;
       draftTown = knownRow?.town || knownRow?.city || knownRow?.location || hint?.town || townKeyFor(name) || "";
+      // The row's own stated island only. The kommune half is asked later, in
+      // islandHere, because the kommune is not known until the coordinate is.
+      knownIsland = namedIslandOf(knownRow || {}, "");
       let coords = null, via = "", precise = true;
       // A published row already holds a reviewed coordinate. Cheapest and best.
       const knownCoord = placeCoords(knownRow || {});
@@ -3778,11 +3788,29 @@ Say which answer came from which source, so a fact from a vouched page and a fac
     // it, which is the field the towns page had to stop using because it held
     // twelve spellings of five places. It does not get to decide which tourist
     // board gets paid.
+    // ── IS THIS DRAFT ON AN ISLAND ──────────────────────────────────
+    //
+    // Oliver, 17 Sep 2026: "I need you to make me able to add 'Islands' to the
+    // research sources as a region." This is the field that scope matches on.
+    //
+    // Three ways to know, strongest first. An ISLAND entry is one by
+    // definition, which is the only route Sejerø has, since its kommune is
+    // mostly Zealand mainland. A published row may state one. And seven
+    // kommuner ARE their island, which is data/kommuner.js rather than a list
+    // invented here. namedIslandOf stops before the part-of-country fallback on
+    // purpose: with it, Copenhagen would be an island.
+    //
+    // A FUNCTION AND NOT A VALUE, because `placed` is still null when this line
+    // runs and can be set twice, once by the location lookup and again by the
+    // venue retry. Read at call time, both builders see the same answer, which
+    // is the thing the sourceCtx comment below was written about.
+    const islandHere = () => (sType === "island" ? name : namedIslandOf({ island: knownIsland }, placed?.kommune || ""));
     const researchWhere = () => ({
       name,
       town: draftTown || "",
       region: placed?.region || "",
       kommune: placed?.kommune || "",
+      island: islandHere(),
       part: placed ? (partOfCountry({ __lat: placed.lat, __lon: placed.lon }) || "") : "",
     });
     setStudioStage({ label: "Planning what to research", percent: 5 });
@@ -4506,6 +4534,11 @@ Say which answer came from which source, so a fact from a vouched page and a fac
           dayTripFrom: known?.dayTripFrom || "",
           part: partHere || "",
           region: placed?.region || (known ? regionOf(known) : ""),
+          // The same call researchWhere makes, so the source that reaches the
+          // PROMPT is the source that gets SEARCHED. Two builders answering
+          // differently is how a founder source ends up quoted at a model that
+          // was never sent to look at it.
+          island: islandHere(),
         };
         const searches = directSourceSearches(founderSources, sType, sourceCtx);
         // ── WHICH SOURCES WERE CHOSEN, AND FROM WHAT ──────────────────
@@ -20261,12 +20294,14 @@ ${languageBlock()}`;
                                 something he should have to guess at. */}
                             {row.applies_place && (() => {
                               const tier = scopeTier(row.applies_place);
-                              const label = { region: "region", part: "part of the country", town: "town" }[tier] || tier;
+                              const label = { region: "region", part: "part of the country", town: "town", islands: "any island" }[tier] || tier;
                               const inIt = tier === "region" ? kommunerIn(row.applies_place) : [];
                               return (
-                                <span title={inIt.length ? `${label} — ${inIt.join(", ")} Kommune` : label}
+                                <span title={inIt.length ? `${label} — ${inIt.join(", ")} Kommune`
+                                  : tier === "islands" ? "Every draft the app can place on a named island, whichever region it is in. An island entry always counts; a town, a restaurant or a festival counts when its kommune is the island or the published row names one."
+                                    : label}
                                   style={{ fontSize: 10, fontWeight: 700, color: "#8AB4F8", background: "#8AB4F818", border: "1px solid #8AB4F844", borderRadius: 100, padding: "2px 9px", flexShrink: 0 }}>
-                                  {tier === "region" ? "🗺" : "📍"} {cleanPlace(row.applies_place)}
+                                  {tier === "region" ? "🗺" : tier === "islands" ? "⛴" : "📍"} {cleanPlace(row.applies_place)}
                                   <span style={{ opacity: 0.62, fontWeight: 600 }}> · {label}</span>
                                 </span>
                               );
@@ -20308,7 +20343,7 @@ ${languageBlock()}`;
                         </div>
                         <input value={newSourcePlace} onChange={e => setNewSourcePlace(e.target.value)}
                           onKeyDown={e => { if (e.key === "Enter") addSource(); }}
-                          list="gemlyx-source-places" placeholder="only for… (a region, a town, or Jutland)"
+                          list="gemlyx-source-places" placeholder="only for… (Islands, a region, a town, or Jutland)"
                           style={{ width: 210, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
                         {/* ── REGIONS, WHICH IS THE ONE HE ASKED FOR ────────
                             Labelled in the option itself rather than left as a
@@ -20316,6 +20351,10 @@ ${languageBlock()}`;
                             "Sønderjylland" sitting between "Slagelse" and
                             "Skagen" reads as another town. */}
                         <datalist id="gemlyx-source-places">
+                          {/* First in the list because it is the one tier that
+                              is not a place name, so nothing about the word
+                              would suggest the box accepts it. */}
+                          <option value={ISLANDS_SCOPE}>any island, whichever region it is in</option>
                           {REGION_NAMES.map(x => <option key={x} value={x}>region · {kommunerIn(x).slice(0, 4).join(", ")}{kommunerIn(x).length > 4 ? "…" : ""}</option>)}
                           {PARTS_OF_COUNTRY.map(x => <option key={x} value={x}>part of the country</option>)}
                           {towns.map(t => t.name).filter(Boolean).sort().map(n => <option key={n} value={n}>town</option>)}
@@ -20329,6 +20368,7 @@ ${languageBlock()}`;
 A note is worth writing: "the operator's own timetable" tells the model when to reach for it, which is most of the value.
                         {" "}Leave "only for" blank for a national source. A city's tourist office belongs to that city: VisitCopenhagen on an Aarhus draft costs money on all seven research calls and invites a Copenhagen page being read as an authority on Aarhus.
                         {" "}A <b>region</b> is the tier between those two, and it is what a Danish tourist board usually covers: visitsonderjylland.dk scoped to Sønderjylland reaches Tønder, Sønderborg, Aabenraa, Haderslev and Rømø without a row each, and stays off a Skagen draft. Which region a draft is in is worked out from its coordinate before anything is searched, so an event gets one too, and a draft nothing could place gets no place-scoped sources at all.
+                        {" "}<b>Islands</b> is the odd one and it is not a place: it reaches every draft the app can put on a named island, in any region, so rundtidanmark.dk scoped to Islands rides along on Sejerø, on a festival on Samsø and on Ærøskøbing, and stays off Aarhus. It is the scope, not the type: leave the type on Everything unless the source is only good for island entries. One island of its own goes in by NAME instead, which also reaches the towns on it.
                       </div>
                       {/* ── AND WHAT THE REGIONS ARE ─────────────────────
                           Folded away, because it is a reference list rather

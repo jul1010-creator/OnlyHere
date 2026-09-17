@@ -1,0 +1,1221 @@
+// ── SOURCES YOU ADD, WITHOUT ASKING ANYONE TO EDIT CODE ─────────────
+//
+// Oliver, 8 Aug 2026: "I'd like to be able to write in sources that I demand
+// Perplexity/Tavily research through. So I don't need to write directly to you
+// all the time about sources that they have to include in their research.
+// Perhaps it should be able to be applied universally for every research."
+//
+// The machinery already existed and was welded shut. `RESEARCH_SOURCE_RULES` in
+// App.jsx has been appended to every research prompt for weeks, telling the
+// models to check Wikipedia and the venue's own site, and how to break a tie
+// between them. It is exactly the right shape and it is a hardcoded string, so
+// changing it meant a commit, which meant asking me. This makes the same thing
+// editable and stored, and leaves the hardcoded rules underneath as the floor.
+//
+// ── "I'M NOT SAYING ONLY.. I'M SAYING INCLUDE" ──────────────────────
+// Oliver, correcting me the moment I described this as a restriction, and he is
+// right. This is a list of pages he has found and vouched for, growing as he
+// finds more: "so if I find new tourism pages, I'll use that." The instruction
+// is ADD THESE, not USE ONLY THESE.
+//
+// The distinction is not pedantry, it decides whether the feature helps. Point a
+// search model at four domains and a small Danish village with no page on any of
+// them comes back empty, when an unrestricted search would have found the parish
+// council's PDF. An empty research pass is not a safer answer than a sourced
+// one, it is just a worse one.
+//
+// So: include them every time, prefer them over an anonymous aggregator when
+// they disagree, and keep searching everything else exactly as before.
+//
+// ── AND IT MAY NOT OVERRIDE THE VENUE ON THE VENUE ──────────────────
+// The standing rule already says the official site wins on anything current: a
+// price, an opening hour, a ferry departure. A founder list that quietly
+// outranked that would let a tourist board's stale page beat the operator's own
+// timetable, which is the single error class this project has spent the most
+// time on. The block below says so out loud, every time.
+
+import { samePlaceName, otherNameFor, variantsOf, spellingsIn, fold, containsName, distinctiveWords } from "./danishNames";
+import { canonicalRegion, isRegion, regionPart, REGION_NAMES } from "./regions";
+
+const clean = (v) => String(v == null ? "" : v).trim();
+
+// ── "visitsønderjylland.dk" IS NOT A DOMAIN, AND HE WAS ABOUT TO TYPE IT ──
+// Oliver named that exact address on 13 Aug 2026 as the source he wanted to
+// add. The shape test below allows `[a-z0-9-]`, ø is not in it, and the panel
+// would have answered "is not a domain I can use" about a site that exists.
+//
+// The real address is visitsonderjylland.dk in plain letters, which is how
+// nearly every Danish site is registered: ø, æ and å reach DNS only through
+// punycode and the tourist boards did not bother. So the Danish spelling is
+// not a typo, it is what the place is CALLED, typed by somebody who knows it,
+// and folding it is what this app already does with Danish letters everywhere
+// else. fold() also settles Århus against Aarhus, the same problem in a
+// hostname, which has already bitten the search index once.
+//
+// The fold runs BEFORE the shape test, so the test refuses everything it
+// refused before. Nothing here gets looser except which letters count.
+//
+// AND IT MUST NOT SWALLOW SPACES. The first version stripped whitespace as
+// well, which put it in front of the `includes(" ")` guard on the next line and
+// quietly turned "hello world.dk" into a domain this app would then search
+// forever. Caught by the assertion that nothing previously refused is accepted
+// now, which is the shape of test worth writing whenever a validator is
+// loosened at all: the interesting question is never what it accepts.
+// fold() already collapses runs of whitespace and trims, so a real space
+// survives to be refused.
+const asciiHost = (s) => fold(s);
+
+// Accepts whatever gets pasted: a full URL, a bare host, a host with www, a
+// trailing slash. Returns the bare host, or "" when it is not a domain at all.
+// Deliberately strict about the shape, because a typo here is a rule the models
+// will dutifully try to honour on every draft forever.
+export const normaliseDomain = (input) => {
+  let s = clean(input).toLowerCase();
+  if (!s) return "";
+  s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//, "");   // protocol
+  s = s.split(/[/?#]/)[0];                        // path, query, fragment
+  s = s.replace(/^www\./, "").replace(/\.+$/, "");
+  s = s.split("@").pop();                          // somebody pasting an email
+  s = asciiHost(s);
+  if (s.includes(" ") || s.length < 4 || s.length > 100) return "";
+  // A real host: at least one dot, sane characters, and a TLD of letters.
+  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,24}$/.test(s)) return "";
+  return s;
+};
+
+// A note is what the source is FOR, and it is not decoration: "the operator's
+// own timetable" tells the model when to reach for it, which is most of the
+// value. Capped because it lands in every prompt.
+export const cleanNote = (v) => clean(v).replace(/\s+/g, " ").slice(0, 160);
+
+// "" means every content type. Anything else must be a type the Studio actually
+// drafts, or the rule is dead and nobody can tell.
+// "essential" is not a place. It is the practical layer: tickets, cards, apps,
+// plugs, fines. Oliver, 10 Aug 2026, on a friend's tip about visitor ticketing
+// and then, immediately after, the real question: "the whole essentials gotta
+// be kept updated at all time. How do we manage that?"
+//
+// Until now these were thirteen objects hardcoded in src/data/essentials.js.
+// The most perishable content in the app, prices and apps and card systems, was
+// the ONLY content that never went near the research pipeline, while a town
+// entry gets two research passes and a fact-check. Making it a real type is how
+// it gets sources, a verdict, and a way to be re-checked rather than remembered.
+// ── "I DON'T KNOW HOW TO RECOMMEND GOTHERSGADE" ─────────────────────
+// Oliver, 15 Aug 2026: "it's technically in Copenhagen.. but it's a bar street
+// with bars.. same with Jomfru Ane Gade. Perhaps make a nightlife 'street'
+// section as well that goes under towns. So gothersgade goes into Copenhagen
+// along with bars. And then perhaps you should be able to click on the
+// different bars and clubs after clicking on the street."
+//
+// A bar street is not a bar and it is not a town. It is the level between,
+// and it needs its own research because the questions are different: which
+// nights it is busy, which end is which, what it costs to get in along it, how
+// it feels at two in the morning. Asking a strip of twenty bars the questions
+// written for one bar is how you get twenty generic paragraphs.
+//
+// foodStreet already made this exact move for food, and it made it as a FLAG on
+// an ordinary food row, which is why a food street has never been able to list
+// what is on it. This one is a type of its own so that it can.
+// ── AND AN ISLAND IS NOT A TOWN, WHICH IS A DIFFERENT CLAIM FROM THE
+//     ONE geography.js MAKES ─────────────────────────────────────────
+//
+// geography.js:306 argues, correctly, that "island" must not be a value in
+// PLACE_KINDS: "Sejero IS an island; AEroskobing is a town ON one. One field
+// answers both." That argument is about a town's SIZE and it still stands. The
+// `island` FIELD on a town row is untouched by this type and keeps doing its
+// job.
+//
+// This type answers a question that field cannot: what is the page ABOUT
+// Bornholm? Not a town on Bornholm, not a tag on Ronne, but the island itself,
+// which has a crossing, an operator, a season and a reason to stay three days.
+// Oliver, 16 Sep 2026: "I think we should make 'islands' their own navigation.
+// Instead of being part of towns. There are alot of islands."
+//
+// It is deliberately LAST in this list. Every per-type table in the repo is
+// keyed rather than ordered, but three test anchors read the FIRST literal of a
+// block, so appending is the one position that cannot move somebody else's
+// anchor.
+export const CONTENT_TYPES = ["town", "festival", "free", "food", "foodStreet", "night", "nightStreet", "nightTown", "booking", "essential", "island"];
+export const TYPE_LABEL = {
+  "": "Everything", town: "Towns", festival: "Events", free: "Attractions", food: "Food",
+  foodStreet: "Food streets", night: "Nightlife", nightStreet: "Bar streets", nightTown: "Nightlife towns", booking: "Workshops", essential: "Essentials",
+  island: "Islands",
+  // ── A LABEL FOR A TYPE THAT IS DELIBERATELY NOT DRAFTABLE ─────────
+  // "undated" is a real row type in gemlyx_content and is deliberately NOT in
+  // CONTENT_TYPES above: nothing drafts one from scratch and no source can be
+  // scoped to one. It is only ever produced by the date gate, from a festival
+  // draft that passed every other check. It needs a label anyway, because the
+  // Manage panel groups by type and would otherwise head the group "undated".
+  // See utils/undatedEvents.js.
+  undated: "No confirmed date yet",
+};
+
+// ── A VENUE CALLED "TRAIN" POISONS ITS OWN RESEARCH ─────────────────
+//
+// Oliver, 15 Aug 2026, on the __sources of an Aarhus concert-hall draft:
+// "this is what I mean with old sources".
+//
+// Three of the eight sources on that draft were about railways:
+//
+//     ricksteves.com/travel-tips/transportation/trains/denmark-rail-passes
+//     interrail.com/.../trains-country/trains-denmark
+//     baekdal.com/article/the-trainwreck-called-quora-and-why-we-dont-need-it
+//
+// The venue is called Train. The relevance filter asks one question, does the
+// snippet mention the place's name, and every page about Danish rail travel
+// says "train" in the first sentence. The third one is an article about Quora.
+//
+// This is the same failure as "we would ALSO like a beach" matching the island
+// Als, one level up: a name that is an ordinary word cannot identify anything
+// on its own, and the boundary check that fixed Als does nothing here, because
+// "train" really is the whole word on those pages.
+//
+// The rule that does work is CORROBORATION. A page is about this place if it
+// says the name AND one other thing that ties it to this place: the town, the
+// venue's own domain, or a word from the name that is not an ordinary word.
+// A page that only says the name, when the name is an ordinary word, is not
+// evidence of anything.
+//
+// Deliberately NOT applied to every name. "Ærøskøbing" or "Ny Carlsberg
+// Glyptotek" identify themselves, and demanding a second signal from them
+// would throw away good sources to solve a problem they do not have. The test
+// is whether the name carries a distinctive word at all.
+const COMMON_NAME_WORDS = new Set([
+  // Ordinary English and Danish words that are also real Danish venue names.
+  // Each one is a name this app either holds or plausibly will.
+  "train", "rust", "vega", "pumpehuset", "loppen", "stengade", "nord", "syd",
+  "culture", "box", "the", "old", "irish", "pub", "bar", "cafe", "kaffe",
+  "huset", "hus", "hall", "room", "space", "studio", "works", "yard",
+  "station", "bridge", "harbour", "harbor", "beach", "garden", "park",
+  "north", "south", "east", "west", "city", "town", "street", "gade",
+]);
+
+// True when the NAME alone is enough to identify the place: it contains at
+// least one word that is neither generic (GENERIC_PLACE_WORDS) nor an ordinary
+// word that happens to be a venue name.
+export const nameIsDistinctive = (name) => {
+  const words = distinctiveWords(name);
+  return words.some(w => !COMMON_NAME_WORDS.has(w));
+};
+
+// ── TWO QUESTIONS ABOUT A HOST, AND ONLY ONE HAD A NAME ─────────────
+//
+// Oliver's Gothersgade draft, 16 August 2026. Eight sources, and six of them are
+// hosts the research pass had already refused: three Wikipedias, a VisitDenmark
+// page and a hotel aggregator. They reached the reader-facing list because
+// App.jsx carried TWO regexes, one at the official-site picker and one at the
+// sources list, and the second was missing half the first.
+//
+// THE TWO LISTS WERE NOT A DUPLICATION BUG. App.jsx already argues the reason,
+// about GetYourGuide: it "is never the official website of anything", and it
+// "answers one question better than any official site does: what can you
+// actually BOOK here, for how much, and does it sell out". Both true. The bug is
+// that only one of those two questions had a name, so the second list was
+// maintained as a vaguer copy of the first and drifted.
+//
+//   isNeverOwnSite   this host is not the place's own website. A reseller, an
+//                    encyclopedia, a tourist board, a social feed. Excellent
+//                    evidence, wrong answer for the officialSite field.
+//   isNeverASource   this host is not evidence of anything. An accommodation
+//                    aggregator whose page exists because the street has a
+//                    postcode, a social feed with no editing.
+//
+// Wikipedia sits in the FIRST and not the second on purpose: pageScan already
+// classes it as a "reference" source, ranked below an operator and above
+// nothing, which is right. An encyclopedia is a real source about a street's
+// history and no source at all about who drinks there on a Tuesday, and that
+// second half is not a host problem. See sourceFit in utils/entryAudit.js.
+const NEVER_OWN_SITE = /tripadvisor|booking\.com|expedia|hotels|hostelworld|airbnb|agoda|trivago|kayak\.|momondo|getyourguide|viator|tiqets|headout|klook|musement|yelp|facebook|instagram|twitter|x\.com|youtube|reddit|quora|pinterest|tiktok|google\.|wikipedia|wikivoyage|directferries|rome2rio|lonelyplanet|visitdenmark/i;
+
+// Strictly smaller, and every omission is deliberate. A reseller listing proves
+// a tour runs; an encyclopedia is a real reference; a tourist board is on the
+// founder's own vouched list. None of those belong here. What belongs here is a
+// page that exists only because an address exists.
+const NEVER_A_SOURCE = /tripadvisor|booking\.com|expedia|hotels|hostelworld|airbnb|agoda|trivago|kayak\.|momondo|facebook|instagram|twitter|x\.com|youtube|reddit|quora|pinterest|tiktok|google\.|yelp/i;
+
+const hostOfUrl = (u) => {
+  try { return new URL(String(u)).hostname.replace(/^www\./, ""); } catch { return ""; }
+};
+
+export const isNeverOwnSite = (url) => {
+  const h = hostOfUrl(url);
+  return !!h && NEVER_OWN_SITE.test(h);
+};
+
+export const isNeverASource = (url) => {
+  const h = hostOfUrl(url);
+  return !!h && NEVER_A_SOURCE.test(h);
+};
+
+// Asserted rather than assumed, because the whole failure was these two drifting
+// apart: anything refused as a SOURCE must also be refused as the own site. The
+// reverse does not hold and that is the point of having two.
+export const SOURCE_RULES_NEST = ["tripadvisor.com", "booking.com", "hotelscopenhagen.org", "facebook.com", "yelp.com"]
+  .every(h => NEVER_A_SOURCE.test(h) && NEVER_OWN_SITE.test(h));
+
+// ── "ONE SOURCE? WHAT DA FK" ────────────────────────────────────────
+//
+// Oliver, 16 August 2026, on a finished draft for the paper art museum in Hune,
+// whose __sources array held exactly one URL: the museum's own website.
+//
+// The research had not failed. THE NAME HAD DISQUALIFIED ITS OWN SOURCES. The
+// draft is titled "Det Nye Museum for Papirkunst". The museum is called Museum
+// for Papirkunst, which is also its domain, museumforpapirkunst.dk. containsName
+// is a whole-phrase test, correctly so, and every page that calls the place by
+// its real name therefore failed to name the place:
+//
+//   "Museum for Papirkunst i Hune viser papirkunst fra hele verden"   refused
+//   "Oplev Museum for Papirkunst i Hune, Nordjylland"                 refused
+//   "Bit Vejle har skabt Museum for Papirkunst"                       refused
+//
+// The one URL that survived did so through the ownHost line below, which is a
+// shortcut past the relevance test rather than a pass of it. So the count was
+// not one source. It was zero sources and a website.
+//
+// AND THE COST IS NOT THE COUNT. The draft states four prices, 90, 50, 160 and
+// 120 DKK, and its own audit note says none of them appear anywhere in the
+// official site's text. They came off one of the pages above, that page was
+// discarded as irrelevant, and the FIGURE outlived its provenance. An empty
+// source list also reads as "a place too small to have been written about",
+// which the comment beside __sources says in as many words, so nothing anywhere
+// looked wrong.
+//
+// A LEADING ARTICLE IS NOT PART OF WHAT SOMEWHERE IS CALLED. "Det Nye Museum
+// for Papirkunst" and "Museum for Papirkunst" are one museum, and a longer name
+// must not be harder to corroborate than the short one it contains.
+//
+// STRIPPED FROM A CLOSED LIST, AND ONLY FROM THE FRONT. Not "any subset of the
+// words", which would make "Den Gamle By" match "det gamle rådhus", the exact
+// shape of the alias bug that put a museum in Aarhus on a Ribe card. Only a
+// leading run of articles and new/old markers, stopping at the first word that
+// is not one, and only while a distinctive word still survives in the remainder:
+// "Den Gamle By" gives up "Den" and keeps "Gamle By", because dropping "Gamle"
+// would leave the generic word "By" to match on its own.
+const LEADING_WORDS = new Set([
+  "det", "den", "de", "dette", "disse", "en", "et",
+  "the", "a", "an",
+  "ny", "nye", "nyt", "new",
+]);
+
+export const nameCore = (name) => {
+  const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+  const needed = distinctiveWords(name);
+  if (!needed.length) return "";
+  let out = words;
+  while (out.length > 1 && LEADING_WORDS.has(fold(out[0]))) {
+    const rest = out.slice(1);
+    // Never strip past the last distinctive word: what is left has to still be
+    // the name of something rather than a category. Reachable, and the case that
+    // proves it is not obvious: distinctiveWords keeps any word of four letters
+    // or more, so of everything in LEADING_WORDS only "dette" and "disse"
+    // qualify. "Dette Museum" therefore has "dette" as its ONLY distinctive
+    // word, and without this line the core would be the bare word "Museum",
+    // which would make every page containing it a source.
+    if (!needed.every(w => distinctiveWords(rest.join(" ")).includes(w))) break;
+    out = rest;
+  }
+  const core = out.join(" ");
+  return core === words.join(" ") ? "" : core;
+};
+
+// The corroborating signals, in the order they are worth anything. `ownHost` is
+// the place's own website: a page ON the venue's own domain is about the venue,
+// full stop, and needs no second signal.
+// ── AND A TYPO EMPTIED A SOURCE LIST TOO ────────────────────────────
+//
+// Oliver, 16 August 2026, on a Jomfru Ane Gade draft: "The streets are for some
+// reason quite wrong." Its __sources was EMPTY, and step 7 of that same run had
+// already ranked eight pages: a Danish Wikipedia article, two TripAdvisor pages
+// and five GetYourGuide ones.
+//
+// The name he typed was "Jomfru ane gadee". Every snippet was tested for
+// containing that, no page on earth contains it, so every source was refused.
+//
+// AND THE APP HAD THE RIGHT NAME BEFORE IT SEARCHED. Step 1, at 0.8 seconds:
+// Google Places "found it as Jomfru Ane Gade, 9000 Aalborg". That resolved name
+// was used to build a log string and thrown away. The draft's own uncertainties
+// then say "The input spelling 'Jomfru ane gadee' was corrected to the street's
+// actual name", so the WRITER knew as well. Two parts of the pipeline had the
+// real name and the one filter that needed it had the typo.
+//
+// Third instance today of the same shape: nameCore this morning, sourceFit this
+// afternoon, and now this. The measurement existed and nothing read it.
+//
+// `alsoKnownAs` is for exactly that: other spellings something upstream RESOLVED,
+// not spellings guessed here. Passing Google's own answer is no more trusting
+// than the app already is, since it takes the coordinate from the same lookup.
+// ── AND A DISTINCTIVE STREET NAME IDENTIFIES NO STREET ──────────────
+//
+// The rule below lets a distinctive name skip corroboration, on the grounds
+// that a name which identifies itself needs no second signal. A Danish street
+// name breaks that grounding without looking like it does. "Vestergade" is one
+// compound word, so nameIsDistinctive says yes, and there is a Vestergade in
+// Aarhus, Odense, Middelfart and a dozen towns besides. A page about any of
+// them was accepted as a source about this one, with no town check at all.
+//
+// `theNameIsAStreet` forces the corroboration step instead of skipping it. The
+// page has to say the town, or the host has to carry a distinctive word from the
+// name, which is exactly what the file already demands of an ordinary name and
+// of a half of a two-part one: "a page matched only on a half still has to be
+// corroborated by the town or by the host".
+export const sourceIsAboutPlace = (snippet, { name, town, url = "", ownHost = "", alsoKnownAs = [], theNameIsAStreet = false } = {}) => {
+  const said = String(snippet || "");
+  if (!said.trim()) return false;             // never saw the page, so it is not a source
+  const host = normaliseDomain(url);
+  if (ownHost && host && host === normaliseDomain(ownHost)) return true;
+  // Every resolved spelling gets the same treatment as the typed one, core and
+  // all, so "Jomfru Ane Gade" from Google Places carries the same weight as what
+  // was typed and a leading-article variant of it still works.
+  const typed = [String(name || ""), ...(Array.isArray(alsoKnownAs) ? alsoKnownAs : [])]
+    .map(v => String(v || "").trim()).filter(Boolean);
+  // ── AND "X (Y)" IS TWO NAMES, NOT ONE LONG ONE ─────────────────
+  //
+  // The Latin Quarter run, 1 Sep: about seventy pages fetched, ONE survived
+  // this filter, and the entry published with a single source under a heading
+  // promising the reader how we know. Nothing was wrong with the pages. The
+  // name was "The Latin Quarter (Latinerkvarteret)" and this list held only
+  // that one contiguous phrase, which no page writes — not the English one,
+  // not the Danish one, not the page that says "The Latin Quarter (Danish:
+  // Latinerkvarteret)".
+  //
+  // A founder typing a parenthetical is writing down the OTHER name for the
+  // place, and that is the spelling the local pages use. See spellingsIn.
+  const halfNames = typed.flatMap(v => spellingsIn(v).slice(1));
+  const spread = (v) => {
+    const core = nameCore(v);
+    return [...variantsOf(v, { includeSights: true }), ...(core ? [core] : [])];
+  };
+  const spellings = [...new Set([...typed, ...halfNames].flatMap(spread))];
+  // ── BUT A HALF IS WEAKER EVIDENCE THAN THE WHOLE ────────────────
+  //
+  // The reason he wrote both halves is that either alone is ambiguous — that is
+  // what a disambiguator IS. "Latin Quarter" is distinctive enough to skip the
+  // corroboration below on its own, and it is also the name of a famous quarter
+  // of Paris. So a page matched only on a half still has to be corroborated by
+  // the town or by the host, exactly as an ordinary name is.
+  const fromAHalf = new Set(halfNames.flatMap(spread).map(v => fold(v)));
+  // WHICH spellings the page used, not merely whether one of them did. The
+  // difference decides the next line, and getting it wrong accepted a railway
+  // page: "Trainn" is a typo of an ordinary-word venue name and is itself
+  // distinctive, so judging distinctiveness on ANY supplied spelling let the typo
+  // vouch for a page that only ever said "train". Caught by the test on its first
+  // run, on the same venue the ordinary-word rule was written for.
+  const matched = spellings.filter(v => v && containsName(said, v));
+  if (!matched.length) return false;
+  // Distinctive on the spelling the page used. A name that identifies itself
+  // needs no second signal; a typo of an ordinary word identifies nothing and
+  // never gets to claim it does.
+  if (!theNameIsAStreet && matched.some(v => nameIsDistinctive(v) && !fromAHalf.has(fold(v)))) return true;
+  // An ordinary name has to be corroborated. The town is the strongest signal
+  // and the one always available; the host containing a distinctive word from
+  // the name is the second.
+  if (town && variantsOf(town).some(v => v && containsName(said, v))) return true;
+  const distinct = matched.flatMap(v => distinctiveWords(v)).filter(w => !COMMON_NAME_WORDS.has(w));
+  if (distinct.length && host && distinct.some(w => host.includes(w))) return true;
+  return false;
+};
+
+// ── A CATEGORY THE PAGE DOES NOT LOOP OVER IS A ROW THAT VANISHES ───
+//
+// The essential draft prompt demands one of exactly seven categories. The
+// Essentials page rendered five of them. A published essential filed under
+// "Culture & Etiquette" or "Solo Travel" wrote to the database, merged cleanly
+// into the essentials array, and appeared nowhere: the two anchors with those
+// names are hardcoded prose blocks that read no data at all. The one already
+// hardcoded row in src/data/essentials.js, "Overtourism in Central
+// Copenhagen", is filed under a category the loop never asked for and has been
+// invisible on the live site since it was written.
+//
+// One list now, read by the prompt that demands the value and by the loop that
+// renders it, so neither can grow a category the other has never heard of.
+// `anchor` is the quick-jump target, and it is part of the definition rather
+// than a second list beside it.
+export const ESSENTIAL_CATEGORIES = [
+  { cat: "Flights & Buses", anchor: "ess-flights", icon: "\u2708\ufe0f", color: "#6A1B9A" },
+  { cat: "Transport", anchor: "ess-transport", icon: "\ud83d\ude87", color: "#00838F" },
+  { cat: "Payments", anchor: "ess-payments", icon: "\ud83d\udcb3", color: "#2E7D32" },
+  { cat: "Sightseeing", anchor: "ess-sightseeing", icon: "\ud83c\udf9f", color: "#B8860B" },
+  // ── AN EIGHTH, AND THE ASYMMETRY IT CLOSES ──────────────────────
+  // Oliver, 16 August 2026: "But what do we do about Nightpay as a category? If
+  // I add more of these.. right now it's at the same row as transport."
+  //
+  // He is right and the gap is structural. The app has a whole nightlife vertical,
+  // three content types of it (night, nightStreet, nightTown), and the practical
+  // list that sits behind them had no shelf for a going-out fact. So Nightpay, an
+  // app for nightlife discounts across eighty-plus bars, was filed under Transport
+  // next to the national railway app, and the next one would have been too.
+  //
+  // NOT Payments, which was the other candidate. Payments is where somebody
+  // worried about their card looks; this is where somebody planning a night out
+  // looks, and that is the reader who needs it.
+  //
+  // One entry is the whole change, which is what the note above this list is for:
+  // the prompt that demands a category and the loop that renders one read the SAME
+  // array, so neither can grow a value the other has never heard of.
+  { cat: "Nightlife", anchor: "ess-nightlife", icon: "\ud83c\udf78", color: "#7A1F3D" },
+  { cat: "Connectivity", anchor: "ess-connectivity", icon: "\ud83d\udcf6", color: "#E23B4E" },
+  { cat: "Culture & Etiquette", anchor: "ess-culture", icon: "\ud83e\udd1d", color: "#5E35B1" },
+  { cat: "Solo Travel", anchor: "ess-solo", icon: "\ud83c\udf7a", color: "#8D6E63" },
+];
+export const ESSENTIAL_CATEGORY_NAMES = ESSENTIAL_CATEGORIES.map(c => c.cat);
+
+// ── THE APP RUNS TWO VOCABULARIES AND ONLY ONE WAS WRITTEN DOWN ─────
+//
+// A row's `type` is what Studio publishes and what the database stores, and
+// there are ten. A rendered place carries `_src`, and there are six of those:
+// town, event, food, nightlife, free, craft. They are not the same list and
+// they never were: foodStreet and food share one `_src`, nightTown and
+// essential correspond to no place card at all.
+//
+// The only place this correspondence existed was an inline object literal,
+// hand-copied into two render sites about three thousand lines apart, and both
+// copies had the same two faults:
+//
+//   booking   fell through the `|| studioType` and became "booking", which is
+//             not an `_src` anywhere, so the assistant opened a workshop draft
+//             with a kind nothing recognises.
+//   nightTown was mapped to "town", and the audit takes that literally:
+//             coordProblems only names one type, and it is "town". A nightTown
+//             row stores no coordinate by design (see shapeForLive), so EVERY
+//             nightlife-town draft was handed a blocking "No coordinate stored"
+//             finding for a field its own shape does not have.
+//
+// One export, one definition, and `null` where the honest answer is that this
+// type is not a place. A caller that needs place rules can then ask, instead of
+// being handed a wrong answer that looks like a right one.
+export const SRC_FOR_TYPE = {
+  town: "town",
+  festival: "event",
+  free: "free",
+  food: "food",
+  foodStreet: "food",
+  night: "nightlife",
+  // A street renders as a nightlife card and opens a nightlife page that
+  // happens to contain other nightlife cards. It is the same vocabulary all
+  // the way down, which is what lets Copenhagen link to it at all.
+  nightStreet: "nightlife",
+  nightTown: "nightlife",
+  booking: "craft",
+  essential: null,
+  // Its own render source rather than borrowing "town". An island that rendered
+  // as a town would be filed under Towns in global search, counted as a town in
+  // the guide pools, and measured the way a town is measured. Every one of
+  // those is a wrong answer, and each would have been found separately.
+  island: "island",
+};
+export const PLACE_SOURCES = ["town", "event", "food", "nightlife", "free", "craft", "island"];
+export const srcForType = (type) => (Object.prototype.hasOwnProperty.call(SRC_FOR_TYPE, type) ? SRC_FOR_TYPE[type] : null);
+
+// ── "VISITCOPENHAGEN IS A GOOD SOURCE BUT PROBABLY NOT FOR AARHUS" ──
+// Oliver, 8 Aug 2026, and the content-type axis alone does not answer it:
+// VisitCopenhagen is a town source, and it is a town source for exactly one
+// town. Sending it along on an Aarhus draft costs money on every one of the
+// seven research prompts, and it costs more than money. A model told to check
+// visitcopenhagen.com for Aarhus will find a Copenhagen page that mentions
+// Aarhus and treat it as an authority on it, which is the same failure as the
+// ferry route "corrected" with a different route's sailing time.
+//
+// So a source carries a PLACE as well as a type, and the field takes either
+// granularity, because both are genuinely useful:
+//   "Copenhagen"  a town, matched against the entry's own name, its parent, and
+//                 the base it is a day trip from
+//   "Jutland"     a part of the country, matched against the derived geography
+//   ""            everywhere, which is what a national tourist board is
+//
+// AND AN UNKNOWN PLACE EXCLUDES IT, deliberately. When nothing tells us where a
+// draft is, a place-scoped source is left out rather than included: leaving it
+// out costs one source that might have helped, and the search still runs
+// everywhere else, while including it costs money on every call and invites the
+// wrong-city answer this exists to prevent.
+export const PARTS_OF_COUNTRY = ["Jutland", "Funen", "Zealand", "Lolland-Falster", "Bornholm"];
+
+// ── AND A FOURTH TIER, WHICH IS NOT A PLACE AT ALL ──────────────────
+//
+// Oliver, 17 Sep 2026, with rundtidanmark.dk/alle-danmarks-oer in hand: "I need
+// you to make me able to add 'Islands' to the research sources as a region."
+//
+// It is not a region, and saying why is the whole design. A region is a set of
+// kommuner and a part of the country is a landmass, so both answer "whereabouts
+// in Denmark is this". This answers a different question, "is this one of the
+// islands", and its members are scattered across every region on the map: Ærø
+// sits in Sydfyn, Læsø in Nordjylland, Bornholm is its own part of the country,
+// Sejerø is in a kommune that is mostly Zealand mainland. No list of kommuner
+// and no outline holds them, so neither existing tier can express it.
+//
+// ── AND WHY NOT THE TYPE AXIS, WHICH ALREADY HAS ISLANDS ON IT ──────
+// A source scoped by TYPE reaches every island ENTRY and nothing else. The same
+// page is the right one to have open for a festival on Samsø, a restaurant on
+// Ærø and the town of Ærøskøbing, and not one of those is an island entry. The
+// type says what a source is good FOR; this says where the draft is standing.
+// They are meant to be used together: type Everything, scope Islands.
+//
+// ── AND "ISLAND" SINGULAR IS REFUSED, DELIBERATELY ──────────────────
+// Two reasons and either would do. In Danish, Island IS Iceland. And a source
+// about ONE island belongs scoped to that island by name, where it lands in the
+// town tier and reaches the island's own entry, the towns on it and anything
+// that uses it as a base. Only the collective words reach this tier.
+export const ISLANDS_SCOPE = "Islands";
+const ISLANDS_WORDS = [
+  "islands", "the islands", "danish islands", "all islands",
+  "danske øer", "de danske øer", "danmarks øer", "øerne", "småøer", "småøerne",
+];
+
+// ── AND A THIRD TIER, BECAUSE NEITHER OF THE OTHER TWO IS THE ANSWER ──
+// Oliver, 13 Aug 2026: "We need to have regions of Denmark in 'specific'
+// regions. So I can put 'visitsønderjylland.dk' as a source for Sønderjylland."
+//
+// He is describing the gap between the two scopes above. Jutland sends
+// VisitSønderjylland to Skagen. Tønder sends it to Tønder and nowhere else, so
+// Sønderborg, Aabenraa, Haderslev, Rømø and Møgeltønder each need their own row
+// and the next place he publishes down there needs one too.
+//
+// utils/regions.js holds the twelve, each defined as the kommuner it contains
+// rather than as an outline anybody drew. The scope field takes all three
+// granularities now and the order below is what decides which one a typed word
+// means: part, then region, then anything left is a town.
+//
+// PART BEFORE REGION IS DELIBERATE. "Jylland" is a part and "Vestjylland" is a
+// region, and samePlaceName knows the Jutland/Jylland pair, so a check made in
+// the other order would still be correct here only by luck. Stating the
+// precedence is cheaper than relying on none of the twelve ever colliding.
+export const cleanPlace = (v) => {
+  const t = clean(v);
+  if (!t) return "";
+  // BEFORE the other three, because this is the only one of the four tiers
+  // whose words are not a place name, so nothing below could ever reach it: an
+  // unmatched word falls through to the town tier and would be filed as a town
+  // called Islands, which is the silent failure this file already records once.
+  // Folded on both sides, so "Danmarks øer" and "danmarks oer" are one answer.
+  if (ISLANDS_WORDS.some(w => fold(w) === fold(t))) return ISLANDS_SCOPE;
+  const part = PARTS_OF_COUNTRY.find(p => samePlaceName(p, t));
+  if (part) return part;
+  // Stored canonical, so "South Jutland" and "sønderjylland" both become
+  // "Sønderjylland" in the database and land in the region branch of the
+  // matcher rather than being filed as a town nobody has an entry for. That
+  // failure is the silent one: the row looks right in the panel and matches
+  // nothing forever.
+  return canonicalRegion(t) || t;
+};
+
+// Which tier a stored scope belongs to. Exported because the Studio panel shows
+// it on the row: a scope that reads "Sønderjylland" tells him nothing about
+// whether the app understood it as a region or filed it as a town, and those
+// two behave completely differently on every draft.
+export const scopeTier = (place) => {
+  const p = cleanPlace(place);
+  if (!p) return "everywhere";
+  if (p === ISLANDS_SCOPE) return "islands";
+  if (PARTS_OF_COUNTRY.includes(p)) return "part";
+  if (isRegion(p)) return "region";
+  return "town";
+};
+
+export { REGION_NAMES };
+
+// ── "I TYPE COPENHAGEN, BUT IN DANISH IT IS KØBENHAVN" ──────────────
+// Oliver, 8 Aug 2026. Straight string equality made the scoping quietly wrong in
+// the one case he was most likely to hit: he types the scope in English because
+// that is how the entry is filed, and any Danish source, entry, or parent name
+// carrying the Danish spelling then failed to match. A source scoped to
+// Copenhagen would have been LEFT OUT of a København draft, silently, which
+// looks exactly like the scoping working. Both directions now match, along with
+// Jutland/Jylland, Funen/Fyn, Aarhus/Århus and the rest.
+const same = (a, b) => samePlaceName(a, b);
+
+// ctx is whatever is known where the prompt is being built. At draft time that
+// is usually just a name, which is enough for the case he raised.
+export const placeMatches = (place, ctx) => {
+  const want = cleanPlace(place);
+  if (!want) return true;                       // universal
+  if (!ctx) return false;                       // nothing to match on: leave it out
+  const c = typeof ctx === "string" ? { name: ctx } : ctx;
+  // ── THE ISLANDS SCOPE ASKS ONE FIELD, AND A NAMED ONE ───────────
+  //
+  // ctx.island is a NAMED island: the draft is an island entry, or a published
+  // row states one, or the kommune is one of the seven whose name is the
+  // island's. It is deliberately NOT islandOf, which falls back to the part of
+  // the country so that every entry on the attractions filter gets an answer.
+  // That fallback here would make Copenhagen an island, because Copenhagen is
+  // on Zealand, and this source would then ride along on most drafts in the
+  // country. See namedIslandOf in geography.js, which exists for this reason.
+  //
+  // What it cannot reach is a small island sharing a kommune with the mainland,
+  // Sejerø in Kalundborg being the case geography.js names, unless the draft is
+  // an island entry or the published row already states it. That is a known
+  // miss and the honest one: the alternative is drawing per-island borders.
+  if (want === ISLANDS_SCOPE) return !!clean(c.island);
+  // ── THE WIDER SCOPE CONTAINS THE NARROWER ONE ───────────────────
+  // A draft that knows it is in Sønderjylland also knows it is in Jutland, and
+  // a source scoped to Jutland must still reach it. Without the second half of
+  // this line, adding regions would QUIETLY TURN OFF every part-scoped source
+  // the moment a draft learned its region, which is the worst shape a change
+  // can have: nothing breaks, the drafts just start finding less.
+  if (PARTS_OF_COUNTRY.includes(want)) return same(c.part, want) || same(regionPart(c.region), want);
+  // Only the region field answers a region scope. Not the town, not the
+  // research text: the region is derived from a coordinate by
+  // regions.regionAt, so if it is absent nothing has placed this draft yet and
+  // the strict rule below applies for the same reason it always has.
+  if (isRegion(want)) return canonicalRegion(c.region) === canonicalRegion(want);
+  // A town source applies to that town, to anywhere inside it, and to anywhere
+  // that uses it as a base: a Dragør entry with dayTripFrom Copenhagen is a
+  // Copenhagen trip, and VisitCopenhagen is the right place to look.
+  return same(c.name, want) || same(c.town, want) || same(c.partOf, want) || same(c.dayTripFrom, want);
+};
+
+// ── "IT NEEDS TO BE ON BOTH.. BUT I CAN ONLY PUT IT ON ONE" ─────────
+//
+// Oliver, 13 Aug 2026, about billetexpressen.dk. He is right, and the case is
+// not unusual: a Danish ticket shop sells for festivals AND for the museums and
+// workshops that take bookings, so "which single type is this" has no answer.
+//
+// He could have added the domain twice, once per type, and the duplicate check
+// would have allowed it. That is a workaround rather than a fix, and it has a
+// trap in it: sourcesFor and sourcesToSearch dedupe BY DOMAIN, so the two rows
+// only stay separate because the type filter runs first. Anyone reordering
+// those two lines would silently drop one of his rows.
+//
+// So applies_to holds a LIST. Stored comma-separated in the same text column,
+// which is why parseTypes accepts a bare single value unchanged: every row
+// already in his database keeps working with no migration, and "" still means
+// every type.
+export const parseTypes = (v) => {
+  const raw = Array.isArray(v) ? v : String(v == null ? "" : v).split(",");
+  const out = [];
+  for (const t of raw) {
+    const s = clean(t);
+    // An unknown type is DROPPED rather than kept as a scope nothing matches.
+    // A row scoped to a type the Studio does not draft is a source that looks
+    // configured and never once fires, which is the silent shape this file has
+    // spent the most comments on.
+    if (CONTENT_TYPES.includes(s) && !out.includes(s)) out.push(s);
+  }
+  return out;
+};
+
+// The stored form, so what goes into the column is what parseTypes will read
+// back. Order follows CONTENT_TYPES rather than what he clicked, so two rows
+// covering the same pair are the same string and the duplicate check works.
+export const serialiseTypes = (v) => CONTENT_TYPES.filter(t => parseTypes(v).includes(t)).join(",");
+
+// "" (no types listed) means EVERY type, which is what a national tourist board
+// is. Kept as the empty list rather than as all nine, so the panel can tell
+// "everything" apart from "he happened to tick all nine".
+export const typeMatches = (appliesTo, type) => {
+  const list = parseTypes(appliesTo);
+  return list.length === 0 || list.includes(type);
+};
+
+export const cleanSource = (row) => {
+  const domain = normaliseDomain(row?.domain);
+  if (!domain) return null;
+  const types = parseTypes(row?.applies_to ?? row?.appliesTo);
+  return {
+    id: row?.id,
+    domain,
+    note: cleanNote(row?.note),
+    types,
+    // Kept as the joined string, because it is what every existing reader of
+    // this shape prints and compares. A single type serialises to itself, so
+    // nothing that worked before reads differently.
+    appliesTo: types.join(","),
+    appliesPlace: cleanPlace(row?.applies_place ?? row?.appliesPlace),
+    enabled: row?.enabled !== false,
+  };
+};
+
+// The ones that apply to this draft: everything universal, plus anything scoped
+// to this type. A ferry operator matters for a town on an island and is noise on
+// a cocktail bar, which is why the per-type half exists.
+export const sourcesFor = (rows, type, ctx) => {
+  const seen = new Set();
+  const out = [];
+  for (const raw of Array.isArray(rows) ? rows : []) {
+    const s = cleanSource(raw);
+    if (!s || !s.enabled) continue;
+    if (!typeMatches(s.appliesTo, type)) continue;
+    if (!placeMatches(s.appliesPlace, ctx)) continue;
+    // BY DOMAIN, and only after filtering. Keying on the scope as well let the
+    // same site be listed TWICE in one prompt: visitfyn.dk scoped to Odense and
+    // the same domain scoped to Funen both match an Odense draft, and paying to
+    // tell a model about one site twice is the waste this scoping exists to
+    // remove. Whichever row comes first wins, and since they name the same
+    // domain the only thing that differs is the scope note beside it.
+    const key = s.domain;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  // Universal first, then the type-specific ones, so the general policy reads
+  // before the exception to it.
+  return out.sort((a, b) => (a.appliesTo === b.appliesTo ? a.domain.localeCompare(b.domain) : a.appliesTo ? 1 : -1));
+};
+
+// Returns "" when there is nothing to say. An empty heading in every prompt
+// teaches the model that this section is usually noise.
+export const sourceRulesBlock = (rows, type, ctx) => {
+  const list = sourcesFor(rows, type, ctx);
+  if (!list.length) return "";
+  const scope = (s) => {
+    const label = s.types.length ? s.types.map(t => TYPE_LABEL[t] || t).join(" and ") : "";
+    const bits = [label, s.appliesPlace].filter(Boolean);
+    return bits.length ? ` (for ${bits.join(" in ")} specifically)` : "";
+  };
+  const lines = list.map(s => `- ${s.domain}${s.note ? ` — ${s.note}` : ""}${scope(s)}`);
+  return `\nSOURCES THE FOUNDER HAS FOUND AND WANTS INCLUDED, in this research and every other:
+${lines.join("\n")}
+
+INCLUDE these in your search every time, in addition to everything you would normally look at. They are pages he has read and vouches for, so they are worth reading rather than worth obeying.
+
+THIS IS AN ADDITION, NOT A RESTRICTION. Search everything else exactly as you normally would. If one of them has nothing about this place, that is ordinary and expected: keep looking elsewhere rather than reporting that nothing was found. A small village with no page on any of these still has real facts somewhere, and finding them is still the job.
+
+WHERE SOURCES DISAGREE, one of these outranks an anonymous aggregator or a content farm, because somebody has looked at it.
+
+BUT THEY DO NOT OUTRANK A VENUE ON ITS OWN DETAILS. For anything current, a price, an opening hour, a departure time, the venue's or operator's own website is still the authority, exactly as stated above. A tourist board page beating an operator's own timetable is the specific error this rule exists to prevent.`;
+};
+
+// ── BEING NAMED IN A PROMPT IS NOT BEING SEARCHED ───────────────────
+// Oliver, 8 Aug 2026, reading a finished Copenhagen draft's source list, which
+// held eight URLs and not one of his: "you're 100% sure that it includes the
+// sources I put in? I put in visitDenmark.dk and visitcopenhagen.dk".
+//
+// He was right and the block above was only half the feature. sourceRulesBlock
+// reaches the PROMPTS, so Perplexity and Gemini were told to include his
+// domains. Tavily, which is the half of the pipeline that actually fetches
+// pages, builds its queries from a fixed template and never saw the list. The
+// draft's __sources records what Tavily returned, so it was an accurate report
+// that the sources had not been opened.
+//
+// This turns each vouched domain into a real search, restricted to that domain.
+// /api/search has accepted include_domains this whole time and nothing used it.
+//
+// CAPPED, because the cost is per draft and it is his money: the list is meant
+// to grow as he finds pages, and an uncapped version quietly turns a twelve-site
+// list into twelve extra searches on every draft. The first few are the ones the
+// ordering in sourcesFor already puts first.
+export const MAX_DIRECT_SEARCHES = 4;
+
+// Both languages in one query, because a Danish tourist board files the capital
+// under København and an English-only query cannot reach that page. Most Danish
+// towns are spelled the same either way and cost nothing extra for this.
+export const QUERY_WORDS = {
+  // Danish first, because the authority on a Danish ticket system is a Danish
+  // page. "gældende" and "priser" are what a rules or price page calls itself.
+  essential: "priser regler gældende 2026 turist besøgende practical information visitors price rules",
+  // ── EVERY WORD HERE HAS TO BE A QUESTION, NOT A CONNECTIVE ──────
+  // sourceFit asks "does anything we read answer the questions this type is
+  // about" by looking for these words in the page text. This line used to end
+  // "what to see opening hours", and "what" and "see" appear on essentially
+  // every page on the internet, so any page at all counted as on-subject and
+  // the check could never fire for a town. See stopwords in sourceFit.
+  town: "praktisk information seværdigheder åbningstider attraktioner opening hours attractions",
+  festival: "billetter datoer program tickets dates programme",
+  free: "åbningstider gratis adgang opening hours free entry",
+  food: "menukort priser åbningstider menu prices opening hours",
+  foodStreet: "boder madmarked åbningstider stalls market opening hours",
+  night: "åbningstider entré opening hours entry",
+  // A street's questions are which nights, which end, and closing time. A
+  // town's are which areas and which crowd. These two lines were identical, so
+  // a page answering neither counted as answering both.
+  // Every word here has to be a word a page about a BAR STREET would use and a
+  // page about something else would not. The first version of this line ended
+  // "bars closing time which night", and "time", "which" and "night" are
+  // ordinary English that appears on any page at all, so one encyclopedia
+  // snippet about when the street was laid out counted as answering the
+  // question and subjectUnsourced could never fire. That is the exact leak the
+  // town line had, reintroduced the same day it was fixed. "udeligger" was not
+  // a Danish word either.
+  nightStreet: "barer natteliv lukketid udeliv bargade nightlife bars closing",
+  nightTown: "natteliv bydele studerende nightlife areas crowd scene",
+  booking: "værksted booking priser workshop booking prices",
+  // Every word here is a word a page about AN ISLAND would use and a page about
+  // a town would not. "faerge", "overfart" and "sejlplan" are what an operator
+  // calls its own pages; a town's tourist page says none of them. No word from
+  // the town line is repeated, which is the property the suite checks.
+  island: "færge overfart sejlplan afgange havn øen ferry crossing timetable sailings harbour",
+};
+
+// ── "I WANNA PUT TIVOLI.DK INTO EVENTS FOR COPENHAGEN.. THIS WILL
+//     PROBABLY HAPPEN WITH MORE AREAS" ──────────────────────────────
+// Oliver, 9 Aug 2026, and doing exactly that would have produced a source that
+// never fired once, silently, forever.
+//
+// placeMatches is strict on purpose: an unknown place EXCLUDES a place-scoped
+// source, because including a Copenhagen source on an Aarhus draft is how you
+// get a Copenhagen page read as an authority on Aarhus. That rule is right.
+//
+// But for an EVENT draft, the only thing the pipeline knows when the searches
+// are built is the event's own name. "Copenhell" is not "Copenhagen", so a
+// Copenhagen-scoped source matches nothing and is dropped. He would have added
+// Tivoli, seen nothing happen, and had no way to tell why.
+//
+// ── DECIDING WHERE TO LOOK IS NOT DECIDING WHAT TO BELIEVE ──────────
+// That is the distinction the strict rule was missing, and it is why one rule
+// cannot serve both jobs.
+//
+// When the question is "should this source's words go into a PROMPT", a wrong
+// answer means a model treating a Copenhagen page as evidence about Aarhus.
+// Strict is correct: exclude unless something says where we are.
+//
+// When the question is "should we run one search against this domain", a wrong
+// answer costs one query that returns nothing. Nothing enters the draft either
+// way, because a search of tivoli.dk for an event that is not at Tivoli comes
+// back empty. So this can afford to be generous, and being generous is what
+// makes a venue or city source usable at all.
+//
+// So the loose test also reads the RESEARCH TEXT. By the time the direct
+// searches run, the general web pass has already pulled snippets about this
+// place, and a Copenhell snippet says Copenhagen in the first line. The strict
+// test is untouched and still governs every prompt.
+// ── A DRAFT THAT KNOWS WHERE IT IS DOES NOT NEED THE TEXT TO GUESS ──
+// Oliver, 10 Aug 2026: "the AI blogger is searching through sources for
+// Copenhagen, even if I am trying to find sources about Odense... Thankfully
+// they don't use the Copenhagen ones. But it's a waste."
+//
+// He is right, and the waste is only the visible half.
+//
+// The text fallback below exists for a real case and stays: an EVENT draft
+// knows the event's name and nothing else, "Copenhell" is not "Copenhagen",
+// and the research snippets are what say where it is held. That is a draft
+// that cannot place itself.
+//
+// A TOWN draft is not that. Its name IS the place. And a realistic Odense
+// research text says something like "about 1 hour 15 from Copenhagen by
+// train", which is a fact ABOUT Odense, not evidence that this is a Copenhagen
+// draft. Every place named anywhere in the snippets was unlocking its own
+// scoped source, so an Odense draft paid to ask visitcopenhagen.com about
+// Odense.
+//
+// AND THE CAP MAKES IT WORSE THAN WASTE. MAX_DIRECT_SEARCHES is 4 and the sort
+// is alphabetical, so visitaarhus.com and visitcopenhagen.com both come before
+// visitodense.com. Four sources in, the Odense draft loses its own Odense
+// source off the end of the list. The irrelevant searches do not only cost
+// money, they crowd out the right one, and the symptom of THAT is a draft that
+// quietly found less than it should have, with nothing on screen to say so.
+//
+// So the text only speaks when the draft is genuinely silent about its place.
+const knowsItsOwnPlace = (ctx, type) => {
+  if (!ctx || typeof ctx !== "object") return false;
+  // For a town, the draft's own name is the answer to "where is this".
+  if (type === "town" || type === "nightTown") return !!clean(ctx.name);
+  // For everything else only a real place field counts, because a festival's
+  // name does not locate it, which is the whole reason the fallback exists.
+  //
+  // A REGION COUNTS, AND IT IS THE STRONGEST OF THESE. It comes from a
+  // coordinate rather than from a field somebody typed, and once the maps
+  // lookup runs before the sources are chosen it is the thing a festival draft
+  // knows FIRST. A draft holding a region does not need the research text to
+  // guess where it is, and letting the text speak anyway is the 10 Aug bug:
+  // "1 hour 15 from Copenhagen" unlocking visitcopenhagen.com on an Odense
+  // draft, four searches deep, crowding visitodense.com off the end.
+  return !!(clean(ctx.region) || clean(ctx.town) || clean(ctx.partOf) || clean(ctx.dayTripFrom) || clean(ctx.part));
+};
+
+export const placeMightMatch = (place, ctx, type) => {
+  const want = cleanPlace(place);
+  if (!want) return true;
+  if (placeMatches(want, ctx)) return true;
+  // ── AND THE ISLANDS SCOPE NEVER TAKES THE TEXT FALLBACK ──────────
+  // Everything below asks whether the research text happens to name the scope.
+  // For a town that is a reasonable last resort. For this tier it is not a
+  // question worth asking: research about any Danish coast says "islands"
+  // constantly, and "øer" is inside Øerne, Øer Maritime and half the fjord
+  // names, so the loose test would attach this source to most drafts in the
+  // country at four searches a time. It matches on the derived island or not at
+  // all.
+  if (want === ISLANDS_SCOPE) return false;
+  if (knowsItsOwnPlace(ctx, type)) return false;
+  const text = ctx && typeof ctx === "object" ? String(ctx.text || "") : "";
+  if (!text) return false;
+  // Either spelling, because the research text is as likely to say København.
+  //
+  // containsName, not a raw substring on the folded text. The old version read
+  // any occurrence of the letters, so a source scoped to Als matched research
+  // containing "also", and one scoped to Fur matched "furniture". Same missing
+  // word boundary as the discovery deduplication and the preview screen, and
+  // here it spends money rather than only showing a wrong card.
+  return variantsOf(want).some(v => v && containsName(text, v));
+};
+
+// Same shape as sourcesFor, with the loose place test. Kept as its own function
+// rather than a flag, so no future call site can pick the generous rule for a
+// prompt by passing the wrong argument.
+export const sourcesToSearch = (rows, type, ctx) => {
+  const seen = new Set();
+  const out = [];
+  for (const raw of Array.isArray(rows) ? rows : []) {
+    const s = cleanSource(raw);
+    if (!s || !s.enabled) continue;
+    if (!typeMatches(s.appliesTo, type)) continue;
+    if (!placeMightMatch(s.appliesPlace, ctx, type)) continue;
+    if (seen.has(s.domain)) continue;
+    seen.add(s.domain);
+    out.push(s);
+  }
+  // ── MOST SPECIFIC FIRST, BECAUSE THIS LIST GETS CUT ───────────────
+  // sourcesFor orders universal first, and it is right to: it feeds the PROMPT,
+  // where the general policy should read before the exception to it. This list
+  // feeds a BUDGET. Its only caller is directSourceSearches, which slices it at
+  // MAX_DIRECT_SEARCHES, so ordering universal first means the cap is spent
+  // before a type-specific source is ever reached.
+  //
+  // Oliver, 12 Aug 2026, after adding billetto.dk and watching nothing change:
+  // "I have put this.. but it doesen't matter.." He was right, and it was worse
+  // than he thought. He had six sources scoped to Everything and four scoped to
+  // Events, the cap is four, and his run log named the four chosen:
+  // enjoynordjylland.dk, getyourguide.com, visitcopenhagen.dk, visitdenmark.dk.
+  // Every one of them universal. So ticketmaster.dk, kultunaut.dk, billetto.dk
+  // and visitorservice.kk.dk were unreachable on every festival draft ever made,
+  // and would have stayed unreachable however many more he added. Three
+  // ticketing sources sat in that list doing nothing while the pipeline reported
+  // "no Danish listing" for a festival whose tickets are on Billetto.
+  //
+  // A source scoped to this exact type is the one he chose FOR this type, so it
+  // goes first. The universal ones still reach the draft through
+  // sourceRulesBlock, so nothing is lost. They just stop eating the budget.
+  //
+  // ── AND FEWER TYPES IS MORE SPECIFIC ─────────────────────────────
+  // Once a source can carry several types, "has a type" stops being a good
+  // enough sort key: a domain scoped to Events alone was chosen FOR events,
+  // and one scoped to Events and Attractions and Workshops is a general
+  // ticketing site. Universal stays last, which is what the 0 is doing here.
+  const rank = (s) => (s.types.length === 0 ? Infinity : s.types.length);
+  // ── AND THE TIE-BREAK WAS THE ALPHABET ───────────────────────────
+  //
+  // Oliver, 1 Sep 2026, reading a Vanvittig Verdenshistorie log: "it went to
+  // search every known ticket page, except the one it needed.."
+  //
+  // The four chosen were billet.unitedtickets.dk, billetlugen.dk, billetto.dk
+  // and kultunaut.dk. Every one of them scoped to Events, so every one ranked
+  // identically, and `a.domain.localeCompare(b.domain)` settled it. Denmark's
+  // largest ticket seller lost the last slot to the letter B, on every festival
+  // draft, for as long as those four have existed.
+  //
+  // The comment two screens up already found this fault one level higher —
+  // "ordering universal first means the cap is spent before a type-specific
+  // source is ever reached" — and then handed what was left to the alphabet,
+  // which is the same mistake with a smaller blast radius. A cap has to be
+  // spent on a PRIORITY, and the alphabet is not one; nobody chose it, and
+  // nothing about a domain's first letter predicts whether it will answer.
+  //
+  // His own order is a decision he made. The rows arrive `order=id.asc`, which
+  // is the order he added them, and he can move one by re-adding it. That is
+  // worth having even before there is a drag handle, because the alternative is
+  // an ordering no one can influence at all.
+  const seat = new Map(out.map((s, i) => [s.domain, i]));
+  return out.sort((a, b) => rank(a) - rank(b) || seat.get(a.domain) - seat.get(b.domain));
+};
+
+// ── "IF I PUT IN TICKETMASTER.DK, DOES IT GO THROUGH ALL OF
+//     TICKETMASTER?" ────────────────────────────────────────────────
+// Oliver, 9 Aug 2026. The whole site, yes. But the honest answer needed a check,
+// and the check found a hole: Tavily's docs describe include_domains as "a list
+// of domains to specifically include" and say NOTHING about subdomains. They do
+// say the list may hold up to 300.
+//
+// That silence matters here more than anywhere else, because of the failure this
+// feature was built around. Rock Under Broen's ticket prices were not on
+// unitedtickets.dk at all. They were on billet.unitedtickets.dk, one subdomain
+// away, and a fact-check that stopped at the front page reported the price as
+// unverified. Adding "unitedtickets.dk" and having it silently exclude the exact
+// page holding the answer would reproduce that bug through the feature meant to
+// fix it.
+//
+// So the search asks for the domain AND the places a Danish ticket shop actually
+// lives. It is one query either way, because include_domains takes a list, so a
+// subdomain that does not exist costs nothing and returns nothing.
+const SHOP_SUBDOMAINS = ["billet", "billetter", "billetsalg", "tickets", "ticket", "shop", "booking", "kalender", "events"];
+
+export const domainVariants = (domain) => {
+  const d = normaliseDomain(domain);
+  if (!d) return [];
+  // The bare host first: it is the one he typed and the one most results carry.
+  return [d, `www.${d}`, ...SHOP_SUBDOMAINS.map(sub => `${sub}.${d}`)];
+};
+
+export const directSourceSearches = (rows, type, ctx) => {
+  const name = clean(typeof ctx === "string" ? ctx : ctx?.name);
+  // No name means no query worth spending. This is the same direction of caution
+  // placeMatches takes: when we do not know where the draft is, do less.
+  if (!name) return [];
+  const words = QUERY_WORDS[type] || "praktisk information åbningstider opening hours";
+  const other = otherNameFor(name, { includeSights: true });
+  const names = other ? `${name} ${other}` : name;
+  return sourcesToSearch(rows, type, ctx)
+    .slice(0, MAX_DIRECT_SEARCHES)
+    // `domain` stays the bare host, because it is what the panel reports back to
+    // him and what he typed. `domains` is what the search is actually given.
+    // ── THE NAME FIRST. THE KEYWORDS ONLY IF THAT FINDS NOTHING ─────
+    // Measured on 12 Aug 2026 against the live endpoint, same key, same code
+    // path, scoped to kultunaut.dk:
+    //
+    //   "Ribelund Festival billetter datoer program tickets dates programme"
+    //       -> results: []          the query this function has always sent
+    //   "Ribelund Festival"
+    //       -> 8 results, one of them carrying
+    //          "Hvor: Ribelund Festivalplads, Pile Alle 2, Ribe ;
+    //           Hvornår: Ons. d. 19. august 2026, kl. 10.30-19. ;
+    //           Pris: Entré: 400 kr."
+    //
+    // The price, the date, the hours and the address, in the snippet, from a
+    // source he had vouched for. The keyword tail was turning eight results into
+    // none. A control search for "koncert" on the same domain returned eight, so
+    // the index is fine and the query was the problem.
+    //
+    // The tail is not deleted, because it is doing real work elsewhere: it is
+    // what biases a search toward a price or an opening-hours page rather than
+    // any page that mentions the place. It becomes the FALLBACK. A bare name is
+    // tried first, and the tail only runs when that came back empty.
+    //
+    // COST: one call in the normal case, exactly as now. Two only when the first
+    // found nothing, which is the case that currently returns nothing at all, so
+    // the extra call buys an answer where today there is none.
+    .map(s => ({
+      domain: s.domain,
+      domains: domainVariants(s.domain),
+      query: names,
+      fallbackQuery: `${names} ${words}`,
+    }));
+};
+
+// ── EVERYTHING PAST THE CAP, IN ONE CALL ────────────────────────────
+//
+// Oliver, 13 Aug 2026: "When it searches on the web for events, towns,
+// attractions, etc. include the research sources I have implemented. Perhaps
+// they'll help."
+//
+// They would have. His own run log for the Græskarfestival draft, the same day:
+//
+//   2. Founder sources chosen [tavily · ok]
+//      got: 4 of 18: billet.unitedtickets.dk, billetlugen.dk, billetto.dk,
+//           kultunaut.dk
+//
+// FOUR OF EIGHTEEN. And the four are all ticketing, because the specificity
+// sort puts festival-scoped sources first and he has four of those. So
+// billetexpressen.dk never ran a search, and Billetexpressen is where that
+// festival's tickets are sold: the URL is sitting in the finished draft's own
+// __sources, found by the general web pass, and Gemini's read of the same
+// festival names it as the ticket vendor. The one source that had the answer
+// was the one the cap cut.
+//
+// ── WHY THE CAP STAYS, AND WHY THIS IS NOT SIMPLY A BIGGER ONE ──────
+// Raising MAX_DIRECT_SEARCHES to eighteen would be eighteen searches per draft,
+// growing every time he finds a page. That is the cost problem he has raised in
+// almost every conversation.
+//
+// include_domains takes a LIST, up to three hundred entries, and api/search has
+// accepted a comma-separated `domains` this whole time. So everything past the
+// cap fits in ONE call. Total cost per draft goes from four to five.
+//
+// The top four keep their own searches rather than being folded in, and that is
+// the point of the split: results from a combined query are ranked across the
+// whole set, so a site with thousands of pages crowds out the parish council's
+// one relevant PDF. A source with its own call is guaranteed its own results.
+// The overflow call cannot make that promise and does not need to: its job is
+// that nothing on his list is unreachable, which today is the failure.
+export const MAX_INCLUDE_DOMAINS = 300;
+
+export const overflowSourceSearch = (rows, type, ctx) => {
+  const name = clean(typeof ctx === "string" ? ctx : ctx?.name);
+  if (!name) return null;
+  const rest = sourcesToSearch(rows, type, ctx).slice(MAX_DIRECT_SEARCHES);
+  if (!rest.length) return null;
+  const words = QUERY_WORDS[type] || "praktisk information åbningstider opening hours";
+  const other = otherNameFor(name, { includeSights: true });
+  const names = other ? `${name} ${other}` : name;
+  // Full variants, so a ticket shop past the cap can still be found at its
+  // billet.<site> subdomain, which is where Rock Under Broen's prices were and
+  // is the reason domainVariants exists at all.
+  const all = [];
+  for (const s of rest) for (const d of domainVariants(s.domain)) if (!all.includes(d)) all.push(d);
+  // NO SILENT CAPS. Three hundred is Tavily's documented ceiling and eleven
+  // variants per domain means about twenty-seven sources before it bites, which
+  // is more than he has. If it ever does bite, the caller says which domains
+  // were dropped rather than reporting a search that quietly covered less.
+  const dropped = all.length > MAX_INCLUDE_DOMAINS ? all.slice(MAX_INCLUDE_DOMAINS) : [];
+  return {
+    covers: rest.map(s => s.domain),
+    domains: all.slice(0, MAX_INCLUDE_DOMAINS),
+    dropped,
+    query: names,
+    fallbackQuery: `${names} ${words}`,
+  };
+};
+
+// ── AND THE DISCOVER TAB, WHICH NEVER SAW THE LIST AT ALL ───────────
+//
+// Oliver, 13 Aug 2026, clarifying which searches he meant: "I mean the 'discover
+// new events' tab."
+//
+// That tab plans five queries with OpenAI and runs five plain web searches. Not
+// one of his eighteen domains has ever been searched by it, and one of the five
+// query slots is literally briefed as "one at local/regional tourism sources",
+// so the planner has been asked to GUESS at the thing he has already written
+// down. A Danish festival's first appearance anywhere is a line on a tourist
+// board's what's-on page or a kultunaut listing, which is exactly the list.
+//
+// ── A DISCOVERY QUERY IS NOT A RESEARCH QUERY ───────────────────────
+// The draft-side words above ask about a place already known by name:
+// "billetter datoer program". Discovery does not have a name yet, it is looking
+// for one, so the query has to be the shape of a LISTING page: what is on, this
+// season, in this part of the country. Danish first for the same reason as
+// everywhere else, since these are Danish sites and their listing pages are
+// filed under Danish words.
+export const DISCOVER_WORDS = {
+  town: "byer seværdigheder oplevelser besøg små byer towns to visit",
+  festival: "kalender hvad sker der arrangementer festival 2026 2027 what's on events calendar",
+  free: "gratis seværdigheder oplevelser attraktioner free attractions things to do",
+  food: "restauranter spisesteder anbefalinger restaurants where to eat",
+  foodStreet: "madmarked street food boder market halls",
+  night: "natteliv barer klubber nightlife bars",
+  // ── A STREET AND A TOWN WERE LOOKING FOR THE SAME THING ─────────
+  // These two lines were identical, so discovery for BAR STREETS searched for
+  // nightlife TOWNS and came back with towns, which the pool then discarded as
+  // already published. The type could not discover anything it was for.
+  nightStreet: "bargade barer i samme gade udeliv gågade med barer bar street nightlife strip",
+  nightTown: "natteliv udeliv nightlife towns",
+  booking: "værksteder kurser oplevelser workshops courses experiences",
+  essential: "praktisk information turist gældende priser practical visitor information",
+  island: "øer småøerne danske øer øhop besøg en ø danish islands island hopping",
+};
+
+// ONE call, not one per domain, and that is deliberate rather than a saving.
+// Discovery wants NAMES it has not seen, so breadth across the whole list beats
+// depth on any one site: a combined query returning eight results spread over
+// six tourist boards is a better candidate list than eight pages of the same
+// board. The opposite of the draft-side reasoning, for the opposite job.
+export const discoverSourceSearch = (rows, type, ctx) => {
+  const list = sourcesToSearch(rows, type, ctx);
+  if (!list.length) return null;
+  const all = [];
+  for (const s of list) for (const d of domainVariants(s.domain)) if (!all.includes(d)) all.push(d);
+  const where = clean(typeof ctx === "string" ? ctx : ctx?.name || ctx?.town);
+  const words = DISCOVER_WORDS[type] || "oplevelser seværdigheder things to do";
+  return {
+    covers: list.map(s => s.domain),
+    domains: all.slice(0, MAX_INCLUDE_DOMAINS),
+    dropped: all.length > MAX_INCLUDE_DOMAINS ? all.slice(MAX_INCLUDE_DOMAINS) : [],
+    query: where ? `${where} ${words}` : `Danmark ${words}`,
+  };
+};
+
+// What the planner is told, so it stops inventing a query aimed at "local
+// tourism sources" and spends that slot on an angle these domains do not cover.
+// Returns "" when there is nothing to name, because an empty heading in every
+// prompt teaches the model the section is noise.
+export const discoverSourceNote = (rows, type, ctx) => {
+  const list = sourcesToSearch(rows, type, ctx);
+  if (!list.length) return "";
+  return `\n\nTHESE SITES ARE ALREADY BEING SEARCHED SEPARATELY, so do not spend one of your five queries aiming at them: ${list.map(s => s.domain).join(", ")}. They are the founder's own vouched tourism and listing sources and a dedicated search runs across all of them alongside yours. Use your five for angles they will NOT cover: forum and Reddit discussion, personal blogs, local news, niche roundups, and anything written by somebody who lives there rather than by a tourist board.`;
+};
+
+// ── WHAT THE LIST COSTS ─────────────────────────────────────────────
+// "So it's a waste of money having it search through that." Every source rides
+// in on all seven research prompts of every draft, so the list has a running
+// cost and nothing was showing it. Rough words rather than a token count,
+// deliberately: an exact-looking estimate would be its own small lie.
+export const blockCost = (rows, type, ctx) => {
+  const block = sourceRulesBlock(rows, type, ctx);
+  if (!block) return { sources: 0, words: 0, perDraft: 0 };
+  const words = block.trim().split(/\s+/).length;
+  return { sources: sourcesFor(rows, type, ctx).length, words, perDraft: words * 7 };
+};
