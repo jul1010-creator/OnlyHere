@@ -284,6 +284,31 @@ export const cleanTourUrl = (url) => {
 // The two fields a pasted link can land in, named here so the Studio and the
 // render cannot disagree about the spelling of either.
 export const TICKET_FIELD = "ticketUrl";
+
+// ── AND SOME THINGS HAVE NO DOOR TO BUY A TICKET TO ─────────────────
+//
+// Oliver's island run log, 16 Sep 2026, seven island drafts in a row. Two of
+// them came back with a bookable ticket link and both were wrong:
+//
+//   Langeland  ticketmaster.dk/event/nicolaj-lange-et-kik-ind-i-langeland-billetter
+//              "bookable, and vetted as being about this place". It is a stand-up
+//              comedian's show called "Et kik ind i Langeland", a pun on his own
+//              name, playing at MCH Herning Kongrescenter on 13 May 2027, two
+//              hundred kilometres away on Jutland.
+//   Bornholm   ticketmaster.dk/venue/musikhuzet-bornholm-ronne-billetter
+//              a music venue in Rønne, which is on the island and is not it.
+//
+// The vetting is not broken. Every one of those pages IS about something called
+// Langeland or Bornholm, which is all the name test can ask. The mistake is one
+// level up: an ISLAND is not a thing you buy admission to, so the right number
+// of ticket links for it is zero and the search should never have run. Five of
+// the seven correctly found nothing, at two Tavily searches each.
+//
+// ONLY ISLANDS, and the restraint is deliberate. A TOWN looks like the same
+// argument and is not: a city card is a real product a reader can buy, sold on
+// Tiqets, and the Copenhagen Card is already an affiliate row in essentials. A
+// town that turns one up is right to. Nobody sells a ticket to Bornholm.
+export const typeHasAdmission = (type) => String(type || "").trim() !== "island";
 export const TOUR_FIELD = "tourUrl";
 
 // ── AND THE TYPES WHOSE PAGE ACTUALLY HAS A TOURS ROW ───────────────

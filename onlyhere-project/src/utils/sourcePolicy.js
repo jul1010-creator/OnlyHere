@@ -529,6 +529,37 @@ export const srcForType = (type) => (Object.prototype.hasOwnProperty.call(SRC_FO
 // wrong-city answer this exists to prevent.
 export const PARTS_OF_COUNTRY = ["Jutland", "Funen", "Zealand", "Lolland-Falster", "Bornholm"];
 
+// ── AND A FOURTH TIER, WHICH IS NOT A PLACE AT ALL ──────────────────
+//
+// Oliver, 17 Sep 2026, with rundtidanmark.dk/alle-danmarks-oer in hand: "I need
+// you to make me able to add 'Islands' to the research sources as a region."
+//
+// It is not a region, and saying why is the whole design. A region is a set of
+// kommuner and a part of the country is a landmass, so both answer "whereabouts
+// in Denmark is this". This answers a different question, "is this one of the
+// islands", and its members are scattered across every region on the map: Ærø
+// sits in Sydfyn, Læsø in Nordjylland, Bornholm is its own part of the country,
+// Sejerø is in a kommune that is mostly Zealand mainland. No list of kommuner
+// and no outline holds them, so neither existing tier can express it.
+//
+// ── AND WHY NOT THE TYPE AXIS, WHICH ALREADY HAS ISLANDS ON IT ──────
+// A source scoped by TYPE reaches every island ENTRY and nothing else. The same
+// page is the right one to have open for a festival on Samsø, a restaurant on
+// Ærø and the town of Ærøskøbing, and not one of those is an island entry. The
+// type says what a source is good FOR; this says where the draft is standing.
+// They are meant to be used together: type Everything, scope Islands.
+//
+// ── AND "ISLAND" SINGULAR IS REFUSED, DELIBERATELY ──────────────────
+// Two reasons and either would do. In Danish, Island IS Iceland. And a source
+// about ONE island belongs scoped to that island by name, where it lands in the
+// town tier and reaches the island's own entry, the towns on it and anything
+// that uses it as a base. Only the collective words reach this tier.
+export const ISLANDS_SCOPE = "Islands";
+const ISLANDS_WORDS = [
+  "islands", "the islands", "danish islands", "all islands",
+  "danske øer", "de danske øer", "danmarks øer", "øerne", "småøer", "småøerne",
+];
+
 // ── AND A THIRD TIER, BECAUSE NEITHER OF THE OTHER TWO IS THE ANSWER ──
 // Oliver, 13 Aug 2026: "We need to have regions of Denmark in 'specific'
 // regions. So I can put 'visitsønderjylland.dk' as a source for Sønderjylland."
@@ -550,6 +581,12 @@ export const PARTS_OF_COUNTRY = ["Jutland", "Funen", "Zealand", "Lolland-Falster
 export const cleanPlace = (v) => {
   const t = clean(v);
   if (!t) return "";
+  // BEFORE the other three, because this is the only one of the four tiers
+  // whose words are not a place name, so nothing below could ever reach it: an
+  // unmatched word falls through to the town tier and would be filed as a town
+  // called Islands, which is the silent failure this file already records once.
+  // Folded on both sides, so "Danmarks øer" and "danmarks oer" are one answer.
+  if (ISLANDS_WORDS.some(w => fold(w) === fold(t))) return ISLANDS_SCOPE;
   const part = PARTS_OF_COUNTRY.find(p => samePlaceName(p, t));
   if (part) return part;
   // Stored canonical, so "South Jutland" and "sønderjylland" both become
@@ -567,6 +604,7 @@ export const cleanPlace = (v) => {
 export const scopeTier = (place) => {
   const p = cleanPlace(place);
   if (!p) return "everywhere";
+  if (p === ISLANDS_SCOPE) return "islands";
   if (PARTS_OF_COUNTRY.includes(p)) return "part";
   if (isRegion(p)) return "region";
   return "town";
@@ -591,6 +629,21 @@ export const placeMatches = (place, ctx) => {
   if (!want) return true;                       // universal
   if (!ctx) return false;                       // nothing to match on: leave it out
   const c = typeof ctx === "string" ? { name: ctx } : ctx;
+  // ── THE ISLANDS SCOPE ASKS ONE FIELD, AND A NAMED ONE ───────────
+  //
+  // ctx.island is a NAMED island: the draft is an island entry, or a published
+  // row states one, or the kommune is one of the seven whose name is the
+  // island's. It is deliberately NOT islandOf, which falls back to the part of
+  // the country so that every entry on the attractions filter gets an answer.
+  // That fallback here would make Copenhagen an island, because Copenhagen is
+  // on Zealand, and this source would then ride along on most drafts in the
+  // country. See namedIslandOf in geography.js, which exists for this reason.
+  //
+  // What it cannot reach is a small island sharing a kommune with the mainland,
+  // Sejerø in Kalundborg being the case geography.js names, unless the draft is
+  // an island entry or the published row already states it. That is a known
+  // miss and the honest one: the alternative is drawing per-island borders.
+  if (want === ISLANDS_SCOPE) return !!clean(c.island);
   // ── THE WIDER SCOPE CONTAINS THE NARROWER ONE ───────────────────
   // A draft that knows it is in Sønderjylland also knows it is in Jutland, and
   // a source scoped to Jutland must still reach it. Without the second half of
@@ -861,6 +914,15 @@ export const placeMightMatch = (place, ctx, type) => {
   const want = cleanPlace(place);
   if (!want) return true;
   if (placeMatches(want, ctx)) return true;
+  // ── AND THE ISLANDS SCOPE NEVER TAKES THE TEXT FALLBACK ──────────
+  // Everything below asks whether the research text happens to name the scope.
+  // For a town that is a reasonable last resort. For this tier it is not a
+  // question worth asking: research about any Danish coast says "islands"
+  // constantly, and "øer" is inside Øerne, Øer Maritime and half the fjord
+  // names, so the loose test would attach this source to most drafts in the
+  // country at four searches a time. It matches on the derived island or not at
+  // all.
+  if (want === ISLANDS_SCOPE) return false;
   if (knowsItsOwnPlace(ctx, type)) return false;
   const text = ctx && typeof ctx === "object" ? String(ctx.text || "") : "";
   if (!text) return false;

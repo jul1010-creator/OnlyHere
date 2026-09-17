@@ -63,17 +63,18 @@ writeFileSync(entry, `
   export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
   export { TICKET_HUNT_PROMPT, ticketHuntUrls } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
-  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, partnerMerchant, destinationIn, linkLabel, affiliateHref, affiliateNote, isAffiliateHref, isGetyourguideUrl, isGetyourguideProductUrl, getyourguideUrl, getyourguideActive, getyourguideDisclosure, bikeRentalFits, tourMerchant, isBajabikesUrl, isBajabikesProductUrl, isBajabikesRental, bajabikesSlug, bajabikesUrl, bajabikesActive, bajabikesDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
+  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, partnerMerchant, destinationIn, linkLabel, outboundLink, affiliateHref, affiliateNote, isAffiliateHref, isGetyourguideUrl, isGetyourguideProductUrl, getyourguideUrl, getyourguideActive, getyourguideDisclosure, bikeRentalFits, tourMerchant, isBajabikesUrl, isBajabikesProductUrl, isBajabikesRental, bajabikesSlug, bajabikesUrl, bajabikesActive, bajabikesDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isWegotripUrl, wegotripUrl, wegotripBrowseUrl, wegotripActive, wegotripDisclosure, tripcomActive } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { TOWN_TYPES, townNameOf, audioFor, audioLine, ticketFor, unmatchedProducts, wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO, TICKET as WEGO_TICKET } from ${JSON.stringify(join(root, "src/utils/wegotripMatch.js"))};
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
   export { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
   export { venueCore, venueMentions, venueQuote, venueVerdict, venueVia, describeVenue, VENUE_MIN_MENTIONS, VENUE_MIN_MENTIONS_NO_TOWN, VENUE_MAX_KM, NO_NAME as V_NO_NAME, NOT_NAMED as V_NOT_NAMED, TOO_FAR as V_TOO_FAR, IS_AN_EVENT as V_IS_AN_EVENT, OK as V_OK } from ${JSON.stringify(join(root, "src/utils/venueMatch.js"))};
-  export { wrongEdition, urlYears, isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketmasterVenuePhrase, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop, priceSourceHost, isTourUrl, cleanTourUrl, TICKET_FIELD, TOUR_FIELD, TOUR_TYPES } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
+  export { wrongEdition, urlYears, isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketmasterVenuePhrase, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop, priceSourceHost, isTourUrl, cleanTourUrl, typeHasAdmission, TICKET_FIELD, TOUR_FIELD, TOUR_TYPES } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel, eventLastDay } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
-  export { scopeTier, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
+  export { groupIdIn, feedUrlProblem, cleanFeed, postsIn, postedDay, datesInPost, timeInPost, candidatesIn, dedupeCandidates, alreadyPublished, newCandidates, sweepCost, PAGES_PER_FEED, CENTS_PER_PAGE } from ${JSON.stringify(join(root, "src/utils/communityFeeds.js"))};
+  export { scopeTier, ISLANDS_SCOPE, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM, islandOf, statedIsland, namedIslandOf, islandsPresent, ISLAND_BY_KOMMUNE, ISLAND_LABEL } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES, distinctThemes } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { tierBadge, TIER_TONE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
@@ -107,7 +108,7 @@ writeFileSync(entry, `
   export { PAID_PLANS_LIVE } from ${JSON.stringify(join(root, "src/config.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
-  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS, claimCitation, urlsIn, CITATION_PROMPT, settleCitation, SPLIT_PROMPT, correctEntry, dropAppliedClaims, CLAIMS_APPLIED, namesField, verifyTransportClaim } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS, claimCitation, urlsIn, sourceLinksIn, citationRefusal, claimIsPerishable, CITATION_PROMPT, settleCitation, SPLIT_PROMPT, correctEntry, dropAppliedClaims, CLAIMS_APPLIED, namesField, verifyTransportClaim, asksWhatItCarries } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS, feedbackProblem, feedbackRow } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { previewReportRow, travellerTurns, PREVIEW_SAID_CAP, PREVIEW_SCREEN_CAP } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { trimFillerRuns, trimFillerAgainst } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -999,6 +1000,419 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     is("a road that does not exist rejects the claim that it does", r.verdict, "rejected");
     ok("and says the crossing is real", /ferry crossing is required/.test(r.correctValue));
   }
+
+  // ── AND THE QUESTION THE PROBE CANNOT BE ASKED, 17 SEP 2026 ───────
+  //
+  // Oliver pasted the operator's own site and an instruction, twice, and got
+  // back "The ferry check could not run (probe unavailable), so nothing is
+  // claimed either way". His words: "this is so annoying.."
+  //
+  // The probe was the wrong instrument before it was an unavailable one. It
+  // answers exactly one question, is a ferry REQUIRED to reach this place,
+  // measured by asking for a driving route with ferries banned, and his claim
+  // was about what the boat CARRIES. A road query cannot see the car deck. So
+  // the reply described the failure of a measurement that would not have
+  // answered him if it had worked, which is the 8 Sep bug at the top of this
+  // block wearing the other branch: it answered a question nobody asked.
+  {
+    const { asksWhatItCarries } = M;
+    ok("a claim about vehicles is a carries claim",
+      asksWhatItCarries({ says: "the crossing is described only as a passenger crossing, but it also carries vehicles" }));
+    ok("in Danish too", asksWhatItCarries({ says: "færgen tager biler og cykler" }));
+    ok("and one about foot passengers", asksWhatItCarries({ says: "it is foot passengers only" }));
+    // The proposed value counts as well as the complaint, because a correction
+    // often carries the fact only in the value it offers.
+    ok("and a value naming them counts too",
+      asksWhatItCarries({ says: "this is wrong", proposed: "Car ferry, 45 minutes" }));
+    // AND THE ROUTING QUESTIONS ARE UNTOUCHED, which is the half that matters:
+    // the ferry probe caught Gemini's 90-minute ferry and its own reason for
+    // existing has not changed.
+    ok("whether a ferry is needed is still a routing question",
+      !asksWhatItCarries({ says: "there is no ferry needed, you can drive" }));
+    ok("and so is how long it takes", !asksWhatItCarries({ says: "the crossing is 45 minutes, not 90" }));
+    // ── AND IT NEVER REACHES THE PROBE ──────────────────────────────
+    const corr = stripComments(readFileSync(join(root, "src/utils/correction.js"), "utf8"));
+    ok("a carries claim is kept off the routing instrument",
+      /if \(kind === "transport" && !asksWhatItCarries\(c\)\) \{/.test(corr));
+  }
+}
+
+// ── "ARGUING WITH IT, DESPITE PROVIDING IT SOURCES" ─────────────────
+//
+// Oliver, 17 Sep 2026. He typed one address and one instruction into the box,
+// and the page he had gone and found was read by nothing.
+//
+// urlsIn says in its own comment why it does not attach URLs to claims: "a
+// bibliography at the bottom of an answer belongs to no single finding, and
+// guessing which one would be worse than having none." That is right about a
+// bibliography, and there is one case with nothing to guess.
+{
+  const corr = stripComments(readFileSync(join(root, "src/utils/correction.js"), "utf8"));
+  ok("one address and one claim need no guessing",
+    /const all = sourceLinksIn\(criticism\);\s*return all\.length === 1 && claims\.length === 1 \? all\[0\] : "";/.test(corr));
+  ok("and the citation tier reads it when the claim carries none",
+    /const citedUrl = claimCitation\(c\) \|\| soleUrl;/.test(corr));
+  // The claim's OWN sourceUrl still wins, or a fact-check that cited a page
+  // per finding would have every finding checked against the wrong one.
+  ok("a claim that names its own page keeps it",
+    /claimCitation\(c\) \|\| soleUrl/.test(corr) && !/soleUrl \|\| claimCitation/.test(corr));
+}
+
+// ── THE COMMUNITY GROUPS ────────────────────────────────────────────
+//
+// Oliver, 17 Sep 2026: "I've been in contact with someone from a community at
+// Sejerø that hosts events. 3 of the groups I've now tried to become member of,
+// while one is a public group... Is it possible for me to put that as a link
+// onto my studio, along with links from other groups from other communities?
+// And then whenever I click the 'refresh events'... it will scroll into these
+// groups that is listed on my studio and check for date?"
+{
+  const { groupIdIn, feedUrlProblem, cleanFeed, postsIn, postedDay, datesInPost,
+          timeInPost, candidatesIn, dedupeCandidates, alreadyPublished, newCandidates, sweepCost } = M;
+
+  // ── THE ID, WHICH IS THE ONLY THING THE API TAKES ───────────────
+  is("his own group link gives its id", groupIdIn("https://www.facebook.com/groups/125246204312244"), "125246204312244");
+  is("with a trailing path too", groupIdIn("https://www.facebook.com/groups/125246204312244/posts/999"), "125246204312244");
+  is("and a bare id is one", groupIdIn("125246204312244"), "125246204312244");
+  is("a page is not a group", groupIdIn("https://www.facebook.com/visitsejeroe"), "");
+  // A VANITY SLUG IS REFUSED WITH INSTRUCTIONS, not with "invalid". Nothing can
+  // turn a slug into an id without asking Facebook, and a row stored from one
+  // would fail on every sweep forever while looking perfectly correct.
+  is("a named group has no id in it", groupIdIn("https://www.facebook.com/groups/sejeroe-nyt"), "");
+  ok("and the message says what to paste instead",
+    /Open the group, click About/.test(feedUrlProblem("https://www.facebook.com/groups/sejeroe-nyt")));
+  ok("a non-Facebook link says only groups work", /Only Facebook groups/.test(feedUrlProblem("https://sejeroe.dk/kalender")));
+  is("and a good one has no problem", feedUrlProblem("https://www.facebook.com/groups/125246204312244"), "");
+  // Stored canonical, so the same group pasted two ways is one row.
+  is("the stored url is the canonical one",
+    cleanFeed({ url: "https://www.facebook.com/groups/125246204312244/posts/1?ref=x" }).url,
+    "https://www.facebook.com/groups/125246204312244");
+  is("a row with no usable link is not a feed", cleanFeed({ url: "sejeroe.dk" }), null);
+
+  // ── READING WHAT THE PROVIDER SENDS ─────────────────────────────
+  // Documented fields, read defensively, because this codebase's own history is
+  // that an assumed API shape was wrong in four places at once.
+  const POST = {
+    post_id: "p1",
+    url: "https://www.facebook.com/groups/125246204312244/posts/p1",
+    message: "Vil du se teater sammen med dine børn eller børnebørn? Se Boris og den glade løve på lørdag d. 25.7. kl.15.00 i Kulturhuset.",
+    timestamp: Math.floor(new Date("2026-07-18T10:00:00Z").getTime() / 1000),
+    author_name: "Lise Zeuthen",
+  };
+  is("one post comes back", postsIn({ posts: [POST] }).length, 1);
+  is("under another array name too", postsIn({ results: [POST] }).length, 1);
+  is("and an empty body is no posts", postsIn({}), []);
+  is("a post with no words is dropped", postsIn({ posts: [{ post_id: "x", message: "   " }] }), []);
+  // SECONDS, NOT MILLISECONDS. A Facebook timestamp read as milliseconds lands
+  // in 1970, and every date in the post would then anchor to the wrong year.
+  is("the timestamp is read as seconds", postedDay(POST), "2026-07-18");
+  is("and a date string is the fallback", postedDay({ date: "2026-07-18T10:00:00Z" }), "2026-07-18");
+  is("with nothing readable giving nothing", postedDay({}), "");
+
+  // ── THE DATE IN THE POST, WHICH IS THE WHOLE FEATURE ────────────
+  //
+  // His own example is the shape: no year, no month name, and a weekday that
+  // only means something against the day it was posted. So the post's own date
+  // is the anchor.
+  is("the date comes out of his own post", datesInPost(POST.message, "2026-07-18"), ["2026-07-25"]);
+  is("and the hour with it", timeInPost(POST.message), "15:00");
+  // ── AND A CLOCK IS NOT A DATE ───────────────────────────────────
+  // "kl. 12.10" is ten past twelve and reads exactly like the twelfth of
+  // October. Danish writes both with a dot, so the only evidence is the word in
+  // front. This was a real bug first: one combined pattern read "kl.15.00" as
+  // the first of May, by letting the day be 1, the 5 become a month and the 00
+  // fall off the end. A plausible date out of a clock.
+  is("a clock time is not a date", datesInPost("Fællesspisning kl. 12.10 i forsamlingshuset", "2026-09-01"), []);
+  is("nor is an evening one", datesInPost("Høstfest 12. oktober kl. 19.30", "2026-09-01"), ["2026-10-12"]);
+  is("and a phone number is not a date", datesInPost("Ring på 20 25 30 40", "2026-09-01"), []);
+  // ── THE YEAR, AND WHEN IT MAY BE ROLLED ─────────────────────────
+  is("a post in December means next January", datesInPost("Nytårskur d. 3. januar kl. 14", "2026-12-20"), ["2027-01-03"]);
+  // A post that WROTE a year is never rolled, or an archive post about 2024
+  // would be quietly moved into this year, which is the invented-date failure
+  // wearing a friendly face.
+  is("a stated year is never moved", datesInPost("Loppemarked 25. juli 2024", "2026-07-18"), ["2024-07-25"]);
+  is("a slash date works", datesInPost("Marked den 3/10 kl 10", "2026-09-01"), ["2026-10-03"]);
+  is("a range keeps both ends", datesInPost("Sejerø Festival 25.-27. juli", "2026-05-01"), ["2026-07-25", "2026-07-27"]);
+  // Date's own arithmetic turns 31 February into 3 March. A date nobody wrote
+  // is worse than no date.
+  is("an impossible day is dropped", datesInPost("den 31. februar", "2026-01-01"), []);
+  is("and with no anchor nothing is dated", datesInPost(POST.message, ""), []);
+
+  // ── WHAT IS WORTH HIS ATTENTION ─────────────────────────────────
+  //
+  // His own example decides this one. The post is from 18 July, the event is
+  // Saturday 25 July, and he is reading it on 17 September: it happened seven
+  // weeks ago. A group wall is mostly the past.
+  const posts = postsIn({ posts: [POST] });
+  is("the example is over by September", candidatesIn(posts, { today: new Date("2026-09-17") }).length, 0);
+  is("and was a candidate in July", candidatesIn(posts, { today: new Date("2026-07-20") }).length, 1);
+  {
+    const c = candidatesIn(posts, { today: new Date("2026-07-20"), feed: { name: "Sejerø", url: "https://x", place: "Sejerø" } })[0];
+    is("carrying its date", c.date, "2026-07-25");
+    is("its hour", c.time, "15:00");
+    is("the post it came from", c.postUrl, POST.url);
+    is("and which group", c.feedName, "Sejerø");
+    // THE POST'S OWN WORDS, AND NO INVENTED NAME. A regex can find a date and
+    // cannot name a show, and a wrong name in the one line he skims is worse
+    // than no name at all.
+    ok("the post's words are carried whole", c.text === POST.message);
+    ok("and nothing calls itself a title", !("title" in c) && !("name" in c));
+  }
+  // A post with no date is a photograph, a thank-you or a lost cat.
+  is("a post with no date is not a candidate",
+    candidatesIn(postsIn({ posts: [{ post_id: "n", message: "Tak for i aftes, alle sammen!", timestamp: POST.timestamp }] }), { today: new Date("2026-07-20") }), []);
+  // Soonest first: a village posts about next Saturday far more often than
+  // about next summer, and the soonest is the one with a deadline on it.
+  {
+    const two = postsIn({ posts: [
+      { post_id: "a", message: "Julemarked 12. december kl 10", timestamp: POST.timestamp },
+      { post_id: "b", message: "Høstfest 3. august kl 18", timestamp: POST.timestamp },
+    ] });
+    is("the soonest is first", candidatesIn(two, { today: new Date("2026-07-20") }).map(c => c.date),
+      ["2026-08-03", "2026-12-12"]);
+  }
+
+  // ── THE SAME EVENING, POSTED FOUR TIMES ─────────────────────────
+  const same = [
+    { postId: "1", date: "2026-08-03", text: "Høstfest i forsamlingshuset\nAlle er velkomne" },
+    { postId: "2", date: "2026-08-03", text: "Høstfest i forsamlingshuset\nHusk tilmelding" },
+    { postId: "3", date: "2026-08-03", text: "Fisketur fra havnen" },
+  ];
+  is("one evening is one card", dedupeCandidates(same).length, 2);
+  // And against what is already on the site, on the day plus a shared word,
+  // because the post says "Høstfest" and the entry says "Høstfest på Sejerø".
+  ok("an event already published is not offered again",
+    alreadyPublished({ date: "2026-08-03", text: "Høstfest i forsamlingshuset" }, [{ name: "Høstfest på Sejerø", dateStart: "2026-08-03" }]));
+  ok("but the same day with nothing in common is not a match",
+    !alreadyPublished({ date: "2026-08-03", text: "Fisketur fra havnen" }, [{ name: "Høstfest på Sejerø", dateStart: "2026-08-03" }]));
+  ok("and neither is the same name on another day",
+    !alreadyPublished({ date: "2026-08-04", text: "Høstfest i forsamlingshuset" }, [{ name: "Høstfest på Sejerø", dateStart: "2026-08-03" }]));
+  is("so the queue holds what is genuinely new",
+    newCandidates(same, [{ name: "Høstfest på Sejerø", dateStart: "2026-08-03" }]).map(c => c.postId), ["3"]);
+
+  // ── WHAT IT COSTS, BEFORE HE PRESSES IT ─────────────────────────
+  is("only the switched-on groups cost anything",
+    sweepCost([{ enabled: true }, { enabled: true }, { enabled: false }]), { feeds: 2, requests: 2, cents: 1.6 });
+  is("and nothing switched on costs nothing", sweepCost([]), { feeds: 0, requests: 0, cents: 0 });
+
+  // ── AND THE WIRING ──────────────────────────────────────────────
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    const api = stripComments(readFileSync(join(root, "api/social-find.js"), "utf8"));
+    // A MODE ON AN EXISTING FUNCTION, not a new file: api/ is a serverless
+    // function count and a new file there is a deploy decision.
+    ok("the group read is a mode on social-find", /check \|\| ""\) === "group-posts"/.test(api));
+    ok("and it is the documented endpoint", /"\/v1\/facebook\/group\/posts", \{ group_id: group, pages: 1 \}/.test(api));
+    ok("with the id demanded as a number", api.includes("/^\\d{5,}$/.test(group)"));
+    ok("the panel is wired", /const sweepFeeds = async \(\) => \{/.test(app));
+    // ── AND THE BUTTON CAN BE SEEN ────────────────────────────────
+    //
+    // Oliver, 17 Sep 2026, after this shipped: "You didn't create anything in
+    // studio for the groups?" It was there. The Studio toolbar was one flex
+    // line with no wrap, already full at seven buttons and ending flush against
+    // the panel's right edge, so the eighth had nowhere to go. Nothing errors
+    // when that happens: the button renders, the handler works, and the feature
+    // is invisible. This project's signature failure, arriving through CSS.
+    ok("the studio toolbar wraps", /<div style=\{\{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" \}\}>/.test(app));
+    // The row it sits inside wraps too, or a narrow window pushes the whole
+    // toolbar off instead of one button.
+    ok("and so does the row it sits in",
+      /justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap"/.test(app));
+    // Both buttons are in that row, which is the thing that was actually asked.
+    ok("the community groups button is in the toolbar", /📣 Community groups\s*<\/button>/.test(app));
+    // ── AND THE GROUPS NOTHING CAN READ ───────────────────────────
+    //
+    // Oliver: "What do you suggest we do with private groups? Shall I make a
+    // mail?" Checked against a real notification in his own inbox rather than
+    // guessed at: one from 13 August carries `Det sker i Gilleleje: "SOMMERTID
+    // = HAVESTUETID. Vores sidste åbningsdage..."` and stops. Facebook
+    // truncates on purpose so you click through, so there is no date in the
+    // email for anything to find. Mail is a doorbell, not a feed.
+    ok("a post can be pasted instead", /const readPastedPost = \(\) => \{/.test(app));
+    // THE SAME READER, or the pasted half and the swept half start disagreeing
+    // about what a post says.
+    ok("and it goes through the same reader", /candidatesIn\(\s*\[\{ id: `pasted-\$\{Date\.now\(\)\}`/.test(app));
+    ok("into the same queue, deduped", /dedupeCandidates\(\[\.\.\.found, \.\.\.had\]\)/.test(app));
+    // TODAY IS THE ANCHOR for a paste, which is a real difference from a swept
+    // post carrying its own day, and the reason is written where it happens.
+    ok("anchored on today, because a paste carries no date of its own",
+      /at: dayKey\(new Date\(\)\), author: "" \}\]/.test(app));
+    ok("and it says so when it finds nothing", /No date that has not already happened/.test(app));
+    // ── AND THE WEEKLY RUN CARRIES IT TOO ─────────────────────────
+    // His own choice: a button, and with the weekly update, "so new posts
+    // surface without you remembering".
+    {
+      const weekly = stripComments(readFileSync(join(root, "api/update-events-check.js"), "utf8"));
+      ok("the weekly update sweeps the groups", /candidatesIn\(postsIn\(body \|\| \{\}\)/.test(weekly));
+      // IMPORTED, not reimplemented. A second copy of the date reading is how
+      // the button and the weekly run come to disagree about what a post says.
+      ok("using the same reader as the button",
+        /import \{ postsIn, candidatesIn, newCandidates \} from "\.\.\/src\/utils\/communityFeeds\.js";/.test(weekly));
+      // ONLY ON THE FIRST PAGE, or a paged weekly run bills the same groups
+      // five times.
+      ok("and only on the first page", /if \(offset === 0\) \{/.test(weekly));
+      ok("with the groups deduped against everything published, not just the batch",
+        /newCandidates\(found, rows\.map\(r => r\.payload \|\| \{\}\)\)/.test(weekly));
+      // IT WRITES NOTHING, like the rest of that endpoint. Asked of SUPABASE
+      // specifically: there is a POST in that file and it is the Perplexity
+      // call, so a bare search for one would fail on a correct endpoint.
+      ok("and nothing is written back to the library",
+        !/SUPABASE_URL[^;]{0,200}method: "(?:POST|PATCH|DELETE)"/.test(weekly));
+    }
+    ok("and it has its own table", /create table if not exists gemlyx_feeds/.test(app));
+    // ── NOTHING IS PUBLISHED, AND NOTHING IS CITED ────────────────
+    // The whole safety of the feature. A post makes the pipeline go and look;
+    // it may never settle anything, and facebook stays in NEVER_A_SOURCE.
+    ok("a candidate goes to the ordinary draft pipeline", /setScanHint\(\{ town: where, lead: c\.text, leadFrom: c\.postUrl \|\| c\.feedUrl \}\)/.test(app));
+    ok("and the research context says what a lead is",
+      /HEARD IN A COMMUNITY GROUP, WHICH IS A LEAD AND NOT A SOURCE/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+    ok("and says it may never be cited",
+      /may NEVER be cited, may never settle a date or a price, and may never appear in __sources/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+    // The lead may not ride in the block that outranks a fresh search.
+    ok("the lead is its own paragraph, not the trusted one",
+      !/KNOWN FROM SOURCE LISTING[\s\S]{0,200}hint\.lead/.test(app));
+    const policy = readFileSync(join(root, "src/utils/sourcePolicy.js"), "utf8");
+    ok("facebook is still never a source", /const NEVER_A_SOURCE = [\s\S]{0,200}facebook/.test(policy));
+  }
+}
+
+// ── A TICKET TO AN ISLAND ───────────────────────────────────────────
+//
+// Oliver's island run log, 16 Sep 2026. Seven island drafts, two bookable
+// ticket links, both wrong: a stand-up comedian's show called "Et kik ind i
+// Langeland" playing in Herning, and a music venue in Rønne. The name test
+// cannot catch either, because both pages really are about something called
+// Langeland or Bornholm. The mistake is one level up.
+{
+  const { typeHasAdmission } = M;
+  is("an island has no door to buy a ticket to", typeHasAdmission("island"), false);
+  // ONLY islands. A town looks like the same argument and is not: a city card
+  // is a real product, sold on Tiqets, and the Copenhagen Card is already an
+  // affiliate row in essentials.
+  is("a town may still turn up a city card", typeHasAdmission("town"), true);
+  is("a festival certainly does", typeHasAdmission("festival"), true);
+  is("and an unknown type is not silently excluded", typeHasAdmission(""), true);
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    // BOTH gates, or the vetting is skipped and the search still runs.
+    is("both ticket hunts ask it",
+      (app.match(/if \(!String\(t\.ticketUrl \|\| ""\)\.trim\(\) && typeHasAdmission\(sType\)\)/g) || []).length, 2);
+  }
+}
+
+// ── "MAKE IT SO WHEN IT SEES http, https, .com, .dk" ────────────────
+//
+// Oliver, 17 Sep 2026: "for the 'critique' fact-checker draft, make it so when
+// it sees 'http', 'https', '.com' '.dk' then it has to assume it's a link, and
+// check that link. Of course, it needs to make sure that's not a third party
+// link from 2018 (example..) as well."
+{
+  const { sourceLinksIn, citationRefusal, claimIsPerishable, settleCitation } = M;
+
+  // ── A LINK WITHOUT A SCHEME IS STILL A LINK ─────────────────────
+  // Nobody typing a source into a box writes https://. Every one of these was
+  // invisible to the pass that was meant to read them.
+  is("a bare Danish host is a link", sourceLinksIn("aeroexpressen.dk says it takes cars"), ["https://aeroexpressen.dk"]);
+  is("with its path", sourceLinksIn("see visitfyn.dk/lyoe"), ["https://visitfyn.dk/lyoe"]);
+  is("a .com too", sourceLinksIn("bornholm.com has it"), ["https://bornholm.com"]);
+  is("a subdomain as well", sourceLinksIn("lollandfaergefart.lolland.dk/prices-and-booking"),
+    ["https://lollandfaergefart.lolland.dk/prices-and-booking"]);
+  is("and a full address is unchanged", sourceLinksIn("https://aeroexpressen.dk/en/ yes. Apply it"), ["https://aeroexpressen.dk/en/"]);
+  // ── AND THE THINGS THAT ARE NOT LINKS ───────────────────────────
+  // Each false one costs a page fetch and an answer about a page that does not
+  // exist, which is why this is an allow-list of endings rather than "word dot
+  // word".
+  is("an email address is not a link", sourceLinksIn("mail me at oliver@gemlyx.dk"), []);
+  is("nor a filename", sourceLinksIn("the file is run.mjs"), []);
+  is("nor a number", sourceLinksIn("it is 1.5 km"), []);
+  is("nor an abbreviation", sourceLinksIn("it costs 160 kr, e.g. on the ferry"), []);
+  is("and an ending that is not one of ours is not one", sourceLinksIn("gemlyx.dkx is not a link"), []);
+  // The host inside an address already found is not collected twice.
+  is("one address is one link", sourceLinksIn("https://bornholm.info/en/ferry"), ["https://bornholm.info/en/ferry"]);
+
+  // ── "NOT A THIRD PARTY LINK FROM 2018" ──────────────────────────
+  // Two of the three questions can be answered from the address alone, before
+  // a fetch is spent on it.
+  ok("a social page is never the deciding source",
+    /social or user-posted/.test(citationRefusal("https://www.facebook.com/events/123")));
+  is("an ordinary page is not refused", citationRefusal("https://aeroexpressen.dk/en/"), "");
+  ok("an address naming another year is refused",
+    /different year/.test(citationRefusal("https://www.ticketmaster.dk/event/partout-tinderbox-2022-billetter/484597", { year: 2027 })));
+  is("and the same address is fine for its own year",
+    citationRefusal("https://www.ticketmaster.dk/event/partout-tinderbox-2022-billetter/484597", { year: 2022 }), "");
+  is("an entry with no date refuses nothing on a year",
+    citationRefusal("https://www.ticketmaster.dk/event/partout-tinderbox-2022-billetter/484597"), "");
+  ok("and something that is not an address at all says so",
+    /not a readable address/.test(citationRefusal("not a link")));
+  is("nothing at all is not a refusal", citationRefusal(""), "");
+
+  // ── WHAT A PAGE FROM 2018 STILL GETS TO ANSWER ──────────────────
+  // Not nothing, which is the mistake in the other direction. pageScan's
+  // PERISHABLE list is the settled answer to what goes off, and a durable fact
+  // about a boat is not on it.
+  ok("a price claim is perishable", claimIsPerishable({ says: "the return fare is 160 kr" }));
+  ok("a timetable claim is", claimIsPerishable({ says: "the last sailing is at 17:30" }));
+  ok("an opening-hours claim is", claimIsPerishable({ says: "it is open all year", field: "hours" }));
+  ok("and anything naming a year is", claimIsPerishable({ says: "the 2027 edition moved" }));
+  ok("but what a ferry carries is not",
+    !claimIsPerishable({ says: "it is described only as a passenger crossing, but it also carries vehicles" }));
+  ok("nor is where a place sits",
+    !claimIsPerishable({ says: "Rådhuspladsen is in Copenhagen, not Aalborg" }));
+
+  // ── AND A STALE PAGE SETTLES NOTHING, IN EITHER DIRECTION ───────
+  // Both halves, or the guard is the more dangerous half of itself: a 2018 page
+  // that says otherwise must not be allowed to reject a correct entry, which is
+  // the shape that has cost the most in this codebase.
+  const OLD = "the newest year on this page is 2018, so nothing on it can be inside 6 months";
+  {
+    const r = settleCitation({ parsed: { says: "supports", quote: "Færgen koster 50 kr" }, url: "https://www.example.dk/x", stale: OLD });
+    is("an old page cannot confirm a price", r.verdict, "");
+    is("and carries nothing to apply", r.sourceUrl, "");
+    ok("while saying how old it is", /2018/.test(r.evidence));
+    ok("and what would settle it", /current page/.test(r.evidence));
+  }
+  {
+    const r = settleCitation({ parsed: { says: "contradicts", quote: "Færgen koster 50 kr" }, url: "https://www.example.dk/x", stale: OLD });
+    is("and an old page cannot reject one either", r.verdict, "");
+    ok("nothing was applied on it", /Nothing was applied/.test(r.evidence));
+  }
+  // A page that is NOT stale behaves exactly as it did, which is the half that
+  // must not move: the operator's own page still settles.
+  {
+    const r = settleCitation({ parsed: { says: "supports", quote: "28 køretøjer pr. overfart" }, url: "https://aeroexpressen.dk/", isOwnSite: true });
+    is("a current operator page still settles it", r.verdict, "confirmed");
+  }
+  // ── AND THE WIRING, OR ALL OF THE ABOVE IS A LIBRARY ────────────
+  const corr = stripComments(readFileSync(join(root, "src/utils/correction.js"), "utf8"));
+  ok("the refusal runs before a fetch is spent",
+    /const refusedWhy = citedUrl \? citationRefusal\(citedUrl, \{ year: editionYear \}\) : "";/.test(corr));
+  ok("the page is aged on its own text",
+    /const age = factAge\(pageText, Date\.now\(\)\);/.test(corr));
+  ok("and the age only bites on a claim that can go off",
+    /const stale = !age\.perishableOk && claimIsPerishable\(c\) \? age\.why : "";/.test(corr));
+  ok("and it reaches the settler", /settleCitation\(\{ parsed: cParsed, url: citedUrl, isOwnSite: isOwn, stale \}\);/.test(corr));
+}
+
+// ── "NOT applied. Not applied." ─────────────────────────────────────
+//
+// What he saw on 17 Sep, in the panel, twice in one reply. correction.js writes
+// that sentence into the evidence itself for two cases, because only it knows
+// whether a value was supplied and whether the operator's own site was asked,
+// and the panel then said it again in front. Two owners of one sentence.
+{
+  const assistant = readFileSync(join(root, "src/components/StudioAssistant.jsx"), "utf8");
+  ok("the panel leads only when the evidence has not",
+    /const lead = \(sentence, evidence\) => \{[\s\S]{0,240}\/\^not applied\\b\/i\.test\(text\)/.test(assistant));
+  ok("the rejected line goes through it", /\? lead\("Not applied\.", c\.evidence\)/.test(assistant));
+  ok("and so does the unconfirmed-from-a-paste line",
+    (assistant.match(/lead\("Not applied\.", c\.evidence\)/g) || []).length === 2);
+  // The shout is gone with it. The evidence underneath says what happened and
+  // says it specifically, which was the 16 Sep lesson one line up.
+  ok("nothing shouts the headline twice", !/NOT applied\. \$\{c\.evidence\}/.test(assistant));
+  // And correction.js still owns the specific version.
+  const corr = readFileSync(join(root, "src/utils/correction.js"), "utf8");
+  ok("the specific sentence still lives where the facts are",
+    /evidence = `Not applied\. This came from a pasted fact-check/.test(corr));
 }
 
 // ── "IT WILL DO IT IN CODE LIKE %20%20%20%" ─────────────────────────
@@ -17972,7 +18386,9 @@ rmSync(dir, { recursive: true, force: true });
   // It goes from zero spend to real spend, so it has to be able to say how much.
   ok("there is a dry run that makes no paid call", /const dry = req\.query\.dry === "1"/.test(upd));
   ok("the dry run reports what it would cost", /wouldCost:/.test(upd));
-  ok("a real run reports what it actually spent", /spend: \{ perplexityCalls: batch\.length, firecrawlCredits: credits \}/.test(upd));
+  // groupReads joined this line on 17 Sep with the community feeds. What it
+  // pins is unchanged: the spend reported is counted, never estimated.
+  ok("a real run reports what it actually spent", /spend: \{ perplexityCalls: batch\.length, firecrawlCredits: credits, groupReads: community\?\.groups \|\| 0 \}/.test(upd));
   ok("credits are counted from the reader rather than guessed", /credits \+= r\.credits \|\| 0;/.test(upd));
 
   // The official site goes in FIRST, which is what makes the priority real.
@@ -18846,6 +19262,44 @@ rmSync(dir, { recursive: true, force: true });
   is("Tønder as a town", scopeTier("Tønder"), "town");
   is("and blank as everywhere", scopeTier(""), "everywhere");
 
+  // ── AND THE FOURTH TIER, WHICH IS NOT A PLACE ────────────────────
+  //
+  // Oliver, 17 Sep 2026, with rundtidanmark.dk/alle-danmarks-oer in hand: "I
+  // need you to make me able to add 'Islands' to the research sources as a
+  // region." It is not a region: its members are scattered across every region
+  // on the map, so no list of kommuner can hold them.
+  is("Islands is its own tier", scopeTier("Islands"), "islands");
+  is("and it stores canonical whatever he types", cleanPlace("islands"), "Islands");
+  is("in Danish too", cleanPlace("Danmarks øer"), "Islands");
+  is("and folded, so the spelling without the slash still lands", cleanPlace("danmarks oer"), "Islands");
+  // ── THE WORD THAT IS REFUSED, AND WHY ────────────────────────────
+  // In Danish, Island IS Iceland. And a source about ONE island belongs scoped
+  // to that island by name, where it reaches the island's own entry, the towns
+  // on it and anything that uses it as a base.
+  is("the singular is not this tier", scopeTier("Island"), "town");
+  is("and a named island is a town-tier scope", scopeTier("Ærø"), "town");
+  // ── WHAT AN ISLANDS SOURCE FIRES ON ──────────────────────────────
+  const aeroe = { name: "Ærøskøbing", region: "Sydfyn", part: "Funen", island: "Ærø" };
+  const samsoFest = { name: "Samsø Festival", region: "Østjylland", island: "Samsø" };
+  const aarhus = { name: "Aarhus", region: "Østjylland", part: "Jutland" };
+  ok("rundtidanmark reaches a town on an island", placeMatches("Islands", aeroe));
+  ok("and a festival on one, which is not an island entry", placeMatches("Islands", samsoFest));
+  ok("and stays off Aarhus", !placeMatches("Islands", aarhus));
+  ok("and off a draft nothing could place", !placeMatches("Islands", { name: "Somewhere" }));
+  // THE FALLBACK THAT WOULD HAVE MADE THIS USELESS. islandOf answers the part
+  // of the country when it cannot name an island, so Copenhagen comes back
+  // "Zealand" — true, and it would have put this source on most drafts in the
+  // country. The context carries namedIslandOf, which stops one tier earlier.
+  ok("a Zealand draft is not an island draft", !placeMatches("Islands", { name: "Copenhagen", part: "Zealand", region: "Storkøbenhavn" }));
+  // AND NO TEXT FALLBACK. Research about any Danish coast says "islands"
+  // constantly, and the loose test would attach this source to most drafts in
+  // the country at four searches a time.
+  ok("the research text cannot unlock it",
+     !placeMightMatch("Islands", { name: "Skagen", text: "boats leave for the islands every hour" }, "town"));
+  ok("not even on a draft nothing has placed",
+     !placeMightMatch("Islands", { name: "Somewhere", text: "one of the Danish islands" }, "festival"));
+  ok("while a real island draft still passes the loose test", placeMightMatch("Islands", aeroe, "town"));
+
   // ── WHAT A SØNDERJYLLAND SOURCE ACTUALLY FIRES ON ────────────────
   const romo = { name: "Rømø Sandskulptur", region: "Sønderjylland", part: "Jutland" };
   const skagen = { name: "Skagen Festival", region: "Nordjylland", part: "Jutland" };
@@ -18969,6 +19423,26 @@ rmSync(dir, { recursive: true, force: true });
   ok("the picker offers the regions", /\{REGION_NAMES\.map\(x => <option key=\{x\} value=\{x\}>region/.test(appR));
   ok("and the row says which tier it was understood as", /const tier = scopeTier\(row\.applies_place\);/.test(appR));
   ok("and names the kommuner behind a region", /kommunerIn\(row\.applies_place\)/.test(appR));
+  // ── AND THE ONE TIER NOTHING ABOUT THE WORD WOULD SUGGEST ────────
+  // A scope he cannot type is a scope that does not exist, and "Islands" is not
+  // a place name, so it has to be offered rather than merely accepted.
+  ok("the picker offers the islands scope", /<option value=\{ISLANDS_SCOPE\}>/.test(appR));
+  ok("and the box says so", /only for… \(Islands, a region, a town, or Jutland\)/.test(appR));
+  ok("and the row labels that tier in words", /islands: "any island"/.test(appR));
+  // ── AND THE DRAFT CARRIES THE FIELD IT MATCHES ON ────────────────
+  // The scope asks ctx.island and nothing else, so a context builder that does
+  // not set it is the scope matching nothing, quietly, forever.
+  ok("the draft works out whether it is on an island",
+     /const islandHere = \(\) => \(sType === "island" \? name : namedIslandOf\(\{ island: knownIsland \}, placed\?\.kommune \|\| ""\)\);/.test(appR));
+  // BOTH builders, or the source reaches the prompt and never gets searched.
+  is("and both context builders carry it", (appR.match(/island: islandHere\(\),/g) || []).length, 2);
+  // namedIslandOf, never islandOf: the fallback would make Copenhagen an island.
+  // The word boundary is load-bearing. Without it this matched `_island:
+  // islandOf(` on the attractions filter, which is a different field on a
+  // different page and is RIGHT to use the fallback: that control has one
+  // geography row and must leave nothing unreachable.
+  ok("the island in a source context is a named one, not the landmass fallback",
+     !/\bisland: islandOf\(/.test(appR));
 }
 
 // ── REACHING EVERY SOURCE HE HAS ADDED ─────────────────────────────
@@ -24591,9 +25065,24 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("and for nothing at all", partnerDisclosure(null), "");
 
   // ── WIRED INTO ESSENTIALS AND INTO THE GUIDE ─────────────────────
-  const paid = ESSENTIALS_FOR_TEST.filter(e => isPartnerLink(e.link));
-  is("exactly one essentials row carries a paid link", paid.length, 1);
-  is("and it is the tickets one", paid[0]?.category, "Sightseeing");
+  //
+  // ── COUNTED THROUGH linksOf AND THROUGH THE WRAPPER, 16 SEP 2026 ─
+  //
+  // This asked isPartnerLink(e.link), which answers about ONE link that is
+  // ALREADY tracked. The Copenhagen Card is neither: it carries two links in
+  // `links`, and the paid one is stored as its destination and wrapped at
+  // render. Asked the old way, this would have reported one paid row on the day
+  // two shipped, and the two prose rules below would have stopped applying to
+  // the row that most needed them. A census that cannot see the second row is
+  // worse than no census.
+  const paidLinksOf = (row) => M.linksOf(row).map(l => M.outboundLink(l.url)).filter(o => !!o.note);
+  const paid = ESSENTIALS_FOR_TEST.filter(r => paidLinksOf(r).length);
+  is("exactly two essentials rows carry a paid link", paid.length, 2);
+  ok("and both of them are in Sightseeing", paid.every(r => r.category === "Sightseeing"));
+  ok("every paid link is disclosed where it is drawn",
+    paid.every(r => paidLinksOf(r).every(o => /commission/.test(o.note))));
+  ok("and none of them is labelled the official site",
+    paid.every(r => paidLinksOf(r).every(o => o.label !== "Official site")));
   // ── AND IT SAYS SO IN ITS OWN WORDS ──────────────────────────────
   // Oliver, 16 Aug 2026: "can you please point out that this is one of our
   // affiliates? Just so people is aware of why we use this random lesser known
@@ -24608,23 +25097,60 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // that keeps the paid link honest rather than merely disclosed.
   paid.forEach(row => ok(`the ${row.name} row still points at the official site first`,
     /own site|official site/i.test(`${row.howTo || ""} ${row.tip || ""}`)));
-  // id 5 is the Copenhagen Card, which Tiqets also sells. It still points at
-  // the official site: quietly rewriting an existing recommendation into a paid
-  // one is the thing the front of this app exists not to do.
+  // ── id 5, THE COPENHAGEN CARD, 16 SEP 2026 ──────────────────────
+  //
+  // Oliver: "Can you put an affiliate link on the Copenhagen Card, please. From
+  // Tiqets."
+  //
+  // What was asserted here was that this row still pointed at the official site
+  // and was not paid, and the reason given was that quietly rewriting a
+  // recommendation into a paid one is the thing the front of this app exists not
+  // to do. The word doing the work in that sentence is QUIETLY, so the row keeps
+  // the official site, keeps it FIRST, and says the partnership in its own
+  // prose. What is asserted is the order and the honesty, not the absence.
   const cph = ESSENTIALS_FOR_TEST.find(e => e.id === 5);
-  ok("the Copenhagen Card row still points at the official site", /copenhagencard\.com/.test(cph?.link || ""));
-  is("and is not a paid link", isPartnerLink(cph?.link), false);
+  const cphLinks = M.linksOf(cph);
+  is("the Copenhagen Card offers two ways to buy it", cphLinks.length, 2);
+  ok("the card's own site is the first of them", /copenhagencard\.com/.test(cphLinks[0]?.url || ""));
+  is("and nothing is disclosed over it, because it earns nothing", M.outboundLink(cphLinks[0].url).note, "");
+  is("it is not called a partner link either", isPartnerLink(cphLinks[0].url), false);
+  // THE PRODUCT PAGE, not the category page and not the browse link. A category
+  // page drops the reader on a list of Copenhagen attractions to find the card
+  // in, which is the distinction tiqetsPageKind exists to draw.
+  ok("the second is the Tiqets product page", M.isTiqetsProductUrl(cphLinks[1]?.url || ""));
+  is("and it is a product page rather than a category one", M.tiqetsPageKind(cphLinks[1].url), "product");
+  // STORED AS THE DESTINATION, WRAPPED AT RENDER. That is what makes the link
+  // go quietly back to being an ordinary one the day the programme ends, with
+  // no edit to the data file and no disclosure left over a link that no longer
+  // earns.
+  is("it is stored untracked", isPartnerLink(cphLinks[1].url), false);
+  ok("and it is tracked by the time it is rendered", M.isAffiliateHref(cphLinks[1].url));
+  ok("with the commission said under it", /commission/.test(M.outboundLink(cphLinks[1].url).note));
+  is("and Tiqets named on the button rather than called the official site",
+    M.outboundLink(cphLinks[1].url).label, "Book on Tiqets");
   // Every essentials id is unique, or the React key collides and one row
   // silently replaces another.
   is("no two essentials share an id",
     new Set(ESSENTIALS_FOR_TEST.map(e => e.id)).size, ESSENTIALS_FOR_TEST.length);
 
   const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the essentials card prints the disclosure", /partnerDisclosure\(item\.link\)/.test(appSrc));
+  const affSrc = readFileSync(join(root, "src/utils/affiliates.js"), "utf8");
+  // ── ONE DOOR, ASKED FOR IN ONE CALL ─────────────────────────────
+  // These pinned partnerDisclosure(item.link) and a rel computed in App.jsx,
+  // which is exactly how the merged branch on the same card ended up with
+  // neither. The four answers are computed together now, so what is pinned is
+  // that both branches ASK, and that the rule itself lives where it cannot be
+  // half-copied.
+  ok("the essentials card asks one function for the whole link", /const \{ href, label, note, rel \} = outboundLink\(item\.link\);/.test(appSrc));
+  ok("and the merged branch asks the same one", /const out = outboundLink\(l\.url\);/.test(appSrc));
   // rel gains sponsored and nofollow when it is tracked. That is what Google
   // asks for on a paid link and is the difference between an affiliate link and
   // an undisclosed ad.
-  ok("and marks a tracked link sponsored", /const rel = note \? "noreferrer sponsored nofollow" : "noreferrer";/.test(appSrc));
+  ok("and a tracked link is marked sponsored", /rel: note \? "noreferrer sponsored nofollow" : "noreferrer",/.test(affSrc));
+  // WRAPPED FIRST, ASKED SECOND. Asking the raw url says "ordinary link,
+  // official site, no disclosure" about a link that is about to earn.
+  ok("the label and the sentence are asked of the wrapped link",
+    /const href = safe \? \(affiliateHref\(safe\) \|\| safe\) : null;[\s\S]{0,120}const note = href \? partnerDisclosure\(href\) : "";/.test(affSrc));
   // ── AND EVERY BRANCH GETS IT, WHICH IS THE BUG THAT WAS HERE ─────
   // 16 Aug: the disclosure and the sponsored rel were computed INSIDE one of
   // three branches, and a plain web link never takes that branch. So the Tiqets
@@ -24641,7 +25167,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // The label is a claim about whose site it is. Tiqets is not the official
     // site of Tivoli, and this branch said it was.
     ok("no branch calls a tracked link the official site", !/Official site ↗/.test(block));
-    ok("the label comes from the link itself", /const label = linkLabel\(item\.link\);/.test(block));
+    ok("the label comes from the link itself", /const \{ href, label, note, rel \} = outboundLink\(item\.link\);/.test(block));
+    // And the href is the WRAPPED one. Rendering externalHref(item.link) beside
+    // a label and a disclosure computed from the wrapped link would describe a
+    // paid link and send the reader down an unpaid one.
+    ok("and every anchor points at the wrapped href", !/<a href=\{externalHref\(item\.link\)\}/.test(block));
     // COMPUTED IS NOT PRINTED. A disclosure read into a const and never
     // rendered is a paid link with nothing under it, which is what was on the
     // page this morning.
@@ -24662,6 +25192,63 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is("a merchant name in an ordinary host names nothing", partnerMerchant("https://tiqets.example.com/x"), "");
     is("and it is still the official site", linkLabel("https://tiqets.example.com/x"), "Official site");
     is("nothing is the official site of nothing in particular", linkLabel(""), "Official site");
+
+    // ── AND THE ONE SHAPE THIS FILE ITSELF BUILDS ─────────────────
+    //
+    // 16 Sep 2026. Every assertion above tests a link somebody PASTED. The
+    // shape affiliateHref GENERATES is tp.media/r?...&u=<destination>, whose
+    // first host label is "tp", and that named nobody: the deep link Gemlyx
+    // creates for every attraction on the site was the one link on the site
+    // that could not say which merchant it went to. It read "Partner site",
+    // which is honest and useless, on the exact links a reader most wants to
+    // recognise before they click.
+    const deepTiq = M.affiliateHref("https://www.tiqets.com/en/copenhagen-attractions-c113/tickets-for-copenhagen-card-discover-p1068607/");
+    ok("the wrapper produces a tp.media link", /^https:\/\/tp\.media\//.test(deepTiq));
+    is("which is a partner link", M.isPartnerLink(deepTiq), true);
+    is("and it knows the merchant behind it", partnerMerchant(deepTiq), "Tiqets");
+    is("so the button names Tiqets", linkLabel(deepTiq), "Book on Tiqets");
+    // The destination is read out of `u`, which is the parameter Travelpayouts
+    // uses and the one this codebase's own template writes.
+    ok("the destination is readable out of the link", /tiqets\.com/.test(M.destinationIn(deepTiq)));
+    // A NETWORK LINK GOING SOMEWHERE WE HOLD NO PROGRAMME WITH IS STILL NOT
+    // NAMED. The destination is a lookup, not a source of names, or the first
+    // link to an unknown shop prints that shop as a Gemlyx partner merchant.
+    is("an unknown destination names nobody",
+      partnerMerchant("https://tp.media/r?marker=1&u=" + encodeURIComponent("https://www.example.com/x")), "");
+    is("and reads as a partner link without a merchant",
+      linkLabel("https://tp.media/r?marker=1&u=" + encodeURIComponent("https://www.example.com/x")), "Partner site");
+
+    // ── outboundLink, THE FOUR ANSWERS TOGETHER ───────────────────
+    //
+    // The single-link branch of the Essentials card had all four right and the
+    // merged branch, forty lines above it on the same card, had two of them
+    // wrong: a raw href that would not have paid, and no disclosure. Both ask
+    // this now, so there is no version of one that can be right while the other
+    // is wrong.
+    const outTiq = M.outboundLink("https://www.tiqets.com/en/copenhagen-attractions-c113/tickets-for-copenhagen-card-discover-p1068607/");
+    is("a destination link comes back tracked", outTiq.href, deepTiq);
+    is("named", outTiq.label, "Book on Tiqets");
+    ok("disclosed", /commission/.test(outTiq.note));
+    is("and marked sponsored", outTiq.rel, "noreferrer sponsored nofollow");
+    const outPlain = M.outboundLink("https://www.copenhagencard.com");
+    is("an ordinary link is left exactly as it came in", outPlain.href, "https://www.copenhagencard.com");
+    is("called the official site", outPlain.label, "Official site");
+    is("said nothing about money", outPlain.note, "");
+    // AND NOT MARKED SPONSORED, which is the same false statement in the other
+    // direction: nofollow on a link nobody paid for.
+    is("and not marked sponsored", outPlain.rel, "noreferrer");
+    // An already-tracked short link is not double-wrapped, or the click is
+    // counted twice and the reader is bounced through two redirects.
+    is("a link that is already tracked is passed through",
+      M.outboundLink("https://tiqets.tpx.li/gjhkxmoh").href, "https://tiqets.tpx.li/gjhkxmoh");
+    ok("and still disclosed", /commission/.test(M.outboundLink("https://tiqets.tpx.li/gjhkxmoh").note));
+    // A bare host is a link a drafted essential really carries, and externalHref
+    // is the one function that decides whether it is one.
+    is("a bare host gets its scheme", M.outboundLink("visitdenmark.com").href, "https://visitdenmark.com");
+    // NOTHING TO LINK TO MEANS NO ANCHOR, not an anchor pointing nowhere.
+    is("junk is not a link", M.outboundLink("javascript:alert(1)").href, null);
+    is("nor is nothing at all", M.outboundLink("").href, null);
+    is("and neither is disclosed", [M.outboundLink("javascript:alert(1)").note, M.outboundLink("").note], ["", ""]);
   }
   // ── AND THE BROWSE ROW IS GONE, REPLACED BY AN INVOICE ──────────
   //
@@ -30111,8 +30698,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // edition-year filter sits between the guard and the call. The assertion is
   // unchanged in what it pins, which is that the picker runs only on a draft
   // that has no ticket link yet.
+  // The guard gained a second half on 17 Sep, typeHasAdmission, after seven
+  // island drafts produced two bookable links and both were wrong. What this
+  // pins is unchanged: the picker runs only on a draft with no ticket link yet.
   ok("and it only runs when nothing better was found",
-     /if \(!String\(t\.ticketUrl \|\| ""\)\.trim\(\)\) \{[\s\S]{0,420}pickTicketUrl\(/.test(appT));
+     /if \(!String\(t\.ticketUrl \|\| ""\)\.trim\(\) && typeHasAdmission\(sType\)\) \{[\s\S]{0,420}pickTicketUrl\(/.test(appT));
   ok("with the reason journalled when it finds nothing", /describeTicketSearch\(candidates/.test(appT));
 
   // ── AND THE PICKER STILL REFUSES RATHER THAN GUESSES ────────────
@@ -48867,6 +49457,49 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("a merged card draws its operators", /\{isMerged\(item\) && \(/.test(app));
     ok("each with its own link", /linksOf\(item\)\.map\(\(l, li\) =>/.test(app));
     ok("and its Android store link where there is one", /l\.android && \(/.test(app));
+    // ── AND A LINK IN A LIST IS STILL A LINK, 16 SEP 2026 ─────────
+    //
+    // This branch drew `href={externalHref(l.url)}` with `rel="noreferrer"` and
+    // asked linkLabel about the UNWRAPPED url. On the Copenhagen Card, which is
+    // a two-link row and is therefore drawn HERE rather than in the branch that
+    // had this right, that is a reseller link that pays nothing, carries no
+    // disclosure and calls itself the official site. Three failures on one
+    // anchor, all three already solved forty lines down the same file.
+    {
+      const start = app.indexOf("{isMerged(item) && (");
+      const block = app.slice(start, app.indexOf("{item.link && (() => {", start));
+      ok("the merged block was found", start > 0 && block.length > 300);
+      ok("no merged link is drawn untracked", !/href=\{externalHref\(l\.url\)\}/.test(block));
+      ok("nor labelled off the unwrapped url", !/linkLabel\(l\.url\)/.test(block));
+      ok("no anchor in it carries a bare rel", !/rel="noreferrer"/.test(block));
+      // COMPUTED IS NOT PRINTED, the rule the other branch already carries.
+      ok("and the disclosure is printed under the link", /\{out\.note && <div style=\{\{[^}]*\}\}>\{out\.note\}<\/div>\}/.test(block));
+    }
+    // ── THE SECOND PLACE AN ESSENTIAL IS DRAWN ────────────────────
+    // The local-essentials block on a town page renders the same rows. Nothing
+    // published today reaches it with a paid link, because a national row never
+    // appears on a town page and both paid rows are national, so this was one
+    // Studio placement away from an undisclosed affiliate link rather than an
+    // actual bug. Same door, so it cannot become one.
+    {
+      const detail = stripComments(readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8"));
+      ok("the local essentials block uses the same door", /const out = outboundLink\(l\.url\);/.test(detail));
+      ok("and prints what it earns", /\{out\.note && <span style=\{\{[^}]*\}\}>\{out\.note\}<\/span>\}/.test(detail));
+      ok("no local essential link is drawn raw", !/<a key=\{l\.url\} href=\{l\.url\}/.test(detail));
+    }
+    // ── AND `android` SURVIVES THE MAPPER ─────────────────────────
+    // The renderer above has drawn `{l.android && ...}` since the merge, and
+    // linksOf never carried the field, so that branch was unreachable: the DSB
+    // entry on "Getting a Ticket" has a Google Play URL and has shown the iOS
+    // link only. Asserted on the real row, because a fixture would have passed
+    // on the day the live one did not.
+    {
+      const ticket = essentials.find(r => /Getting a Ticket/i.test(r.name));
+      const dsb = linksOf(ticket).find(l => /DSB/i.test(l.label));
+      ok("the DSB entry keeps its Android link", /play\.google\.com/.test(dsb?.android || ""));
+      is("and a link with no Android one says so with an empty string",
+        linksOf(ticket).find(l => /Rejsekort/i.test(l.label))?.android, "");
+    }
   }
 }
 
@@ -55138,7 +55771,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ONLY WHEN THE PAGES IN HAND CAME UP EMPTY, which is what makes the cost
   // defensible: a draft that already has a link pays nothing.
   ok("it only runs when nothing else found a link",
-     /if \(!String\(t\.ticketUrl \|\| ""\)\.trim\(\)\) \{\s*\n\s*let searched = 0;/.test(appT));
+     /if \(!String\(t\.ticketUrl \|\| ""\)\.trim\(\) && typeHasAdmission\(sType\)\) \{\s*\n\s*let searched = 0;/.test(appT));
   ok("and stops at the first query that answers", /if \(String\(t\.ticketUrl \|\| ""\)\.trim\(\)\) break;/.test(appT));
   // NEVER THE FIRST RESULT. A wrong ticket link is not a weak fact, it is a
   // reader who paid for something else.
@@ -60526,6 +61159,30 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   is("a long paste is not his", whoseWord("x".repeat(PASTED_MIN + 1)), "pasted");
   is("and length is not the only tell", whoseWord("* Claim: the bar is 23+\n* What is wrong: it is not"), "pasted");
   is("nor is a cited source", whoseWord("it is 23+ per https://www.mapquest.com/dk/x"), "pasted");
+
+  // ── BUT A LINK HE HANDED OVER WITH AN ORDER IS HIS, 17 SEP 2026 ──
+  //
+  // His message, in full: "https://aeroexpressen.dk/en/ yes. Apply that it's
+  // also a vehicle crossing". Sixty-six characters, typed by him, and the reply
+  // said "This came from a pasted fact-check rather than from you". The one
+  // thing he could add to make a correction MORE trustworthy, the page to check
+  // it against, was the thing that disqualified it. "this is so annoying.." and
+  // "arguing with it, despite providing it sources".
+  is("a link plus an instruction is his word",
+    whoseWord("https://aeroexpressen.dk/en/ yes. Apply that it's also a vehicle crossing"), "founder");
+  is("and so is a link with what he did", whoseWord("I checked https://www.dsb.dk, it is 2h 15"), "founder");
+  is("and one with a plain order", whoseWord("use this https://www.visitaeroe.dk"), "founder");
+  // ── AND THE LINE THAT STAYS SOMEBODY ELSE'S ─────────────────────
+  // A short fact-check saying what SHOULD be is a report wearing an
+  // instruction, and reading it as his is the 6 Sep failure coming back in
+  // through a new door.
+  is("a short report with a link is still not his",
+    whoseWord("The crossing should be described as a vehicle ferry, see https://aeroexpressen.dk/"), "pasted");
+  is("and a structured one with an order in it is still a report",
+    whoseWord("* Claim: it is 23+\n* Verdict: apply this https://x.dk"), "pasted");
+  // THE URLS ARE STRIPPED BEFORE THE QUESTION IS ASKED, or a path decides it.
+  is("a word inside the address does not speak for him",
+    whoseWord("https://www.example.dk/apply-online is the page"), "pasted");
   // ── ANCHORED ON THE ROUTER'S OWN LINE ───────────────────────────
   // A mutation put the literal 400 back in the router and this still passed:
   // the pattern "t.length > PASTED_MIN" also appears in whoseWord two functions

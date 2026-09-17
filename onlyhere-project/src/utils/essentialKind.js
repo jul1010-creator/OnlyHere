@@ -220,9 +220,18 @@ export const hasCategoryChange = (row, next) => Object.keys(categoryPatch(row, n
 // linksOf gives the render one shape to draw whichever it was handed.
 export const linksOf = (row) => {
   const many = Array.isArray(row?.links) ? row.links.filter(l => l && l.url) : [];
-  if (many.length) return many.map(l => ({ label: String(l.label || "").trim(), url: String(l.url).trim(), note: String(l.note || "").trim() }));
+  // ── AND `android` IS ONE OF THE FOUR, NOT A FIELD THAT FALLS OFF ──
+  //
+  // 16 Sep 2026. The Essentials renderer draws `{l.android && ...}` for a second
+  // badge, and this mapper never carried the field, so that branch was
+  // unreachable on every merged row. "Getting a Ticket" carries a DSB entry with
+  // a Google Play URL on it and has shown the iOS link only since the day it was
+  // written. Eleventh thing in this codebase found written and called from
+  // nowhere; the first one where the caller existed and the DATA was dropped on
+  // the way to it.
+  if (many.length) return many.map(l => ({ label: String(l.label || "").trim(), url: String(l.url).trim(), note: String(l.note || "").trim(), android: String(l.android || "").trim() }));
   const one = String(row?.link || "").trim();
-  return one ? [{ label: "", url: one, note: "" }] : [];
+  return one ? [{ label: "", url: one, note: "", android: String(row?.linkAndroid || "").trim() }] : [];
 };
 
 export const isMerged = (row) => linksOf(row).length > 1;

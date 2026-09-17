@@ -159,6 +159,48 @@ export default async function handler(req, res) {
   // It is a separate mode on this function rather than a new file: api/ is a
   // function count, and a thirteenth serverless function is a deploy decision
   // rather than a feature.
+  // ── THE COMMUNITY GROUPS, 17 SEP 2026 ─────────────────────────────
+  //
+  // Oliver: "I've been in contact with someone from a community at Sejerø that
+  // hosts events... they tend to apparently put up events. How can we manage
+  // that on my page?"
+  //
+  // GET /v1/facebook/group/posts?group_id=<id>&pages=1, read from their docs
+  // rather than guessed, which is the standing rule on this file after the
+  // first version's shape was wrong in four places at once. Documented: a
+  // `posts` array carrying post_id, url, message, date, timestamp, author_name
+  // and external_url, a `count`, and paging of 1 to 15 pages billed per page.
+  //
+  // PUBLIC GROUPS ONLY, and their docs say so outright. The three groups he has
+  // asked to join are private and stay unreadable here whatever happens to his
+  // membership, because his membership is his and not this app's.
+  //
+  // A MODE ON THIS FUNCTION, not a file. api/ is a serverless function count
+  // and the event-window mode below carries the same note for the same reason.
+  //
+  // IT RETURNS POSTS AND NOTHING ELSE. Every judgement about what is an event,
+  // what date it is on and whether it already happened is
+  // src/utils/communityFeeds.js, pure and tested with no network.
+  if (String(req.query.check || "") === "group-posts") {
+    const group = String(req.query.group || "").trim();
+    if (!/^\d{5,}$/.test(group)) {
+      return res.status(400).json({ error: "Provide ?group= as the numeric group id." });
+    }
+    const feedKey = process.env.API_DIRECT_KEY;
+    if (!feedKey) return res.status(200).json({ group, posts: [], skipped: "API_DIRECT_KEY is not set" });
+    // One page. A village group does not post fifty times a week, and page two
+    // is last month, which candidatesIn would drop anyway for being in the past.
+    const got = await askApiDirect(feedKey, "/v1/facebook/group/posts", { group_id: group, pages: 1 });
+    if (!got.ok) return res.status(200).json({ group, posts: [], failed: got.why });
+    const body = got.body || {};
+    const posts = Array.isArray(body.posts) ? body.posts
+      : Array.isArray(body.results) ? body.results
+      : Array.isArray(body.data) ? body.data : [];
+    // Passed through in the provider's own shape, so postsIn owns the reading
+    // and one reader can be asserted against a fixture. The count is theirs.
+    return res.status(200).json({ group, posts, count: Number(body.count) || posts.length });
+  }
+
   if (String(req.query.check || "") === "event-window") {
     const from = String(req.query.from || "").trim();
     const to = String(req.query.to || "").trim();

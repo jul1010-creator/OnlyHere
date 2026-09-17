@@ -35,6 +35,11 @@
 import { readPage } from "../src/utils/readPage.js";
 import { domainOf } from "../src/utils/pageScan.js";
 import { parseEventDate, isPastDate } from "../src/utils/eventDates.js";
+// The judgement half of the community feeds, imported rather than reimplemented.
+// A second copy of the date reading is how the button and the weekly run would
+// come to disagree about what a post says, which is the duplication this
+// codebase has now found eleven times.
+import { postsIn, candidatesIn, newCandidates } from "../src/utils/communityFeeds.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://vpxfahjnerkkkoueovhl.supabase.co";
 
@@ -192,6 +197,59 @@ Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "tick
     }
   }
 
+  // ── AND THE COMMUNITY GROUPS, ON THE SAME RUN ─────────────────────
+  //
+  // Oliver chose this on 17 Sep: a button in Studio, and with the weekly event
+  // update, "so new posts surface without you remembering".
+  //
+  // ONLY ON THE FIRST PAGE. This endpoint is paged through ten events at a
+  // time, and the groups have nothing to do with which events are in this
+  // batch, so sweeping them on every page would bill the same groups five times
+  // for one weekly run.
+  //
+  // IT REPORTS AND WRITES NOTHING, exactly like everything else in here. The
+  // candidates come back in the response beside `changed`, and a post becomes an
+  // entry only when he puts one through the ordinary pipeline from Studio.
+  let community = null;
+  if (offset === 0) {
+    const feedKey = process.env.API_DIRECT_KEY;
+    community = { candidates: [], failed: [], groups: 0, skipped: feedKey ? "" : "API_DIRECT_KEY is not set" };
+    if (feedKey) {
+      try {
+        const fr = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_feeds?select=*&enabled=is.true`, {
+          headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+        });
+        // A missing table is not a failure worth a 502 on the whole run: the
+        // feeds are an addition to this endpoint, and an event check that dies
+        // because he has not made a table yet would be the tail wagging the dog.
+        const feeds = fr.ok ? await fr.json().catch(() => []) : [];
+        const live = Array.isArray(feeds) ? feeds : [];
+        community.groups = live.length;
+        const found = [];
+        for (const feed of live) {
+          const groupId = String(feed?.group_id || "").trim();
+          if (!/^\d{5,}$/.test(groupId)) { community.failed.push({ name: feed?.name || groupId, why: "no numeric group id on the row" }); continue; }
+          try {
+            const gr = await fetch(`https://apidirect.io/v1/facebook/group/posts?group_id=${encodeURIComponent(groupId)}&pages=1`, {
+              headers: { "X-API-Key": feedKey, Accept: "application/json" },
+            });
+            if (!gr.ok) { community.failed.push({ name: feed?.name || groupId, why: `API Direct returned ${gr.status}` }); continue; }
+            const body = await gr.json().catch(() => null);
+            found.push(...candidatesIn(postsIn(body || {}), { today, feed: { name: feed?.name || "", url: feed?.url || "", place: feed?.place || "" } }));
+          } catch (err) {
+            community.failed.push({ name: feed?.name || groupId, why: String(err).slice(0, 140) });
+          }
+        }
+        // Against every published event, not only this batch: a candidate is
+        // about the whole library, and deduping against ten rows would offer
+        // him the same evening every week until it happened.
+        community.candidates = newCandidates(found, rows.map(r => r.payload || {}));
+      } catch (err) {
+        community.failed.push({ name: "the feed list", why: String(err).slice(0, 140) });
+      }
+    }
+  }
+
   const nextOffset = offset + batch.length;
   return res.status(200).json({
     published: rows.length,
@@ -202,7 +260,10 @@ Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "tick
     // Named, not counted: "3 sites were blocked" is not something anyone can
     // act on and "visitodense.dk was blocked" is.
     reads,
-    spend: { perplexityCalls: batch.length, firecrawlCredits: credits },
+    spend: { perplexityCalls: batch.length, firecrawlCredits: credits, groupReads: community?.groups || 0 },
+    // null on every page but the first, so a reader of page three does not
+    // read an empty list as "no community events this week".
+    community,
     nextOffset,
     done: nextOffset >= upcoming.length,
   });

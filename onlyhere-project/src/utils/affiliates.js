@@ -2,6 +2,12 @@ import { BOOKING_AFFILIATE_ID, TICKETMASTER_AFFILIATE_TEMPLATE, TIQETS_BROWSE_LI
 // hostOf, not a fourth copy of it. See pageScan.js, and see the four other
 // functions this codebase has already found existing twice.
 import { hostOf } from "./pageScan";
+// externalHref, not a second scheme guard written here. It is the one function
+// in this codebase that decides whether a string is a link a reader may be sent
+// to, and outboundLink below is the door every rendered link goes through, so
+// the two belong in one place. helpers.js imports nothing that reaches back
+// here, checked before this line was written.
+import { externalHref } from "./helpers";
 import { t as uiT, DEFAULT_UI_LANGUAGE } from "./uiLanguage";
 
 // ── WHERE TO STAY LINKS (Oliver, 7 Aug: "on accommodation, put booking.com
@@ -810,7 +816,14 @@ export const isAffiliateHref = (url) => {
 export const destinationIn = (url) => {
   try {
     const u = new URL(String(url || "").trim());
-    const target = u.searchParams.get("url") || u.searchParams.get("ulp") || "";
+    // ── AND THE THIRD NAME FOR THE SAME PARAMETER ──────────────────
+    // Adtraction calls it `url`, Impact calls it `ulp`, and Travelpayouts
+    // calls it `u`, which is the one TIQETS_AFFILIATE_TEMPLATE in config.js
+    // writes on every deep link this file builds. It was missing here, so the
+    // one network Gemlyx books most of its tickets through was the one whose
+    // destination this could not read, and partnerMerchant below had nothing
+    // to look the merchant up by.
+    const target = u.searchParams.get("url") || u.searchParams.get("ulp") || u.searchParams.get("u") || "";
     return /^https?:\/\//i.test(target) ? target : "";
   } catch { return ""; }
 };
@@ -819,35 +832,89 @@ export const partnerMerchant = (url) => {
   if (!isPartnerLink(url)) return "";
   const h = hostOf(url);
   if (!h) return "";
-  // ── ONE NETWORK WHERE THE HOST NAMES NOBODY ───────────────────────
+  // ── THE HOST FIRST, AND THE DESTINATION WHEN IT NAMES NOBODY ──────
   //
-  // Every Travelpayouts link is <programme>.tpx.li, so the first label IS the
-  // merchant. Every Adtraction link is track.adtraction.com, whatever it sells,
-  // so the first label is "track" and the rule above would print "Book on
-  // Track" on every one of them. That is the failure the comment over
-  // PARTNER_MERCHANTS warns about, arriving through a door it did not expect.
+  // A Travelpayouts SHORT link is <programme>.tpx.li, so the first label IS the
+  // merchant and the host answers on its own. Nothing else does. An Adtraction
+  // link is track.adtraction.com whatever it sells, so the first label is
+  // "track"; a Travelpayouts DEEP link is tp.media whatever it sells, so the
+  // first label is "tp". Reading the host alone on either would print "Book on
+  // Track", or fall through to the generic "Partner site" on every deep link
+  // this file builds, which is what it did until 16 Sep 2026: the Tiqets
+  // template produces a tp.media URL, and the one shape the affiliate machinery
+  // generates was the one shape that could not name its own merchant.
   //
-  // The merchant is in the `url` parameter, which is where Adtraction puts the
-  // destination, so it is read from there and looked up the same way. A link
-  // with no readable destination gets the honest generic label rather than a
-  // guess, exactly as an unknown Travelpayouts programme does.
-  if (h === "adtraction.com" || h.endsWith(".adtraction.com")) {
-    const dest = destinationIn(url);
-    const destHost = dest ? hostOf(dest) : "";
-    const label = destHost ? destHost.replace(/^www\./i, "").split(".")[0].toLowerCase() : "";
-    return PARTNER_MERCHANTS[label] || "";
-  }
-  const first = h.split(".")[0].toLowerCase();
+  // So the host is asked first and the DESTINATION is asked second, through the
+  // parameter each network carries it in. One rule rather than a branch per
+  // network, because the next network will have a third name for its host and
+  // the same answer sitting in its `url`. A link with no readable destination
+  // gets the honest generic label rather than a guess.
+  //
   // A bare programme host with no subdomain names nothing: booking.com?aid= is
   // recognised as paid by its parameter and its first label is the merchant
   // itself, which is fine, and impact.com is the network with no merchant in it.
-  return PARTNER_MERCHANTS[first] || "";
+  const first = h.split(".")[0].toLowerCase();
+  if (PARTNER_MERCHANTS[first]) return PARTNER_MERCHANTS[first];
+  const dest = destinationIn(url);
+  const destHost = dest ? hostOf(dest) : "";
+  const label = destHost ? destHost.replace(/^www\./i, "").split(".")[0].toLowerCase() : "";
+  return PARTNER_MERCHANTS[label] || "";
 };
 
 export const linkLabel = (url) => {
   if (!isPartnerLink(url)) return "Official site";
   const who = partnerMerchant(url);
   return who ? `Book on ${who}` : "Partner site";
+};
+
+// ── AND ONE DOOR THAT RENDERS A LINK, NOT JUST TRACKS ONE ───────────
+//
+// Oliver, 16 Sep 2026: "Can you put an affiliate link on the Copenhagen Card,
+// please. From Tiqets."
+//
+// One row, and it could not be done honestly without this function, which is
+// worth writing down. The Copenhagen Card row needs TWO links, the card's own
+// site and the reseller, so it becomes a merged row and is drawn by the merged
+// renderer. That renderer drew a bare href with rel="noreferrer" and nothing
+// underneath it: no affiliateHref, so the link would not have paid; no
+// disclosure, so a paid link would have printed as an ordinary one; and
+// linkLabel over an unwrapped tiqets.com URL answers "Official site", which is
+// a false statement about whose site it is. Three failures, all of them
+// already solved once, forty lines above in the single-link branch of the same
+// card.
+//
+// affiliateHref's own comment says the point of it is that nobody has to
+// remember. That held for the HREF and for nothing else, and a render site is
+// not finished when it has the href: it needs the label, the sentence, and the
+// rel, and all three follow from the href. So they are computed together, once,
+// and both renderers ask for the set rather than assembling it.
+//
+// THE ORDER MATTERS AND IS THE WHOLE TRICK. The href is wrapped FIRST, and the
+// label and the disclosure are asked of the WRAPPED link. A raw
+// tiqets.com/...-p1068607 is not a partner link by any test in this file, so
+// asking it directly says "ordinary link, official site, no disclosure" about a
+// link that is about to earn a commission. Wrapped, it is a tp.media URL, which
+// is a partner host, and every one of those three answers flips to the truth.
+// That is also why partnerMerchant learned to read a destination above: without
+// it this returns a correct but useless "Partner site" on every deep link.
+//
+// Returns href: null when there is nothing safe to link to, so a caller draws
+// no anchor at all rather than one pointing nowhere.
+export const outboundLink = (url) => {
+  const safe = externalHref(url);
+  const href = safe ? (affiliateHref(safe) || safe) : null;
+  const note = href ? partnerDisclosure(href) : "";
+  return {
+    href,
+    label: linkLabel(href || ""),
+    note,
+    // sponsored and nofollow whenever the link is tracked, which is what Google
+    // asks for and is the difference between an affiliate link and an
+    // undisclosed ad. Read off the disclosure rather than asked separately, so
+    // a link that says nothing and a link that carries no rel cannot be two
+    // different sets of links.
+    rel: note ? "noreferrer sponsored nofollow" : "noreferrer",
+  };
 };
 
 // ── AND A CAR BUTTON MAY NOT CONTRADICT THE PAGE IT SITS ON ─────────

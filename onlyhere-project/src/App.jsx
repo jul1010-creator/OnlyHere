@@ -99,7 +99,7 @@ import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION, PAID_PLANS_LIVE, FOUNDER_IDS }
 // screen says yes while the endpoints say no, or the reverse, which is worse.
 import { isFounder } from "./utils/apiGuard";
 import {
-  getSeason, getEventDate, isUpcoming, isCurrentlyLive, isOnOrUpcoming, soonestFirst, hasFinished, externalHref, weatherIcon,
+  getSeason, getEventDate, isUpcoming, isCurrentlyLive, isOnOrUpcoming, soonestFirst, hasFinished, weatherIcon,
   isInDenmark, travelLabel, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, readerView, seededShuffle, daysUntil, detectLegMode, haversineKm, scanForAITells, priceBand, PRICE_BANDS,
   getEnclosingJSONStringBounds, nextWeekdayTimestamp,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
@@ -151,7 +151,11 @@ import { branchesOf, branchCandidates, branchFromCandidate, mergeBranches, branc
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance, staleUncertainties, describeStale } from "./utils/glanceExtract";
 import { showsJourney, journeyOriginFor, journeyOriginPoint, IS_THE_CENTRE_KM } from "./utils/journeyScope";
 import { readableOn } from "./utils/readableColor";
-import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive, isNeverOwnSite, isNeverASource } from "./utils/sourcePolicy";
+// The judgement half of the community feeds. Every rule about what a group post
+// says is in there, pure and tested with no network; this file does the state,
+// the table and the panel. See utils/communityFeeds.js.
+import { cleanFeed, feedUrlProblem, groupIdIn, postsIn, candidatesIn, dedupeCandidates, newCandidates, sweepCost } from "./utils/communityFeeds";
+import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, ISLANDS_SCOPE, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive, isNeverOwnSite, isNeverASource } from "./utils/sourcePolicy";
 import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn, danishAddressIn } from "./utils/regions";
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
 import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoice";
@@ -199,7 +203,7 @@ import { swapIsAllowed } from "./utils/stopSwap";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
 import { weighAdd, addCaution, tripLoadBlock } from "./utils/weighAdd";
-import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl, TICKET_FIELD, TOUR_FIELD } from "./utils/ticketLink";
+import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl, typeHasAdmission, TICKET_FIELD, TOUR_FIELD } from "./utils/ticketLink";
 import { tourQuery, tourKindFor, tourTownFor, pickTourUrl, tourPhrase, tourCandidates, tourProposal, replaceTour, describeTourFindings, tourAliveVerdict, tourRemovalFor, TOUR_RESWEEP_DAYS, FOUND as TOUR_FOUND, GONE as TOUR_GONE, UNKNOWN as TOUR_UNKNOWN, ALIVE as TOUR_ALIVE } from "./utils/tourSweep";
 import { currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLanguage";
 import { LanguageChoice } from "./components/LanguagePicker";
@@ -222,7 +226,10 @@ import { buildChatReport, chatReportFilename } from "./utils/chatReport";
 import { openingThread, withTestBrief, withoutTestBrief, loadThread, saveThread, clearThread } from "./utils/chatThread";
 import { downloadReport } from "./utils/previewReport";
 import { briefThemes , essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, fitsBrief, preferenceRowState, PREF_READY, PREF_NO_ACCOUNT } from "./utils/interestFit";
-import { partnerDisclosure, linkLabel, affiliateHref } from "./utils/affiliates";
+// outboundLink, and no longer partnerDisclosure or linkLabel beside it: both
+// render sites on the Essentials card asked for those separately and one of
+// them forgot two of the four. See outboundLink in utils/affiliates.js.
+import { affiliateHref, outboundLink } from "./utils/affiliates";
 import { sweepPlan, describeSweepPlan, ticketProposal, describeTicketFindings, affiliateWriteFor, agentLabel, FOUND as AFF_FOUND, RESWEEP_DAYS } from "./utils/affiliateSweep";
 import { wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO } from "./utils/wegotripMatch";
 import { CHECKED_ON as WEGO_CHECKED_ON, WEGOTRIP_SOURCE } from "./data/wegotrip";
@@ -708,6 +715,39 @@ drop policy if exists "read gemlyx_sources" on gemlyx_sources;
 create policy "read gemlyx_sources" on gemlyx_sources for select to anon using (true);
 drop policy if exists "auth all gemlyx_sources" on gemlyx_sources;
 create policy "auth all gemlyx_sources" on gemlyx_sources for all to authenticated using (true) with check (true);`;
+
+// ── THE COMMUNITY GROUPS HE WATCHES ─────────────────────────────────
+//
+// Oliver, 17 Sep 2026, about a Sejerø community that posts its events on
+// Facebook: "Is it possible for me to put that as a link onto my studio, along
+// with links from other groups from other communities?"
+//
+// Its own table rather than a type on gemlyx_sources, because the two are not
+// the same thing and the difference is the one this app is built on. A research
+// source is a page a draft may QUOTE. A community group is a place to hear that
+// something is happening, and facebook has been in NEVER_A_SOURCE since the
+// beginning. Filing them together would put a Facebook host one careless line
+// away from being cited, and it would also put groups into the source-cost line
+// where they would make it wrong.
+//
+// Re-runnable, like SOURCES_SQL, and for the reason written there: Supabase
+// runs the editor as one transaction, so a "policy already exists" error rolls
+// back the whole script including the table.
+const FEEDS_SQL = `create table if not exists gemlyx_feeds (
+  id bigserial primary key,
+  name text not null,
+  group_id text not null,
+  url text not null,
+  place text default '',
+  note text,
+  enabled boolean default true,
+  last_checked date,
+  created_at timestamptz default now()
+);
+alter table gemlyx_feeds enable row level security;
+
+drop policy if exists "auth all gemlyx_feeds" on gemlyx_feeds;
+create policy "auth all gemlyx_feeds" on gemlyx_feeds for all to authenticated using (true) with check (true);`;
 
 // `where` is whatever the caller knows about the place: usually a name, and a
 // whole entry where one exists. A source scoped to a town is left OUT when
@@ -3551,6 +3591,13 @@ Say which answer came from which source, so a fact from a vouched page and a fac
     // from the moment it shipped. It now has to live even higher, because the
     // location lookup below runs before that block exists at all.
     let draftTown = "";
+    // ── AND WHETHER IT IS ON AN ISLAND, KEPT THE SAME WAY ───────────
+    // Beside draftTown and for the identical reason: it is read off the
+    // published row inside the location block below, which closes long before
+    // either context builder runs. A source scoped to Islands matches on this
+    // and on nothing else, so losing it here is the scope silently matching
+    // nothing, which is the shape this file keeps finding.
+    let knownIsland = "";
     // ── AND THE NAME A LOOKUP RESOLVES, KEPT ────────────────────────
     // Beside draftTown because it has the same lifetime: found before the
     // research runs, needed long after it. Oliver's Jomfru Ane Gade draft came
@@ -3616,6 +3663,9 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       const existingRow = (manageItems || []).find(r => r?.type === sType && samePlaceName(r?.payload?.name, name));
       const knownRow = existingRow?.payload || null;
       draftTown = knownRow?.town || knownRow?.city || knownRow?.location || hint?.town || townKeyFor(name) || "";
+      // The row's own stated island only. The kommune half is asked later, in
+      // islandHere, because the kommune is not known until the coordinate is.
+      knownIsland = namedIslandOf(knownRow || {}, "");
       let coords = null, via = "", precise = true;
       // A published row already holds a reviewed coordinate. Cheapest and best.
       const knownCoord = placeCoords(knownRow || {});
@@ -3775,11 +3825,29 @@ Say which answer came from which source, so a fact from a vouched page and a fac
     // it, which is the field the towns page had to stop using because it held
     // twelve spellings of five places. It does not get to decide which tourist
     // board gets paid.
+    // ── IS THIS DRAFT ON AN ISLAND ──────────────────────────────────
+    //
+    // Oliver, 17 Sep 2026: "I need you to make me able to add 'Islands' to the
+    // research sources as a region." This is the field that scope matches on.
+    //
+    // Three ways to know, strongest first. An ISLAND entry is one by
+    // definition, which is the only route Sejerø has, since its kommune is
+    // mostly Zealand mainland. A published row may state one. And seven
+    // kommuner ARE their island, which is data/kommuner.js rather than a list
+    // invented here. namedIslandOf stops before the part-of-country fallback on
+    // purpose: with it, Copenhagen would be an island.
+    //
+    // A FUNCTION AND NOT A VALUE, because `placed` is still null when this line
+    // runs and can be set twice, once by the location lookup and again by the
+    // venue retry. Read at call time, both builders see the same answer, which
+    // is the thing the sourceCtx comment below was written about.
+    const islandHere = () => (sType === "island" ? name : namedIslandOf({ island: knownIsland }, placed?.kommune || ""));
     const researchWhere = () => ({
       name,
       town: draftTown || "",
       region: placed?.region || "",
       kommune: placed?.kommune || "",
+      island: islandHere(),
       part: placed ? (partOfCountry({ __lat: placed.lat, __lon: placed.lon }) || "") : "",
     });
     setStudioStage({ label: "Planning what to research", percent: 5 });
@@ -4503,6 +4571,11 @@ Say which answer came from which source, so a fact from a vouched page and a fac
           dayTripFrom: known?.dayTripFrom || "",
           part: partHere || "",
           region: placed?.region || (known ? regionOf(known) : ""),
+          // The same call researchWhere makes, so the source that reaches the
+          // PROMPT is the source that gets SEARCHED. Two builders answering
+          // differently is how a founder source ends up quoted at a model that
+          // was never sent to look at it.
+          island: islandHere(),
         };
         const searches = directSourceSearches(founderSources, sType, sourceCtx);
         // ── WHICH SOURCES WERE CHOSEN, AND FROM WHAT ──────────────────
@@ -6484,7 +6557,21 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
       });
       const rawResearch = (orderBlock ? `${orderBlock}\n\n` : "") + (hint && (hint.town || hint.dates)
         ? `KNOWN FROM SOURCE LISTING (trust this over a weaker fresh search unless your own search clearly contradicts it with better evidence): ${[hint.town && `town/city = ${hint.town}`, hint.dates && `dates = ${hint.dates}`].filter(Boolean).join(", ")}\n\n`
-        : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}\n\n` : "") + (realAddressText ? `${realAddressText}\n\n` : "") + (ticketText ? `${ticketText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below).
+        : "")
+        // ── AND A LEAD OUT OF A COMMUNITY GROUP ───────────────────────
+        //
+        // 17 Sep 2026, with the feeds panel. A Facebook post cannot ride in the
+        // block above it: that block says "trust this over a weaker fresh
+        // search", and facebook has been in NEVER_A_SOURCE since the beginning.
+        // Given that sentence, a village post would outrank the operator.
+        //
+        // So it arrives as its own paragraph saying exactly what it is. The
+        // post is what made this draft happen and the writer should know what
+        // it said, because it carries the venue and the hour that no search
+        // result will phrase as well. What it must never do is END the search.
+        + (hint && hint.lead
+          ? `HEARD IN A COMMUNITY GROUP, WHICH IS A LEAD AND NOT A SOURCE. Somebody posted this in a local Facebook group${hint.leadFrom ? ` (${hint.leadFrom})` : ""}, and it is why this draft is being written at all. A social post may NEVER be cited, may never settle a date or a price, and may never appear in __sources. Use it to know WHAT to look for and WHERE, then find it on a page you are allowed to quote. If no such page states it, say so in uncertainties and leave the fields empty rather than repeating the post.\n${String(hint.lead).slice(0, 1200)}\n\n`
+          : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}\n\n` : "") + (realAddressText ? `${realAddressText}\n\n` : "") + (ticketText ? `${ticketText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below).
 WHEN THESE TWO CONFLICT, PREFER THE ONE YOU CAN POINT AT. "More specific" is not the test and never was: a synthesised answer always reads as more specific than a raw snippet, so preferring specificity means preferring whichever source happens to sound most confident, which is the opposite of what this pipeline is for. Prefer the claim that names a real page, an operator, an official site or a dated announcement. If the two disagree and neither is traceable, say so in uncertainties and leave the field empty rather than picking a winner.
 A DATE, PRICE OR OPENING TIME FROM EITHER SOURCE IS A LEAD, NOT A FACT, unless it comes from the place's own site or its official ticketing page.
 BUT A LEAD THAT A CURRENT SOURCE STATES IS STILL WRITTEN AS A FACT. "Lead" governs how much you should go looking for a better source, not how you phrase the number once it is the best you have. If a current page states a price, WRITE THE PRICE. Never write that it is unconfirmed, never call it an estimate, never say it was not verified by the organiser, and never tell the reader to ring and check. A reader who is told 400 kr and finds 400 kr is served; a reader told "400 kr, but treat it as an estimate" is told nothing and trusts nothing. Where the figure came from goes in __sources, and it goes nowhere else.
@@ -7542,7 +7629,10 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // rather than a best guess, which is the rule that file states about
         // itself: an absent Tickets button is one fewer button, and a wrong one
         // is a reader who paid for something else.
-        if (!String(t.ticketUrl || "").trim()) {
+        // typeHasAdmission: an island has no door to buy a ticket to, and the
+        // two links this found on seven island drafts were a stand-up show and
+        // a concert venue. See ticketLink.js.
+        if (!String(t.ticketUrl || "").trim() && typeHasAdmission(sType)) {
           const candidates = Object.keys(pagesByUrl).map(u => ({ url: u, snippet: String(pagesByUrl[u] || "").slice(0, 800) }));
           // The edition year comes off the draft's own date, so a ticket page
           // naming a different year is refused rather than ranked. See
@@ -8014,7 +8104,9 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // in hand have had their turn, and only when they came up empty — so a
         // draft that already has a link pays nothing, and the second gate pass
         // reports whatever this found.
-        if (!String(t.ticketUrl || "").trim()) {
+        // The same gate as the vetting above, and it saves two searches on every
+        // island draft as well as keeping the wrong link out.
+        if (!String(t.ticketUrl || "").trim() && typeHasAdmission(sType)) {
           let searched = 0;
           for (const q of ticketQueries(name, draftTown)) {
             if (String(t.ticketUrl || "").trim()) break;
@@ -9943,6 +10035,40 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   // twice.
   const sourcesErrorFor = (status, body) => studioErrorMessage("the source list", status, body);
 
+  // ── THE COMMUNITY FEEDS ─────────────────────────────────────────
+  // The group list, and the candidate queue a sweep leaves behind. The queue is
+  // state and not a table on purpose: a candidate is a thing to look at once,
+  // and anything worth keeping becomes a draft, which has a table already.
+  const [feedsOpen, setFeedsOpen] = useState(false);
+  const [feedRows, setFeedRows] = useState([]);
+  const [feedError, setFeedError] = useState(null);
+  const [feedBusy, setFeedBusy] = useState(false);
+  const [newFeedUrl, setNewFeedUrl] = useState("");
+  const [newFeedName, setNewFeedName] = useState("");
+  const [newFeedPlace, setNewFeedPlace] = useState("");
+  // null | { running, done, total, found, failed: [{name, why}], candidates: [] }
+  const [feedSweep, setFeedSweep] = useState(null);
+  // ── AND THE ONE FOR A GROUP NOTHING CAN READ ────────────────────
+  //
+  // Oliver, 17 Sep 2026: "What do you suggest we do with private groups? Shall I
+  // make a mail or somehow make a folder in my mail that takes in notifications
+  // from these groups?"
+  //
+  // The mail idea was checked against a real one in his inbox rather than
+  // guessed at. A Facebook group notification of 13 August carries this, in
+  // full: `Det sker i Gilleleje: "SOMMERTID = HAVESTUETID. Vores sidste
+  // åbningsdage..."` and then stops. Forty-five characters and an ellipsis.
+  // Facebook truncates on purpose so you click through, so the post is not in
+  // the email and no parser can find a date that is not there. Mail is a
+  // doorbell, not a feed.
+  //
+  // So the answer for a private group is the cheapest thing that works: he is
+  // IN the group, he can read it, and the thirty seconds of copying is the part
+  // no server can do for him. Everything after that is the same machinery the
+  // sweep uses, which is the point: one reader, one queue, one set of rules.
+  const [pastedPost, setPastedPost] = useState("");
+  const feedsErrorFor = (status, body) => studioErrorMessage("the community feeds", status, body);
+
   // Removes one uncertainty from the draft, through studioDraftText, which is
   // what Publish actually reads. Editing studioDraft alone would clear it on
   // screen and publish it anyway, which is the standing rule about what you
@@ -10158,6 +10284,163 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
       else { setSourceRows(prev => prev.filter(r => r.id !== row.id)); refreshSources(); }
     } catch (e) { setSourceError(String(e.message || e)); }
     setSourceBusy(false);
+  };
+
+  // ── THE FEED LIST, THE SAME FOUR CALLS THE SOURCES HAVE ─────────
+  const loadFeeds = async () => {
+    setFeedError(null);
+    let headers;
+    try { headers = studioAuth(); }
+    catch (e) { setFeedError(String(e.message || e)); return; }
+    try {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_feeds?select=*&order=id.asc`, { headers });
+      const rows = await res.json();
+      if (Array.isArray(rows)) { setFeedRows(rows); return; }
+      setFeedRows([]);
+      setFeedError(feedsErrorFor(res.status, rows));
+    } catch (e) { setFeedError(String(e.message || e)); }
+  };
+
+  const addFeed = async () => {
+    // feedUrlProblem, not a boolean: a vanity group link is the failure he will
+    // actually hit, and "that is not valid" would send him looking for a typo
+    // in an address that is perfectly correct and simply has no number in it.
+    const problem = feedUrlProblem(newFeedUrl);
+    if (problem) { setFeedError(problem); return; }
+    const groupId = groupIdIn(newFeedUrl);
+    if (feedRows.some(r => String(r.group_id) === groupId)) {
+      setFeedError(`That group is already on the list${feedRows.find(r => String(r.group_id) === groupId)?.name ? ` as ${feedRows.find(r => String(r.group_id) === groupId).name}` : ""}.`);
+      return;
+    }
+    setFeedBusy(true); setFeedError(null);
+    try {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_feeds`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({
+          name: newFeedName.trim().slice(0, 80) || `Group ${groupId}`,
+          group_id: groupId,
+          url: `https://www.facebook.com/groups/${groupId}`,
+          place: cleanPlace(newFeedPlace),
+          enabled: true,
+        }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setFeedError(feedsErrorFor(res.status, body)); setFeedBusy(false); return; }
+      setNewFeedUrl(""); setNewFeedName(""); setNewFeedPlace("");
+      await loadFeeds();
+    } catch (e) { setFeedError(String(e.message || e)); }
+    setFeedBusy(false);
+  };
+
+  const setFeedEnabled = async (row, enabled) => {
+    setFeedBusy(true); setFeedError(null);
+    try {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_feeds?id=eq.${Number(row.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) setFeedError(feedsErrorFor(res.status, await res.json().catch(() => null)));
+      else setFeedRows(prev => prev.map(r => r.id === row.id ? { ...r, enabled } : r));
+    } catch (e) { setFeedError(String(e.message || e)); }
+    setFeedBusy(false);
+  };
+
+  const deleteFeed = async (row) => {
+    setFeedBusy(true); setFeedError(null);
+    try {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_feeds?id=eq.${Number(row.id)}`, { method: "DELETE" });
+      if (!res.ok) setFeedError(feedsErrorFor(res.status, await res.json().catch(() => null)));
+      else setFeedRows(prev => prev.filter(r => r.id !== row.id));
+    } catch (e) { setFeedError(String(e.message || e)); }
+    setFeedBusy(false);
+  };
+
+  // ── THE SWEEP ───────────────────────────────────────────────────
+  //
+  // One request per enabled group, sequential rather than parallel for the
+  // reason the source scan gives about itself: three at once is a good way to
+  // get throttled and lose one silently.
+  //
+  // NOTHING IS WRITTEN. A sweep leaves a queue of candidates on screen, each
+  // carrying the post it came from, and "Draft this" hands it to the ordinary
+  // event pipeline as a hint. That is the whole safety of the feature: a
+  // Facebook post is a lead, so the only thing it can do is make the pipeline
+  // go and look, and a reader still never sees a date that no citable page
+  // carries. See the header of utils/communityFeeds.js.
+  const sweepFeeds = async () => {
+    const live = feedRows.map(cleanFeed).filter(f => f && f.enabled);
+    if (!live.length) { setFeedError("No groups are switched on."); return; }
+    setFeedError(null);
+    setFeedSweep({ running: true, done: 0, total: live.length, found: 0, failed: [], candidates: [] });
+    const today = new Date();
+    const found = [];
+    const failed = [];
+    for (let i = 0; i < live.length; i++) {
+      const feed = live[i];
+      setFeedSweep(s => ({ ...s, done: i, name: feed.name }));
+      try {
+        const res = await studioFetch(`/api/social-find?check=group-posts&group=${encodeURIComponent(feed.groupId)}`);
+        const data = await res.json().catch(() => null);
+        if (!res.ok || data?.failed || data?.skipped) {
+          failed.push({ name: feed.name, why: data?.failed || data?.skipped || `the request returned ${res.status}` });
+          continue;
+        }
+        const posts = postsIn(data);
+        found.push(...candidatesIn(posts, { today, feed }));
+      } catch (e) {
+        failed.push({ name: feed.name, why: String(e?.message || e) });
+      }
+    }
+    // Against what is already published, so the four posts a village writes
+    // about one evening arrive as one card, and an event already on the site
+    // does not come back every week until it happens.
+    const published = (manageItems || []).filter(r => r?.type === "festival").map(r => r.payload || {});
+    const fresh = newCandidates(found, published);
+    setFeedSweep({ running: false, done: live.length, total: live.length, found: fresh.length, failed, candidates: fresh });
+    // The stamp, so the panel can say when each was last looked at. Best effort:
+    // a sweep that found things and failed to write a date is still a sweep.
+    // dayKey, never toISOString: a UTC day used as a local one is a day out for
+    // half of every evening in Denmark, which is exactly when he runs this.
+    const day = dayKey(new Date());
+    for (const feed of live) {
+      if (!feed.id) continue;
+      try {
+        await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_feeds?id=eq.${Number(feed.id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ last_checked: day }),
+        });
+      } catch { /* the stamp is a convenience, never the feature */ }
+    }
+    loadFeeds();
+  };
+
+  // TODAY IS THE ANCHOR, and that is a real difference from the sweep. A swept
+  // post carries the day it was written and "25.7." is read against that. A
+  // pasted one carries nothing, so the anchor is now, which is right for a post
+  // he is looking at this minute and wrong for one he scrolled back to find.
+  // The card shows the date it read, so a wrong one is one glance away.
+  const readPastedPost = () => {
+    const text = String(pastedPost || "").trim();
+    if (!text) return;
+    const found = candidatesIn(
+      [{ id: `pasted-${Date.now()}`, url: "", text, at: dayKey(new Date()), author: "" }],
+      { today: new Date(), feed: { name: "Pasted in", url: "", place: "" } },
+    );
+    if (!found.length) {
+      setFeedError("No date that has not already happened could be read out of that. Check the post carries a day, and that it is still ahead.");
+      return;
+    }
+    setFeedError(null);
+    setPastedPost("");
+    // Into the same queue, deduped against it, so pasting the same post twice
+    // does not give him two cards to look at.
+    setFeedSweep(s => {
+      const had = s?.candidates || [];
+      return { running: false, done: 0, total: 0, failed: s?.failed || [], candidates: dedupeCandidates([...found, ...had]), found: dedupeCandidates([...found, ...had]).length };
+    });
   };
 
   const [sweepId, setSweepId] = useState(SWEEPS[0]?.id || "");
@@ -20068,9 +20351,27 @@ ${languageBlock()}`;
                       <div style={{ fontSize: 14, fontWeight: 700, color: C.gold, fontFamily: "'Fraunces', serif" }}>🛠 Content Studio — founder tool</div>
                       <button onClick={studioLogout} style={{ background: "none", border: "none", color: C.muted, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>Log out</button>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
                       <div style={{ fontSize: 10.5, color: C.muted }}>Logged in as {studioSession.email}</div>
-                      <div style={{ display: "flex", gap: 6 }}>
+                      {/* ── THIS ROW WRAPS NOW, AND IT HAD TO ─────────────
+                          17 Sep 2026. Oliver, after the community groups panel
+                          shipped: "You didn't create anything in studio for the
+                          groups?" The button was there in the code and the row
+                          it sits in was ONE LINE with no wrap, already full at
+                          seven buttons on his screen: Record, Recording, Needs
+                          Redraft, Reports, Manage Published, Facts, Research
+                          sources, ending flush against the panel's right edge.
+                          An eighth had nowhere to go.
+                          Nothing errors when that happens, which is the whole
+                          problem: the button renders, the handler works, the
+                          panel opens if anything could click it, and the
+                          feature is invisible. This codebase's signature
+                          failure, arriving through CSS for once rather than
+                          through a missing caller.
+                          Wrapping rather than scrolling, because a toolbar you
+                          have to scroll sideways hides its own contents just as
+                          well, and this row only grows. */}
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
                         {/* ── THE RECORDER ────────────────────────────────
                             Oliver, 3 Sep: "you can make a studio button, that
                             records everything I do... so you can see a file
@@ -20118,6 +20419,10 @@ ${languageBlock()}`;
                 <button onClick={() => { setSourcesOpen(o => !o); if (!sourcesOpen) loadSources(); }}
                   style={{ background: sourcesOpen ? `${C.gold}22` : "none", border: `1px solid ${sourcesOpen ? C.gold : C.border}`, color: sourcesOpen ? C.gold : C.light, borderRadius: 100, padding: "6px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                   🔗 Research sources
+                </button>
+                <button onClick={() => { setFeedsOpen(o => !o); if (!feedsOpen) loadFeeds(); }}
+                  style={{ background: feedsOpen ? `${C.gold}22` : "none", border: `1px solid ${feedsOpen ? C.gold : C.border}`, color: feedsOpen ? C.gold : C.light, borderRadius: 100, padding: "6px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  📣 Community groups
                 </button>
                       </div>
                     </div>
@@ -20258,12 +20563,14 @@ ${languageBlock()}`;
                                 something he should have to guess at. */}
                             {row.applies_place && (() => {
                               const tier = scopeTier(row.applies_place);
-                              const label = { region: "region", part: "part of the country", town: "town" }[tier] || tier;
+                              const label = { region: "region", part: "part of the country", town: "town", islands: "any island" }[tier] || tier;
                               const inIt = tier === "region" ? kommunerIn(row.applies_place) : [];
                               return (
-                                <span title={inIt.length ? `${label} — ${inIt.join(", ")} Kommune` : label}
+                                <span title={inIt.length ? `${label} — ${inIt.join(", ")} Kommune`
+                                  : tier === "islands" ? "Every draft the app can place on a named island, whichever region it is in. An island entry always counts; a town, a restaurant or a festival counts when its kommune is the island or the published row names one."
+                                    : label}
                                   style={{ fontSize: 10, fontWeight: 700, color: "#8AB4F8", background: "#8AB4F818", border: "1px solid #8AB4F844", borderRadius: 100, padding: "2px 9px", flexShrink: 0 }}>
-                                  {tier === "region" ? "🗺" : "📍"} {cleanPlace(row.applies_place)}
+                                  {tier === "region" ? "🗺" : tier === "islands" ? "⛴" : "📍"} {cleanPlace(row.applies_place)}
                                   <span style={{ opacity: 0.62, fontWeight: 600 }}> · {label}</span>
                                 </span>
                               );
@@ -20305,7 +20612,7 @@ ${languageBlock()}`;
                         </div>
                         <input value={newSourcePlace} onChange={e => setNewSourcePlace(e.target.value)}
                           onKeyDown={e => { if (e.key === "Enter") addSource(); }}
-                          list="gemlyx-source-places" placeholder="only for… (a region, a town, or Jutland)"
+                          list="gemlyx-source-places" placeholder="only for… (Islands, a region, a town, or Jutland)"
                           style={{ width: 210, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
                         {/* ── REGIONS, WHICH IS THE ONE HE ASKED FOR ────────
                             Labelled in the option itself rather than left as a
@@ -20313,6 +20620,10 @@ ${languageBlock()}`;
                             "Sønderjylland" sitting between "Slagelse" and
                             "Skagen" reads as another town. */}
                         <datalist id="gemlyx-source-places">
+                          {/* First in the list because it is the one tier that
+                              is not a place name, so nothing about the word
+                              would suggest the box accepts it. */}
+                          <option value={ISLANDS_SCOPE}>any island, whichever region it is in</option>
                           {REGION_NAMES.map(x => <option key={x} value={x}>region · {kommunerIn(x).slice(0, 4).join(", ")}{kommunerIn(x).length > 4 ? "…" : ""}</option>)}
                           {PARTS_OF_COUNTRY.map(x => <option key={x} value={x}>part of the country</option>)}
                           {towns.map(t => t.name).filter(Boolean).sort().map(n => <option key={n} value={n}>town</option>)}
@@ -20326,6 +20637,7 @@ ${languageBlock()}`;
 A note is worth writing: "the operator's own timetable" tells the model when to reach for it, which is most of the value.
                         {" "}Leave "only for" blank for a national source. A city's tourist office belongs to that city: VisitCopenhagen on an Aarhus draft costs money on all seven research calls and invites a Copenhagen page being read as an authority on Aarhus.
                         {" "}A <b>region</b> is the tier between those two, and it is what a Danish tourist board usually covers: visitsonderjylland.dk scoped to Sønderjylland reaches Tønder, Sønderborg, Aabenraa, Haderslev and Rømø without a row each, and stays off a Skagen draft. Which region a draft is in is worked out from its coordinate before anything is searched, so an event gets one too, and a draft nothing could place gets no place-scoped sources at all.
+                        {" "}<b>Islands</b> is the odd one and it is not a place: it reaches every draft the app can put on a named island, in any region, so rundtidanmark.dk scoped to Islands rides along on Sejerø, on a festival on Samsø and on Ærøskøbing, and stays off Aarhus. It is the scope, not the type: leave the type on Everything unless the source is only good for island entries. One island of its own goes in by NAME instead, which also reaches the towns on it.
                       </div>
                       {/* ── AND WHAT THE REGIONS ARE ─────────────────────
                           Folded away, because it is a reference list rather
@@ -20359,6 +20671,194 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           </div>
                         );
                       })()}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* ── THE COMMUNITY GROUPS ────────────────────────────────
+                  Oliver, 17 Sep 2026: "I've been in contact with someone from a
+                  community at Sejerø that hosts events... Is it possible for me
+                  to put that as a link onto my studio, along with links from
+                  other groups from other communities?"
+
+                  Deliberately a SEPARATE panel from the research sources, and
+                  the copy says why in his own terms: these are places to HEAR
+                  about something, and nothing in here may ever be quoted. */}
+              {feedsOpen && (
+                <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>📣 Community groups to watch for events</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 3, lineHeight: 1.6, marginBottom: 11 }}>
+                    A sweep reads the recent posts in each group, finds the ones carrying a date that has not happened yet, and leaves them here as
+                    candidates. Nothing is written and nothing is published: a post is a lead, so "Draft this" hands it to the ordinary event pipeline,
+                    which still has to find the event on a page it is allowed to quote before a reader sees anything.
+                    {" "}<b>Public groups only.</b> A private group cannot be read by anything running on a server, whether or not you are a member, so keep
+                    those here for the link and open them yourself.
+                  </div>
+
+                  {feedError === "MISSING_TABLE" ? (
+                    <div style={{ fontSize: 11.5, color: "#FFB347", lineHeight: 1.6 }}>
+                      The <code>gemlyx_feeds</code> table does not exist yet. Run this once in Supabase, then reopen this panel:
+                      <pre style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px", fontSize: 10.5, color: C.light, overflowX: "auto", marginTop: 8, whiteSpace: "pre" }}>{FEEDS_SQL}</pre>
+                      <button onClick={() => { navigator.clipboard?.writeText(FEEDS_SQL); setToast("SQL copied"); }}
+                        style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "6px 13px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Copy the SQL</button>
+                    </div>
+                  ) : (
+                    <>
+                      {feedError && <div style={{ fontSize: 11.5, color: "#FFB347", marginBottom: 9, lineHeight: 1.5 }}>{feedError}</div>}
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 11 }}>
+                        {feedRows.map(row => (
+                          <div key={row.id} style={{ display: "flex", alignItems: "center", gap: 8, background: C.bg, borderRadius: 8, padding: "7px 10px" }}>
+                            <input type="checkbox" checked={row.enabled !== false} disabled={feedBusy}
+                              onChange={e => setFeedEnabled(row, e.target.checked)} style={{ accentColor: C.gold, cursor: "pointer", flexShrink: 0 }} />
+                            <a href={row.url} target="_blank" rel="noreferrer"
+                              style={{ fontSize: 12, color: C.text, fontWeight: 600, textDecoration: "none", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {row.name} ↗
+                            </a>
+                            {row.place && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: "#8AB4F8", background: "#8AB4F818", border: "1px solid #8AB4F844", borderRadius: 100, padding: "2px 9px", flexShrink: 0 }}>
+                                📍 {row.place}
+                              </span>
+                            )}
+                            {/* WHEN IT WAS LAST LOOKED AT, because a sweep that
+                                quietly stopped working looks exactly like a
+                                quiet month in the group. */}
+                            <span style={{ fontSize: 10, color: C.muted, flexShrink: 0 }}>
+                              {row.last_checked ? `checked ${row.last_checked}` : "never checked"}
+                            </span>
+                            <button onClick={() => deleteFeed(row)} disabled={feedBusy} title="Remove"
+                              style={{ background: "none", border: "none", color: C.muted, fontSize: 15, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}>×</button>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+                        <input value={newFeedUrl} onChange={e => setNewFeedUrl(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") addFeed(); }}
+                          placeholder="facebook.com/groups/125246204312244"
+                          style={{ flex: 1, minWidth: 200, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                        <input value={newFeedName} onChange={e => setNewFeedName(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") addFeed(); }}
+                          placeholder="what to call it"
+                          style={{ width: 170, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                        <input value={newFeedPlace} onChange={e => setNewFeedPlace(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") addFeed(); }}
+                          list="gemlyx-source-places" placeholder="where it covers"
+                          style={{ width: 150, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                        <button onClick={addFeed} disabled={feedBusy || !newFeedUrl.trim()}
+                          style={{ background: newFeedUrl.trim() && !feedBusy ? C.gold : C.bg, border: `1px solid ${C.border}`, color: newFeedUrl.trim() && !feedBusy ? "#000" : C.muted, borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, cursor: newFeedUrl.trim() ? "pointer" : "default", flexShrink: 0 }}>
+                          {feedBusy ? "…" : "Add"}
+                        </button>
+                      </div>
+
+                      {/* ── AND THE GROUPS NOTHING CAN READ ──────────────
+                          A private group is unreadable by anything on a server,
+                          and the mail route does not rescue it: a Facebook
+                          notification carries about forty-five characters of the
+                          post and then an ellipsis, so there is no date in it to
+                          find. He is in the group and can see the whole thing,
+                          so the copy is the one step no server can do, and
+                          everything after it is the same machinery. */}
+                      <div style={{ marginTop: 11, background: C.bg, borderRadius: 8, padding: "10px 11px" }}>
+                        <div style={{ fontSize: 11, color: C.light, fontWeight: 700, marginBottom: 5 }}>From a group that cannot be read</div>
+                        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginBottom: 7 }}>
+                          Paste the post. It is read the same way a swept one is, and it lands in the same queue. Useful for a private group, and for a poster in a window.
+                        </div>
+                        <textarea value={pastedPost} onChange={e => setPastedPost(e.target.value)}
+                          placeholder="Paste what it says"
+                          style={{ width: "100%", minHeight: 62, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", resize: "vertical", boxSizing: "border-box" }} />
+                        <button onClick={readPastedPost} disabled={!pastedPost.trim()}
+                          style={{ marginTop: 6, background: "none", border: `1px solid ${pastedPost.trim() ? `${C.gold}66` : C.border}`, color: pastedPost.trim() ? C.gold : C.muted, borderRadius: 100, padding: "6px 13px", fontSize: 11, fontWeight: 700, cursor: pastedPost.trim() ? "pointer" : "default", fontFamily: "'Inter', sans-serif" }}>
+                          Read the date out of it
+                        </button>
+                      </div>
+
+                      {/* WHAT IT COSTS, before he presses it, in his own
+                          currency. The same discipline the source list has. */}
+                      {feedRows.length > 0 && (() => {
+                        const cost = sweepCost(feedRows.map(cleanFeed).filter(Boolean));
+                        return (
+                          <div style={{ display: "flex", gap: 9, alignItems: "center", flexWrap: "wrap", marginTop: 11 }}>
+                            <button onClick={sweepFeeds} disabled={feedBusy || feedSweep?.running || !cost.feeds}
+                              style={{ background: cost.feeds && !feedSweep?.running ? `${C.gold}22` : C.bg, border: `1px solid ${cost.feeds && !feedSweep?.running ? C.gold : C.border}`, color: cost.feeds && !feedSweep?.running ? C.gold : C.muted, borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, cursor: cost.feeds && !feedSweep?.running ? "pointer" : "default", fontFamily: "'Inter', sans-serif" }}>
+                              {feedSweep?.running ? `Reading ${feedSweep.name || "…"} (${feedSweep.done + 1} of ${feedSweep.total})` : "🔄 Check the groups for events"}
+                            </button>
+                            <span style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5 }}>
+                              {cost.feeds} group{cost.feeds === 1 ? "" : "s"} switched on, {cost.requests} request{cost.requests === 1 ? "" : "s"}, about {cost.cents} øre a sweep.
+                            </span>
+                          </div>
+                        );
+                      })()}
+
+                      {/* ── THE QUEUE ────────────────────────────────────
+                          Soonest first, because a village group posts about
+                          next Saturday far more often than about next summer,
+                          and the soonest is the one with a deadline on it. */}
+                      {feedSweep && !feedSweep.running && (
+                        <div style={{ marginTop: 12 }}>
+                          <div style={{ fontSize: 11.5, color: C.light, fontWeight: 700, marginBottom: 7 }}>
+                            {feedSweep.found
+                              ? `${feedSweep.found} thing${feedSweep.found === 1 ? "" : "s"} coming up`
+                              : "Nothing coming up in those groups"}
+                            {feedSweep.failed.length > 0 && <span style={{ color: "#FFB347", fontWeight: 600 }}> · {feedSweep.failed.length} could not be read</span>}
+                          </div>
+                          {/* A GROUP THAT COULD NOT BE READ IS NAMED. A private
+                              group and a quiet one look identical in a count,
+                              and only one of them is worth doing something
+                              about. */}
+                          {feedSweep.failed.map(f => (
+                            <div key={f.name} style={{ fontSize: 10.5, color: "#FFB347", lineHeight: 1.5, marginBottom: 4 }}>
+                              {f.name}: {f.why}
+                            </div>
+                          ))}
+                          {feedSweep.candidates.map(c => (
+                            <div key={c.postId || c.postUrl || `${c.date}${c.feedName}`} style={{ background: C.bg, borderRadius: 10, padding: "10px 12px", marginBottom: 7 }}>
+                              <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: C.gold }}>
+                                  {c.date}{c.dates.length > 1 ? ` to ${c.dates[c.dates.length - 1]}` : ""}{c.time ? ` · ${c.time}` : ""}
+                                </span>
+                                <span style={{ fontSize: 10.5, color: C.muted }}>{c.feedName}{c.place ? ` · ${c.place}` : ""}</span>
+                              </div>
+                              {/* The post's own words, untouched. This panel
+                                  never names the event: a regex can find a date
+                                  and cannot name a show, and a wrong name in the
+                                  one line he skims is worse than no name. */}
+                              <div style={{ fontSize: 11.5, color: C.text, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: 7 }}>
+                                {c.text.length > 320 ? `${c.text.slice(0, 320)}…` : c.text}
+                              </div>
+                              <div style={{ display: "flex", gap: 9, alignItems: "center", flexWrap: "wrap" }}>
+                                <button onClick={() => {
+                                  // Into the ordinary event pipeline, with the
+                                  // post as the hint. The date is NOT written
+                                  // onto anything: the draft has to find it on
+                                  // a page it may quote, which is the whole
+                                  // arrangement. See communityFeeds.js.
+                                  // A feed scoped to the Islands tier covers
+                                  // every island and names no town, so it must
+                                  // not be typed into the town box as one.
+                                  const where = c.place && c.place !== ISLANDS_SCOPE ? c.place : "";
+                                  setStudioType("festival");
+                                  setStudioTown(where);
+                                  setScanHint({ town: where, lead: c.text, leadFrom: c.postUrl || c.feedUrl });
+                                  setFeedsOpen(false);
+                                  showToast("Ready to draft. Type the event's name and hit Draft it", 4000);
+                                }}
+                                  style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                  Draft this
+                                </button>
+                                {c.postUrl && (
+                                  <a href={c.postUrl} target="_blank" rel="noreferrer"
+                                    style={{ fontSize: 11, fontWeight: 700, color: C.muted, textDecoration: "none" }}>
+                                    The post ↗
+                                  </a>
+                                )}
+                                <span style={{ fontSize: 10, color: C.muted }}>posted {c.postedAt}{c.author ? ` by ${c.author}` : ""}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -26551,26 +27051,58 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           introduce a field they do not need. */}
                       {isMerged(item) && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 4 }}>
-                          {linksOf(item).map((l, li) => (
-                            <div key={li} style={{ background: C.bg, borderRadius: 8, padding: "9px 11px" }}>
-                              <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-                                <span style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>{l.label}</span>
-                                {l.note && <span style={{ fontSize: 11, color: C.muted, lineHeight: 1.5 }}>{l.note}</span>}
+                          {linksOf(item).map((l, li) => {
+                            // ── AND A LINK IN A LIST IS STILL A LINK ───────
+                            //
+                            // This branch drew a bare href with rel="noreferrer"
+                            // and asked linkLabel about the UNWRAPPED url, while
+                            // the single-link branch forty lines down wrapped,
+                            // disclosed and marked its one link correctly. Two
+                            // renderers on the same card, one of them right.
+                            //
+                            // So the Copenhagen Card, which needs the card's own
+                            // site AND Tiqets and is therefore drawn here, would
+                            // have shipped a reseller link that paid nothing,
+                            // carried no disclosure and called itself the
+                            // official site. outboundLink answers all four at
+                            // once and both branches now ask it, so there is no
+                            // longer a version of this that can be right in one
+                            // place and wrong in the other.
+                            const out = outboundLink(l.url);
+                            return (
+                              <div key={li} style={{ background: C.bg, borderRadius: 8, padding: "9px 11px" }}>
+                                <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                                  <span style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>{l.label}</span>
+                                  {l.note && <span style={{ fontSize: 11, color: C.muted, lineHeight: 1.5 }}>{l.note}</span>}
+                                </div>
+                                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 5, flexWrap: "wrap" }}>
+                                  {out.href && (
+                                    <a href={out.href} target="_blank" rel={out.rel}
+                                      style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>
+                                      {out.label} ↗
+                                    </a>
+                                  )}
+                                  {/* An app store link is never a partner link,
+                                      and the label on it is the store rather
+                                      than the merchant, so it keeps its own
+                                      anchor. It goes through outboundLink all
+                                      the same: the day one of these is a
+                                      tracked link, nobody has to notice. */}
+                                  {l.android && (
+                                    <a href={outboundLink(l.android).href} target="_blank" rel={outboundLink(l.android).rel}
+                                      style={{ fontSize: 11.5, fontWeight: 700, color: C.muted, textDecoration: "none" }}>
+                                      Android ↗
+                                    </a>
+                                  )}
+                                </div>
+                                {/* COMPUTED IS NOT PRINTED, the same rule the
+                                    single-link branch carries: a disclosure read
+                                    into a const and never rendered is a paid
+                                    link with nothing under it. */}
+                                {out.note && <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.5, marginTop: 6, maxWidth: 320 }}>{out.note}</div>}
                               </div>
-                              <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 5, flexWrap: "wrap" }}>
-                                <a href={externalHref(l.url)} target="_blank" rel="noreferrer"
-                                  style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>
-                                  {linkLabel(l.url)} ↗
-                                </a>
-                                {l.android && (
-                                  <a href={externalHref(l.android)} target="_blank" rel="noreferrer"
-                                    style={{ fontSize: 11.5, fontWeight: 700, color: C.muted, textDecoration: "none" }}>
-                                    Android ↗
-                                  </a>
-                                )}
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                       {item.link && (() => {
@@ -26602,9 +27134,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         // nofollow whenever the link is tracked, which is what
                         // Google asks for and is the difference between an
                         // affiliate link and an undisclosed ad.
-                        const note = partnerDisclosure(item.link);
-                        const label = linkLabel(item.link);
-                        const rel = note ? "noreferrer sponsored nofollow" : "noreferrer";
+                        // ── ASKED OF THE WRAPPED LINK, 16 SEP 2026 ─────────
+                        // These three were computed off item.link RAW, which is
+                        // correct for every row written so far because each of
+                        // them stores a link that is already tracked. It stops
+                        // being correct the moment a row stores the destination
+                        // instead: affiliateHref would wrap it at render, and
+                        // these three would be answering about a different URL
+                        // from the one in the href. outboundLink wraps first and
+                        // answers about the result, which is the same answer on
+                        // every existing row and the right one on the next.
+                        const { href, label, note, rel } = outboundLink(item.link);
                         return (
                           <div>
                             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -26619,7 +27159,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   Decided by the host, the same way the label above
                                   is. See storeKindOf. */}
                               {storeKindOf(item.link) === "web" && !item.linkAndroid ? (
-                                <a href={externalHref(item.link)} target="_blank" rel={rel}
+                                <a href={href} target="_blank" rel={rel}
                                   style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "7px 14px", fontSize: 12, fontWeight: 700, color: C.gold, textDecoration: "none" }}>
                                   {label} ↗
                                 </a>
@@ -26629,7 +27169,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   <StoreBadge type="android" href={item.linkAndroid} />
                                 </>
                               ) : (
-                                <a href={externalHref(item.link)} target="_blank" rel={rel}
+                                <a href={href} target="_blank" rel={rel}
                                   style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, color: C.light, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
                                   🌐 {label} ↗
                                 </a>

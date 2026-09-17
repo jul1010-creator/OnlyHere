@@ -215,8 +215,23 @@ export const StudioAssistant = ({ session, supaFetch, readPage, item, kind, draf
       //
       // So the headline says only what is true of every rejection, and the
       // evidence underneath, which was right all along, says which kind it is.
+      // ── AND THE HEADLINE IS WRITTEN ONCE ──────────────────────
+      //
+      // "NOT applied. Not applied. This came from a pasted fact-check..." is
+      // what he saw on 17 Sep. correction.js writes the same sentence into the
+      // evidence itself for two of these cases, because only correction.js
+      // knows whether a value was supplied and whether the operator's own site
+      // was asked, and this then said it again in front. Two owners of one
+      // sentence, which is the thing this file keeps finding one layer down.
+      //
+      // The evidence wins, because it is the one that can be specific. This
+      // only leads when the evidence has not already said it.
+      const lead = (sentence, evidence) => {
+        const text = String(evidence || "").trim();
+        return /^not applied\b/i.test(text) ? `\n   ${text}` : `\n   ${sentence} ${text}`.trimEnd();
+      };
       const why = c.verdict === "rejected"
-        ? `\n   Not applied. ${c.evidence}`
+        ? lead("Not applied.", c.evidence)
         : c.verdict === "unresolved"
         // ── "8 ON MY WORD IS ALOT.. THIS IS FROM GEMINI" ─────────
         // Oliver, 6 Sep 2026. An unresolved claim out of a PASTED fact-check is
@@ -225,7 +240,7 @@ export const StudioAssistant = ({ session, supaFetch, readPage, item, kind, draf
         // no value to use" about somebody else's claim is the same confusion
         // that had eight of them riding in under "on your word".
         ? (result.fromPaste
-            ? `\n   NOT applied. ${c.evidence}`
+            ? lead("Not applied.", c.evidence)
             : `\n   Left alone, nothing settled it and you gave no value to use. ${c.evidence}`)
         : c.verdict === "asserted"
         ? `\n   Applied on your word, still unconfirmed. ${c.evidence}`

@@ -105,6 +105,14 @@ import { PROSE_FIELDS as NARRATIVE_FIELDS } from "./entryAudit";
 // this project has been bitten six times, most recently on 7 Sep when journey.js
 // and claimCheck.js disagreed about "2h 58m".
 import { durationsIn } from "./claimCheck";
+// ── THE THREE THINGS A CITED LINK HAS TO BE ASKED ───────────────────
+// factAge dates a page, isNeverASource says whether a host may settle anything
+// at all, and wrongEdition catches an address that names another year. All
+// three already exist and are already tested; what was missing was anything
+// asking them about a link HE pastes. See citationRefusal below.
+import { factAge } from "./pageScan";
+import { isNeverASource } from "./sourcePolicy";
+import { wrongEdition } from "./ticketLink";
 export const PROSE_FIELDS = [...NARRATIVE_FIELDS, "blogBody", "intro", "body"];
 
 // A claim reaches the patch step under one of two verdicts. "confirmed" means a
@@ -511,6 +519,98 @@ export const urlsIn = (text) =>
   [...new Set((String(text || "").match(/https?:\/\/[^\s<>"')\]]+/gi) || [])
     .map(u => u.replace(/[).,;\]]+$/, "")))];
 
+// ── AND A LINK WITHOUT A SCHEME IS STILL A LINK ─────────────────────
+//
+// Oliver, 17 Sep 2026: "make it so when it sees 'http', 'https', '.com' '.dk'
+// then it has to assume it's a link, and check that link."
+//
+// urlsIn above answers a narrower question, how many addresses a fact-check
+// printed, and it wants the strict form. This is the one the correction pass
+// asks, and it has to match what a person types. Nobody typing a source into a
+// box writes the scheme: he writes "aeroexpressen.dk" or "visitfyn.dk/lyoe",
+// and every one of those was invisible to the pass that was supposed to read
+// them.
+//
+// AN ALLOW-LIST OF ENDINGS, for the reason every list in this codebase is one.
+// A general "word dot word" would read "e.g", "run.mjs", "1.5" and the end of
+// any sentence that happens to be followed by a capital as addresses, and each
+// false one costs a page fetch and an answer about a page that does not exist.
+// .dk and .com are his two, and the rest are what a Danish source realistically
+// ends in.
+const LINK_TLDS = ["dk", "com", "net", "org", "eu", "io", "info", "travel", "de", "se", "no", "nu", "uk", "app", "shop", "dev"];
+// The leading class is what keeps an email address out: in "oliver@gemlyx.dk"
+// the character before the host is "@", which is neither the start of the text
+// nor one of these, so nothing matches. The trailing guard keeps "gemlyx.dkx"
+// out for the same reason a word boundary is used everywhere else in here.
+const BARE_LINK = `(?:^|[\\s(<"'])((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+(?:${LINK_TLDS.join("|")}))(?![a-z0-9-])(\\/[^\\s<>"')\\]]*)?`;
+
+// NAMED sourceLinksIn AND NOT linksIn: pageScan.js already exports a linksIn,
+// which pulls the <a href> out of a page's HTML. Different question, same word,
+// and one bundle cannot hold both. This one is about the links a PERSON typed.
+export const sourceLinksIn = (text) => {
+  const raw = String(text || "");
+  const absolute = raw.match(/https?:\/\/[^\s<>"')\]]+/gi) || [];
+  // Blanked rather than skipped, so the host inside an address already found is
+  // not collected a second time as a bare one.
+  const rest = raw.replace(/https?:\/\/[^\s<>"')\]]+/gi, " ");
+  const bare = [];
+  const re = new RegExp(BARE_LINK, "gi");
+  let m;
+  while ((m = re.exec(rest)) !== null) bare.push(`https://${m[1]}${m[2] || ""}`);
+  return [...new Set([...absolute, ...bare].map(u => u.replace(/[).,;:\]]+$/, "")))];
+};
+
+// ── AND WHETHER A LINK MAY SETTLE ANYTHING ──────────────────────────
+//
+// His own second half, in the same breath: "Of course, it needs to make sure
+// that's not a third party link from 2018 (example..) as well."
+//
+// He is describing the failure this pass would otherwise have. Reading whatever
+// address is in the box and treating the answer as settled is how a 2018 blog
+// post gets to overrule an entry, which is the same shape as the stale
+// Ticketmaster link from 2022 and the 2022 press release that priced Ribelund.
+// A link is a lead until it survives three questions, and all three instruments
+// already exist.
+//
+// This one answers the two that can be asked BEFORE spending a fetch. Age needs
+// the page, so it is asked after, in the loop.
+export const citationRefusal = (url, { year = null } = {}) => {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+  let host = "";
+  try { host = new URL(raw).hostname.replace(/^www\./, ""); } catch { return `${raw} is not a readable address, so nothing was fetched.`; }
+  // Social and user-generated pages are never a source here, which is a rule
+  // this codebase already holds everywhere else. A Facebook post saying the
+  // ferry takes cars is a person saying it, not the operator.
+  if (isNeverASource(raw)) return `${host} is a social or user-posted page, which is never the deciding source here. Give the operator's own page and this will settle it.`;
+  // An address that names a year in its own path, for an entry that is about a
+  // different one. This is the 2022 Ticketmaster link, arriving by hand instead
+  // of by search.
+  if (year && wrongEdition(raw, year)) return `${host} names a different year in its own address, and this entry is for ${year}, so it is about another edition and was not read.`;
+  return "";
+};
+
+// ── WHAT A PAGE FROM 2018 STILL GETS TO ANSWER ──────────────────────
+//
+// Not nothing, which is the mistake in the other direction. pageScan's
+// PERISHABLE list is the settled answer to "what goes off": a price, a date, an
+// opening hour, a phone number, a booking detail, a transport claim, a
+// timetable, and whether a named business is still there. An old page may not
+// carry those and may still carry everything else, and the same page's history
+// is fine, which is the rule the research pipeline has run on for a month.
+//
+// So the age gate is asked of the CLAIM, not only of the page. "The ferry
+// carries cars" is a durable fact about a boat and a 2018 page answers it.
+// "The ferry costs 160 kr" is not.
+export const claimIsPerishable = (claim) => {
+  const t = `${claim?.field || ""} ${claim?.says || ""} ${claim?.proposed || ""}`;
+  return /\b(?:kr|dkk|kroner|price|prices|pris|priser|cost|costs|fare|fares|billet|ticket|entr(?:y|é|e)|free entry|gratis)\b/i.test(t)
+    || /\b(?:open|opens|opening|closed|closes|hours|åben|åbent|åbningstider|lukket|timetable|sejlplan|schedule|departure|departures|afgang|afgange|sailing|sailings|season|sæson)\b/i.test(t)
+    || /\b(?:19|20)\d{2}\b/.test(t)
+    || /\d{1,2}[:.]\d{2}\b/.test(t)
+    || /\b\d{1,3}\s*(?:kr|dkk|€|\$)\b/i.test(t);
+};
+
 export const CITATION_PROMPT = (name, claim, host, pageText) => `A fact-check of a Danish travel entry about "${name}" made this claim and cited ONE page as its evidence. Below is the actual text of that page, fetched just now.
 
 Your only job is to answer whether that page says what the claim says it says. You are not deciding whether the claim is true in the world, and you must not reason from anything except the text below.
@@ -540,12 +640,31 @@ ${String(pageText || "").slice(0, 12000)}`;
 // The settler, pure and separate, for the reason settleVerdict and settleOwnSite
 // are: a rule that lives inside a network call cannot be tested, and this one
 // decides whether a fact-check's own evidence gets to reject it.
-export const settleCitation = ({ parsed, url = "", isOwnSite = false } = {}) => {
+export const settleCitation = ({ parsed, url = "", isOwnSite = false, stale = "" } = {}) => {
   const said = String(parsed?.says || "");
   const quote = String(parsed?.quote || "").trim();
   let host = "";
   try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { host = ""; }
   const who = host || "the page it cited";
+  // ── A PAGE TOO OLD TO CARRY THIS FACT SETTLES NOTHING ───────────
+  //
+  // "a third party link from 2018 (example..)", in his words, and the guard has
+  // to work in BOTH directions or it is the more dangerous half of itself. A
+  // 2018 page saying the fare is 50 kr does not confirm today's fare, and a
+  // 2018 page saying something else does not disprove it either: that is how a
+  // stale page gets to reject a correct entry, which is the shape that has cost
+  // the most in this codebase. So it is reported with its age and it decides
+  // nothing.
+  //
+  // `stale` is empty unless the caller measured the page AND the claim is one
+  // of the perishable kinds. A 2018 page is still the answer to what a ferry
+  // carries or where a harbour is. See claimIsPerishable.
+  if (stale && (said === "supports" || said === "contradicts")) {
+    return {
+      verdict: "", read: true, supported: false, sourceUrl: "",
+      evidence: `${who} ${said === "supports" ? "does say this" : "says otherwise"}${quote ? `: "${quote}"` : ""}, but ${stale}, so it cannot settle something that changes. Nothing was applied on it. A current page from whoever charges or runs this would.`,
+    };
+  }
   if (said === "contradicts") {
     return {
       verdict: "rejected", read: true, supported: false, sourceUrl: url,
@@ -609,6 +728,30 @@ Respond with ONLY the complete corrected JSON object, nothing before or after.
 
 Entry:
 ${entryJson}`;
+
+// ── AND ONE QUESTION THE ROUTING API CANNOT BE ASKED ────────────────
+//
+// 17 Sep 2026, the second half of the same annoyance. His claim was that the
+// ÆrøXpressen crossing "also carries vehicles". classifyClaim called it
+// transport, verifyTransportClaim saw the word "crossing" and ran the ferry
+// probe, and the ferry probe answers exactly one question: is a ferry REQUIRED
+// to reach this place, measured by asking for a driving route with ferries
+// banned. It cannot see what is on the boat. So a claim about what a ferry
+// carries was handed to an instrument with no opinion on it, and the reply he
+// got, "the ferry check could not run", described the failure of a measurement
+// that would not have answered him if it had run.
+//
+// This is the 8 Sep duration bug forty lines below, in the other branch of the
+// same function: "It answered a question nobody asked."
+//
+// So a carries-claim never reaches the probe. It goes down the ordinary source
+// path instead, which can read the operator's own page, which is where the
+// answer is: aeroexpressen.dk says 28 køretøjer pr. overfart in Danish, and its
+// English page does not mention vehicles at all, which is also why a page read
+// beats a measurement here.
+export const asksWhatItCarries = (claim) =>
+  /\b(?:cars?|vehicles?|bikes?|bicycles?|caravans?|campers?|motorhomes?|lorr(?:y|ies)|trailers?|foot ?passengers?|passenger[- ]only|walk[- ]on|pedestrians?|bil(?:er|en)?|k(?:ø|oe)ret(?:ø|oe)j(?:er)?|cykl?(?:er|en)?|campingvogn(?:e)?|g(?:å|aa)ende|fodg(?:æ|ae)ngere)\b/i
+    .test(`${claim?.says || ""} ${claim?.proposed || ""}`);
 
 // ── transport verification, by measurement ──────────────────────────
 // Injected `directions` is (origin, destination, mode, extra) => response, so
@@ -994,11 +1137,44 @@ export const PASTED_MIN = 400;
 const REPORTED = /(^|\n)\s*[*\-•]?\s*(?:claim|what is wrong|finding|verdict|source|evidence)\s*:/i;
 const CITES = /https?:\/\/\S+/;
 
+// ── AND A LINK IS NOT A REPORT, 17 SEP 2026 ─────────────────────────
+//
+// Oliver pasted "https://aeroexpressen.dk/en/ yes. Apply that it's also a
+// vehicle crossing" and got back "This came from a pasted fact-check rather
+// than from you". It did not. He typed it, all sixty-six characters of it, and
+// the sentence he typed is an instruction with a source attached, which is the
+// STRONGEST shape a correction can arrive in: his word AND a page to check it
+// against. CITES turned it into somebody else's report on the strength of the
+// page, so the one thing he could add to make a correction more trustworthy was
+// the thing that disqualified it. His words afterwards: "this is so annoying.."
+// and "arguing with it, despite providing it sources".
+//
+// The original reasoning holds for what it was written about: a fact-check
+// arrives carrying its citations. What was missing is that a URL on its own
+// says nothing about WHO is speaking, and the length test and REPORTED already
+// catch the actual report. So a link now only marks a paste when nothing else
+// in the sentence is him speaking.
+//
+// THE URLS ARE STRIPPED BEFORE THIS IS ASKED, or a path like /apply-online
+// would answer the question about the prose. Same word-boundary lesson as the
+// discovery deduplication and the source scoping.
+// ── AND THE LIST IS FIRST PERSON AND IMPERATIVE, NOTHING WIDER ──────
+// "should be" and "it should" were in the first draft of this line and came
+// straight back out. A short fact-check says "the crossing should be described
+// as a vehicle ferry, see <url>", and that is a REPORT wearing an instruction,
+// which is the 6 Sep failure being let back in through a new door. What stays
+// is what only the person typing into the box says: an order given to this
+// pass, or a sentence about what HE did.
+const INSTRUCTS = /\b(?:appl(?:y|ied)|use this|change it|correct it|fix it|set it|make it|i (?:know|checked|think|saw|found|have|want)|here(?:'s| is)|yes|no|confirm(?:ed)? it)\b/i;
+const withoutUrls = (t) => String(t || "").replace(/https?:\/\/[^\s<>"')\]]+/gi, " ");
+
 export const whoseWord = (criticism) => {
   const t = String(criticism || "").trim();
   if (!t) return "founder";
   if (t.length > PASTED_MIN) return "pasted";
-  return REPORTED.test(t) || CITES.test(t) ? "pasted" : "founder";
+  if (REPORTED.test(t)) return "pasted";
+  if (CITES.test(t)) return INSTRUCTS.test(withoutUrls(t)) ? "founder" : "pasted";
+  return "founder";
 };
 
 // ── A PASTED REPORT CANNOT GIVE AN INSTRUCTION ─────────────────────
@@ -1125,6 +1301,34 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
   let claims = Array.isArray(split?.claims) ? split.claims : [];
   if (claims.length === 0) throw new Error("No specific claims could be read out of that text.");
 
+  // ── AND A LINK HE TYPED BELONGS TO THE CLAIM HE TYPED IT WITH ────
+  //
+  // urlsIn says in its own comment why it is not used to attach URLs to claims:
+  // "a bibliography at the bottom of an answer belongs to no single finding,
+  // and guessing which one would be worse than having none". That is right
+  // about a bibliography and there is one case where there is nothing to guess:
+  // ONE address, ONE claim. Then the link is the source for that claim or it is
+  // in the box for no reason at all.
+  //
+  // This is how "https://aeroexpressen.dk/en/ yes. Apply that it's also a
+  // vehicle crossing" reaches the page he was pointing at. Without it the
+  // extractor has to think to copy the URL onto the claim's sourceUrl, and when
+  // it does not, the page he went and found is read by nothing.
+  // sourceLinksIn, not urlsIn: he types "aeroexpressen.dk", not "https://…". See
+  // sourceLinksIn, and his own words, "when it sees 'http', 'https', '.com' '.dk'
+  // then it has to assume it's a link, and check that link".
+  const soleUrl = (() => {
+    const all = sourceLinksIn(criticism);
+    return all.length === 1 && claims.length === 1 ? all[0] : "";
+  })();
+  // The edition year off the entry's own date, for the address that names a
+  // different one. Null for anything with no date, which is most entries, and
+  // wrongEdition then refuses nothing.
+  const editionYear = (() => {
+    const m = /^(\d{4})-/.exec(String(entry?.dateStart || entry?.date || "").trim());
+    return m ? Number(m[1]) : null;
+  })();
+
   // 2. verify, one at a time, each by the right instrument
   const verified = [];
   for (let i = 0; i < claims.length; i++) {
@@ -1139,7 +1343,10 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
       continue;
     }
 
-    if (kind === "transport") {
+    // asksWhatItCarries, because the routing probe measures whether a ferry is
+    // REQUIRED and nothing else. A claim about what the boat takes aboard falls
+    // through to the source path below, where the operator's own page is read.
+    if (kind === "transport" && !asksWhatItCarries(c)) {
       const r = await verifyTransportClaim(c, entry, { directions });
       verified.push({ ...c, kind, ...r });
       continue;
@@ -1155,8 +1362,16 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
     // behaves exactly as this did before and the tier is testable with no
     // network at all.
     let cited = null;
-    const citedUrl = claimCitation(c);
-    if (typeof readPage === "function" && citedUrl) {
+    const citedUrl = claimCitation(c) || soleUrl;
+    // ── ASKED BEFORE A FETCH IS SPENT ON IT ───────────────────────
+    // A social page and an address naming another year are both answerable
+    // from the URL alone, and both are reported rather than silently dropped:
+    // "nothing settled it" over a link he went and found reads as the pass
+    // ignoring him, which is exactly what he said it was doing.
+    const refusedWhy = citedUrl ? citationRefusal(citedUrl, { year: editionYear }) : "";
+    if (refusedWhy) {
+      cited = { verdict: "", read: false, supported: false, sourceUrl: "", evidence: refusedWhy };
+    } else if (typeof readPage === "function" && citedUrl) {
       try {
         const page = await readPage(citedUrl);
         const pageText = String(page?.text || "").trim();
@@ -1169,7 +1384,13 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
           // this file, so it is the primary source here too. ownSite is already
           // resolved and already refuses an aggregator sitting in `website`.
           const isOwn = !!ownSite && !!citeHost && citeHost.toLowerCase().endsWith(ownSite.toLowerCase());
-          cited = settleCitation({ parsed: cParsed, url: citedUrl, isOwnSite: isOwn });
+          // ── AND HOW OLD THE PAGE IS, MEASURED ON ITS OWN TEXT ──
+          // factAge is the research pipeline's own instrument, the one that
+          // writes "the newest year on this page is 2022" into the run log.
+          // Asked here for the first time about a page somebody pasted.
+          const age = factAge(pageText, Date.now());
+          const stale = !age.perishableOk && claimIsPerishable(c) ? age.why : "";
+          cited = settleCitation({ parsed: cParsed, url: citedUrl, isOwnSite: isOwn, stale });
         } else {
           // A bot wall is not a fact about the claim, so nothing is concluded
           // from it. It is said out loud anyway: "their source could not be
