@@ -20351,9 +20351,27 @@ ${languageBlock()}`;
                       <div style={{ fontSize: 14, fontWeight: 700, color: C.gold, fontFamily: "'Fraunces', serif" }}>🛠 Content Studio — founder tool</div>
                       <button onClick={studioLogout} style={{ background: "none", border: "none", color: C.muted, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>Log out</button>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
                       <div style={{ fontSize: 10.5, color: C.muted }}>Logged in as {studioSession.email}</div>
-                      <div style={{ display: "flex", gap: 6 }}>
+                      {/* ── THIS ROW WRAPS NOW, AND IT HAD TO ─────────────
+                          17 Sep 2026. Oliver, after the community groups panel
+                          shipped: "You didn't create anything in studio for the
+                          groups?" The button was there in the code and the row
+                          it sits in was ONE LINE with no wrap, already full at
+                          seven buttons on his screen: Record, Recording, Needs
+                          Redraft, Reports, Manage Published, Facts, Research
+                          sources, ending flush against the panel's right edge.
+                          An eighth had nowhere to go.
+                          Nothing errors when that happens, which is the whole
+                          problem: the button renders, the handler works, the
+                          panel opens if anything could click it, and the
+                          feature is invisible. This codebase's signature
+                          failure, arriving through CSS for once rather than
+                          through a missing caller.
+                          Wrapping rather than scrolling, because a toolbar you
+                          have to scroll sideways hides its own contents just as
+                          well, and this row only grows. */}
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
                         {/* ── THE RECORDER ────────────────────────────────
                             Oliver, 3 Sep: "you can make a studio button, that
                             records everything I do... so you can see a file

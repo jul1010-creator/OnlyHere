@@ -1205,6 +1205,21 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ok("and it is the documented endpoint", /"\/v1\/facebook\/group\/posts", \{ group_id: group, pages: 1 \}/.test(api));
     ok("with the id demanded as a number", api.includes("/^\\d{5,}$/.test(group)"));
     ok("the panel is wired", /const sweepFeeds = async \(\) => \{/.test(app));
+    // ── AND THE BUTTON CAN BE SEEN ────────────────────────────────
+    //
+    // Oliver, 17 Sep 2026, after this shipped: "You didn't create anything in
+    // studio for the groups?" It was there. The Studio toolbar was one flex
+    // line with no wrap, already full at seven buttons and ending flush against
+    // the panel's right edge, so the eighth had nowhere to go. Nothing errors
+    // when that happens: the button renders, the handler works, and the feature
+    // is invisible. This project's signature failure, arriving through CSS.
+    ok("the studio toolbar wraps", /<div style=\{\{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" \}\}>/.test(app));
+    // The row it sits inside wraps too, or a narrow window pushes the whole
+    // toolbar off instead of one button.
+    ok("and so does the row it sits in",
+      /justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap"/.test(app));
+    // Both buttons are in that row, which is the thing that was actually asked.
+    ok("the community groups button is in the toolbar", /📣 Community groups\s*<\/button>/.test(app));
     // ── AND THE GROUPS NOTHING CAN READ ───────────────────────────
     //
     // Oliver: "What do you suggest we do with private groups? Shall I make a
