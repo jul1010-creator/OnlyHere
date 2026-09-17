@@ -199,7 +199,7 @@ import { swapIsAllowed } from "./utils/stopSwap";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
 import { weighAdd, addCaution, tripLoadBlock } from "./utils/weighAdd";
-import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl, TICKET_FIELD, TOUR_FIELD } from "./utils/ticketLink";
+import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl, typeHasAdmission, TICKET_FIELD, TOUR_FIELD } from "./utils/ticketLink";
 import { tourQuery, tourKindFor, tourTownFor, pickTourUrl, tourPhrase, tourCandidates, tourProposal, replaceTour, describeTourFindings, tourAliveVerdict, tourRemovalFor, TOUR_RESWEEP_DAYS, FOUND as TOUR_FOUND, GONE as TOUR_GONE, UNKNOWN as TOUR_UNKNOWN, ALIVE as TOUR_ALIVE } from "./utils/tourSweep";
 import { currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLanguage";
 import { LanguageChoice } from "./components/LanguagePicker";
@@ -7578,7 +7578,10 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // rather than a best guess, which is the rule that file states about
         // itself: an absent Tickets button is one fewer button, and a wrong one
         // is a reader who paid for something else.
-        if (!String(t.ticketUrl || "").trim()) {
+        // typeHasAdmission: an island has no door to buy a ticket to, and the
+        // two links this found on seven island drafts were a stand-up show and
+        // a concert venue. See ticketLink.js.
+        if (!String(t.ticketUrl || "").trim() && typeHasAdmission(sType)) {
           const candidates = Object.keys(pagesByUrl).map(u => ({ url: u, snippet: String(pagesByUrl[u] || "").slice(0, 800) }));
           // The edition year comes off the draft's own date, so a ticket page
           // naming a different year is refused rather than ranked. See
@@ -8050,7 +8053,9 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // in hand have had their turn, and only when they came up empty — so a
         // draft that already has a link pays nothing, and the second gate pass
         // reports whatever this found.
-        if (!String(t.ticketUrl || "").trim()) {
+        // The same gate as the vetting above, and it saves two searches on every
+        // island draft as well as keeping the wrong link out.
+        if (!String(t.ticketUrl || "").trim() && typeHasAdmission(sType)) {
           let searched = 0;
           for (const q of ticketQueries(name, draftTown)) {
             if (String(t.ticketUrl || "").trim()) break;

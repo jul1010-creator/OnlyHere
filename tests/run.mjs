@@ -69,7 +69,7 @@ writeFileSync(entry, `
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
   export { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
   export { venueCore, venueMentions, venueQuote, venueVerdict, venueVia, describeVenue, VENUE_MIN_MENTIONS, VENUE_MIN_MENTIONS_NO_TOWN, VENUE_MAX_KM, NO_NAME as V_NO_NAME, NOT_NAMED as V_NOT_NAMED, TOO_FAR as V_TOO_FAR, IS_AN_EVENT as V_IS_AN_EVENT, OK as V_OK } from ${JSON.stringify(join(root, "src/utils/venueMatch.js"))};
-  export { wrongEdition, urlYears, isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketmasterVenuePhrase, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop, priceSourceHost, isTourUrl, cleanTourUrl, TICKET_FIELD, TOUR_FIELD, TOUR_TYPES } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
+  export { wrongEdition, urlYears, isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketmasterVenuePhrase, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop, priceSourceHost, isTourUrl, cleanTourUrl, typeHasAdmission, TICKET_FIELD, TOUR_FIELD, TOUR_TYPES } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel, eventLastDay } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
@@ -107,7 +107,7 @@ writeFileSync(entry, `
   export { PAID_PLANS_LIVE } from ${JSON.stringify(join(root, "src/config.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
-  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS, claimCitation, urlsIn, CITATION_PROMPT, settleCitation, SPLIT_PROMPT, correctEntry, dropAppliedClaims, CLAIMS_APPLIED, namesField, verifyTransportClaim } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS, claimCitation, urlsIn, sourceLinksIn, citationRefusal, claimIsPerishable, CITATION_PROMPT, settleCitation, SPLIT_PROMPT, correctEntry, dropAppliedClaims, CLAIMS_APPLIED, namesField, verifyTransportClaim, asksWhatItCarries } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS, feedbackProblem, feedbackRow } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { previewReportRow, travellerTurns, PREVIEW_SAID_CAP, PREVIEW_SCREEN_CAP } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { trimFillerRuns, trimFillerAgainst } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -999,6 +999,201 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     is("a road that does not exist rejects the claim that it does", r.verdict, "rejected");
     ok("and says the crossing is real", /ferry crossing is required/.test(r.correctValue));
   }
+
+  // ── AND THE QUESTION THE PROBE CANNOT BE ASKED, 17 SEP 2026 ───────
+  //
+  // Oliver pasted the operator's own site and an instruction, twice, and got
+  // back "The ferry check could not run (probe unavailable), so nothing is
+  // claimed either way". His words: "this is so annoying.."
+  //
+  // The probe was the wrong instrument before it was an unavailable one. It
+  // answers exactly one question, is a ferry REQUIRED to reach this place,
+  // measured by asking for a driving route with ferries banned, and his claim
+  // was about what the boat CARRIES. A road query cannot see the car deck. So
+  // the reply described the failure of a measurement that would not have
+  // answered him if it had worked, which is the 8 Sep bug at the top of this
+  // block wearing the other branch: it answered a question nobody asked.
+  {
+    const { asksWhatItCarries } = M;
+    ok("a claim about vehicles is a carries claim",
+      asksWhatItCarries({ says: "the crossing is described only as a passenger crossing, but it also carries vehicles" }));
+    ok("in Danish too", asksWhatItCarries({ says: "færgen tager biler og cykler" }));
+    ok("and one about foot passengers", asksWhatItCarries({ says: "it is foot passengers only" }));
+    // The proposed value counts as well as the complaint, because a correction
+    // often carries the fact only in the value it offers.
+    ok("and a value naming them counts too",
+      asksWhatItCarries({ says: "this is wrong", proposed: "Car ferry, 45 minutes" }));
+    // AND THE ROUTING QUESTIONS ARE UNTOUCHED, which is the half that matters:
+    // the ferry probe caught Gemini's 90-minute ferry and its own reason for
+    // existing has not changed.
+    ok("whether a ferry is needed is still a routing question",
+      !asksWhatItCarries({ says: "there is no ferry needed, you can drive" }));
+    ok("and so is how long it takes", !asksWhatItCarries({ says: "the crossing is 45 minutes, not 90" }));
+    // ── AND IT NEVER REACHES THE PROBE ──────────────────────────────
+    const corr = stripComments(readFileSync(join(root, "src/utils/correction.js"), "utf8"));
+    ok("a carries claim is kept off the routing instrument",
+      /if \(kind === "transport" && !asksWhatItCarries\(c\)\) \{/.test(corr));
+  }
+}
+
+// ── "ARGUING WITH IT, DESPITE PROVIDING IT SOURCES" ─────────────────
+//
+// Oliver, 17 Sep 2026. He typed one address and one instruction into the box,
+// and the page he had gone and found was read by nothing.
+//
+// urlsIn says in its own comment why it does not attach URLs to claims: "a
+// bibliography at the bottom of an answer belongs to no single finding, and
+// guessing which one would be worse than having none." That is right about a
+// bibliography, and there is one case with nothing to guess.
+{
+  const corr = stripComments(readFileSync(join(root, "src/utils/correction.js"), "utf8"));
+  ok("one address and one claim need no guessing",
+    /const all = sourceLinksIn\(criticism\);\s*return all\.length === 1 && claims\.length === 1 \? all\[0\] : "";/.test(corr));
+  ok("and the citation tier reads it when the claim carries none",
+    /const citedUrl = claimCitation\(c\) \|\| soleUrl;/.test(corr));
+  // The claim's OWN sourceUrl still wins, or a fact-check that cited a page
+  // per finding would have every finding checked against the wrong one.
+  ok("a claim that names its own page keeps it",
+    /claimCitation\(c\) \|\| soleUrl/.test(corr) && !/soleUrl \|\| claimCitation/.test(corr));
+}
+
+// ── A TICKET TO AN ISLAND ───────────────────────────────────────────
+//
+// Oliver's island run log, 16 Sep 2026. Seven island drafts, two bookable
+// ticket links, both wrong: a stand-up comedian's show called "Et kik ind i
+// Langeland" playing in Herning, and a music venue in Rønne. The name test
+// cannot catch either, because both pages really are about something called
+// Langeland or Bornholm. The mistake is one level up.
+{
+  const { typeHasAdmission } = M;
+  is("an island has no door to buy a ticket to", typeHasAdmission("island"), false);
+  // ONLY islands. A town looks like the same argument and is not: a city card
+  // is a real product, sold on Tiqets, and the Copenhagen Card is already an
+  // affiliate row in essentials.
+  is("a town may still turn up a city card", typeHasAdmission("town"), true);
+  is("a festival certainly does", typeHasAdmission("festival"), true);
+  is("and an unknown type is not silently excluded", typeHasAdmission(""), true);
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    // BOTH gates, or the vetting is skipped and the search still runs.
+    is("both ticket hunts ask it",
+      (app.match(/if \(!String\(t\.ticketUrl \|\| ""\)\.trim\(\) && typeHasAdmission\(sType\)\)/g) || []).length, 2);
+  }
+}
+
+// ── "MAKE IT SO WHEN IT SEES http, https, .com, .dk" ────────────────
+//
+// Oliver, 17 Sep 2026: "for the 'critique' fact-checker draft, make it so when
+// it sees 'http', 'https', '.com' '.dk' then it has to assume it's a link, and
+// check that link. Of course, it needs to make sure that's not a third party
+// link from 2018 (example..) as well."
+{
+  const { sourceLinksIn, citationRefusal, claimIsPerishable, settleCitation } = M;
+
+  // ── A LINK WITHOUT A SCHEME IS STILL A LINK ─────────────────────
+  // Nobody typing a source into a box writes https://. Every one of these was
+  // invisible to the pass that was meant to read them.
+  is("a bare Danish host is a link", sourceLinksIn("aeroexpressen.dk says it takes cars"), ["https://aeroexpressen.dk"]);
+  is("with its path", sourceLinksIn("see visitfyn.dk/lyoe"), ["https://visitfyn.dk/lyoe"]);
+  is("a .com too", sourceLinksIn("bornholm.com has it"), ["https://bornholm.com"]);
+  is("a subdomain as well", sourceLinksIn("lollandfaergefart.lolland.dk/prices-and-booking"),
+    ["https://lollandfaergefart.lolland.dk/prices-and-booking"]);
+  is("and a full address is unchanged", sourceLinksIn("https://aeroexpressen.dk/en/ yes. Apply it"), ["https://aeroexpressen.dk/en/"]);
+  // ── AND THE THINGS THAT ARE NOT LINKS ───────────────────────────
+  // Each false one costs a page fetch and an answer about a page that does not
+  // exist, which is why this is an allow-list of endings rather than "word dot
+  // word".
+  is("an email address is not a link", sourceLinksIn("mail me at oliver@gemlyx.dk"), []);
+  is("nor a filename", sourceLinksIn("the file is run.mjs"), []);
+  is("nor a number", sourceLinksIn("it is 1.5 km"), []);
+  is("nor an abbreviation", sourceLinksIn("it costs 160 kr, e.g. on the ferry"), []);
+  is("and an ending that is not one of ours is not one", sourceLinksIn("gemlyx.dkx is not a link"), []);
+  // The host inside an address already found is not collected twice.
+  is("one address is one link", sourceLinksIn("https://bornholm.info/en/ferry"), ["https://bornholm.info/en/ferry"]);
+
+  // ── "NOT A THIRD PARTY LINK FROM 2018" ──────────────────────────
+  // Two of the three questions can be answered from the address alone, before
+  // a fetch is spent on it.
+  ok("a social page is never the deciding source",
+    /social or user-posted/.test(citationRefusal("https://www.facebook.com/events/123")));
+  is("an ordinary page is not refused", citationRefusal("https://aeroexpressen.dk/en/"), "");
+  ok("an address naming another year is refused",
+    /different year/.test(citationRefusal("https://www.ticketmaster.dk/event/partout-tinderbox-2022-billetter/484597", { year: 2027 })));
+  is("and the same address is fine for its own year",
+    citationRefusal("https://www.ticketmaster.dk/event/partout-tinderbox-2022-billetter/484597", { year: 2022 }), "");
+  is("an entry with no date refuses nothing on a year",
+    citationRefusal("https://www.ticketmaster.dk/event/partout-tinderbox-2022-billetter/484597"), "");
+  ok("and something that is not an address at all says so",
+    /not a readable address/.test(citationRefusal("not a link")));
+  is("nothing at all is not a refusal", citationRefusal(""), "");
+
+  // ── WHAT A PAGE FROM 2018 STILL GETS TO ANSWER ──────────────────
+  // Not nothing, which is the mistake in the other direction. pageScan's
+  // PERISHABLE list is the settled answer to what goes off, and a durable fact
+  // about a boat is not on it.
+  ok("a price claim is perishable", claimIsPerishable({ says: "the return fare is 160 kr" }));
+  ok("a timetable claim is", claimIsPerishable({ says: "the last sailing is at 17:30" }));
+  ok("an opening-hours claim is", claimIsPerishable({ says: "it is open all year", field: "hours" }));
+  ok("and anything naming a year is", claimIsPerishable({ says: "the 2027 edition moved" }));
+  ok("but what a ferry carries is not",
+    !claimIsPerishable({ says: "it is described only as a passenger crossing, but it also carries vehicles" }));
+  ok("nor is where a place sits",
+    !claimIsPerishable({ says: "Rådhuspladsen is in Copenhagen, not Aalborg" }));
+
+  // ── AND A STALE PAGE SETTLES NOTHING, IN EITHER DIRECTION ───────
+  // Both halves, or the guard is the more dangerous half of itself: a 2018 page
+  // that says otherwise must not be allowed to reject a correct entry, which is
+  // the shape that has cost the most in this codebase.
+  const OLD = "the newest year on this page is 2018, so nothing on it can be inside 6 months";
+  {
+    const r = settleCitation({ parsed: { says: "supports", quote: "Færgen koster 50 kr" }, url: "https://www.example.dk/x", stale: OLD });
+    is("an old page cannot confirm a price", r.verdict, "");
+    is("and carries nothing to apply", r.sourceUrl, "");
+    ok("while saying how old it is", /2018/.test(r.evidence));
+    ok("and what would settle it", /current page/.test(r.evidence));
+  }
+  {
+    const r = settleCitation({ parsed: { says: "contradicts", quote: "Færgen koster 50 kr" }, url: "https://www.example.dk/x", stale: OLD });
+    is("and an old page cannot reject one either", r.verdict, "");
+    ok("nothing was applied on it", /Nothing was applied/.test(r.evidence));
+  }
+  // A page that is NOT stale behaves exactly as it did, which is the half that
+  // must not move: the operator's own page still settles.
+  {
+    const r = settleCitation({ parsed: { says: "supports", quote: "28 køretøjer pr. overfart" }, url: "https://aeroexpressen.dk/", isOwnSite: true });
+    is("a current operator page still settles it", r.verdict, "confirmed");
+  }
+  // ── AND THE WIRING, OR ALL OF THE ABOVE IS A LIBRARY ────────────
+  const corr = stripComments(readFileSync(join(root, "src/utils/correction.js"), "utf8"));
+  ok("the refusal runs before a fetch is spent",
+    /const refusedWhy = citedUrl \? citationRefusal\(citedUrl, \{ year: editionYear \}\) : "";/.test(corr));
+  ok("the page is aged on its own text",
+    /const age = factAge\(pageText, Date\.now\(\)\);/.test(corr));
+  ok("and the age only bites on a claim that can go off",
+    /const stale = !age\.perishableOk && claimIsPerishable\(c\) \? age\.why : "";/.test(corr));
+  ok("and it reaches the settler", /settleCitation\(\{ parsed: cParsed, url: citedUrl, isOwnSite: isOwn, stale \}\);/.test(corr));
+}
+
+// ── "NOT applied. Not applied." ─────────────────────────────────────
+//
+// What he saw on 17 Sep, in the panel, twice in one reply. correction.js writes
+// that sentence into the evidence itself for two cases, because only it knows
+// whether a value was supplied and whether the operator's own site was asked,
+// and the panel then said it again in front. Two owners of one sentence.
+{
+  const assistant = readFileSync(join(root, "src/components/StudioAssistant.jsx"), "utf8");
+  ok("the panel leads only when the evidence has not",
+    /const lead = \(sentence, evidence\) => \{[\s\S]{0,240}\/\^not applied\\b\/i\.test\(text\)/.test(assistant));
+  ok("the rejected line goes through it", /\? lead\("Not applied\.", c\.evidence\)/.test(assistant));
+  ok("and so does the unconfirmed-from-a-paste line",
+    (assistant.match(/lead\("Not applied\.", c\.evidence\)/g) || []).length === 2);
+  // The shout is gone with it. The evidence underneath says what happened and
+  // says it specifically, which was the 16 Sep lesson one line up.
+  ok("nothing shouts the headline twice", !/NOT applied\. \$\{c\.evidence\}/.test(assistant));
+  // And correction.js still owns the specific version.
+  const corr = readFileSync(join(root, "src/utils/correction.js"), "utf8");
+  ok("the specific sentence still lives where the facts are",
+    /evidence = `Not applied\. This came from a pasted fact-check/.test(corr));
 }
 
 // ── "IT WILL DO IT IN CODE LIKE %20%20%20%" ─────────────────────────
@@ -30282,8 +30477,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // edition-year filter sits between the guard and the call. The assertion is
   // unchanged in what it pins, which is that the picker runs only on a draft
   // that has no ticket link yet.
+  // The guard gained a second half on 17 Sep, typeHasAdmission, after seven
+  // island drafts produced two bookable links and both were wrong. What this
+  // pins is unchanged: the picker runs only on a draft with no ticket link yet.
   ok("and it only runs when nothing better was found",
-     /if \(!String\(t\.ticketUrl \|\| ""\)\.trim\(\)\) \{[\s\S]{0,420}pickTicketUrl\(/.test(appT));
+     /if \(!String\(t\.ticketUrl \|\| ""\)\.trim\(\) && typeHasAdmission\(sType\)\) \{[\s\S]{0,420}pickTicketUrl\(/.test(appT));
   ok("with the reason journalled when it finds nothing", /describeTicketSearch\(candidates/.test(appT));
 
   // ── AND THE PICKER STILL REFUSES RATHER THAN GUESSES ────────────
@@ -55352,7 +55550,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ONLY WHEN THE PAGES IN HAND CAME UP EMPTY, which is what makes the cost
   // defensible: a draft that already has a link pays nothing.
   ok("it only runs when nothing else found a link",
-     /if \(!String\(t\.ticketUrl \|\| ""\)\.trim\(\)\) \{\s*\n\s*let searched = 0;/.test(appT));
+     /if \(!String\(t\.ticketUrl \|\| ""\)\.trim\(\) && typeHasAdmission\(sType\)\) \{\s*\n\s*let searched = 0;/.test(appT));
   ok("and stops at the first query that answers", /if \(String\(t\.ticketUrl \|\| ""\)\.trim\(\)\) break;/.test(appT));
   // NEVER THE FIRST RESULT. A wrong ticket link is not a weak fact, it is a
   // reader who paid for something else.
@@ -60740,6 +60938,30 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   is("a long paste is not his", whoseWord("x".repeat(PASTED_MIN + 1)), "pasted");
   is("and length is not the only tell", whoseWord("* Claim: the bar is 23+\n* What is wrong: it is not"), "pasted");
   is("nor is a cited source", whoseWord("it is 23+ per https://www.mapquest.com/dk/x"), "pasted");
+
+  // ── BUT A LINK HE HANDED OVER WITH AN ORDER IS HIS, 17 SEP 2026 ──
+  //
+  // His message, in full: "https://aeroexpressen.dk/en/ yes. Apply that it's
+  // also a vehicle crossing". Sixty-six characters, typed by him, and the reply
+  // said "This came from a pasted fact-check rather than from you". The one
+  // thing he could add to make a correction MORE trustworthy, the page to check
+  // it against, was the thing that disqualified it. "this is so annoying.." and
+  // "arguing with it, despite providing it sources".
+  is("a link plus an instruction is his word",
+    whoseWord("https://aeroexpressen.dk/en/ yes. Apply that it's also a vehicle crossing"), "founder");
+  is("and so is a link with what he did", whoseWord("I checked https://www.dsb.dk, it is 2h 15"), "founder");
+  is("and one with a plain order", whoseWord("use this https://www.visitaeroe.dk"), "founder");
+  // ── AND THE LINE THAT STAYS SOMEBODY ELSE'S ─────────────────────
+  // A short fact-check saying what SHOULD be is a report wearing an
+  // instruction, and reading it as his is the 6 Sep failure coming back in
+  // through a new door.
+  is("a short report with a link is still not his",
+    whoseWord("The crossing should be described as a vehicle ferry, see https://aeroexpressen.dk/"), "pasted");
+  is("and a structured one with an order in it is still a report",
+    whoseWord("* Claim: it is 23+\n* Verdict: apply this https://x.dk"), "pasted");
+  // THE URLS ARE STRIPPED BEFORE THE QUESTION IS ASKED, or a path decides it.
+  is("a word inside the address does not speak for him",
+    whoseWord("https://www.example.dk/apply-online is the page"), "pasted");
   // ── ANCHORED ON THE ROUTER'S OWN LINE ───────────────────────────
   // A mutation put the literal 400 back in the router and this still passed:
   // the pattern "t.length > PASTED_MIN" also appears in whoseWord two functions

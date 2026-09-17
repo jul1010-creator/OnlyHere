@@ -1,0 +1,1832 @@
+import { isoDay } from "./eventDates";
+// ── "Google AI says this is wrong. Correct it." ─────────────────────
+// Oliver, 6 Aug 2026: "Is it possible to make an AI where I can write 'Google AI
+// says this is wrong. Correct it.' So when we spot these mistakes, I don't need
+// to make new drafts."
+//
+// Yes. This is that. Paste the criticism, get a patch.
+//
+// THREE RULES DECIDE THE WHOLE DESIGN, and all three come from things that
+// already went wrong this week.
+//
+// 1. THE CRITICISM IS A LEAD, NOT A SOURCE. His own words, 6 Aug: "I've found
+//    out that Gemini seems to not always be correct either." It has been wrong
+//    twice in ways that would have made an entry WORSE: it insisted a ferry
+//    crossing was 90 minutes when the operator's own timetable says 80, and it
+//    called an unqualified "third-largest" claim an error when the figure was
+//    right and only the measure was missing. So nothing is applied because a
+//    model said it. Every claim is re-verified independently, and a claim that
+//    fails verification is REJECTED with the evidence shown. A correction tool
+//    that trusts its input is just a second way to publish someone else's
+//    mistake.
+//
+// 2. TRANSPORT CLAIMS ARE SETTLED BY MEASUREMENT, NOT BY ASKING A MODEL. If a
+//    claim is about a ferry, a route or a journey time, it goes to the
+//    Directions API, not to Perplexity. A live route query is a fact; a model's
+//    opinion about a route is a sentence. The Aarhus ferry claim in his document
+//    is exactly this case, and it resolves in one API call.
+//
+// 3. ONLY THE CRITICISED FIELDS MAY CHANGE, AND THAT IS ENFORCED IN CODE. The
+//    standing rule of this whole project: anything the system already knows must
+//    be applied as code, never requested in a prompt. So the rewrite is asked to
+//    touch only the named fields, and then every other field is compared against
+//    the original and RESTORED if it moved. A model quietly "improving" an
+//    untouched paragraph is how a correction turns into a redraft, which is the
+//    exact thing he is trying to stop doing.
+//
+// What comes out is a patch plus a per-claim verdict list, for review before
+// anything is saved. What you review is what you publish.
+
+import { FERRY, classifyFerry } from "./transport";
+import { hostMatchesName } from "./helpers";
+import { CHECK_SCOPE_BLOCK } from "./checkScope";
+
+// ── which claims can be settled without asking a model ──────────────
+// Only two things here are settled by a live route query, and the line is
+// drawn deliberately tight. Whether a ferry is required, and how long the
+// journey takes, are both answers the Directions API gives directly. The NAME
+// of a station is not: "Aarhus H" comes from DSB, not from a duration, and
+// routing a name claim into a route probe would answer a different question
+// confidently, which is the failure this whole file exists to prevent.
+export const FERRY_WORDS = /\bferr(y|ies)|f(æ|ae)rge|\bcrossing\b|\bisland\b|\bbridge\b/i;
+export const DURATION_WORDS = /travel ?time|journey time|\bduration\b|how long .{0,20}(take|journey|trip)|\bdrive time\b|\btravel duration\b/i;
+export const WEBSITE_WORDS = /\bwebsite\b|\bofficial site\b|\bhomepage\b|\burl\b|\bdomain\b|\.dk\b|https?:\/\//i;
+export const HOURS_WORDS = /opening hours?|\bopening times?\b|\bclosed on\b|\bopen from\b/i;
+
+export const classifyClaim = (claim) => {
+  const t = `${claim?.field || ""} ${claim?.says || ""} ${claim?.proposed || ""}`;
+  // Order matters. A transport claim that happens to cite the operator's URL is
+  // still a transport claim, so the measurable category is tested first.
+  if (FERRY_WORDS.test(t) || DURATION_WORDS.test(t)) return "transport";
+  if (WEBSITE_WORDS.test(t)) return "website";
+  if (HOURS_WORDS.test(t)) return "hours";
+  return "general";
+};
+
+// ── field resolution ────────────────────────────────────────────────
+// A critic writes "the nearestStation field", "Nearest Station", "the station",
+// or nothing at all. The patch has to land on a real key or the scope guard
+// will simply revert it, so the hint is matched against the keys the entry
+// actually has rather than trusted as given.
+export const resolveField = (entry, hint) => {
+  if (!entry || typeof entry !== "object" || !hint) return null;
+  const keys = Object.keys(entry);
+  const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const h = norm(hint);
+  if (!h) return null;
+  const exact = keys.find(k => norm(k) === h);
+  if (exact) return exact;
+  // "the nearestStation field" and "Nearest Station (At a Glance)" both contain
+  // the key. Longest match wins so "ticketInfo" is not shadowed by "ticket".
+  const contained = keys.filter(k => h.includes(norm(k)) || norm(k).includes(h));
+  if (contained.length) return contained.sort((a, b) => norm(b).length - norm(a).length)[0];
+  return null;
+};
+
+// Prose lives in blogBody and in the long narrative fields, and a critic almost
+// never names those precisely. A claim that resolves to nothing is allowed to
+// touch the prose fields only, never a glance field, because a glance field
+// holding a guessed value is the failure mode this project keeps hitting.
+//
+// ── AND IT IS NO LONGER A SECOND HAND-WRITTEN COPY ──────────────────
+// This named eight fields while entryAudit.js named sixteen, and the two lists
+// answered the same question for the same entries. A bar street's whole body is
+// whoFor, bestNights and walkIt, and NONE of the three was here, so a confirmed
+// correction to something said in "Walking It" could rewrite the description
+// and the reality check and never the sentence that was wrong.
+//
+// The narrative fields now come from entryAudit's list, which is the one the
+// suite checks against what shapeForLive really writes. The three added here
+// are the STRUCTURAL keys that are not narrative fields at all: blogBody is the
+// published body, and intro/body are the older shapes some rows still carry.
+// They are listed here because they belong to this question and not to that one.
+import { PROSE_FIELDS as NARRATIVE_FIELDS } from "./entryAudit";
+// The duration reader the draft gates already use. A second parser here is how
+// this project has been bitten six times, most recently on 7 Sep when journey.js
+// and claimCheck.js disagreed about "2h 58m".
+import { durationsIn } from "./claimCheck";
+// ── THE THREE THINGS A CITED LINK HAS TO BE ASKED ───────────────────
+// factAge dates a page, isNeverASource says whether a host may settle anything
+// at all, and wrongEdition catches an address that names another year. All
+// three already exist and are already tested; what was missing was anything
+// asking them about a link HE pastes. See citationRefusal below.
+import { factAge } from "./pageScan";
+import { isNeverASource } from "./sourcePolicy";
+import { wrongEdition } from "./ticketLink";
+export const PROSE_FIELDS = [...NARRATIVE_FIELDS, "blogBody", "intro", "body"];
+
+// A claim reaches the patch step under one of two verdicts. "confirmed" means a
+// primary source backed it. "asserted" means nothing settled it either way and
+// Oliver supplied the value himself, so it is applied on his authority and
+// labelled as such. See THE FOUNDER IS NOT GEMINI below for why that exists.
+export const APPLIED_VERDICTS = new Set(["confirmed", "asserted"]);
+
+export const allowedFieldsFor = (entry, claims) => {
+  const out = new Set();
+  for (const c of claims) {
+    if (!APPLIED_VERDICTS.has(c.verdict)) continue;
+    const f = resolveField(entry, c.field);
+    if (f) out.add(f);
+    else PROSE_FIELDS.forEach(p => { if (p in (entry || {})) out.add(p); });
+  }
+  // uncertainties is always writable: unresolved claims are recorded there, and
+  // a claim that changed a field should stop being listed as unconfirmed.
+  out.add("uncertainties");
+  return [...out];
+};
+
+// ── THE SAME GUARD, FOR THE PATH THAT NEVER HAD ONE ─────────────────
+//
+// Found in the overnight audit, 12 Aug 2026, and it is the most damaging thing
+// in the draft pipeline.
+//
+// The MANUAL correction, a pasted fact-check, runs through enforceScope below,
+// so a rewrite that wanders outside the claims it was given is put back and the
+// attempt is reported. The AUTOMATIC one, at the end of generateArea, does this
+// instead:
+//
+//     const corrected = await parseClaudeJSON(fixResult.text, 8192);
+//     if (corrected && corrected.name) { t = corrected;
+//
+// One key checked, then the entire draft replaced with model output. And it
+// runs LAST, after every value the pipeline measured in code:
+//
+//   travelTime      measured by Google Directions, the only measurement there is
+//   ticketStatus    read off Ticketmaster's own listing
+//   __ticket        which seller said it, and when
+//   __dateSource    the operator's own published dates
+//   __lat / __lon   the frozen geocode, or a deliberate CLEARING of a bad one
+//   __hours         Google's business listing, bought once
+//   __sources       every page the research actually opened
+//   website         the URL the owner registered, not a guessed domain
+//   uncertainties   including "STOP, DO NOT PUBLISH: this event is CANCELLED"
+//
+// The prompt asks the model to "leave every other field completely untouched",
+// which is a REQUEST, and this codebase already has the rule about requests:
+// anything the system knows must be applied as code, because a request has a
+// failure rate. An 8192-token JSON round-trip is exactly where a key that looks
+// like internal noise, and all seven __ fields do, gets dropped or tidied away.
+// The result is a draft that quietly loses its measured travel time, its
+// verified ticket status, its map pin and a stop order about a cancelled
+// festival, while the panel above it says AUTO-CORRECTED.
+//
+// ── A RULE, NOT AN ENUMERATION ──────────────────────────────────────
+// Any key starting with `__` is the pipeline's own record and is never
+// model-writable. Deliberately a rule rather than a list: five separate __
+// fields have been added to this codebase and shapeForLive forgot four of them.
+// The sixth is protected here on the day it is written.
+export const MEASURED_FIELDS = ["travelTime", "ticketStatus", "website", "nearestStation", "lat", "lon"];
+export const isPipelineOwned = (key) => String(key || "").startsWith("__") || MEASURED_FIELDS.includes(key);
+
+// Publisher notes are the other half. A correction may add to uncertainties and
+// may clear one it genuinely resolved, but "STOP, DO NOT PUBLISH" is not a claim
+// about the entry, it is an instruction to a person, and a model tidying prose
+// has no standing to delete it.
+const SHOUTED_NOTE = /^(?:STOP, DO NOT PUBLISH|CHECK BEFORE PUBLISHING|PIPELINE CONTRADICTION|FIX BEFORE PUBLISHING)/;
+
+// ── AND A DATE THE OPERATOR PUBLISHED IS NOT UP FOR REWRITING ───────
+//
+// Oliver, 26 Aug 2026: "If their own website tells you a date, then there is no
+// page to contradict it.. what should contradict Roskilde-festival.com's page?
+// Some blogger from USA? Be reasonable."
+//
+// He is right, and MEASURED_FIELDS did not cover it. The list is travelTime,
+// ticketStatus, website, nearestStation, lat and lon — every value the pipeline
+// MEASURED. A date read off the operator's own page is measured in exactly the
+// same sense, and `__dateSource = { by: "official-site" }` is the pipeline
+// already writing down that it did the measuring. It just never protected it.
+//
+// So the invented-claim check, which searches the open web, could flag a date
+// the festival itself publishes, and the rewrite that follows was free to move
+// it. A US aggregator carrying last year's dates is enough to start that.
+//
+// `alsoKeep` rather than a sixth entry in MEASURED_FIELDS, because the
+// protection is CONDITIONAL: dateStart is ordinary rewritable prose on a draft
+// where nobody confirmed anything, and untouchable on one where the operator
+// did. The call site knows which, and this function should not have to guess.
+export const keepMeasured = (before, corrected, { alsoKeep = [] } = {}) => {
+  const locked = (k) => isPipelineOwned(k) || alsoKeep.includes(k);
+  if (!corrected || typeof corrected !== "object") {
+    return { patched: before, restored: [], why: "The correction returned nothing usable, so the draft is unchanged." };
+  }
+  // ── A FIELD THE REWRITE OMITTED IS NOT A FIELD IT DELETED ────────
+  //
+  // Oliver, 12 Aug 2026, on a draft that came back holding name, nearestStation,
+  // travelTime, ticketStatus, website and the four __ fields, AND NOTHING ELSE.
+  // No desc, no ticketInfo, no dates, no town, no atmosphere, no Reality Check.
+  // That set is exactly `name` plus MEASURED_FIELDS plus the __ fields, which is
+  // precisely the set this function restores, which is how it was diagnosed.
+  //
+  // `{ ...corrected }` was the whole bug. It starts from the REWRITE and then
+  // puts back only what isPipelineOwned covers, so every ordinary field the
+  // rewrite failed to echo back was silently deleted. An 8192-token rewrite of
+  // a large JSON that runs out of room mid-object does exactly that, and the
+  // draft that reaches Publish is a shell.
+  //
+  // Starting from `before` fixes it without weakening the correction: a rewrite
+  // that genuinely wants a field EMPTIED still sends the key with "" and that
+  // wins, because it is later in the spread. Only an OMITTED key falls through
+  // to the original, and omission is never something the prompt asks for.
+  const out = { ...before, ...corrected };
+  const restored = [];
+  const keys = new Set([...Object.keys(before || {}), ...Object.keys(corrected || {})]);
+  // And a rewrite that dropped a large share of the draft did not correct it,
+  // it truncated. That is not a merge worth making: the whole thing is refused
+  // and the caller is told, rather than publishing a shell with the measured
+  // fields intact and the entry gone.
+  // ORDINARY FIELDS ONLY. A rewrite routinely omits the __ keys, because the
+  // prompt sends a draft with them stripped and the model has nothing to echo
+  // back; restoring those is this function's ordinary job and not evidence of
+  // anything. Counting them as losses made the refusal fire on a healthy
+  // correction, which the suite caught immediately.
+  const beforeKeys = Object.keys(before || {}).filter(k => !locked(k));
+  const dropped = beforeKeys.filter(k => !(k in (corrected || {})));
+  if (beforeKeys.length >= 5 && dropped.length > beforeKeys.length / 3) {
+    return {
+      patched: before,
+      restored: [],
+      rejected: true,
+      why: `The correction came back missing ${dropped.length} of ${beforeKeys.length} fields (${dropped.slice(0, 8).join(", ")}${dropped.length > 8 ? ", and more" : ""}), which is a truncated rewrite rather than a correction. The draft is unchanged.`,
+    };
+  }
+  for (const k of keys) {
+    if (!locked(k)) continue;
+    if (JSON.stringify(before?.[k]) === JSON.stringify(out[k])) continue;
+    restored.push(k);
+    if (k in (before || {})) out[k] = before[k];
+    else delete out[k];
+  }
+  // A dropped stop order goes back at the FRONT, where the pipeline puts it,
+  // because its entire job is to be the first thing read.
+  const wasNotes = (Array.isArray(before?.uncertainties) ? before.uncertainties : [])
+    .filter(u => SHOUTED_NOTE.test(String(u || "").trim()));
+  const now = Array.isArray(out.uncertainties) ? out.uncertainties : [];
+  const lost = wasNotes.filter(u => !now.includes(u));
+  if (lost.length) {
+    out.uncertainties = [...lost, ...now];
+    restored.push("uncertainties");
+  }
+  return {
+    patched: out,
+    restored,
+    why: restored.length
+      ? `The auto-correction changed ${restored.length} field${restored.length === 1 ? "" : "s"} it was told to leave alone, and ${restored.length === 1 ? "it was" : "they were"} put back: ${restored.join(", ")}. Those are measured or pipeline-owned, so a rewrite has nothing to correct them with.`
+      : "",
+  };
+};
+
+// ── the scope guard ─────────────────────────────────────────────────
+// The part that makes this a correction rather than a redraft. Anything the
+// rewrite changed outside the allowed set is put back, and the fact that it
+// tried is reported rather than swallowed.
+export const enforceScope = (original, patched, allowed) => {
+  const out = { ...(patched || {}) };
+  const reverted = [];
+  const allow = new Set(allowed || []);
+  const keys = new Set([...Object.keys(original || {}), ...Object.keys(patched || {})]);
+  for (const k of keys) {
+    if (allow.has(k)) continue;
+    const before = JSON.stringify(original?.[k]);
+    const after = JSON.stringify(out[k]);
+    if (before === after) continue;
+    reverted.push(k);
+    if (k in (original || {})) out[k] = original[k];
+    else delete out[k];
+  }
+  return { patched: out, reverted };
+};
+
+// ── splitting the criticism ─────────────────────────────────────────
+// Deliberately a separate step from fixing. A pasted fact-check is prose with
+// several claims in it, some right, some wrong, some already handled. Verifying
+// them one at a time is what lets a single wrong claim be rejected without
+// dragging the good ones down with it.
+export const SPLIT_PROMPT = (entryJson, criticism, fieldList) => `Below is a published Gemlyx entry (JSON) and a piece of criticism about it, which may come from another AI, a reader, or the founder's own notes.
+
+Break the criticism into SEPARATE, ATOMIC claims. One claim is one assertion that could be independently checked and turn out true or false. Do not merge two assertions, and do not invent claims the criticism does not make.
+
+For each claim give:
+- "field": the single JSON key it is about, chosen from this exact list where possible: ${fieldList.join(", ")}. Use "prose" if it is about the written paragraphs rather than a specific short field.
+- "says": what the criticism asserts is wrong, in one plain sentence.
+- "proposed": the corrected value or wording the criticism proposes, or an empty string if it only says something is wrong without saying what is right.
+- "checkable": "yes" if this is a factual assertion (a name, number, date, route, URL, status), "no" if it is a matter of style, tone or opinion.
+- "sourceUrl": the ONE web address the criticism gives as its evidence FOR THIS CLAIM, copied exactly, or an empty string. Take it only from the part of the text that makes this claim: a "Source:" line under it, or a URL in the same sentence or bullet. If the criticism ends with a list of links belonging to no particular claim, leave this empty for every claim rather than guessing which is which. Never invent, complete or correct a URL, and never carry one claim's source over to another.
+
+Respond with ONLY strict JSON: {"claims": [{"field": "...", "says": "...", "proposed": "...", "checkable": "yes", "sourceUrl": ""}]}
+
+Entry:
+${entryJson}
+
+Criticism:
+${criticism}`;
+
+// ── THE CHECKER DOES NOT GET THE LAST WORD EITHER ───────────────────
+// Oliver, 8 Aug 2026: "Of course, Gemini shouldn't have the final word. It
+// should always be a deeper analysis into that claim."
+//
+// `rules` is the standing research policy, appended so the verifier knows where
+// a price actually lives and what a measured duration measures. Both of tonight's
+// failures turn on exactly that: a price called unverified by a checker that
+// never opened the ticket shop, and a real door-to-door figure called incorrect
+// because it was compared against a train's running time. A verifier without
+// those rules repeats the checker's mistake and calls it confirmation.
+// ── A VERDICT THAT ARGUES AGAINST ITSELF ─────────────────────────────
+//
+// Oliver, 21 Aug 2026, reading a Mols Bjerge correction that came back "Not
+// applied, a source says otherwise" and then said, in its own next sentence,
+// "the claim that it spans multiple municipalities is not supported by the
+// primary source". The label refused the correction; the reasoning under it made
+// the correction's case.
+//
+// The verdict and its evidence are two free-text fields from ONE model call and
+// nothing had ever compared them. It matters most on a REJECTION, because of
+// which way that one fails: a wrong "confirmed" is loud, the entry visibly
+// changes and he sees it, while a wrong "rejected" leaves a false claim in a
+// published entry with a confident note beside it saying a source says
+// otherwise. He caught this one only by reading the reasoning as carefully as
+// he did.
+//
+// So the check answers the same question twice, in opposite directions, and this
+// requires the two to agree. A model that has muddled itself often muddles one
+// phrasing and not the other, which is the whole point of asking the second way
+// round.
+//
+// DOWNGRADED, NEVER INVERTED. A disagreement means the check could not keep its
+// own answer straight, which is not evidence for either side. It becomes
+// unresolved, the entry is left exactly as it is, and both halves are shown so
+// he can settle it. Deliberately not "apply the criticism": the reviewer that
+// raised this one was wrong about the other two claims in the same batch.
+//
+// EXTRACTED AS A PREDICATE, on this codebase's own recorded lesson from 10
+// August: a source-text assertion can survive the rule being switched off, so
+// the rule that matters gets a pure function and a behavioural test.
+export const settleVerdict = ({ parsed, hasSource = false, selfEvidentUrl = false } = {}) => {
+  const said = String(parsed?.verdict || "");
+  // Only a real boolean counts. An absent field is not a disagreement, so an
+  // older reply that never carried it behaves exactly as it did before.
+  //
+  // The typeof guard is documentation rather than behaviour, and mutation
+  // testing says so: `?? null` behaves identically here, because only a real
+  // boolean can satisfy the `=== true` and `=== false` comparisons below. It is
+  // written this way so the intent survives somebody reading it later, and it is
+  // recorded as an equivalent mutant so nobody hunts for the missing test.
+  const saysCorrect = typeof parsed?.entryIsAlreadyCorrect === "boolean" ? parsed.entryIsAlreadyCorrect : null;
+  const inverted = (said === "rejected" && saysCorrect === false)
+    || (said === "confirmed" && saysCorrect === true);
+  // A "confirmed" with no source is not confirmed. The whole difference between
+  // a lead and a fact, enforced here rather than hoped for in the prompt.
+  const sourceless = said === "confirmed" && !hasSource && !selfEvidentUrl;
+  const verdict = (inverted || sourceless) ? "unresolved" : said;
+  const evidence = inverted
+    ? `The check contradicted itself: it returned "${said}" while also saying the entry is ${saysCorrect ? "already correct" : "wrong"}. Nothing was changed, because a check that cannot keep its own answer straight is not evidence either way. Settle this one yourself. ${parsed?.evidence || ""}`.trim()
+    : sourceless
+      ? `The check agreed with the criticism but gave no primary source, so nothing was changed. ${parsed?.evidence || ""}`.trim()
+      : (parsed?.evidence || "");
+  return { verdict, evidence, inverted, sourceless };
+};
+
+// ── AND THEN ASK THE PLACE ITSELF ───────────────────────────────────
+//
+// Oliver, 6 Sep 2026, on a Da Vinci Bar draft. He pasted Gemini's fact-check,
+// which said the bar "is legally restricted as an explicit 23+ age-limit
+// venue", citing a MapQuest listing. The verification search found no primary
+// source, the claim fell to unresolved, and the asserted rule below applied it
+// on his word: "Nothing contradicted it, and no primary source confirmed it
+// either."
+//
+// davincibar.dk, the bar's own site, says 18+. Google found it in one search.
+// His words: "Google took in sources from shitty ones early on, but then later
+// on it used the website's own 18+ ... Gemlyx draft fact-checker did not stop
+// it. It would have denied the change if it had checked their own website."
+//
+// He is right, and the gap is one tier wide. VERIFY_PROMPT above already TELLS
+// the search to prefer the venue's own site, and telling is not asking: a
+// general web search that surfaces aggregators returns aggregators. The row
+// already carries the operator's own address in `website`, and nothing ever
+// pointed a question at it.
+//
+// ── WHY THIS IS NOT JUST ANOTHER SEARCH ─────────────────────────────
+//
+// The asserted rule exists for a real reason and is not being undone: rule 1 of
+// this file, that criticism is a lead and not a source, once produced a tool
+// that ignored him, and handoff 6 records "he is right more often than the
+// fact-checker is". Silence must not block him.
+//
+// But silence is what this pass could not tell apart from an unasked question.
+// A claim nobody has put to the operator is not a claim nothing contradicts.
+// One search closes that, and it can only ever move a claim OFF unresolved: it
+// confirms, it rejects, or it changes nothing.
+export const ownSiteFor = (entry, name) => {
+  const url = String(entry?.website || "").trim();
+  if (!/^https?:\/\//i.test(url)) return "";
+  // hostMatchesName, the same test the website-claim branch already uses. A
+  // `website` field holding an aggregator is exactly the case that must NOT be
+  // treated as the operator speaking, because that is the failure this whole
+  // tier exists to fix, one level up.
+  if (!hostMatchesName(url, name)) return "";
+  try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
+};
+
+export const OWN_SITE_PROMPT = (name, host, claim) => `Search ${host}, the official website of "${name}" in Denmark, and answer ONE question from that site alone.
+
+The claim to check: ${claim?.says || ""}${claim?.proposed ? `\nThe correction proposed: ${claim.proposed}` : ""}
+
+Rules, and they are strict:
+- ONLY ${host} counts. Not an aggregator, not a listings site, not a review site, not a maps profile. If the answer is on any other domain, that is NOT an answer to this question.
+- If ${host} states something that CONTRADICTS the claim, say so and quote it. That is the most useful answer you can give.
+- If ${host} does not address it at all, say exactly "not on their site". Do not reason from what is likely.
+
+Reply as JSON only:
+{"verdict":"confirmed"|"rejected"|"unresolved","correctValue":"what their own site says, or empty","evidence":"the sentence from their site, quoted","sourceUrl":"the page on ${host} you read"}`;
+
+// The settler, pure and separate for the reason settleVerdict is: a rule that
+// lives inside a network call cannot be tested and this one decides whether a
+// wrong fact reaches a published page.
+//
+// THE SOURCE HAS TO BE ON THEIR OWN HOST. A reply that answers from MapQuest is
+// the thing being fixed, not a weaker version of it, so it settles nothing.
+export const settleOwnSite = ({ parsed, host } = {}) => {
+  const said = String(parsed?.verdict || "");
+  const src = String(parsed?.sourceUrl || "").trim();
+  const clean = String(host || "").trim().toLowerCase();
+  let onTheirSite = false;
+  try { onTheirSite = !!clean && new URL(src).hostname.replace(/^www\./, "").toLowerCase().endsWith(clean); } catch { onTheirSite = false; }
+  if (!onTheirSite || (said !== "confirmed" && said !== "rejected")) {
+    return { verdict: "unresolved", asked: true, evidence: `${clean || "Their own site"} was asked directly and did not answer this. ${parsed?.evidence || ""}`.trim(), sourceUrl: "" };
+  }
+  return {
+    verdict: said,
+    asked: true,
+    correctValue: String(parsed?.correctValue || "").trim(),
+    evidence: `${clean}, their own site, ${said === "rejected" ? "contradicts this" : "states this"}. ${parsed?.evidence || ""}`.trim(),
+    sourceUrl: src,
+  };
+};
+
+// ── AND THE PAGE THE CRITICISM ITSELF POINTED AT ────────────────────
+//
+// Oliver, 7 Sep 2026: "I'd also like the fact-check copy for Gemini to ask for
+// sources, and the draft fact-checker to check any sources linked."
+//
+// Everything above verifies a claim by going and LOOKING FOR a source. Nothing
+// has ever opened the source the criticism handed over. When Gemini says "the
+// bar is 23+, see mapquest.com/...", the pipeline throws that URL away, runs a
+// general search, finds nothing, and lands on unresolved — which is how a
+// correction resting on a listings site ends up applied on his word, and how a
+// correct one with a real page behind it ends up refused.
+//
+// ── THE MOST USEFUL ANSWER IS THAT THE PAGE DOES NOT SAY IT ─────────
+//
+// This is not a shortcut to trusting the checker. It is the opposite: the one
+// question a cited URL can settle better than any search is whether the source
+// says what it was claimed to say. A model that has invented a citation, or read
+// one page and cited another, or generalised a sentence into something stronger,
+// fails here and fails loudly, with the page quoted back.
+//
+// ── AND WHO OWNS THE PAGE DECIDES HOW FAR IT GETS ───────────────────
+//
+// The same hierarchy the rest of this file uses. The operator's own site is a
+// primary source and settles a claim on its own; an aggregator is supporting
+// evidence and never the deciding one, so a supported claim on a listings site
+// still goes through the ordinary verification and only gains the right to say
+// that a real page, opened by us, does back it.
+//
+// Three answers, and only two of them stop anything:
+//
+//   contradicts  the page they cited says otherwise. Rejected, quoted, done.
+//                Cheapest resolver that can answer, answers: no search is run.
+//   supports     a real page we opened does say it. On the operator's own site
+//                that confirms; anywhere else it is carried forward as evidence.
+//   silent       the page does not mention it. Recorded in the evidence, and
+//                the ordinary verification runs as it always did.
+//
+// A page that will not open changes nothing at all, which is the only safe
+// answer: a bot wall is not a fact about the claim.
+
+// Only a real http(s) address, and only one. A claim citing three pages is a
+// claim whose splitter did not split, and reading all of them would spend three
+// fetches to answer one question.
+export const claimCitation = (claim) => {
+  const raw = String(claim?.sourceUrl || "").trim().replace(/[).,;\]]+$/, "");
+  return /^https?:\/\/\S+$/i.test(raw) ? raw : "";
+};
+
+// Every http(s) address in the pasted text, in order, for the panel line that
+// tells him how many the checker actually gave. Deliberately not used to attach
+// URLs to claims: a bibliography at the bottom of an answer belongs to no single
+// finding, and guessing which one would be worse than having none.
+export const urlsIn = (text) =>
+  [...new Set((String(text || "").match(/https?:\/\/[^\s<>"')\]]+/gi) || [])
+    .map(u => u.replace(/[).,;\]]+$/, "")))];
+
+// ── AND A LINK WITHOUT A SCHEME IS STILL A LINK ─────────────────────
+//
+// Oliver, 17 Sep 2026: "make it so when it sees 'http', 'https', '.com' '.dk'
+// then it has to assume it's a link, and check that link."
+//
+// urlsIn above answers a narrower question, how many addresses a fact-check
+// printed, and it wants the strict form. This is the one the correction pass
+// asks, and it has to match what a person types. Nobody typing a source into a
+// box writes the scheme: he writes "aeroexpressen.dk" or "visitfyn.dk/lyoe",
+// and every one of those was invisible to the pass that was supposed to read
+// them.
+//
+// AN ALLOW-LIST OF ENDINGS, for the reason every list in this codebase is one.
+// A general "word dot word" would read "e.g", "run.mjs", "1.5" and the end of
+// any sentence that happens to be followed by a capital as addresses, and each
+// false one costs a page fetch and an answer about a page that does not exist.
+// .dk and .com are his two, and the rest are what a Danish source realistically
+// ends in.
+const LINK_TLDS = ["dk", "com", "net", "org", "eu", "io", "info", "travel", "de", "se", "no", "nu", "uk", "app", "shop", "dev"];
+// The leading class is what keeps an email address out: in "oliver@gemlyx.dk"
+// the character before the host is "@", which is neither the start of the text
+// nor one of these, so nothing matches. The trailing guard keeps "gemlyx.dkx"
+// out for the same reason a word boundary is used everywhere else in here.
+const BARE_LINK = `(?:^|[\\s(<"'])((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+(?:${LINK_TLDS.join("|")}))(?![a-z0-9-])(\\/[^\\s<>"')\\]]*)?`;
+
+// NAMED sourceLinksIn AND NOT linksIn: pageScan.js already exports a linksIn,
+// which pulls the <a href> out of a page's HTML. Different question, same word,
+// and one bundle cannot hold both. This one is about the links a PERSON typed.
+export const sourceLinksIn = (text) => {
+  const raw = String(text || "");
+  const absolute = raw.match(/https?:\/\/[^\s<>"')\]]+/gi) || [];
+  // Blanked rather than skipped, so the host inside an address already found is
+  // not collected a second time as a bare one.
+  const rest = raw.replace(/https?:\/\/[^\s<>"')\]]+/gi, " ");
+  const bare = [];
+  const re = new RegExp(BARE_LINK, "gi");
+  let m;
+  while ((m = re.exec(rest)) !== null) bare.push(`https://${m[1]}${m[2] || ""}`);
+  return [...new Set([...absolute, ...bare].map(u => u.replace(/[).,;:\]]+$/, "")))];
+};
+
+// ── AND WHETHER A LINK MAY SETTLE ANYTHING ──────────────────────────
+//
+// His own second half, in the same breath: "Of course, it needs to make sure
+// that's not a third party link from 2018 (example..) as well."
+//
+// He is describing the failure this pass would otherwise have. Reading whatever
+// address is in the box and treating the answer as settled is how a 2018 blog
+// post gets to overrule an entry, which is the same shape as the stale
+// Ticketmaster link from 2022 and the 2022 press release that priced Ribelund.
+// A link is a lead until it survives three questions, and all three instruments
+// already exist.
+//
+// This one answers the two that can be asked BEFORE spending a fetch. Age needs
+// the page, so it is asked after, in the loop.
+export const citationRefusal = (url, { year = null } = {}) => {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+  let host = "";
+  try { host = new URL(raw).hostname.replace(/^www\./, ""); } catch { return `${raw} is not a readable address, so nothing was fetched.`; }
+  // Social and user-generated pages are never a source here, which is a rule
+  // this codebase already holds everywhere else. A Facebook post saying the
+  // ferry takes cars is a person saying it, not the operator.
+  if (isNeverASource(raw)) return `${host} is a social or user-posted page, which is never the deciding source here. Give the operator's own page and this will settle it.`;
+  // An address that names a year in its own path, for an entry that is about a
+  // different one. This is the 2022 Ticketmaster link, arriving by hand instead
+  // of by search.
+  if (year && wrongEdition(raw, year)) return `${host} names a different year in its own address, and this entry is for ${year}, so it is about another edition and was not read.`;
+  return "";
+};
+
+// ── WHAT A PAGE FROM 2018 STILL GETS TO ANSWER ──────────────────────
+//
+// Not nothing, which is the mistake in the other direction. pageScan's
+// PERISHABLE list is the settled answer to "what goes off": a price, a date, an
+// opening hour, a phone number, a booking detail, a transport claim, a
+// timetable, and whether a named business is still there. An old page may not
+// carry those and may still carry everything else, and the same page's history
+// is fine, which is the rule the research pipeline has run on for a month.
+//
+// So the age gate is asked of the CLAIM, not only of the page. "The ferry
+// carries cars" is a durable fact about a boat and a 2018 page answers it.
+// "The ferry costs 160 kr" is not.
+export const claimIsPerishable = (claim) => {
+  const t = `${claim?.field || ""} ${claim?.says || ""} ${claim?.proposed || ""}`;
+  return /\b(?:kr|dkk|kroner|price|prices|pris|priser|cost|costs|fare|fares|billet|ticket|entr(?:y|é|e)|free entry|gratis)\b/i.test(t)
+    || /\b(?:open|opens|opening|closed|closes|hours|åben|åbent|åbningstider|lukket|timetable|sejlplan|schedule|departure|departures|afgang|afgange|sailing|sailings|season|sæson)\b/i.test(t)
+    || /\b(?:19|20)\d{2}\b/.test(t)
+    || /\d{1,2}[:.]\d{2}\b/.test(t)
+    || /\b\d{1,3}\s*(?:kr|dkk|€|\$)\b/i.test(t);
+};
+
+export const CITATION_PROMPT = (name, claim, host, pageText) => `A fact-check of a Danish travel entry about "${name}" made this claim and cited ONE page as its evidence. Below is the actual text of that page, fetched just now.
+
+Your only job is to answer whether that page says what the claim says it says. You are not deciding whether the claim is true in the world, and you must not reason from anything except the text below.
+
+The claim: ${claim?.says || ""}${claim?.proposed ? `\nThe correction proposed: ${claim.proposed}` : ""}
+
+The page cited: ${host}
+
+Answer with ONLY strict JSON:
+{"says":"supports"|"contradicts"|"silent","quote":"the exact sentence from the page, or an empty string","correctValue":"the value the page gives, or an empty string"}
+
+"supports"    the page states this, or states something that plainly entails it.
+"contradicts" the page states something incompatible with it. This is the most
+              useful answer you can give, so look for it before settling on the
+              others, and put the incompatible sentence in "quote".
+"silent"      the page does not address it. Say this rather than reasoning your
+              way to a conclusion the page does not state, and say it when the
+              page is about something else entirely.
+
+An almost-match is "silent", not "supports". A page saying a place is popular
+does not support a claim about its opening hours, and a page giving one price
+does not support a claim about a different ticket.
+
+THE PAGE:
+${String(pageText || "").slice(0, 12000)}`;
+
+// The settler, pure and separate, for the reason settleVerdict and settleOwnSite
+// are: a rule that lives inside a network call cannot be tested, and this one
+// decides whether a fact-check's own evidence gets to reject it.
+export const settleCitation = ({ parsed, url = "", isOwnSite = false, stale = "" } = {}) => {
+  const said = String(parsed?.says || "");
+  const quote = String(parsed?.quote || "").trim();
+  let host = "";
+  try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { host = ""; }
+  const who = host || "the page it cited";
+  // ── A PAGE TOO OLD TO CARRY THIS FACT SETTLES NOTHING ───────────
+  //
+  // "a third party link from 2018 (example..)", in his words, and the guard has
+  // to work in BOTH directions or it is the more dangerous half of itself. A
+  // 2018 page saying the fare is 50 kr does not confirm today's fare, and a
+  // 2018 page saying something else does not disprove it either: that is how a
+  // stale page gets to reject a correct entry, which is the shape that has cost
+  // the most in this codebase. So it is reported with its age and it decides
+  // nothing.
+  //
+  // `stale` is empty unless the caller measured the page AND the claim is one
+  // of the perishable kinds. A 2018 page is still the answer to what a ferry
+  // carries or where a harbour is. See claimIsPerishable.
+  if (stale && (said === "supports" || said === "contradicts")) {
+    return {
+      verdict: "", read: true, supported: false, sourceUrl: "",
+      evidence: `${who} ${said === "supports" ? "does say this" : "says otherwise"}${quote ? `: "${quote}"` : ""}, but ${stale}, so it cannot settle something that changes. Nothing was applied on it. A current page from whoever charges or runs this would.`,
+    };
+  }
+  if (said === "contradicts") {
+    return {
+      verdict: "rejected", read: true, supported: false, sourceUrl: url,
+      evidence: `Not applied. ${who} is the page the fact-check itself gave as its source, and it says the opposite.${quote ? ` It reads: "${quote}"` : ""}`,
+    };
+  }
+  if (said === "supports") {
+    return {
+      verdict: isOwnSite ? "confirmed" : "", read: true, supported: true, sourceUrl: url,
+      correctValue: String(parsed?.correctValue || "").trim(),
+      evidence: isOwnSite
+        ? `${who}, the operator's own site and the page the fact-check cited, states this.${quote ? ` It reads: "${quote}"` : ""}`
+        : `${who}, the page the fact-check cited, does say this${quote ? `: "${quote}"` : ""}. It is not the operator's own site, so it is supporting evidence rather than the deciding source, and the check below still ran.`,
+    };
+  }
+  if (said === "silent") {
+    return {
+      verdict: "", read: true, supported: false, sourceUrl: "",
+      evidence: `${who}, the page the fact-check cited as its source, does not mention this at all.`,
+    };
+  }
+  // Anything else is a reply we could not read, which tells us nothing about
+  // the claim and must not be allowed to look like it did.
+  return { verdict: "", read: false, supported: false, sourceUrl: "", evidence: "" };
+};
+
+export const VERIFY_PROMPT = (name, claim, rules) => `Check ONE factual claim about "${name}" in Denmark using real, current web search.
+
+The claim: ${claim.says}${claim.proposed ? `\nThe correction proposed: ${claim.proposed}` : ""}
+
+Rules for your answer, and they are strict:
+- A PRIMARY SOURCE settles this. For an official site, opening hours, prices, programmes or dates that is the place's own website. For a ferry it is the operator's own timetable. Wikipedia, tourist boards and aggregators are supporting evidence, never the deciding one.
+- If sources disagree, say so and name both, rather than silently picking one. An operator's own timetable page outranks its own marketing front page.
+- If you cannot find a primary source, say so plainly. "Could not confirm" is a correct and useful answer here. Do not reason your way to a conclusion.
+
+Respond with ONLY strict JSON:
+{"verdict": "confirmed" | "rejected" | "unresolved", "entryIsAlreadyCorrect": true | false | null, "correctValue": "the real verified value, or an empty string", "evidence": "one or two sentences on what the source says", "sourceUrl": "the primary source URL, or an empty string"}
+
+"confirmed" means the criticism is right and the entry needs changing. "rejected" means the criticism is wrong and the entry is already correct, and your evidence must say why. "unresolved" means no primary source settled it.
+
+ANSWER THE SAME QUESTION TWICE, DELIBERATELY. The field "entryIsAlreadyCorrect" asks, in the opposite direction from the verdict, whether the entry as it currently stands says the right thing: true when the entry is fine as it is, false when the entry says something the source does not support, null when nothing settled it. It must agree with your verdict, because "rejected" and "the entry is already correct" are the same answer, and so are "confirmed" and "the entry is wrong". Two fields rather than one because a verdict and the reasoning under it were coming back saying opposite things, and nothing could tell.
+
+BOTH THE ENTRY AND THE CRITICISM CAN BE RIGHT AT ONCE, and when that happens the verdict is "rejected", not "confirmed". Two real figures measuring different things are not a disagreement: a door to door journey time and a train's running time are both true and neither corrects the other. Before returning "confirmed", check that the criticism is talking about the SAME measure, the same route, the same ticket and the same variant as the entry. If it is measuring something else, reject it and say what it measured instead.${rules ? `\n${rules}` : ""}`;
+
+export const PATCH_PROMPT = (entryJson, confirmed, allowed) => `Here is a published Gemlyx entry (JSON) and a list of corrections that have each been independently verified against a primary source.
+
+Apply the corrections. Then stop.
+
+Absolute rules:
+- You may change ONLY these keys: ${allowed.join(", ")}. Every other key must come back byte-identical, same wording, same punctuation, same order.
+- Do not improve, tighten, re-tone or re-order anything that is not listed above. This is a correction, not a rewrite. Any other edit will be automatically reverted, so it is wasted effort.
+- Where a correction gives a real verified value, use that exact value.
+- Never write an em dash or an en dash. Use a comma, a full stop, or a rephrase.
+- A short At a Glance field takes a NAME or a VALUE, never a sentence, never advice to the reader, never a hedge. If the right value is unknown, leave it as an empty string.
+- If applying a correction makes an existing sentence wrong, fix that sentence too, but only inside the keys listed above.
+
+Corrections to apply:
+${confirmed.map((c, i) => `${i + 1}. Field: ${c.field}. What was wrong: ${c.says}. The correct value: ${c.correctValue || c.proposed}. ${c.verdict === "asserted" ? "Given by the site's founder. Write it as stated, plainly and without hedging. Do not add \"reportedly\" or \"said to be\"." : `Source: ${c.sourceUrl || "verified by live routing data"}`}`).join("\n")}
+
+Respond with ONLY the complete corrected JSON object, nothing before or after.
+
+Entry:
+${entryJson}`;
+
+// ── AND ONE QUESTION THE ROUTING API CANNOT BE ASKED ────────────────
+//
+// 17 Sep 2026, the second half of the same annoyance. His claim was that the
+// ÆrøXpressen crossing "also carries vehicles". classifyClaim called it
+// transport, verifyTransportClaim saw the word "crossing" and ran the ferry
+// probe, and the ferry probe answers exactly one question: is a ferry REQUIRED
+// to reach this place, measured by asking for a driving route with ferries
+// banned. It cannot see what is on the boat. So a claim about what a ferry
+// carries was handed to an instrument with no opinion on it, and the reply he
+// got, "the ferry check could not run", described the failure of a measurement
+// that would not have answered him if it had run.
+//
+// This is the 8 Sep duration bug forty lines below, in the other branch of the
+// same function: "It answered a question nobody asked."
+//
+// So a carries-claim never reaches the probe. It goes down the ordinary source
+// path instead, which can read the operator's own page, which is where the
+// answer is: aeroexpressen.dk says 28 køretøjer pr. overfart in Danish, and its
+// English page does not mention vehicles at all, which is also why a page read
+// beats a measurement here.
+export const asksWhatItCarries = (claim) =>
+  /\b(?:cars?|vehicles?|bikes?|bicycles?|caravans?|campers?|motorhomes?|lorr(?:y|ies)|trailers?|foot ?passengers?|passenger[- ]only|walk[- ]on|pedestrians?|bil(?:er|en)?|k(?:ø|oe)ret(?:ø|oe)j(?:er)?|cykl?(?:er|en)?|campingvogn(?:e)?|g(?:å|aa)ende|fodg(?:æ|ae)ngere)\b/i
+    .test(`${claim?.says || ""} ${claim?.proposed || ""}`);
+
+// ── transport verification, by measurement ──────────────────────────
+// Injected `directions` is (origin, destination, mode, extra) => response, so
+// the app passes its real fetch and the tests pass fixtures.
+export const verifyTransportClaim = async (claim, entry, { directions, origin = "55.6761,12.5683" } = {}) => {
+  const lat = entry?.__lat ?? entry?.lat, lon = entry?.__lon ?? entry?.lon;
+  if (!directions || lat == null || lon == null) {
+    return { verdict: "unresolved", evidence: "No stored coordinates for this entry, so the route could not be measured.", sourceUrl: "" };
+  }
+  const dest = `${lat},${lon}`;
+  const isFerryClaim = /\bferr(y|ies)|f(æ|ae)rge|\bcrossing\b|\bisland\b|\bbridge\b/i.test(`${claim.says} ${claim.proposed}`);
+
+  let base = null;
+  try { base = await directions(origin, dest, "driving"); } catch { base = null; }
+  if (!base || base.error) {
+    return { verdict: "unresolved", evidence: `The routing API returned no driving route (${base?.error || "request failed"}), so this could not be settled by measurement.`, sourceUrl: "" };
+  }
+
+  if (isFerryClaim) {
+    let avoid, probeRan = true;
+    try { avoid = await directions(origin, dest, "driving", { avoid: "ferries" }); }
+    catch { probeRan = false; avoid = undefined; }
+    const verdict = classifyFerry({ base, avoid, probeRan });
+
+    // What the criticism is asserting: either "a ferry is not needed here" or
+    // "a ferry is needed here". The measurement answers both.
+    const claimsNoFerryNeeded = /\bno (mandatory|required|necessary)\b|\bnot (an island|required|mandatory|needed|necessary)\b|\boptional\b|\bbridge\b|\bby road\b|\bnot a ferry\b|there is no .{0,20}ferry/i.test(`${claim.says} ${claim.proposed}`);
+
+    if (verdict.status === FERRY.OPTIONAL) {
+      return {
+        verdict: claimsNoFerryNeeded ? "confirmed" : "rejected",
+        correctValue: `Reachable by road${verdict.landDurationText ? ` in ${verdict.landDurationText}${verdict.landDistanceText ? ` (${verdict.landDistanceText})` : ""}` : ""}. The ferry is an optional shortcut, not a requirement.`,
+        evidence: `Measured live: the same driving query with ferries banned still returns a road route${verdict.landDurationText ? ` of ${verdict.landDurationText}` : ""}, so there is a land connection and the ferry is optional.`,
+        sourceUrl: "",
+      };
+    }
+    if (verdict.status === FERRY.REQUIRED) {
+      return {
+        verdict: claimsNoFerryNeeded ? "rejected" : "confirmed",
+        correctValue: "A ferry crossing is required, there is no road connection.",
+        evidence: "Measured live: the same driving query with ferries banned returns no route at all, so no road reaches this place and the crossing is required.",
+        sourceUrl: "",
+      };
+    }
+    return { verdict: "unresolved", evidence: `The ferry check could not run (${verdict.probeError || "probe unavailable"}), so nothing is claimed either way.`, sourceUrl: "" };
+  }
+
+  // ── A DURATION CLAIM, AND WHAT THE MEASUREMENT CAN SETTLE ─────────
+  //
+  // Found 8 Sep 2026. This branch returned verdict "confirmed" for EVERY claim
+  // that reached it, with a car time from Copenhagen, without reading the claim
+  // at all. So "the travel time is wrong, by train it is 2h 15 not 3h" came
+  // back marked CONFIRMED with a patch reading "1h 50 mins by car (135 km) from
+  // Copenhagen", into a field the pipeline fills with a transit time. Confirmed
+  // means THE CRITICISM IS RIGHT, and nothing had compared anything.
+  //
+  // Three things were wrong and they are separable:
+  //
+  //   1. It answered a question nobody asked. A drive from Copenhagen cannot
+  //      settle a claim about a train, a bus or a walk.
+  //   2. It measured from Copenhagen for every content type, four days after
+  //      journeyScope settled that only a TOWN is measured from there.
+  //   3. It confirmed without comparing.
+  //
+  // All three are fixed by using the journey the entry already carries. That is
+  // the figure the draft was written from, measured from the right origin for
+  // its type, in the mode the pipeline used, and comparing against it is the
+  // only comparison that can agree with a fresh draft of the same entry. The
+  // live drive stays as the fallback for a row that has no journey, and it says
+  // out loud what it is when it is used.
+  const said = `${claim?.says || ""} ${claim?.proposed || ""}`;
+  const j = entry?.__journey;
+  const measured = Number.isFinite(j?.total) ? { minutes: j.total, how: "on public transport", from: String(j.from || "").trim() }
+    : Number.isFinite(base.durationMinutes) ? { minutes: base.durationMinutes, how: "by car", from: "Copenhagen" }
+    : null;
+  const fromWhere = measured?.from ? ` from ${measured.from}` : "";
+  const drive = `${base.durationText}, ${base.distanceText} by car from Copenhagen`;
+
+  // A MODE THIS CANNOT MEASURE IS NOT SETTLED BY THIS. Naming a different mode
+  // is the traveller being specific, and answering with a different one is the
+  // fault above wearing a number.
+  const OTHER_MODE = /\b(train|rail|tog|bus|coach|metro|letbane|s-tog|walk|walking|on foot|cycle|cycling|bike)\b/i;
+  const SAYS_CAR = /\b(car|drive|driving|by road|bil|k(ø|oe)r)/i;
+  if (!measured || (OTHER_MODE.test(said) && !SAYS_CAR.test(said) && measured.how === "by car")) {
+    return {
+      verdict: "unresolved",
+      evidence: `The only figure available here is the drive: ${drive}. The criticism is about a different way of travelling, and a driving time cannot settle it.`,
+      sourceUrl: "",
+    };
+  }
+
+  // NOTHING TO COMPARE IS NOT AGREEMENT. A criticism that says the time is
+  // wrong without saying what it should be leaves the measurement standing and
+  // the question open.
+  const claimed = durationsIn(said).map(d => d.minutes).filter(Number.isFinite);
+  if (!claimed.length) {
+    return {
+      verdict: "unresolved",
+      evidence: `Measured: ${measured.minutes} minutes ${measured.how}${fromWhere}. The criticism names no figure to compare that with, so nothing here settles it.`,
+      sourceUrl: "",
+    };
+  }
+
+  // Fifteen per cent, floored at five minutes, because a journey is not a
+  // constant: a figure that close is the same journey reported by two sources
+  // rather than a disagreement worth rewriting a field over.
+  const near = claimed.some(m => Math.abs(m - measured.minutes) <= Math.max(5, measured.minutes * 0.15));
+  return {
+    verdict: near ? "confirmed" : "rejected",
+    correctValue: near ? `${measured.minutes} minutes ${measured.how}${fromWhere}` : "",
+    evidence: near
+      ? `Measured: ${measured.minutes} minutes ${measured.how}${fromWhere}, which agrees with the ${claimed.join(" or ")} minutes the criticism gives.`
+      : `Measured: ${measured.minutes} minutes ${measured.how}${fromWhere}. The criticism says ${claimed.join(" or ")} minutes, which is not the same journey, so the entry's own figure stands.`,
+    sourceUrl: "",
+  };
+};
+
+// Website claims lean on the same matcher the drafting pipeline uses, so the
+// two can never disagree about what counts as a place's own domain.
+
+// ── ONE BOX, NOT A FORM ─────────────────────────────────────────────
+// Oliver, 6 Aug 2026: "Make it my personal Gemlyx."
+//
+// So it is not a Correction Panel with fields to fill in. It is a box you talk
+// to about your own site, and it works out what you are asking for. Three
+// things people actually type at a tool like this:
+//
+//   "Google AI says this is wrong. Correct it. <pasted fact-check>"  -> fix it
+//   "is the ferry thing right on this one?"                          -> answer
+//   "which ones need work?"                                          -> audit
+//
+// Routed deterministically, and deliberately so. A model deciding whether to
+// EDIT YOUR PUBLISHED CONTENT or merely answer a question is a coin flip on
+// something that must never be a coin flip, and the tell is unmissable: a
+// correction message carries an instruction to change something, or it carries
+// a pasted block of criticism. When it is genuinely unclear, this answers
+// rather than edits, because the wrong guess in that direction costs a
+// sentence and the wrong guess in the other direction costs an entry.
+export const CORRECT_INTENT = /\b(correct|fix|change|update|amend|rewrite|redo|apply|patch)\b/i;
+export const AUDIT_INTENT = /\b(which|what) (ones?|entries|towns|pages|are)\b|needs? (a )?(redraft|work|fixing)|worst|audit|scan (them|everything|all)/i;
+
+// ── WHY THIS GOT REWRITTEN (Oliver, 7 Aug 2026) ─────────────────────
+// "the AI assistant that is meant to put in the newly fact-checked things is
+// not thaaat great... I would like to have an AI I can write to after the draft
+// where I can say 'Fact-checkers say bla bla bla is wrong, and that really bla
+// bla bla is true.'"
+//
+// The first version demanded an imperative verb. Run his own sentence through
+// it and it routes to "ask", so the assistant discusses the fact-check instead
+// of applying it. Five of six realistic correction messages did the same:
+//
+//   "The station is wrong. It should be Aarhus H."                    -> ask
+//   "Google says the date is wrong, it is actually 25 August."        -> ask
+//   "This says the ferry is required but that is not true."           -> ask
+//
+// Nobody types "correct it" every time. A correction is not an imperative, it
+// is an ASSERTION: something is wrong, and here is what is right. Either half
+// on its own is enough of a tell, because a person does not say "should be
+// Aarhus H" to make conversation.
+export const WRONG_HALF = /\b(wrong|incorrect|inaccurate|untrue|false|mistaken|a mistake|an error|errors?|not right|isn'?t right|not true|isn'?t true|not correct|doesn'?t exist|does not exist|misleading|misleads)\b/i;
+export const RIGHT_HALF = /\b(should (be|say|read|actually)|shouldn'?t (be|say)|it'?s actually|is actually|actually is|actually,|\breally\b|in fact|in reality|the real |the correct |instead of|rather than|supposed to be)\b/i;
+
+// A question is answered, never acted on, even when it is about something being
+// wrong. Guessing "correct" on "is the ferry thing right?" would run a whole
+// verification pass because he wondered aloud.
+// A question has two shapes: one he opens with, and one that is nothing but a
+// trailing question mark. They are kept apart because a pasted report ends with
+// its own question and that one is not his. QUESTION is built from the opener
+// rather than restating the word list, so the two can never drift.
+export const QUESTION_OPENS = /^\s*(why|what|how|is|are|does|do|did|can|could|should|would|which|who|when|where|was|were|any|anything)\b/i;
+export const QUESTION = new RegExp(`${QUESTION_OPENS.source}|\\?\\s*$`, "i");
+
+// ── "I would like to have Claude rewriting itself" ──────────────────
+// Oliver, 7 Aug 2026: "I like that I can finally talk to an AI about the draft.
+// But I would like to have Claude rewriting itself.. instead of me changing it."
+//
+// The correction pass above is a FACT-CHECKING pipeline. It splits criticism
+// into atomic claims, checks each against a primary source, and patches only
+// what a source backed. That is exactly right for "the station is wrong, it
+// should be Aarhus H", and exactly useless for "this paragraph is too long".
+// A style claim comes back from the splitter marked checkable:"no", nothing
+// verifies it, nothing applies it, and he is left editing the JSON by hand.
+//
+// So there is a third thing a person can say to a draft, and it was missing:
+//
+//   correct  a claim about the WORLD.   "The date is wrong, it is 25 August."
+//   edit     a claim about the WRITING. "This reads like an advert."
+//   ask      a question.                "Why does it say the ferry is required?"
+//
+// An edit needs no verification, because nothing about reality is in dispute.
+// What it needs instead is the opposite guard: A REWRITE MAY NOT CHANGE A FACT.
+// That is the entire risk here. Ask for something shorter and a model will
+// happily drop the price, round the year, or smooth "1 hour 20" into "about an
+// hour", and it will read beautifully. Every number, date, price, URL and
+// proper name in the original has to survive, and no new one may appear. See
+// factsIn and factsPreserved below, which enforce it rather than request it.
+const STYLE_WORDS = /\b(too (long|short|wordy|dry|formal|casual|salesy|generic|much)|wordy|clunky|boring|bland|dull|dry|stiff|salesy|markety|corporate|repetitive|repeats?|waffl|rambl|reads? like|sounds? like|feels? like|flows?|tone|voice|style|punchier|snappier|warmer|colder|plainer|simpler|shorter|longer|tighten|trim|cut|shorten|expand|reword|rephrase|make it more|make it less|less .{0,12}(formal|salesy|generic|wordy)|more .{0,12}(human|natural|direct|specific|concrete))\b/i;
+
+// A rewrite instruction names an action on the TEXT. Kept separate from
+// CORRECT_INTENT because "fix" and "change" belong to both worlds and only the
+// company they keep tells them apart.
+const EDIT_VERBS = /\b(rewrite|reword|rephrase|redraft|shorten|tighten|trim|cut|expand|punch up|polish|clean up|tidy)\b/i;
+
+export const isEditRequest = (text) => {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  // A factual assertion is a correction even when it is phrased as a complaint
+  // about the writing, because the fact is the thing that matters. "This is
+  // wrong, it should say 25 August" is never an edit.
+  if (RIGHT_HALF.test(t)) return false;
+  return EDIT_VERBS.test(t) || STYLE_WORDS.test(t);
+};
+
+// ── A REWRITE MAY NOT CHANGE A FACT ─────────────────────────────────
+// Everything a rewrite could quietly lose or invent, pulled out of the text so
+// the two versions can be compared. Deliberately generous about what counts as
+// a fact and deliberately blind to wording: the question is never "did this get
+// rephrased", it is "did a number, a date, a price, a link or a name move".
+// UNITS ARE LISTED LONGEST FIRST. Regex alternation takes the first branch that
+// matches, so with "km|m|minutes" in that order "12 minutes" tokenises as
+// "12 m" and a rewrite that turned it into "about an hour" reported the loss of
+// something called "12 m". The verdict was right and the explanation was
+// gibberish, which is its own kind of wrong when a person has to act on it.
+const UNIT = "minutes?|mins?|hours?|hrs?|days?|weeks?|years?|kroner|dkk|kr|euros?|km|%|m";
+const TIME = /\b\d{1,2}[:.]\d{2}\b/g;                       // 10:00, and 17.30
+const NUMBER = new RegExp(`\\b\\d[\\d.,]*\\s?(?:${UNIT})?`, "gi");
+const LINK = /https?:\/\/[^\s)"']+|\b[a-z0-9-]+\.(?:dk|com|org|net|eu)\b/gi;
+const NAME = /\b[A-ZÆØÅ][\wÆØÅæøå-]+(?:\s+[A-ZÆØÅ][\wÆØÅæøå-]+)*/g;
+// A phrase starting with one of these is a sentence beginning, not a name.
+// Without this, "The Vikingeskibsmuseet is..." and "at the Vikingeskibsmuseet"
+// are two different facts, and rephrasing around an article reads as losing a
+// place. Stripped rather than rejected, so the place itself still counts.
+const LEADING = /^(?:the|a|an|and|but|so|see|open|opens|it|its|this|that|in|at|on|for|from|to|of|is|was|there|here|you|your|we)\s+/i;
+
+export const factsIn = (text) => {
+  const t = String(text || "");
+  const out = new Set();
+  const times = t.match(TIME) || [];
+  times.forEach(m => out.add(m.replace(".", ":")));
+  // Times are removed before the number pass, or 10:00 also arrives as "10"
+  // and "00" and every rephrasing looks like it moved a number.
+  const withoutTimes = t.replace(TIME, " ");
+  (withoutTimes.match(NUMBER) || [])
+    .map(m => m.replace(/\s+/g, " ").trim().replace(/[.,;:]+$/, "").toLowerCase())
+    .filter(Boolean)
+    .forEach(m => out.add(m));
+  (t.match(LINK) || []).forEach(m => out.add(m.toLowerCase().replace(/[.,;:]+$/, "")));
+  // ── A CAPITALISED WORD OPENING A SENTENCE IS NOT A NAME ────
+  // Found by testing the edit path end to end on 8 Aug. The whoFor field read
+  // "Anyone with an hour to spare around midday", and EVERY rewrite of it was
+  // refused for "dropping anyone", because Anyone is capitalised, longer than
+  // six letters and sits at the start of a sentence, so it counted as a proper
+  // noun. Families, Visitors, Everyone and Sunday all do the same. That one
+  // rule was quietly rejecting most honest rewrites of most fields.
+  //
+  // A single capitalised word only counts when it appears MID-SENTENCE, where
+  // English has no other reason to capitalise it. A multi-word run still counts
+  // anywhere, because "Roskilde Domkirke" is a name wherever it falls.
+  for (const m of t.matchAll(NAME)) {
+    const stripped = m[0].replace(LEADING, "").trim();
+    if (!stripped) continue;
+    const words = stripped.split(/\s+/).filter(Boolean);
+    if (words.length === 1) {
+      if (stripped.length < 6) continue;
+      // What comes before it in the raw text, ignoring the whitespace.
+      const before = t.slice(0, m.index).replace(/\s+$/, "");
+      const opensSentence = before === "" || /[.!?:;]$/.test(before) || /^\s*[-*•]/.test(t.slice(0, m.index));
+      if (opensSentence) continue;
+    }
+    out.add(stripped.toLowerCase());
+  }
+  return out;
+};
+
+// Returns what went missing and what appeared from nowhere. Empty on both
+// counts is the only result that lets a rewrite through.
+export const factsPreserved = (before, after, opts = {}) => {
+  const a = factsIn(before), b = factsIn(after);
+  const lost = [...a].filter(x => !b.has(x));
+  // A NEW number or link is as bad as a lost one: it is an invention wearing
+  // the clothes of an edit. New proper names are allowed, since a rewrite may
+  // legitimately name a street the original described.
+  //
+  // `source`, when given, is the whole entry, and it widens what counts as
+  // already known. A rewrite may move a fact between fields; it may not conjure
+  // one the entry has never contained.
+  const known = opts.source ? factsIn(opts.source) : a;
+  const invented = [...b].filter(x => !a.has(x) && !known.has(x) && /\d|https?:|\.(dk|com|org|net|eu)\b/i.test(x));
+  return { ok: lost.length === 0 && invented.length === 0, lost, invented };
+};
+
+export const EDIT_PROMPT = (fieldName, current, instruction, voice) => `Rewrite ONE field of a Gemlyx travel entry, following the founder's instruction about how it is written.
+
+FIELD: ${fieldName}
+
+CURRENT TEXT:
+${typeof current === "string" ? current : JSON.stringify(current, null, 2)}
+
+WHAT HE ASKED FOR:
+${instruction}
+
+THE ONE RULE THAT OUTRANKS HIS INSTRUCTION: every fact stays exactly as it is. Every number, price, date, duration, opening time, place name, street, venue and web address must survive the rewrite unchanged, and you may not introduce a single one that is not already there. If following the instruction fully would mean dropping a fact, keep the fact and follow the instruction as far as it will go. This is checked automatically afterwards and a rewrite that loses a fact is thrown away, so there is nothing to gain by guessing.
+
+${voice || ""}
+
+Reply with ONLY the rewritten text for that one field. No preamble, no explanation, no quotation marks around it, no markdown fences.${Array.isArray(current) ? " The field is a list, so reply with a JSON array of the same shape and the same number of items." : ""}`;
+
+// ── "OR TALKING TO AN AI THAT ARE ABLE TO DO TINY CHANGES WITH THEM ALL" ──
+// Oliver, 8 Aug 2026. The sentence has two halves and the second one is the
+// whole request: not one entry, all of them.
+//
+// A correction is about THIS row. A sweep is about a column. The tell is that
+// he names a set rather than a thing, and it has to be caught before the
+// correction router sees it, because "every town that is inside a bigger city
+// should say so" trips RIGHT_HALF ("should say") and would otherwise run a
+// fact-checking pass on whatever single entry happened to be open.
+//
+// A wrong guess here is cheap in the safe direction: the sweep intent produces
+// a confirmation card and nothing else. Nothing runs, nothing is written, and
+// no row is read until he presses the button on it.
+export const SWEEP_INTENT = /\b(?:all|every|each)\s+(?:the\s+)?(?:published\s+|single\s+|other\s+)?(?:ones?|entr(?:y|ies)|towns?|places?|pages?|rows?|guides?|cit(?:y|ies)|villages?)\b|\ball of them\b|\bthem all\b|\bacross (?:the board|everything|all entries|all of them)\b|\bin bulk\b|\bevery single one\b/i;
+
+// ── THE CHAT MAY SELECT A SWEEP. IT MAY NOT INVENT ONE ──────────────
+// This is the line that keeps the chat door safe, and it is worth stating
+// plainly because the obvious design does the opposite.
+//
+// It would be easy to have the model return {fields: ["whatever"]} and run it.
+// That would work, and it would quietly walk around the one rule protecting
+// this whole feature: a sweep may only write a field shapeForLive already
+// carries, asserted in tests against the REGISTRY. A sweep invented in a chat
+// message has never been near that assertion, so it could write a field that
+// renders perfectly and is silently dropped the next time that row is
+// redrafted. That is the 8 Aug bug with a three-week fuse on it.
+//
+// So the model's entire job here is to pick an id out of a list, or say none of
+// them fit. An id that is not in the registry is treated as none.
+export const SWEEP_PROMPT = (registry, message) => `The founder of a Danish travel site said this about his published content:
+
+"${message}"
+
+Below are the bulk changes his Studio knows how to make. Each one fills specific fields on many published entries at once.
+
+${registry.map(s => `id: ${s.id}\n  what it does: ${s.blurb}\n  fields it may touch: ${s.fields.join(", ")}`).join("\n\n")}
+
+Which one, if any, is he asking for? Match on what the change would DO, not on shared words.
+
+If none of them is what he means, answer null. That is a normal answer and it is better than a near miss: running the wrong bulk change over seventy entries is expensive, and he has no way to know it was the wrong one from the name alone.
+
+Reply with ONLY this JSON:
+{"sweep": "the id, or null", "why": "one plain sentence saying what you think he wants, in his own terms"}`;
+
+// ── AND WHOSE WORD IS IT ────────────────────────────────────────────
+//
+// Oliver, 6 Sep 2026, reading "5 confirmed, 8 on your word, 1 rejected": "having
+// '8' on my word is alot.. this is from Gemini.. so Gemini might be wrong as
+// well. That's the problem." Then: "I can now click apply to draft.. but then
+// I'll apply 5 confirmed and 8 that might be wrong."
+//
+// He is right and the label was wrong. The asserted rule was written for HIS
+// corrections, and handoff 6's "he is right more often than the fact-checker
+// is" is about him, not about a model he pasted. The panel he types into says
+// "Paste what Gemini said" in its own subtitle, and everything pasted there
+// arrived as "your word".
+//
+// Rule 1 at the top of this file already settles it for the pasted case:
+// criticism is a LEAD AND NOT A SOURCE. What was missing is that the pass could
+// not tell the two apart, so it applied the second on the strength of the first.
+//
+// ── THE SIGNAL IS THE ONE routeMessage ALREADY USES ─────────────────
+//
+// A founder correction is short and first-person: "really it is 60 minutes".
+// A pasted fact-check is long, impersonal and structured, and the router
+// already reads exactly that at the bottom of routeMessage: "a long paste with
+// no instruction is a fact-check dropped in whole". The threshold is shared
+// rather than restated, because two copies of one number is how the router and
+// this would come to disagree about what a paste is.
+export const PASTED_MIN = 400;
+
+// The shapes a fact-check arrives in, on top of length. Any one of them and the
+// text is somebody's report rather than his sentence: a claim list, a verdict
+// list, or a cited source. Deliberately narrow — the length test carries most
+// of it and these only catch a short, structured paste.
+const REPORTED = /(^|\n)\s*[*\-•]?\s*(?:claim|what is wrong|finding|verdict|source|evidence)\s*:/i;
+const CITES = /https?:\/\/\S+/;
+
+// ── AND A LINK IS NOT A REPORT, 17 SEP 2026 ─────────────────────────
+//
+// Oliver pasted "https://aeroexpressen.dk/en/ yes. Apply that it's also a
+// vehicle crossing" and got back "This came from a pasted fact-check rather
+// than from you". It did not. He typed it, all sixty-six characters of it, and
+// the sentence he typed is an instruction with a source attached, which is the
+// STRONGEST shape a correction can arrive in: his word AND a page to check it
+// against. CITES turned it into somebody else's report on the strength of the
+// page, so the one thing he could add to make a correction more trustworthy was
+// the thing that disqualified it. His words afterwards: "this is so annoying.."
+// and "arguing with it, despite providing it sources".
+//
+// The original reasoning holds for what it was written about: a fact-check
+// arrives carrying its citations. What was missing is that a URL on its own
+// says nothing about WHO is speaking, and the length test and REPORTED already
+// catch the actual report. So a link now only marks a paste when nothing else
+// in the sentence is him speaking.
+//
+// THE URLS ARE STRIPPED BEFORE THIS IS ASKED, or a path like /apply-online
+// would answer the question about the prose. Same word-boundary lesson as the
+// discovery deduplication and the source scoping.
+// ── AND THE LIST IS FIRST PERSON AND IMPERATIVE, NOTHING WIDER ──────
+// "should be" and "it should" were in the first draft of this line and came
+// straight back out. A short fact-check says "the crossing should be described
+// as a vehicle ferry, see <url>", and that is a REPORT wearing an instruction,
+// which is the 6 Sep failure being let back in through a new door. What stays
+// is what only the person typing into the box says: an order given to this
+// pass, or a sentence about what HE did.
+const INSTRUCTS = /\b(?:appl(?:y|ied)|use this|change it|correct it|fix it|set it|make it|i (?:know|checked|think|saw|found|have|want)|here(?:'s| is)|yes|no|confirm(?:ed)? it)\b/i;
+const withoutUrls = (t) => String(t || "").replace(/https?:\/\/[^\s<>"')\]]+/gi, " ");
+
+export const whoseWord = (criticism) => {
+  const t = String(criticism || "").trim();
+  if (!t) return "founder";
+  if (t.length > PASTED_MIN) return "pasted";
+  if (REPORTED.test(t)) return "pasted";
+  if (CITES.test(t)) return INSTRUCTS.test(withoutUrls(t)) ? "founder" : "pasted";
+  return "founder";
+};
+
+// ── A PASTED REPORT CANNOT GIVE AN INSTRUCTION ─────────────────────
+// Oliver, 7 Sep 2026: "This is annoying.. can't argue with the draft because of
+// this." He had pasted a Kronborg fact-check into the box and got back a
+// site-wide audit of 185 entries. He found it himself: "it's because Gemini
+// ends up asking about entry lol". Gemini signs off by offering to audit the
+// next draft entry, and the router read that word as HIS request.
+//
+// The rule that was missing: the routes meaning "he is telling me to do
+// something ELSE" are read out of his sentence, never out of the report he
+// pasted. A report describes its own work. When it says "audit" it is naming
+// what it just did, and when it ends "shall I do the next one?" that is
+// Gemini's question, not his. Two routes are gated, and only two:
+//   audit  a word like "audit" or "worst" anywhere in the prose
+//   ask    a trailing "?" belonging to the report's last line
+// A question he leads with still answers, because that one he typed above the
+// paste. Every other route reads content rather than intent, and a paste is
+// exactly what those routes are for.
+//
+// whoseWord is reused rather than restated: it is already this file's one
+// answer to "is this his sentence or somebody's report", and a second copy is
+// how the two would come to disagree.
+export const routeMessage = (text) => {
+  const t = String(text || "").trim();
+  if (!t) return "ask";
+  const pasted = whoseWord(t) === "pasted";
+  if (!pasted && AUDIT_INTENT.test(t) && !CORRECT_INTENT.test(t)) return "audit";
+  // Before edit and correct: a sentence naming a SET is not a claim about the
+  // open entry, however much it reads like one.
+  if (SWEEP_INTENT.test(t)) return "sweep";
+  // An explicit instruction wins over everything, including a question mark:
+  // "why is this wrong? fix it" is an instruction with a preamble.
+  // An edit is checked BEFORE the correction intent, because "rewrite", "fix"
+  // and "change" live in both vocabularies and only the rest of the sentence
+  // separates them. isEditRequest already refuses anything that asserts a fact.
+  if (isEditRequest(t) && !WRONG_HALF.test(t)) return "edit";
+  if (CORRECT_INTENT.test(t)) return "correct";
+  if (pasted ? QUESTION_OPENS.test(t) : QUESTION.test(t)) return "ask";
+  if (WRONG_HALF.test(t) || RIGHT_HALF.test(t)) return "correct";
+  // A long paste with no instruction is a fact-check dropped in whole. That is
+  // still a correction request, it just did not come with a covering sentence.
+  if (t.length > PASTED_MIN && /\b(wrong|incorrect|inaccurate|error|should be|actually|resolved|verify)\b/i.test(t)) return "correct";
+  return "ask";
+};
+
+// The one-tap escape hatch for everything the router still answers instead of
+// acting on. When a message reads like it MIGHT be a correction, the reply
+// carries a "Correct it" button, so a wrong guess costs a tap and never a
+// retype. This is the safe direction to be wrong in: answering is free.
+export const offersCorrection = (text) => {
+  const t = String(text || "").trim();
+  if (!t || routeMessage(t) !== "ask") return false;
+  return WRONG_HALF.test(t) || RIGHT_HALF.test(t) || t.length > 200;
+};
+
+// The read-only half. Answers about an entry from the entry itself plus its
+// audit, never from the model's own memory of Denmark, because a confident
+// answer sourced from nowhere is what this whole tool exists to stop.
+// ── THE HANDOFF MARKER ─────────────────────────────────────────────
+// Oliver, 7 Aug 2026: "the assistant that is ready on blogs and what not are
+// about questions only. And if it can't answer, then perplexity will quickly
+// research to answer the question."
+//
+// The entry stays the FIRST source, because it is the thing that was actually
+// fact-checked. This marker is how the answering step says "I genuinely do not
+// have this" in a way code can act on, instead of the caller trying to detect
+// a hedge in prose. The two kinds of answer are never blended afterwards: an
+// answer from the entry is quiet about its origin, an answer from a live search
+// announces itself and carries its sources, so a reader can always tell which
+// one they are holding.
+export const NOT_IN_ENTRY = "NOT_IN_ENTRY";
+
+export const ASK_PROMPT = (entryJson, auditText, question) => `You are Gemlyx Studio's own assistant, answering the founder about ONE published entry.
+
+Answer ONLY from the entry below and its automated audit. Never fill a gap from general knowledge, and never state a Danish fact the entry does not contain: this tool exists because unsourced confidence is the problem.
+
+IF THE ENTRY DOES NOT CONTAIN THE ANSWER, reply with exactly ${NOT_IN_ENTRY} followed by one short sentence naming what is missing, and nothing else. Do not apologise, do not guess, and do not answer anyway from what you happen to know. Something else will go and look it up. Getting this wrong in the other direction is the expensive mistake: answering from memory is how a fact nobody checked ends up on the page.
+
+Be short. No preamble, no restating the question. Never use an em dash or an en dash.
+
+If the honest answer is that something looks wrong and should be corrected, say so and say which field.
+
+${CHECK_SCOPE_BLOCK}
+
+AND THAT RULE APPLIES TO YOU. "Argue with this draft" is the founder asking whether an entry is right, and the same category error is available here as in the automated check: a field the brief asked the writer to characterise cannot be argued with on the grounds that no page states it. If you think an atmosphere sentence is wrong, say what contradicts it. Never answer that it is unsupported.
+
+Entry:
+${entryJson}
+
+Automated audit of this entry:
+${auditText || "No findings."}
+
+Question:
+${question}`;
+
+// The lookup that runs when the entry genuinely does not have it. Scoped hard to
+// the one gap, because this is a reader waiting for an answer, not a research
+// pass: a broad prompt here would take ten seconds and come back with an essay.
+export const LOOKUP_PROMPT = (name, question, gap) => `Using real, current web search, answer this specific question about ${name || "this place"} in Denmark.
+
+Question: ${question}
+${gap ? `What is missing: ${gap}\n` : ""}
+Be short and concrete: the answer, and nothing else. Prefer the venue's own site, the organiser, or an official transport or tourism source over an aggregator. If you cannot confirm it, say exactly that rather than offering a likely answer.`;
+
+// The whole pass. `deps` is injected so this file stays testable and has no
+// knowledge of App.jsx's component state.
+export const correctEntry = async ({ entry, criticism, deps }) => {
+  const { askClaude, askPerplexity, parseJSON, directions, onStage, rules, readPage } = deps || {};
+  const stage = (label, percent) => { try { onStage?.({ label, percent }); } catch { /* UI only */ } };
+  const name = entry?.name || "this entry";
+  const entryJson = JSON.stringify(entry, null, 2);
+  // Resolved once, before the loop, because it is a property of the entry
+  // rather than of a claim and asking it per claim would read the same field
+  // five times to get the same answer.
+  const ownSite = ownSiteFor(entry, name);
+
+  // 1. split
+  stage("Reading the criticism", 10);
+  const fieldList = Object.keys(entry || {}).filter(k => !k.startsWith("__"));
+  const splitRaw = await askClaude(SPLIT_PROMPT(entryJson, criticism, fieldList), 4096, "claude-sonnet-5", true);
+  if (splitRaw?.error) throw new Error(splitRaw.error);
+  const split = await parseJSON(splitRaw.text, 4096);
+  let claims = Array.isArray(split?.claims) ? split.claims : [];
+  if (claims.length === 0) throw new Error("No specific claims could be read out of that text.");
+
+  // ── AND A LINK HE TYPED BELONGS TO THE CLAIM HE TYPED IT WITH ────
+  //
+  // urlsIn says in its own comment why it is not used to attach URLs to claims:
+  // "a bibliography at the bottom of an answer belongs to no single finding,
+  // and guessing which one would be worse than having none". That is right
+  // about a bibliography and there is one case where there is nothing to guess:
+  // ONE address, ONE claim. Then the link is the source for that claim or it is
+  // in the box for no reason at all.
+  //
+  // This is how "https://aeroexpressen.dk/en/ yes. Apply that it's also a
+  // vehicle crossing" reaches the page he was pointing at. Without it the
+  // extractor has to think to copy the URL onto the claim's sourceUrl, and when
+  // it does not, the page he went and found is read by nothing.
+  // sourceLinksIn, not urlsIn: he types "aeroexpressen.dk", not "https://…". See
+  // sourceLinksIn, and his own words, "when it sees 'http', 'https', '.com' '.dk'
+  // then it has to assume it's a link, and check that link".
+  const soleUrl = (() => {
+    const all = sourceLinksIn(criticism);
+    return all.length === 1 && claims.length === 1 ? all[0] : "";
+  })();
+  // The edition year off the entry's own date, for the address that names a
+  // different one. Null for anything with no date, which is most entries, and
+  // wrongEdition then refuses nothing.
+  const editionYear = (() => {
+    const m = /^(\d{4})-/.exec(String(entry?.dateStart || entry?.date || "").trim());
+    return m ? Number(m[1]) : null;
+  })();
+
+  // 2. verify, one at a time, each by the right instrument
+  const verified = [];
+  for (let i = 0; i < claims.length; i++) {
+    const c = claims[i];
+    stage(`Verifying claim ${i + 1} of ${claims.length}`, 20 + Math.round((i / claims.length) * 55));
+    const kind = classifyClaim(c);
+
+    if (c.checkable === "no") {
+      // Style and tone are not facts, so there is nothing to verify. They are
+      // applied on the founder's say-so, because it is his voice.
+      verified.push({ ...c, kind, verdict: "confirmed", correctValue: c.proposed || "", evidence: "A wording or tone change, applied as asked rather than fact-checked.", sourceUrl: "" });
+      continue;
+    }
+
+    // asksWhatItCarries, because the routing probe measures whether a ferry is
+    // REQUIRED and nothing else. A claim about what the boat takes aboard falls
+    // through to the source path below, where the operator's own page is read.
+    if (kind === "transport" && !asksWhatItCarries(c)) {
+      const r = await verifyTransportClaim(c, entry, { directions });
+      verified.push({ ...c, kind, ...r });
+      continue;
+    }
+
+    // ── FIRST, THE PAGE THE CRITICISM ITSELF CITED ────────────────
+    //
+    // Before any search, because it is one fetch against a search and it is the
+    // only instrument that can answer the question a search cannot: does the
+    // source they gave say what they said it says. See settleCitation above.
+    //
+    // Gated on `readPage` being injected, so a caller without a page reader
+    // behaves exactly as this did before and the tier is testable with no
+    // network at all.
+    let cited = null;
+    const citedUrl = claimCitation(c) || soleUrl;
+    // ── ASKED BEFORE A FETCH IS SPENT ON IT ───────────────────────
+    // A social page and an address naming another year are both answerable
+    // from the URL alone, and both are reported rather than silently dropped:
+    // "nothing settled it" over a link he went and found reads as the pass
+    // ignoring him, which is exactly what he said it was doing.
+    const refusedWhy = citedUrl ? citationRefusal(citedUrl, { year: editionYear }) : "";
+    if (refusedWhy) {
+      cited = { verdict: "", read: false, supported: false, sourceUrl: "", evidence: refusedWhy };
+    } else if (typeof readPage === "function" && citedUrl) {
+      try {
+        const page = await readPage(citedUrl);
+        const pageText = String(page?.text || "").trim();
+        if (pageText) {
+          let citeHost = "";
+          try { citeHost = new URL(citedUrl).hostname.replace(/^www\./, ""); } catch { citeHost = ""; }
+          const cRes = await askPerplexity(CITATION_PROMPT(name, c, citeHost || citedUrl, pageText));
+          const cParsed = cRes?.error || !cRes?.text ? null : await parseJSON(cRes.text, 2048).catch(() => null);
+          // The operator's own site is the primary source everywhere else in
+          // this file, so it is the primary source here too. ownSite is already
+          // resolved and already refuses an aggregator sitting in `website`.
+          const isOwn = !!ownSite && !!citeHost && citeHost.toLowerCase().endsWith(ownSite.toLowerCase());
+          // ── AND HOW OLD THE PAGE IS, MEASURED ON ITS OWN TEXT ──
+          // factAge is the research pipeline's own instrument, the one that
+          // writes "the newest year on this page is 2022" into the run log.
+          // Asked here for the first time about a page somebody pasted.
+          const age = factAge(pageText, Date.now());
+          const stale = !age.perishableOk && claimIsPerishable(c) ? age.why : "";
+          cited = settleCitation({ parsed: cParsed, url: citedUrl, isOwnSite: isOwn, stale });
+        } else {
+          // A bot wall is not a fact about the claim, so nothing is concluded
+          // from it. It is said out loud anyway: "their source could not be
+          // opened" is a different thing for him than "their source said
+          // nothing", and only one of them is worth going to look at himself.
+          cited = { verdict: "", read: false, supported: false, sourceUrl: "",
+                    evidence: `The page the fact-check cited (${citedUrl}) could not be read${page?.error ? `: ${String(page.error).slice(0, 140)}` : ""}, so nothing was concluded from it.` };
+        }
+      } catch { cited = null; /* a failed fetch is not a reason to lose the claim */ }
+    }
+    if (cited && (cited.verdict === "rejected" || cited.verdict === "confirmed")) {
+      verified.push({ ...c, kind, verdict: cited.verdict, correctValue: cited.verdict === "confirmed" ? (cited.correctValue || c.proposed || "") : "", evidence: cited.evidence, sourceUrl: cited.sourceUrl, citedSource: citedUrl, readTheirSource: true });
+      continue;
+    }
+
+    const res = await askPerplexity(VERIFY_PROMPT(name, c, rules));
+    if (res?.error || !res?.text) {
+      verified.push({ ...c, kind, verdict: "unresolved", evidence: `The verification search could not run. ${cited?.evidence || ""}`.trim(), sourceUrl: cited?.supported ? cited.sourceUrl : "", citedSource: citedUrl, readTheirSource: !!cited?.read });
+      continue;
+    }
+    let parsed = null;
+    try { parsed = await parseJSON(res.text, 2048); } catch { parsed = null; }
+    if (!parsed || !parsed.verdict) {
+      verified.push({ ...c, kind, verdict: "unresolved", evidence: `${(res.text || "").slice(0, 300)} ${cited?.evidence || ""}`.trim(), sourceUrl: cited?.supported ? cited.sourceUrl : "", citedSource: citedUrl, readTheirSource: !!cited?.read });
+      continue;
+    }
+    // A "confirmed" with no source is not confirmed. This is the whole
+    // difference between a lead and a fact, and it is enforced here rather
+    // than hoped for in the prompt. Website claims are exempt only when the
+    // domain is literally the name, which is checked below.
+    // A page WE opened that backs the claim counts as a source here, which is
+    // the whole reason the tier above carries `supported` forward: the rule
+    // being enforced is "a confirmed with no source is not confirmed", and a
+    // cited page we read and checked ourselves is exactly a source.
+    const hasSource = !!String(parsed.sourceUrl || "").trim() || !!cited?.supported;
+    const selfEvidentUrl = kind === "website" && hostMatchesName(parsed.correctValue || c.proposed, name);
+    // One implementation, in settleVerdict above, so the rule and the test
+    // cannot drift apart the way two copies of a function in this repo have
+    // four times.
+    const settled = settleVerdict({ parsed, hasSource, selfEvidentUrl });
+    // ── AND IF NOTHING SETTLED IT, ASK THE PLACE ITSELF ─────────────
+    //
+    // One search, only on the claims that would otherwise be applied on his
+    // word, and only when the row carries the operator's own address. It is the
+    // step Google took on its second pass and this pass never took at all: a
+    // claim nobody has put to the operator is not a claim nothing contradicts.
+    if (settled.verdict === "unresolved" && ownSite && String(c.proposed || "").trim()) {
+      try {
+        const own = await askPerplexity(OWN_SITE_PROMPT(name, ownSite, c));
+        const ownParsed = own?.error || !own?.text ? null : await parseJSON(own.text, 2048).catch(() => null);
+        const fromThem = settleOwnSite({ parsed: ownParsed, host: ownSite });
+        if (fromThem.verdict === "confirmed" || fromThem.verdict === "rejected") {
+          verified.push({ ...c, kind, verdict: fromThem.verdict, correctValue: fromThem.correctValue || parsed.correctValue || "", evidence: `${fromThem.evidence} ${cited?.evidence || ""}`.trim(), sourceUrl: fromThem.sourceUrl, citedSource: citedUrl, readTheirSource: !!cited?.read, askedOwnSite: true });
+          continue;
+        }
+        // Asked and unanswered is still worth recording, because it is what the
+        // asserted sentence below now gets to say instead of implying nobody
+        // could have known.
+        verified.push({ ...c, kind, verdict: "unresolved", correctValue: parsed.correctValue || "", evidence: `${settled.evidence} ${fromThem.evidence} ${cited?.evidence || ""}`.trim(), sourceUrl: cited?.supported ? cited.sourceUrl : "", citedSource: citedUrl, readTheirSource: !!cited?.read, askedOwnSite: true });
+        continue;
+      } catch { /* their site failing is not a reason to lose the claim */ }
+    }
+    verified.push({
+      ...c, kind,
+      verdict: settled.verdict,
+      correctValue: parsed.correctValue || "",
+      // The citation's sentence goes last, after the search's, because it is
+      // context for the verdict rather than the verdict's reason. It is the
+      // line that tells him a finding was resting on a page that never said it.
+      evidence: `${settled.evidence} ${cited?.evidence || ""}`.trim(),
+      sourceUrl: parsed.sourceUrl || (cited?.supported ? cited.sourceUrl : "") || (selfEvidentUrl ? (parsed.correctValue || c.proposed) : ""),
+      citedSource: citedUrl,
+      readTheirSource: !!cited?.read,
+      askedOwnSite: false,
+    });
+  }
+
+  // ── THE FOUNDER IS NOT GEMINI (Oliver, 7 Aug 2026) ─────────────────
+  // Rule 1 at the top of this file, that criticism is a lead and not a source,
+  // was written about a MODEL's criticism, and it is still right about that.
+  // Applied to Oliver himself it produced a tool that ignored him: he types
+  // "really it is X", no primary source turns up, the claim lands as unresolved
+  // and NOTHING CHANGES. Handoff 6 records the opposite of that instinct,
+  // "he is right more often than the fact-checker is", with the Samso ferry as
+  // the case in point.
+  //
+  // So silence no longer blocks him, but evidence still overrules him:
+  //   rejected   a source actively CONTRADICTS the claim. Never applied. This
+  //              is the protection that caught Gemini's 90-minute ferry, and it
+  //              is untouched.
+  //   unresolved nothing settled it either way. If he supplied a value, it is
+  //              applied on his authority as "asserted", labelled in the verdict
+  //              list, in uncertainties and in __corrections, so it is never
+  //              mistaken later for something a source confirmed.
+  //   unresolved with no value supplied. Still changes nothing, because there
+  //              is nothing to write.
+  //
+  // ── AND ONLY WHEN IT IS ACTUALLY HIS WORD ───────────────────────────
+  // Everything above is about a correction HE makes. A pasted fact-check is
+  // rule 1's case, a lead and not a source, and applying eight of them on the
+  // strength of a rule written about him is what put "8 on your word" over
+  // Gemini's claims. whoseWord tells the two apart; a pasted claim that no
+  // source settled is reported and left alone, which is what "unresolved"
+  // already means.
+  const mine = whoseWord(criticism) === "founder";
+  const asserted = [];
+  for (const v of verified) {
+    if (v.verdict !== "unresolved") continue;
+    const value = String(v.proposed || "").trim();
+    if (!value) continue;
+    if (!mine) {
+      v.evidence = `Not applied. This came from a pasted fact-check rather than from you, and no source settled it: ${v.askedOwnSite ? "their own site was asked directly and does not address it" : "nothing contradicted it and nothing confirmed it"}. ${v.evidence || ""}`.trim();
+      continue;
+    }
+    v.verdict = "asserted";
+    v.correctValue = value;
+    // ── AND IT SAYS WHETHER THE PLACE ITSELF WAS ASKED ─────────────
+    // "No primary source confirmed it" read as "nobody could have known", and
+    // on the Da Vinci draft that was not true: their own site says 18+ and
+    // nothing had asked it. The two states are now different sentences, because
+    // one of them means he should go and look.
+    v.evidence = v.askedOwnSite
+      ? `Applied on your word. Their own site was asked directly and does not address it, and no other primary source confirmed it. ${v.evidence || ""}`.trim()
+      : `Applied on your word. Nothing contradicted it, and no primary source confirmed it either. ${ownSite ? "" : "This entry carries no official website, so there was no operator page to ask. "}${v.evidence || ""}`.trim();
+    asserted.push(v);
+  }
+
+  const confirmed = verified.filter(v => v.verdict === "confirmed");
+  const rejected = verified.filter(v => v.verdict === "rejected");
+  const unresolved = verified.filter(v => v.verdict === "unresolved");
+  // asserted is empty unless the words were his, so this is the same line it
+  // always was and it now cannot carry somebody else's claim.
+  const applying = [...confirmed, ...asserted];
+
+  if (applying.length === 0) {
+    return { claims: verified, confirmed, rejected, unresolved, asserted, fromPaste: !mine, patched: null, changed: [], reverted: [],
+      unchangedReason: mine
+        ? "Nothing was confirmed, and nothing came with a value to apply, so the entry was left exactly as it is."
+        : "Nothing held up against a source. This was a pasted fact-check rather than your own correction, so the unconfirmed claims were reported and not applied." };
+  }
+
+  // 3. patch, scoped
+  stage("Applying the corrections", 82);
+  const allowed = allowedFieldsFor(entry, applying);
+  const patchRaw = await askClaude(PATCH_PROMPT(entryJson, applying, allowed), 8192, "claude-sonnet-5", true);
+  if (patchRaw?.error) throw new Error(patchRaw.error);
+  const candidate = await parseJSON(patchRaw.text, 8192);
+  if (!candidate || typeof candidate !== "object") throw new Error("The correction came back unreadable.");
+
+  // 4. enforce
+  stage("Checking nothing else moved", 92);
+  const { patched, reverted } = enforceScope(entry, candidate, allowed);
+
+  // 5. record what happened, in the payload itself
+  // isoDay, not toISOString: this stamps the day a correction was made onto the
+  // row, and toISOString converts to UTC first, so a correction applied between
+  // midnight and 02:00 Danish time was filed under yesterday. Small, and it is
+  // the line a future audit reads to know when something changed.
+  const at = isoDay(new Date());
+  patched.__corrections = [
+    ...(Array.isArray(entry?.__corrections) ? entry.__corrections : []),
+    ...applying.map(c => ({
+      at,
+      field: resolveField(entry, c.field) || c.field,
+      was: c.says,
+      // An asserted value must never read later like a sourced one. This line
+      // is what a future audit or handoff sees, so it says plainly whose word
+      // it is standing on.
+      source: c.verdict === "asserted"
+        ? "asserted by the founder, not source-verified"
+        : (c.sourceUrl || "live routing measurement"),
+    })),
+  ];
+  // Unresolved claims do not change a word, but they are not thrown away
+  // either. They go where the next reviewer will actually see them.
+  if (unresolved.length || asserted.length) {
+    patched.uncertainties = [
+      ...(Array.isArray(patched.uncertainties) ? patched.uncertainties : []),
+      ...unresolved.map(u => `Raised in a correction pass and NOT changed, because no primary source settled it: ${u.says}`),
+      // An applied-on-authority value is still an open item, not a closed one.
+      // It belongs in front of the next reviewer exactly like an unresolved
+      // claim does, or "applied because Oliver said so" quietly becomes
+      // indistinguishable from "verified" a month from now.
+      ...asserted.map(a => `Applied from your own correction and still UNCONFIRMED by a primary source: ${a.field} is now "${a.correctValue}". Worth a source when one turns up.`),
+    ];
+  }
+
+  const changed = Object.keys(patched).filter(k => JSON.stringify(patched[k]) !== JSON.stringify(entry?.[k]));
+  return { claims: verified, confirmed, rejected, unresolved, asserted, fromPaste: !mine, patched, changed, reverted, allowed };
+};
+
+// ── THE REWRITE PASS ────────────────────────────────────────────────
+// Oliver: "I would like to have Claude rewriting itself.. instead of me
+// changing it."
+//
+// Deliberately NOT routed through correctEntry. That pipeline's whole shape is
+// split, verify, patch what a source backed, and a style instruction has
+// nothing for a source to say about it. Running one through it means three API
+// calls that all conclude "not checkable" and a draft that comes back
+// untouched, which is exactly what has been happening.
+//
+// This is the other half: no verification, because no fact is in dispute, and
+// in its place a hard guard that no fact MOVED. Claude does the writing, as it
+// does everywhere in this project.
+// ── WHAT AN EDIT IS ALLOWED TO TOUCH ────────────────────────────────
+// Found in the same test run: "rename nothing, just tighten the writing"
+// resolved to the `name` field, because resolveField matches a key as a
+// substring of the instruction and "rename" contains "name". "make it less
+// stereotypical" contains "type". "See the price" contains "price". Every short
+// key in the schema is a word fragment of ordinary English, so an editorial
+// instruction could rewrite an entry's identity, its category, or a glance
+// value that is supposed to be a verified fact.
+//
+// An edit is for PROSE. Anything a resolver comes back with that is not a
+// writing field is treated as if it resolved to nothing, which falls through to
+// the prose fields the entry actually has.
+//
+// ── AND A BAR STREET'S BODY WAS NOT ON IT ───────────────────────────
+// bestNights and walkIt shipped with the street types on 15 Aug and this set
+// was not touched, so two of a bar street's four sections could not be named in
+// an edit. "tighten Walking It" resolved to walkIt, failed this gate, and fell
+// through to whatever other prose the entry had, which meant the instruction
+// silently rewrote a different paragraph than the one he pointed at.
+//
+// howTo IS DELIBERATELY ABSENT and that is not the same omission. It is real
+// prose, an essential's whole "How It Works" section, and it is reachable
+// through the fallthrough because PROSE_FIELDS above now carries it. It is kept
+// out of THIS set because this set is what an instruction may name, and
+// resolveField strips spaces before matching: "make the how to shorter" would
+// resolve to howTo. That is the exact hazard the note at the top of this block
+// is about, and the honest answer is that "how to" is too common an English
+// fragment to be a field name a person can point at.
+export const EDITABLE_FIELDS = new Set([
+  "desc", "intro", "body",
+  "special", "whoFor", "whoItsFor", "whoItsForText", "realityCheck",
+  "atmosphere", "whatToDo", "gettingThereReality", "characterAndFit",
+  "howItsMade", "vibeLocation", "afterDark", "beforeDark", "bestTime",
+  "bestNights", "walkIt",
+  // Reader-facing prose on a card rather than in a body: an essentials tip, a
+  // bar's crowd line, and the visitor note the essential prompt marks REQUIRED
+  // when a system is resident-gated. All three could be read and none could be
+  // named in an edit, so "tighten the tip" resolved to `tip`, failed this gate
+  // and silently rewrote some other paragraph.
+  "tip", "crowd", "visitorNote",
+  "whenEnter", "highlight", "gemlyxFind", "thingsToKnow", "accommodationTip",
+]);
+
+export const editEntry = async ({ entry, instruction, deps }) => {
+  const { askClaude, voice, onStage } = deps || {};
+  const stage = (label, percent) => { try { onStage?.({ label, percent }); } catch { /* UI only */ } };
+  if (!entry || typeof entry !== "object") return { error: "There is no draft open to rewrite." };
+
+  // WHICH FIELD. Named explicitly if he named it, otherwise the prose fields
+  // this entry actually has. Never a glance field by accident: "make it
+  // shorter" must not be allowed to rewrite nearestStation into something
+  // prettier, because a glance field is a value and not a sentence.
+  stage("Working out what to rewrite", 15);
+  const resolved = resolveField(entry, instruction);
+  // NAMING A FACT FIELD IS A REFUSAL, NOT A FALLBACK. The first version let it
+  // fall through to the prose fields, so "shorten the ticketsGlance" quietly
+  // rewrote the description instead. Rewriting something the person did not ask
+  // about is worse than doing nothing, and it is the kind of wrong that only
+  // gets noticed after it is published.
+  if (resolved && !EDITABLE_FIELDS.has(resolved)) {
+    return { error: `"${resolved}" holds a verified value, not writing, so a style note is the wrong tool for it. Correct it instead, for example: the ${resolved} is wrong, it should be X.` };
+  }
+  const named = resolved || null;
+  // BUG 4: blogBody was in the fallback list. It is an array of {type, text}
+  // blocks that the publish step BUILDS from the prose fields, so rewriting it
+  // from a style instruction reshapes the rendered article and is then thrown
+  // away at publish. Never a target.
+  const targets = named
+    ? [named]
+    : PROSE_FIELDS.filter(f => f !== "blogBody" && EDITABLE_FIELDS.has(f) && f in entry && entry[f] != null && entry[f] !== "");
+  if (targets.length === 0) {
+    return { error: resolved
+      ? `"${resolved}" is a fact field, not writing, so I will not rewrite it from a style note. Correct it instead, for example: the ${resolved} is wrong, it should be X.`
+      : "I could not tell which part you meant. Name the field, for example \"rewrite the realityCheck\"." };
+  }
+
+  const patched = { ...entry };
+  const changed = [];
+  const refused = [];
+
+  for (let i = 0; i < targets.length; i++) {
+    const field = targets[i];
+    const current = entry[field];
+    if (current == null) continue;
+    // AN EMPTY FIELD IS THE POINT, NOT A REASON TO SKIP. This used to `continue`
+    // on an empty string, so asking for a reality check on an entry that has
+    // none did nothing at all and reported nothing. That is now the single most
+    // common thing to ask for, since four types only just gained the field.
+    const writingFresh = current === "" || (Array.isArray(current) && current.length === 0);
+    stage(`${writingFresh ? "Writing" : "Rewriting"} ${field}`, 20 + Math.round((i / targets.length) * 70));
+
+    const res = await askClaude(EDIT_PROMPT(field, current, instruction, voice), 1400);
+    if (res?.error || !res?.text) { refused.push({ field, reason: "the rewrite call failed" }); continue; }
+
+    let next = res.text.trim().replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
+    if (Array.isArray(current)) {
+      try { next = JSON.parse(next); } catch { refused.push({ field, reason: "the rewrite came back in the wrong shape for a list" }); continue; }
+      if (!Array.isArray(next)) { refused.push({ field, reason: "the rewrite came back in the wrong shape for a list" }); continue; }
+    } else {
+      next = next.replace(/^["']|["']$/g, "");
+    }
+
+    // THE GUARD. A rewrite that lost a price or invented a year is thrown away
+    // and SAID SO, rather than quietly kept because it reads better.
+    const beforeText = typeof current === "string" ? current : JSON.stringify(current);
+    const afterText = typeof next === "string" ? next : JSON.stringify(next);
+    // Writing an empty field has nothing to preserve, so the question changes
+    // from "did a fact move" to "did a fact come from nowhere". The rest of the
+    // entry is the allowed source: moving a price out of ticketsGlance and into
+    // the prose is fine, inventing one is not.
+    // LOST is measured against the field, INVENTED against the whole entry.
+    // Moving a price out of ticketsGlance and into the prose is a legitimate
+    // edit; conjuring one that appears nowhere in the entry is not. Measuring
+    // invention against the field alone refused "mention the price in the
+    // description", which is a perfectly reasonable thing to ask for.
+    const check = writingFresh
+      ? factsPreserved(afterText, afterText, { source: JSON.stringify(entry) })
+      : factsPreserved(beforeText, afterText, { source: JSON.stringify(entry) });
+    if (!check.ok) {
+      refused.push({
+        field,
+        reason: check.lost.length
+          ? `the rewrite dropped ${check.lost.slice(0, 3).join(", ")}`
+          : `the rewrite invented ${check.invented.slice(0, 3).join(", ")}`,
+      });
+      continue;
+    }
+    if (afterText.trim() === beforeText.trim()) continue;   // nothing to report
+
+    patched[field] = next;
+    changed.push(field);
+  }
+
+  stage("Done", 100);
+  return { patched, changed, refused, targets };
+};
+
+// ── A CORRECTION MAY NOT ANSWER WITH ITS OWN VERDICT ────────────────
+//
+// Oliver's screenshot, 15 Aug 2026, of the preview screen. The card for
+// Hyllested Skovgårde read:
+//
+//   "The claim is not confirmed by the checked sources. It suits someone
+//    already driving through Mols Bje..."
+//
+// That is the fact-checker's own verdict, published as the entry's description,
+// on a card a traveller reads. The auto-correction is told to remove what it
+// cannot verify rather than guess, and on that draft it removed the sentence
+// and wrote down WHY in the same field, which is a note to the founder living
+// where the prose should be.
+//
+// keepMeasured already guards the fields the pipeline measured. Prose was
+// unguarded, because prose is exactly what a correction is allowed to change.
+// What it is not allowed to do is stop being prose.
+//
+// The test is comparative on purpose. An entry may legitimately say a claim is
+// unverified, in `uncertainties`, which exists for that, and an original that
+// already hedged keeps its hedge. Only language the correction ADDED is
+// refused, and only in a field a reader sees.
+const VERDICT_LANGUAGE = /\b(?:not confirmed|could not be confirmed|cannot be confirmed|is not (?:supported|verified|stated)|not stated in the (?:research|sources)|no source (?:states|confirms|supports)|the checked sources|the sources (?:do not|don't)|unverifiable|could not be verified|nothing (?:in the research|states|supports))\b/i;
+
+// The fields a traveller reads as writing. `uncertainties` is deliberately
+// absent: saying what is unconfirmed is that field's whole job.
+const READER_PROSE = [
+  "desc", "atmosphere", "special", "whoFor", "whoItsFor", "realityCheck",
+  "beforeDark", "afterDark", "whenEnter", "bestTime", "bestNights", "walkIt",
+  "gemlyxFind", "tip", "highlight", "vibeLocation", "crowd", "howTo",
+];
+
+export const verdictInProse = (before, after) => {
+  const bad = [];
+  for (const field of READER_PROSE) {
+    const was = String(before?.[field] ?? "");
+    const now = String(after?.[field] ?? "");
+    if (!now || now === was) continue;
+    if (VERDICT_LANGUAGE.test(now) && !VERDICT_LANGUAGE.test(was)) bad.push(field);
+  }
+  return bad;
+};
+
+// Put the original back, field by field, and say which. A correction that got
+// three fields right and one wrong keeps the three: refusing the whole rewrite
+// over one sentence would throw away real fixes, which is the mistake the
+// truncation guard above was careful not to make.
+export const keepProse = (before, corrected) => {
+  const bad = verdictInProse(before, corrected);
+  if (!bad.length) return { patched: corrected, restored: [], why: "" };
+  const patched = { ...corrected };
+  for (const f of bad) patched[f] = before?.[f] ?? "";
+  return {
+    patched,
+    restored: bad,
+    why: `The correction answered in ${bad.join(" and ")} with a statement about the checking rather than with prose, so ${bad.length === 1 ? "that field was" : "those fields were"} put back. A reader is not the audience for "the claim is not confirmed by the checked sources": if a claim cannot stand, it comes out of the sentence and goes into uncertainties.`,
+  };
+};
+
+// ── A CORRECTION THAT WAS PUT BACK IS NOT A CORRECTION ──────────────
+// The WOW PARK Billund entry, 8 Sep 2026, carried this in its uncertainties:
+//   "The nearestStation field previously showed an unrelated business name from
+//    the source data. It has been corrected to note that WOW PARK offers a free
+//    seasonal shuttle bus for transit travelers, per wowpark.dk."
+// and, on the page, a Nearest Stop reading "Logistik-Optimering v/Bo Trygve
+// Mortensen". The correction pass wrote the shuttle sentence, the guard that
+// protects a MEASURED value from a rewrite put the measurement back, and the
+// sentence claiming the fix survived the fix being undone. (The shuttle is real
+// and runs in July and August only, so it was the wrong value regardless.)
+//
+// Of the three things that could be wrong here, this is the worst: a wrong
+// value is a wrong value, and a page that tells a reader it corrected something
+// it did not is the app breaking its own promise on the same screen.
+//
+// So the restore drops the claim it just falsified. Deliberately narrow: only a
+// line that BOTH names the field and says the change was made. A line that
+// merely mentions the field, or one that says a correction was raised and NOT
+// applied, is left alone, because both of those are still true afterwards.
+export const CLAIMS_APPLIED = /\b(?:has been|have been|was|were|is now|are now|now)\s+(?:corrected|changed|updated|fixed|replaced|set)\b|\bcorrected to\b|\bupdated to\b|\bchanged to\b|\breplaced with\b/i;
+
+const rxSafe = (a) => String(a).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export const namesField = (line, names = []) => {
+  const t = String(line || "");
+  return (Array.isArray(names) ? names : [names]).some(n => {
+    const word = String(n || "").trim();
+    if (!word) return false;
+    try { return new RegExp(`\\b${rxSafe(word).replace(/\s+/g, "\\s+")}\\b`, "i").test(t); }
+    catch { return false; }
+  });
+};
+
+export const dropAppliedClaims = (lines, names = []) => {
+  const list = Array.isArray(lines) ? lines : [];
+  const words = (Array.isArray(names) ? names : [names]).filter(Boolean);
+  if (!words.length) return list;
+  return list.filter(line => !(CLAIMS_APPLIED.test(String(line || "")) && namesField(line, words)));
+};
