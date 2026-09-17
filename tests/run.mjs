@@ -73,6 +73,7 @@ writeFileSync(entry, `
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel, eventLastDay } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
+  export { groupIdIn, feedUrlProblem, cleanFeed, postsIn, postedDay, datesInPost, timeInPost, candidatesIn, dedupeCandidates, alreadyPublished, newCandidates, sweepCost, PAGES_PER_FEED, CENTS_PER_PAGE } from ${JSON.stringify(join(root, "src/utils/communityFeeds.js"))};
   export { scopeTier, ISLANDS_SCOPE, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM, islandOf, statedIsland, namedIslandOf, islandsPresent, ISLAND_BY_KOMMUNE, ISLAND_LABEL } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES, distinctThemes } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
@@ -1055,6 +1056,191 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // per finding would have every finding checked against the wrong one.
   ok("a claim that names its own page keeps it",
     /claimCitation\(c\) \|\| soleUrl/.test(corr) && !/soleUrl \|\| claimCitation/.test(corr));
+}
+
+// ── THE COMMUNITY GROUPS ────────────────────────────────────────────
+//
+// Oliver, 17 Sep 2026: "I've been in contact with someone from a community at
+// Sejerø that hosts events. 3 of the groups I've now tried to become member of,
+// while one is a public group... Is it possible for me to put that as a link
+// onto my studio, along with links from other groups from other communities?
+// And then whenever I click the 'refresh events'... it will scroll into these
+// groups that is listed on my studio and check for date?"
+{
+  const { groupIdIn, feedUrlProblem, cleanFeed, postsIn, postedDay, datesInPost,
+          timeInPost, candidatesIn, dedupeCandidates, alreadyPublished, newCandidates, sweepCost } = M;
+
+  // ── THE ID, WHICH IS THE ONLY THING THE API TAKES ───────────────
+  is("his own group link gives its id", groupIdIn("https://www.facebook.com/groups/125246204312244"), "125246204312244");
+  is("with a trailing path too", groupIdIn("https://www.facebook.com/groups/125246204312244/posts/999"), "125246204312244");
+  is("and a bare id is one", groupIdIn("125246204312244"), "125246204312244");
+  is("a page is not a group", groupIdIn("https://www.facebook.com/visitsejeroe"), "");
+  // A VANITY SLUG IS REFUSED WITH INSTRUCTIONS, not with "invalid". Nothing can
+  // turn a slug into an id without asking Facebook, and a row stored from one
+  // would fail on every sweep forever while looking perfectly correct.
+  is("a named group has no id in it", groupIdIn("https://www.facebook.com/groups/sejeroe-nyt"), "");
+  ok("and the message says what to paste instead",
+    /Open the group, click About/.test(feedUrlProblem("https://www.facebook.com/groups/sejeroe-nyt")));
+  ok("a non-Facebook link says only groups work", /Only Facebook groups/.test(feedUrlProblem("https://sejeroe.dk/kalender")));
+  is("and a good one has no problem", feedUrlProblem("https://www.facebook.com/groups/125246204312244"), "");
+  // Stored canonical, so the same group pasted two ways is one row.
+  is("the stored url is the canonical one",
+    cleanFeed({ url: "https://www.facebook.com/groups/125246204312244/posts/1?ref=x" }).url,
+    "https://www.facebook.com/groups/125246204312244");
+  is("a row with no usable link is not a feed", cleanFeed({ url: "sejeroe.dk" }), null);
+
+  // ── READING WHAT THE PROVIDER SENDS ─────────────────────────────
+  // Documented fields, read defensively, because this codebase's own history is
+  // that an assumed API shape was wrong in four places at once.
+  const POST = {
+    post_id: "p1",
+    url: "https://www.facebook.com/groups/125246204312244/posts/p1",
+    message: "Vil du se teater sammen med dine børn eller børnebørn? Se Boris og den glade løve på lørdag d. 25.7. kl.15.00 i Kulturhuset.",
+    timestamp: Math.floor(new Date("2026-07-18T10:00:00Z").getTime() / 1000),
+    author_name: "Lise Zeuthen",
+  };
+  is("one post comes back", postsIn({ posts: [POST] }).length, 1);
+  is("under another array name too", postsIn({ results: [POST] }).length, 1);
+  is("and an empty body is no posts", postsIn({}), []);
+  is("a post with no words is dropped", postsIn({ posts: [{ post_id: "x", message: "   " }] }), []);
+  // SECONDS, NOT MILLISECONDS. A Facebook timestamp read as milliseconds lands
+  // in 1970, and every date in the post would then anchor to the wrong year.
+  is("the timestamp is read as seconds", postedDay(POST), "2026-07-18");
+  is("and a date string is the fallback", postedDay({ date: "2026-07-18T10:00:00Z" }), "2026-07-18");
+  is("with nothing readable giving nothing", postedDay({}), "");
+
+  // ── THE DATE IN THE POST, WHICH IS THE WHOLE FEATURE ────────────
+  //
+  // His own example is the shape: no year, no month name, and a weekday that
+  // only means something against the day it was posted. So the post's own date
+  // is the anchor.
+  is("the date comes out of his own post", datesInPost(POST.message, "2026-07-18"), ["2026-07-25"]);
+  is("and the hour with it", timeInPost(POST.message), "15:00");
+  // ── AND A CLOCK IS NOT A DATE ───────────────────────────────────
+  // "kl. 12.10" is ten past twelve and reads exactly like the twelfth of
+  // October. Danish writes both with a dot, so the only evidence is the word in
+  // front. This was a real bug first: one combined pattern read "kl.15.00" as
+  // the first of May, by letting the day be 1, the 5 become a month and the 00
+  // fall off the end. A plausible date out of a clock.
+  is("a clock time is not a date", datesInPost("Fællesspisning kl. 12.10 i forsamlingshuset", "2026-09-01"), []);
+  is("nor is an evening one", datesInPost("Høstfest 12. oktober kl. 19.30", "2026-09-01"), ["2026-10-12"]);
+  is("and a phone number is not a date", datesInPost("Ring på 20 25 30 40", "2026-09-01"), []);
+  // ── THE YEAR, AND WHEN IT MAY BE ROLLED ─────────────────────────
+  is("a post in December means next January", datesInPost("Nytårskur d. 3. januar kl. 14", "2026-12-20"), ["2027-01-03"]);
+  // A post that WROTE a year is never rolled, or an archive post about 2024
+  // would be quietly moved into this year, which is the invented-date failure
+  // wearing a friendly face.
+  is("a stated year is never moved", datesInPost("Loppemarked 25. juli 2024", "2026-07-18"), ["2024-07-25"]);
+  is("a slash date works", datesInPost("Marked den 3/10 kl 10", "2026-09-01"), ["2026-10-03"]);
+  is("a range keeps both ends", datesInPost("Sejerø Festival 25.-27. juli", "2026-05-01"), ["2026-07-25", "2026-07-27"]);
+  // Date's own arithmetic turns 31 February into 3 March. A date nobody wrote
+  // is worse than no date.
+  is("an impossible day is dropped", datesInPost("den 31. februar", "2026-01-01"), []);
+  is("and with no anchor nothing is dated", datesInPost(POST.message, ""), []);
+
+  // ── WHAT IS WORTH HIS ATTENTION ─────────────────────────────────
+  //
+  // His own example decides this one. The post is from 18 July, the event is
+  // Saturday 25 July, and he is reading it on 17 September: it happened seven
+  // weeks ago. A group wall is mostly the past.
+  const posts = postsIn({ posts: [POST] });
+  is("the example is over by September", candidatesIn(posts, { today: new Date("2026-09-17") }).length, 0);
+  is("and was a candidate in July", candidatesIn(posts, { today: new Date("2026-07-20") }).length, 1);
+  {
+    const c = candidatesIn(posts, { today: new Date("2026-07-20"), feed: { name: "Sejerø", url: "https://x", place: "Sejerø" } })[0];
+    is("carrying its date", c.date, "2026-07-25");
+    is("its hour", c.time, "15:00");
+    is("the post it came from", c.postUrl, POST.url);
+    is("and which group", c.feedName, "Sejerø");
+    // THE POST'S OWN WORDS, AND NO INVENTED NAME. A regex can find a date and
+    // cannot name a show, and a wrong name in the one line he skims is worse
+    // than no name at all.
+    ok("the post's words are carried whole", c.text === POST.message);
+    ok("and nothing calls itself a title", !("title" in c) && !("name" in c));
+  }
+  // A post with no date is a photograph, a thank-you or a lost cat.
+  is("a post with no date is not a candidate",
+    candidatesIn(postsIn({ posts: [{ post_id: "n", message: "Tak for i aftes, alle sammen!", timestamp: POST.timestamp }] }), { today: new Date("2026-07-20") }), []);
+  // Soonest first: a village posts about next Saturday far more often than
+  // about next summer, and the soonest is the one with a deadline on it.
+  {
+    const two = postsIn({ posts: [
+      { post_id: "a", message: "Julemarked 12. december kl 10", timestamp: POST.timestamp },
+      { post_id: "b", message: "Høstfest 3. august kl 18", timestamp: POST.timestamp },
+    ] });
+    is("the soonest is first", candidatesIn(two, { today: new Date("2026-07-20") }).map(c => c.date),
+      ["2026-08-03", "2026-12-12"]);
+  }
+
+  // ── THE SAME EVENING, POSTED FOUR TIMES ─────────────────────────
+  const same = [
+    { postId: "1", date: "2026-08-03", text: "Høstfest i forsamlingshuset\nAlle er velkomne" },
+    { postId: "2", date: "2026-08-03", text: "Høstfest i forsamlingshuset\nHusk tilmelding" },
+    { postId: "3", date: "2026-08-03", text: "Fisketur fra havnen" },
+  ];
+  is("one evening is one card", dedupeCandidates(same).length, 2);
+  // And against what is already on the site, on the day plus a shared word,
+  // because the post says "Høstfest" and the entry says "Høstfest på Sejerø".
+  ok("an event already published is not offered again",
+    alreadyPublished({ date: "2026-08-03", text: "Høstfest i forsamlingshuset" }, [{ name: "Høstfest på Sejerø", dateStart: "2026-08-03" }]));
+  ok("but the same day with nothing in common is not a match",
+    !alreadyPublished({ date: "2026-08-03", text: "Fisketur fra havnen" }, [{ name: "Høstfest på Sejerø", dateStart: "2026-08-03" }]));
+  ok("and neither is the same name on another day",
+    !alreadyPublished({ date: "2026-08-04", text: "Høstfest i forsamlingshuset" }, [{ name: "Høstfest på Sejerø", dateStart: "2026-08-03" }]));
+  is("so the queue holds what is genuinely new",
+    newCandidates(same, [{ name: "Høstfest på Sejerø", dateStart: "2026-08-03" }]).map(c => c.postId), ["3"]);
+
+  // ── WHAT IT COSTS, BEFORE HE PRESSES IT ─────────────────────────
+  is("only the switched-on groups cost anything",
+    sweepCost([{ enabled: true }, { enabled: true }, { enabled: false }]), { feeds: 2, requests: 2, cents: 1.6 });
+  is("and nothing switched on costs nothing", sweepCost([]), { feeds: 0, requests: 0, cents: 0 });
+
+  // ── AND THE WIRING ──────────────────────────────────────────────
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    const api = stripComments(readFileSync(join(root, "api/social-find.js"), "utf8"));
+    // A MODE ON AN EXISTING FUNCTION, not a new file: api/ is a serverless
+    // function count and a new file there is a deploy decision.
+    ok("the group read is a mode on social-find", /check \|\| ""\) === "group-posts"/.test(api));
+    ok("and it is the documented endpoint", /"\/v1\/facebook\/group\/posts", \{ group_id: group, pages: 1 \}/.test(api));
+    ok("with the id demanded as a number", api.includes("/^\\d{5,}$/.test(group)"));
+    ok("the panel is wired", /const sweepFeeds = async \(\) => \{/.test(app));
+    // ── AND THE WEEKLY RUN CARRIES IT TOO ─────────────────────────
+    // His own choice: a button, and with the weekly update, "so new posts
+    // surface without you remembering".
+    {
+      const weekly = stripComments(readFileSync(join(root, "api/update-events-check.js"), "utf8"));
+      ok("the weekly update sweeps the groups", /candidatesIn\(postsIn\(body \|\| \{\}\)/.test(weekly));
+      // IMPORTED, not reimplemented. A second copy of the date reading is how
+      // the button and the weekly run come to disagree about what a post says.
+      ok("using the same reader as the button",
+        /import \{ postsIn, candidatesIn, newCandidates \} from "\.\.\/src\/utils\/communityFeeds\.js";/.test(weekly));
+      // ONLY ON THE FIRST PAGE, or a paged weekly run bills the same groups
+      // five times.
+      ok("and only on the first page", /if \(offset === 0\) \{/.test(weekly));
+      ok("with the groups deduped against everything published, not just the batch",
+        /newCandidates\(found, rows\.map\(r => r\.payload \|\| \{\}\)\)/.test(weekly));
+      // IT WRITES NOTHING, like the rest of that endpoint. Asked of SUPABASE
+      // specifically: there is a POST in that file and it is the Perplexity
+      // call, so a bare search for one would fail on a correct endpoint.
+      ok("and nothing is written back to the library",
+        !/SUPABASE_URL[^;]{0,200}method: "(?:POST|PATCH|DELETE)"/.test(weekly));
+    }
+    ok("and it has its own table", /create table if not exists gemlyx_feeds/.test(app));
+    // ── NOTHING IS PUBLISHED, AND NOTHING IS CITED ────────────────
+    // The whole safety of the feature. A post makes the pipeline go and look;
+    // it may never settle anything, and facebook stays in NEVER_A_SOURCE.
+    ok("a candidate goes to the ordinary draft pipeline", /setScanHint\(\{ town: where, lead: c\.text, leadFrom: c\.postUrl \|\| c\.feedUrl \}\)/.test(app));
+    ok("and the research context says what a lead is",
+      /HEARD IN A COMMUNITY GROUP, WHICH IS A LEAD AND NOT A SOURCE/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+    ok("and says it may never be cited",
+      /may NEVER be cited, may never settle a date or a price, and may never appear in __sources/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+    // The lead may not ride in the block that outranks a fresh search.
+    ok("the lead is its own paragraph, not the trusted one",
+      !/KNOWN FROM SOURCE LISTING[\s\S]{0,200}hint\.lead/.test(app));
+    const policy = readFileSync(join(root, "src/utils/sourcePolicy.js"), "utf8");
+    ok("facebook is still never a source", /const NEVER_A_SOURCE = [\s\S]{0,200}facebook/.test(policy));
+  }
 }
 
 // ── A TICKET TO AN ISLAND ───────────────────────────────────────────
@@ -18167,7 +18353,9 @@ rmSync(dir, { recursive: true, force: true });
   // It goes from zero spend to real spend, so it has to be able to say how much.
   ok("there is a dry run that makes no paid call", /const dry = req\.query\.dry === "1"/.test(upd));
   ok("the dry run reports what it would cost", /wouldCost:/.test(upd));
-  ok("a real run reports what it actually spent", /spend: \{ perplexityCalls: batch\.length, firecrawlCredits: credits \}/.test(upd));
+  // groupReads joined this line on 17 Sep with the community feeds. What it
+  // pins is unchanged: the spend reported is counted, never estimated.
+  ok("a real run reports what it actually spent", /spend: \{ perplexityCalls: batch\.length, firecrawlCredits: credits, groupReads: community\?\.groups \|\| 0 \}/.test(upd));
   ok("credits are counted from the reader rather than guessed", /credits \+= r\.credits \|\| 0;/.test(upd));
 
   // The official site goes in FIRST, which is what makes the priority real.

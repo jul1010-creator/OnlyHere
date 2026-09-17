@@ -151,6 +151,10 @@ import { branchesOf, branchCandidates, branchFromCandidate, mergeBranches, branc
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance, staleUncertainties, describeStale } from "./utils/glanceExtract";
 import { showsJourney, journeyOriginFor, journeyOriginPoint, IS_THE_CENTRE_KM } from "./utils/journeyScope";
 import { readableOn } from "./utils/readableColor";
+// The judgement half of the community feeds. Every rule about what a group post
+// says is in there, pure and tested with no network; this file does the state,
+// the table and the panel. See utils/communityFeeds.js.
+import { cleanFeed, feedUrlProblem, groupIdIn, postsIn, candidatesIn, newCandidates, sweepCost } from "./utils/communityFeeds";
 import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, ISLANDS_SCOPE, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive, isNeverOwnSite, isNeverASource } from "./utils/sourcePolicy";
 import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn, danishAddressIn } from "./utils/regions";
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
@@ -711,6 +715,39 @@ drop policy if exists "read gemlyx_sources" on gemlyx_sources;
 create policy "read gemlyx_sources" on gemlyx_sources for select to anon using (true);
 drop policy if exists "auth all gemlyx_sources" on gemlyx_sources;
 create policy "auth all gemlyx_sources" on gemlyx_sources for all to authenticated using (true) with check (true);`;
+
+// ── THE COMMUNITY GROUPS HE WATCHES ─────────────────────────────────
+//
+// Oliver, 17 Sep 2026, about a Sejerø community that posts its events on
+// Facebook: "Is it possible for me to put that as a link onto my studio, along
+// with links from other groups from other communities?"
+//
+// Its own table rather than a type on gemlyx_sources, because the two are not
+// the same thing and the difference is the one this app is built on. A research
+// source is a page a draft may QUOTE. A community group is a place to hear that
+// something is happening, and facebook has been in NEVER_A_SOURCE since the
+// beginning. Filing them together would put a Facebook host one careless line
+// away from being cited, and it would also put groups into the source-cost line
+// where they would make it wrong.
+//
+// Re-runnable, like SOURCES_SQL, and for the reason written there: Supabase
+// runs the editor as one transaction, so a "policy already exists" error rolls
+// back the whole script including the table.
+const FEEDS_SQL = `create table if not exists gemlyx_feeds (
+  id bigserial primary key,
+  name text not null,
+  group_id text not null,
+  url text not null,
+  place text default '',
+  note text,
+  enabled boolean default true,
+  last_checked date,
+  created_at timestamptz default now()
+);
+alter table gemlyx_feeds enable row level security;
+
+drop policy if exists "auth all gemlyx_feeds" on gemlyx_feeds;
+create policy "auth all gemlyx_feeds" on gemlyx_feeds for all to authenticated using (true) with check (true);`;
 
 // `where` is whatever the caller knows about the place: usually a name, and a
 // whole entry where one exists. A source scoped to a town is left OUT when
@@ -6520,7 +6557,21 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
       });
       const rawResearch = (orderBlock ? `${orderBlock}\n\n` : "") + (hint && (hint.town || hint.dates)
         ? `KNOWN FROM SOURCE LISTING (trust this over a weaker fresh search unless your own search clearly contradicts it with better evidence): ${[hint.town && `town/city = ${hint.town}`, hint.dates && `dates = ${hint.dates}`].filter(Boolean).join(", ")}\n\n`
-        : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}\n\n` : "") + (realAddressText ? `${realAddressText}\n\n` : "") + (ticketText ? `${ticketText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below).
+        : "")
+        // ── AND A LEAD OUT OF A COMMUNITY GROUP ───────────────────────
+        //
+        // 17 Sep 2026, with the feeds panel. A Facebook post cannot ride in the
+        // block above it: that block says "trust this over a weaker fresh
+        // search", and facebook has been in NEVER_A_SOURCE since the beginning.
+        // Given that sentence, a village post would outrank the operator.
+        //
+        // So it arrives as its own paragraph saying exactly what it is. The
+        // post is what made this draft happen and the writer should know what
+        // it said, because it carries the venue and the hour that no search
+        // result will phrase as well. What it must never do is END the search.
+        + (hint && hint.lead
+          ? `HEARD IN A COMMUNITY GROUP, WHICH IS A LEAD AND NOT A SOURCE. Somebody posted this in a local Facebook group${hint.leadFrom ? ` (${hint.leadFrom})` : ""}, and it is why this draft is being written at all. A social post may NEVER be cited, may never settle a date or a price, and may never appear in __sources. Use it to know WHAT to look for and WHERE, then find it on a page you are allowed to quote. If no such page states it, say so in uncertainties and leave the fields empty rather than repeating the post.\n${String(hint.lead).slice(0, 1200)}\n\n`
+          : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}\n\n` : "") + (realAddressText ? `${realAddressText}\n\n` : "") + (ticketText ? `${ticketText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below).
 WHEN THESE TWO CONFLICT, PREFER THE ONE YOU CAN POINT AT. "More specific" is not the test and never was: a synthesised answer always reads as more specific than a raw snippet, so preferring specificity means preferring whichever source happens to sound most confident, which is the opposite of what this pipeline is for. Prefer the claim that names a real page, an operator, an official site or a dated announcement. If the two disagree and neither is traceable, say so in uncertainties and leave the field empty rather than picking a winner.
 A DATE, PRICE OR OPENING TIME FROM EITHER SOURCE IS A LEAD, NOT A FACT, unless it comes from the place's own site or its official ticketing page.
 BUT A LEAD THAT A CURRENT SOURCE STATES IS STILL WRITTEN AS A FACT. "Lead" governs how much you should go looking for a better source, not how you phrase the number once it is the best you have. If a current page states a price, WRITE THE PRICE. Never write that it is unconfirmed, never call it an estimate, never say it was not verified by the organiser, and never tell the reader to ring and check. A reader who is told 400 kr and finds 400 kr is served; a reader told "400 kr, but treat it as an estimate" is told nothing and trusts nothing. Where the figure came from goes in __sources, and it goes nowhere else.
@@ -9984,6 +10035,21 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   // twice.
   const sourcesErrorFor = (status, body) => studioErrorMessage("the source list", status, body);
 
+  // ── THE COMMUNITY FEEDS ─────────────────────────────────────────
+  // The group list, and the candidate queue a sweep leaves behind. The queue is
+  // state and not a table on purpose: a candidate is a thing to look at once,
+  // and anything worth keeping becomes a draft, which has a table already.
+  const [feedsOpen, setFeedsOpen] = useState(false);
+  const [feedRows, setFeedRows] = useState([]);
+  const [feedError, setFeedError] = useState(null);
+  const [feedBusy, setFeedBusy] = useState(false);
+  const [newFeedUrl, setNewFeedUrl] = useState("");
+  const [newFeedName, setNewFeedName] = useState("");
+  const [newFeedPlace, setNewFeedPlace] = useState("");
+  // null | { running, done, total, found, failed: [{name, why}], candidates: [] }
+  const [feedSweep, setFeedSweep] = useState(null);
+  const feedsErrorFor = (status, body) => studioErrorMessage("the community feeds", status, body);
+
   // Removes one uncertainty from the draft, through studioDraftText, which is
   // what Publish actually reads. Editing studioDraft alone would clear it on
   // screen and publish it anyway, which is the standing rule about what you
@@ -10199,6 +10265,137 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
       else { setSourceRows(prev => prev.filter(r => r.id !== row.id)); refreshSources(); }
     } catch (e) { setSourceError(String(e.message || e)); }
     setSourceBusy(false);
+  };
+
+  // ── THE FEED LIST, THE SAME FOUR CALLS THE SOURCES HAVE ─────────
+  const loadFeeds = async () => {
+    setFeedError(null);
+    let headers;
+    try { headers = studioAuth(); }
+    catch (e) { setFeedError(String(e.message || e)); return; }
+    try {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_feeds?select=*&order=id.asc`, { headers });
+      const rows = await res.json();
+      if (Array.isArray(rows)) { setFeedRows(rows); return; }
+      setFeedRows([]);
+      setFeedError(feedsErrorFor(res.status, rows));
+    } catch (e) { setFeedError(String(e.message || e)); }
+  };
+
+  const addFeed = async () => {
+    // feedUrlProblem, not a boolean: a vanity group link is the failure he will
+    // actually hit, and "that is not valid" would send him looking for a typo
+    // in an address that is perfectly correct and simply has no number in it.
+    const problem = feedUrlProblem(newFeedUrl);
+    if (problem) { setFeedError(problem); return; }
+    const groupId = groupIdIn(newFeedUrl);
+    if (feedRows.some(r => String(r.group_id) === groupId)) {
+      setFeedError(`That group is already on the list${feedRows.find(r => String(r.group_id) === groupId)?.name ? ` as ${feedRows.find(r => String(r.group_id) === groupId).name}` : ""}.`);
+      return;
+    }
+    setFeedBusy(true); setFeedError(null);
+    try {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_feeds`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({
+          name: newFeedName.trim().slice(0, 80) || `Group ${groupId}`,
+          group_id: groupId,
+          url: `https://www.facebook.com/groups/${groupId}`,
+          place: cleanPlace(newFeedPlace),
+          enabled: true,
+        }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setFeedError(feedsErrorFor(res.status, body)); setFeedBusy(false); return; }
+      setNewFeedUrl(""); setNewFeedName(""); setNewFeedPlace("");
+      await loadFeeds();
+    } catch (e) { setFeedError(String(e.message || e)); }
+    setFeedBusy(false);
+  };
+
+  const setFeedEnabled = async (row, enabled) => {
+    setFeedBusy(true); setFeedError(null);
+    try {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_feeds?id=eq.${Number(row.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) setFeedError(feedsErrorFor(res.status, await res.json().catch(() => null)));
+      else setFeedRows(prev => prev.map(r => r.id === row.id ? { ...r, enabled } : r));
+    } catch (e) { setFeedError(String(e.message || e)); }
+    setFeedBusy(false);
+  };
+
+  const deleteFeed = async (row) => {
+    setFeedBusy(true); setFeedError(null);
+    try {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_feeds?id=eq.${Number(row.id)}`, { method: "DELETE" });
+      if (!res.ok) setFeedError(feedsErrorFor(res.status, await res.json().catch(() => null)));
+      else setFeedRows(prev => prev.filter(r => r.id !== row.id));
+    } catch (e) { setFeedError(String(e.message || e)); }
+    setFeedBusy(false);
+  };
+
+  // ── THE SWEEP ───────────────────────────────────────────────────
+  //
+  // One request per enabled group, sequential rather than parallel for the
+  // reason the source scan gives about itself: three at once is a good way to
+  // get throttled and lose one silently.
+  //
+  // NOTHING IS WRITTEN. A sweep leaves a queue of candidates on screen, each
+  // carrying the post it came from, and "Draft this" hands it to the ordinary
+  // event pipeline as a hint. That is the whole safety of the feature: a
+  // Facebook post is a lead, so the only thing it can do is make the pipeline
+  // go and look, and a reader still never sees a date that no citable page
+  // carries. See the header of utils/communityFeeds.js.
+  const sweepFeeds = async () => {
+    const live = feedRows.map(cleanFeed).filter(f => f && f.enabled);
+    if (!live.length) { setFeedError("No groups are switched on."); return; }
+    setFeedError(null);
+    setFeedSweep({ running: true, done: 0, total: live.length, found: 0, failed: [], candidates: [] });
+    const today = new Date();
+    const found = [];
+    const failed = [];
+    for (let i = 0; i < live.length; i++) {
+      const feed = live[i];
+      setFeedSweep(s => ({ ...s, done: i, name: feed.name }));
+      try {
+        const res = await studioFetch(`/api/social-find?check=group-posts&group=${encodeURIComponent(feed.groupId)}`);
+        const data = await res.json().catch(() => null);
+        if (!res.ok || data?.failed || data?.skipped) {
+          failed.push({ name: feed.name, why: data?.failed || data?.skipped || `the request returned ${res.status}` });
+          continue;
+        }
+        const posts = postsIn(data);
+        found.push(...candidatesIn(posts, { today, feed }));
+      } catch (e) {
+        failed.push({ name: feed.name, why: String(e?.message || e) });
+      }
+    }
+    // Against what is already published, so the four posts a village writes
+    // about one evening arrive as one card, and an event already on the site
+    // does not come back every week until it happens.
+    const published = (manageItems || []).filter(r => r?.type === "festival").map(r => r.payload || {});
+    const fresh = newCandidates(found, published);
+    setFeedSweep({ running: false, done: live.length, total: live.length, found: fresh.length, failed, candidates: fresh });
+    // The stamp, so the panel can say when each was last looked at. Best effort:
+    // a sweep that found things and failed to write a date is still a sweep.
+    // dayKey, never toISOString: a UTC day used as a local one is a day out for
+    // half of every evening in Denmark, which is exactly when he runs this.
+    const day = dayKey(new Date());
+    for (const feed of live) {
+      if (!feed.id) continue;
+      try {
+        await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_feeds?id=eq.${Number(feed.id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ last_checked: day }),
+        });
+      } catch { /* the stamp is a convenience, never the feature */ }
+    }
+    loadFeeds();
   };
 
   const [sweepId, setSweepId] = useState(SWEEPS[0]?.id || "");
@@ -20160,6 +20357,10 @@ ${languageBlock()}`;
                   style={{ background: sourcesOpen ? `${C.gold}22` : "none", border: `1px solid ${sourcesOpen ? C.gold : C.border}`, color: sourcesOpen ? C.gold : C.light, borderRadius: 100, padding: "6px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                   🔗 Research sources
                 </button>
+                <button onClick={() => { setFeedsOpen(o => !o); if (!feedsOpen) loadFeeds(); }}
+                  style={{ background: feedsOpen ? `${C.gold}22` : "none", border: `1px solid ${feedsOpen ? C.gold : C.border}`, color: feedsOpen ? C.gold : C.light, borderRadius: 100, padding: "6px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  📣 Community groups
+                </button>
                       </div>
                     </div>
 
@@ -20407,6 +20608,172 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           </div>
                         );
                       })()}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* ── THE COMMUNITY GROUPS ────────────────────────────────
+                  Oliver, 17 Sep 2026: "I've been in contact with someone from a
+                  community at Sejerø that hosts events... Is it possible for me
+                  to put that as a link onto my studio, along with links from
+                  other groups from other communities?"
+
+                  Deliberately a SEPARATE panel from the research sources, and
+                  the copy says why in his own terms: these are places to HEAR
+                  about something, and nothing in here may ever be quoted. */}
+              {feedsOpen && (
+                <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>📣 Community groups to watch for events</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 3, lineHeight: 1.6, marginBottom: 11 }}>
+                    A sweep reads the recent posts in each group, finds the ones carrying a date that has not happened yet, and leaves them here as
+                    candidates. Nothing is written and nothing is published: a post is a lead, so "Draft this" hands it to the ordinary event pipeline,
+                    which still has to find the event on a page it is allowed to quote before a reader sees anything.
+                    {" "}<b>Public groups only.</b> A private group cannot be read by anything running on a server, whether or not you are a member, so keep
+                    those here for the link and open them yourself.
+                  </div>
+
+                  {feedError === "MISSING_TABLE" ? (
+                    <div style={{ fontSize: 11.5, color: "#FFB347", lineHeight: 1.6 }}>
+                      The <code>gemlyx_feeds</code> table does not exist yet. Run this once in Supabase, then reopen this panel:
+                      <pre style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px", fontSize: 10.5, color: C.light, overflowX: "auto", marginTop: 8, whiteSpace: "pre" }}>{FEEDS_SQL}</pre>
+                      <button onClick={() => { navigator.clipboard?.writeText(FEEDS_SQL); setToast("SQL copied"); }}
+                        style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "6px 13px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Copy the SQL</button>
+                    </div>
+                  ) : (
+                    <>
+                      {feedError && <div style={{ fontSize: 11.5, color: "#FFB347", marginBottom: 9, lineHeight: 1.5 }}>{feedError}</div>}
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 11 }}>
+                        {feedRows.map(row => (
+                          <div key={row.id} style={{ display: "flex", alignItems: "center", gap: 8, background: C.bg, borderRadius: 8, padding: "7px 10px" }}>
+                            <input type="checkbox" checked={row.enabled !== false} disabled={feedBusy}
+                              onChange={e => setFeedEnabled(row, e.target.checked)} style={{ accentColor: C.gold, cursor: "pointer", flexShrink: 0 }} />
+                            <a href={row.url} target="_blank" rel="noreferrer"
+                              style={{ fontSize: 12, color: C.text, fontWeight: 600, textDecoration: "none", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {row.name} ↗
+                            </a>
+                            {row.place && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: "#8AB4F8", background: "#8AB4F818", border: "1px solid #8AB4F844", borderRadius: 100, padding: "2px 9px", flexShrink: 0 }}>
+                                📍 {row.place}
+                              </span>
+                            )}
+                            {/* WHEN IT WAS LAST LOOKED AT, because a sweep that
+                                quietly stopped working looks exactly like a
+                                quiet month in the group. */}
+                            <span style={{ fontSize: 10, color: C.muted, flexShrink: 0 }}>
+                              {row.last_checked ? `checked ${row.last_checked}` : "never checked"}
+                            </span>
+                            <button onClick={() => deleteFeed(row)} disabled={feedBusy} title="Remove"
+                              style={{ background: "none", border: "none", color: C.muted, fontSize: 15, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}>×</button>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+                        <input value={newFeedUrl} onChange={e => setNewFeedUrl(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") addFeed(); }}
+                          placeholder="facebook.com/groups/125246204312244"
+                          style={{ flex: 1, minWidth: 200, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                        <input value={newFeedName} onChange={e => setNewFeedName(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") addFeed(); }}
+                          placeholder="what to call it"
+                          style={{ width: 170, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                        <input value={newFeedPlace} onChange={e => setNewFeedPlace(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") addFeed(); }}
+                          list="gemlyx-source-places" placeholder="where it covers"
+                          style={{ width: 150, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                        <button onClick={addFeed} disabled={feedBusy || !newFeedUrl.trim()}
+                          style={{ background: newFeedUrl.trim() && !feedBusy ? C.gold : C.bg, border: `1px solid ${C.border}`, color: newFeedUrl.trim() && !feedBusy ? "#000" : C.muted, borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, cursor: newFeedUrl.trim() ? "pointer" : "default", flexShrink: 0 }}>
+                          {feedBusy ? "…" : "Add"}
+                        </button>
+                      </div>
+
+                      {/* WHAT IT COSTS, before he presses it, in his own
+                          currency. The same discipline the source list has. */}
+                      {feedRows.length > 0 && (() => {
+                        const cost = sweepCost(feedRows.map(cleanFeed).filter(Boolean));
+                        return (
+                          <div style={{ display: "flex", gap: 9, alignItems: "center", flexWrap: "wrap", marginTop: 11 }}>
+                            <button onClick={sweepFeeds} disabled={feedBusy || feedSweep?.running || !cost.feeds}
+                              style={{ background: cost.feeds && !feedSweep?.running ? `${C.gold}22` : C.bg, border: `1px solid ${cost.feeds && !feedSweep?.running ? C.gold : C.border}`, color: cost.feeds && !feedSweep?.running ? C.gold : C.muted, borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, cursor: cost.feeds && !feedSweep?.running ? "pointer" : "default", fontFamily: "'Inter', sans-serif" }}>
+                              {feedSweep?.running ? `Reading ${feedSweep.name || "…"} (${feedSweep.done + 1} of ${feedSweep.total})` : "🔄 Check the groups for events"}
+                            </button>
+                            <span style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5 }}>
+                              {cost.feeds} group{cost.feeds === 1 ? "" : "s"} switched on, {cost.requests} request{cost.requests === 1 ? "" : "s"}, about {cost.cents} øre a sweep.
+                            </span>
+                          </div>
+                        );
+                      })()}
+
+                      {/* ── THE QUEUE ────────────────────────────────────
+                          Soonest first, because a village group posts about
+                          next Saturday far more often than about next summer,
+                          and the soonest is the one with a deadline on it. */}
+                      {feedSweep && !feedSweep.running && (
+                        <div style={{ marginTop: 12 }}>
+                          <div style={{ fontSize: 11.5, color: C.light, fontWeight: 700, marginBottom: 7 }}>
+                            {feedSweep.found
+                              ? `${feedSweep.found} thing${feedSweep.found === 1 ? "" : "s"} coming up`
+                              : "Nothing coming up in those groups"}
+                            {feedSweep.failed.length > 0 && <span style={{ color: "#FFB347", fontWeight: 600 }}> · {feedSweep.failed.length} could not be read</span>}
+                          </div>
+                          {/* A GROUP THAT COULD NOT BE READ IS NAMED. A private
+                              group and a quiet one look identical in a count,
+                              and only one of them is worth doing something
+                              about. */}
+                          {feedSweep.failed.map(f => (
+                            <div key={f.name} style={{ fontSize: 10.5, color: "#FFB347", lineHeight: 1.5, marginBottom: 4 }}>
+                              {f.name}: {f.why}
+                            </div>
+                          ))}
+                          {feedSweep.candidates.map(c => (
+                            <div key={c.postId || c.postUrl || `${c.date}${c.feedName}`} style={{ background: C.bg, borderRadius: 10, padding: "10px 12px", marginBottom: 7 }}>
+                              <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: C.gold }}>
+                                  {c.date}{c.dates.length > 1 ? ` to ${c.dates[c.dates.length - 1]}` : ""}{c.time ? ` · ${c.time}` : ""}
+                                </span>
+                                <span style={{ fontSize: 10.5, color: C.muted }}>{c.feedName}{c.place ? ` · ${c.place}` : ""}</span>
+                              </div>
+                              {/* The post's own words, untouched. This panel
+                                  never names the event: a regex can find a date
+                                  and cannot name a show, and a wrong name in the
+                                  one line he skims is worse than no name. */}
+                              <div style={{ fontSize: 11.5, color: C.text, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: 7 }}>
+                                {c.text.length > 320 ? `${c.text.slice(0, 320)}…` : c.text}
+                              </div>
+                              <div style={{ display: "flex", gap: 9, alignItems: "center", flexWrap: "wrap" }}>
+                                <button onClick={() => {
+                                  // Into the ordinary event pipeline, with the
+                                  // post as the hint. The date is NOT written
+                                  // onto anything: the draft has to find it on
+                                  // a page it may quote, which is the whole
+                                  // arrangement. See communityFeeds.js.
+                                  // A feed scoped to the Islands tier covers
+                                  // every island and names no town, so it must
+                                  // not be typed into the town box as one.
+                                  const where = c.place && c.place !== ISLANDS_SCOPE ? c.place : "";
+                                  setStudioType("festival");
+                                  setStudioTown(where);
+                                  setScanHint({ town: where, lead: c.text, leadFrom: c.postUrl || c.feedUrl });
+                                  setFeedsOpen(false);
+                                  showToast("Ready to draft. Type the event's name and hit Draft it", 4000);
+                                }}
+                                  style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                  Draft this
+                                </button>
+                                {c.postUrl && (
+                                  <a href={c.postUrl} target="_blank" rel="noreferrer"
+                                    style={{ fontSize: 11, fontWeight: 700, color: C.muted, textDecoration: "none" }}>
+                                    The post ↗
+                                  </a>
+                                )}
+                                <span style={{ fontSize: 10, color: C.muted }}>posted {c.postedAt}{c.author ? ` by ${c.author}` : ""}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
