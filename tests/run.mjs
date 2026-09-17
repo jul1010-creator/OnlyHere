@@ -1205,6 +1205,24 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ok("and it is the documented endpoint", /"\/v1\/facebook\/group\/posts", \{ group_id: group, pages: 1 \}/.test(api));
     ok("with the id demanded as a number", api.includes("/^\\d{5,}$/.test(group)"));
     ok("the panel is wired", /const sweepFeeds = async \(\) => \{/.test(app));
+    // ── AND THE GROUPS NOTHING CAN READ ───────────────────────────
+    //
+    // Oliver: "What do you suggest we do with private groups? Shall I make a
+    // mail?" Checked against a real notification in his own inbox rather than
+    // guessed at: one from 13 August carries `Det sker i Gilleleje: "SOMMERTID
+    // = HAVESTUETID. Vores sidste åbningsdage..."` and stops. Facebook
+    // truncates on purpose so you click through, so there is no date in the
+    // email for anything to find. Mail is a doorbell, not a feed.
+    ok("a post can be pasted instead", /const readPastedPost = \(\) => \{/.test(app));
+    // THE SAME READER, or the pasted half and the swept half start disagreeing
+    // about what a post says.
+    ok("and it goes through the same reader", /candidatesIn\(\s*\[\{ id: `pasted-\$\{Date\.now\(\)\}`/.test(app));
+    ok("into the same queue, deduped", /dedupeCandidates\(\[\.\.\.found, \.\.\.had\]\)/.test(app));
+    // TODAY IS THE ANCHOR for a paste, which is a real difference from a swept
+    // post carrying its own day, and the reason is written where it happens.
+    ok("anchored on today, because a paste carries no date of its own",
+      /at: dayKey\(new Date\(\)\), author: "" \}\]/.test(app));
+    ok("and it says so when it finds nothing", /No date that has not already happened/.test(app));
     // ── AND THE WEEKLY RUN CARRIES IT TOO ─────────────────────────
     // His own choice: a button, and with the weekly update, "so new posts
     // surface without you remembering".

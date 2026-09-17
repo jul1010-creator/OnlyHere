@@ -154,7 +154,7 @@ import { readableOn } from "./utils/readableColor";
 // The judgement half of the community feeds. Every rule about what a group post
 // says is in there, pure and tested with no network; this file does the state,
 // the table and the panel. See utils/communityFeeds.js.
-import { cleanFeed, feedUrlProblem, groupIdIn, postsIn, candidatesIn, newCandidates, sweepCost } from "./utils/communityFeeds";
+import { cleanFeed, feedUrlProblem, groupIdIn, postsIn, candidatesIn, dedupeCandidates, newCandidates, sweepCost } from "./utils/communityFeeds";
 import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, ISLANDS_SCOPE, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive, isNeverOwnSite, isNeverASource } from "./utils/sourcePolicy";
 import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn, danishAddressIn } from "./utils/regions";
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
@@ -10048,6 +10048,25 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   const [newFeedPlace, setNewFeedPlace] = useState("");
   // null | { running, done, total, found, failed: [{name, why}], candidates: [] }
   const [feedSweep, setFeedSweep] = useState(null);
+  // ── AND THE ONE FOR A GROUP NOTHING CAN READ ────────────────────
+  //
+  // Oliver, 17 Sep 2026: "What do you suggest we do with private groups? Shall I
+  // make a mail or somehow make a folder in my mail that takes in notifications
+  // from these groups?"
+  //
+  // The mail idea was checked against a real one in his inbox rather than
+  // guessed at. A Facebook group notification of 13 August carries this, in
+  // full: `Det sker i Gilleleje: "SOMMERTID = HAVESTUETID. Vores sidste
+  // åbningsdage..."` and then stops. Forty-five characters and an ellipsis.
+  // Facebook truncates on purpose so you click through, so the post is not in
+  // the email and no parser can find a date that is not there. Mail is a
+  // doorbell, not a feed.
+  //
+  // So the answer for a private group is the cheapest thing that works: he is
+  // IN the group, he can read it, and the thirty seconds of copying is the part
+  // no server can do for him. Everything after that is the same machinery the
+  // sweep uses, which is the point: one reader, one queue, one set of rules.
+  const [pastedPost, setPastedPost] = useState("");
   const feedsErrorFor = (status, body) => studioErrorMessage("the community feeds", status, body);
 
   // Removes one uncertainty from the draft, through studioDraftText, which is
@@ -10396,6 +10415,32 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
       } catch { /* the stamp is a convenience, never the feature */ }
     }
     loadFeeds();
+  };
+
+  // TODAY IS THE ANCHOR, and that is a real difference from the sweep. A swept
+  // post carries the day it was written and "25.7." is read against that. A
+  // pasted one carries nothing, so the anchor is now, which is right for a post
+  // he is looking at this minute and wrong for one he scrolled back to find.
+  // The card shows the date it read, so a wrong one is one glance away.
+  const readPastedPost = () => {
+    const text = String(pastedPost || "").trim();
+    if (!text) return;
+    const found = candidatesIn(
+      [{ id: `pasted-${Date.now()}`, url: "", text, at: dayKey(new Date()), author: "" }],
+      { today: new Date(), feed: { name: "Pasted in", url: "", place: "" } },
+    );
+    if (!found.length) {
+      setFeedError("No date that has not already happened could be read out of that. Check the post carries a day, and that it is still ahead.");
+      return;
+    }
+    setFeedError(null);
+    setPastedPost("");
+    // Into the same queue, deduped against it, so pasting the same post twice
+    // does not give him two cards to look at.
+    setFeedSweep(s => {
+      const had = s?.candidates || [];
+      return { running: false, done: 0, total: 0, failed: s?.failed || [], candidates: dedupeCandidates([...found, ...had]), found: dedupeCandidates([...found, ...had]).length };
+    });
   };
 
   const [sweepId, setSweepId] = useState(SWEEPS[0]?.id || "");
@@ -20686,6 +20731,28 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <button onClick={addFeed} disabled={feedBusy || !newFeedUrl.trim()}
                           style={{ background: newFeedUrl.trim() && !feedBusy ? C.gold : C.bg, border: `1px solid ${C.border}`, color: newFeedUrl.trim() && !feedBusy ? "#000" : C.muted, borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, cursor: newFeedUrl.trim() ? "pointer" : "default", flexShrink: 0 }}>
                           {feedBusy ? "…" : "Add"}
+                        </button>
+                      </div>
+
+                      {/* ── AND THE GROUPS NOTHING CAN READ ──────────────
+                          A private group is unreadable by anything on a server,
+                          and the mail route does not rescue it: a Facebook
+                          notification carries about forty-five characters of the
+                          post and then an ellipsis, so there is no date in it to
+                          find. He is in the group and can see the whole thing,
+                          so the copy is the one step no server can do, and
+                          everything after it is the same machinery. */}
+                      <div style={{ marginTop: 11, background: C.bg, borderRadius: 8, padding: "10px 11px" }}>
+                        <div style={{ fontSize: 11, color: C.light, fontWeight: 700, marginBottom: 5 }}>From a group that cannot be read</div>
+                        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginBottom: 7 }}>
+                          Paste the post. It is read the same way a swept one is, and it lands in the same queue. Useful for a private group, and for a poster in a window.
+                        </div>
+                        <textarea value={pastedPost} onChange={e => setPastedPost(e.target.value)}
+                          placeholder="Paste what it says"
+                          style={{ width: "100%", minHeight: 62, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", resize: "vertical", boxSizing: "border-box" }} />
+                        <button onClick={readPastedPost} disabled={!pastedPost.trim()}
+                          style={{ marginTop: 6, background: "none", border: `1px solid ${pastedPost.trim() ? `${C.gold}66` : C.border}`, color: pastedPost.trim() ? C.gold : C.muted, borderRadius: 100, padding: "6px 13px", fontSize: 11, fontWeight: 700, cursor: pastedPost.trim() ? "pointer" : "default", fontFamily: "'Inter', sans-serif" }}>
+                          Read the date out of it
                         </button>
                       </div>
 
