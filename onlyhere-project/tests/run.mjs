@@ -48,7 +48,7 @@ writeFileSync(entry, `
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS, foundAt, matchVariantsOf, GENERIC_ALIASES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, townOfStreet, streetForSpot, barsOnStreet, nightlifeForTown, nightKindOf, strandedNight } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
-  export { supabaseFailure, studioErrorMessage, refreshIsDead, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
+  export { supabaseFailure, studioErrorMessage, refreshIsDead, missingColumn, EXPIRED, REFUSED, MISSING, OUTDATED, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, cleanIsland, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { dateProbeQueries, danishDay, englishDay, numericDay, parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, datePropositionWhy, nextEdition, dateRangesInText, isoDay, anchoredEdition, venueRatherThanEvent, PROGRAMME_DATES, dateMentions, labelledAt, otherLabelAt, CALENDAR_DATES, DATE_LABEL_WINDOW, looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER, OFFICE_CONTEXT_WINDOW, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS, WRONG_EDITION, readAnotherEdition, statusIsAboutAFinishedEdition, statusRefusalFor, STATUS_REFUSAL_WHY } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
@@ -65,6 +65,7 @@ writeFileSync(entry, `
   export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, partnerMerchant, destinationIn, linkLabel, outboundLink, affiliateHref, affiliateNote, isAffiliateHref, isGetyourguideUrl, isGetyourguideProductUrl, getyourguideUrl, getyourguideActive, getyourguideDisclosure, bikeRentalFits, tourMerchant, isBajabikesUrl, isBajabikesProductUrl, isBajabikesRental, bajabikesSlug, bajabikesUrl, bajabikesActive, bajabikesDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isWegotripUrl, wegotripUrl, wegotripBrowseUrl, wegotripActive, wegotripDisclosure, tripcomActive } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
+  export { bookingEarns, bookingCjUrl, partnerAdsUrl, partnerAdsBanner, partnerAdsMerchant, featuredStayFor, stayDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { TOWN_TYPES, townNameOf, audioFor, audioLine, ticketFor, unmatchedProducts, wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO, TICKET as WEGO_TICKET } from ${JSON.stringify(join(root, "src/utils/wegotripMatch.js"))};
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
   export { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
@@ -7317,7 +7318,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the panel has its own branch for it", /researchMemory\.status === REFUSED \?/.test(app10));
   // THE EVIDENCE, which was missing from the branch most likely to need it: the
   // expired message printed advice and swallowed the status code entirely.
-  is("every branch prints the status it saw", (app10.match(/\(\{researchMemory\.detail\}\)/g) || []).length, 4);
+  is("every branch prints the status it saw", (app10.match(/\(\{researchMemory\.detail\}\)/g) || []).length, 5);
   ok("and the panel can run the query itself", /const checkResearchTable = async \(\) => \{/.test(app10));
   ok("reporting the raw status and code, not a verdict", /HTTP \$\{res\.status\}\$\{code \? ` · \$\{code\}` : ""\}/.test(app10));
   ok("a genuinely missing table is the only branch that shows SQL", /=== MISSING \? \([\s\S]{0,600}\{RESEARCH_SQL\}/.test(app10));
@@ -7325,6 +7326,167 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // Re-runnable, same lesson gemlyx_sources taught this morning: Supabase runs
   // the editor as one transaction, so "policy already exists" rolls back the lot.
   ok("the research SQL can be run twice", /drop policy if exists "auth all gemlyx_research"/.test(app10));
+}
+
+// ── "COULD NOT FIND THE 'kind' COLUMN OF 'gemlyx_feeds'" ─────────
+// Oliver, 18 Sep 2026, pressing Add on a Facebook page in the community feeds
+// panel and being told: "Could not read the community feeds (400 PGRST204)."
+// He had not read anything. His table was made before pages arrived beside
+// groups, so it has no `kind` column, and the panel answered with PostgREST's
+// own sentence about a schema cache and no way forward.
+{
+  const app11 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const col = { code: "PGRST204", message: "Could not find the 'kind' column of 'gemlyx_feeds' in the schema cache" };
+  const pg = { code: "42703", message: 'column "kind" of relation "gemlyx_feeds" does not exist' };
+
+  // A TABLE ONE COLUMN SHORT IS NOT A MISSING TABLE. Both halves matter: the
+  // relation is there, so no create-table script, and something IS to be run,
+  // so it is not filed under "nothing to do either".
+  is("a missing column is its own failure", M.supabaseFailure(400, col), M.OUTDATED);
+  is("and so is Postgres's own wording for it", M.supabaseFailure(400, pg), M.OUTDATED);
+  ok("it is never read as a missing table", M.supabaseFailure(400, col) !== M.MISSING);
+  ok("nor is the 42703 shape, whose message says does not exist", M.supabaseFailure(400, pg) !== M.MISSING);
+  ok("nor as a login", M.supabaseFailure(400, col) !== M.EXPIRED);
+  // The MISSING test still owns what it always owned.
+  is("an absent relation is untouched by this", M.supabaseFailure(404, { code: "PGRST205" }), M.MISSING);
+  is("including when only the message says so", M.supabaseFailure(400, { message: "relation does not exist" }), M.MISSING);
+
+  // THE COLUMN TRAVELS, so the sentence can name it.
+  is("the marker carries the column", M.studioErrorMessage("the community feeds", 400, col), "OUTDATED_TABLE:kind");
+  is("read out of Postgres's quoting too", M.missingColumn(pg), "kind");
+  is("and empty rather than invented when nothing names one", M.missingColumn({ message: "boom" }), "");
+  ok("a null body never throws", M.missingColumn(null) === "");
+
+  // ── "COULD NOT READ", ON A BUTTON THAT WRITES ─────────────────────
+  // Four operations shared one verb. The panel that reads, adds, updates and
+  // deletes told him it could not READ on all four.
+  ok("the verb is the caller's to say", /Could not add to the community feeds \(400\)/.test(M.studioErrorMessage("the community feeds", 400, null, "add to")));
+  ok("and it still defaults to read", /Could not read the facts \(500\)/.test(M.studioErrorMessage("the facts", 500, null)));
+  ok("adding a feed says add", /feedsErrorFor\(res\.status, body, "add to"\)/.test(app11));
+  ok("switching one off says update", /feedsErrorFor\(res\.status, await res\.json\(\)\.catch\(\(\) => null\), "update"\)/.test(app11));
+  ok("deleting one says remove", /feedsErrorFor\(res\.status, await res\.json\(\)\.catch\(\(\) => null\), "remove from"\)/.test(app11));
+  ok("and the source panel got the same four", /sourcesErrorFor\(res\.status, body, "add to"\)/.test(app11));
+
+  // WHAT HE SEES INSTEAD: the same script, which was written to be re-runnable
+  // for exactly this reason, and it is offered for the feeds and the sources.
+  ok("the feeds panel offers the feeds script", /startsWith\("OUTDATED_TABLE"\) \? \([\s\S]{0,900}\{FEEDS_SQL\}/.test(app11));
+  ok("the source panel offers the source script", /startsWith\("OUTDATED_TABLE"\) \? \([\s\S]{0,900}\{SOURCES_SQL\}/.test(app11));
+  ok("and the notices keep their own script", /startsWith\("OUTDATED_NOTICES"\) \? \([\s\S]{0,900}\{NOTICES_SQL\}/.test(app11));
+  ok("each one names the column rather than the code", (app11.match(/String\((?:feedError|sourceError)\)\.split\(":"\)\[1\] \|\| "column"/g) || []).length === 3);
+  // Both feeds scripts add the column to a table that predates it, which is the
+  // whole reason this branch may offer them.
+  ok("the feeds script adds kind to an existing table", /alter table gemlyx_feeds add column if not exists kind/.test(app11));
+  ok("and the sources script adds applies_place", /alter table gemlyx_sources add column if not exists applies_place/.test(app11));
+
+  // ── AND THE NOTICE SEND PATH STOPPED GUESSING ─────────────────────
+  // It read any error mentioning gemlyx_notices as the table being absent, and
+  // a missing column of it mentions the table.
+  ok("the notice path classifies through the helper",
+     /const said = studioErrorMessage\("the notice", res\.status, body, "send"\);/.test(app11));
+  ok("and no longer sniffs the body for the table name",
+     !/gemlyx_notices\/\.test\(JSON\.stringify/.test(app11));
+  ok("a missing notices column reaches its own branch",
+     /said\.startsWith\("OUTDATED_TABLE"\) \? said\.replace\("OUTDATED_TABLE", "OUTDATED_NOTICES"\)/.test(app11));
+
+  // ── THE RESEARCH STRIP NO LONGER SWEARS THERE IS NOTHING TO RUN ───
+  ok("the research strip has a branch for it", /researchMemory\.status === OUTDATED \?/.test(app11));
+  ok("and it does not offer the create script", /one column short<\/b> \(\{researchMemory\.detail\}\)/.test(app11));
+  is("which is still the only place RESEARCH_SQL appears", (app11.match(/\{RESEARCH_SQL\}/g) || []).length, 1);
+}
+
+// ── "THEY FINALLY LET ME!" ───────────────────────────────────────
+// Oliver, 18 Sep 2026, handing over three links: a partner-ads banner for a
+// hotel, a second for travel items, and "this is my booking.com affiliate. I
+// think? They finally let me!" He was right, and it was checked rather than
+// taken on trust: kqzyfj.com is a CJ Affiliate click domain, and his inbox
+// carries the Booking.com programme welcome from noreply@cj.com the night
+// before.
+{
+  const aff = readFileSync(join(root, "src/utils/affiliates.js"), "utf8");
+  const guide = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  const search = "https://www.booking.com/searchresults.html?ss=Aarhus%2C%20Denmark&group_adults=2&no_rooms=1";
+
+  // ── THE SEARCH SURVIVES THE CLICK LINK ────────────────────────────
+  // The whole value of a stay link here is that it is a search for one town on
+  // named dates. A bare CJ click link lands on Booking's front page, so the
+  // destination rides back on the url parameter, which is the shape he chose
+  // when asked.
+  const wrapped = M.bookingCjUrl(search);
+  ok("a Booking search goes through CJ", /^https:\/\/www\.kqzyfj\.com\/click-101858166-13375717\?url=/.test(wrapped));
+  is("and the town is still in it", M.destinationIn(wrapped), search);
+  is("wrapping twice cannot nest one click link in another", M.bookingCjUrl(wrapped), wrapped);
+  // ONLY the advertiser the link belongs to. A click link over another host
+  // would earn nothing and would carry a disclosure saying it might.
+  is("another host is left alone", M.bookingCjUrl("https://www.airbnb.com/s/Aarhus/homes"), "https://www.airbnb.com/s/Aarhus/homes");
+  is("and so is something that is not a link", M.bookingCjUrl("not a url"), "not a url");
+
+  // The door, the sentence and the rel together, which is where the Copenhagen
+  // Card went wrong two days ago: an href on its own is not a finished link.
+  is("the shared door wraps it", M.affiliateHref(search), wrapped);
+  ok("so it is a tracked link", M.isAffiliateHref(search));
+  ok("the wrapped link is a partner link", M.isPartnerLink(wrapped));
+  ok("it carries a disclosure", /may earn a small commission/.test(M.partnerDisclosure(wrapped)));
+  is("and the rel a paid link has to carry", M.outboundLink(search).rel, "noreferrer sponsored nofollow");
+  // The merchant comes out of the DESTINATION, because the host is CJ's on
+  // every link it issues. The same trap the Adtraction note wrote down on 14 Sep.
+  is("the merchant is named from the destination", M.partnerMerchant(wrapped), "Booking.com");
+  is("so the button can say where it goes", M.linkLabel(wrapped), "Book on Booking.com");
+  // The plain search, unwrapped, is still not a paid link: a mention of
+  // booking.com in prose must not be labelled as one.
+  ok("an untracked Booking URL stays unpaid", !M.isPartnerLink(search));
+
+  // ── AND THE SENTENCES WERE ASKING THE WRONG CONSTANT ──────────────
+  // Every disclosure about stays asked BOOKING_AFFILIATE_ID, which is Booking's
+  // own aid parameter and is still empty. The programme arrived as a CJ link
+  // instead, so all of them would have gone on telling a reader that a link
+  // which now pays earns nothing.
+  ok("Booking pays now", M.bookingEarns());
+  ok("the affiliates page says the programme is live", M.affiliateActive());
+  ok("and the stay card says which link pays", /Booking\.com links may earn/.test(M.stayDisclosure({ tripcom: false })));
+  ok("both of them when Trip.com is on screen too", /Booking\.com and Trip\.com links may earn/.test(M.stayDisclosure({ tripcom: true })));
+
+  // ── PARTNER-ADS, THE NETWORK THAT CANNOT BE ASKED ─────────────────
+  // A klikbanner URL carries partnerid and bannerid and nothing else: no
+  // destination, no advertiser host, no merchant. Both fallbacks in
+  // partnerMerchant would answer on it, and both would be wrong.
+  const hotel = M.partnerAdsUrl("77692");
+  is("the builder writes his partner id once", hotel, "https://www.partner-ads.com/dk/klikbanner.php?partnerid=57554&bannerid=77692");
+  ok("the network is known, so the link is disclosed", M.isPartnerLink(hotel));
+  ok("and it carries the sponsored rel", /sponsored/.test(M.outboundLink(hotel).rel));
+  is("the banner id is readable back off it", M.partnerAdsBanner(hotel), "77692");
+  is("a link on another host has no banner", M.partnerAdsBanner("https://tiqets.tpx.li/gjhkxmoh"), "");
+
+  // ── AN UNNAMED BANNER RENDERS NOTHING ─────────────────────────────
+  // The Copenhagen Card rule from 16 Sep: a paid row names its partner out loud
+  // in its own prose. Nobody has said who 77692 is yet, and partner-ads blocks
+  // automated fetching, so there is no honest wording available and the row
+  // does not exist. Refused rather than repaired, the same shape as the money
+  // gate and the empty WeGoTrip template.
+  is("an unnamed banner names nobody", M.partnerAdsMerchant(hotel), "");
+  is("so the label falls back to the honest generic", M.linkLabel(hotel), "Partner site");
+  is("and the featured stay is absent entirely", M.featuredStayFor("Aarhus"), null);
+  is("for any town", M.featuredStayFor(""), null);
+  ok("the name is asked for in config, one line per banner", /PARTNER_ADS_BANNERS = \{/.test(readFileSync(join(root, "src/config.js"), "utf8")));
+
+  // ── "DON'T MAKE THE GUIDE GIVE A BIASED ROUTE" ────────────────────
+  // His own words in the message that handed the hotel over. It is the Layla
+  // complaint this codebase already has a named invariant for, so the hotel
+  // joins that list rather than being promised in a comment.
+  ok("the hotel cannot reach the step that picks places", M.INVENTORY_MAY_NOT_SELECT.includes("featuredStayFor"));
+  ok("nor can the config it reads", M.INVENTORY_MAY_NOT_SELECT.includes("PARTNER_ADS"));
+  // Rendered off the town THIS DAY already has, which is the difference between
+  // showing a hotel to somebody who is going there and sending them there.
+  ok("the card reads the day's own town", /featuredStayFor\(day\.glance\.stayArea \|\| stayTown\)/.test(guide));
+  ok("and the Booking button goes through the door", /href=\{outboundLink\(stayBookingUrl\)\.href \|\| stayBookingUrl\}/.test(guide));
+  ok("with the rel that comes with it", /rel=\{outboundLink\(stayBookingUrl\)\.rel\}/.test(guide));
+  ok("and no raw rel is left on a link that now pays", !/href=\{stayBookingUrl\} target="_blank" rel="noreferrer"/.test(guide));
+
+  // ── CJ ROTATES ITS CLICK DOMAINS ──────────────────────────────────
+  // The silent failure the host list prevents: a link generated tomorrow on a
+  // sibling domain, pasted in, and rendering with no disclosure under it and no
+  // rel on it.
+  ok("a sibling CJ domain is disclosed too", M.isPartnerLink("https://www.dpbolvw.net/click-101858166-13375717"));
+  ok("and partner-ads is in the same list", /"partner-ads\.com",/.test(aff));
 }
 
 // ── "EVENTS HAVE TWO 'MUSICS'" ───────────────────────────────────
@@ -25691,8 +25853,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // The fifth joined on 11 Sep 2026. Baja Bikes tracks on its own domain like
   // GetYourGuide, so it appends rather than substitutes, and it is in the same
   // door keeping the same three-way contract.
+  // The sixth is Booking.com, 18 Sep 2026, and it is the odd one out twice
+  // over: it wraps a SEARCH rather than a product page, and it is the only
+  // wrapper whose job is to put the destination back onto a link that would
+  // otherwise throw it away. See bookingCjUrl.
   ok("each agent goes through the one door",
-     /for \(const wrap of \[ticketmasterUrl, tiqetsUrl, wegotripUrl, getyourguideUrl, bajabikesUrl\]\)/.test(readFileSync(join(root, "src/utils/affiliates.js"), "utf8")));
+     /for \(const wrap of \[ticketmasterUrl, tiqetsUrl, wegotripUrl, getyourguideUrl, bajabikesUrl, bookingCjUrl\]\)/.test(readFileSync(join(root, "src/utils/affiliates.js"), "utf8")));
   {
     const wego = "https://wegotrip.com/billund-d2624144/legoland-billund-entry-ticket-p20636/";
     ok("and the third one wraps when it has a template",

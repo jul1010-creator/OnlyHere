@@ -57,6 +57,32 @@ export const MISSING = "missing";
 // That is the same sin as mapping 401 to "missing table", one level down, and I
 // wrote it into the file whose entire purpose is to stop doing that.
 export const REFUSED = "refused";
+
+// ── AND THE TABLE THAT IS OLDER THAN THE CODE ──────────────────────
+//
+// Oliver, 18 Sep 2026, adding a Facebook page to the community feeds:
+//
+//   Could not read the community feeds (400 PGRST204). Could not find the
+//   'kind' column of 'gemlyx_feeds' in the schema cache
+//
+// Three things are wrong in that one line and none of them is the database. It
+// says READ, and he had pressed Add. It hands him PostgREST's own words about a
+// schema cache. And it leaves out the only thing he needed, which is that the
+// fix is a paste he already has.
+//
+// His gemlyx_feeds was created before 17 Sep, the day pages arrived beside
+// groups and brought a `kind` column with them. So the relation is there, the
+// policy is there, the login is fine, and the table is one column short of the
+// code that writes to it.
+//
+// That is NOT MISSING, and the difference is the whole subject of this file: a
+// create-table script printed at a man whose table plainly exists is the
+// original sin here, one column down instead of one table.
+//
+// 42703 is Postgres saying the same thing in its own words, and its message
+// carries "does not exist", which the MISSING test reads as an absent
+// relation. So this is classified BEFORE it, on purpose.
+export const OUTDATED = "outdated";
 export const OTHER = "error";
 
 export const supabaseFailure = (status, body) => {
@@ -68,8 +94,23 @@ export const supabaseFailure = (status, body) => {
   // 42501 is Postgres's own "permission denied", which arrives with a 403 when a
   // policy exists and does not match, and PGRST116 when nothing matched at all.
   if (status === 403 || code === "42501") return REFUSED;
+  // PGRST204 and 42703: the relation answered, and one column of it is not
+  // there. Ahead of the MISSING test, whose /does not exist/ would otherwise
+  // win 42703 and offer a create-table script for a table that exists.
+  if (code === "PGRST204" || code === "42703" || /could not find the '[^']*' column/i.test(message)) return OUTDATED;
   if (status === 404 || code === "PGRST205" || /does not exist/i.test(message)) return MISSING;
   return OTHER;
+};
+
+// ── WHICH COLUMN, SO A PANEL CAN NAME IT ──────────────────────────
+// PostgREST quotes the name with ' and Postgres with ", and both spellings
+// have arrived from this database. Empty when neither shape is there, which
+// the caller reads as "a column": the paste fixes any of them, so the name is
+// for him rather than for the code.
+export const missingColumn = (body) => {
+  const message = String((body && typeof body === "object" && body.message) || "");
+  const m = message.match(/'([^']+)' column/) || message.match(/column "([^"]+)"/);
+  return m ? m[1] : "";
 };
 
 // The message a panel shows. `what` names the thing in the sentence, so the
@@ -77,15 +118,23 @@ export const supabaseFailure = (status, body) => {
 // `sql` is what the caller shows when, and only when, the table is genuinely
 // absent: MISSING is returned as a bare marker so the caller can render a code
 // block rather than a paragraph.
-export const studioErrorMessage = (what, status, body) => {
+// `did` is the verb, because the sentence was false on three quarters of its
+// call sites. Every panel here reads, adds, updates and deletes, and all four
+// said "could not read", which sent him looking at a list that was fine. It
+// defaults to read, so a call site that has not thought about it is no worse
+// off than it was.
+export const studioErrorMessage = (what, status, body, did = "read") => {
   const kind = supabaseFailure(status, body);
   if (kind === EXPIRED) return `Your Studio login has expired. Log out and back in. (Nothing is wrong with ${what}.)`;
   // Never "log in again": the login already worked and the database said no.
   if (kind === REFUSED) return `Logged in, but the database refused the request (403). This is a row level security policy on ${what}, not your login, so logging in again will not change it.`;
   if (kind === MISSING) return "MISSING_TABLE";
+  // The column travels with the marker, since the panel holds only this string
+  // and the sentence it writes should name what is absent.
+  if (kind === OUTDATED) return `OUTDATED_TABLE:${missingColumn(body)}`;
   const code = body && typeof body === "object" ? String(body.code || "") : "";
   const message = String((body && typeof body === "object" && body.message) || "");
-  return `Could not read ${what} (${status}${code ? ` ${code}` : ""}). ${message.slice(0, 160)}`.trim();
+  return `Could not ${did} ${what} (${status}${code ? ` ${code}` : ""}). ${message.slice(0, 160)}`.trim();
 };
 
 // ── WHEN THE REFRESH TOKEN ITSELF IS DEAD ──────────────────────────

@@ -1,4 +1,4 @@
-import { BOOKING_AFFILIATE_ID, TICKETMASTER_AFFILIATE_TEMPLATE, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_LINK, WEGOTRIP_AFFILIATE_TEMPLATE , TRIPCOM_ALLIANCE_ID, TRIPCOM_SID, GETYOURGUIDE_PARTNER_ID, GETYOURGUIDE_CAMPAIGN, BAJABIKES_REFERRAL_ID, BAJABIKES_BANNERS, BAJABIKES_RENTAL_SLUG } from "../config";
+import { BOOKING_AFFILIATE_ID, BOOKING_CJ_LINK, PARTNER_ADS_PARTNER_ID, PARTNER_ADS_STAY_BANNER, PARTNER_ADS_BANNERS, TICKETMASTER_AFFILIATE_TEMPLATE, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_LINK, WEGOTRIP_AFFILIATE_TEMPLATE , TRIPCOM_ALLIANCE_ID, TRIPCOM_SID, GETYOURGUIDE_PARTNER_ID, GETYOURGUIDE_CAMPAIGN, BAJABIKES_REFERRAL_ID, BAJABIKES_BANNERS, BAJABIKES_RENTAL_SLUG } from "../config";
 // hostOf, not a fourth copy of it. See pageScan.js, and see the four other
 // functions this codebase has already found existing twice.
 import { hostOf } from "./pageScan";
@@ -138,7 +138,13 @@ export const airbnbUrl = ({ area, country = "Denmark", checkin, checkout, adults
 // Shown next to the links. Deliberately names which one pays: a blanket "these
 // are affiliate links" would be inaccurate, and the whole identity of this app
 // is not saying things that are not so.
-export const STAY_DISCLOSURE = BOOKING_AFFILIATE_ID
+// bookingEarns, not BOOKING_AFFILIATE_ID, from 18 Sep 2026: the programme
+// arrived as a CJ click link rather than as an aid number, and every sentence
+// below that asked about the aid alone would have gone on telling a reader that
+// a link which now pays does not. Either one means Booking pays.
+export const bookingEarns = () => !!(BOOKING_AFFILIATE_ID || BOOKING_CJ_LINK);
+
+export const STAY_DISCLOSURE = bookingEarns()
   ? "Booking.com links may earn Gemlyx a small commission at no cost to you. The Airbnb link earns nothing."
   // ── AND "YET" IS A NOTE TO YOURSELF ─────────────────────────────
   // Oliver, 15 Aug 2026, reading a live town page: "anything that does not look
@@ -163,14 +169,107 @@ export const STAY_DISCLOSURE = BOOKING_AFFILIATE_ID
 //
 // The constant stays exported and unchanged, because a caller with no Trip.com
 // link to show is still asking the question it answers.
-export const stayDisclosure = ({ tripcom = false, booking = !!BOOKING_AFFILIATE_ID } = {}) => {
+export const stayDisclosure = ({ tripcom = false, booking = bookingEarns() } = {}) => {
   if (booking && tripcom) return "The Booking.com and Trip.com links may earn Gemlyx a small commission at no cost to you. The Airbnb link earns nothing.";
   if (booking) return STAY_DISCLOSURE;
   if (tripcom) return "The Trip.com link may earn Gemlyx a small commission at no cost to you. The Booking.com and Airbnb links earn nothing.";
   return STAY_DISCLOSURE;
 };
 
-export const affiliateActive = () => !!BOOKING_AFFILIATE_ID;
+export const affiliateActive = () => bookingEarns();
+
+// ─ AND THE CJ CLICK LINK WRAPS THE SEARCH, NOT THE SITE ─────────
+//
+// The whole value of the Booking link in this app is that it is a search for
+// one town on one set of dates. A bare CJ click link throws that away and lands
+// on booking.com's front page, so the destination goes back on it through CJ's
+// `url` parameter, which is the same shape Adtraction and Impact use and which
+// destinationIn() already reads.
+//
+// ONLY booking.com. A click link belongs to one advertiser, and wrapping some
+// other host in it would be a tracking link pointing somewhere the programme
+// does not cover: it would earn nothing, and a disclosure saying it might would
+// be a false statement about money. Already-wrapped links are returned
+// untouched, so calling this twice cannot nest one click link inside another.
+const BOOKING_HOSTS = ["booking.com"];
+
+export const bookingCjUrl = (url) => {
+  const raw = String(url || "").trim();
+  if (!BOOKING_CJ_LINK) return raw;
+  if (!/^https?:\/\//i.test(raw)) return raw;
+  const h = hostOf(raw);
+  if (!h || !BOOKING_HOSTS.some(d => h === d || h.endsWith(`.${d}`))) return raw;
+  return `${BOOKING_CJ_LINK}?url=${encodeURIComponent(raw)}`;
+};
+
+// ─ PARTNER-ADS: THE LINK, AND THE NAME THAT MUST COME WITH IT ─────
+//
+// The builder is trivial and the point of it is that the partnerid is written
+// in ONE place. partnerAdsBanner reads the id back off a link, because that id
+// is the only thing a partner-ads URL knows about itself and the merchant table
+// is keyed on it.
+export const partnerAdsUrl = (banner) => {
+  const b = String(banner || "").trim();
+  if (!b || !PARTNER_ADS_PARTNER_ID) return null;
+  return `https://www.partner-ads.com/dk/klikbanner.php?partnerid=${PARTNER_ADS_PARTNER_ID}&bannerid=${b}`;
+};
+
+export const partnerAdsBanner = (url) => {
+  try {
+    const u = new URL(String(url || "").trim());
+    const h = u.hostname.toLowerCase().replace(/^www\./, "");
+    if (h !== "partner-ads.com" && !h.endsWith(".partner-ads.com")) return "";
+    return String(u.searchParams.get("bannerid") || "").trim();
+  } catch { return ""; }
+};
+
+// "" when the banner has not been named in config.js, which is what keeps an
+// unnamed banner from rendering anywhere. See the comment on PARTNER_ADS_BANNERS.
+export const partnerAdsMerchant = (url) => {
+  const b = partnerAdsBanner(url);
+  if (!b) return "";
+  const row = PARTNER_ADS_BANNERS[b];
+  return row && row.merchant ? String(row.merchant) : "";
+};
+
+// ─ THE ONE NAMED STAY, AND THE RULE HE SET AROUND IT HIMSELF ──────
+//
+// Oliver, 18 Sep 2026, on the hotel banner: "an affiliate for a great hotel
+// that we should probably somehow put on priority". Asked where, he chose the
+// quietest of four offers: inside guides for its own town, and nowhere else.
+//
+// Then, unprompted, before a line of this existed: "Obviously don't make the
+// guide give a biased route towards the hotel. But IF they go that route.."
+//
+// That is Layla complaint 5 in his own words, the one INVENTORY_MAY_NOT_SELECT
+// in utils/constraintCheck.js was written against on 25 Aug: reviewers of other
+// travel AI say it "pushes hotels". So this is a RENDER over a town the
+// itinerary has already chosen, and it is kept that way structurally rather
+// than by intention: featuredStayFor and PARTNER_ADS are both on that list, and
+// the suite fails if either name appears anywhere in the window of App.jsx that
+// plans the days and picks the stops.
+//
+// A town, not a region. "Aarhus C" and "Aarhus, Midtjylland" are the same town
+// as "Aarhus" and a reader in either should see it; "Aarhusvej" is not, so the
+// looser match needs the boundary after the name rather than a bare includes().
+const sameTown = (a, b) => {
+  const x = String(a || "").trim().toLowerCase();
+  const y = String(b || "").trim().toLowerCase();
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const longer = x.length > y.length ? x : y;
+  const shorter = x.length > y.length ? y : x;
+  return longer.startsWith(shorter) && /^[\s,]/.test(longer.slice(shorter.length));
+};
+
+export const featuredStayFor = (town) => {
+  const row = PARTNER_ADS_BANNERS[PARTNER_ADS_STAY_BANNER];
+  if (!row || !row.merchant || !row.town) return null;
+  if (!sameTown(town, row.town)) return null;
+  const url = partnerAdsUrl(PARTNER_ADS_STAY_BANNER);
+  if (!url) return null;
+  return { merchant: String(row.merchant), town: String(row.town), site: String(row.site || ""), url };
+};
 
 // ── TICKETMASTER, AND ONLY TICKETMASTER ─────────────────────────────
 //
@@ -630,6 +729,26 @@ const PARTNER_HOSTS = [
   // already uses for Tiqets and Ticketmaster, so a deep link into one Oscar
   // branch is available later if Oscar allows deeplinking.
   "adtraction.com",
+  // ─ CJ AFFILIATE, 18 SEP 2026 ──────────────────────
+  //
+  // Booking.com's programme runs on CJ, and CJ clicks land on a set of its own
+  // short domains rather than on one. kqzyfj.com is the one his link uses; the
+  // rest are CJ's other click domains, listed for the reason the Adtraction
+  // entry above gives about itself. The failure this prevents is the silent
+  // one: a link generated tomorrow on a sibling domain, pasted in, rendering
+  // with no disclosure under it and no sponsored rel on it.
+  //
+  // The direction of error is chosen deliberately. A host listed here that
+  // turns out not to be CJ's would make an ordinary link SAY it might earn,
+  // which is visible and wrong on a page nobody links to; a host missing from
+  // here makes a paid link say nothing, which is invisible and wrong on a page
+  // a reader is about to press.
+  "kqzyfj.com", "dpbolvw.net", "anrdoezrs.net", "jdoqocy.com", "tkqlhce.com", "emjcd.com",
+  // ─ PARTNER-ADS, THE DANISH NETWORK ───────────────────
+  // Every banner shares this one host and carries no destination at all, so the
+  // merchant cannot be read off either the host or a url parameter. See
+  // partnerAdsMerchant, and the table it reads in config.js.
+  "partner-ads.com",
 ];
 
 export const isPartnerLink = (url) => {
@@ -754,7 +873,7 @@ export const affiliateHref = (url) => {
   // The same refusal both wrappers make, kept here so a caller gets one
   // contract: null means "this is not a link", never "this is not a partner".
   if (!/^https?:\/\//i.test(raw)) return null;
-  for (const wrap of [ticketmasterUrl, tiqetsUrl, wegotripUrl, getyourguideUrl, bajabikesUrl]) {
+  for (const wrap of [ticketmasterUrl, tiqetsUrl, wegotripUrl, getyourguideUrl, bajabikesUrl, bookingCjUrl]) {
     const out = wrap(raw);
     if (out && out !== raw) return out;
   }
@@ -853,6 +972,13 @@ export const partnerMerchant = (url) => {
   // A bare programme host with no subdomain names nothing: booking.com?aid= is
   // recognised as paid by its parameter and its first label is the merchant
   // itself, which is fine, and impact.com is the network with no merchant in it.
+  // ─ THE NETWORK THAT CANNOT BE ASKED ──────────────────
+  // Asked FIRST, because both lookups below would answer confidently and
+  // wrongly on a partner-ads link: the host's first label is "partner", and
+  // there is no destination in the URL to read. The table is the only thing
+  // that knows, and an unnamed banner gets "" rather than a guess.
+  const viaBanner = partnerAdsMerchant(url);
+  if (viaBanner) return viaBanner;
   const first = h.split(".")[0].toLowerCase();
   if (PARTNER_MERCHANTS[first]) return PARTNER_MERCHANTS[first];
   const dest = destinationIn(url);

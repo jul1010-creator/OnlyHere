@@ -150,6 +150,79 @@ export const SITE_ORIGIN = "https://www.gemlyxtravel.com";
 // the app's planned revenue path, per Oliver directly (Aug 5 2026).
 export const BOOKING_AFFILIATE_ID = "";
 
+// ─ AND THEY FINALLY LET HIM IN, THROUGH CJ ───────────────
+//
+// Oliver, 18 Sep 2026: "this is my booking.com affiliate. I think? They finally
+// let me!"
+//
+// He is right, and it was worth checking rather than taking on trust. Two
+// facts, neither of them from him: kqzyfj.com is one of CJ Affiliate's click
+// domains, and his inbox carries "Booking.com Affiliate Programme" from
+// noreply@cj.com, 17 Sep at 20:50, signed by the CJ Booking.com affiliate team.
+// So the programme is live and it closes the item that has been open here since
+// 5 August, and on the to-do list since 9 September as "applying to Booking.com
+// through CJ".
+//
+// ─ WHY THIS IS NOT AN aid NUMBER ──────────────────────
+//
+// BOOKING_AFFILIATE_ID above is Booking's own parameter: one number, attached
+// to any booking.com URL, deep link intact. CJ works the other way round, with
+// a click URL of its own that redirects, and a deep link rides in a `url`
+// parameter on it. The difference matters to a reader: the bare click link
+// lands on Booking's front page, and every stay link in this app is a search
+// for a named town on named dates.
+//
+// So the link is stored here as the CLICK PREFIX and the destination is added
+// at render, by bookingCjUrl in utils/affiliates.js, over the search URL
+// bookingUrl already builds. Asked which shape he wanted, he chose exactly
+// this. BOOKING_AFFILIATE_ID stays: if CJ or Booking ever hand him an aid, it
+// slots in and needs no wrapper at all, and the two are not mutually exclusive.
+//
+// ONE THING TO TEST, in his own words from 7 Sep: "just make sure that it
+// explicitly tells me that it has inputted an affiliate link, so I can test if
+// it got it right." Press a Where to stay button on any published guide: it
+// should go through kqzyfj.com and arrive at Booking's results for that town.
+// If it lands on Booking's front page, the programme does not allow deep links
+// and this constant should be emptied rather than left half working.
+export const BOOKING_CJ_LINK = "https://www.kqzyfj.com/click-101858166-13375717";
+
+// ─ PARTNER-ADS, THE FOURTH NETWORK ────────────────────
+//
+// After Travelpayouts, Impact and Adtraction. Danish, and the two banners below
+// are his, 18 Sep 2026.
+//
+// ─ A BANNER ID IS NOT A DESTINATION ───────────────────
+//
+// A partner-ads link is /dk/klikbanner.php?partnerid=<id>&bannerid=<n> and that
+// is ALL of it. Unlike Adtraction, Impact and Travelpayouts, there is no `url`
+// parameter, so nothing in the link says who the advertiser is, which host it
+// ends at, or what it sells. destinationIn() reads nothing out of one and
+// partnerMerchant would have printed "Partner site" on every row.
+//
+// So the name lives here, one line per banner, and NOTHING RENDERS UNTIL IT IS
+// WRITTEN. That is deliberate, and it is the Copenhagen Card rule from 16 Sep:
+// a paid row names its partner out loud in its own prose. A row that cannot say
+// whose link it is has no honest wording available to it, so it does not exist
+// yet. partner-ads.com also blocks automated fetching in its robots.txt, so the
+// name cannot be resolved from the link either. It comes from him.
+export const PARTNER_ADS_PARTNER_ID = "57554";
+// "an affiliate for a great hotel that we should probably somehow put on
+// priority". Shown inside guides for its own town only, which is the quietest
+// of the four places it could go and the one he picked. `town` is the town the
+// hotel is IN, spelled the way the app spells it.
+export const PARTNER_ADS_STAY_BANNER = "77692";
+// "and this is for travelling items. Put this on tips." A Tips row is a row in
+// data/essentials.js, so this one needs no code at all once it is named: the
+// link goes on the row and outboundLink does the rest.
+export const PARTNER_ADS_GEAR_BANNER = "112737";
+export const PARTNER_ADS_BANNERS = {
+  // Fill one line and the row it belongs to starts working:
+  //   [PARTNER_ADS_STAY_BANNER]: { merchant: "Hotel Name", site: "https://hotel.dk", town: "Aarhus" },
+  //   [PARTNER_ADS_GEAR_BANNER]: { merchant: "Shop Name", site: "https://shop.dk" },
+  // `merchant` is what the reader is told they are being sent to, so it is the
+  // advertiser's real name and not a category.
+};
+
 // ── TRIP.COM, DIRECT ────────────────────────────────────────────────
 //
 // Oliver, 7 Sep 2026: "Got another affiliate!"

@@ -56,7 +56,7 @@ import { testTravelerLine, isFerryText, daysUntil, readerView } from "../utils/h
 import { aiDisclosureFor } from "../utils/aiDisclosure";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen, clampNote } from "../utils/guideReading";
 import { BOOKING_AFFILIATE_ID } from "../config";
-import { tiqetsBrowseUrl, partnerDisclosure, supportNote, partnerLinkCount, isPartnerLink, carRentalFits, bookingUrl, tripcomStayUrl, stayDisclosure, STAY_DISCLOSURE } from "../utils/affiliates";
+import { tiqetsBrowseUrl, partnerDisclosure, supportNote, partnerLinkCount, isPartnerLink, carRentalFits, bookingUrl, tripcomStayUrl, stayDisclosure, STAY_DISCLOSURE, outboundLink, featuredStayFor } from "../utils/affiliates";
 import { CostsBlock } from "../components/CostsBlock";
 import { dayStart, dayKey, dayPlus } from "../utils/calendarDay";
 import { TripCalendarCard } from "../components/TripCalendarCard";
@@ -2207,8 +2207,53 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                         click is worth. A border, a tint and real padding are
                         enough to move it from prose into the class of things
                         that do something. */}
+                    {/* ── ONE NAMED HOTEL, AND ONLY WHERE THE ROUTE ALREADY GOES ──
+                        Oliver, 18 Sep 2026: "an affiliate for a great hotel
+                        that we should probably somehow put on priority", and in
+                        the same breath, before a line of this existed:
+                        "Obviously don't make the guide give a biased route
+                        towards the hotel. But IF they go that route.."
+
+                        So it reads the town THIS DAY already has, and it can do
+                        nothing else: featuredStayFor is on
+                        INVENTORY_MAY_NOT_SELECT, so the suite fails if its name
+                        appears anywhere in the window of App.jsx that plans the
+                        days and picks the stops. It answers null until the
+                        banner is named in config.js, because a paid row that
+                        cannot name its partner has no honest wording available
+                        to it. */}
+                    {(() => {
+                      const featured = featuredStayFor(day.glance.stayArea || stayTown);
+                      if (!featured) return null;
+                      const out = outboundLink(featured.url);
+                      if (!out.href) return null;
+                      return (
+                        <div>
+                          <a href={out.href} target="_blank" rel={out.rel}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, marginRight: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 13px", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
+                            🛏 {featured.merchant} ↗
+                          </a>
+                          {/* Named in the row's own prose and not only in the
+                              small print under it. The Copenhagen Card rule,
+                              16 Sep 2026. */}
+                          <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4 }}>
+                            {featured.merchant} is a Gemlyx partner, so this link earns us a commission. It is here because this day is already in {featured.town}, and it changes nothing about what you pay.
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {/* ── THROUGH THE DOOR, NOT AROUND IT ──
+                        18 Sep 2026, the day Booking.com started paying. This
+                        href was the raw search URL and this rel was
+                        "noreferrer", both correct while the link earned nothing
+                        and both wrong the moment it did: the CJ wrapper is
+                        added by affiliateHref at render, and a paid link
+                        without sponsored nofollow is what Google asks
+                        publishers not to do. outboundLink computes the href,
+                        the label, the sentence and the rel in one place, which
+                        is what it was written for. */}
                     {stayBookingUrl && (
-                      <a href={stayBookingUrl} target="_blank" rel="noreferrer"
+                      <a href={outboundLink(stayBookingUrl).href || stayBookingUrl} target="_blank" rel={outboundLink(stayBookingUrl).rel}
                         style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, marginRight: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
                         🔎 {day.glance.recommendedStay ? `See ${day.glance.recommendedStay} on Booking.com` : `Search stays near ${day.glance.stayArea}`} ↗
                       </a>

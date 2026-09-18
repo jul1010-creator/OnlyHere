@@ -257,7 +257,7 @@ import { dayKey, dayStart, dayPlus } from "./utils/calendarDay";
 import { arrivalPoint } from "./utils/arrival";
 import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, nightlifeForTown, barsOnStreet, townOfLocation, nightKindOf, strandedNight } from "./utils/nightlife";
 import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
-import { supabaseFailure, studioErrorMessage, refreshIsDead, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
+import { supabaseFailure, studioErrorMessage, refreshIsDead, EXPIRED, REFUSED, MISSING, OUTDATED } from "./utils/studioErrors";
 import { cleanPlaceKind, cleanRelation, cleanIsland, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
 import { resolveUncertainties, CONFIRM_FORMAT } from "./utils/uncertaintyResolve";
@@ -10172,7 +10172,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   // This panel is new and its table genuinely may not exist yet, so it has to
   // tell those two apart from the first day rather than learning the lesson
   // twice.
-  const sourcesErrorFor = (status, body) => studioErrorMessage("the source list", status, body);
+  const sourcesErrorFor = (status, body, did) => studioErrorMessage("the source list", status, body, did);
 
   // ── THE COMMUNITY FEEDS ─────────────────────────────────────────
   // The group list, and the candidate queue a sweep leaves behind. The queue is
@@ -10209,7 +10209,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   // no server can do for him. Everything after that is the same machinery the
   // sweep uses, which is the point: one reader, one queue, one set of rules.
   const [pastedPost, setPastedPost] = useState("");
-  const feedsErrorFor = (status, body) => studioErrorMessage("the community feeds", status, body);
+  const feedsErrorFor = (status, body, did) => studioErrorMessage("the community feeds", status, body, did);
 
   // Removes one uncertainty from the draft, through studioDraftText, which is
   // what Publish actually reads. Editing studioDraft alone would clear it on
@@ -10379,7 +10379,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
         body: JSON.stringify({ domain, note: cleanNote(newSourceNote), applies_to: newSourceType, applies_place: cleanPlace(newSourcePlace), enabled: true }),
       });
       const body = await res.json().catch(() => null);
-      if (!res.ok) { setSourceError(sourcesErrorFor(res.status, body)); setSourceBusy(false); return; }
+      if (!res.ok) { setSourceError(sourcesErrorFor(res.status, body, "add to")); setSourceBusy(false); return; }
       setNewSourceDomain(""); setNewSourceNote(""); setNewSourcePlace(""); setNewSourceTypes([]);
       await loadSources();
       refreshSources();
@@ -10410,7 +10410,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
         body: JSON.stringify({ enabled }),
       });
       const body = await res.json().catch(() => null);
-      if (!res.ok) setSourceError(sourcesErrorFor(res.status, body));
+      if (!res.ok) setSourceError(sourcesErrorFor(res.status, body, "update"));
       else { setSourceRows(prev => prev.map(r => r.id === row.id ? { ...r, enabled } : r)); refreshSources(); }
     } catch (e) { setSourceError(String(e.message || e)); }
     setSourceBusy(false);
@@ -10422,7 +10422,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
       const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_sources?id=eq.${Number(row.id)}`, {
         method: "DELETE",
       });
-      if (!res.ok) setSourceError(sourcesErrorFor(res.status, await res.json().catch(() => null)));
+      if (!res.ok) setSourceError(sourcesErrorFor(res.status, await res.json().catch(() => null), "remove from"));
       else { setSourceRows(prev => prev.filter(r => r.id !== row.id)); refreshSources(); }
     } catch (e) { setSourceError(String(e.message || e)); }
     setSourceBusy(false);
@@ -10493,7 +10493,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
         }),
       });
       const body = await res.json().catch(() => null);
-      if (!res.ok) { setFeedError(feedsErrorFor(res.status, body)); setFeedBusy(false); return; }
+      if (!res.ok) { setFeedError(feedsErrorFor(res.status, body, "add to")); setFeedBusy(false); return; }
       setNewFeedUrl(""); setNewFeedName(""); setNewFeedPlace("");
       await loadFeeds();
     } catch (e) { setFeedError(String(e.message || e)); }
@@ -10508,7 +10508,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
         headers: { "Content-Type": "application/json", Prefer: "return=representation" },
         body: JSON.stringify({ enabled }),
       });
-      if (!res.ok) setFeedError(feedsErrorFor(res.status, await res.json().catch(() => null)));
+      if (!res.ok) setFeedError(feedsErrorFor(res.status, await res.json().catch(() => null), "update"));
       else setFeedRows(prev => prev.map(r => r.id === row.id ? { ...r, enabled } : r));
     } catch (e) { setFeedError(String(e.message || e)); }
     setFeedBusy(false);
@@ -10518,7 +10518,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     setFeedBusy(true); setFeedError(null);
     try {
       const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_feeds?id=eq.${Number(row.id)}`, { method: "DELETE" });
-      if (!res.ok) setFeedError(feedsErrorFor(res.status, await res.json().catch(() => null)));
+      if (!res.ok) setFeedError(feedsErrorFor(res.status, await res.json().catch(() => null), "remove from"));
       else setFeedRows(prev => prev.filter(r => r.id !== row.id));
     } catch (e) { setFeedError(String(e.message || e)); }
     setFeedBusy(false);
@@ -10657,9 +10657,17 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) {
-        setFeedError(String(res.status) === "404" || /gemlyx_notices/.test(JSON.stringify(body || ""))
-          ? "MISSING_NOTICES_TABLE"
-          : studioErrorMessage("the notices", res.status, body));
+        // ── CLASSIFIED IN studioErrors, NEVER HERE ──────────────────
+        // The old test read ANY error naming gemlyx_notices as the table being
+        // absent. A missing COLUMN of it names the table too, so a table that
+        // exists would have been handed a create-table script, which is the one
+        // thing studioErrors.js exists to stop.
+        const said = studioErrorMessage("the notice", res.status, body, "send");
+        setFeedError(
+          said === "MISSING_TABLE" ? "MISSING_NOTICES_TABLE"
+          : said.startsWith("OUTDATED_TABLE") ? said.replace("OUTDATED_TABLE", "OUTDATED_NOTICES")
+          : said
+        );
         setNoticeSending("");
         return;
       }
@@ -20735,7 +20743,14 @@ ${languageBlock()}`;
                     them is still researched everywhere else. They also never outrank a venue's own site on its own prices and hours.
                   </div>
 
-                  {sourceError === "MISSING_TABLE" ? (
+                  {String(sourceError || "").startsWith("OUTDATED_TABLE") ? (
+                    <div style={{ fontSize: 11.5, color: "#FFB347", lineHeight: 1.6 }}>
+                      Your <code>gemlyx_sources</code> table has no <code>{String(sourceError).split(":")[1] || "column"}</code> column, so it is older than this panel. The script is safe to run again and adds it:
+                      <pre style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px", fontSize: 10.5, color: C.light, overflowX: "auto", marginTop: 8, whiteSpace: "pre" }}>{SOURCES_SQL}</pre>
+                      <button onClick={() => { navigator.clipboard?.writeText(SOURCES_SQL); setToast("SQL copied"); }}
+                        style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "6px 13px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Copy the SQL</button>
+                    </div>
+                  ) : sourceError === "MISSING_TABLE" ? (
                     <div style={{ fontSize: 11.5, color: "#FFB347", lineHeight: 1.6 }}>
                       The <code>gemlyx_sources</code> table does not exist yet. Run this once in Supabase, then reopen this panel:
                       <pre style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px", fontSize: 10.5, color: C.light, overflowX: "auto", marginTop: 8, whiteSpace: "pre" }}>{SOURCES_SQL}</pre>
@@ -20976,6 +20991,20 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       The <code>gemlyx_notices</code> table does not exist yet. Run this once in Supabase, then send it again:
                       <pre style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px", fontSize: 10.5, color: C.light, overflowX: "auto", marginTop: 8, whiteSpace: "pre" }}>{NOTICES_SQL}</pre>
                       <button onClick={() => { navigator.clipboard?.writeText(NOTICES_SQL); setToast("SQL copied"); }}
+                        style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "6px 13px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Copy the SQL</button>
+                    </div>
+                  ) : String(feedError || "").startsWith("OUTDATED_NOTICES") ? (
+                    <div style={{ fontSize: 11.5, color: "#FFB347", lineHeight: 1.6 }}>
+                      Your <code>gemlyx_notices</code> table has no <code>{String(feedError).split(":")[1] || "column"}</code> column, so it is older than this panel. The script is safe to run again and adds it:
+                      <pre style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px", fontSize: 10.5, color: C.light, overflowX: "auto", marginTop: 8, whiteSpace: "pre" }}>{NOTICES_SQL}</pre>
+                      <button onClick={() => { navigator.clipboard?.writeText(NOTICES_SQL); setToast("SQL copied"); }}
+                        style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "6px 13px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Copy the SQL</button>
+                    </div>
+                  ) : String(feedError || "").startsWith("OUTDATED_TABLE") ? (
+                    <div style={{ fontSize: 11.5, color: "#FFB347", lineHeight: 1.6 }}>
+                      Your <code>gemlyx_feeds</code> table has no <code>{String(feedError).split(":")[1] || "column"}</code> column, so it was created before this panel learned to hold pages as well as groups. The script is safe to run again and adds it:
+                      <pre style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px", fontSize: 10.5, color: C.light, overflowX: "auto", marginTop: 8, whiteSpace: "pre" }}>{FEEDS_SQL}</pre>
+                      <button onClick={() => { navigator.clipboard?.writeText(FEEDS_SQL); setToast("SQL copied"); }}
                         style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "6px 13px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Copy the SQL</button>
                     </div>
                   ) : feedError === "MISSING_TABLE" ? (
@@ -24426,6 +24455,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   <b style={{ color: "#FFB347" }}>The gemlyx_research table does not exist yet</b> ({researchMemory.detail}). Drafts are not remembering their sources, so a redraft starts from scratch every time. Run this once in the Supabase SQL editor:
                                   <div style={{ fontFamily: "monospace", fontSize: 10, color: C.text, background: C.bg, borderRadius: 6, padding: "7px 8px", marginTop: 6, whiteSpace: "pre-wrap", userSelect: "all" }}>{RESEARCH_SQL}</div>
                                 </>
+                              ) : researchMemory.status === OUTDATED ? (
+                                /* Not the create script, and saying so: this
+                                   table exists and is one column short, and
+                                   RESEARCH_SQL adds no column to a table that
+                                   is already there. The check below prints the
+                                   column PostgREST named. */
+                                <><b style={{ color: "#FFB347" }}>The gemlyx_research table is one column short</b> ({researchMemory.detail}). It exists and its policy is fine, so the create script is not the answer. A column the code writes is not in the table, and the check below names it.</>
                               ) : (
                                 <><b style={{ color: "#FFB347" }}>Research memory could not be read</b> ({researchMemory.detail}). Drafts still work, they just start from scratch. This is not a missing table, so there is no SQL to run.</>
                               )}

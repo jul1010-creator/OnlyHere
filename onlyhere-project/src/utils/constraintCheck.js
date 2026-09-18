@@ -323,4 +323,17 @@ export const repairWorked = (before, after, constraints, opts) =>
 // invariants stop being true. The suite asserts it now.
 export const INVENTORY_MAY_NOT_SELECT = [
   "bookingUrl", "airbnbUrl", "tiqets", "ticketmaster", "BOOKING_AFFILIATE_ID", "affiliateHref",
+  // ─ 18 SEP 2026, AND THIS ONE HE ASKED FOR BEFORE IT EXISTED ──────
+  //
+  // Handing over a hotel's affiliate banner, in the same message: "Obviously
+  // don't make the guide give a biased route towards the hotel. But IF they go
+  // that route.."
+  //
+  // Which is this list, in his own words, about the first piece of inventory
+  // Gemlyx has ever had a reason to prefer. featuredStayFor names ONE hotel in
+  // ONE town, so it is the first thing that could tilt a route and the one
+  // addition here that is not hypothetical. PARTNER_ADS catches the config
+  // constants it reads, so reaching around the function does not get past this
+  // either.
+  "featuredStayFor", "PARTNER_ADS", "BOOKING_CJ_LINK",
 ];
