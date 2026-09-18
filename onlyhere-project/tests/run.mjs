@@ -111,7 +111,7 @@ writeFileSync(entry, `
   export { PAID_PLANS_LIVE } from ${JSON.stringify(join(root, "src/config.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
-  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS, claimCitation, urlsIn, sourceLinksIn, citationRefusal, claimIsPerishable, CITATION_PROMPT, settleCitation, SPLIT_PROMPT, correctEntry, dropAppliedClaims, CLAIMS_APPLIED, namesField, verifyTransportClaim, asksWhatItCarries } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { MEASURED_BY, remeasureFor, pendingRemeasure, describeRemeasure, looksLikeAPlace, REMEASURE, REMEASURE_CLEARS, enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS, claimCitation, urlsIn, sourceLinksIn, citationRefusal, claimIsPerishable, CITATION_PROMPT, settleCitation, SPLIT_PROMPT, correctEntry, dropAppliedClaims, CLAIMS_APPLIED, namesField, verifyTransportClaim, asksWhatItCarries } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS, feedbackProblem, feedbackRow } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { previewReportRow, travellerTurns, PREVIEW_SAID_CAP, PREVIEW_SCREEN_CAP } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { trimFillerRuns, trimFillerAgainst } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -173,7 +173,7 @@ writeFileSync(entry, `
   export { guideLanguage, languageOfProse, ruledOutLanguages, briefSentences, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS, MARKER_FLOOR, MARKER_MARGIN } from ${JSON.stringify(join(root, "src/utils/travellerLanguage.js"))};
   export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, LABEL_CLASS, LABEL_SIDES, LABEL_GAP, labelBox, labelSides, SPOT_PIN_ZOOM, isSpotPin, spotsShowAt, PHONE_MAP_PINS, phoneMapShows } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
   export { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE, cameraArrive, cameraLanded, frameFor, SLIDE_HOLD_MS, makeCamera, unplayedBeat } from ${JSON.stringify(join(root, "src/utils/mapDirections.js"))};
-  export { costLines, byUrgency, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
+  export { costLines, byUrgency, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND, estimateFrom, describeEstimate } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { freeButPriced, moneyProblems, LODGING_FLOOR_DKK } from ${JSON.stringify(join(root, "src/utils/moneyClaims.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
@@ -5912,7 +5912,10 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 
   // Wired: shown on the card, saved onto the block, and switchable.
   const app2 = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the finder shows what the picture is", /\{hit\.caption && <div title=\{hit\.caption\}/.test(app2));
+  // The cards moved into components/CommonsResults.jsx on 18 Sep, one grid for
+  // all three panels. The card is asserted where it lives now.
+  ok("the finder shows what the picture is",
+     /\{hit\.caption && <div title=\{hit\.caption\}/.test(readFileSync(join(root, "src/components/CommonsResults.jsx"), "utf8")));
   ok("and it can be saved as the caption", /useCommonsCaption && hit\.caption \? \{ caption: hit\.caption \}/.test(app2));
   // BOTH save paths, or one of them silently drops it.
   is("both places that save a Commons photo carry it", (app2.match(/useCommonsCaption && hit\.caption/g) || []).length, 2);
@@ -5962,8 +5965,14 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("a painting is pushed behind the photographs", /keep\.sort\(\(a, b2\) => \(a\.historical/.test(api));
   // A dead source must be visible in the panel, not inferred from odd results.
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the panel warns when only the text search answered", /Only the blind text search found anything/.test(app));
-  ok("and every card shows its filename", /title=\{hit\.title\}/.test(app));
+  {
+    // One grid, three panels, since 18 Sep. Both of these are properties of the
+    // grid rather than of whichever panel is drawing it.
+    const grid = readFileSync(join(root, "src/components/CommonsResults.jsx"), "utf8");
+    ok("the panel warns when only the text search answered", /Only the blind text search found anything/.test(grid));
+    ok("and every card shows its filename", /title=\{hit\.title\}/.test(grid));
+    ok("and the panel that draws it hands it the finder", /<CommonsResults finder=\{photoFinder\}/.test(app));
+  }
 }
 
 // ── NOWHERE IS A JOURNEY FROM ITSELF ───────────────────────────────
@@ -7461,6 +7470,142 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ok("and no page at all says so plainly instead",
        /NOT IN ANYTHING WE READ/.test(M.describePriceTrace(pt, { statedOn: null })));
   }
+}
+
+// ── "1395 DKK, FROM danceus.org" ────────────────
+// TinderBox, 16 Sep 2026, step 28. An American dance listing won the price slot
+// for a Danish festival because the operator's own shop could not be read. The
+// same night, two ferry resellers were read for fifteen thousand characters
+// across two island runs while the shipping companies went unread.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const pages = {
+    "https://danceus.org/tinderbox": "Tickets from 1395 DKK",
+    "https://shop.tinderbox.dk/": "",
+  };
+  const order = ["tinderbox.dk", "danceus.org"];
+  // Without a predicate it behaves as it always did, which is what let it in.
+  is("a page that happens to carry the figure used to win",
+     M.priceSource("Tickets 1395 DKK", pages, order)?.host, "danceus.org");
+  // ── AND WITH ONE, THE OPERATOR SETS THE PRICE ────────────────────
+  // A ticket seller takes the money and everybody else is repeating it.
+  // Repeating it in a currency does not make it a citation.
+  {
+    const decided = M.priceSource("Tickets 1395 DKK", pages, order, { mayDecide: (u) => /tinderbox\.dk/.test(u) });
+    ok("a listing that may not decide does not decide", !!decided.mayNotDecide);
+    is("and the near miss is still named, rather than a silence", decided.host, "danceus.org");
+  }
+  // A page that MAY decide still wins outright.
+  {
+    const ok2 = M.priceSource("Tickets 1395 DKK", { "https://shop.tinderbox.dk/": "Partout 1395 DKK" }, ["tinderbox.dk"], { mayDecide: () => true });
+    is("the operator's own page decides", ok2.host, "shop.tinderbox.dk");
+    ok("with nothing refused about it", !ok2.mayNotDecide);
+  }
+  // A thrown predicate is not a pass, the same rule the subject matcher keeps.
+  ok("a predicate that throws refuses",
+     !!M.priceSource("Tickets 1395 DKK", pages, order, { mayDecide: () => { throw new Error("x"); } })?.mayNotDecide);
+
+  // ── AND THE CLASSES ARE READ OFF THE RANKED LIST ─────────────────
+  // official is the operator, listing is a ticket seller or a transport
+  // operator. A tourism board, an encyclopedia and a blog may SURFACE a
+  // candidate and may not settle what it costs.
+  ok("the predicate is built from the ranking", /const priceClassOf = new Map\(rankedSources\.map\(r => \[String\(r\.host \|\| ""\)\.toLowerCase\(\), r\.cls\]\)\);/.test(app));
+  ok("and only two classes may price", /const MAY_PRICE = \["official", "listing"\];/.test(app));
+  ok("an unranked host is refused rather than admitted", /return false;\n      \};/.test(app));
+  ok("and every price question asks it", (app.match(/mayDecide: priceDecider/g) || []).length === 3);
+}
+
+// ── ONE GRID, THREE PANELS ──────────────────
+// The Media panel and the draft panel each drew the Wikimedia results inline,
+// and the facts panel could not draw them at all: its button asked for one
+// result and took it. Three copies was the shape this codebase calls its
+// signature failure, so the grid is one file.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const grid = readFileSync(join(root, "src/components/CommonsResults.jsx"), "utf8");
+  ok("all three panels draw the same grid", (app.match(/<CommonsResults finder=/g) || []).length === 3);
+  ok("and no panel draws its own cards any more",
+     !/photoFinder\.results\.map\(hit =>/.test(app) && !/draftPhotoFinder\.results\.map\(hit =>/.test(app));
+  // THE WRITER IS THE PANEL'S, THE CARD IS THE GRID'S. Each panel hands over
+  // its own writer, because what a picked photo means is different in each:
+  // one patches a published row, one edits the draft JSON, one fills a fact.
+  ok("each panel hands over its own writer",
+     /onUse=\{hit => useCommonsPhoto\(row, hit\)\}/.test(app)
+     && /onUse=\{hit => useDraftCommonsPhoto\(hit\)\}/.test(app)
+     && /onUse=\{hit => useFactCommonsPhoto\(d\.key, hit\)\}/.test(app));
+  // The saving state is per card and only the Media panel has one, so the grid
+  // takes it as a url rather than assuming a shape.
+  ok("a per-card saving state still works", /busyUrl=\{photoFinder\.saving \|\| ""\}/.test(app)
+     && /busyUrl === hit\.url \? "Saving\u2026" : "Use this"/.test(grid));
+  // EVERY STATE THE OLD COPIES HAD, in one place: loading, error, nothing
+  // usable found, which lookups answered, and the cards.
+  ok("the grid keeps the loading line", /Searching Wikimedia/.test(grid));
+  ok("and the nothing-found line", /Nothing usable found/.test(grid));
+  ok("and the licence on every card", /hit\.credit\?\.license/.test(grid));
+  ok("and it renders nothing at all without a finder", /if \(!finder\) return null;/.test(grid));
+}
+
+// ── "AALBORG ST. IS THE CLOSEST TO RADHUSPLADSEN?" ───────────────
+// Oliver, 16 Sep 2026, on the panel. Two rules, each defensible, and together a
+// trap: nearestStation is measured so a human may not type it, and that run's
+// coordinate was an organiser's office in Aalborg, so the one field he could
+// SEE was wrong was the one field he could not correct.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const measured = { name: "Koebenhavns Oktoberfest", nearestStation: "Aalborg St.", travelTime: "5min", __journey: { total: 5 }, __lat: 57.04, __lon: 9.91 };
+
+  // ── THE MEASUREMENT IS DROPPED, NOT EDITED ───────────────────────
+  // The rule worth keeping is that a typed travel time is a guess wearing the
+  // authority of a measurement. The rule worth losing is that a wrong
+  // coordinate is permanent.
+  {
+    const patch = M.remeasureFor(measured, { address: "Raadhuspladsen, Copenhagen", why: "the event is on Raadhuspladsen", at: "2026-09-18" });
+    is("the journey goes", patch.__journey, null);
+    is("the coordinate goes", patch.__lat, null);
+    is("and the other half of it", patch.__lon, null);
+    is("the travel time is emptied rather than rewritten", patch.travelTime, "");
+    is("and so is the arrival point", patch.nearestStation, "");
+    is("with the place he named written down", patch[M.REMEASURE].from, "Raadhuspladsen, Copenhagen");
+    is("and why", patch[M.REMEASURE].why, "the event is on Raadhuspladsen");
+    // NOT the station and not the minutes: those are recomputed, never typed.
+    ok("nothing typed lands in a measured field",
+       !M.REMEASURE_CLEARS.filter(k => !k.startsWith("__")).some(k => patch[k]));
+  }
+  // ONE PENDING RE-MEASURE PER ROW. A second claim while one is queued is how a
+  // row ends up measured from whichever claim arrived last rather than from the
+  // one somebody checked.
+  {
+    const queued = { ...measured, [M.REMEASURE]: { from: "Raadhuspladsen", why: "", at: "2026-09-18" } };
+    is("a second claim while one is pending is refused", M.remeasureFor(queued, { address: "Somewhere else" }), null);
+    ok("and the pending one is readable", !!M.pendingRemeasure(queued));
+    ok("a row with none reads as none", !M.pendingRemeasure(measured));
+  }
+  // NOTHING TO MEASURE FROM IS NOT A REASON TO CLEAR A ROW.
+  is("a claim with no place named changes nothing", M.remeasureFor(measured, { address: "" }), null);
+  // A claim about a DURATION proposes a duration, and geocoding that is how a
+  // row would end up measured from nowhere at all.
+  ok("an address is a place", M.looksLikeAPlace("Raadhuspladsen, Copenhagen"));
+  ok("a station is a place", M.looksLikeAPlace("Noerreport St."));
+  ok("a duration is not", !M.looksLikeAPlace("about 3 hours"));
+  ok("nor a bare figure", !M.looksLikeAPlace("3h 13min"));
+  ok("nor a price", !M.looksLikeAPlace("160 DKK"));
+
+  // ── AND THE NEXT RUN MEASURES FROM WHAT HE SAID ──────────────────
+  // Fable's warning, and the reason the hatch carries an address: run 1 derived
+  // Aalborg St. TWICE, at steps 10 and 12, from one listing. A re-measure that
+  // starts from the same name reproduces the same wrong stop.
+  ok("the row's own coordinate is not reused", /const knownCoord = askedAgain \? null : placeCoords\(knownRow \|\| \{\}\);/.test(app));
+  ok("the place he named is geocoded first",
+     /if \(!coords && askedAgain\) \{/.test(app) && /geocodePlace\(`\$\{askedAgain\.from\}, Denmark`\)/.test(app));
+  ok("and the log says a re-measure was asked for", /note\("A re-measure was asked for"/.test(app));
+
+  // ── THE PANEL SAYS WHAT IT DID ───────────────────────────────────
+  // His own rule about a link applies to a field: tell him what was inputted so
+  // he can test whether it got it right.
+  ok("the sentence names the drop rather than an edit",
+     /dropped rather than edited/.test(M.describeRemeasure({ from: "Raadhuspladsen" })));
+  is("and nothing is said about a row with no re-measure", M.describeRemeasure(null), "");
+  ok("the correction reports it back", /remeasured = \{ field: hit\.field, from: said \}/.test(readFileSync(join(root, "src/utils/correction.js"), "utf8")));
 }
 
 // ── THE ANSWER IS ONE CLICK PAST THE FRONT PAGE ────────
@@ -17201,6 +17346,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     travelTime: "38min 🚂", ticketStatus: "on_sale", website: "https://roskilde-festival.dk",
     __ticket: { source: "ticketmaster", at: "2026-08-12", url: "https://tm.dk/rf" },
     __dateSource: { by: "official-site", dates: ["2026-06-27"] },
+    // __journey is what makes travelTime and nearestStation MEASUREMENTS rather
+    // than prose, and since 18 Sep the lock asks for it. See MEASURED_BY: the
+    // Aalborg St. trap was a row where the one field he could see was wrong was
+    // the one field he could not correct.
+    __journey: { total: 38, onBoard: 30, waiting: 5, from: "Copenhagen", legs: [{ vehicle: "train", to: "Roskilde St." }] },
     __sources: ["https://a.dk"], __lat: 55.6, __lon: 12.0,
     uncertainties: ["STOP, DO NOT PUBLISH: Ticketmaster says this event is CANCELLED.", "Ticket price unconfirmed."],
   };
@@ -17256,6 +17406,25 @@ is("missing licence does not require credit", creditIsRequired({}), false);
      keepMeasured(full, { ...full, ticketInfo: "" }).patched.ticketInfo, "");
   // THE POINT. Every measured value survives a rewrite that dropped it.
   is("a measured travel time is put back", kept.patched.travelTime, "38min 🚂");
+  // ── AND ONLY WHILE THE MEASUREMENT IS ON THE ROW ─────────────────
+  //
+  // 18 Sep 2026. What makes travelTime a measurement is __journey, not the
+  // field's name, which is what provenance.js has said all along. A row
+  // carrying a travel time and no journey has prose in that field, and the
+  // Aalborg St. run is what the old answer cost: the one field he could see
+  // was wrong was the one field he was structurally unable to correct.
+  {
+    const noRecord = { ...measuredDraft };
+    delete noRecord.__journey;
+    const loose = keepMeasured(noRecord, rewritten);
+    is("a travel time with no journey behind it is prose, and correctable", loose.patched.travelTime, "about 40 minutes");
+    // The two that are not derived from a coordinate stay locked whatever else
+    // is missing: there is no re-measure to ask for.
+    is("the registered website is still locked", loose.patched.website, "https://roskilde-festival.dk");
+    is("and so is a verified ticket status", loose.patched.ticketStatus, "on_sale");
+    ok("the lock says so on its own", !M.isPipelineOwned("travelTime", noRecord) && M.isPipelineOwned("travelTime", measuredDraft));
+    ok("and with no entry to ask it answers as it always did", M.isPipelineOwned("travelTime"));
+  }
   is("a verified ticket status is put back", kept.patched.ticketStatus, "on_sale");
   is("the registered website is put back", kept.patched.website, "https://roskilde-festival.dk");
   is("and its provenance", (kept.patched.__ticket || {}).source, "ticketmaster");
@@ -17888,8 +18057,10 @@ rmSync(dir, { recursive: true, force: true });
   // same lie with more steps.
   ok("an untraced price goes to a founder note, not into the prose",
      /const line = describePriceTrace\(pt, \{ statedOn: traced \? domainOf\(traced\.url\) : null \}\);\s*noteToFounder\(line\);/.test(stripNonCode(app)));
+  // stripNonCode blanks string literals, so the predicate is asserted by shape
+  // here and by name off the raw source.
   ok("and the note is told whether a page that was read states it",
-     /const traced = priceSource\(readerText\(t\), pagesByUrl, rankedSources\.map\(r => r\.host\)\);/.test(stripNonCode(app)));
+     /const traced = priceSource\(readerText\(t\), pagesByUrl, rankedSources\.map\(r => r\.host\), \{ mayDecide: priceDecider \}\);/.test(stripNonCode(app)));
   ok("and the run log records the comparison either way", /note\(`Prices against the official site\$\{suffix\}`/.test(app));
 
   // ── AND REPORTING IT WAS ALL ANYTHING COULD EVER DO ─────────
@@ -18262,7 +18433,10 @@ rmSync(dir, { recursive: true, force: true });
   ok("and is marked as outside the ranked list",
      priceSource("Entry 400 kr", { "https://someblog.dk/x": "400 kr" }, ["oplev.esbjerg.dk"])?.ranked === false);
   ok("the draft records it", /t\.__priceSource = \{ url: src\.url, host: domainOf\(src\.url\), price: src\.price/.test(appG));
-  ok("with the ranking passed in", /priceSource\(readerText\(t\), pagesByUrl, rankedSources\.map\(r => r\.host\)\)/.test(appG));
+  // And with the price-decider predicate since 18 Sep, so an American dance
+  // listing cannot win a Danish fare because the operator's shop was unreadable.
+  ok("with the ranking passed in",
+     /priceSource\(readerText\(t\), pagesByUrl, rankedSources\.map\(r => r\.host\), \{ mayDecide: priceDecider \}\)/.test(appG));
 
   // ── AND A MEASURED FIELD IS FORCED AFTER THE REWRITE TOO ─────────
   // The frozenGeo override runs before the correction. keepMeasured restores a
@@ -25721,6 +25895,24 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("there is a roster", roster.length >= 6);
     is("every programme says what it sells", roster.filter(p => !p.sells).map(p => p.key), []);
     is("and why it was chosen", roster.filter(p => !p.why || p.why.length < 40).map(p => p.key), []);
+
+    // ── "I DOUBT THOSE PARTNERS WILL BE HAPPY SEEING BE CAREFUL WITH X" ──
+    //
+    // Oliver, 18 Sep 2026: "you're really not selling these affiliates very
+    // well.. I doubt those partners will be happy seeing 'be careful with
+    // WeGoTrip'.. why be careful?"
+    //
+    // He is right, and the fix is not to hide a caveat: it is that a row
+    // belongs on this page only if there is a reason to use it, and "be
+    // careful" is the sentence you write when you cannot think of one. A
+    // programme with nothing good to say about it should be off the roster
+    // rather than on it with a warning attached.
+    is("no row warns the reader off the thing it is recommending",
+       roster.filter(p => /be careful|beware|at your own risk/i.test(p.why || "")).map(p => p.key), []);
+    // And the page does not hedge the price of every programme into nothing,
+    // which is the other way this copy goes wrong.
+    is("nor does a row promise a price it does not set",
+       roster.filter(p => /\bthe same price\b|\bidentical price\b|cheapest anywhere|\bbest price\b/i.test(p.why || "")).map(p => p.key), []);
     is("and each has its own key", new Set(roster.map(p => p.key)).size, roster.length);
     // COUNTED, NEVER TYPED. "Some of the links here are paid" over a site where
     // none of them are is the sentence this file exists to prevent.
@@ -25881,6 +26073,43 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // that keeps the paid link honest rather than merely disclosed.
   paid.forEach(row => ok(`the ${row.name} row still points at the official site first`,
     /own site|official site/i.test(`${row.howTo || ""} ${row.tip || ""}`)));
+
+  // ── "NEARLY IDENTICAL PRICE" INSTEAD OF "THE SAME PRICE" ────
+  //
+  // Oliver, 18 Sep 2026: "tiqets prices seem to be slightly different from the
+  // page own. I don't want to lie to users. Write 'nearly identical price'
+  // instead of 'the same price'. Sell the affiliate by saying it's much more
+  // convenient to use."
+  //
+  // Both halves are asserted, because each one fails in its own direction. A
+  // row claiming an identical price is a small lie a reader can catch at the
+  // gate, which costs more trust than the few kroner is worth. A row that only
+  // hedges has nothing left to recommend it, which was the state of the
+  // affiliate copy an hour before this, and a partner reading it would be
+  // right to object.
+  paid.forEach(row => {
+    const prose = `${row.desc || ""} ${row.howTo || ""} ${row.tip || ""} ${row.price || ""}`;
+    ok(`the ${row.name} row does not claim an identical price`,
+      !/\bthe same price\b|\bidentical price\b|\bsame as the (?:gate|official)/i.test(prose));
+    ok(`the ${row.name} row says nearly rather than exactly`, /nearly identical|nearly the same/i.test(prose));
+    // The reason to press the button, in the row's own words. One order, one
+    // charge, one place to keep the tickets: that is what the reseller is for.
+    ok(`the ${row.name} row says what is convenient about it`,
+      /one order|one checkout|one place|QR|free cancellation|one card charged/i.test(prose));
+  });
+  // AND THE FIGURE IN THE PRICE FIELD IS NOT A FIGURE IT CANNOT KEEP. A row
+  // whose price is a claim about somebody else's price may not print a number:
+  // a number there is read as the number you pay.
+  {
+    const tiqetsRow = ESSENTIALS_FOR_TEST.find(e => e.id === 301);
+    ok("the ticket row exists", !!tiqetsRow);
+    is("and its price is a comparison rather than an amount", /\d/.test(tiqetsRow.price || ""), false);
+    ok("which says nearly", /nearly identical/i.test(tiqetsRow.price || ""));
+    // The tip still sends a reader who cares about kroner to the gate price,
+    // because that is where the price is set.
+    ok("and the tip still names the attraction's own site as the one to check",
+      /own site/i.test(tiqetsRow.tip || ""));
+  }
   // ── id 5, THE COPENHAGEN CARD, 16 SEP 2026 ──────────────────────
   //
   // Oliver: "Can you put an affiliate link on the Copenhagen Card, please. From
@@ -29217,15 +29446,21 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      /findDraftCommonsPhotos\(draftPhotoFinder[\s\S]{0,700}🔎 Find on Wikimedia\s*\n\s*<\/button>/.test(appW));
   ok("it searches the draft's own name", /onClick=\{\(\) => findDraftCommonsPhotos\(draftPhotoFinder \? \(document\.getElementById\("cmq-draft"\)\?\.value \|\| nameOf\) : nameOf\)\}/.test(appW));
   ok("the results panel is gated on the finder's own state", /\{draftPhotoFinder && \(/.test(appW));
-  ok("and every result offers the pick that writes it in", /onClick=\{\(\) => useDraftCommonsPhoto\(hit\)\}/.test(appW));
+  // Through the shared grid since 18 Sep: the panel hands it the writer and the
+  // grid calls it per card.
+  ok("and every result offers the pick that writes it in",
+     /onUse=\{hit => useDraftCommonsPhoto\(hit\)\}/.test(appW)
+     && /onClick=\{\(\) => onUse\(hit\)\}/.test(readFileSync(join(root, "src/components/CommonsResults.jsx"), "utf8")));
   // THE NAME ALONE is the default query. The endpoint resolves a Wikipedia
   // article and a Commons category from it, and those are the only two sources
   // whose results are known to be about the right subject. "Ribe Denmark" makes
   // both miss and leaves the blind text search answering on its own.
   ok("the default query is the name, not the name padded with the country",
      /const nameOf = String\(parsedDraft\?\.name \|\| studioDraft\?\.name \|\| ""\)\.trim\(\);/.test(appW));
+  // The warning travels with the grid now, so it reads the finder's own query
+  // rather than one panel's variable name.
   ok("and the panel warns when only the text search answered",
-     /Only the blind text search found anything\. No Wikipedia article and no Commons category matched "\$\{draftPhotoFinder\.query\}"/.test(appW));
+     /Only the blind text search found anything\. No Wikipedia article and no Commons category matched "\$\{query\}"/.test(readFileSync(join(root, "src/components/CommonsResults.jsx"), "utf8")));
 }
 
 // ── A SAVED TRIP THAT CAME BACK AS A TITLE AND A DAY COUNT ─────────
@@ -31661,7 +31896,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     for (const [what, said] of [["the Ticketmaster one", td(TM, "https://t.example/?u={url}")],
                                 ["the Tiqets one", tqd(TQ, "https://t.example/?u={url}")]]) {
       ok(`${what} names the commission`, /commission/i.test(said));
-      ok(`${what} says it costs the reader nothing`, /costs you nothing|no cost to you/i.test(said));
+      // ── AND WHICH PRICE IT IS TALKING ABOUT ────────
+      // 18 Sep 2026. These said the link makes "no change to the price", which
+      // is true of the link and reads as a claim about the gate price, and
+      // Tiqets is a few kroner off the gate. Oliver: "I don't want to lie to
+      // users." So the sentence compares the same page with and without the
+      // link, which is the claim that holds.
+      ok(`${what} says it costs the reader nothing`,
+         /you pay exactly what you would pay reaching the same page without it/i.test(said));
+      ok(`${what} makes no claim about anybody else's price`, !/does not change the price|no change to the price/i.test(said));
       ok(`${what} carries no dash`, !/[–—]/.test(said));
     }
   }
@@ -45765,7 +46008,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Wired, with a subject the caller actually holds.
   {
     const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
-    ok("the caller passes a subject test", /priceSource\([\s\S]{0,200}?isAbout:/.test(app));
+    ok("the caller passes a subject test", /priceSource\([\s\S]{0,600}?isAbout:/.test(app));
     ok("built from sourceIsAboutPlace rather than a second matcher", /isAbout: \(pageText, url\) => sourceIsAboutPlace\(/.test(app));
     ok("and an off-subject hit stores nothing", /src && src\.offSubject/.test(app));
   }
@@ -49570,6 +49813,86 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       !gaps.some(g => /Louisiana|Distortion/.test(g)));
     ok("and free entry is not a gap either", !gaps.some(g => /Nationalmuseet/.test(g)));
   }
+
+  // ── "CAN YOU IMPLEMENT ESTIMATED COST INTO THE GUIDE?" ──────
+  //
+  // Oliver, 18 Sep 2026. The list has been per line since it was built and a
+  // reader planning a trip wants one number. One number is also the single
+  // easiest thing on this page to be wrong about without anybody noticing, so
+  // every rule in estimateFrom has an assertion here and each one names the way
+  // the number would lie without it.
+  {
+    const { estimateFrom, describeEstimate } = M;
+    const est = estimateFrom(lines);
+
+    // ── THE ONE WRITING THIS TEST FOUND ────────────
+    //
+    // The first version counted every priced line, which on this fixture meant
+    // Distortion's 450 DKK: more than half the total, for a June festival on a
+    // February trip, in a figure printed under a line that says "there is
+    // nothing to buy for your dates". A refusal is the page telling a reader not
+    // to count on something. A total labelled what you pay may not count it.
+    is("a refused line is not in the figure", est.from, 145 + 0 + 110);
+    ok("the festival that does not run is not paid for", est.from < 450);
+    is("both refusals are reported rather than dropped in silence", est.refused, 2);
+    ok("and the sentence says why they are out", /nothing to buy/.test(describeEstimate(est)));
+    // An unpriced refusal is not counted twice, in two buckets, as though two
+    // different things were missing.
+    is("a refused line is not also counted as unpriced", est.unpriced, 2);
+    is("and the two unpriced ones are the searches", est.missing.length, 2);
+    ok("the ferry among them", est.missing.some(m => /ferry/i.test(m)));
+    ok("and the bed", est.missing.some(m => /sleep/i.test(m)));
+
+    // ── FREE IS A FIGURE, NOT A GAP ──────────────
+    // Leaving a free stop out would make the most certain line on the list look
+    // unpriced, and would put Nationalmuseet in a sentence about what is missing.
+    is("free entry is counted", est.counted, 3);
+    ok("and free entry is not called missing", !est.missing.some(m => /Nationalmuseet/.test(m)));
+
+    // ── A FLOOR, AND IT SAYS SO ────────────────
+    const said = describeEstimate(est);
+    ok("the sentence says from rather than a flat total", /^From 255 DKK per person/.test(said));
+    ok("and says what a floor is, in words", /lowest price/.test(said) && /floor rather than a forecast/.test(said));
+    // A bed is the biggest number on any trip and this list never holds a quote
+    // for one, only a search. Saying so is the difference between a floor and a
+    // figure somebody budgets a weekend against.
+    ok("and that a room is not in it", /a bed is not in it/.test(said));
+
+    // ── THE LOW END OF A RANGE, AND ONE CURRENCY ────────
+    {
+      const e = estimateFrom([{ name: "A", price: "145 DKK" }, { name: "C", price: "150 to 275 DKK" }]);
+      is("a range contributes its low end", e.from, 145 + 150);
+      // A high end summed is neither a floor nor a forecast, it is a number
+      // nobody will pay.
+      ok("not its high end", e.from < 145 + 275);
+    }
+    {
+      // There is no live rate in this app, and converting at a guessed one puts
+      // a wrong number inside a total that looks precise.
+      const e = estimateFrom([{ name: "A", price: "145 DKK" }, { name: "E", price: "25 EUR" }]);
+      is("a euro price is not converted into the total", e.from, 145);
+      is("it is reported as left out", e.otherCurrency, 1);
+      ok("and the sentence says so", /another currency/.test(describeEstimate(e)));
+      // kr is Danish for DKK and is counted, or every price read off a Danish
+      // site drops out of the total.
+      is("kroner written the Danish way still count", estimateFrom([{ name: "A", price: "110 kr" }]).from, 110);
+    }
+
+    // ── AND NOTHING COUNTED IS NOT A TOTAL OF ZERO ────────
+    // A guide whose every line is a search link has no estimate. "From 0 DKK"
+    // over one would be the worst sentence in this file.
+    is("a list with nothing priced has no estimate", estimateFrom([{ name: "S", price: "", kind: COST_KIND.STAY }]), null);
+    is("a list of refusals has none either", estimateFrom([{ name: "R", price: "450 DKK", refused: "x" }]), null);
+    is("an empty list has none", estimateFrom([]), null);
+    is("and junk does not throw", estimateFrom(null), null);
+    is("nor does the sentence for nothing", describeEstimate(null), "");
+    // The one case where a bed IS quoted, so the caveat must not be printed.
+    {
+      const e = estimateFrom([{ name: "Bed", price: "900 DKK", kind: COST_KIND.STAY }]);
+      is("a priced bed is counted", e.from, 900);
+      ok("and then nothing claims a bed is missing", !/a bed is not in it/.test(describeEstimate(e)));
+    }
+  }
 }
 
 // ── "ATTRACTIONS ALL SAY FREE" ──────────────────────────────────────
@@ -51416,6 +51739,26 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("a stop with no ticket link still shows its price", r.says("110 DKK"));
     ok("and never says we have no link", !/no link|could not find a link|we do not have/i.test(r.text));
 
+    // ── AND THE ESTIMATE, UNDER THE LINES IT IS MADE OF ────
+    //
+    // Oliver, 18 Sep 2026: "can you implement estimated cost into the guide?"
+    // The rules are asserted against costLedger above. What is asserted here is
+    // that a guide goes in and the number comes out, which is the half that
+    // shipped broken four times this month.
+    ok("the block prints an estimate", r.says("Estimated"));
+    ok("as a floor rather than a total", r.says("from"));
+    ok("and per head, which is what every priced line on the list is", r.says("per person"));
+    // Rosenborg 145 + Nationalmuseet free + Moens Klint 110. NOT Distortion's
+    // 450: this render's own markup says "nothing to buy for your dates" over
+    // that line, four assertions above.
+    ok("the figure is the one the lines add up to", r.says("255 DKK"));
+    ok("and the refused festival is not inside it", !r.says("705 DKK") && !r.says("865 DKK"));
+    ok("with the reason the refused lines are out", r.says("nothing to buy for"));
+    ok("and the caveat that a bed is not in it", r.says("a bed is not in it"));
+    // What is missing is NAMED. "and 2 more" is not a thing a reader can check.
+    ok("the unpriced lines are named", r.says("Not in the figure"));
+    ok("the bed among them", /Not in the figure[^.]*sleep/.test(r.text));
+
     // The disclosure is printed from the links on the page, not typed.
     ok("a partner link brings its disclosure", /commission|partner link/i.test(r.text));
     // And a partner link is marked for crawlers, which is a legal edge, not taste.
@@ -51435,6 +51778,23 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   {
     const r = await draw({ guide: {}, rowFor: () => null });
     is("and neither does an empty guide", r.html, "");
+  }
+
+  // ── AND A LIST WITH NOTHING PRICED PRINTS NO FIGURE ────
+  //
+  // The block still draws, because a bed and a crossing are things to arrange
+  // and belong on it. What must not appear is a number: "from 0 DKK" over a
+  // trip is worse than no estimate at all, and the absence of the estimate is
+  // the only thing separating those two from the outside.
+  {
+    const bare = {
+      _arrivalDate: "2027-02-12", _mode: "public transport",
+      days: [{ day: 1, stops: [{ name: "Nyhavn" }], glance: { stayArea: "Indre By", legs: [] } }],
+    };
+    const r = await draw({ guide: bare, rowFor: () => ({ _src: "town" }) });
+    ok("the block still lists what has to be arranged", r.says("Find a room"));
+    ok("but claims no estimate", !r.says("Estimated"));
+    ok("and prints no total of nothing", !/from 0 DKK/i.test(r.text));
   }
 
   // ── THE LABEL FOLLOWS THE KIND ───────────────────────────────────
@@ -56112,8 +56472,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      /if \(!hit \|\| !geocodeIsASettlement\(hit\) \|\| sType === "town" \|\| sType === "island" \|\| sType === "nightTown"\) return false;/.test(appN));
   ok("and the refusal is a decision in the log, not a silence",
      /decide\("whether Nominatim's coordinate is about this place"/.test(appN));
-  ok("both geocode attempts go through it",
-     (appN.match(/settlementRefused\(hit, /g) || []).length === 2);
+  // Three since 18 Sep: the place named in a correction goes first, ahead of
+  // the name that produced the wrong point. Every one of them is refused the
+  // same way, which is what this counts.
+  ok("every geocode attempt goes through it",
+     (appN.match(/settlementRefused\(hit, /g) || []).length === 3);
   ok("and the log can finally say what the geocoder found",
      /which found "\$\{String\(hit\.found\)\.slice\(0, 70\)\}"/.test(appN));
 }

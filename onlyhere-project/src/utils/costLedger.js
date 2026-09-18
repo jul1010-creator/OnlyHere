@@ -476,6 +476,102 @@ export const costLines = ({
 //   3. everything else             a cost to know about, nothing to do today
 //
 // Within each band, by day, because that is the order they will work through it.
+// ── "CAN YOU IMPLEMENT ESTIMATED COST INTO THE GUIDE" ──────
+//
+// Oliver, 18 Sep 2026. The list under What you pay has been per line since it
+// was built, and a reader planning a trip wants one number.
+//
+// ── A FLOOR, NOT A FORECAST ──────────────────
+//
+// Every rule below exists to stop this becoming a figure that is wrong in a way
+// nobody can see:
+//
+//   ONE CURRENCY. Only DKK is added up. There is no live rate in this app and
+//   converting at a guessed one would put a wrong number in a total that looks
+//   precise. A line in euros is counted as not counted.
+//
+//   THE LOW END OF A RANGE. "150 to 275 DKK" contributes 150. The answer is a
+//   floor, so it says FROM, and a floor built from high ends is neither.
+//
+//   FREE IS A FIGURE. A free line is counted, at zero, because leaving it out
+//   would make it look unpriced when it is the most certain line on the list.
+//
+//   AND WHAT IS MISSING IS SAID OUT LOUD. `unpriced` is how many lines carry no
+//   figure, and the render prints it. A total that quietly omits four stops is
+//   the "at a glance" failure with money attached.
+//
+//   AND A LINE WITH NOTHING TO BUY IS NOT A COST. Found by writing the
+//   assertion, 18 Sep 2026: on the February fixture this counted Distortion's
+//   450 DKK, which is more than half the total, into a trip whose own page says
+//   "there is nothing to buy for your dates" two lines above the figure. A
+//   refusal is the page telling the reader not to count on something, so a
+//   number labelled what you pay may not count it either. Refused lines are
+//   reported in their own bucket rather than dropped in silence.
+//
+// PER PERSON, and that is a property of the data rather than a choice: every
+// priced line in costLines is per head. The stay line carries no price at all,
+// because it is a search rather than a quote, so a room is named as not
+// included rather than guessed at.
+export const estimateFrom = (lines) => {
+  const rows = Array.isArray(lines) ? lines.filter(Boolean) : [];
+  let from = 0;
+  const counted = [], unpriced = [], otherCurrency = [], refused = [];
+  for (const l of rows) {
+    const text = String(l?.price ?? "").trim();
+    // The refusal is read before the price, and a priced refusal counts as
+    // refused rather than as unpriced: the figure is real, it is just not a
+    // figure this reader pays. An unpriced refusal is nobody's business twice.
+    if (l?.refused) { if (text) refused.push(l); continue; }
+    if (!text) { unpriced.push(l); continue; }
+    if (/^free$/i.test(text) || /\bgratis\b/i.test(text)) { counted.push({ line: l, kroner: 0 }); continue; }
+    const found = pricesIn(text).filter(p => p.currency);
+    const dkk = found.find(p => String(p.currency).toUpperCase() === "DKK");
+    if (!dkk) {
+      if (found.length) otherCurrency.push(l);
+      else unpriced.push(l);
+      continue;
+    }
+    const lo = Number(dkk.lo);
+    if (!Number.isFinite(lo)) { unpriced.push(l); continue; }
+    from += lo;
+    counted.push({ line: l, kroner: lo });
+  }
+  // NOTHING COUNTED IS NOT A TOTAL OF ZERO. A guide whose every line is a
+  // search link has no estimate, and printing "from 0 DKK" over one would be
+  // the worst sentence in this file.
+  if (!counted.length) return null;
+  return {
+    from,
+    counted: counted.length,
+    unpriced: unpriced.length,
+    otherCurrency: otherCurrency.length,
+    refused: refused.length,
+    // Named, because "and 4 more" is not a thing anybody can check.
+    missing: unpriced.map(l => String(l?.name || "")).filter(Boolean).slice(0, 6),
+    // A room is the biggest number on any trip and this list never holds one.
+    stayIncluded: counted.some(c => c.line?.kind === COST_KIND.STAY),
+  };
+};
+
+// The sentence, in one place, so the render cannot invent a different claim
+// from the same numbers.
+export const describeEstimate = (e) => {
+  if (!e) return "";
+  const bits = [`From ${e.from} DKK per person`];
+  if (!e.stayIncluded) bits.push("a bed is not in it");
+  if (e.unpriced) bits.push(`${e.unpriced} line${e.unpriced === 1 ? "" : "s"} on this list ${e.unpriced === 1 ? "carries" : "carry"} no price yet`);
+  if (e.otherCurrency) bits.push(`${e.otherCurrency} priced in another currency and left out`);
+  // Named rather than dropped quietly, because a reader who can see a 450 DKK
+  // line above a total that does not include it is owed the reason.
+  // "nothing to buy for them" rather than a date reason: off_window is about
+  // the dates, sold_out and off_sale are not, and one sentence covers all six
+  // refusals without claiming the wrong one.
+  if (e.refused) bits.push(`${e.refused} left out because there is nothing to buy for ${e.refused === 1 ? "it" : "them"}`);
+  // FROM, and the reason said plainly: every figure on the list is a lowest
+  // price, so the sum of them is a lowest price too.
+  return `${bits.join(", ")}. Every figure here is a lowest price, so this is a floor rather than a forecast.`;
+};
+
 export const byUrgency = (lines) =>
   [...(lines || [])].sort((a, b) => {
     const rank = (l) => (l.href && l.bookAhead ? 0 : l.href ? 1 : 2);

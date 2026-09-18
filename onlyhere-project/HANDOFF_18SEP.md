@@ -2,9 +2,13 @@
 
 Written for the next session. Oliver ran this one on Opus 5.
 
-**17,783 assertions pass and the build is green.** That is up 163 from the
-17,620 the 17 Sep handoff claimed, and 199 from the 17,584 that were committed
+**17,882 assertions pass and the build is green.** That is up 262 from the
+17,620 the 17 Sep handoff claimed, and 298 from the 17,584 that were committed
 at the time.
+
+Every named follow-up this handoff opened with has since been built. Sections
+2.13 to 2.18 are the second half of the session, written after the first draft
+of this file, and section 3 is what is left.
 
 ---
 
@@ -62,8 +66,9 @@ were taken. The source-trust and glance clusters were decided in-session.
 
 ## 1. WHAT HE HAS TO DO
 
-1. **Commit and push.** Twenty files are changed on his disk, byte-compared
-   after writing. The pre-push hook will run the suite and a build: both pass.
+1. **Commit and push.** Twenty six files are changed on his disk, every one of
+   them staged back and byte-compared after writing. The pre-push hook will run
+   the suite and a build: both pass here.
 2. **The three SQL scripts**, if they are not run yet. `gemlyx_tables_18sep.sql`
    is in the chat sidebar with all three in one paste, safe to re-run.
 3. **Name the two partner-ads banners.** This is the only thing blocking two
@@ -77,11 +82,20 @@ were taken. The source-trust and glance clusters were decided in-session.
    Nothing renders until then, on purpose: a paid row that cannot name its
    partner has no honest wording available. partner-ads blocks automated
    fetching, so the name has to come from him.
-4. **Test one Booking link** after the deploy. Press a Where to stay button on a
-   published guide. It should pass through `kqzyfj.com` and land on Booking's
-   results for that town. If it lands on Booking's front page, CJ is not
-   honouring the deep link and `BOOKING_CJ_LINK` should be emptied rather than
-   left half working.
+4. **Press three buttons after the deploy**, because three things are wired
+   that nothing here can prove from the outside:
+   - **A Booking button** on a published guide. It should pass through
+     `kqzyfj.com` and land on Booking's results for that town. If it lands on
+     Booking's front page, CJ is not honouring the deep link and
+     `BOOKING_CJ_LINK` should be emptied rather than left half working.
+   - **The good and the budget button on the same day.** Both go to Booking for
+     the same town and differ only by the sort key, `STAY_ORDER` in
+     `utils/affiliates.js`. If the two pages come back in the same order,
+     Booking is ignoring the key and the two labels are a distinction the page
+     cannot keep.
+   - **The named hotel**, once the banner is named. It should reach partner-ads
+     and then the hotel, and it only appears on a day the route already spends
+     in that town.
 
 ---
 
@@ -193,8 +207,9 @@ chooses one from Wiki itself." The button asked for `limit=1` and took
 lead image. It now searches eight and shows a grid, keyed to the one fact row,
 and picking one writes the image and its credit together.
 
-The grid is a new component, `components/CommonsResults.jsx`. **Named follow-up
-below:** the Media panel and the draft panel still draw their own copies.
+The grid is a new component, `components/CommonsResults.jsx`. The Media panel
+and the draft panel drew their own copies of it when this section was written,
+and section 2.14 is them moving onto it later the same night.
 
 ### 2.9 A table one column short is not a missing table
 
@@ -274,6 +289,129 @@ page about dogs.
   something about THEIR trip changed. Nothing to undo if he picks one of the
   other two.
 
+### 2.13 The measured-field escape hatch
+
+Follow-up 1 from the first draft of this file, built the same night. Checker
+section 3c and Fable's design, in `utils/correction.js`:
+
+- `MEASURED_BY` maps a field to the RECORD that makes it a measurement:
+  `travelTime` and `nearestStation` to `__journey`, `lat` and `lon` to `__lat`
+  and `__lon`. `isPipelineOwned(key, entry)` now locks a field only while its
+  record exists, so a row carrying a travel time and no journey has PROSE in
+  that field and a correction may fix prose. `website` and `ticketStatus` stay
+  locked unconditionally: neither is derived from a coordinate, so a wrong one
+  is not a symptom of a wrong point. The second argument is optional and the
+  answer without an entry is the answer the function has always given, so no
+  existing caller changed.
+- `remeasureFor` is the hatch. A confirmed claim that resolves to a measured
+  field does not patch the field: it drops the MEASUREMENT, journey and
+  coordinate with it, empties the two derived fields rather than rewriting them,
+  and records `__remeasure` carrying the ADDRESS the human gave. One pending
+  re-measure per row. A claim that names no place is refused, because clearing a
+  row for nothing is worse than leaving it wrong.
+- **The address is the point of it.** Fable's warning: run 1 derived Aalborg St.
+  twice, at steps 10 and 12, from one listing. `App.jsx` geocodes
+  `askedAgain.from` BEFORE the name and never reuses the row's own coordinate,
+  or the re-measure reproduces the same wrong stop and the hatch is theatre.
+- `describeRemeasure` says what happened, in the terms he asked for on 7 Sep
+  about affiliate links: tell him what was inputted so he can test whether it
+  got it right.
+
+The one part of Fable's design NOT built: a re-measure that lands within
+`IS_THE_CENTRE_KM` of the invalidated point should report "same point" and
+change nothing. Today it re-measures and the log says where from. Worth adding
+the day somebody corrects a row and gets the same answer back.
+
+### 2.14 The three Commons grids became one
+
+Follow-up 2, and the reason it was safe to do after all: the facts panel's
+Wikimedia button never had a grid. Oliver, 18 Sep: "the published facts do not
+allow me to pick out Wikimedia. It just chooses one from Wiki itself." It asked
+for one result and took it.
+
+`components/CommonsResults.jsx` is now the one results grid: the loading line,
+the error line, the nothing-found line, the which-lookups-answered warning and
+the cards. All three panels draw it, `<CommonsResults finder onUse busy
+busyUrl />`. The query box and the caption checkbox stayed where they were,
+since those are each panel's own wiring, which is why the grid was never shared
+in the first place. The suite's pinned strings moved to the component in the
+same edit, each with a comment saying which panel they came from.
+
+### 2.15 Who may decide a price
+
+Follow-up 5. Checker section 4: TinderBox step 28 printed "1395 DKK, from
+danceus.org", an American dance listing, which won the slot because the
+operator's own shop could not be read.
+
+`priceSource` in `utils/entryAudit.js` takes `mayDecide`, and `App.jsx` builds
+it off the ranked sources it already has: `official` and `listing` may settle a
+figure, `reference`, `tourism` and `blog` may surface a candidate and may not.
+An unranked host is refused rather than admitted, which is the direction of
+error this codebase takes everywhere. A near miss now returns
+`refused: "mayNotDecide"` with the host named, so the log says "danceus.org had
+the number and may not state it" rather than going quiet.
+
+### 2.16 Firecrawl and a non-ASCII host
+
+Follow-up 6, half of it. `bjørnø.net` was the top-ranked official source and
+Firecrawl refused it twice, so the draft was written off a tourist board
+listing. `asciiUrl` in `utils/pageScan.js` converts the host to its punycode
+form before the request, using the encode half written beside the decode from
+section 2.12, and `firecrawlBody` goes through it. The log still prints the
+readable name.
+
+### 2.17 The affiliate copy, and the Tiqets price
+
+Three of his messages, all about the same thing: the page about money may not
+say anything untrue, and may not hedge so hard that a partner reading it would
+object.
+
+- **"Book direct: that is often the better price" is gone.** He is right that it
+  was not true: where an affiliate is materially pricier it is not included at
+  all, and several of these programmes are the page people book from anyway. The
+  five programme disclosures and `partnerDisclosure` now say **"You pay exactly
+  what you would pay reaching the same page without it"**, which is the claim
+  that holds, in English, Danish and German.
+- **"Be careful with WeGoTrip" is gone**, and the reservation behind it (that it
+  is the closest thing on the list to what Gemlyx writes itself) is a code
+  comment. A row belongs on that page only if there is a reason to use it, and a
+  new assertion refuses any roster row whose `why` warns the reader off the
+  thing it recommends.
+- **Tiqets: "nearly identical price", not "the same price".** His words: "tiqets
+  prices seem to be slightly different from the page own. I don't want to lie to
+  users... Sell the affiliate by saying it's much more convenient to use." Rows
+  301 and 5 of `data/essentials.js` and the Tiqets roster row now sell one
+  order, one card charged once, every ticket as a QR code, free cancellation on
+  most of them, against four checkouts and four cancellation policies at four
+  own sites. The price claim is "nearly identical to the gate price" and the
+  attraction's own site is still named as the one to check against. Asserted for
+  every paid essentials row rather than for these two, so a third cannot ship
+  claiming an identical price.
+
+### 2.18 Estimated cost in the guide
+
+"Can you implement estimated cost into the guide?" `estimateFrom` and
+`describeEstimate` in `utils/costLedger.js`, rendered under the What you pay
+list rather than over it: a total at the top is a number a reader takes away on
+its own, and this one has conditions that only make sense after the lines.
+
+Every rule exists to stop it being wrong in a way nobody can see. DKK only,
+because there is no live rate in this app and a guessed one puts a wrong number
+inside a figure that looks precise. The LOW end of a range, so it is a floor and
+says FROM. Free counted, at zero, because leaving it out would make the most
+certain line on the list look unpriced. Unpriced lines counted AND NAMED, since
+"and 2 more" is not a thing a reader can check. A bed named as not included,
+because the stay line is a search rather than a quote. And `null` rather than
+zero when nothing is priced: "from 0 DKK" over a trip is worse than no estimate.
+
+**Writing the assertion found the bug in it.** The first version counted every
+priced line, which on the February fixture meant Distortion's 450 DKK: more than
+half the total, for a June festival, inside a figure printed under a line
+saying "there is nothing to buy for your dates". A refusal is the page telling a
+reader not to count on something, so a refused line is now its own bucket,
+reported in the sentence and never in the number. The figure on that fixture
+went from 865 DKK to 255.
+
 ---
 
 ## 3. WHAT IS STILL OPEN
@@ -286,36 +424,32 @@ page about dogs.
 
 ### Named follow-ups, in the order I would take them
 
-1. **The measured-field escape hatch.** Checker section 3c, and the biggest
-   thing left. `nearestStation` is in `MEASURED_FIELDS`, so when the coordinate
-   is wrong the one field a human can see is wrong is the one they cannot
-   correct. Fable designed it in full: `isPipelineOwned` should lock a field
-   only while its RECORD exists (`__journey`, `__lat`), a correction naming a
-   measured field should clear the record and write `__remeasure` carrying the
-   corrected ADDRESS rather than editing the field, one pending re-measure per
-   row, and a re-measure landing within `IS_THE_CENTRE_KM` of the invalidated
-   point reports "same point" and changes nothing. Its warning is worth
-   repeating: a re-measure from the same inputs reproduces the same stop, which
-   is why the hatch has to carry the address.
-2. **The two older Commons grids** onto `components/CommonsResults.jsx`. Left
-   alone tonight on purpose: both are welded to their panel's own wiring and the
-   suite pins strings inside them, and a refactor that also rewrites its own
-   assertions in the same edit as a bug fix is one nobody can review.
-3. **Ferry resellers.** `ferrysavers.co.uk` and `aferry.com` were read for
+The six in the first draft of this file are four built and two left. What
+remains, and what the new work opened:
+
+1. **The same-point answer for a re-measure.** Section 2.13. A correction that
+   re-measures to within `IS_THE_CENTRE_KM` of the point it invalidated should
+   say "same point, nothing changed" rather than quietly measuring again. It is
+   the difference between a hatch that reports and one that absorbs.
+2. **Ferry resellers.** `ferrysavers.co.uk` and `aferry.com` were read for
    15,000 characters across two runs. The operators now outrank them, which was
    the half that mattered, but they are still ordinary sources for a fare.
-4. **The age gate and identity, properly separated.** Run log section 4. Tonight
-   fixed the identity side of ranking and the price log's sentence. A small
+3. **The age gate and identity, properly separated.** Run log section 4. A small
    ferry's own page with 1994 in the footer is still demoted for perishable
    claims, which the run log itself argues is correct, and the contradiction it
-   produced is gone. If he wants the operator's own page to be able to state a
+   produced is gone. If he wants an operator's own page to be able to state a
    fare at eight months old, that is a product decision and not a bug.
-5. **danceus.org in a price question.** Checker section 4: an American dance
-   listing won the price slot because the operator's shop could not be read.
-   What may SURFACE a candidate and what may DECIDE one, again.
-6. **Bjørnø had no operator page at all.** Firecrawl refused `bjørnø.net` twice
-   and it was the top-ranked official source, so the draft was written off a
-   tourist board listing.
+4. **Bjørnø, the rest of it.** Section 2.16 fixed the host. Whether Firecrawl
+   can read that site at all is unknown until a run tries it, and a draft
+   written off a tourist board listing should probably say so in the log.
+5. **The estimate on a guide with a real stay price.** Section 2.18 counts a
+   stay line the day one carries a figure, and nothing carries one today:
+   `bookingUrl` is a search, not a quote. If he ever wants a bed inside the
+   number, that is where it would come from, and the caveat sentence already
+   knows how to disappear.
+6. **`partnerAdsPlacements` is empty until he names the banners.** Not a bug and
+   not a follow-up for a session: two finished features render nothing until
+   those two lines exist in `config.js`.
 
 ---
 
@@ -336,3 +470,10 @@ page about dogs.
 - Two scripted patches wrote `{{` into real code, from a Python format string
   that was never formatted. Caught by the build in seconds, but worth the note:
   a patch script that builds JavaScript needs its braces checked before it runs.
+- **The assertion is part of the change, not a receipt for it.** Section 2.18 is
+  the clearest case this session: the estimate passed a manual read and a build,
+  and writing its test is what surfaced a figure that was 240 percent of the
+  honest one. Nothing shipped tonight without its assertions in the same edit.
+- Every file he has on disk was byte-compared at the end of the session, not
+  only the ones written in the last batch. Two were the same size and different
+  content earlier in the week, which is the failure that check exists for.

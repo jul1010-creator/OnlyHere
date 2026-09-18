@@ -54,7 +54,11 @@ const ROSTER = [
     key: "tiqets",
     name: "Tiqets",
     sells: "Attraction tickets",
-    why: "Their product pages cover a lot of what Denmark charges to get into, and a link goes to the exact attraction rather than a search.",
+    // ── SOLD ON CONVENIENCE, NOT ON PRICE ──────────
+    // Oliver, 18 Sep 2026: "Sell the affiliate by saying it's much more
+    // convenient to use." Their prices are nearly identical to the gate rather
+    // than identical, so the case for them is the case that is true.
+    why: "One order and one card charged once for several attractions, in English, with every ticket as a QR code on your phone and free cancellation on most of them. Four attractions bought at four own sites is four checkouts and four cancellation policies. Prices are nearly identical to the gate rather than identical, so the attraction's own site is still the one to check against.",
     live: tiqetsActive,
   },
   {

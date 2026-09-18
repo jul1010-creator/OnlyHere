@@ -180,7 +180,117 @@ export const allowedFieldsFor = (entry, claims) => {
 // fields have been added to this codebase and shapeForLive forgot four of them.
 // The sixth is protected here on the day it is written.
 export const MEASURED_FIELDS = ["travelTime", "ticketStatus", "website", "nearestStation", "lat", "lon"];
-export const isPipelineOwned = (key) => String(key || "").startsWith("__") || MEASURED_FIELDS.includes(key);
+
+// ── AND A MEASURED FIELD MEASURED FROM THE WRONG POINT ──────
+//
+// Oliver, 16 Sep 2026, on the panel: "what da fuck. Aalborg st. is the closest
+// to Radhuspladsen in Copenhagen? And even when I give the fact checker a
+// direct ticket link, it rejects it."
+//
+// Both halves of that are this list. nearestStation is on it, so
+// isPipelineOwned protected it and keepMeasured put it back, which is right
+// when the measurement is trustworthy. That run's coordinate was an organiser's
+// office in Aalborg, so the one field he could SEE was wrong was the one field
+// he was structurally unable to correct. Each half is defensible and together
+// they are a trap.
+//
+// ── WHAT MAKES A VALUE MEASURED IS THE RECORD, NOT THE NAME ────
+//
+// So the lock asks for the record rather than the field name. travelTime and
+// nearestStation are measurements while `__journey` is on the row; lat and lon
+// while `__lat` and `__lon` are. A row carrying a travel time and no journey
+// has written prose in that field, which is what provenance.js already says
+// out loud: it defines measured as `!!p.__journey`.
+//
+// website and ticketStatus stay locked unconditionally. They are not derived
+// from a coordinate, so a wrong one is not a symptom of a wrong point, and
+// there is no re-measure to ask for.
+//
+// The second argument is optional and the answer with no entry is the answer
+// this function has always given, so every existing caller is unchanged.
+export const MEASURED_BY = {
+  travelTime: "__journey",
+  nearestStation: "__journey",
+  lat: "__lat",
+  lon: "__lon",
+};
+
+const hasRecord = (entry, key) => {
+  const v = (entry || {})[key];
+  return v !== undefined && v !== null && v !== "";
+};
+
+export const isPipelineOwned = (key, entry = null) => {
+  if (String(key || "").startsWith("__")) return true;
+  if (!MEASURED_FIELDS.includes(key)) return false;
+  const record = MEASURED_BY[key];
+  if (!record || !entry) return true;
+  return hasRecord(entry, record);
+};
+
+// ── AND THE HATCH: INVALIDATE THE MEASUREMENT, NEVER TYPE IT ────
+//
+// The rule worth keeping is that a human may not hand-write a measured value:
+// a typed travel time is a guess wearing the authority of a measurement. The
+// rule worth losing is that a wrong coordinate is permanent.
+//
+// So a confirmed claim that resolves to a measured field does not patch the
+// field. It drops the MEASUREMENT, the journey and the coordinate with it, and
+// records what the human said the place is, for the next run to measure from.
+// The human's authority is over the PLACE. The station and the minutes are
+// recomputed, never typed.
+//
+// FROM THE ADDRESS, and this is the part that cannot be skipped: run 1 derived
+// Aalborg St. twice, at steps 10 and 12, from one listing. A re-measure that
+// starts from the same name reproduces the same wrong stop, so the hatch
+// carries the corrected address or it is theatre.
+export const REMEASURE = "__remeasure";
+
+// The fields a re-measure invalidates, which is every value derived from the
+// coordinate. ticketStatus and website are not among them.
+export const REMEASURE_CLEARS = ["__journey", "__lat", "__lon", "travelTime", "nearestStation"];
+
+export const pendingRemeasure = (entry) => {
+  const r = (entry || {})[REMEASURE];
+  return r && typeof r === "object" && String(r.from || "").trim() ? r : null;
+};
+
+// "" when there is nothing usable to measure from, which is the one case this
+// refuses: a claim saying the station is wrong and not saying where the place
+// is leaves nothing to re-measure and would clear a row for nothing.
+export const remeasureFor = (entry, { address = "", why = "", at = "" } = {}) => {
+  const from = String(address || "").trim();
+  if (!from) return null;
+  // ONE PENDING RE-MEASURE PER ROW. A second claim while one is queued is the
+  // same request twice, and clearing an already-cleared measurement to write a
+  // different address is how a row ends up measured from whichever claim
+  // arrived last rather than from the one somebody checked.
+  if (pendingRemeasure(entry)) return null;
+  const patch = { [REMEASURE]: { from, why: String(why || "").slice(0, 200), at: String(at || "") } };
+  for (const k of REMEASURE_CLEARS) patch[k] = k.startsWith("__") ? null : "";
+  return patch;
+};
+
+// What the panel says it did, in the terms he asked for on 7 Sep: "just make
+// sure that it explicitly tells me that it has inputted an affiliate link, so I
+// can test if it got it right." Same principle, different field.
+// A value that could be a PLACE. A claim about a travel time proposes "about
+// three hours" and a claim about a station proposes a station, and only one of
+// those is something to measure from. Geocoding a duration is how a row would
+// end up measured from nowhere at all.
+export const looksLikeAPlace = (v) => {
+  const t = String(v || "").trim();
+  if (t.length < 3 || t.length > 120) return false;
+  if (!/[a-z\u00e6\u00f8\u00e5]{3}/i.test(t)) return false;
+  if (/^(?:about|approx\.?|ca\.?|roughly)?\s*\d/i.test(t)) return false;
+  if (/\b(?:hours?|hrs?|minutes?|mins?|timer|minutter|dkk|kr\.?)\b/i.test(t)) return false;
+  return true;
+};
+
+export const describeRemeasure = (r) => {
+  if (!r) return "";
+  return `The measurement was dropped rather than edited: the journey, the coordinate, the travel time and the arrival point are cleared, and the next draft measures them from "${r.from}". A measured value is never typed in by hand.`;
+};
 
 // Publisher notes are the other half. A correction may add to uncertainties and
 // may clear one it genuinely resolved, but "STOP, DO NOT PUBLISH" is not a claim
@@ -209,7 +319,10 @@ const SHOUTED_NOTE = /^(?:STOP, DO NOT PUBLISH|CHECK BEFORE PUBLISHING|PIPELINE 
 // where nobody confirmed anything, and untouchable on one where the operator
 // did. The call site knows which, and this function should not have to guess.
 export const keepMeasured = (before, corrected, { alsoKeep = [] } = {}) => {
-  const locked = (k) => isPipelineOwned(k) || alsoKeep.includes(k);
+  // `before` is handed over, so a field whose record is gone is not locked. See
+  // MEASURED_BY: a row carrying a travel time and no __journey has prose in
+  // that field, and a correction is allowed to fix prose.
+  const locked = (k) => isPipelineOwned(k, before) || alsoKeep.includes(k);
   if (!corrected || typeof corrected !== "object") {
     return { patched: before, restored: [], why: "The correction returned nothing usable, so the draft is unchanged." };
   }
@@ -1587,8 +1700,42 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
     ];
   }
 
+  // ── AND A MEASURED FIELD IS RE-MEASURED, NEVER TYPED ──────
+  //
+  // The Aalborg St. trap, closed. A confirmed or asserted claim that resolves to
+  // a field the pipeline measured does not get to write that field: a typed
+  // travel time is a guess wearing the authority of a measurement. It drops the
+  // MEASUREMENT instead, the journey and the coordinate with it, and records
+  // where the human says the place is so the next run measures from there.
+  //
+  // Only when the claim proposes something that could be a place. A claim about
+  // a duration proposes a duration, and there is nothing to measure from in it.
+  let remeasured = null;
+  {
+    const hit = applying
+      .map(c => ({ c, field: resolveField(entry, c.field) }))
+      .find(x => x.field && MEASURED_BY[x.field] && isPipelineOwned(x.field, entry));
+    if (hit) {
+      const said = String(hit.c.correctValue || hit.c.proposed || "").trim();
+      const patch = looksLikeAPlace(said) ? remeasureFor(entry, { address: said, why: hit.c.says || "", at }) : null;
+      if (patch) {
+        Object.assign(patched, patch);
+        remeasured = { field: hit.field, from: said };
+        hit.c.evidence = `${hit.c.evidence || ""} ${describeRemeasure(patch[REMEASURE])}`.trim();
+        patched.uncertainties = [
+          ...(Array.isArray(patched.uncertainties) ? patched.uncertainties : []),
+          `The measurement for ${hit.field} was dropped rather than edited, and the next draft will measure it from "${said}". Nothing on this row states a travel time or an arrival point until it does.`,
+        ];
+      } else if (said) {
+        // Said out loud rather than swallowed: he corrected a measured field,
+        // the field did not move, and the reason is not that he was ignored.
+        hit.c.evidence = `${hit.c.evidence || ""} Not written into ${hit.field}: that field is measured rather than typed, and "${said}" is not something a coordinate can be taken from. Give the place or the address and the measurement is dropped and taken again.`.trim();
+      }
+    }
+  }
+
   const changed = Object.keys(patched).filter(k => JSON.stringify(patched[k]) !== JSON.stringify(entry?.[k]));
-  return { claims: verified, confirmed, rejected, unresolved, asserted, fromPaste: !mine, patched, changed, reverted, allowed };
+  return { claims: verified, confirmed, rejected, unresolved, asserted, fromPaste: !mine, patched, changed, reverted, allowed, remeasured };
 };
 
 // ── THE REWRITE PASS ────────────────────────────────────────────────

@@ -409,7 +409,7 @@ export const UI_STRINGS = {
   // answer "does this link earn"; affiliateNote is the one render-facing
   // accessor and it translates. A test asserts this column and their string are
   // the same sentence, or the two drift apart the first time either is edited.
-  "affiliate.disclosure": { en: "Booking through this link may earn Gemlyx a small commission. It costs you nothing and does not change the price.", da: "Booker du gennem dette link, kan Gemlyx få en lille kommission. Det koster dig ikke noget og ændrer ikke prisen.", de: "Wenn du über diesen Link buchst, kann Gemlyx eine kleine Provision erhalten. Für dich kostet es nichts und der Preis ändert sich nicht." },
+  "affiliate.disclosure": { en: "Booking through this link may earn Gemlyx a small commission. You pay exactly what you would pay reaching the same page without it.", da: "Booker du gennem dette link, kan Gemlyx få en lille kommission. Du betaler præcis det samme, som hvis du selv fandt den samme side.", de: "Wenn du über diesen Link buchst, kann Gemlyx eine kleine Provision erhalten. Du zahlst genau so viel, wie wenn du dieselbe Seite ohne den Link aufrufst." },
 
   // ── THE SCREEN A DANE MEETS WHEN THEY TRY TO KEEP A GUIDE ─────────
   //

@@ -288,8 +288,31 @@ export const FIRECRAWL_TIMEOUT_MS = 30000;
 //
 // `fresh` sets maxAge to 0, which makes Firecrawl fetch rather than serve. It
 // costs a credit, and a redraft is already the expensive path.
+// ── AND A DANISH HOST GOES OUT AS ASCII ────────────
+//
+// Bjorno, 16 Sep 2026, steps 11 and 14: `firecrawl-refused` twice on
+// bjoernoe.net written with its real letters, and it was the TOP RANKED
+// official source for that draft. Step 16 then said "NO operator page was
+// read" and the entry was written off a tourist board listing.
+//
+// The host left here with non-ASCII characters in it. A URL on the wire is
+// meant to carry the punycode form, new URL() produces it for nothing, and no
+// API is obliged to accept the other one. Whether that was the whole reason for
+// those two refusals is not provable from the log, and it costs nothing to
+// stop being one of the possible reasons.
+//
+// The PATH is left exactly as it came: percent-encoding a path that is already
+// encoded is how a working address turns into a 404.
+export const asciiUrl = (url) => {
+  const raw = String(url || "").trim();
+  try {
+    const u = new URL(raw);
+    return u.href;
+  } catch { return raw; }
+};
+
 export const firecrawlBody = (url, { fresh = false } = {}) => ({
-  url,
+  url: asciiUrl(url),
   // markdown, not html: onlyMainContent already drops the nav, the cookie
   // banner and the footer, which is the half of every scrape we were paying
   // OpenAI to read past.

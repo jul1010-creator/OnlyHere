@@ -146,7 +146,7 @@ import { isRecording, startRecording, stopRecording, record, recordedEvents, rec
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
 import { journeyParts, journeyFigure, WAIT_INSIDE_TOTAL, NO_TRANSIT_NOTE, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, islandLegProblems, closedButPlanned, arrivalStop, arrivalGlanceRow, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
-import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS, urlsIn, dropAppliedClaims } from "./utils/correction";
+import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS, pendingRemeasure, urlsIn, dropAppliedClaims } from "./utils/correction";
 import { branchesOf, branchCandidates, branchFromCandidate, mergeBranches, branchLabel, branchLine, coordForTown, MAX_BRANCHES } from "./utils/branches";
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance, staleUncertainties, describeStale } from "./utils/glanceExtract";
 import { showsJourney, journeyOriginFor, journeyOriginPoint, IS_THE_CENTRE_KM } from "./utils/journeyScope";
@@ -3845,9 +3845,29 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // islandHere, because the kommune is not known until the coordinate is.
       knownIsland = namedIslandOf(knownRow || {}, "");
       let coords = null, via = "", precise = true;
+      // ── AND A ROW ASKING TO BE RE-MEASURED IS NOT TRUSTED ──────
+      //
+      // A correction that named a measured field dropped the measurement rather
+      // than editing it, and wrote down where the place is. See
+      // remeasureFor in utils/correction.js and the Aalborg St. run it was
+      // written for.
+      //
+      // TWO THINGS FOLLOW and both matter. The row's own coordinate is the one
+      // that was refused, so it must not be reused as "cheapest and best". And
+      // the lookup runs on the ADDRESS HE GAVE rather than on the name, because
+      // the name is what produced the wrong point twice in one run.
+      const askedAgain = pendingRemeasure(knownRow);
       // A published row already holds a reviewed coordinate. Cheapest and best.
-      const knownCoord = placeCoords(knownRow || {});
+      const knownCoord = askedAgain ? null : placeCoords(knownRow || {});
       if (knownCoord) { coords = knownCoord; via = "the coordinate already on the published row"; }
+      if (askedAgain) {
+        note("A re-measure was asked for", {
+          provider: "fetch", outcome: "ok", used: true,
+          detail: "a correction dropped the measurement rather than editing it",
+          got: `measuring from "${askedAgain.from}" rather than from the name${askedAgain.why ? `, because: ${String(askedAgain.why).slice(0, 120)}` : ""}`,
+          why: "The coordinate on the row is the one that was refused, so it is not reused.",
+        });
+      }
       // ── AND NOMINATIM'S ANSWER GETS THE SAME QUESTION GOOGLE'S DOES ──
       //
       // Meatpacking District, 1 Sep: "55.6747, 12.5744 via Nominatim, on the
@@ -3875,6 +3895,16 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         });
         return true;
       };
+      // THE ADDRESS HE GAVE GOES FIRST. A re-measure exists because the name
+      // produced the wrong point, so asking the name again first would spend the
+      // call to get the same answer. See remeasureFor.
+      if (!coords && askedAgain) {
+        const hit = await geocodePlace(`${askedAgain.from}, Denmark`);
+        if (hit && !settlementRefused(hit, askedAgain.from)) {
+          coords = hit;
+          via = `Nominatim, on the place named in the correction, "${askedAgain.from}"${hit.found ? `, which found "${String(hit.found).slice(0, 70)}"` : ""}`;
+        }
+      }
       if (!coords) {
         const hit = await geocodePlace(name);
         if (hit && !settlementRefused(hit, name)) { coords = hit; via = `Nominatim, on the name${hit.found ? `, which found "${String(hit.found).slice(0, 70)}"` : ""}`; }
@@ -6772,6 +6802,12 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
       // This ranks by SOURCE rather than by ENGINE, so Perplexity's citations
       // are ranked like any other URL and its synthesis with nothing behind it
       // ranks under everything.
+      // ── AND WHO MAY DECIDE A PRICE ──────────────
+      // Declared with the ranked list because it reads the classes off it. An
+      // official page is the operator, a listing is a ticket seller or a
+      // transport operator, and those two are who a figure may come from. A
+      // tourism board, an encyclopedia and a blog may SURFACE a candidate and
+      // may not settle what it costs. Same split the Facebook carve-out makes.
       const rankedSources = rankSources(
         [...new Set([...founderUrls, ...candidateUrls])].map(u => ({ url: u, text: urlSaidWhat.get(u) || "" })),
         // ── AND WHETHER THIS SUBJECT IS ABOUT THIS YEAR ────────────
@@ -6782,6 +6818,20 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
         // essential are not, and their encyclopedia keeps its place.
         { officialHosts: [...officialHosts, ...(placesWebsite ? [domainOf(placesWebsite)] : [])], living: LIVING_TYPES.includes(sType) }
       );
+      // The classes, read once, so a price question can ask who is speaking.
+      // Unknown hosts are refused rather than admitted: a page nothing ranked
+      // is a page nothing vouched for, which is the direction of error this
+      // codebase takes everywhere else.
+      const priceClassOf = new Map(rankedSources.map(r => [String(r.host || "").toLowerCase(), r.cls]));
+      const MAY_PRICE = ["official", "listing"];
+      const priceDecider = (url) => {
+        const h = domainOf(url).toLowerCase();
+        if (!h) return false;
+        for (const [host, cls] of priceClassOf) {
+          if (h === host || h.endsWith(`.${host}`)) return MAY_PRICE.includes(cls);
+        }
+        return false;
+      };
       const orderBlock = sourceOrderBlock(rankedSources, { living: LIVING_TYPES.includes(sType) });
       note("Source order", {
         provider: "tavily",
@@ -7722,7 +7772,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         const statedOnNow = (() => {
           if (!pt.checked || !pt.untraced.length) return null;
           try {
-            const found = priceSource(readerText(t), pagesByUrl, rankedSources.map(r => r.host));
+            const found = priceSource(readerText(t), pagesByUrl, rankedSources.map(r => r.host), { mayDecide: priceDecider });
             return found ? domainOf(found.url) : null;
           } catch { return null; }
         })();
@@ -7842,6 +7892,12 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           // have to reach into sourcePolicy. See priceSource for the Bybjerg
           // citation this fixes.
           const src = priceSource(readerText(t), pagesByUrl, rankedSources.map(r => r.host), {
+            // ── WHO MAY DECIDE A PRICE ────────────────
+            // TinderBox, step 28: "1395 DKK, from danceus.org", an American
+            // dance listing, which won the slot because the operator's own shop
+            // could not be read. The operator sets a price and a ticket seller
+            // takes the money; everybody else is repeating it. See priceSource.
+            mayDecide: priceDecider,
             isAbout: (pageText, url) => sourceIsAboutPlace(pageText, { name: t?.name, town: t?.town || t?.city || t?.location, url, theNameIsAStreet: NAME_IS_A_STREET.includes(sType) }),
           });
           if (src && src.offSubject) {
@@ -7879,7 +7935,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           // draft nothing supported the price at all. Answering with the host,
           // or with null, is the difference between telling him to go and find
           // the page and telling him to cut the number.
-          const traced = priceSource(readerText(t), pagesByUrl, rankedSources.map(r => r.host));
+          const traced = priceSource(readerText(t), pagesByUrl, rankedSources.map(r => r.host), { mayDecide: priceDecider });
           const line = describePriceTrace(pt, { statedOn: traced ? domainOf(traced.url) : null });
           noteToFounder(line);
           // FIRST PASS ONLY, exactly as the stated-absence gate does it: the
@@ -22171,61 +22227,23 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                           <input type="checkbox" checked={useCommonsCaption} onChange={e => setUseCommonsCaption(e.target.checked)} style={{ accentColor: C.gold, cursor: "pointer" }} />
                                           Save Wikimedia's own description as the caption
                                         </label>
-                                        {photoFinder.loading && <div style={{ fontSize: 11.5, color: C.muted }}>Searching Wikimedia…</div>}
-                                        {photoFinder.error && <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.5 }}>{photoFinder.error}</div>}
-                                        {photoFinder.results?.length === 0 && (
-                                          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>
-                                            Nothing usable found. Commons had no freely licensed photo for that search, or every match was non-commercial, no-derivatives, or had no nameable author. Try a different wording.
-                                          </div>
-                                        )}
-                                        {/* ── WHICH LOOKUPS ANSWERED ──────────
-                                            A search that falls back to its worst source and
-                                            returns seven confident-looking results is the
-                                            failure this panel kept hiding. */}
-                                        {photoFinder.results?.length > 0 && photoFinder.sources?.length > 0 && (() => {
-                                          const live = photoFinder.sources.filter(sc => sc.used > 0);
-                                          const dead = photoFinder.sources.filter(sc => sc.found === 0);
-                                          const off = photoFinder.sources.reduce((n2, sc) => n2 + (sc.offSubject || 0), 0);
-                                          const onlySearch = live.length === 1 && live[0].source === "Commons search";
-                                          return (
-                                            <div style={{ fontSize: 10, color: onlySearch ? "#FFB347" : C.muted, lineHeight: 1.55, marginBottom: 8 }}>
-                                              {onlySearch
-                                                ? `Only the blind text search found anything. No Wikipedia article and no Commons category matched "${photoFinder.query}", so nothing here has been judged to be about the right place. Try the name on its own.`
-                                                : `From: ${live.map(sc => `${sc.source} (${sc.used})`).join(", ")}.`}
-                                              {dead.length > 0 && !onlySearch && <span> Found nothing: {dead.map(sc => sc.source).join(", ")}.</span>}
-                                              {off > 0 && <span> {off} text-search {off === 1 ? "result" : "results"} never mentioned {photoFinder.subject ? `"${photoFinder.subject}"` : "the subject"} and {off === 1 ? "was" : "were"} dropped.</span>}
-                                            </div>
-                                          );
-                                        })()}
-                                        {photoFinder.results?.length > 0 && (
-                                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>
-                                            {photoFinder.results.map(hit => (
-                                              <div key={hit.url} style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", background: C.surface }}>
-                                                <img src={hit.url} alt="" style={{ width: "100%", height: 78, objectFit: "cover", display: "block" }} />
-                                                <div style={{ padding: "6px 7px" }}>
-                                                  {/* THE FILENAME AND THE SOURCE, because a photographer's
-                                                      name tells you nothing about whether the picture is
-                                                      of the right place. Four barges credited to "Rolf
-                                                      Heinrich, Köln" looked exactly as legitimate as the
-                                                      palace did. */}
-                                                  {/* THE DESCRIPTION FIRST, because "Ringkøbing Kirkegård"
-                                                      tells you what the picture is and "DSC00575.jpg"
-                                                      does not. The filename stays underneath it, since
-                                                      it is what identifies the file. */}
-                                                  {hit.caption && <div title={hit.caption} style={{ fontSize: 10, color: C.text, fontWeight: 700, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.caption}</div>}
-                                                  <div title={hit.title} style={{ fontSize: 9.5, color: hit.caption ? C.muted : C.text, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.title}</div>
-                                                  <div style={{ fontSize: 8.5, color: hit.source === "Commons search" ? "#FFB347" : C.muted, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.source === "Commons search" ? "⚠ text search" : hit.source}</div>
-                                                  <div style={{ fontSize: 9.5, color: C.light, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.credit.photographer}</div>
-                                                  <div style={{ fontSize: 9, color: C.gold, marginBottom: 5 }}>{hit.credit.license}</div>
-                                                  <button onClick={() => useCommonsPhoto(row, hit)} disabled={mediaBusy || !!photoFinder.saving}
-                                                    style={{ width: "100%", background: C.gold, border: "none", color: C.onGold, borderRadius: 100, padding: "4px", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                                                    {photoFinder.saving === hit.url ? "Saving…" : "Use this"}
-                                                  </button>
-                                                </div>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        )}
+                                        {/* ── ONE GRID, NOT THREE ────────────────────
+                                            18 Sep 2026. This drew the results inline, so did
+                                            the draft panel, and the facts panel could not draw
+                                            them at all: its Wikimedia button asked for one
+                                            result and took it. Oliver, of the facts: it does
+                                            not allow him to pick out Wikimedia, it just
+                                            chooses one from Wiki itself.
+                                        
+                                            The loading line, the empty line, the
+                                            which-lookups-answered warning and the cards are one
+                                            component now. The query box and the caption
+                                            checkbox stay here: those are this panel's own
+                                            wiring, which is why the grid was never shared. */}
+                                        <CommonsResults finder={photoFinder}
+                                          onUse={hit => useCommonsPhoto(row, hit)}
+                                          busy={mediaBusy || !!photoFinder.saving}
+                                          busyUrl={photoFinder.saving || ""} />
                                       </div>
                                     )}
                                     <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
@@ -24221,57 +24239,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   <input type="checkbox" checked={useCommonsCaption} onChange={e => setUseCommonsCaption(e.target.checked)} style={{ accentColor: C.gold, cursor: "pointer" }} />
                                   Save Wikimedia's own description as the caption
                                 </label>
-                                {draftPhotoFinder.loading && <div style={{ fontSize: 11.5, color: C.muted }}>Searching Wikimedia…</div>}
-                                {draftPhotoFinder.error && <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.5 }}>{draftPhotoFinder.error}</div>}
-                                {draftPhotoFinder.results?.length === 0 && !draftPhotoFinder.error && (
-                                  <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>
-                                    Nothing usable found. Commons had no freely licensed photo for that search, or every match was non-commercial, no-derivatives, or had no nameable author. Try a different wording.
-                                  </div>
-                                )}
-                                {/* ── WHICH LOOKUPS ANSWERED ──────────
-                                    The same warning the published panel carries.
-                                    A search that matched no article and no
-                                    category has fallen through to the blind text
-                                    search, and nothing it returns has been judged
-                                    to be about this place at all. */}
-                                {draftPhotoFinder.results?.length > 0 && draftPhotoFinder.sources?.length > 0 && (() => {
-                                  const live = draftPhotoFinder.sources.filter(sc => sc.used > 0);
-                                  const dead = draftPhotoFinder.sources.filter(sc => sc.found === 0);
-                                  const off = draftPhotoFinder.sources.reduce((n2, sc) => n2 + (sc.offSubject || 0), 0);
-                                  const onlySearch = live.length === 1 && live[0].source === "Commons search";
-                                  return (
-                                    <div style={{ fontSize: 10, color: onlySearch ? "#FFB347" : C.muted, lineHeight: 1.55, marginBottom: 8 }}>
-                                      {onlySearch
-                                        ? `Only the blind text search found anything. No Wikipedia article and no Commons category matched "${draftPhotoFinder.query}", so nothing here has been judged to be about the right place. Try the name on its own.`
-                                        : `From: ${live.map(sc => `${sc.source} (${sc.used})`).join(", ")}.`}
-                                      {dead.length > 0 && !onlySearch && <span> Found nothing: {dead.map(sc => sc.source).join(", ")}.</span>}
-                                      {off > 0 && <span> {off} text-search {off === 1 ? "result" : "results"} never mentioned {draftPhotoFinder.subject ? `"${draftPhotoFinder.subject}"` : "the subject"} and {off === 1 ? "was" : "were"} dropped.</span>}
-                                    </div>
-                                  );
-                                })()}
-                                {draftPhotoFinder.results?.length > 0 && (
-                                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>
-                                    {draftPhotoFinder.results.map(hit => (
-                                      <div key={hit.url} style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", background: C.surface }}>
-                                        <img src={hit.url} alt="" referrerPolicy="no-referrer" style={{ width: "100%", height: 78, objectFit: "cover", display: "block" }} />
-                                        <div style={{ padding: "6px 7px" }}>
-                                          {/* The description first, because "Ringkøbing
-                                              Kirkegård" tells you what the picture is and
-                                              "DSC00575.jpg" does not. */}
-                                          {hit.caption && <div title={hit.caption} style={{ fontSize: 10, color: C.text, fontWeight: 700, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.caption}</div>}
-                                          <div title={hit.title} style={{ fontSize: 9.5, color: hit.caption ? C.muted : C.text, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.title}</div>
-                                          <div style={{ fontSize: 8.5, color: hit.source === "Commons search" ? "#FFB347" : C.muted, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.source === "Commons search" ? "⚠ text search" : hit.source}</div>
-                                          <div style={{ fontSize: 9.5, color: C.light, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.credit?.photographer || hit.credit?.source || ""}</div>
-                                          <div style={{ fontSize: 9, color: C.gold, marginBottom: 5 }}>{hit.credit?.license}</div>
-                                          <button onClick={() => useDraftCommonsPhoto(hit)} disabled={draftPhotoBusy}
-                                            style={{ width: "100%", background: C.gold, border: "none", color: C.onGold, borderRadius: 100, padding: "4px", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                                            Use this
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
+                                {/* The same grid as the Media panel and the facts panel. See
+                                    components/CommonsResults.jsx: the query box and the caption
+                                    checkbox above are this panel's own, the results are not. */}
+                                <CommonsResults finder={draftPhotoFinder}
+                                  onUse={hit => useDraftCommonsPhoto(hit)}
+                                  busy={draftPhotoBusy} />
                               </div>
                             )}
                             </>

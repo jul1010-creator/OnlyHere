@@ -1,4 +1,4 @@
-import { costLines, byUrgency, COST_KIND } from "../utils/costLedger";
+import { costLines, byUrgency, estimateFrom, describeEstimate, COST_KIND } from "../utils/costLedger";
 import { partnerDisclosure, outboundLink } from "../utils/affiliates";
 import { tripDayDate } from "../utils/guideReading";
 
@@ -115,6 +115,34 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
             )}
           </div>
         ))}
+        {/* ── THE ESTIMATE, UNDER THE LINES IT IS MADE OF ──────
+            Oliver, 18 Sep 2026: "can you implement estimated cost into the
+            guide?"
+
+            Under the list rather than over it, on purpose. A total at the top
+            is a number a reader takes away on its own; a total at the bottom is
+            the arithmetic of the lines they have just read, and this one has
+            conditions on it that only make sense after them. See estimateFrom
+            in utils/costLedger.js for why it is a floor. */}
+        {(() => {
+          const est = estimateFrom(lines);
+          if (!est) return null;
+          return (
+            <div style={{ marginTop: 10, paddingTop: 9, borderTop: `1px solid ${C.gold}44` }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0 8px", alignItems: "baseline" }}>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase" }}>Estimated</span>
+                <span style={{ fontSize: 15, fontWeight: 800, color: C.text }}>from {est.from} DKK</span>
+                <span style={{ fontSize: 11.5, color: C.muted }}>per person</span>
+              </div>
+              <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 3 }}>{describeEstimate(est)}</div>
+              {est.missing.length > 0 && (
+                <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 2 }}>
+                  Not in the figure: {est.missing.join(", ")}.
+                </div>
+              )}
+            </div>
+          );
+        })()}
         {/* Printed from the links that are on the page, never typed, so
             it cannot say "this pays us" over a list that happens to contain no
             partner link at all. */}

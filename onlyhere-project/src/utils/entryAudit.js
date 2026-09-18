@@ -2472,7 +2472,28 @@ export const priceLabel = (p) => {
   return unit ? `${figure} ${unit}` : figure;
 };
 
-export const priceSource = (priceText, pagesByUrl, order = [], { isAbout = null } = {}) => {
+// ── AND WHO MAY DECIDE A PRICE, WHICH IS NOT EVERYBODY ──────
+//
+// Two findings, one rule. TinderBox, 16 Sep 2026, step 28: "What the pages say
+// a ticket costs: 1395 DKK, from danceus.org", an American dance listing, which
+// won the slot because the operator's own shop could not be read. And the same
+// night, two ferry resellers were read for fifteen thousand characters across
+// two island runs while the shipping companies went unread.
+//
+// A page that HAPPENS to carry a figure is not a source for it. The operator
+// sets the price and a ticket seller takes the money; everybody else is
+// repeating something, and repeating it in a currency does not make it a
+// citation. So a caller that knows the classes hands over `mayDecide`, and a
+// page that cannot decide is passed over the way an off-subject page already is.
+//
+// REFUSING IS THE ANSWER THE PIPELINE ALREADY HANDLES. With nothing
+// authoritative stating the figure, the trace says no page we read states it,
+// the founder note says the same, and the money gate keeps it out of a glance
+// value. That is the honest outcome: a figure nobody who charges it has stated
+// is not a price, it is a rumour with a decimal point.
+//
+// Optional, and with no predicate this behaves exactly as it did.
+export const priceSource = (priceText, pagesByUrl, order = [], { isAbout = null, mayDecide = null } = {}) => {
   // The whole objects, not just their keys: the key is what MATCHES a figure on
   // a page and the object is what a reader is shown.
   const byKey = new Map(pricesIn(priceText).filter(p => p.currency).map(p => [priceKey(p), p]));
@@ -2486,10 +2507,23 @@ export const priceSource = (priceText, pagesByUrl, order = [], { isAbout = null 
   };
   const urls = Object.keys(pagesByUrl || {}).sort((a, b) => rankOf(a) - rankOf(b));
   let offSubject = null;
+  let refused = null;
   for (const url of urls) {
     const here = new Set(pricesIn(pagesByUrl[url]).map(priceKey));
     const hit = wanted.find(k => here.has(k));
     if (!hit) continue;
+    if (typeof mayDecide === "function") {
+      let allowed = false;
+      // A thrown predicate is not a pass, the same rule the matcher below keeps.
+      try { allowed = !!mayDecide(url); } catch { allowed = false; }
+      if (!allowed) {
+        // Kept so the log can name the near miss rather than reporting a silence:
+        // "danceus.org states it and is not who charges it" is actionable and
+        // "no page states it" is not.
+        if (!refused) refused = { url, price: priceLabel(byKey.get(hit)), key: hit, host: hostOf(url), ranked: rankOf(url) !== Number.MAX_SAFE_INTEGER, mayNotDecide: true };
+        continue;
+      }
+    }
     const found = { url, price: priceLabel(byKey.get(hit)), key: hit, host: hostOf(url), ranked: rankOf(url) !== Number.MAX_SAFE_INTEGER };
     if (typeof isAbout !== "function") return found;
     let about = false;
@@ -2500,9 +2534,10 @@ export const priceSource = (priceText, pagesByUrl, order = [], { isAbout = null 
     if (about) return found;
     if (!offSubject) offSubject = { ...found, offSubject: true };
   }
-  // Nothing on-subject. If some page had the figure, say which, so the Studio
-  // can show him the near miss instead of a silent absence.
-  return offSubject || null;
+  // Nothing on-subject, or nothing allowed to decide. If some page had the
+  // figure, say which, so the Studio shows him the near miss instead of a
+  // silent absence.
+  return offSubject || refused || null;
 };
 
 // ── THE HONEST NOTE, LAUNDERED INTO A FACT ──────────────────────────
