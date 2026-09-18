@@ -16,7 +16,7 @@
 // tested with no network at all. This file is the network and nothing else,
 // which is the split api/tickets.js documents.
 import {
-  stripToText, ticketLinks, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, FIRECRAWL_URL,
+  stripToText, ticketLinks, faqLink, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, FIRECRAWL_URL,
   bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, ticketLinksFromMarkdown,
 } from "./pageScan.js";
 
@@ -37,7 +37,9 @@ export const readPlain = async (url, f = fetch) => {
     // unreachable one line later. See bannerImages in pageScan.js, and the
     // Distortion measurement written up there: a front page whose text says a
     // date that has already passed while the real one exists only as pixels.
-    return { status: r.status, text: stripToText(html), tickets: ticketLinks(html, url).slice(0, 6), banners: bannerImages(html, url).slice(0, MAX_BANNERS), err: "" };
+    // faq, beside tickets and for the same reason: the links are in the html
+    // and this is the one place that has it. See faqLink in pageScan.js.
+    return { status: r.status, faq: faqLink(html, url), text: stripToText(html), tickets: ticketLinks(html, url).slice(0, 6), banners: bannerImages(html, url).slice(0, MAX_BANNERS), err: "" };
   } catch (err) {
     return { status: 0, text: "", tickets: [], banners: [], err: String(err) };
   }

@@ -85,7 +85,7 @@ import { stayDriftNote, LODGING_NOTES_RULE, isLodgingType } from "./utils/venueS
 import { modelProvenanceNote } from "./utils/modelProvenance";
 import { missingSourcesNote } from "./utils/provenance";
 import { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, formatLogs, logChips, storeState } from "./utils/runLog";
-import { domainOf, isListingHost, scrapeTier, isApiCoveredHost, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE, MAX_TICKET_PAGES, isOwnSiteFor, urlNames, isKommuneHost } from "./utils/pageScan";
+import { domainOf, isListingHost, scrapeTier, faqWorthReading, FAQ_RULE, isApiCoveredHost, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE, MAX_TICKET_PAGES, isOwnSiteFor, urlNames, isKommuneHost } from "./utils/pageScan";
 import { weatherSourceFor, weatherBadge, normalsNote, dayWeather, FORECAST, NORMALS } from "./utils/weather";
 import { foodSpots } from "./data/food";
 import { essentials } from "./data/essentials";
@@ -145,7 +145,7 @@ import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow, removeLive
 import { isRecording, startRecording, stopRecording, record, recordedEvents, recordingText, recordingFileName, safeUrl } from "./utils/studioRecorder";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
-import { journeyParts, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, islandLegProblems, closedButPlanned, arrivalStop, arrivalGlanceRow, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
+import { journeyParts, journeyFigure, WAIT_INSIDE_TOTAL, NO_TRANSIT_NOTE, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, islandLegProblems, closedButPlanned, arrivalStop, arrivalGlanceRow, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
 import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS, urlsIn, dropAppliedClaims } from "./utils/correction";
 import { branchesOf, branchCandidates, branchFromCandidate, mergeBranches, branchLabel, branchLine, coordForTown, MAX_BRANCHES } from "./utils/branches";
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance, staleUncertainties, describeStale } from "./utils/glanceExtract";
@@ -286,6 +286,9 @@ import { EntryLink } from "./components/EntryLink";
 import { AuthSheet } from "./components/AuthSheet";
 import { ConfirmSheet } from "./components/ConfirmSheet";
 import { StudioReports } from "./components/StudioReports";
+// The Wikimedia results grid, one file rather than a third inline copy. See
+// components/CommonsResults.jsx.
+import { CommonsResults } from "./components/CommonsResults";
 import { filterReports, INBOX_SETUP_SQL } from "./utils/supportInbox";
 import { SUPPORT_TABLE } from "./utils/support";
 import { DeleteAccountSheet, deleteReasonMessage } from "./components/DeleteAccountSheet";
@@ -499,6 +502,21 @@ const NIGHTLIFE_TYPES = CONTENT_TYPES.filter(t => /^night/.test(t));
 // to a region rather than to a business. Whether the answer is worth USING is a
 // separate question, and it now gets asked: see listingMatchesSubject.
 const PLACES_WITH_A_LISTING = PLACE_TYPES_WITH_A_JOURNEY.filter(t => t !== "town");
+
+// ── A QUOTA IS NOT A BLIP ────────────────────────
+//
+// Avernako, 16 Sep 2026: Perplexity ran out of quota mid-run and the
+// invented-claim check, which the pipeline calls its last accuracy gate,
+// reported a failure with the provider's raw sentence in it: "You exceeded your
+// current quota".
+//
+// The guide builder has told this apart from an ordinary failure since August,
+// for the same reason and in Oliver's own case: he hit "can't build"
+// repeatedly and it was credits, which no amount of retrying fixes. The test
+// was written inline there. It is one test now, because a retryable failure and
+// a failure that needs a card on file are two different sentences and every
+// caller has to be able to say which one it got.
+const looksLikeBilling = (msg) => /credit balance|billing|payment|purchase credits|exceeded your current quota|insufficient[_ ]quota|quota exceeded|rate limit/i.test(String(msg || ""));
 
 const FACT_CHECK_SCOPE_RULES = `SCOPE, AND THIS OVERRIDES EVERYTHING ELSE HERE: only report a correction that is about the EXACT same thing the draft is about. A real fact about a similar-but-different thing is not a correction, and offering it as one is worse than staying silent, because a correction gets trusted and applied.
 This has already caused a real, confirmed near-miss: a draft about one specific ferry route was "corrected" using the sailing time of a DIFFERENT route to the same island. Both durations were real. Applying the correction would have reverted an entry that had already been fixed.
@@ -1414,6 +1432,27 @@ function GemlyxApp() {
   );
   const noticeToShow = useMemo(
     () => noticesNearby(noticeRows, isInDenmark(userCoords) ? userCoords : null, { today: new Date(), dismissed: noticesSeen })[0] || null,
+    [noticeRows, userCoords?.lat, userCoords?.lon, noticesSeen],
+  );
+  // ── AND WHERE A NOTICE GOES AFTER THE POP-UP ──────────
+  //
+  // Oliver, 17 Sep 2026, on the notices: "when you've clicked the notification,
+  // then the notification will be gone. But it will have its own tab under
+  // 'near you'." The list is on the account page and the pop-up shows once, so
+  // between those two there was nothing: dismiss it and the only way back was
+  // to know the list existed.
+  //
+  // Asked where it should surface he was offered a strip on the front page, a
+  // bell with a count, or a push notification, and has not answered yet. This
+  // is the bell, in the quietest form the chrome already has room for: a gold
+  // dot on the account button, which is the way to the list, and the count on
+  // the menu item itself. No new tab, no strip competing with the front page,
+  // and nothing to undo if he picks one of the other two.
+  //
+  // COUNTED FROM THE SAME FILTER AS THE POP-UP, so a dot cannot outlive the
+  // event it is about: gone is a filter, not a job.
+  const noticesWaiting = useMemo(
+    () => noticesNearby(noticeRows, isInDenmark(userCoords) ? userCoords : null, { today: new Date(), dismissed: noticesSeen }).length,
     [noticeRows, userCoords?.lat, userCoords?.lon, noticesSeen],
   );
   const dismissNotice = (id) => {
@@ -3893,7 +3932,43 @@ Say which answer came from which source, so a fact from a vouched page and a fac
           // sources out. A missing region costs a weaker search. A wrong one
           // costs a whole draft about the wrong town, silently.
           const placesOk = pr.ok && !pd.error && Number.isFinite(pd.lat) && Number.isFinite(pd.lon);
-          const placesAbout = placesOk && listingMatchesSubject(name, draftTown, pd.name || pd.address, { theNameIsAStreet: NAME_IS_A_STREET.includes(sType) });
+          const nameMatches = placesOk && listingMatchesSubject(name, draftTown, pd.name || pd.address, { theNameIsAStreet: NAME_IS_A_STREET.includes(sType) });
+          // ── AND THE NAME MATCHING IS NOT THE WHOLE QUESTION ──────
+          //
+          // TinderBox, 16 Sep 2026. Step 1: "55.6287, 12.6492 via Nominatim, on
+          // the name, which found Tinderbox, Lufthavnstorvet, Kastrup, Tarnby
+          // Kommune". TinderBox is a festival in Odense, on Funen. Step 2 then
+          // printed the contradiction on its own face: "scoped to Odense, in
+          // Storkobenhavn, on Zealand".
+          //
+          // The name test passed because something in Kastrup really is called
+          // Tinderbox. The Kobenhavns Oktoberfest run passed it for the other
+          // reason: the organiser's own business name IS the draft's name, and
+          // its office is in Aalborg.
+          //
+          // So the second half of the question is the one nothing asked: does
+          // this coordinate sit in the town this draft is about. coordFitsTown
+          // has done that arithmetic since 12 Aug, in guideEnrichment.js, and
+          // the town is read BEFORE the Places answer is allowed to set it,
+          // because a lookup that can name the town it landed in can always
+          // agree with itself.
+          //
+          // REFUSING IS THE SAFE DIRECTION, the same argument the Ringsted
+          // refusal above makes: with no coordinate the draft says so and
+          // leaves the place-scoped sources out. A missing region costs a
+          // weaker search; a wrong one costs a draft about the wrong town, and
+          // the later tiers recover it from the research anyway.
+          const townBefore = draftTown;
+          const fit = nameMatches && townBefore ? coordFitsTown({ lat: pd.lat, lon: pd.lon }, townBefore) : { ok: true, why: "" };
+          const placesAbout = nameMatches && fit.ok;
+          if (nameMatches && !fit.ok && fit.why === "far-from-town") {
+            decide("whether Google's coordinate is in the right town", {
+              winner: "nothing",
+              loser: `Google Places' "${String(pd.address || pd.name || "").slice(0, 60)}"`,
+              rule: `A coordinate has to sit in the town the draft is about. This one is ${Math.round(Number(fit.km) || 0)} km from ${townBefore}, and a wrong coordinate scopes every search after it.`,
+              value: `${name} (${sType})`,
+            });
+          }
           if (placesOk && !placesAbout) {
             decide("whether Google's coordinate is about this place", {
               winner: "nothing",
@@ -5125,7 +5200,21 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
             // string "Sælvig" will write "the station at Sælvig", because that
             // is the sentence the field name suggests. Handed "ferry terminal",
             // it writes about a crossing, which is what actually happens there.
-            const st = await findRealNearestStation(coords.lat, coords.lon);
+            // ── AND AN ISLAND IS NOT ASKED THIS QUESTION ────────
+            //
+            // 18 Sep 2026, from the seven island runs. An island's stored
+            // coordinate is its CENTROID, so a radius search from it answers
+            // "what transit is nearest the middle of the island", and the
+            // middle of an island is a field. It returned a rural bus stop
+            // three minutes from Bornholm's geometric centre, residential
+            // streets on Langeland, and on Bjorno another island's harbour.
+            //
+            // For an island the arrival point is the harbour the measured route
+            // lands at, which arrivalStop now reads off the ferry leg. So this
+            // lookup is skipped rather than overruled: paying for a Places call
+            // to produce a candidate that will lose is two ways of being wrong.
+            const islandArrival = sType === "island";
+            const st = islandArrival ? null : await findRealNearestStation(coords.lat, coords.lon);
             const station = st?.name || null;
             const stopKind = st?.kind || null;
             // ── THE ONE MAJOR STEP WITH NO LINE IN THE LOG ────────
@@ -5140,12 +5229,16 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
             note("Nearest arrival point", {
               provider: "google",
               detail: `Places, then a walking route, from ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}`,
-              outcome: station ? "ok" : "empty",
-              got: station
-                ? `${station} (${st.kind})${st.walk ? `, ${st.walk} on foot` : ""}`
-                : "no station, terminal or stop that is both transit and walkable was returned within the search radii",
-              why: station ? "" : "This is not evidence that none exists. It means this lookup found none from this coordinate.",
-              used: !!station,
+              outcome: islandArrival ? "ok" : station ? "ok" : "empty",
+              got: islandArrival
+                ? "not asked: for an island this is read off the measured route's ferry leg instead, since the coordinate here is the middle of the island"
+                : station
+                  ? `${station} (${st.kind})${st.walk ? `, ${st.walk} on foot` : ""}`
+                  : "no station, terminal or stop that is both transit and walkable was returned within the search radii",
+              why: islandArrival
+                ? "A radius search from a centroid answers what is nearest the middle of the island, and nobody travels to there."
+                : station ? "" : "This is not evidence that none exists. It means this lookup found none from this coordinate.",
+              used: !islandArrival && !!station,
             });
             const KIND_WORD = { rail: "railway station", ferry: "ferry terminal", bus: "bus stop", air: "airport", other: "transit stop" };
             const kindWord = KIND_WORD[stopKind] || "transit stop";
@@ -5482,6 +5575,11 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
       let placesHours = null;
       // The official site's own words, separate from the merged research blob.
       let scrapedSiteText = "";
+      // ONE FAQ PER DRAFT, found while the pages are read and followed after the
+      // writer has been, so "still empty" can be the gate. Declared here rather
+      // than in the read loop, which is a block that closes long before the
+      // stage that uses this. See faqLink in utils/pageScan.js.
+      let faqPage = null;
       // What language the EVENT runs in, measured off those same words. See
       // utils/languageBarrier.js. Declared here so it survives to the stamp.
       let entryLanguage = { level: "unknown", note: "", why: "the operator's own site was not read, so nothing here is measured" };
@@ -6185,6 +6283,9 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
             // Collected here and followed after the loop, rather than inside
             // it, so a nested fetch cannot make one slow agent hold up the
             // remaining sources.
+            // The OPERATOR's own FAQ and nobody else's: a tourist board's
+            // FAQ answers questions about the board.
+            if (pageTier === "operator" && !faqPage && scanData.faq) faqPage = { href: String(scanData.faq), from: url };
             if (pageTier !== "old" && Array.isArray(scanData.tickets)) {
               for (const l of scanData.tickets) {
                 if (!ticketPages.some(x => x.href === l.href) && !toFetch.includes(l.href)) ticketPages.push({ ...l, from: url });
@@ -7224,6 +7325,10 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         t.__journey = {
           ...transitParts,
           drivingMins,
+          // Which figure the card is showing, from the one function that
+          // decides it. A row carrying a cut figure and no word for why is a
+          // number nobody downstream can check.
+          figure: journeyFigure(transitParts),
           // Was the literal "Copenhagen" on every row, including the bar
           // streets that were never measured from there. journeyReach prints
           // this word to the reader, so a wrong one is not a provenance
@@ -7386,7 +7491,10 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       // See arrivalStop in utils/journey.js for the Agersø ferry slip that
       // prompted this. The measured route beats a radius search, and one
       // helper serves both override sites so the two cannot drift.
-      const measuredStop = arrivalStop(transitParts);
+      // The island flag, for the reason in arrivalStop: the last leg of a
+      // measured island route is whatever bus runs inland from the boat, and
+      // the harbour is the stop a reader will stand on.
+      const measuredStop = arrivalStop(transitParts, { island: sType === "island" });
 
       // ── THE COORDINATE AND THE STOP ARE TWO QUESTIONS ────────────
       //
@@ -7534,15 +7642,95 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       // ALLOW-LIST: a __ field it does not name cannot reach a reader by
       // accident, whereas a prefix rule can be defeated by a reworded message.
       // The Studio panel renders them separately, so he loses nothing.
+      // ── AND THE FAQ, WHEN A PRACTICAL FIELD IS STILL EMPTY ────
+      //
+      // Oliver, 17 Sep 2026, choosing the gate: "probably mainly anything that
+      // can be seasonal". Barred from price and date, one page per draft, and
+      // only the operator's own site.
+      //
+      // AFTER the writer and after the ordinary extraction, because "still
+      // empty" is the whole of the gate: a field somebody filled is not
+      // improved by a second source, which is what the nineteen glance
+      // overrules of 16 Sep were. So this costs a read and a small call on the
+      // drafts that have a hole in them and nothing at all on the rest.
+      //
+      // BARRED STRUCTURALLY. The field list handed to the extraction IS the
+      // list of empty practical fields, so a price on an FAQ page has no field
+      // to land in. See FAQ_FIELDS and FAQ_RULE in utils/pageScan.js.
+      const faqEmpty = faqPage ? faqWorthReading(t) : [];
+      if (faqPage && faqEmpty.length) {
+        try {
+          setStudioStage({ label: "Reading the operator's own FAQ for what is still empty", percent: 89 });
+          const faqRes = await studioFetch(`/api/scan-source?${editingId !== null ? "fresh=1&" : ""}url=${encodeURIComponent(faqPage.href)}`);
+          const faqData = await faqRes.json();
+          const faqText = String(faqData?.text || "").trim();
+          if (faqText.length > 200) {
+            const faqExtract = await askOpenAI(GLANCE_EXTRACT_PROMPT(name, sType, faqEmpty, `${FAQ_RULE}\n\n${faqText}`), 700);
+            const fRead = faqExtract?.error ? { ok: false, values: {}, why: faqExtract.error } : readGlanceExtract(faqExtract?.text, faqEmpty);
+            if (fRead.ok) {
+              const mergedFaq = mergeGlance(t, fRead.values, faqEmpty, faqText, faqText);
+              t = mergedFaq.patched;
+              note("The operator's own FAQ", {
+                provider: "fetch",
+                detail: `one page, for the fields still empty: ${faqEmpty.join(", ")}`,
+                outcome: mergedFaq.changed.length ? "ok" : "empty",
+                got: mergedFaq.changed.length
+                  ? mergedFaq.changed.map(c => `${c.field}: "${c.now}"`).join(" | ")
+                  : `${domainOf(faqPage.href)} answered none of them`,
+                why: `${faqPage.href.slice(0, 120)}. Barred from price and date: an FAQ is written once and revised rarely.`,
+                used: mergedFaq.changed.length > 0,
+              });
+            }
+          } else {
+            note("The operator's own FAQ", {
+              provider: "fetch", outcome: "empty", used: false,
+              detail: `for the fields still empty: ${faqEmpty.join(", ")}`,
+              got: `${domainOf(faqPage.href)} returned too little text to read`,
+            });
+          }
+        } catch (e) {
+          note("The operator's own FAQ", {
+            provider: "fetch", outcome: "failed", used: false,
+            why: String(e?.message || e).slice(0, 160),
+            got: "the FAQ read threw, so nothing was taken from it",
+          });
+        }
+      }
+
       const gateDraft = (pass) => {
         const again = pass === "again";
         const suffix = again ? ", after the correction" : "";
         const pt = tracePrices(readerText(t), scrapedSiteText, listingSiteText);
+        // ── AND IT DOES NOT ACCUSE A BLOG THE NEXT STEP NAMES ────
+        // Fejo, 16 Sep 2026, steps 23 and 25 of one run, thirty seconds apart:
+        //
+        //   23. NOT FROM THE OFFICIAL SITE: 160 DKK, 40 DKK, 65 DKK. These
+        //       figures do not appear anywhere in the official site's own text,
+        //       so they came from a search result or a blog.
+        //   25. 160 kr DKK is on lollandfaergefart.lolland.dk, the highest
+        //       ranked page read that states it.
+        //
+        // The fare is right, it is on the county ferry operator's own booking
+        // page, and the run accused itself of inventing it. Both steps ran
+        // again after the correction and said the same two things again.
+        //
+        // The founder note has asked priceSource for the host since 16 Aug,
+        // for exactly this reason, and the RUN LOG line was the one place that
+        // still guessed. Asked here too, before the sentence is written, so the
+        // log cannot contradict the step below it. priceSource is a pure read
+        // over pages already fetched, so this costs nothing but the call.
+        const statedOnNow = (() => {
+          if (!pt.checked || !pt.untraced.length) return null;
+          try {
+            const found = priceSource(readerText(t), pagesByUrl, rankedSources.map(r => r.host));
+            return found ? domainOf(found.url) : null;
+          } catch { return null; }
+        })();
         note(`Prices against the official site${suffix}`, {
           provider: "google", detail: "the site's own words, compared with every price in the draft",
           outcome: !pt.checked ? "skipped" : pt.untraced.length ? "empty" : "ok",
           why: pt.checked ? "" : pt.why,
-          got: describePriceTrace(pt) || "the draft states no price",
+          got: describePriceTrace(pt, { statedOn: statedOnNow }) || "the draft states no price",
           used: pt.checked && !pt.untraced.length,
         });
         // ── AND THE OTHER DIRECTION, WHICH NOTHING ASKED ────────
@@ -7897,7 +8085,13 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // Same shape as the price trace, deliberately: it does not rewrite
         // anything, it moves an unproven claim to uncertainties.
         {
-          const tp = transitProblems(readerText(t), { parts: transitParts, drivingMins });
+          // ── WHAT THE WRITER WROTE, NOT WHAT WE MEASURED ──────
+          // writtenFields, for the reason given where it is defined: this check
+          // asks whether a CLAIM in the prose matches the measurement, and
+          // readerText hands it the measured fields as well. On a second pass
+          // that means it reads the pipeline's own travelTime back as prose and
+          // has an opinion about it. The checker sees the draft's own words.
+          const tp = transitProblems(readerText(writtenFields(t)), { parts: transitParts, drivingMins });
           // ── AND HOW MUCH OF THE DRAFT THAT SENTENCE COVERS ───────
           //
           // Oliver, 25 Aug: "the pipeline still tends to get the logistics
@@ -8557,7 +8751,20 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           // transitParts.total IS the number, and no format can misread it.
           // The text parse stays as the fallback for the case where there are
           // no steps to build parts from.
-          const exact = Number(transitParts?.total);
+          // ── THROUGH journeyFigure, NOT THE RAW TOTAL ──────────
+          // 18 Sep 2026, and this is the Bornholm line on a live page. The
+          // total Google returns can be mostly waiting for the next sailing,
+          // and the rule for what to do about that lives in one place now. See
+          // journeyFigure in utils/journey.js.
+          const figure = journeyFigure(transitParts);
+          const exact = Number(figure.mins);
+          // Named for the decision line below. `hm` is a regex match three
+          // lines down, so it cannot be a duration formatter here as well.
+          const waitWords = (n) => {
+            const t2 = Math.max(0, Math.round(Number(n) || 0));
+            const wh = Math.floor(t2 / 60), wm = t2 % 60;
+            return wh ? `${wh}h${wm ? ` ${wm}min` : ""}` : `${wm}min`;
+          };
           const hm = realTransport.transit.match(/(\d+)\s*hour/);
           const mmm = realTransport.transit.match(/(\d+)\s*min/);
           const h = Number.isFinite(exact) && exact > 0 ? Math.floor(exact / 60) : (hm ? Number(hm[1]) : 0);
@@ -8590,7 +8797,13 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             } else {
               decide("travelTime", {
                 winner: "Google Directions (measured)", loser: modelSaid ? `the model ("${modelSaid}")` : "an empty field",
-                rule: "A measured duration always replaces a written one. Distance and duration are Google's jurisdiction alone.",
+                // The rule says which figure was taken and why, because the run
+                // log is where Oliver reads these back and "measured" was the
+                // word doing all the work on the night Bornholm published
+                // 10h 44min.
+                rule: figure.basis === "moving"
+                  ? `A measured duration replaces a written one, and a measured total that is more than ${WAIT_INSIDE_TOTAL} minutes of waiting is cut to the time in motion: the wait is a fact about the departure time we asked for, not about the route. ${waitWords(figure.waiting)} of waiting came off this one.`
+                  : "A measured duration always replaces a written one. Distance and duration are Google's jurisdiction alone.",
                 value: t.travelTime,
               });
             }
@@ -8647,7 +8860,10 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           });
           t.uncertainties = [
             ...(t.uncertainties || []),
-            "The travel time shown is by road. Google returned no public transport itinerary for this route, which is a fact about the routing feed and not about the place: check rejseplanen.dk for the real connection.",
+            // The sentence lives in utils/journey.js beside the check that
+            // must not flag it. Two copies of it is how the absence check
+            // started charging 200 seconds to rewrite the pipeline's own words.
+            NO_TRANSIT_NOTE,
           ];
         } else if (typeof t.travelTime !== "undefined" && t.travelTime) {
           // Still reachable: driving came back with no usable duration. Now the
@@ -8811,7 +9027,13 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         const flaggedText = inventedRead.findings.map(f => `${f.label}: ${f.text.replace(/^\s*[-*]?\s*\**\s*(CONTRADICTED|UNVERIFIED)\s*:?\s*/i, "")}`).join("\n");
         const downgraded = inventedRead.findings.filter(f => f.moved);
         if (inventedCheck.error) {
-          note("Invented-claim check", { provider: "perplexity", outcome: "failed", why: String(inventedCheck.error).slice(0, 200), used: false });
+          // Named, because "it failed, run it again" and "the account is out of
+          // quota" are different instructions and only one of them works.
+          const billing = looksLikeBilling(inventedCheck.error);
+          note("Invented-claim check", {
+            provider: "perplexity", outcome: "failed", used: false,
+            why: `${String(inventedCheck.error).slice(0, 200)}${billing ? ". This is the Perplexity account's quota rather than a transient failure, so re-running this draft will fail the same way until it is topped up." : ""}`,
+          });
           ui(setStudioInventedWarning, inventedWarning = `THE INVENTED-CLAIM CHECK DID NOT RUN. This is the last accuracy gate in the pipeline and it failed rather than passing: ${String(inventedCheck.error).slice(0, 200)}. Nothing below has been compared against its own research, so treat every number and name in this draft as unverified until you check it yourself or redraft.`);
         } else if (inventedRead.verdict === "unreadable") {
           // NOT treated as a pass and NOT treated as a flag. Guessing "clean"
@@ -8973,7 +9195,7 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
                   // before the last writer overrides nothing. Same lesson as
                   // gateDraft itself, applied to the values rather than the
                   // checks.
-                  const restoreStop = arrivalStop(transitParts) || frozenGeo?.station;
+                  const restoreStop = arrivalStop(transitParts, { island: sType === "island" }) || frozenGeo?.station;
                   if (restoreStop && typeof t.nearestStation !== "undefined" && t.nearestStation !== restoreStop) {
                     note("A measured field was rewritten", {
                       provider: "claude", detail: "nearestStation, after the correction pass",
@@ -9245,6 +9467,47 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
   // lane is a real offence to real people.
   const FACT_CATEGORIES = ["history", "attractions", "nature", "food", "nightlife", "culture"];
   const [factDrafts, setFactDrafts] = useState([]);      // drafted, not yet saved
+  // ── AND THE FACT'S PHOTO IS PICKED, NOT HANDED OVER ──────
+  //
+  // Oliver, 18 Sep 2026: "the published 'facts' do not allow me to pick out
+  // Wikimedia. It just chooses one from Wiki itself."
+  //
+  // The button asked for limit=1 and took results[0], which for a subject with
+  // a Wikipedia article is that article's own lead image. Eight and a grid, the
+  // same as the Media panel and the draft panel, through the one component all
+  // three should be using. See components/CommonsResults.jsx.
+  //
+  // Keyed by the FACT's key rather than shared, for the reason the draft
+  // finder's own comment gives about itself: two panels sharing one piece of
+  // state is how the assistant pasted draft A's payload into draft B, and a
+  // batch of facts is a whole column of rows that each have a subject.
+  const [factPhotoFinder, setFactPhotoFinder] = useState(null);   // { key, query, results, loading, error, sources, subject }
+  const findFactCommonsPhotos = async (key, subject) => {
+    const term = String(subject || "").trim();
+    if (!term) { setFactPhotoFinder({ key, query: "", results: [], loading: false, error: "Give the fact a subject first, then search for a picture of it." }); return; }
+    setFactError(null);
+    setFactPhotoFinder({ key, query: term, results: null, loading: true, error: null });
+    try {
+      const res = await studioFetch(`/api/commons-photo?q=${encodeURIComponent(`${term} Denmark`)}&limit=8`);
+      const data = await res.json();
+      if (data.error) { setFactPhotoFinder(f => (f?.key === key ? { ...f, loading: false, error: data.error } : f)); return; }
+      setFactPhotoFinder(f => (f?.key === key
+        ? { ...f, loading: false, results: data.results || [], sources: data.sources || [], subject: data.subject || null }
+        : f));
+    } catch (e) {
+      setFactPhotoFinder(f => (f?.key === key ? { ...f, loading: false, error: `Wikimedia lookup failed: ${String(e?.message || e)}` } : f));
+    }
+  };
+  // ONE WRITE, IMAGE AND CREDIT TOGETHER, the same rule the draft panel states
+  // at length: a CC BY file may only be republished with attribution, so a
+  // picture that reaches a row while its credit arrives in some later step is
+  // one refresh away from being published without the right to publish it.
+  const useFactCommonsPhoto = (key, hit) => {
+    const src = String(hit?.url || "").split("?")[0];
+    if (!src) { setFactError("That result had no usable image URL."); return; }
+    setFactDrafts(prev => prev.map(x => x.key === key ? { ...x, photo: src, credit: hit?.credit } : x));
+    setFactPhotoFinder(null);
+  };
   const [factBusy, setFactBusy] = useState(false);
   const [factStage, setFactStage] = useState(null);
   const [factError, setFactError] = useState(null);
@@ -12482,7 +12745,11 @@ ${researchRules("festival", ev)}`
         // The radius stop remains the fallback, for a row whose journey was
         // never measured. That is what it was always good for.
         if ("nearestStation" in shaped) {
-          const measuredAtPublish = arrivalStop(shaped.__journey);
+          // The type comes off the shape being published rather than from a
+          // closure, for the reason the comment above gives about reading the
+          // data: this runs long after the draft loop and sType is not in scope
+          // here in any form worth trusting.
+          const measuredAtPublish = arrivalStop(shaped.__journey, { island: studioType === "island" });
           const stopToStore = measuredAtPublish || studioFrozenGeo.station;
           if (stopToStore) shaped.nearestStation = stopToStore;
         }
@@ -16592,7 +16859,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       // lands in the console so the next "can't build" report is diagnosable.
       console.warn("Guide build failed:", err);
       const msg = String(err?.message || err || "");
-      const isBilling = /credit balance|billing|payment|purchase credits|exceeded your current quota|insufficient[_ ]quota/i.test(msg);
+      const isBilling = looksLikeBilling(msg);
       setGuideError(isBilling
         ? "The AI account is out of credits, so no guide can be built right now. This is a billing issue, not a problem with your plan. Top up the API credits and try again."
         : "Couldn't build a guide from that yet. Try asking for a fuller plan first.");
@@ -22304,17 +22571,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   them in batches. The credit rides along with the
                                   image, so a fact can never show uncredited. */}
                               <button disabled={d.uploading || factBusy}
-                                onClick={async () => {
-                                  setFactError(null);
-                                  try {
-                                    const res = await studioFetch(`/api/commons-photo?q=${encodeURIComponent(d.subject + " Denmark")}&limit=1`);
-                                    const data = await res.json();
-                                    const hit = (data.results || [])[0];
-                                    if (!hit) { setFactError(`No freely licensed photo found for "${d.subject}".`); return; }
-                                    setFactDrafts(prev => prev.map(x => x.key === d.key
-                                      ? { ...x, photo: String(hit.url).split("?")[0], credit: hit.credit } : x));
-                                  } catch (e) { setFactError(`Wikimedia lookup failed: ${e.message || e}`); }
-                                }}
+                                onClick={() => findFactCommonsPhotos(d.key, d.subject)}
                                 style={{ background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                 🔎 Wikimedia
                               </button>
@@ -22327,7 +22584,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 <span style={{ fontSize: 10.5, color: "#FFB347" }}>no source URL</span>
                               )}
                               <div style={{ flex: 1 }} />
-                              <button onClick={() => setFactDrafts(prev => prev.filter(x => x.key !== d.key))}
+                              <button onClick={() => { setFactDrafts(prev => prev.filter(x => x.key !== d.key)); setFactPhotoFinder(f => (f?.key === d.key ? null : f)); }}
                                 style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "5px 11px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                 Discard
                               </button>
@@ -22336,6 +22593,21 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 Save
                               </button>
                             </div>
+                            {factPhotoFinder?.key === d.key && (
+                              <div style={{ marginTop: 8, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px" }}>
+                                {/* The subject is the query, and it is editable
+                                    above, so there is no second search box
+                                    here: pressing the button again after
+                                    changing the subject searches the new one. */}
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                                  <span style={{ fontSize: 10.5, color: C.muted }}>Wikimedia, for "{factPhotoFinder.query}"</span>
+                                  <button onClick={() => setFactPhotoFinder(null)}
+                                    style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "4px 10px", fontSize: 10.5, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Close</button>
+                                </div>
+                                <CommonsResults finder={factPhotoFinder} busy={factBusy || d.uploading}
+                                  onUse={hit => useFactCommonsPhoto(d.key, hit)} />
+                              </div>
+                            )}
                           </div>
                         ))}
 
@@ -28556,7 +28828,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 See components/AccountAvatar.jsx for why the person is drawn
                 underneath the picture rather than instead of it. */}
             <button className="gemlyx-account" onClick={() => setShowMenu(!showMenu)}
-              aria-label={[uiT("header.menu", uiLang), userSession ? accountLabel() : "", unreadTripChanges > 0 ? alertCountLine(unreadTripChanges) : ""].filter(Boolean).join(". ")}
+              aria-label={[uiT("header.menu", uiLang), userSession ? accountLabel() : "", unreadTripChanges > 0 ? alertCountLine(unreadTripChanges) : "", noticesWaiting > 0 ? `${noticesWaiting} thing${noticesWaiting === 1 ? "" : "s"} on near you` : ""].filter(Boolean).join(". ")}
               title={unreadTripChanges > 0 ? alertCountLine(unreadTripChanges) : uiT("header.menu", uiLang)}
               style={{ position: "relative", background: "none", border: "none", padding: 0, cursor: "pointer", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               {userSession ? (
@@ -28565,6 +28837,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <span style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <Ico name="menu" size={21} color={C.text} />
                 </span>
+              )}
+              {/* Gold rather than red, and a dot rather than a number. Red on
+                  this button means something about THEIR trip changed, which is
+                  a different order of thing from a village fete eight
+                  kilometres away, and two red counts on one 32px circle would
+                  flatten that difference. The count is on the menu item. */}
+              {noticesWaiting > 0 && unreadTripChanges === 0 && (
+                <span aria-hidden="true" style={{
+                  position: "absolute", bottom: -2, right: -2, width: 10, height: 10,
+                  borderRadius: 100, background: C.gold, border: `2px solid ${C.bg}`, boxSizing: "content-box",
+                }} />
               )}
               {unreadTripChanges > 0 && (
                 <span style={{
@@ -28746,7 +29029,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               // Sign in reuses row.needAccount.action rather than getting a
               // second entry: one word, one row in the catalogue, which is the
               // reason the catalogue is one module.
-              { id: "login", label: userSession ? uiT("menu.account", uiLang) : uiT("menu.signIn", uiLang), ico: "user", action: "login" },
+              // The notices live on the account page, under Near you, so the
+              // count belongs on the way in rather than on a tab of its own.
+              { id: "login", label: `${userSession ? uiT("menu.account", uiLang) : uiT("menu.signIn", uiLang)}${userSession && noticesWaiting > 0 ? ` · ${noticesWaiting} near you` : ""}`, ico: "user", action: "login" },
               // ── AND THE WAY BACK OUT, ONLY WHEN THERE IS ONE ────────
               // "I want login here." then "I mean log out." Signing out lived
               // on the account page, two screens in, which is a long walk for

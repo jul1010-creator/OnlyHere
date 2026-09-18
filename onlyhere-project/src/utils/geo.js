@@ -272,6 +272,18 @@ const walkTo = async (lat, lon, place) => {
     const dirRes = await fetch(`/api/directions?origin=${lat},${lon}&destination=${place.lat},${place.lon}&mode=walking`);
     const dir = await dirRes.json();
     if (dir.error) return NO_ROUTE.test(String(dir.error)) ? null : { walk: null };
+    // ── A WALK THAT BOARDS A BOAT IS NOT A WALK ────────
+    //
+    // Bjorno, 16 Sep 2026. The nearest arrival point came back as Avernako Havn,
+    // a DIFFERENT island's harbour, "57 mins on foot". Google was not wrong and
+    // neither was this function: there is a route, it is on foot at both ends,
+    // and in the middle it sails. Nobody walks it.
+    //
+    // api/directions has reported hasFerry since 6 Aug and this was the one
+    // caller that never asked. Null rather than a long walk, because null is
+    // what this function already means by "there is no footpath", which is the
+    // true answer here: the candidate is across water.
+    if (dir.hasFerry) return null;
     return { walk: dir.durationText || null, minutes: dir.durationMinutes ?? null };
   } catch {
     return { walk: null };   // the lookup failed, which says nothing about the path

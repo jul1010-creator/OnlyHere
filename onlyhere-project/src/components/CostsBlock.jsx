@@ -1,5 +1,5 @@
 import { costLines, byUrgency, COST_KIND } from "../utils/costLedger";
-import { partnerDisclosure } from "../utils/affiliates";
+import { partnerDisclosure, outboundLink } from "../utils/affiliates";
 import { tripDayDate } from "../utils/guideReading";
 
 // ── "GIVE THEM A LIST OF WHAT THEY HAVE TO PAY FOR" ─────────────────
@@ -41,7 +41,18 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
   // Nothing rather than a labelled empty row. A trip with nothing to pay for is
   // a real trip and the block should not appear on it.
   if (!lines.length) return null;
-  const partnered = lines.filter(l => l.partner).map(l => l.href);
+  // ── AND THE DOOR, NOT THE STORED STRING ──────────
+  // 18 Sep 2026, the day Booking.com started paying. Every other kind on this
+  // list stores an already-tracked URL, so this block could draw l.href
+  // directly. A stay line cannot: CJ tracking is added at render, so the stored
+  // value is the plain search. Drawn as it was, the one paid link on the list
+  // went out untracked, with rel="noreferrer", and l.partner was false so the
+  // sentence at the bottom did not mention it.
+  //
+  // Asked of the door instead, which answers for all of them: a link that is
+  // already tracked comes back unchanged, and the disclosure is read off the
+  // same answer as the rel so the two cannot disagree.
+  const partnered = lines.map(l => outboundLink(l.href)).filter(o => o.href && o.note).map(o => o.href);
   // The action word per kind. A ferry link goes to a timetable and a hotel link
   // goes to a search, and calling both of them "Buy tickets" is the kind of
   // label that makes a reader distrust the rest of the page.
@@ -89,7 +100,7 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
                    footnote.
                    Outlined rather than filled. He asked for "a bit", and this
                    block can hold six of them at once. */
-                ? <a href={l.href} target="_blank" rel={l.partner ? "noreferrer sponsored nofollow" : "noreferrer"}
+                ? <a href={outboundLink(l.href).href || l.href} target="_blank" rel={outboundLink(l.href).rel}
                     style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 6, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "7px 13px", fontSize: 12.5, fontWeight: 700, textDecoration: "none" }}>
                     {action(l.kind)} ↗
                   </a>

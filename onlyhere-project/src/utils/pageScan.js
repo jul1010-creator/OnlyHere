@@ -3,7 +3,11 @@ import { MONTHS } from "./factCheckRead";
 // cannot sit beside ø. See ticketLinks.
 import { fold, containsName } from "./danishNames";
 import { KOMMUNER, K } from "../data/kommuner";
-import { CONTENT_TYPES } from "./sourcePolicy";
+import { CONTENT_TYPES, isNeverOwnSite } from "./sourcePolicy";
+// The four transport operators this app already names for a leg. Used here so a
+// real shipping company cannot rank below a reseller of its own tickets. See
+// rankSource. operators.js imports nothing from this file, checked.
+import { OPERATORS } from "./operators";
 
 // ── WAS THAT A PAGE, OR A WALL? ─────────────────────────────────────
 //
@@ -150,6 +154,67 @@ export const linksIn = (html, baseUrl = "") => {
   }
   return out;
 };
+
+// ── THE ANSWER IS OFTEN ONE CLICK PAST THE FRONT PAGE ──────
+//
+// Oliver, 17 Sep 2026, asked which fields should be allowed to follow a link on
+// the operator's own site: "probably mainly anything that can be seasonal".
+//
+// A small operator's front page says what the place IS. When it opens, whether
+// the boat runs in winter, whether a wheelchair gets aboard, whether you can
+// camp: that is on the FAQ, one click away, and this pipeline has never
+// followed it. Four of the seven island drafts of 16 Sep came back with those
+// fields empty off sites that answer them.
+//
+// ONE PAGE, AND ONLY THE OPERATOR'S OWN HOST. "Follow the links" is how a page
+// read turns into a crawl, and a crawl on a founder's budget is how a draft
+// costs five euros. The shortest matching path wins because a section page
+// answers several questions and a deep one usually answers a single question
+// nobody asked.
+const FAQ_WORDS = /(?:^|[^a-z])(?:faq|ofte\s+stillede|sp(?:\u00f8|oe)rgsm(?:\u00e5|aa)l|praktisk|praktiske|good\s+to\s+know|questions|before\s+you\s+(?:go|visit)|bes(?:\u00f8|oe)gsinfo|visitor\s+info)/i;
+
+const depthOf = (u) => {
+  try { return new URL(u).pathname.split("/").filter(Boolean).length; } catch { return 9; }
+};
+
+export const faqLink = (html, baseUrl = "") => {
+  const own = hostOf(baseUrl);
+  if (!own) return "";
+  const sameSite = (u) => {
+    const h = hostOf(u);
+    return !!h && (h === own || h.endsWith(`.${own}`) || own.endsWith(`.${h}`));
+  };
+  const hit = linksIn(html, baseUrl)
+    .filter(l => sameSite(l.href) && l.href.split("#")[0] !== String(baseUrl).split("#")[0])
+    .filter(l => FAQ_WORDS.test(l.text) || FAQ_WORDS.test(l.href))
+    // FEWEST PATH SEGMENTS FIRST, then the shorter address. Depth is the signal
+    // and length is only the tie-break: /faq/hunde-ombord is shorter than
+    // /ofte-stillede-spoergsmaal and answers one question about dogs, while the
+    // longer address is the section that answers all of them.
+    .sort((a, b) => depthOf(a.href) - depthOf(b.href) || a.href.length - b.href.length)[0];
+  return hit ? hit.href : "";
+};
+
+// ── AND WHAT IT MAY ANSWER, WHICH IS THE WHOLE GATE ──────
+//
+// His own words: "bar it from price and date". An FAQ is written once and
+// revised rarely, which makes it a good source for what is ALLOWED and a bad
+// one for what it COSTS or WHEN it runs, and that is the same split the age
+// gate draws over every page in this pipeline.
+//
+// Barred STRUCTURALLY rather than by instruction: the extraction that reads an
+// FAQ page is handed this list as its whole field set, so a price on it has no
+// field to land in. A sentence in a prompt asking a model not to use something
+// it has been given is the weakest form of a rule this codebase has.
+export const FAQ_FIELDS = ["accessibility", "camping", "bestTimeGlance"];
+
+export const FAQ_RULE = "This page is the operator's own FAQ. It may answer what is allowed, what is there and when the season runs. It may NOT be used for a price or for a date: an FAQ is written once and revised rarely, so a figure or a day on it may be years old.";
+
+// Empty is the only reason to spend the read. A field the writer already filled
+// is not improved by a second source, which is the lesson the nineteen glance
+// overrules taught on the same night.
+export const faqWorthReading = (draft, fields = FAQ_FIELDS) =>
+  fields.filter(f => typeof (draft || {})[f] !== "undefined" && !String((draft || {})[f] ?? "").trim());
 
 export const stripToText = (html) =>
   String(html || "")
@@ -391,8 +456,83 @@ export const scrapeTier = (url, text, nowMs, subject = null) => {
 // One line, for the run log and for the founder reading it. Names the domain,
 // because "a source was blocked" is not something anyone can act on and
 // "visitodense.dk was blocked" is.
+// ── AND HE READS THESE LOGS, SO THEY SAY THE NAME ────────
+//
+// Oliver's island runs, 16 Sep 2026, in the log he reads end to end:
+// `xn--bjrn-hrac.net` and `xn--ly-mka.dk`. Those are bjorno.net and lyo.dk with
+// the Danish letters in them, and an internationalised host arrives in that
+// form from every API this app calls.
+//
+// RFC 3492's decode half, written out rather than imported: Node has a
+// punycode module and this file runs in a browser, where there is no decoder
+// exposed. new URL() keeps the xn-- form on purpose, so nothing built in helps.
+// Encode is not needed anywhere, so it is not here.
+const PUNY = { base: 36, tmin: 1, tmax: 26, skew: 38, damp: 700, initialBias: 72, initialN: 128 };
+
+const punyAdapt = (delta, numPoints, firstTime) => {
+  let d = firstTime ? Math.floor(delta / PUNY.damp) : delta >> 1;
+  d += Math.floor(d / numPoints);
+  let k = 0;
+  while (d > ((PUNY.base - PUNY.tmin) * PUNY.tmax) >> 1) {
+    d = Math.floor(d / (PUNY.base - PUNY.tmin));
+    k += PUNY.base;
+  }
+  return k + Math.floor(((PUNY.base - PUNY.tmin + 1) * d) / (d + PUNY.skew));
+};
+
+// "" when the label is not decodable, so the caller keeps what it had rather
+// than printing half a name.
+const punyLabel = (label) => {
+  const input = String(label || "");
+  const out = [];
+  let i = 0, n = PUNY.initialN, bias = PUNY.initialBias;
+  const delim = input.lastIndexOf("-");
+  if (delim > 0) {
+    for (let j = 0; j < delim; j++) {
+      const c = input.charCodeAt(j);
+      if (c >= 0x80) return "";
+      out.push(c);
+    }
+  }
+  let idx = delim > 0 ? delim + 1 : 0;
+  while (idx < input.length) {
+    const oldi = i;
+    let w = 1;
+    for (let k = PUNY.base; ; k += PUNY.base) {
+      if (idx >= input.length) return "";
+      const c = input.charCodeAt(idx++);
+      const digit = c >= 0x30 && c <= 0x39 ? c - 0x30 + 26
+        : c >= 0x61 && c <= 0x7A ? c - 0x61
+        : c >= 0x41 && c <= 0x5A ? c - 0x41
+        : -1;
+      if (digit < 0) return "";
+      i += digit * w;
+      const t = k <= bias ? PUNY.tmin : k >= bias + PUNY.tmax ? PUNY.tmax : k - bias;
+      if (digit < t) break;
+      w *= PUNY.base - t;
+      if (w > Number.MAX_SAFE_INTEGER) return "";
+    }
+    bias = punyAdapt(i - oldi, out.length + 1, oldi === 0);
+    n += Math.floor(i / (out.length + 1));
+    i %= out.length + 1;
+    if (n > 0x10FFFF) return "";
+    out.splice(i, 0, n);
+    i++;
+  }
+  try { return String.fromCodePoint(...out); } catch { return ""; }
+};
+
+export const unpuny = (host) => String(host || "")
+  .split(".")
+  .map(l => {
+    if (!/^xn--/i.test(l)) return l;
+    const decoded = punyLabel(l.slice(4));
+    return decoded || l;
+  })
+  .join(".");
+
 export const domainOf = (url) => {
-  try { return new URL(String(url)).hostname.replace(/^www\./, ""); } catch { return String(url || "").slice(0, 60); }
+  try { return unpuny(new URL(String(url)).hostname.replace(/^www\./, "")); } catch { return String(url || "").slice(0, 60); }
 };
 export const describeRead = (url, verdict, via) =>
   `${domainOf(url)}: ${verdict?.usable ? `read via ${via}` : `not readable (${verdict?.reason || "unknown"})`}`;
@@ -931,11 +1071,56 @@ export const isOwnSiteFor = (url, nameWords = [], { placesWebsite = "", type = "
 // officialHosts is what the pipeline has already decided is the operator's own
 // site, rather than a guess made here. Passing none is fine: nothing is ranked
 // official, which is honest rather than optimistic.
+// ── AN ENCYCLOPEDIA IS NOT ANYBODY'S OFFICIAL SITE ──────
+//
+// Avernako, 16 Sep 2026, step 23 of the run:
+//
+//   da.wikipedia.org (official) > lex.dk (reference) > nn.wikipedia.org (reference)
+//
+// The same encyclopedia is "official" and "reference" in one list. It happens
+// when an island has no site of its own and the pipeline files the Wikipedia
+// article as its `website`, and then every check that says "the operator's own
+// page" means Wikipedia.
+//
+// isNeverOwnSite has listed wikipedia since it was written and this was the one
+// path that never asked it. Filtered HERE rather than at the caller, because
+// the caller is where the wrong host came from.
+const officialOnly = (hosts) => (Array.isArray(hosts) ? hosts : [])
+  .map(h => String(h || "").toLowerCase().replace(/^www\./, ""))
+  .filter(h => h && !isNeverOwnSite(`https://${h}/`));
+
+// ── AND A SHIPPING COMPANY IS NOT A BLOG ────────────
+//
+// Bornholm, 16 Sep 2026, the source order:
+//
+//   bornholm.info (official) > visit-bornholm.com > visitdenmark.dk >
+//   visitbornholm.com > trip.com (blog, 2026) > getyourguide.com (blog, 2025) >
+//   via.ritzau.dk (blog, 2025) > kombardoexpressen.com (blog)
+//
+// Kombardo Expressen runs the Koge to Ronne boat. It is last, as a blog, below
+// trip.com and GetYourGuide, and it is in this app's own OPERATORS list as the
+// operator for that crossing. Meanwhile two ferry RESELLERS were read for
+// fifteen thousand characters across two runs.
+//
+// An operator's own page is not the official site of the PLACE, so it does not
+// become "official" here. It is the authority on its own crossing, which puts
+// it where a ticket calendar sits and above anything anonymous.
+const OPERATOR_HOSTS = Object.values(OPERATORS || {})
+  .map(o => { try { return new URL(String(o?.url || "")).hostname.replace(/^www\./, "").toLowerCase(); } catch { return ""; } })
+  .filter(Boolean);
+
+const isOperatorHost = (host) => OPERATOR_HOSTS.some(h => host === h || host.endsWith(`.${h}`)
+  // kombardoexpressen.dk and kombardoexpressen.com are one company. Compared on
+  // the name before the suffix, since an operator answering on both is ordinary
+  // and listing every suffix by hand is how a list like this goes stale.
+  || host.replace(/\.[a-z.]+$/, "") === h.replace(/\.[a-z.]+$/, ""));
+
 export const rankSource = (url, text, { officialHosts = [], living = false } = {}) => {
   const host = hostOf(url);
   const era = pageEra(text);
-  const cls = officialHosts.map(h => String(h).toLowerCase().replace(/^www\./, "")).some(h => h && (host === h || host.endsWith(`.${h}`)))
+  const cls = officialOnly(officialHosts).some(h => h && (host === h || host.endsWith(`.${h}`)))
     ? "official"
+    : isOperatorHost(host) ? "listing"
     : isListingHost(url) ? "listing"
     : isReferenceHost(url) ? "reference"
     // Checked AFTER reference, because a board is never an encyclopedia and the

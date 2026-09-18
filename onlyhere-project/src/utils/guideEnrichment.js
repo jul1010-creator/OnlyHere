@@ -186,6 +186,24 @@ export const lookupRealPlace = (name) => {
 // LONGEST MATCH WINS, separately: with plain .find(), "Nykøbing" could answer
 // for a stop in "Nykøbing Falster" purely by key order.
 const isLetter = (ch) => !!ch && /\p{L}/u.test(ch);
+// ── AND DANISH PUTS AN s ON THE TOWN ────────────
+//
+// "Kobenhavns Oktoberfest", 16 Sep 2026, and the whole run went to Aalborg.
+//
+// The chain that decides which town a draft is about asks this function for a
+// town standing as its own word inside the name. Danish forms a possessive by
+// adding s with no apostrophe, so the name carries "Kobenhavns" and the town is
+// "Kobenhavn", and a whole-word test refuses it by one letter. With no town
+// known, the geocode ran on the name alone, Google Places answered with the
+// organiser's office in Aalborg, and the log then read "scoped to Aalborg, in
+// Nordjylland, on Jutland" for an event on Radhuspladsen.
+//
+// ONE TRAILING s, AND ONLY WHERE A LETTER FOLLOWS THE TOWN. The boundary test
+// is what stops "Ringsted" matching inside a longer word, so the s is allowed
+// as the boundary rather than as part of the name: "Kobenhavns" matches,
+// "Kobenhavnsgade" still does not.
+const isLetterAt = (str, i) => isLetter(str[i]);
+
 export const townInName = (name, town) => {
   const n = String(name || "").toLowerCase(), t = String(town || "").toLowerCase();
   if (!n || !t) return false;
@@ -193,13 +211,28 @@ export const townInName = (name, town) => {
   for (;;) {
     const i = n.indexOf(t, from);
     if (i < 0) return false;
-    if (!isLetter(n[i - 1]) && !isLetter(n[i + t.length])) return true;
+    const before = !isLetterAt(n, i - 1);
+    const afterIdx = i + t.length;
+    const after = !isLetterAt(n, afterIdx)
+      // The Danish genitive, and nothing else: one s, then a boundary.
+      || (n[afterIdx] === "s" && !isLetterAt(n, afterIdx + 1));
+    if (before && after) return true;
     from = i + 1;
   }
 };
+// ── AND THE TOWN LIST IS KEYED IN ENGLISH ────────────
+//
+// The other half of the Kobenhavns Oktoberfest run. TOWN_COORDS is keyed
+// "Copenhagen", the draft is named in Danish, and a name written the way the
+// place writes it matched nothing at all. danishNames has carried the pair
+// ["Copenhagen", "Kobenhavn"] since it was written, for the search side, and
+// this chain never asked it.
+//
+// Both spellings, and the KEY is what comes back, because every caller looks a
+// town point up by key.
 export const townKeyFor = (name) =>
   Object.keys(TOWN_COORDS)
-    .filter(t => townInName(name, t))
+    .filter(t => townInName(name, t) || variantsOf(t).some(v => v !== t && townInName(name, v)))
     .sort((a, b) => b.length - a.length)[0] || null;
 
 

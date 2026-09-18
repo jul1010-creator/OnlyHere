@@ -288,6 +288,51 @@ export const numbersTraceable = (value, research) => {
 // Bare "free" is not enough as the witness: "free cancellation", "free wifi"
 // and "free walking tour" all appear on tourist pages about places that charge
 // at the door. So the witness needs a door word beside it, in either language.
+// ── A GLANCE VALUE IS A COMPRESSION, NOT A SENTENCE ──────
+//
+// Nineteen overrules across Oliver's seven island runs of 16 Sep 2026, and not
+// one of them an improvement:
+//
+//   bestTimeGlance         May-Sept                     Summer months
+//   bestTimeGlance         May-Sept                     Spring, summer and early autumn
+//   recommendedStayGlance  3-4 days minimum, up to a week   Minimum 3-4 days; one week for cycling routes, hiking trails and relaxed exploration; two weeks for slow travel
+//   accommodationGlance    Book cars and rooms ahead for July   Hotels, guesthouses, holiday homes and campsites
+//   accommodationGlance    Few options, book ahead in summer    Limited accommodation
+//   accommodationTip       (a written sentence)         Nobis Hotel Copenhagen, and on another run the bare word Odense
+//
+// The rule doing this is sound, and its own words are the reason: At a Glance
+// is data, and a value stated on a page beats one composed by a writer. It was
+// written against a model inventing prices.
+//
+// On these four fields the writer is not inventing anything, he is COMPRESSING,
+// and the compression is the product: At a Glance is a row a reader scans in a
+// second, and "When the fruit trees blossom, when the sun is warm, or when the
+// apples are ready to eat" is a sentence off a tourist board page in a field
+// sized for six words.
+//
+// ── THE SHAPE, NOT THE RULE ──────────────────
+//
+// So the rule is untouched everywhere it was written for, and on these fields
+// an extraction has to bring a FIGURE the written value did not have. That is
+// what "data" means here. A season name replacing a month range brings none. A
+// page's "3 to 5 days" over a writer's "Two to three days" brings one and still
+// wins, which is the case the rule exists for.
+//
+// AND AN EMPTY FIELD IS UNTOUCHED BY THIS. accommodationGlance on Avernako went
+// from empty to "Avernako Landhotel", which IS the rule working: a real name
+// beats nothing. The gate only decides a swap.
+export const COMPRESSION_GLANCE = ["bestTimeGlance", "recommendedStayGlance", "accommodationGlance", "accommodationTip"];
+
+export const glanceShapeProblem = (field, prev, next) => {
+  if (!COMPRESSION_GLANCE.includes(field)) return "";
+  const was = String(prev || "").trim();
+  const now = String(next || "").trim();
+  if (!was || !now) return "";
+  const had = new Set(digitsOf(was));
+  if (digitsOf(now).some(n => !had.has(n))) return "";
+  return `no figure the writer did not already have, so this is prose replacing prose on a field sized for a glance`;
+};
+
 const FREE_AT_THE_DOOR = /(?:gratis|fri)\s*(?:adgang|entr[ée]|indgang)|free\s+(?:entry|entrance|admission|to\s+(?:enter|visit))|(?:no|ingen)\s+(?:entry|admission|cover|entr[ée])(?:\s*(?:fee|charge|price|betaling))?|no\s+ticket\s+required/i;
 
 // A figure with a currency on it, which is the thing that must not vanish.
@@ -391,6 +436,10 @@ export const mergeGlance = (draft, values, fields, research = "", pages = "") =>
       continue;
     }
     {
+      // See COMPRESSION_GLANCE above: on four fields the extraction has to
+      // bring a figure rather than a longer sentence.
+      const shape = glanceShapeProblem(f, prev, next);
+      if (shape) { rejected.push({ field: f, value: next, shape }); continue; }
     }
     out[f] = next;
     changed.push({ field: f, was: prev, now: next });
@@ -497,7 +546,9 @@ export const describeGlance = (r) => {
     ? `${x.field} (${x.missing.join(", ")} appears nowhere in the research)`
     : Array.isArray(x?.untranslated) && x.untranslated.length
       ? `${x.field} (still in Danish: ${x.untranslated.join(", ")})`
-      : `${x?.field || "a field"} (refused)`;
+      : x?.shape
+        ? `${x.field} (${x.shape})`
+        : `${x?.field || "a field"} (refused)`;
   if (r.rejected?.length) parts.push(`${r.rejected.length} refused: ${r.rejected.map(why).join(", ")}`);
   return parts.join(". ") || "nothing to change";
 };

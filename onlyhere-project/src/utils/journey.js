@@ -166,6 +166,49 @@ const hm = (n) => {
   return h ? `${h}h${m ? ` ${m}min` : ""}` : `${m}min`;
 };
 
+// ── A MEASURED DURATION CAN STILL BE THE WRONG NUMBER ──────
+//
+// Bornholm, published and live, read off Oliver's own run log of 16 Sep 2026:
+//
+//   travelTime: believed Google Directions (measured), overruled the model
+//   ("4h25min") value: 10h 44min
+//
+// Copenhagen to Bornholm is about three hours by train and ferry through
+// Ystad. Nothing measured it wrongly. Google was asked for a door to door
+// itinerary leaving at the departure anchor, the next sailing was the following
+// morning, and it answered with the overnight wait inside the total. Step 41 of
+// the same run diagnosed it correctly, in its own words, and was discarded,
+// because a prose check has no authority over a measured field.
+//
+// ── THE WAIT IS A FACT ABOUT THE DEPARTURE TIME WE PICKED ────
+//
+// Not about the route. A traveller leaves in time to meet the boat. So a total
+// that is mostly waiting is a duration nobody experiences, and on a card it is
+// the difference between a weekend and "not this trip".
+//
+// An hour of it stays in, and that number is the whole of the judgement here:
+// connection time IS part of a journey with a change in it, and cutting every
+// minute of it would understate a real itinerary with two changes. Past an hour
+// the figure has stopped describing the trip and started describing the
+// timetable we happened to ask about.
+//
+// THE RULE, NOT THE FIELD, and that is the difference between this and the
+// discarded step 41: every reader of the measurement asks this one function, so
+// the card, the journey block, the transport check and the correction cannot
+// hold three opinions about what the number is.
+export const WAIT_INSIDE_TOTAL = 60;
+
+export const journeyFigure = (parts) => {
+  const total = Number(parts?.total);
+  if (!Number.isFinite(total) || total <= 0) return { mins: null, basis: "none", waiting: 0 };
+  const waiting = Math.max(0, Number(parts?.waiting) || 0);
+  if (waiting <= WAIT_INSIDE_TOTAL) return { mins: total, basis: "total", waiting };
+  // Never below the time in motion, whatever the arithmetic of a rounded
+  // total says.
+  const moving = Math.max(Number(parts?.onBoard) || 0, total - waiting);
+  return { mins: moving, basis: "moving", waiting };
+};
+
 // ── WHERE THE JOURNEY PUTS YOU DOWN ─────────────────────────────────
 //
 // Oliver's Græskarfestival draft, 14 Aug 2026:
@@ -202,10 +245,25 @@ const hm = (n) => {
 // The trailing parenthetical is Google's transit feed disambiguating a stop by
 // its street, so it is dropped for a field that wants a name. Nothing is lost:
 // the full form stays in __journey where it was measured.
-export const arrivalStop = (parts) => {
+export const arrivalStop = (parts, { island = false } = {}) => {
   const legs = Array.isArray(parts?.legs) ? parts.legs.filter(l => l && l.to) : [];
   if (!legs.length) return "";
-  const last = String(legs[legs.length - 1].to || "").trim();
+  // ── AND AN ISLAND ARRIVES AT ITS HARBOUR ────────────
+  //
+  // Bornholm's arrival point came back as Åsedamsvej v. Oxholmvej, a rural bus
+  // stop three minutes from the island's geometric centre, because the stored
+  // coordinate of an island IS its centre and the last leg of the measured
+  // route is whatever bus runs inland from the boat.
+  //
+  // Nobody travels to there. You arrive at Rønne, and where you go afterwards
+  // is the rest of the guide. So for an island the arrival point is the last
+  // leg that crossed the water, which is measured, is in the same payload, and
+  // is the one stop on the route a reader will certainly stand on.
+  //
+  // Falls through to the last leg when no ferry was involved, which is the
+  // right answer for an island with a bridge: Falster and Mon arrive by road.
+  const ferry = island ? legs.filter(l => String(l.vehicle || "") === "ferry").pop() : null;
+  const last = String((ferry || legs[legs.length - 1]).to || "").trim();
   // Only a TRAILING parenthetical, and only when something is left in front of
   // it. "Nørreport St. (Metro)" becomes "Nørreport St."; a stop whose whole
   // name is bracketed keeps it rather than becoming an empty string.
@@ -470,7 +528,13 @@ const ORIGIN_NAMED = /\b(copenhagen|k[oø]benhavn|cph)\b/i;
 export const transitProblems = (prose, { parts, drivingMins } = {}) => {
   if (!parts) return [];
   const out = [];
-  const measured = [parts.total, parts.onBoard, parts.onFoot, parts.waiting, parts.longest?.mins, drivingMins]
+  // ── THE FIGURE ON THE CARD IS A MEASURED FIGURE ────────
+  // journeyFigure cuts an overnight wait out of the total, so the number the
+  // card shows can be none of the five below and this check would then flag the
+  // pipeline's own field as unmeasured. It is the same measurement, read by the
+  // one function that decides what the measurement means.
+  const shown = journeyFigure(parts).mins;
+  const measured = [parts.total, shown, parts.onBoard, parts.onFoot, parts.waiting, parts.longest?.mins, drivingMins]
     .filter(n => Number.isFinite(Number(n)) && Number(n) > 0)
     .map(Number);
   // Split on sentence ends, because attribution is a sentence-level property:
@@ -646,10 +710,36 @@ const ABSENCE_CULTURE = [
 // out-of-scope filter was built to stop on the checker's side.
 const ABUNDANCE = /\bno\s+(?:shortage|lack|end|want)\s+of\b|\bnot\s+short\s+of\b/i;
 
+// ── THE PIPELINE DOES NOT CHECK ITS OWN SENTENCES ──────
+//
+// Fejo and Lyo, 16 Sep 2026, at the last step before publishing:
+//
+//   45. Stated absences, FOUND A GAP
+//   "Google returned no public transport itinerary for this route, which is a
+//   fact about the routing feed and not about the place" states that something
+//   does not exist.
+//
+// It does, and the pipeline is what said it. A prompt adds that sentence to
+// uncertainties when the routing comes back empty, for the exact purpose of
+// stopping the entry from claiming the place has no public transport. The
+// absence check below then reads it as an unbacked claim, hands it to the
+// correction as contradicted, and the rewrite that follows cost 200 seconds of
+// a 425 second run on Lyo.
+//
+// A check that flags the sentence written to satisfy it is not reading the
+// draft any more. The sentence is recognisable by its own words, and it is
+// exported so the prompt and this list cannot drift apart.
+export const NO_TRANSIT_NOTE = "The travel time shown is by road. Google returned no public transport itinerary for this route, which is a fact about the routing feed and not about the place: check rejseplanen.dk for the real connection.";
+
+const PIPELINE_SAID = [
+  /a fact about the routing feed and not about the place/i,
+];
+
 export const absenceClaims = (prose) => {
   const out = [];
   for (const s of sentences(prose)) {
     if (HEDGED.test(s)) continue;
+    if (PIPELINE_SAID.some(re => re.test(s))) continue;
     if (ABUNDANCE.test(s)) continue;
     if (ABSENCE.some(re => re.test(s))) {
       out.push(`"${s.trim().slice(0, 120)}" states that something does not exist. Nothing in this run measured an absence and nothing could: an empty nearestStation means the pipeline does not know, and Google returning no itinerary means it could not route this, neither of which is evidence that no station or no service exists. Say it could not be confirmed, or take the sentence out.`);
@@ -678,6 +768,7 @@ export const contradictedAbsence = (prose, { rowsForTown = [], town = "" } = {})
   const out = [];
   for (const s of sentences(prose)) {
     if (HEDGED.test(s)) continue;
+    if (PIPELINE_SAID.some(re => re.test(s))) continue;
     if (!ABSENCE_CULTURE.some(re => re.test(s))) continue;
     const names = rows.slice(0, 3).map(r => String(r.name).trim()).join(", ");
     out.push(`"${s.trim().slice(0, 120)}" is contradicted by this app's own library: ${rows.length} published event${rows.length === 1 ? "" : "s"} for ${town || "this town"}, including ${names}. Take the sentence out.`);

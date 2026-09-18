@@ -2,7 +2,7 @@ import { useState } from "react";
 import { C } from "../utils/theme";
 import { auditRows, auditLinks, auditSummary, auditNote, programmeState, TICKET, TOUR } from "../utils/affiliateAudit";
 import { isBookableTicketUrl, ticketAgentOf, isTourUrl, TOUR_TYPES, TICKET_FIELD, TOUR_FIELD } from "../utils/ticketLink";
-import { affiliateHref, wegotripBrowseUrl, tripcomActive, getyourguideActive, bajabikesActive } from "../utils/affiliates";
+import { affiliateHref, wegotripBrowseUrl, tripcomActive, getyourguideActive, bajabikesActive, bookingEarns, partnerAdsPlacements } from "../utils/affiliates";
 import { TRIPCOM_CITIES } from "../data/tripcom";
 import { BOOKING_AFFILIATE_ID, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, TICKETMASTER_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_AFFILIATE_TEMPLATE, BAJABIKES_BANNERS } from "../config";
 
@@ -48,6 +48,10 @@ export const AffiliatePanel = ({ rows, onSetLink, savingId = null }) => {
     tiqetsBrowse: TIQETS_BROWSE_LINK,
     ticketmasterTemplate: TICKETMASTER_AFFILIATE_TEMPLATE,
     bookingId: BOOKING_AFFILIATE_ID,
+    // Through the builders, the same reason as the three rows below: the panel
+    // and the links a reader sees must never disagree about what is on.
+    bookingCj: bookingEarns() ? "on" : "",
+    partnerAds: partnerAdsPlacements(),
     carRental: CAR_RENTAL_LINK,
     // Through the builder rather than the constant, so this panel and whatever
     // renders the browse button can never disagree about whether one exists.

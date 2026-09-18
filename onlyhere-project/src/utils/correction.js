@@ -105,6 +105,10 @@ import { PROSE_FIELDS as NARRATIVE_FIELDS } from "./entryAudit";
 // this project has been bitten six times, most recently on 7 Sep when journey.js
 // and claimCheck.js disagreed about "2h 58m".
 import { durationsIn } from "./claimCheck";
+// journeyFigure, for the reason at its definition: what a measured total MEANS
+// is one decision and it is made in one place. journey.js imports nothing from
+// here, checked before this line was written.
+import { journeyFigure } from "./journey";
 // ── THE THREE THINGS A CITED LINK HAS TO BE ASKED ───────────────────
 // factAge dates a page, isNeverASource says whether a host may settle anything
 // at all, and wrongEdition catches an address that names another year. All
@@ -824,7 +828,12 @@ export const verifyTransportClaim = async (claim, entry, { directions, origin = 
   // out loud what it is when it is used.
   const said = `${claim?.says || ""} ${claim?.proposed || ""}`;
   const j = entry?.__journey;
-  const measured = Number.isFinite(j?.total) ? { minutes: j.total, how: "on public transport", from: String(j.from || "").trim() }
+  // journeyFigure, not j.total, for the reason written where it lives: a total
+  // can be mostly waiting for the next sailing, and a traveller correcting
+  // "10h 44min to Bornholm" is right. Comparing their claim against the raw
+  // total would tell them they are wrong with the pipeline's own bad number.
+  const jf = journeyFigure(j);
+  const measured = Number.isFinite(jf.mins) ? { minutes: jf.mins, how: "on public transport", from: String(j.from || "").trim() }
     : Number.isFinite(base.durationMinutes) ? { minutes: base.durationMinutes, how: "by car", from: "Copenhagen" }
     : null;
   const fromWhere = measured?.from ? ` from ${measured.from}` : "";

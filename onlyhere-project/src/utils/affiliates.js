@@ -1,4 +1,4 @@
-import { BOOKING_AFFILIATE_ID, BOOKING_CJ_LINK, PARTNER_ADS_PARTNER_ID, PARTNER_ADS_STAY_BANNER, PARTNER_ADS_BANNERS, TICKETMASTER_AFFILIATE_TEMPLATE, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_LINK, WEGOTRIP_AFFILIATE_TEMPLATE , TRIPCOM_ALLIANCE_ID, TRIPCOM_SID, GETYOURGUIDE_PARTNER_ID, GETYOURGUIDE_CAMPAIGN, BAJABIKES_REFERRAL_ID, BAJABIKES_BANNERS, BAJABIKES_RENTAL_SLUG } from "../config";
+import { BOOKING_AFFILIATE_ID, BOOKING_CJ_LINK, PARTNER_ADS_PARTNER_ID, PARTNER_ADS_STAY_BANNER, PARTNER_ADS_GEAR_BANNER, PARTNER_ADS_BANNERS, TICKETMASTER_AFFILIATE_TEMPLATE, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_LINK, WEGOTRIP_AFFILIATE_TEMPLATE , TRIPCOM_ALLIANCE_ID, TRIPCOM_SID, GETYOURGUIDE_PARTNER_ID, GETYOURGUIDE_CAMPAIGN, BAJABIKES_REFERRAL_ID, BAJABIKES_BANNERS, BAJABIKES_RENTAL_SLUG } from "../config";
 // hostOf, not a fourth copy of it. See pageScan.js, and see the four other
 // functions this codebase has already found existing twice.
 import { hostOf } from "./pageScan";
@@ -119,12 +119,35 @@ const withTown = (area, near) => {
   return `${a}, ${t}`;
 };
 
-export const bookingUrl = ({ area, near = "", country = "Denmark", checkin, checkout, adults = 2 } = {}) => {
+// ── "A 'GOOD HOTEL' OR 'BUDGET HOTEL'" ──────────────
+//
+// Oliver, 18 Sep 2026: "everytime they can pick a hotel make a 'good hotel' or
+// 'budget hotel'. And in the Aarhus one, that would be replacing the 'good
+// hotel'."
+//
+// Booking's own sort keys, on the search this file already builds. They live
+// here rather than at the render sites, so the day Booking renames one there is
+// one line to change instead of four.
+//
+// AN UNKNOWN SORT KEY DEGRADES RATHER THAN BREAKS, which is why this is safe to
+// ship before anyone has pressed it: Booking ignores a parameter it does not
+// recognise and returns its default order, so the worst case is an ordinary
+// search that still lands on the right town on the right dates. Worth pressing
+// both once to see the sort come up on the page, because that is the only way
+// to know it is honoured.
+//
+// NOT a price filter. A filter can empty a page, and "budget" returning no
+// hotels at all in a small town would be worse than the same list in a
+// different order.
+export const STAY_ORDER = { good: "bayesian_review_score", budget: "price" };
+
+export const bookingUrl = ({ area, near = "", country = "Denmark", checkin, checkout, adults = 2, tier = "" } = {}) => {
   if (!area) return null;
   const d = dateRange(checkin, checkout);
   return `https://www.booking.com/searchresults.html?ss=${q(`${withTown(area, near)}, ${country}`)}` +
     (d.checkin ? `&checkin=${d.checkin}&checkout=${d.checkout}` : "") +
     `&group_adults=${adults}&no_rooms=1` +
+    (STAY_ORDER[tier] ? `&order=${STAY_ORDER[tier]}` : "") +
     (BOOKING_AFFILIATE_ID ? `&aid=${BOOKING_AFFILIATE_ID}` : "");
 };
 
@@ -261,6 +284,30 @@ const sameTown = (a, b) => {
   const shorter = x.length > y.length ? y : x;
   return longer.startsWith(shorter) && /^[\s,]/.test(longer.slice(shorter.length));
 };
+
+// ── AND WHAT IS PLACED, FOR THE PAGE THAT SAYS SO ────────
+//
+// Oliver, 18 Sep 2026: "remember to add the hotel and tip inside the 'how we're
+// paid'. I don't want to lie to people."
+//
+// So the affiliates page reads THIS rather than a sentence somebody typed, the
+// rule that file states about itself: a hand-written page is true until a
+// placement changes and then it is a public claim about money that nobody
+// remembers to edit. A banner with no name in config.js is placed nowhere,
+// earns nothing, and appears on no page; the day it is named, the page says so
+// with no edit.
+export const partnerAdsPlacements = () =>
+  Object.entries(PARTNER_ADS_BANNERS || {})
+    .filter(([, row]) => row && String(row.merchant || "").trim())
+    .map(([banner, row]) => ({
+      banner: String(banner),
+      slot: String(banner) === String(PARTNER_ADS_STAY_BANNER) ? "stay"
+          : String(banner) === String(PARTNER_ADS_GEAR_BANNER) ? "gear"
+          : "other",
+      merchant: String(row.merchant).trim(),
+      town: String(row.town || "").trim(),
+      site: String(row.site || "").trim(),
+    }));
 
 export const featuredStayFor = (town) => {
   const row = PARTNER_ADS_BANNERS[PARTNER_ADS_STAY_BANNER];

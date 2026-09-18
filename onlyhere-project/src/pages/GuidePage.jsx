@@ -2167,7 +2167,39 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 checkin: fmt(dayDate) || undefined,
                 checkout: fmt(dayDate) ? fmt(nextDate) : undefined,
                 adults,
+                // Sorted by review score only when this is a SEARCH. When the
+                // guide named a property, the link is a lookup for that name
+                // and an order parameter over one hotel means nothing.
+                tier: day.glance.recommendedStay ? "" : "good",
               });
+              // ── "A GOOD HOTEL OR BUDGET HOTEL" ────────────
+              //
+              // Oliver, 18 Sep 2026: "everytime they can pick a hotel make a
+              // 'good hotel' or 'budget hotel'."
+              //
+              // Two slots, and the budget one is always the AREA rather than
+              // the named property: a cheaper room is a different hotel, so
+              // sorting a search for one building by price answers nothing.
+              const stayAreaTerm = day.glance.stayArea || stayTown || searchTerm;
+              const stayBudgetUrl = bookingUrl({
+                area: stayAreaTerm,
+                near: stayTown,
+                checkin: fmt(dayDate) || undefined,
+                checkout: fmt(dayDate) ? fmt(nextDate) : undefined,
+                adults,
+                tier: "budget",
+              });
+              // The good slot as a search, for when the partner hotel is
+              // filling the slot itself and a reader wants to pick another.
+              const stayGoodUrl = bookingUrl({
+                area: stayAreaTerm,
+                near: stayTown,
+                checkin: fmt(dayDate) || undefined,
+                checkout: fmt(dayDate) ? fmt(nextDate) : undefined,
+                adults,
+                tier: "good",
+              });
+              const featuredStay = featuredStayFor(stayAreaTerm);
               // ── AND TRIP.COM, WHERE IT HAS A CITY ────────────────
               // Oliver, 7 Sep 2026: "Got another affiliate!" Booking has been
               // approved-pending since 5 August and earns nothing meanwhile,
@@ -2223,7 +2255,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                         cannot name its partner has no honest wording available
                         to it. */}
                     {(() => {
-                      const featured = featuredStayFor(day.glance.stayArea || stayTown);
+                      const featured = featuredStay;
                       if (!featured) return null;
                       const out = outboundLink(featured.url);
                       if (!out.href) return null;
@@ -2255,7 +2287,16 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                     {stayBookingUrl && (
                       <a href={outboundLink(stayBookingUrl).href || stayBookingUrl} target="_blank" rel={outboundLink(stayBookingUrl).rel}
                         style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, marginRight: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
-                        🔎 {day.glance.recommendedStay ? `See ${day.glance.recommendedStay} on Booking.com` : `Search stays near ${day.glance.stayArea}`} ↗
+                        {/* THE LABEL SAYS WHICH SLOT THIS IS. With the partner
+                            hotel above it, this button is the way to pick
+                            another, which is what he asked for in the same
+                            message: "make them able to pick another from
+                            Booking." */}
+                        🔎 {day.glance.recommendedStay
+                          ? `See ${day.glance.recommendedStay} on Booking.com`
+                          : featuredStay
+                            ? `Other good hotels in ${stayAreaTerm}`
+                            : `Good hotels in ${stayAreaTerm}`} ↗
                       </a>
                     )}
                     {/* ── AND THE INLINE COPY WAS DODGING THIS CHECK ──────
@@ -2270,13 +2311,22 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                     {/* The same shape, so the two sit beside each other as a
                         pair of doors rather than as a link and its follow-up,
                         and wrap onto two lines on a phone. */}
+                    {/* The second slot. Same shape as the two beside it, so
+                        the three read as a row of doors rather than as a link
+                        and its footnotes. */}
+                    {stayBudgetUrl && (
+                      <a href={outboundLink(stayBudgetUrl).href || stayBudgetUrl} target="_blank" rel={outboundLink(stayBudgetUrl).rel}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, marginRight: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 13px", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
+                        💰 Budget hotels in {stayAreaTerm} ↗
+                      </a>
+                    )}
                     {stayTripUrl && (
                       <a href={stayTripUrl} target="_blank" rel="noreferrer sponsored nofollow"
                         style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
                         🏨 Compare hotels on Trip.com ↗
                       </a>
                     )}
-                    {(stayBookingUrl || stayTripUrl) && dayIdx === 0 && (
+                    {(stayBookingUrl || stayBudgetUrl || stayTripUrl) && dayIdx === 0 && (
                       <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4 }}>{stayDisclosure({ tripcom: !!stayTripUrl })}</div>
                     )}
                   </div>

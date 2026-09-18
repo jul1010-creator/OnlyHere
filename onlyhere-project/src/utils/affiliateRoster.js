@@ -30,6 +30,7 @@
 import {
   affiliateActive, tiqetsActive, ticketmasterActive, wegotripActive,
   tripcomActive, carRentalActive, getyourguideActive, bajabikesActive,
+  partnerAdsPlacements,
 } from "./affiliates";
 import { TRIPCOM_CITIES } from "../data/tripcom";
 
@@ -81,7 +82,21 @@ const ROSTER = [
     key: "wegotrip",
     name: "WeGoTrip",
     sells: "Self-guided audio walks",
-    why: "The closest thing on this list to what Gemlyx already writes, which is the reason to be careful with it as much as the reason to have it. It is offered where a walk adds something our own writing does not.",
+    // ── "WHY BE CAREFUL?" ────────────────────
+    // Oliver, 18 Sep 2026, reading this page: "I doubt those partners will be
+    // happy seeing 'be careful with WeGoTrip'.. why be careful? The chances
+    // that they've even read my blog in the first place is quite small.. they
+    // take the guide and that's it."
+    //
+    // He is right, and it is the "yet" in the old stay disclosure all over
+    // again: a founder's note about competition, printed under a partner's name
+    // on a page a reader and the partner can both open. The reservation was
+    // about whether WeGoTrip's audio walks substitute for what Gemlyx writes,
+    // which is a question about our product and not a warning about theirs, and
+    // nothing on a reader-facing page follows from it.
+    //
+    // It belongs here, where it is still on the record and reads as what it is.
+    why: "Self-guided audio walks, which is the one thing on this list that works the minute you arrive: no booking window, nobody to meet, and you stop when you like. Offered where a walk exists for a place a guide already sends you to.",
     live: wegotripActive,
   },
   {
@@ -102,9 +117,21 @@ const ROSTER = [
   },
   {
     key: "carhire",
-    name: "AutoEurope",
+    // ── A CLOSED PROGRAMME IS NOT AN ANSWER TO "HOW ARE YOU PAID" ──
+    // AutoEurope closed on 14 Sep 2026 and CAR_RENTAL_LINK was emptied the same
+    // night, so this row named a partner that no longer exists, under a heading
+    // about money, on the page least likely to be corrected. Same call Oliver
+    // made about Airbnb on 9 Sep: "Airbnb stopped being an affiliate in 2021.
+    // So remove that."
+    //
+    // The row stays in the source, because a car programme is being chosen
+    // right now and this is where its reason goes. hideWhenOff keeps it off the
+    // page until one pays, rather than printing a partner's name beside the
+    // word nothing.
+    name: "Car hire",
+    hideWhenOff: true,
     sells: "Car hire",
-    why: "Chosen over a programme paying more than twice the rate, because that one had no Danish cars at all. AutoEurope has nine Danish airports. The link only appears on a trip you have said involves driving.",
+    why: "A car is the only way to reach a lot of what this site writes about, and the link appears only on a trip you have said involves driving, never on a page telling you a car is not worth it. The last programme was chosen over one paying more than twice the rate, because that one had no Danish cars at all, and its replacement is being picked on the same test.",
     live: carRentalActive,
   },
 ];
@@ -125,11 +152,54 @@ const ROSTER = [
 // place for it than a list on another page, and it is the place the disclosure
 // rules in this codebase have always insisted on: the sentence travels with the
 // link rather than being filed somewhere.
+// ── AND THE TWO PARTNER-ADS PLACEMENTS, 18 SEP 2026 ──────
+//
+// Oliver: "remember to add the hotel and tip inside the 'how we're paid'. I
+// don't want to lie to people."
+//
+// GENERATED, not typed, and that is the same decision the header of this file
+// makes about every other row. A partner-ads banner is named in config.js or it
+// is placed nowhere on the site, so the row exists exactly when the placement
+// does: one line in config gives the hotel a row here, and emptying it takes
+// the row away. Nobody has to remember either.
+//
+// One row per ADVERTISER rather than one for the network, because "Partner-ads"
+// answers none of the three questions this page asks. A reader wants to know
+// which hotel, what it sells, and why it is on the page.
+const PARTNER_ADS_WHY = {
+  stay: "The one hotel we have a partnership with. It is named inside guides that already pass through its own town, never as a reason to send you there, and the Booking.com search sits beside it so you can pick something else.",
+  gear: "Travel gear, on the Tips page and nowhere else. Nothing about a trip changes if you buy none of it, which is why it sits under advice rather than beside a place.",
+  other: "A partner offer, named on the page it appears on rather than only here.",
+};
+
+// `placements` is an argument so the suite can see what a named banner produces
+// without a config constant existing for it to flip.
+export const partnerAdsRows = (placements = partnerAdsPlacements()) =>
+  placements.map(p => ({
+    key: `partnerads-${p.banner}`,
+    name: p.merchant,
+    sells: p.slot === "stay" ? `A place to stay${p.town ? ` in ${p.town}` : ""}`
+      : p.slot === "gear" ? "Travel gear"
+      : "A partner offer",
+    why: PARTNER_ADS_WHY[p.slot] || PARTNER_ADS_WHY.other,
+    // A named placement is a live link on the site, so it earns. There is no
+    // half state: an unnamed banner never reaches this function.
+    earning: true,
+  }));
+
 // The roster with the live state resolved, newest question first: does this
 // programme pay anything TODAY. `live` is a function rather than a boolean so
 // the answer is read when the page renders, not when this module is imported.
-export const affiliateRoster = () =>
-  ROSTER.map(({ live, ...rest }) => ({ ...rest, earning: !!live() }));
+export const affiliateRoster = () => [
+  ...ROSTER
+    .map(({ live, ...rest }) => ({ ...rest, earning: !!live() }))
+    // A row that opted in to being hidden while it earns nothing. See the car
+    // row: the alternative is a partner's name printed under a heading about
+    // money next to the word nothing.
+    .filter(p => !(p.hideWhenOff && !p.earning))
+    .map(({ hideWhenOff, ...rest }) => rest),
+  ...partnerAdsRows(),
+];
 
 // What the page says at the top, and it has to be countable rather than a claim.
 // "Some of the links here are paid" over a site where none of them are would be

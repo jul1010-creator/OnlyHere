@@ -44,7 +44,7 @@ const dir = mkdtempSync(join(tmpdir(), "gemlyx-test-"));
 const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
-  export { legSteps, journeyFromStored, worthShowingLegs, journeyParts, journeyBlock, vehicleWord, arrivalStop, arrivalGlanceRow, ARRIVAL_WALK_LIMIT, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn, closedButPlanned, storedJourney, journeyReach, journeyChanges, journeyBreakdown, journeyDriving, journeyStamp, journeyAgencies, JOURNEY_SOURCE } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
+  export { legSteps, journeyFromStored, worthShowingLegs, journeyParts, journeyFigure, NO_TRANSIT_NOTE, WAIT_INSIDE_TOTAL, journeyBlock, vehicleWord, arrivalStop, arrivalGlanceRow, ARRIVAL_WALK_LIMIT, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn, closedButPlanned, storedJourney, journeyReach, journeyChanges, journeyBreakdown, journeyDriving, journeyStamp, journeyAgencies, JOURNEY_SOURCE } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS, foundAt, matchVariantsOf, GENERIC_ALIASES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, townOfStreet, streetForSpot, barsOnStreet, nightlifeForTown, nightKindOf, strandedNight } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
@@ -52,7 +52,7 @@ writeFileSync(entry, `
   export { cleanPlaceKind, cleanRelation, cleanIsland, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { dateProbeQueries, danishDay, englishDay, numericDay, parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, datePropositionWhy, nextEdition, dateRangesInText, isoDay, anchoredEdition, venueRatherThanEvent, PROGRAMME_DATES, dateMentions, labelledAt, otherLabelAt, CALENDAR_DATES, DATE_LABEL_WINDOW, looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER, OFFICE_CONTEXT_WINDOW, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS, WRONG_EDITION, readAnotherEdition, statusIsAboutAFinishedEdition, statusRefusalFor, STATUS_REFUSAL_WHY } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isApiCoveredHost, API_COVERED_HOSTS, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES, bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK, linksInMarkdown, ticketLinksFromMarkdown, scoreTicketLinks } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
+  export { faqLink, faqWorthReading, FAQ_FIELDS, FAQ_RULE, unpuny, stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isApiCoveredHost, API_COVERED_HOSTS, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES, bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK, linksInMarkdown, ticketLinksFromMarkdown, scoreTicketLinks } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
   export { DINING_STYLES, DINING_STYLE_LABEL, diningStyleOf, diningStyleLabel, unstyledEntries, styleCoverage, STYLE_COVERAGE_MIN, showStyleFacet, buildFoodFacets, foodCitiesIn, FOOD_SORTS, byFoodPrice } from ${JSON.stringify(join(root, "src/utils/foodStyle.js"))};
@@ -288,7 +288,7 @@ writeFileSync(entry, `
   export { longestEcho, echoWords, isNameEcho, echoInDraft, describeEcho, ECHO_RUN } from ${JSON.stringify(join(root, "src/utils/echoCheck.js"))};
   export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
-  export { moneyTraceable, EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, saysFreeOnly, statesAnAmount, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
+  export { moneyTraceable, COMPRESSION_GLANCE, glanceShapeProblem, EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, saysFreeOnly, statesAnAmount, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { keepLanguageOf } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
@@ -2786,21 +2786,39 @@ is("missing licence does not require credit", creditIsRequired({}), false);
        /\.trim\(\) \+ " 🚗"/.test(appSrc3));
     // NO TRANSIT ITINERARY IS NOT NO TRANSIT, and the reader is told which is
     // which rather than being left to read a car time as a verdict.
+    // The sentence moved into utils/journey.js on 18 Sep, beside the absence
+    // check that was flagging it as an unbacked claim and charging a rewrite
+    // for it. Asserted on both sides: the uncertainty carries it, and the check
+    // that reads uncertainties knows it is the pipeline's own words.
     ok("and the reader is told transport was not confirmed, not that it is absent",
-       /a fact about the routing feed and not about the place/.test(appSrc3));
+       /NO_TRANSIT_NOTE,/.test(appSrc3)
+       && /a fact about the routing feed and not about the place/.test(readFileSync(join(root, "src/utils/journey.js"), "utf8")));
+    is("and the check no longer flags the pipeline's own sentence",
+       M.absenceClaims(M.NO_TRANSIT_NOTE), []);
     // Still reachable when driving came back with no usable duration, and still
     // recorded as written rather than quietly promoted.
     ok("an unmeasured travelTime is still recorded as written, not measured",
        /rule: "Neither mode returned a usable duration, so no measured figure existed\. This number is WRITTEN, not measured\."/.test(appSrc3));
-    ok("and the measured case names what it overruled", /rule: "A measured duration always replaces a written one/.test(appSrc3));
+    // Two rules now, and the second is the Bornholm one: a total that is mostly
+    // waiting for the next sailing is cut to the time in motion, and the log
+    // says which of the two was applied. See journeyFigure in utils/journey.js.
+    ok("and the measured case names what it overruled",
+       /rule: figure\.basis === "moving"/.test(appSrc3)
+       && /A measured duration always replaces a written one/.test(appSrc3)
+       && /is cut to the time in motion/.test(appSrc3));
     // ── AND THE MINUTES ARE READ AS A NUMBER, NOT OUT OF PROSE ────
     // Third time this class has bitten. The first regex made "5 hours 53 mins"
     // into "5h"; the fix was two independent matches. Google can also answer
     // "1 day 3 hours", and /(\d+)\s*hour/ reads 3 out of that, publishing a
     // twenty-seven hour journey as "3h". No string test catches it, because the
     // parse is correct for every format anybody thinks to try.
+    // Still the integer and not the prose, and now through the one function that
+    // decides what a measured total MEANS, which is the Bornholm fix: the raw
+    // total put 10h 44min on a live card because the next boat was the next
+    // morning.
     ok("the duration comes from the measured integer",
-       /const exact = Number\(transitParts\?\.total\);/.test(appSrc3));
+       /const figure = journeyFigure\(transitParts\);/.test(appSrc3)
+       && /const exact = Number\(figure\.mins\);/.test(appSrc3));
     ok("with hours and minutes derived from it, not from the sentence",
        /Math\.floor\(exact \/ 60\)[\s\S]{0,200}exact % 60/.test(appSrc3));
     // The text parse stays for the case with no steps to build parts from.
@@ -7394,6 +7412,207 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("which is still the only place RESEARCH_SQL appears", (app11.match(/\{RESEARCH_SQL\}/g) || []).length, 1);
 }
 
+// ── THE SOURCE ORDER PUT A SHIPPING COMPANY LAST ──────────
+//
+// Two lines from Oliver's island runs of 16 Sep 2026, both of them the same
+// mistake about who is speaking.
+{
+  const pageSrc = readFileSync(join(root, "src/utils/pageScan.js"), "utf8");
+  const stale = "";
+
+  // ── AN ENCYCLOPEDIA IS NOT ANYBODY'S OFFICIAL SITE ──────
+  // Avernako: "da.wikipedia.org (official) > lex.dk (reference) >
+  // nn.wikipedia.org (reference)". The same encyclopedia twice, in two classes,
+  // because an island with no site of its own had the Wikipedia article filed
+  // as its website.
+  is("a Wikipedia article handed over as the official site is refused",
+     M.rankSource("https://da.wikipedia.org/wiki/Avernako", stale, { officialHosts: ["da.wikipedia.org"] }).cls, "reference");
+  is("and so is a Facebook page", M.rankSource("https://www.facebook.com/visitsamsoe", stale, { officialHosts: ["facebook.com"] }).cls, "blog");
+  // A real official site is untouched by the filter.
+  is("a real official site is still official",
+     M.rankSource("https://bornholm.info/en/", stale, { officialHosts: ["bornholm.info"] }).cls, "official");
+
+  // ── AND A SHIPPING COMPANY IS NOT A BLOG ────────────
+  // Kombardo Expressen runs the Koge to Ronne boat and ranked last, as a blog,
+  // below trip.com and GetYourGuide, while two ferry resellers were read for
+  // fifteen thousand characters.
+  is("the operator of the crossing ranks as an operator",
+     M.rankSource("https://www.kombardoexpressen.com/", stale, {}).cls, "listing");
+  is("on either of its suffixes", M.rankSource("https://www.kombardoexpressen.dk/priser", stale, {}).cls, "listing");
+  is("and the national rail operator the same way", M.rankSource("https://www.dsb.dk/en/", stale, {}).cls, "listing");
+  ok("which is above an anonymous write-up",
+     M.rankSource("https://www.kombardoexpressen.com/", stale, {}).rank < M.rankSource("https://some-travel-blog.com/bornholm", stale, {}).rank);
+  ok("and the list is read off the app's own operators rather than typed here",
+     /import \{ OPERATORS \} from "\.\/operators";/.test(pageSrc));
+
+  // ── THE PRICE LOG CONTRADICTED THE NEXT STEP ──────────
+  // Fejo, steps 23 and 25, thirty seconds apart: "these figures came from a
+  // search result or a blog", and then the page they are on, by name.
+  {
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the run log asks which page states the figure before it writes the sentence",
+       /const statedOnNow = \(\) => \{|const statedOnNow = \(\(\) => \{/.test(app)
+       && /got: describePriceTrace\(pt, \{ statedOn: statedOnNow \}\)/.test(app));
+    // The sentence itself already had three forms and the right one was never
+    // reached from the log.
+    const pt = { checked: true, draft: [{ amount: 160, currency: "DKK" }], traced: [], listed: [], untraced: [{ amount: 160, currency: "DKK" }] };
+    ok("naming the page it is on replaces the accusation",
+       /stated on lollandfaergefart\.lolland\.dk/i.test(M.describePriceTrace(pt, { statedOn: "lollandfaergefart.lolland.dk" })));
+    ok("and no page at all says so plainly instead",
+       /NOT IN ANYTHING WE READ/.test(M.describePriceTrace(pt, { statedOn: null })));
+  }
+}
+
+// ── THE ANSWER IS ONE CLICK PAST THE FRONT PAGE ────────
+// Oliver, 17 Sep 2026, choosing the gate for following a link on the operator's
+// own site: "probably mainly anything that can be seasonal". Barred from price
+// and date, one page per draft.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const html = `
+    <a href="/priser">Priser</a>
+    <a href="/ofte-stillede-spoergsmaal">Ofte stillede sp\u00f8rgsm\u00e5l</a>
+    <a href="/faq/hunde-ombord">Hunde ombord</a>
+    <a href="https://www.visitfyn.dk/faq">FAQ hos VisitFyn</a>
+  `;
+  // THE OPERATOR'S OWN HOST AND NOBODY ELSE'S: a tourist board's FAQ answers
+  // questions about the board.
+  // The SECTION page, not one answer inside it: depth is the signal and length
+  // is the tie-break, or /faq/hunde-ombord wins on being shorter and the draft
+  // gets a page about dogs.
+  is("the operator's own FAQ is found", M.faqLink(html, "https://bjoernoefaergen.dk/"), "https://bjoernoefaergen.dk/ofte-stillede-spoergsmaal");
+  is("and a deep single answer loses to it",
+     M.faqLink('<a href="/faq/hunde">Hunde</a><a href="/faq">Alle sp\u00f8rgsm\u00e5l</a>', "https://x.dk/"), "https://x.dk/faq");
+  is("and a board's FAQ on another host is not", M.faqLink('<a href="https://www.visitfyn.dk/faq">FAQ</a>', "https://bjoernoefaergen.dk/"), "");
+  is("nothing to follow is empty rather than a guess", M.faqLink('<a href="/priser">Priser</a>', "https://bjoernoefaergen.dk/"), "");
+  is("and no base url is no answer", M.faqLink(html, ""), "");
+  // The page itself is not its own FAQ link.
+  is("a self link is skipped", M.faqLink('<a href="https://x.dk/faq">FAQ</a>', "https://x.dk/faq"), "");
+
+  // ── EMPTY IS THE WHOLE OF THE GATE ──────────────
+  // A field somebody filled is not improved by a second source, which is what
+  // the nineteen glance overrules of the night before were.
+  is("only the empty practical fields are asked for",
+     M.faqWorthReading({ accessibility: "", camping: "Two sites on the island", bestTimeGlance: "" }),
+     ["accessibility", "bestTimeGlance"]);
+  is("a type with none of those fields asks for nothing", M.faqWorthReading({ ticketInfo: "" }), []);
+  is("and a full draft reads no FAQ at all",
+     M.faqWorthReading({ accessibility: "Step free to the quay", camping: "No", bestTimeGlance: "May-Sept" }), []);
+
+  // ── BARRED FROM PRICE AND DATE, STRUCTURALLY ────────
+  // Not by a sentence in a prompt. The field list handed to the extraction IS
+  // the list of empty practical fields, so a price on an FAQ page has no field
+  // to land in.
+  ok("no money field is on the list", !M.FAQ_FIELDS.some(f => /price|cost|ticket/i.test(f)));
+  ok("nor a date field", !M.FAQ_FIELDS.some(f => /date|hours|opening/i.test(f)));
+  ok("and the rule says so as well", /may NOT be used for a price or for a date/.test(M.FAQ_RULE));
+  ok("the stage is handed the empty fields as its whole field set",
+     /GLANCE_EXTRACT_PROMPT\(name, sType, faqEmpty, `\$\{FAQ_RULE\}/.test(app)
+     && /mergeGlance\(t, fRead\.values, faqEmpty, faqText, faqText\)/.test(app));
+  ok("it runs only when a field is empty and a link was found",
+     /const faqEmpty = faqPage \? faqWorthReading\(t\) : \[\];/.test(app)
+     && /if \(faqPage && faqEmpty\.length\) \{/.test(app));
+  ok("and only from a page this run judged to be the operator's",
+     /if \(pageTier === "operator" && !faqPage && scanData\.faq\)/.test(app));
+  // ONE PAGE PER DRAFT. "Follow the links" is how a page read becomes a crawl.
+  ok("one page and no more", (app.match(/faqPage = \{ href:/g) || []).length === 1);
+}
+
+// ── AND WHERE A NOTICE GOES AFTER THE POP-UP ──────────
+// Oliver, 17 Sep 2026: "when you've clicked the notification, then the
+// notification will be gone. But it will have its own tab under 'near you'."
+// The list is on the account page and the pop-up shows once, so between the two
+// there was nothing. Offered a front-page strip, a bell with a count or a push
+// notification, he has not picked yet; this is the bell, in the quietest form
+// the chrome already had room for.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the count comes from the same filter as the pop-up",
+     /const noticesWaiting = useMemo\(\s*\(\) => noticesNearby\(noticeRows, isInDenmark\(userCoords\) \? userCoords : null, \{ today: new Date\(\), dismissed: noticesSeen \}\)\.length/.test(app));
+  // A dot, not a number, and gold rather than red: red on that button means
+  // something about THEIR trip changed, which is a different order of thing
+  // from a village fete eight kilometres away.
+  ok("a dot appears on the way to the list", /\{noticesWaiting > 0 && unreadTripChanges === 0 && \(/.test(app));
+  ok("and it never competes with a trip alert", /noticesWaiting > 0 && unreadTripChanges === 0/.test(app));
+  ok("the count is on the menu item itself", /noticesWaiting > 0 \? ` \u00b7 \$\{noticesWaiting\} near you`/.test(app));
+  ok("and a screen reader is told as well", /thing\$\{noticesWaiting === 1 \? "" : "s"\} on near you/.test(app));
+  // GONE IS A FILTER AND NOT A JOB, so a dot cannot outlive its event.
+  ok("nothing runs to expire a notice", !/setInterval\([^)]*notice/i.test(app));
+}
+
+// ── "KOBENHAVNS OKTOBERFEST" WENT TO AALBORG ──────────
+// Oliver, 16 Sep 2026, on the panel: "what da fuck. Aalborg st. is the closest
+// to Radhuspladsen in Copenhagen?"
+//
+// Step 1 of that run geocoded on the NAME, before any research, and Google
+// Places answered with the organiser's address in Aalborg. Everything
+// downstream inherited it and every downstream step was internally consistent
+// and externally wrong.
+{
+  // Danish forms a possessive with a bare s, so the chain that reads a town out
+  // of the draft's own name missed "Kobenhavns" by one letter and no town was
+  // known at all when the geocode ran.
+  is("a possessive still names its town", M.townKeyFor("Odenses Blomsterfestival"), "Odense");
+  is("and the plain form is unchanged", M.townKeyFor("Blomsterfestival i Odense"), "Odense");
+  is("Aalborg the same way", M.townKeyFor("Aalborgs Karneval"), "Aalborg");
+  // AND THE LIST IS KEYED IN ENGLISH, which is the other half of the same run:
+  // the draft is named in Danish and TOWN_COORDS says "Copenhagen".
+  is("a Danish spelling finds the English key", M.townKeyFor("K\u00f8benhavns Oktoberfest"), "Copenhagen");
+  is("and so does the plain Danish form", M.townKeyFor("Oktoberfest i K\u00f8benhavn"), "Copenhagen");
+  // The boundary test is what stops a town matching inside a longer word, so
+  // the s is allowed as a boundary and not as part of the name.
+  is("a street is not its town", M.townKeyFor("Odensegade 4"), null);
+  is("nor a compound", M.townKeyFor("K\u00f8benhavnsgade"), null);
+  ok("and a town standing alone is still found", M.townInName("Festival i Ribe", "Ribe"));
+}
+
+// ── "xn--bjrn-hrac.net" IS A NAME HE CANNOT READ ────────
+// Both of these are in the island run logs of 16 Sep 2026, in the file Oliver
+// reads end to end. RFC 3492's decode half, verified against Node's own
+// punycode module before it was written into the app, which runs in a browser
+// where no decoder is exposed.
+{
+  is("a Danish host reads as a Danish host", M.unpuny("xn--bjrn-hrac.net"), "bjørnø.net");
+  is("and the other one from the same run", M.unpuny("xn--ly-mka.dk"), "lyø.dk");
+  is("a plain host is untouched", M.unpuny("visitfyn.dk"), "visitfyn.dk");
+  is("an undecodable label is kept rather than half printed", M.unpuny("xn--!!!.dk"), "xn--!!!.dk");
+  is("nothing is nothing", M.unpuny(""), "");
+  is("and the log line goes through it", M.domainOf("https://www.xn--ly-mka.dk/priser"), "lyø.dk");
+}
+
+// ── "IT JUST CHOOSES ONE FROM WIKI ITSELF" ────────────
+// Oliver, 18 Sep 2026, of the fact generator: "the published 'facts' do not
+// allow me to pick out Wikimedia. It just chooses one from Wiki itself."
+//
+// The button was labelled Wikimedia and asked api/commons-photo for limit=1,
+// then took results[0], which for a subject with a Wikipedia article is that
+// article's own lead image. The Media panel and the draft panel have asked for
+// eight and drawn a grid since the day they were written.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const grid = readFileSync(join(root, "src/components/CommonsResults.jsx"), "utf8");
+  ok("the facts search asks for eight, like the other two",
+     /commons-photo\?q=\$\{encodeURIComponent\(`\$\{term\} Denmark`\)\}&limit=8/.test(app));
+  ok("and no limit=1 lookup is left anywhere in the facts panel", !/commons-photo\?q=\$\{encodeURIComponent\(d\.subject/.test(app));
+  ok("the button opens a picker rather than attaching a photo",
+     /onClick=\{\(\) => findFactCommonsPhotos\(d\.key, d\.subject\)\}/.test(app));
+  ok("the results are keyed to one fact row, not shared across the batch",
+     /factPhotoFinder\?\.key === d\.key/.test(app));
+  // THE CREDIT TRAVELS WITH THE PICTURE. A CC BY file may only be republished
+  // with attribution, so the write is one write.
+  ok("picking one writes the image and its credit together",
+     /\{ \.\.\.x, photo: src, credit: hit\?\.credit \}/.test(app));
+  ok("and the grid is a component rather than a third inline copy",
+     /import \{ CommonsResults \} from "\.\/components\/CommonsResults"/.test(app)
+     && /<CommonsResults finder=\{factPhotoFinder\}/.test(app));
+  // The warning that matters most on this grid: a search that matched no
+  // article and no category has fallen through to a blind text search, and
+  // nothing it returns has been judged to be about the right place.
+  ok("the component carries the blind-search warning wherever it is used",
+     /Only the blind text search found anything/.test(grid));
+  ok("and the licence is on the card the picking happens on", /hit\.credit\?\.license/.test(grid));
+}
+
 // ── "THEY FINALLY LET ME!" ───────────────────────────────────────
 // Oliver, 18 Sep 2026, handing over three links: a partner-ads banner for a
 // hotel, a second for travel items, and "this is my booking.com affiliate. I
@@ -7476,7 +7695,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("nor can the config it reads", M.INVENTORY_MAY_NOT_SELECT.includes("PARTNER_ADS"));
   // Rendered off the town THIS DAY already has, which is the difference between
   // showing a hotel to somebody who is going there and sending them there.
-  ok("the card reads the day's own town", /featuredStayFor\(day\.glance\.stayArea \|\| stayTown\)/.test(guide));
+  // One value, read once and used by all three buttons, so the town the hotel
+  // is matched against is the same town the searches beside it are for.
+  ok("the card reads the day's own town",
+     /const stayAreaTerm = day\.glance\.stayArea \|\| stayTown \|\| searchTerm;/.test(guide)
+     && /const featuredStay = featuredStayFor\(stayAreaTerm\);/.test(guide));
   ok("and the Booking button goes through the door", /href=\{outboundLink\(stayBookingUrl\)\.href \|\| stayBookingUrl\}/.test(guide));
   ok("with the rel that comes with it", /rel=\{outboundLink\(stayBookingUrl\)\.rel\}/.test(guide));
   ok("and no raw rel is left on a link that now pays", !/href=\{stayBookingUrl\} target="_blank" rel="noreferrer"/.test(guide));
@@ -8745,9 +8968,12 @@ is("missing licence does not require credit", creditIsRequired({}), false);
      /transitParts = journeyParts\(transitD\?\.steps, transitD\?\.durationMinutes\);/.test(codeJ));
   ok("and the prompt reads the same object the gate does",
      /journeyBlock\(transitParts\)/.test(codeJ));
+  // writtenFields since 18 Sep: the check asks whether a CLAIM matches the
+  // measurement, and readerText was handing it the measured fields too, so on
+  // the correction pass it read the pipeline's own travelTime back as prose.
   ok("the gate runs inside gateDraft, so the correction pass is checked too",
-     codeJ.indexOf("const tp = transitProblems(readerText(t)") > codeJ.indexOf("const gateDraft = (pass) =>") &&
-     codeJ.indexOf("const tp = transitProblems(readerText(t)") < codeJ.indexOf('gateDraft("first")'));
+     codeJ.indexOf("const tp = transitProblems(readerText(writtenFields(t))") > codeJ.indexOf("const gateDraft = (pass) =>") &&
+     codeJ.indexOf("const tp = transitProblems(readerText(writtenFields(t))") < codeJ.indexOf('gateDraft("first")'));
   ok("a problem goes to a founder note rather than rewriting the prose",
      /for \(const line of tp\) \{\s*noteToFounder\(line\);/.test(codeJ));
   ok("and the run log records the comparison either way",
@@ -18818,7 +19044,21 @@ rmSync(dir, { recursive: true, force: true });
 // checked at all.
 {
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("a failed check is journalled as failed", /note\("Invented-claim check", \{ provider: "perplexity", outcome: "failed"/.test(app));
+  ok("a failed check is journalled as failed",
+     /note\("Invented-claim check", \{\s*provider: "perplexity", outcome: "failed"/.test(app));
+  // ── AND A QUOTA IS NOT A BLIP ────────────────────────────────────
+  // Avernako, 16 Sep 2026: Perplexity ran out of quota mid-run and the last
+  // accuracy gate in the pipeline reported the provider's raw sentence. "Run it
+  // again" and "the account is out of quota" are different instructions and
+  // only one of them works.
+  ok("and a quota failure says it will fail the same way next time",
+     /const billing = looksLikeBilling\(inventedCheck\.error\);/.test(app)
+     && /quota rather than a transient failure/.test(app));
+  // In CODE once. The guide builder's comment still quotes the fingerprint it
+  // was written against, which is history rather than a second test.
+  ok("through one test rather than a second copy of the regex",
+     (stripComments(app).match(/exceeded your current quota/g) || []).length === 1
+     && /const isBilling = looksLikeBilling\(msg\);/.test(app));
   // "It did not answer" is its own outcome, and neither a pass nor a flag.
   // Guessing clean hides real findings; guessing flagged rewrites correct
   // drafts. The wording moved into readInventedCheck; the branch is what
@@ -20463,8 +20703,10 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   const appL = readFileSync(join(root, "src/App.jsx"), "utf8");
   const rp = readFileSync(join(root, "src/utils/readPage.js"), "utf8");
   const api = readFileSync(join(root, "api/scan-source.js"), "utf8");
+  // faq joined the same return on 18 Sep and for the same reason: the links are
+  // in the html and stripToText deletes every href.
   ok("the links are taken out BEFORE the tags are stripped",
-     /return \{ status: r\.status, text: stripToText\(html\), tickets: ticketLinks\(html, url\)/.test(rp));
+     /return \{ status: r\.status, faq: faqLink\(html, url\), text: stripToText\(html\), tickets: ticketLinks\(html, url\)/.test(rp));
   // ── AND SO ARE THE PICTURES, FOR THE SAME REASON ─────────────────
   // stripToText deletes every src and every alt alongside the hrefs. A banner
   // reader wired downstream of it would find nothing on every page forever and
@@ -21032,6 +21274,64 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // An identical value is not a change, so a run log does not report six
   // rewrites that rewrote nothing.
   is("the same value is not a change", mergeGlance({ ticketInfo: "180 DKK" }, { ticketInfo: "180 DKK" }, ["ticketInfo"]).changed, []);
+
+  // ── NINETEEN OVERRULES AND NOT ONE IMPROVEMENT ────────────
+  //
+  // Oliver's seven island runs, 16 Sep 2026. The extraction overruled the
+  // writer nineteen times across them and every single one was worse: May-Sept
+  // became "Summer months", and "Book cars and rooms ahead for July" became
+  // "Hotels, guesthouses, holiday homes and campsites".
+  //
+  // The rule is right and was written against a model inventing prices. On a
+  // field sized for a glance the writer is compressing, not inventing.
+  {
+    const shape = (f, prev, next) => mergeGlance({ [f]: prev }, { [f]: next }, [f]);
+    // THE NINE FROM THE RUN LOG, field by field.
+    is("a season name does not replace a month range",
+       shape("bestTimeGlance", "May-Sept", "Summer months").changed, []);
+    is("nor does a longer season name",
+       shape("bestTimeGlance", "May-Sept", "Spring, summer and early autumn").changed, []);
+    is("nor a sentence off a tourist board page",
+       shape("bestTimeGlance", "Apr-Oct, blossom to apple harvest",
+             "When the fruit trees blossom, when the sun is warm, or when the apples are ready to eat").changed, []);
+    is("a list of accommodation types does not replace advice",
+       shape("accommodationGlance", "Book cars and rooms ahead for July", "Hotels, guesthouses, holiday homes and campsites").changed, []);
+    is("nor does a shorter category",
+       shape("accommodationGlance", "Few options, book ahead in summer", "Limited accommodation").changed, []);
+    is("and a hotel name does not replace a written tip",
+       shape("accommodationTip", "Book ahead in July, the island fills up", "Nobis Hotel Copenhagen").changed, []);
+    is("nor does a bare town name",
+       shape("accommodationTip", "Stay in the old town, everything is walkable", "Odense").changed, []);
+    // A verbose value carrying the SAME figures is the same failure wearing
+    // digits, which is the case a naive number test would have waved through.
+    is("and repeating the writer's own figures at four times the length is refused",
+       shape("recommendedStayGlance", "3-4 days minimum, up to a week",
+             "Minimum 3-4 days; one week for cycling routes, hiking trails and relaxed exploration; two weeks for slow travel").changed, []);
+
+    // ── AND THE RULE STILL WINS WHERE IT WAS WRITTEN TO ──────
+    // A figure the writer did not have is data, which is the whole point of the
+    // stage, so it is taken.
+    is("a page's figure beats a writer's words",
+       shape("recommendedStayGlance", "Two to three days", "3 to 5 days").changed.length, 1);
+    is("even when the writer wrote a sentence",
+       shape("recommendedStayGlance", "A day trip or one night", "2 to 3 days").changed.length, 1);
+    // An empty field is not a swap. Avernako went from nothing to a real hotel
+    // name and that is the rule working.
+    is("filling an empty field is untouched by any of this",
+       mergeGlance({ accommodationGlance: "" }, { accommodationGlance: "Avernako Landhotel" }, ["accommodationGlance"]).changed.length, 1);
+    // And no other field is touched by the gate: ticketInfo is exactly the
+    // field the original rule exists for.
+    is("a longer ticket line is still allowed to win",
+       mergeGlance({ ticketInfo: "180 DKK" }, { ticketInfo: "180 DKK adults, 90 DKK children, under 12 free" }, ["ticketInfo"]).changed.length, 1);
+    is("the gate covers four fields and no more", M.COMPRESSION_GLANCE.length, 4);
+    is("and says nothing about a field outside them", M.glanceShapeProblem("ticketInfo", "a", "a much longer value"), "");
+
+    // THE REFUSAL IS READABLE, which is the lesson describeGlance already
+    // learned twice: a refused value with no sentence for why is a stage that
+    // reports nothing.
+    ok("and the log says which kind of refusal it was",
+       /prose replacing prose/.test(M.describeGlance(shape("bestTimeGlance", "May-Sept", "Summer months"))));
+  }
   ok("and the log line says both halves", /taken from the research/.test(describeGlance(m1)) && /left as the writer had/.test(describeGlance(m1)));
 
   // ── WIRED, WHICH IS THIS CODEBASE'S USUAL FAILURE ────────────────
@@ -21110,17 +21410,89 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("one leg is still an arrival", arrivalStop({ legs: [{ to: "Ribe St." }] }), "Ribe St.");
   is("no legs is no answer, never a guess", arrivalStop({ legs: [] }), "");
   is("and neither is nothing", arrivalStop(null), "");
+
+  // ── "10 HOURS 44 MINUTES" ────────────────────
+  //
+  // A published Bornholm entry, live, off Oliver's run log of 16 Sep 2026.
+  // Copenhagen to Bornholm is about three hours by train and ferry through
+  // Ystad. Google measured a door to door itinerary whose next sailing was the
+  // following morning and put the overnight wait inside the total, and step 41
+  // of the same run diagnosed it correctly and was discarded.
+  {
+    const bornholm = { total: 644, onBoard: 193, onFoot: 20, waiting: 431 };
+    const fig = M.journeyFigure(bornholm);
+    is("a total that is mostly waiting is cut to the time in motion", fig.mins, 213);
+    is("and says which figure it is", fig.basis, "moving");
+    is("with the wait it took off", fig.waiting, 431);
+    // AN HOUR OF CONNECTION TIME IS PART OF A JOURNEY. A trip with two changes
+    // waits, and cutting every minute of that would understate a real
+    // itinerary, which is the opposite error and just as wrong on a card.
+    const normal = { total: 110, onBoard: 74, onFoot: 20, waiting: 16 };
+    is("an ordinary connection stays inside the total", M.journeyFigure(normal).mins, 110);
+    is("and is named as the total", M.journeyFigure(normal).basis, "total");
+    is("the line is an hour", M.WAIT_INSIDE_TOTAL, 60);
+    is("exactly an hour is still inside it", M.journeyFigure({ total: 120, onBoard: 60, waiting: 60 }).basis, "total");
+    is("a minute past it is not", M.journeyFigure({ total: 121, onBoard: 60, waiting: 61 }).basis, "moving");
+    // Never below the time in motion, whatever a rounded total says.
+    is("and never below the time on board", M.journeyFigure({ total: 200, onBoard: 150, waiting: 120 }).mins, 150);
+    is("nothing measured is no figure", M.journeyFigure(null).mins, null);
+    is("nor a zero", M.journeyFigure({ total: 0 }).mins, null);
+    // THE FIGURE ON THE CARD IS A MEASURED FIGURE. Cutting the wait puts a
+    // number on the row that is none of the five the transport check knew
+    // about, so the check would have flagged the pipeline's own field.
+    const prose = "The train and ferry from Copenhagen takes about 3h 33min.";
+    is("a sentence quoting the shown figure is not flagged as unmeasured",
+       M.transitProblems(prose, { parts: bornholm }).filter(x => /was not measured by anything/.test(x)), []);
+  }
+
+  // ── AND AN ISLAND ARRIVES AT ITS HARBOUR ──────────────
+  //
+  // An island's stored coordinate is its centroid, so the last leg of a
+  // measured route is whatever bus runs inland from the boat. Bornholm's
+  // arrival point published as a rural bus stop three minutes from the island's
+  // geometric centre.
+  {
+    const toBornholm = { legs: [
+      { vehicle: "train", to: "Ystad" },
+      { vehicle: "ferry", to: "Roenne Havn" },
+      { vehicle: "bus", to: "Aasedamsvej v. Oxholmvej" },
+    ] };
+    is("a town still arrives where the journey ends", M.arrivalStop(toBornholm), "Aasedamsvej v. Oxholmvej");
+    is("an island arrives at the water", M.arrivalStop(toBornholm, { island: true }), "Roenne Havn");
+    // A bridge is not a boat. Falster and Mon arrive by road, and for those the
+    // last leg is the right answer on an island too.
+    const bridged = { legs: [{ vehicle: "train", to: "Nykoebing F. St." }] };
+    is("an island with no ferry leg keeps the last leg", M.arrivalStop(bridged, { island: true }), "Nykoebing F. St.");
+    is("and the first ferry is not preferred over the last", M.arrivalStop({ legs: [
+      { vehicle: "ferry", to: "First Havn" }, { vehicle: "ferry", to: "Second Havn" },
+    ] }, { island: true }), "Second Havn");
+  }
+
+  // ── A WALK THAT BOARDS A BOAT IS NOT A WALK ────────────
+  // Bjorno's arrival point came back as Avernako Havn, another island's
+  // harbour, "57 mins on foot". api/directions has reported hasFerry since
+  // 6 Aug and this was the one caller that never asked.
+  ok("the walking check refuses a route that sails",
+     /if \(dir\.hasFerry\) return null;/.test(readFileSync(join(root, "src/utils/geo.js"), "utf8")));
+  {
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("and an island is not asked for a radius stop at all",
+       /const islandArrival = sType === "island";/.test(app)
+       && /const st = islandArrival \? null : await findRealNearestStation\(coords\.lat, coords\.lon\);/.test(app));
+    ok("with the log saying it was not asked rather than that nothing exists",
+       /not asked: for an island this is read off the measured route's ferry leg/.test(app));
+  }
   // A leg with no stop name must not win by being last.
   is("a nameless last leg falls back to the last NAMED one",
      arrivalStop({ legs: [{ to: "Slagelse" }, { to: "" }] }), "Slagelse");
 
   const appA = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the draft prefers the measured arrival point", /const measuredStop = arrivalStop\(transitParts\);/.test(appA));
+  ok("the draft prefers the measured arrival point", /const measuredStop = arrivalStop\(transitParts, \{ island: sType === "island" \}\);/.test(appA));
   ok("over the nearest transit point by distance", /const stop = measuredStop \|\| frozenGeo\?\.station;/.test(appA));
   // The correction pass restores this field. If it restored the OLD answer the
   // ferry slip would come straight back, so both sites read one helper.
   ok("and the post-correction restore reads the same helper",
-     /const restoreStop = arrivalStop\(transitParts\) \|\| frozenGeo\?\.station;/.test(appA));
+     /const restoreStop = arrivalStop\(transitParts, \{ island: sType === "island" \}\) \|\| frozenGeo\?\.station;/.test(appA));
   ok("with the disagreement recorded rather than silent",
      /loser: `the nearest transit point by distance/.test(appA));
   // Oliver's 17:22 draft carried nearestStation "Skaelskoer Busterminal" AND a
@@ -22974,8 +23346,11 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
 {
   const appP2 = readFileSync(join(root, "src/App.jsx"), "utf8");
   const code2 = stripNonCode(appP2);
+  // code2 is stripNonCode, which blanks string literals, so the island literal
+  // is asserted off the raw source and the call shape off the stripped copy.
   ok("publish reads the arrival point out of the stored journey",
-     /const measuredAtPublish = arrivalStop\(shaped\.__journey\);/.test(code2));
+     /const measuredAtPublish = arrivalStop\(shaped\.__journey, \{ island: studioType === /.test(code2)
+     && /arrivalStop\(shaped\.__journey, \{ island: studioType === "island" \}\)/.test(appP2));
   ok("and prefers it over the radius search",
      /const stopToStore = measuredAtPublish \|\| studioFrozenGeo\.station;/.test(code2));
   // The radius stop stays as the fallback for a row whose journey was never
@@ -50136,9 +50511,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("nothing is taken from a refused lookup", /if \(placesAbout\) \{/.test(app));
     // Finiteness is necessary and no longer sufficient, which is the whole
     // change: Ringsted's coordinate was a perfectly finite number.
+    // The name test is now `nameMatches` and the coordinate has a second
+    // question to answer, added 18 Sep: does it sit in the town this draft is
+    // about. See the TinderBox run, where the name matched something at
+    // Copenhagen Airport for a festival in Odense.
     ok("and finiteness alone no longer admits one",
       /const placesOk = pr\.ok && !pd\.error && Number\.isFinite/.test(app)
-      && /const placesAbout = placesOk && listingMatchesSubject/.test(app));
+      && /const nameMatches = placesOk && listingMatchesSubject/.test(app)
+      && /const placesAbout = nameMatches && fit\.ok;/.test(app));
     // BOTH CALL SITES, or the pair drifts again. The hours step had it first.
     is("both Google answers are checked against the subject",
       (app.match(/listingMatchesSubject\(/g) || []).length, 2);
@@ -61379,7 +61759,18 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // Pass one's own rule is untouched: this is a second question, not a looser
     // version of the first.
     ok("and pass one still refuses on the name",
-       /const placesAbout = placesOk && listingMatchesSubject\(name, draftTown, pd\.name \|\| pd\.address/.test(appS));
+       /const nameMatches = placesOk && listingMatchesSubject\(name, draftTown, pd\.name \|\| pd\.address/.test(appS));
+    // ── AND ON THE TOWN, WHICH IS THE SECOND QUESTION ────────────
+    // TinderBox is a festival in Odense and the name matched something called
+    // Tinderbox at Copenhagen Airport, 140 km away. Kobenhavns Oktoberfest
+    // matched its own organiser's office in Aalborg.
+    ok("and on whether the coordinate is in the town at all",
+       /const townBefore = draftTown;/.test(appS)
+       && /coordFitsTown\(\{ lat: pd\.lat, lon: pd\.lon \}, townBefore\)/.test(appS));
+    ok("read before the lookup is allowed to name the town itself",
+       appS.indexOf("const townBefore = draftTown;") < appS.indexOf("if (pd.town && !draftTown) draftTown = pd.town;"));
+    ok("and the refusal is a decision in the log rather than a silent drop",
+       /whether Google's coordinate is in the right town/.test(appS));
   }
 }
 

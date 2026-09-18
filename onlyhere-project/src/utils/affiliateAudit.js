@@ -162,7 +162,16 @@ export const auditNote = (s) => {
 // switched on at all. An empty template is not a bug and is not a mistake, and
 // there is no way to tell an empty one from a filled one without opening
 // config.js, which is exactly the state this panel exists to end.
-export const programmeState = ({ tiqetsTemplate, tiqetsBrowse, ticketmasterTemplate, bookingId, carRental, wegotrip, wegotripTemplate, tripcom, tripcomCities = 0, getyourguide, bajabikes, bajabikesProducts = 0 } = {}) => [
+export const programmeState = ({ tiqetsTemplate, tiqetsBrowse, ticketmasterTemplate, bookingId, carRental, wegotrip, wegotripTemplate, tripcom, tripcomCities = 0, getyourguide, bajabikes, bajabikesProducts = 0, bookingCj, partnerAds = [] } = {}) => [
+  // ── PARTNER-ADS, 18 SEP 2026 ────────────
+  // Named advertisers rather than a network row, because a banner id that has
+  // not been named is placed nowhere and is not a programme state anybody can
+  // act on. The reader-facing version of this list, affiliateRoster, generates
+  // its rows from the same array, and the suite asserts the two agree.
+  { name: "Partner-ads", what: `${partnerAds.length} named ${partnerAds.length === 1 ? "placement" : "placements"}`, on: partnerAds.length > 0,
+    note: partnerAds.length
+      ? `live: ${partnerAds.map(p => `${p.merchant}${p.town ? ` (${p.town})` : ""}`).join(", ")}`
+      : "two banners given on 18 Sep and neither named yet, so nothing renders. A klikbanner URL says nothing about where it goes, so the advertiser's name has to be written into PARTNER_ADS_BANNERS in config.js before a row can name it out loud" },
   { name: "Tiqets", what: "attraction tickets, deep link", on: !!clean(tiqetsTemplate),
     note: clean(tiqetsTemplate) ? "live on every row with a Tiqets product page" : "no template, so Tiqets product pages render a button that earns nothing" },
   { name: "Tiqets browse", what: "one generic button per guide", on: !!clean(tiqetsBrowse),

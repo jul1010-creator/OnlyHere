@@ -102,7 +102,12 @@ export const AffiliatesPage = () => {
 
         <p style={{ fontSize: 12.5, lineHeight: 1.7, color: C.muted, margin: "22px 0 0" }}>
           If you are booking something anyway, using a link here is the whole of how the site pays for itself.
-          If you would rather not, book direct: that is often the better price and it is always fine.
+          Booking direct is always fine, and on most of these there is nothing to gain by it: where a partner is the
+          seller, which covers most concert tickets and every operator here that runs what it sells, the direct page
+          is the page the link already goes to. Where a partner is a reseller, the price is the one the venue set,
+          and where those two numbers differ the row keeps the price and drops the link rather than sending you to
+          the dearer shop. The one worth checking yourself is a hotel's own website, which is the seller not on this
+          list that can undercut the booking sites that are.
         </p>
         <p style={{ fontSize: 12.5, lineHeight: 1.7, color: C.muted, margin: "12px 0 0" }}>
           Questions about any of this: hello@gemlyxtravel.com
