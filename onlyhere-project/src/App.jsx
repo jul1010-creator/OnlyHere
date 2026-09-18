@@ -156,6 +156,7 @@ import { readableOn } from "./utils/readableColor";
 // the table and the panel. See utils/communityFeeds.js.
 import { cleanFeed, feedUrlProblem, feedKindOf, groupIdIn, pageNameIn, postsIn, candidatesIn, dedupeCandidates, newCandidates, sweepCost } from "./utils/communityFeeds";
 import { parsePretend, readPretend, writePretend, pretendBanner } from "./utils/pretendLocation";
+import { cleanNotice, noticesNearby, noticeIsCurrent, noticeTitle, noticeWhen, readDismissed, writeDismissed, NOTICE_RADIUS_KM } from "./utils/nearbyNotices";
 import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, ISLANDS_SCOPE, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive, isNeverOwnSite, isNeverASource } from "./utils/sourcePolicy";
 import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn, danishAddressIn } from "./utils/regions";
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
@@ -755,6 +756,40 @@ alter table gemlyx_feeds alter column group_id drop not null;
 drop policy if exists "auth all gemlyx_feeds" on gemlyx_feeds;
 create policy "auth all gemlyx_feeds" on gemlyx_feeds for all to authenticated using (true) with check (true);`;
 
+// ── AND WHAT THE LOCALS ARE DOING, WHILE IT IS STILL ON ─────────────
+//
+// Oliver, 17 Sep 2026: "This shouldn't be a massive blog. This should be little
+// notifications you get... And when the event is over, then the draft is gone.
+// No return."
+//
+// Its own table, and not a type on gemlyx_content, for the reason written at
+// the top of utils/nearbyNotices.js: a notice sharing a table with the entries
+// would arrive in the Explore lists, the search index, the sitemap and the
+// guide builder, each of which would then need a rule to keep it out, and one
+// of them would be forgotten.
+//
+// ANON MAY READ IT. Unlike the feeds and the sources, which are his tools, this
+// is the one thing here a reader sees, so it needs the same read policy
+// gemlyx_content has.
+const NOTICES_SQL = `create table if not exists gemlyx_notices (
+  id bigserial primary key,
+  headline text not null,
+  body text,
+  day date not null,
+  end_day date,
+  place text default '',
+  lat double precision,
+  lon double precision,
+  source_url text,
+  created_at timestamptz default now()
+);
+alter table gemlyx_notices enable row level security;
+
+drop policy if exists "read gemlyx_notices" on gemlyx_notices;
+create policy "read gemlyx_notices" on gemlyx_notices for select to anon using (true);
+drop policy if exists "auth all gemlyx_notices" on gemlyx_notices;
+create policy "auth all gemlyx_notices" on gemlyx_notices for all to authenticated using (true) with check (true);`;
+
 // `where` is whatever the caller knows about the place: usually a name, and a
 // whole entry where one exists. A source scoped to a town is left OUT when
 // nothing says where the draft is, which is the cheap direction to be wrong in.
@@ -989,6 +1024,18 @@ function GemlyxApp() {
     // the guide loading card already reads. Separate call because it fills a
     // different table and must not be able to delay or break the content load.
     ensureLiveFactsLoaded().catch(() => {});
+    // ── AND WHAT IS ON NEAR THE READER RIGHT NOW ──────────────────
+    // Its own call, for the reason the facts load has its own: it fills a
+    // different table and must not be able to delay or break the content load.
+    // Anon read, because this is the one founder-managed table a reader sees.
+    // Failing quietly is right here: no notices and a failed fetch look the
+    // same to a reader, and neither is worth a message about a database.
+    fetch(`${SUPABASE_URL}/rest/v1/gemlyx_notices?select=*&order=day.asc`, {
+      headers: { apikey: SUPABASE_KEY },
+    })
+      .then(r => (r.ok ? r.json() : []))
+      .then(rows => { if (!cancelled && Array.isArray(rows)) setNoticeRows(rows); })
+      .catch(() => {});
     return () => { cancelled = true; };
   }, []);
   // null when the published library loaded, a string saying why when it did not.
@@ -1287,6 +1334,13 @@ function GemlyxApp() {
   // the craft sort, the events strip, are untouched. A flag instead would be a
   // second code path only he ever runs, which is a test rig that passes while
   // the real one breaks. See utils/pretendLocation.js.
+  // ── THE NOTICES A READER SEES ────────────────────────────────────
+  // Loaded once per session, filtered in the browser. There are a handful of
+  // these alive at any time and they are the same for everybody, so a query per
+  // reader per page would be a round trip to re-learn what one fetch already
+  // knows.
+  const [noticeRows, setNoticeRows] = useState([]);
+  const [noticesSeen, setNoticesSeen] = useState(() => readDismissed(typeof window !== "undefined" ? window.localStorage : null));
   const [pretendAt, setPretendAt] = useState(() => readPretend(typeof window !== "undefined" ? window.localStorage : null));
   const userCoords = pretendAt ? { lat: pretendAt.lat, lon: pretendAt.lon } : realCoords;
   // Everywhere the app holds a coordinate for: the hand-checked town table, and
@@ -1345,6 +1399,30 @@ function GemlyxApp() {
     );
   };
 
+
+  // ── THE NOTICES, FILTERED THREE WAYS ─────────────────────────────
+  //
+  // Current, near, and not already dismissed, and they are different lists on
+  // purpose. `noticesHere` is everything still on near this reader, which is
+  // what the Near you tab shows. `noticeToShow` is the first one they have not
+  // clicked away, which is what pops. His own split: "when you've clicked the
+  // notification, then the notification will be gone. But it will have its own
+  // tab under 'near you'."
+  const noticesHere = useMemo(
+    () => noticesNearby(noticeRows, isInDenmark(userCoords) ? userCoords : null, { today: new Date() }),
+    [noticeRows, userCoords?.lat, userCoords?.lon],
+  );
+  const noticeToShow = useMemo(
+    () => noticesNearby(noticeRows, isInDenmark(userCoords) ? userCoords : null, { today: new Date(), dismissed: noticesSeen })[0] || null,
+    [noticeRows, userCoords?.lat, userCoords?.lon, noticesSeen],
+  );
+  const dismissNotice = (id) => {
+    setNoticesSeen(prev => writeDismissed(
+      typeof window !== "undefined" ? window.localStorage : null,
+      [...prev, String(id)],
+      noticeRows.map(r => r?.id),
+    ));
+  };
 
   const nearYou = isInDenmark(userCoords) ? (() => {
     const ranked = Object.entries(TOWN_COORDS).map(([name, [tLat, tLon]]) => {
@@ -10530,6 +10608,68 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
       const had = s?.candidates || [];
       return { running: false, done: 0, total: 0, failed: s?.failed || [], candidates: dedupeCandidates([...found, ...had]), found: dedupeCandidates([...found, ...had]).length };
     });
+  };
+
+  // ── A CANDIDATE BECOMES A NOTICE ────────────────────────────────
+  //
+  // Oliver: "This shouldn't be a massive blog. This should be little
+  // notifications you get as a paid account."
+  //
+  // So the queue has two exits and they are not the same thing. "Draft this"
+  // sends it to the research pipeline and it becomes an entry that will still
+  // be there next year. "Send as a notice" writes ONE ROW that stops being
+  // returned the day after the event, and nothing about it is checked, which is
+  // why the notice carries the post's own words and a link to where it was
+  // posted rather than anything written in Gemlyx's voice.
+  //
+  // THE COORDINATE COMES FROM THE PLACE, and no coordinate means no notice: a
+  // notice that cannot say where it is cannot make the one promise it exists to
+  // make. Refused with the reason rather than saved without one.
+  const [noticeSending, setNoticeSending] = useState("");
+  const sendAsNotice = async (candidate) => {
+    const place = String(candidate?.place || "").trim();
+    const found = place ? pretendPlaces.find(p => p.name.toLowerCase() === place.toLowerCase()) : null;
+    if (!found) {
+      setFeedError(place
+        ? `No coordinate on file for "${place}", so a reader could not be told it is near them. Publish that place first, or set the group's scope to somewhere that is published.`
+        : "That group has no place on it, so there is nothing to measure a distance from. Give it one in the list above.");
+      return;
+    }
+    setNoticeSending(candidate.postId || candidate.postUrl || candidate.date);
+    setFeedError(null);
+    try {
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_notices`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({
+          // The first line is the headline and the rest is the body. A village
+          // post leads with what it is, and anything cleverer would be this app
+          // naming an event nothing has checked.
+          headline: String(candidate.text || "").split(/\n/)[0].trim().slice(0, 120),
+          body: String(candidate.text || "").trim().slice(0, 400),
+          day: candidate.date,
+          end_day: candidate.dates?.length > 1 ? candidate.dates[candidate.dates.length - 1] : candidate.date,
+          place: found.name,
+          lat: found.lat,
+          lon: found.lon,
+          source_url: candidate.postUrl || candidate.feedUrl || "",
+        }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setFeedError(String(res.status) === "404" || /gemlyx_notices/.test(JSON.stringify(body || ""))
+          ? "MISSING_NOTICES_TABLE"
+          : studioErrorMessage("the notices", res.status, body));
+        setNoticeSending("");
+        return;
+      }
+      // Off the queue, because it has been dealt with, and into the reader's
+      // list in the same tick so he can see it without a reload.
+      setNoticeRows(prev => [...prev, ...(Array.isArray(body) ? body : [])]);
+      setFeedSweep(st => st ? { ...st, candidates: st.candidates.filter(c => c !== candidate), found: Math.max(0, st.found - 1) } : st);
+      showToast(`Sent. It is near ${found.name} until ${candidate.date}.`, 4000);
+    } catch (e) { setFeedError(String(e.message || e)); }
+    setNoticeSending("");
   };
 
   const [sweepId, setSweepId] = useState(SWEEPS[0]?.id || "");
@@ -20831,7 +20971,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     link and paste their posts below.
                   </div>
 
-                  {feedError === "MISSING_TABLE" ? (
+                  {feedError === "MISSING_NOTICES_TABLE" ? (
+                    <div style={{ fontSize: 11.5, color: "#FFB347", lineHeight: 1.6 }}>
+                      The <code>gemlyx_notices</code> table does not exist yet. Run this once in Supabase, then send it again:
+                      <pre style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px", fontSize: 10.5, color: C.light, overflowX: "auto", marginTop: 8, whiteSpace: "pre" }}>{NOTICES_SQL}</pre>
+                      <button onClick={() => { navigator.clipboard?.writeText(NOTICES_SQL); setToast("SQL copied"); }}
+                        style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "6px 13px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Copy the SQL</button>
+                    </div>
+                  ) : feedError === "MISSING_TABLE" ? (
                     <div style={{ fontSize: 11.5, color: "#FFB347", lineHeight: 1.6 }}>
                       The <code>gemlyx_feeds</code> table does not exist yet. Run this once in Supabase, then reopen this panel:
                       <pre style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px", fontSize: 10.5, color: C.light, overflowX: "auto", marginTop: 8, whiteSpace: "pre" }}>{FEEDS_SQL}</pre>
@@ -20988,6 +21135,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 }}
                                   style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                                   Draft this
+                                </button>
+                                {/* THE OTHER EXIT, and the one he asked for. A
+                                    notice is not an entry: one row, one line, no
+                                    page, and gone the day after. */}
+                                <button onClick={() => sendAsNotice(c)} disabled={!!noticeSending}
+                                  style={{ background: `${C.gold}18`, border: `1px solid ${C.gold}`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: noticeSending ? "default" : "pointer" }}>
+                                  {noticeSending === (c.postId || c.postUrl || c.date) ? "…" : "Send as a notice"}
                                 </button>
                                 {c.postUrl && (
                                   <a href={c.postUrl} target="_blank" rel="noreferrer"
@@ -29094,6 +29248,41 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           wait down. Same guideBuildStage the overlay reads, so there is one
           source of progress and the bar cannot claim a different stage from the
           screen it came from. Tapping it brings the full wait back. */}
+      {/* ── THE NOTIFICATION ────────────────────────────────────────
+          Oliver, 17 Sep 2026: "It should be a notification and then with text
+          under when it pops that says 'bla bla bla near you'. And when you've
+          clicked the notification, then the notification will be gone."
+
+          Clicked is DISMISSED, and that is the whole interaction: there is
+          nowhere to go. A notice has no page, and sending a reader to one would
+          be the blog this was built to not be. What clicking does is take it off
+          the screen, and the Near you tab keeps it until the event passes.
+
+          Bottom right, because the pretend chip is bottom left and two fixed
+          cards in one corner is how one of them becomes unreachable. */}
+      {noticeToShow && (
+        <div style={{ position: "fixed", right: 12, bottom: 12, zIndex: 964, maxWidth: "min(360px, calc(100vw - 24px))" }}>
+          <button onClick={() => dismissNotice(noticeToShow.id)}
+            style={{ display: "block", width: "100%", textAlign: "left", background: C.surface, border: `1px solid ${C.gold}66`, borderRadius: 14, padding: "12px 14px", cursor: "pointer", boxShadow: "0 8px 26px rgba(0,0,0,0.5)", fontFamily: "'Inter', sans-serif" }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", color: C.gold, marginBottom: 5 }}>
+              {noticeTitle(noticeToShow)}
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.4, marginBottom: 4 }}>{noticeToShow.headline}</div>
+            {/* THE TEXT UNDER, in the words it was posted in. Nothing here has
+                been checked by anything, so putting it in our own voice would
+                be claiming more than we know. */}
+            {noticeToShow.body && (
+              <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.55, marginBottom: 6 }}>
+                {noticeToShow.body.length > 140 ? `${noticeToShow.body.slice(0, 140)}…` : noticeToShow.body}
+              </div>
+            )}
+            <div style={{ fontSize: 10.5, color: C.muted }}>
+              {noticeWhen(noticeToShow)}{noticeToShow.km >= 1 ? ` · ${Math.round(noticeToShow.km)} km away` : ""}
+            </div>
+          </button>
+        </div>
+      )}
+
       {/* ── THE ONE THING THAT MAKES THE VPN SAFE ──────────────────
           A coordinate quietly stuck on Sejerø makes every travel time on the
           site wrong, and wrong in a way that reads as a bug rather than as a
@@ -29398,6 +29587,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         // reason.
         onOpenGuide={openSavedGuide}
         onDeleteGuide={deleteSavedGuide}
+        // Everything still on near this reader, dismissed or not: clicking the
+        // pop-up takes it off the screen, not out of the list. What takes it out
+        // of the list is the event finishing, which is a filter and not a job.
+        notices={noticesHere}
+        noticeRadiusKm={NOTICE_RADIUS_KM}
+        hasLocation={isInDenmark(userCoords)}
+        onAskLocation={requestLocation}
         // Navigates only if the sign out actually happened. See the note on
         // handleSignOut's return value: this line used to move somebody home
         // and then ask them whether they wanted to leave.

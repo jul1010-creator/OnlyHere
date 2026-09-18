@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { noticeWhen } from "../utils/nearbyNotices";
 import { C } from "../utils/theme";
 import { EMPTY_PROFILE, cleanProfile, cleanLearned, isBlank, saveProfile, SETUP_SQL, OBSERVED_FIELDS, knownAboutTraveller, REPLY_LENGTHS } from "../utils/profile";
 import { settledObservations, learnedIsEmpty, OBSERVED_MIN } from "../utils/profileLearning";
@@ -98,6 +99,17 @@ export const ME_SECTIONS = [
   // Second in the rail on purpose. It is the only section here somebody opens to
   // USE rather than to change a setting, so it sits directly under General.
   { id: "trips", label: "Saved trips", blurb: "The guides you kept, and the way back into them." },
+  // ── NEAR YOU ──────────────────────────────────────────────────────
+  //
+  // Oliver, 17 Sep 2026: "it will have its own tab under 'near you' in the
+  // account section where saved trips, General, about me, etc. is. and again,
+  // when the event is over, then it disappears. Only what is current."
+  //
+  // Third, under Saved trips, because it belongs with the other section
+  // somebody opens to USE rather than to change a setting, and it is the one
+  // that goes stale: a reader who opens this account page at all is more likely
+  // to be looking for what is on this week than for their own name.
+  { id: "near", label: "Near you", blurb: "What the locals have on, while it is still on." },
   { id: "about", label: "About me", blurb: "Your travel preferences and what Gemlyx has learned." },
   { id: "plan", label: "Plan", blurb: "What your account includes." },
   { id: "legal", label: "Legal", blurb: "Terms of Service and Privacy Policy." },
@@ -120,6 +132,7 @@ export const AboutMePage = ({
   open, session, profile, savedGuides = [], savedPlaces = [], cloudSyncOk = true,
   setupSql = null, deleting = false, section = null, onSection, onClose, onProfileSaved,
   onNeedsSetup, onSignOut, onDelete, onOpenGuide, onDeleteGuide,
+  notices = [], noticeRadiusKm = 30, hasLocation = false, onAskLocation,
 }) => {
   const [p, setP] = useState(EMPTY_PROFILE);
   const [busy, setBusy] = useState(false);
@@ -696,7 +709,60 @@ export const AboutMePage = ({
     </Card>
   );
 
-  const bodyFor = { general: generalSection, trips: tripsSection, about: aboutSection, plan: planSection, legal: legalSection };
+  // ── NEAR YOU ──────────────────────────────────────────────────────
+  //
+  // Three states and they are different facts: this browser has not said where
+  // it is, it has and nothing is on, or here is what is on. The first is a
+  // question with a button on it; the second is an answer and not a failure.
+  const nearSection = (
+    <>
+      <Card>
+        <H>Near you</H>
+        {!hasLocation ? (
+          <>
+            <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.75, marginBottom: 12 }}>
+              Gemlyx needs to know roughly where you are before it can tell you what is on within {noticeRadiusKm} km.
+            </div>
+            <button onClick={() => onAskLocation?.()}
+              style={{ background: `${C.gold}18`, border: `1px solid ${C.gold}`, color: C.gold, borderRadius: 100, padding: "9px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+              Use my location
+            </button>
+          </>
+        ) : notices.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.75 }}>
+            Nothing on within {noticeRadiusKm} km of you right now. This fills up when a local community posts something with a date on it, and
+            empties itself again the day after.
+          </div>
+        ) : (
+          <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.75 }}>
+            {notices.length === 1 ? "One thing on near you." : `${notices.length} things on near you.`} They disappear on their own once they are over.
+          </div>
+        )}
+      </Card>
+
+      {notices.map(n => (
+        <Card key={n.id}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", color: C.gold, marginBottom: 6 }}>
+            {n.place || "Near you"}{n.km >= 1 ? ` · ${Math.round(n.km)} km` : ""}
+          </div>
+          <div style={{ fontSize: 15, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.3, marginBottom: 6 }}>{n.headline}</div>
+          {n.body && <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.7, whiteSpace: "pre-wrap", marginBottom: 8 }}>{n.body}</div>}
+          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>{noticeWhen(n)}</div>
+          {/* WHERE IT CAME FROM, because this is the one thing on Gemlyx that
+              has not been through the pipeline. A reader deciding whether to
+              drive an hour deserves to see the post it came from. */}
+          {n.sourceUrl && (
+            <a href={n.sourceUrl} target="_blank" rel="noreferrer"
+              style={{ display: "inline-block", marginTop: 10, fontSize: 11.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>
+              Where this was posted ↗
+            </a>
+          )}
+        </Card>
+      ))}
+    </>
+  );
+
+  const bodyFor = { general: generalSection, trips: tripsSection, near: nearSection, about: aboutSection, plan: planSection, legal: legalSection };
 
   return (
     <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 990, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>

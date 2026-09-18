@@ -73,6 +73,7 @@ writeFileSync(entry, `
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel, eventLastDay } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
+  export { cleanNotice, noticeIsCurrent, noticesNearby, noticeTitle, noticeWhen, distanceKm, readDismissed, writeDismissed, NOTICE_RADIUS_KM, DISMISSED_KEY } from ${JSON.stringify(join(root, "src/utils/nearbyNotices.js"))};
   export { parsePretend, cleanPretend, readPretend, writePretend, pretendBanner, findPlace, PRETEND_KEY } from ${JSON.stringify(join(root, "src/utils/pretendLocation.js"))};
   export { groupIdIn, pageNameIn, feedKindOf, FEED_KINDS, feedUrlProblem, cleanFeed, postsIn, postedDay, datesInPost, timeInPost, candidatesIn, dedupeCandidates, alreadyPublished, newCandidates, sweepCost, PAGES_PER_FEED, CENTS_PER_PAGE } from ${JSON.stringify(join(root, "src/utils/communityFeeds.js"))};
   export { scopeTier, ISLANDS_SCOPE, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
@@ -1057,6 +1058,125 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // per finding would have every finding checked against the wrong one.
   ok("a claim that names its own page keeps it",
     /claimCitation\(c\) \|\| soleUrl/.test(corr) && !/soleUrl \|\| claimCitation/.test(corr));
+}
+
+// ── WHAT THE LOCALS ARE DOING, WHILE IT IS STILL ON ─────────────────
+//
+// Oliver, 17 Sep 2026: "This shouldn't be a massive blog. This should be little
+// notifications you get as a paid account. 'Near you, locals on Sejerø is
+// hosting an event at bla bla bla..' And when the event is over, then the draft
+// is gone. No return." Then: "when you've clicked the notification, then the
+// notification will be gone. But it will have its own tab under 'near you'...
+// and again, when the event is over, then it disappears. Only what is current."
+{
+  const { cleanNotice, noticeIsCurrent, noticesNearby, noticeTitle, noticeWhen,
+          distanceKm, readDismissed, writeDismissed, NOTICE_RADIUS_KM, DISMISSED_KEY } = M;
+
+  const SEJERO = { lat: 55.8892, lon: 11.1436 };
+  const AARHUS = { lat: 56.1629, lon: 10.2039 };
+  const ROWS = [
+    { id: 1, headline: "Åben ø-dag for børnefamilier", body: "Husk åben ø-dag for børnefamilier d. 19. september!", day: "2026-09-19", place: "Sejerø", lat: 55.8892, lon: 11.1436, source_url: "https://facebook.com/x" },
+    { id: 2, headline: "Høstfest", day: "2026-09-01", place: "Sejerø", lat: 55.8892, lon: 11.1436 },
+    { id: 3, headline: "Noget i Aarhus", day: "2026-09-25", place: "Aarhus", lat: 56.1629, lon: 10.2039 },
+    { id: 4, headline: "Somewhere unplaced", day: "2026-09-25", place: "Ukendt" },
+    { id: 5, headline: "", day: "2026-09-25", lat: 55.9, lon: 11.1 },
+  ];
+
+  // ── ONLY WHAT IS CURRENT, AND IT IS A FILTER, NOT A JOB ─────────
+  // Nothing has to run for a notice to disappear, and nothing can forget to
+  // run. A cleanup that deletes the rows later changes nothing a reader sees.
+  is("a finished one is not current", noticeIsCurrent(ROWS[1], new Date("2026-09-17")), false);
+  is("one still ahead is", noticeIsCurrent(ROWS[0], new Date("2026-09-17")), true);
+  is("and the day itself counts, which is the most useful day there is",
+    noticeIsCurrent(ROWS[0], new Date("2026-09-19")), true);
+  // A RANGE KEEPS ITS LAST DAY, or a three day festival expires after its first
+  // evening. This was a real bug first: the reader here read "already clean or
+  // clean it" off a field name, and a raw row carries end_day while a clean one
+  // carries endDay, so a raw row skipped the cleaning and had no endDay to read.
+  const RANGE = { id: 9, headline: "Festival", day: "2026-09-19", end_day: "2026-09-21", lat: 55.8892, lon: 11.1436 };
+  is("a range is current on its middle day", noticeIsCurrent(RANGE, new Date("2026-09-20")), true);
+  is("and over after its last", noticeIsCurrent(RANGE, new Date("2026-09-22")), false);
+  is("and it reads both ends", noticeWhen(RANGE), "Saturday 19 September to 21 September");
+
+  // ── NEAR IS A HARD GATE, IN BOTH DIRECTIONS ─────────────────────
+  is("the radius is the one the Explore page already uses", NOTICE_RADIUS_KM, 30);
+  is("standing on Sejerø, the island's thing is on the list",
+    noticesNearby(ROWS, SEJERO, { today: new Date("2026-09-17") }).map(n => n.id), [1]);
+  is("standing in Aarhus it is not, and the Aarhus one is",
+    noticesNearby(ROWS, AARHUS, { today: new Date("2026-09-17") }).map(n => n.id), [3]);
+  // A NOTICE WITH NO COORDINATE REACHES NOBODY rather than everybody. "Near
+  // you" is the entire promise and one that cannot say where it is cannot make
+  // it.
+  ok("an unplaced notice reaches nobody",
+    !noticesNearby(ROWS, SEJERO, { today: new Date("2026-09-17") }).some(n => n.id === 4));
+  ok("and one with no words is not a notice", cleanNotice(ROWS[4]) === null);
+  is("a reader whose browser will not say where it is gets none",
+    noticesNearby(ROWS, null, { today: new Date("2026-09-17") }), []);
+  ok("the distance is real", Math.round(distanceKm(SEJERO, AARHUS)) > 60);
+
+  // ── CLICKED IS DISMISSED, AND DISMISSED IS NOT GONE ─────────────
+  // His own split: the pop-up reads the dismissed list, the Near you tab does
+  // not. What takes it out of the tab is the event finishing.
+  is("a dismissed one stops popping",
+    noticesNearby(ROWS, SEJERO, { today: new Date("2026-09-17"), dismissed: ["1"] }).map(n => n.id), []);
+  is("but the tab still has it",
+    noticesNearby(ROWS, SEJERO, { today: new Date("2026-09-17") }).map(n => n.id), [1]);
+
+  // Soonest first, because what has a deadline goes above what does not.
+  {
+    const two = [
+      { id: 7, headline: "December", day: "2026-12-12", lat: 55.8892, lon: 11.1436 },
+      { id: 8, headline: "Next week", day: "2026-09-24", lat: 55.8892, lon: 11.1436 },
+    ];
+    is("the soonest is first", noticesNearby(two, SEJERO, { today: new Date("2026-09-17") }).map(n => n.id), [8, 7]);
+  }
+
+  // ── WHAT A READER IS TOLD ───────────────────────────────────────
+  // The place is named, because "near you" on its own is the vaguest possible
+  // claim and somebody in Kalundborg wants to know it is Sejerø before deciding
+  // whether that is near enough.
+  is("the title names the place", noticeTitle(ROWS[0]), "Near you: something on Sejerø");
+  is("and says near you when it cannot", noticeTitle({ headline: "x", day: "2026-09-19" }), "Near you");
+  is("the day reads like a plan, not a form field", noticeWhen(ROWS[0]), "Saturday 19 September");
+
+  // ── DISMISSAL IS PER DEVICE AND CANNOT GROW FOREVER ─────────────
+  {
+    const store = (() => { const m = new Map(); return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, v), removeItem: k => m.delete(k) }; })();
+    writeDismissed(store, ["1", "2"], [1, 2, 3]);
+    is("what was dismissed comes back", readDismissed(store), ["1", "2"]);
+    // PRUNED AGAINST WHAT IS STILL LIVE on every write: an id that no longer
+    // exists cannot be dismissed again, so this list cannot grow forever.
+    is("an id that is gone is dropped", writeDismissed(store, ["1", "2"], [2]), ["2"]);
+    is("and the key is one key", typeof DISMISSED_KEY === "string" && DISMISSED_KEY.length > 0, true);
+    const angry = { getItem: () => { throw new Error("no"); }, setItem: () => { throw new Error("no"); } };
+    is("a private window reads as nothing dismissed", readDismissed(angry), []);
+    is("and writing in one still answers", writeDismissed(angry, ["1"], [1]), ["1"]);
+  }
+
+  // ── AND THE WIRING ──────────────────────────────────────────────
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    const me = stripComments(readFileSync(join(root, "src/components/AboutMePage.jsx"), "utf8"));
+    // ITS OWN TABLE, not a type on gemlyx_content: a notice sharing a table
+    // with the entries would arrive in the Explore lists, the search index, the
+    // sitemap and the guide builder, each of which would need a rule to keep it
+    // out, and one of them would be forgotten.
+    ok("notices have their own table", /create table if not exists gemlyx_notices/.test(app));
+    ok("which a reader may read", /create policy "read gemlyx_notices"[\s\S]{0,120}to anon using \(true\)/.test(app));
+    ok("and it is not a content type", !/CONTENT_TYPES[\s\S]{0,200}"notice"/.test(app));
+    // Two lists, and the difference between them IS the feature.
+    ok("the tab shows everything current and near", /const noticesHere = useMemo\(/.test(app));
+    ok("the pop-up skips what was clicked", /dismissed: noticesSeen/.test(app));
+    ok("clicking dismisses and nothing else", /onClick=\{\(\) => dismissNotice\(noticeToShow\.id\)\}/.test(app));
+    // The queue has two exits and they are not the same thing.
+    ok("a candidate can be sent as a notice", /const sendAsNotice = async \(candidate\) => \{/.test(app));
+    ok("and one with no coordinate is refused rather than saved without one",
+      /so a reader could not be told it is near them/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+    // The section, in the rail he named.
+    ok("Near you is a section in the account page", /\{ id: "near", label: "Near you"/.test(me));
+    ok("with a body of its own", /near: nearSection/.test(me));
+    ok("and it says so when this browser has not said where it is", /Use my location/.test(me));
+  }
 }
 
 // ── STANDING SOMEWHERE ELSE ─────────────────────────────────────────
@@ -16038,8 +16158,15 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // here is a setting somebody opens to change; this is the only one they open
   // to USE, so it sits directly under General where a returning reader looks
   // first.
-  is("five categories", sections.length, 5);
-  is("in the order he reads them", sections.map(x => x.id).join(","), "general,trips,about,plan,legal");
+  // Six on 17 Sep, when the community notices needed somewhere to live: "it
+  // will have its own tab under 'near you' in the account section where saved
+  // trips, General, about me, etc. is."
+  //
+  // THIRD, under Saved trips, and the rule is the same one: it belongs with the
+  // other section somebody opens to USE rather than to change. It is also the
+  // only one here that goes stale on its own.
+  is("six categories", sections.length, 6);
+  is("in the order he reads them", sections.map(x => x.id).join(","), "general,trips,near,about,plan,legal");
   ok("every one has a label", sections.length > 0 && sections.every(x => !!x.label));
   // The blurb is the line under the name on the PHONE list, which is the whole
   // screen before anything is opened. A row with a name and no line is a guess,
@@ -30222,9 +30349,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // string than the one it is there to interrogate. It also must not trigger a
   // refresh: a session being thrown out is not a session worth renewing first.
   //
+  // A SEVENTH JOINED ON 17 SEP, and it is the third kind rather than a new
+  // kind: gemlyx_notices is what a reader is shown near them, so it has to work
+  // signed out and carries the anon key exactly as craft_items does. Its table
+  // grants select to anon and nothing else, and the writing side of the same
+  // table goes through supaFetch like everything founder-gated.
+  //
   // Anything else appearing in this list is the bug growing back.
   const bareSupabase = [...app16.matchAll(/[^a-zA-Z]fetch\(`\$\{SUPABASE_URL\}([^`]*)`/g)].map(m => m[1]);
   is("every founder-gated Supabase call goes through it", bareSupabase, [
+    "/rest/v1/gemlyx_notices?select=*&order=day.asc",
     "/auth/v1/user",
     "/auth/v1/token?grant_type=refresh_token",
     "/auth/v1/token?grant_type=password",
@@ -30232,6 +30366,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     "/rest/v1/craft_items?select=*&order=id",
     "/rest/v1/craft_requests",
   ]);
+  // AND THE WRITE DOES NOT. A reader may read the notices and may never write
+  // one, which is the half a bare fetch on the same table would quietly break.
+  ok("but writing a notice is founder-gated",
+    /supaFetch\(`\$\{SUPABASE_URL\}\/rest\/v1\/gemlyx_notices`, \{\s*\n?\s*method: "POST"/.test(app16));
   ok("and there are plenty that do", [...app16.matchAll(/supaFetch\(`\$\{SUPABASE_URL\}/g)].length > 25);
   // ONE PLACE KNOWS THE TOKEN EXPIRES. Six hand-rolled retries are gone; the
   // only two callers left are the two helpers. A third means somebody has
