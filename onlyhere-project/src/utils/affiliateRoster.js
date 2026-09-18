@@ -31,6 +31,7 @@ import {
   affiliateActive, tiqetsActive, ticketmasterActive, wegotripActive,
   tripcomActive, carRentalActive, getyourguideActive, bajabikesActive,
   partnerAdsPlacements,
+  partnerAdsPending,
 } from "./affiliates";
 import { TRIPCOM_CITIES } from "../data/tripcom";
 
@@ -178,6 +179,27 @@ const PARTNER_ADS_WHY = {
 
 // `placements` is an argument so the suite can see what a named banner produces
 // without a config constant existing for it to flip.
+// ── AND THE ONES THAT ARE SIGNED UP AND NOT YET NAMED ────
+//
+// A programme nobody can reach earns nothing, so its dot says so in the same
+// size type as a live one. What it may NOT do is be absent: this page answers
+// how Gemlyx is paid, and two signed-up programmes missing from it is the page
+// being incomplete about money, which is the one thing it exists not to be.
+//
+// One row for both, because two rows reading "Partner Ads" with no company name
+// tell a reader less than one row naming both slots.
+export const partnerAdsPendingRow = (pending = partnerAdsPending()) => {
+  if (!pending.length) return [];
+  const slots = pending.map(p => p.slot === "stay" ? "a hotel" : p.slot === "gear" ? "travel gear" : "a partner offer");
+  return [{
+    key: "partnerads-pending",
+    name: "Partner Ads",
+    sells: slots.join(" and "),
+    why: `A Danish affiliate network. ${pending.length === 1 ? "One programme is" : `${pending.length} programmes are`} signed up here and ${pending.length === 1 ? "it is" : "they are"} not live: nothing on the site links to ${pending.length === 1 ? "it" : "them"} yet, so ${pending.length === 1 ? "it earns" : "they earn"} nothing. A klikbanner link says nothing about where it goes, so the company has to be named in the site's own configuration before a button can tell you whose page you are about to open. When one goes live, this row names the company.`,
+    earning: false,
+  }];
+};
+
 export const partnerAdsRows = (placements = partnerAdsPlacements()) =>
   placements.map(p => ({
     key: `partnerads-${p.banner}`,
@@ -203,6 +225,7 @@ export const affiliateRoster = () => [
     .filter(p => !(p.hideWhenOff && !p.earning))
     .map(({ hideWhenOff, ...rest }) => rest),
   ...partnerAdsRows(),
+  ...partnerAdsPendingRow(),
 ];
 
 // What the page says at the top, and it has to be countable rather than a claim.

@@ -336,4 +336,9 @@ export const INVENTORY_MAY_NOT_SELECT = [
   // constants it reads, so reaching around the function does not get past this
   // either.
   "featuredStayFor", "PARTNER_ADS", "BOOKING_CJ_LINK",
+  // 19 Sep, with the gear placement. It carries no town so it cannot tilt a
+  // route the way a hotel can, and it goes on the list anyway: the rule is that
+  // paid inventory does not reach the step that chooses places, and an
+  // exception argued case by case is how the rule stops holding.
+  "partnerAdsGear",
 ];

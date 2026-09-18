@@ -1,4 +1,4 @@
-import { costLines, byUrgency, estimateFrom, describeEstimate, COST_KIND } from "../utils/costLedger";
+import { costLines, byUrgency, estimateFrom, describeEstimate, partyOf, describeGroup, COST_KIND } from "../utils/costLedger";
 import { partnerDisclosure, outboundLink } from "../utils/affiliates";
 import { tripDayDate } from "../utils/guideReading";
 
@@ -134,10 +134,30 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
                 <span style={{ fontSize: 15, fontWeight: 800, color: C.text }}>from {est.from} DKK</span>
                 <span style={{ fontSize: 11.5, color: C.muted }}>per person</span>
               </div>
+              {/* ── AND WHAT IT IS FOR A GROUP ──────────────────
+                  19 Sep 2026. Per person is honest and it is not the number a
+                  family wants, and the multiplication was being left to them.
+                  partyOf refuses a count it cannot read rather than guessing
+                  one, so this line is absent more often than it is wrong. */}
+              {(() => {
+                const party = partyOf(guide?._travelers);
+                const said = describeGroup(est, party);
+                if (!said) return null;
+                return <div style={{ fontSize: 12, color: C.text, lineHeight: 1.5, marginTop: 3 }}>{said}</div>;
+              })()}
               <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 3 }}>{describeEstimate(est)}</div>
               {est.missing.length > 0 && (
                 <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 2 }}>
                   Not in the figure: {est.missing.join(", ")}.
+                </div>
+              )}
+              {/* THE ARITHMETIC CLOSES. Named with their prices, so a reader
+                  adding up the lines above can see exactly which figures were
+                  taken out and why, rather than finding a total that is smaller
+                  than the list and no explanation for the gap. */}
+              {est.refusedNames.length > 0 && (
+                <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 2 }}>
+                  Left out, nothing to buy for these dates: {est.refusedNames.join(", ")}.
                 </div>
               )}
             </div>

@@ -548,9 +548,80 @@ export const estimateFrom = (lines) => {
     refused: refused.length,
     // Named, because "and 4 more" is not a thing anybody can check.
     missing: unpriced.map(l => String(l?.name || "")).filter(Boolean).slice(0, 6),
+    // ── AND THE REFUSED ONES NAMED WITH THEIR PRICES ─────────────
+    //
+    // 19 Sep 2026. The lines on the page did not add up to the figure under
+    // them: a reader saw 145, 450, 160 and 110 and a total of 255, with one
+    // sentence saying two were left out and not saying which. The unpriced ones
+    // were named directly underneath, which made the silence about these two
+    // look like an error rather than a rule. The price comes with the name, so
+    // the arithmetic closes: 255 plus the two named figures is what is on
+    // screen.
+    refusedNames: refused.map(l => {
+      const n = String(l?.name || "").trim();
+      if (!n) return "";
+      const p = String(l?.price || "").trim();
+      return p ? `${n} (${p})` : n;
+    }).filter(Boolean).slice(0, 6),
     // A room is the biggest number on any trip and this list never holds one.
     stayIncluded: counted.some(c => c.line?.kind === COST_KIND.STAY),
   };
+};
+
+// ── "PER PERSON" IS HONEST AND NOT THE NUMBER A FAMILY WANTS ────
+//
+// Every priced line in costLines is per head, so the estimate is too, and it
+// says so. A family of four reading 255 owes 1020 and the page was leaving that
+// multiplication to them.
+//
+// THE COUNT IS REFUSED RATHER THAN GUESSED. `_travelers` is free text a
+// traveller typed, so "2 adults and 2 kids" is four heads, "family of 4" is
+// four, and "2 weeks with friends" is a number this must not multiply anything
+// by. A count is read only where it sits next to a word about people, and the
+// answer is null everywhere else: no group line is better than a wrong one.
+const PEOPLE = "adults?|grown[- ]?ups?|people|persons?|travell?ers?|friends?|kids?|children|child|babies|baby|toddlers?|voksne|b\u00f8rn|boern|personer|rejsende|venner";
+const KIDS = /\b(?:kids?|children|child|babies|baby|toddlers?|b\u00f8rn|boern|barn)\b/i;
+const ALONE = /\b(?:alone|solo|just me|by myself|on my own|alene|selv)\b/i;
+const PARTY_CAP = 12;
+
+export const partyOf = (said) => {
+  const text = String(said ?? "").trim();
+  if (!text) return null;
+  const hasKids = KIDS.test(text);
+  let heads = 0;
+  for (const m of text.matchAll(new RegExp(`(\\d{1,2})\\s*(?:more\\s+)?(?:${PEOPLE})\\b`, "gi"))) {
+    heads += Number(m[1]) || 0;
+  }
+  // "family of 4", "familie p\u00e5 4", "party of 3", "group of 6".
+  if (!heads) {
+    const of = text.match(/\b(?:family|familie|party|group|gruppe|selskab)\s+(?:of|p\u00e5|paa|pa)\s+(\d{1,2})\b/i);
+    if (of) heads = Number(of[1]) || 0;
+  }
+  // A bare count, which is what the intake field mostly holds: "4", "4 pax",
+  // "we are 4". Deliberately narrow: a number inside a sentence about anything
+  // else is not a headcount.
+  if (!heads) {
+    const bare = text.match(/^\s*(?:we\s+are\s+|vi\s+er\s+)?(\d{1,2})\s*(?:pax|of us)?\s*$/i);
+    if (bare) heads = Number(bare[1]) || 0;
+  }
+  if (!heads && ALONE.test(text)) heads = 1;
+  if (!heads || heads < 1) return null;
+  // A guide for thirty is a coach tour and not something this figure should
+  // multiply out; a two-digit typo should not print a five-figure total either.
+  if (heads > PARTY_CAP) return null;
+  return { heads, hasKids };
+};
+
+// The group figure, and the caveat that makes it honest. A child's ticket is
+// usually cheaper and sometimes free, so multiplying an adult price by heads
+// OVERSTATES a family, which is the one direction a floor may not err in
+// without saying so.
+export const describeGroup = (e, party) => {
+  if (!e || !party || !(party.heads > 1)) return "";
+  const total = e.from * party.heads;
+  return party.hasKids
+    ? `For ${party.heads} of you that is from ${total} DKK, counting everybody at the adult price. Children are often cheaper and sometimes free, so the real figure is usually lower.`
+    : `For ${party.heads} of you that is from ${total} DKK.`;
 };
 
 // The sentence, in one place, so the render cannot invent a different claim

@@ -2,7 +2,7 @@
 
 Written for the next session. Oliver ran this one on Opus 5.
 
-**17,882 assertions pass and the build is green.** That is up 262 from the
+**17,953 assertions pass and the build is green.** That is up 262 from the
 17,620 the 17 Sep handoff claimed, and 298 from the 17,584 that were committed
 at the time.
 
@@ -71,17 +71,21 @@ were taken. The source-trust and glance clusters were decided in-session.
    the suite and a build: both pass here.
 2. **The three SQL scripts**, if they are not run yet. `gemlyx_tables_18sep.sql`
    is in the chat sidebar with all three in one paste, safe to re-run.
-3. **Name the two partner-ads banners.** This is the only thing blocking two
-   finished features. One line each in `src/config.js`:
+3. **Name the two partner-ads banners.** One line each in `src/config.js`. It
+   is now the only thing blocking two features that are both finished, which was
+   not true when this file first said it: see section 2.19.
    ```js
    export const PARTNER_ADS_BANNERS = {
      [PARTNER_ADS_STAY_BANNER]: { merchant: "Hotel Name", site: "https://hotel.dk", town: "Aarhus" },
      [PARTNER_ADS_GEAR_BANNER]: { merchant: "Shop Name", site: "https://shop.dk" },
    };
    ```
-   Nothing renders until then, on purpose: a paid row that cannot name its
-   partner has no honest wording available. partner-ads blocks automated
-   fetching, so the name has to come from him.
+   No BUTTON renders until then, on purpose: a label that cannot say whose page
+   it opens is not a link this site prints. partner-ads disallows automated
+   fetching of a klikbanner URL, so the name has to come from him or from his
+   partner-ads dashboard. Everything around the button is live without it: the
+   Tips block, and the row on the public affiliates page saying both programmes
+   are signed up and neither is live.
 4. **Press three buttons after the deploy**, because three things are wired
    that nothing here can prove from the outside:
    - **A Booking button** on a published guide. It should pass through
@@ -412,6 +416,50 @@ reader not to count on something, so a refused line is now its own bucket,
 reported in the sentence and never in the number. The figure on that fixture
 went from 865 DKK to 255.
 
+### 2.19 What he found on the 19th, and what was wrong
+
+Two complaints, both correct, and the second one was a real miss rather than a
+misunderstanding.
+
+**"The tips are still not there."** He gave two banners on 18 Sep with one
+instruction each: the hotel "on priority", the gear one "on tips". The hotel got
+`featuredStayFor` and a render site in GuidePage the same night. The gear one got
+a config constant, no function, and NOWHERE TO APPEAR. Worse, the roster row
+described a Tips placement that did not exist, and section 1 of this file told
+him the only blocker was naming the banner. True of one of the two.
+
+Now built: `partnerAdsGear` in `utils/affiliates.js` and a What To Bring block on
+the Tips tab in `App.jsx`. **The advice is not gated on the partner.** Five
+things worth having in Denmark render whether or not a shop is named, because a
+section that exists only when it can sell something is an ad with a heading, and
+because gating it is what kept the Tips tab empty. Only the button waits for the
+name. `partnerAdsGear` takes its row as an argument so the suite can see what a
+named banner produces, which is how a source regex stops standing in for "does
+the button work". It is also on `INVENTORY_MAY_NOT_SELECT`: gear carries no town
+so it cannot tilt a route, and an exception argued case by case is how that rule
+stops holding.
+
+**"The legal documents about our affiliates are not either."** He asked on the
+18th to add the hotel and the tip to the how we're paid page. Every row on that
+page is generated from NAMED placements, so it said nothing about either. The
+reasoning was half right: a button needs the advertiser's name, and that page
+does not. "A Danish affiliate network, two programmes signed up here, neither
+live, nothing on the site links to them yet" is true without a merchant name,
+and leaving it off the one page whose job is to be complete about money is the
+omission he objected to. `partnerAdsPendingRow` adds it, earning nothing, in the
+same size type as a live row, and it disappears on its own the day a banner is
+named. The studio panel and the public page are compared through the slot now,
+so one panel row can answer for a named row and a pending one.
+
+**Two things from the concerns list, done in the same pass.** The refused lines
+are named with their prices under the estimate, so a reader who adds up 145, 450,
+160 and 110 can see exactly which figures were removed from 255 and why. And a
+party gets a group total: `partyOf` reads a headcount out of `_travelers` only
+where a number sits beside a word about people, in English and Danish, and
+answers null everywhere else, because multiplying money by a wrong count is worse
+than printing nothing. With children in the party the line says everybody was
+counted at the adult price and that the real figure is usually lower.
+
 ---
 
 ## 3. WHAT IS STILL OPEN
@@ -448,8 +496,14 @@ remains, and what the new work opened:
    number, that is where it would come from, and the caveat sentence already
    knows how to disappear.
 6. **`partnerAdsPlacements` is empty until he names the banners.** Not a bug and
-   not a follow-up for a session: two finished features render nothing until
-   those two lines exist in `config.js`.
+   not a follow-up for a session: two finished features have no button until
+   those two lines exist in `config.js`. Everything else about them is live.
+7. **Nothing from 18 or 19 Sep is deployed.** The whole of it is uncommitted on
+   one laptop, and OneDrive rather than git is what saved the source directory on
+   the 18th. Worth splitting into three or four commits before pushing: the
+   affiliate and copy work, the measured-field hatch with the price decider, the
+   Commons grid, the estimate. A single 26 file commit cannot be bisected if the
+   deploy comes up wrong.
 
 ---
 

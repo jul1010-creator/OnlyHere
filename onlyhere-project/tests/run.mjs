@@ -65,7 +65,7 @@ writeFileSync(entry, `
   export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, partnerMerchant, destinationIn, linkLabel, outboundLink, affiliateHref, affiliateNote, isAffiliateHref, isGetyourguideUrl, isGetyourguideProductUrl, getyourguideUrl, getyourguideActive, getyourguideDisclosure, bikeRentalFits, tourMerchant, isBajabikesUrl, isBajabikesProductUrl, isBajabikesRental, bajabikesSlug, bajabikesUrl, bajabikesActive, bajabikesDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isWegotripUrl, wegotripUrl, wegotripBrowseUrl, wegotripActive, wegotripDisclosure, tripcomActive } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
-  export { bookingEarns, bookingCjUrl, partnerAdsUrl, partnerAdsBanner, partnerAdsMerchant, featuredStayFor, stayDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
+  export { bookingEarns, bookingCjUrl, partnerAdsUrl, partnerAdsBanner, partnerAdsMerchant, partnerAdsPlacements, partnerAdsPending, partnerAdsGear, featuredStayFor, stayDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { TOWN_TYPES, townNameOf, audioFor, audioLine, ticketFor, unmatchedProducts, wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO, TICKET as WEGO_TICKET } from ${JSON.stringify(join(root, "src/utils/wegotripMatch.js"))};
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
   export { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
@@ -173,7 +173,7 @@ writeFileSync(entry, `
   export { guideLanguage, languageOfProse, ruledOutLanguages, briefSentences, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS, MARKER_FLOOR, MARKER_MARGIN } from ${JSON.stringify(join(root, "src/utils/travellerLanguage.js"))};
   export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, LABEL_CLASS, LABEL_SIDES, LABEL_GAP, labelBox, labelSides, SPOT_PIN_ZOOM, isSpotPin, spotsShowAt, PHONE_MAP_PINS, phoneMapShows } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
   export { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE, cameraArrive, cameraLanded, frameFor, SLIDE_HOLD_MS, makeCamera, unplayedBeat } from ${JSON.stringify(join(root, "src/utils/mapDirections.js"))};
-  export { costLines, byUrgency, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND, estimateFrom, describeEstimate } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
+  export { costLines, byUrgency, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND, estimateFrom, describeEstimate, partyOf, describeGroup } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { freeButPriced, moneyProblems, LODGING_FLOOR_DKK } from ${JSON.stringify(join(root, "src/utils/moneyClaims.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
@@ -297,7 +297,7 @@ writeFileSync(entry, `
   export { alertKey, describeWeatherChange, unseenAlerts, usableSeen, seenAlerts, markAlertSeen, alertCountLine, SEEN_KEY, MAX_SEEN } from ${JSON.stringify(join(root, "src/utils/weatherAlerts.js"))};
   export { preferenceRowState, PREF_NO_ACCOUNT, PREF_NO_INTERESTS, PREF_READY } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { savableThread, restorableThread, saveThread, loadThread, clearThread, CHAT_KEY, MAX_SAVED_MESSAGES } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
-  export { affiliateRoster, payingCount, AFFILIATES_PATH } from ${JSON.stringify(join(root, "src/utils/affiliateRoster.js"))};
+  export { affiliateRoster, payingCount, AFFILIATES_PATH, partnerAdsPendingRow } from ${JSON.stringify(join(root, "src/utils/affiliateRoster.js"))};
   export { UI_LANGUAGES, UI_CODES, UI_STRINGS, UI_KEYS, UI_LANGUAGE_KEY, DEFAULT_UI_LANGUAGE, t, resolveUiLanguage, isUiLanguage, uiLanguageMeta, storedUiLanguage, setStoredUiLanguage, currentUiLanguage } from ${JSON.stringify(join(root, "src/utils/uiLanguage.js"))};
   export { ENTRY_WORDS, ENTRY_HEADINGS, ARRIVAL_LABELS, GLANCE_LABELS, KIND_LABELS, entryWord, BOOK_LABELS, bookLabel, TOUR_PHRASE_WORDS } from ${JSON.stringify(join(root, "src/utils/entryWords.js"))};
   export { tourQuery, tourUrlIsAboutTown, pickTourUrl, tourPhrase, tourKindFor, tourTownFor, tourCandidates, tourProposal, replaceTour, describeTourFindings, guideTours, tourNamesExcluded, tourAliveVerdict, tourRemovalFor, TOUR_RESWEEP_DAYS, FOUND as TOUR_FOUND, NOTHING as TOUR_NOTHING, FAILED as TOUR_FAILED, ALIVE as TOUR_ALIVE, GONE as TOUR_GONE, UNKNOWN as TOUR_UNKNOWN } from ${JSON.stringify(join(root, "src/utils/tourSweep.js"))};
@@ -25913,6 +25913,110 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // which is the other way this copy goes wrong.
     is("nor does a row promise a price it does not set",
        roster.filter(p => /\bthe same price\b|\bidentical price\b|cheapest anywhere|\bbest price\b/i.test(p.why || "")).map(p => p.key), []);
+
+    // ── "THE LEGAL DOCUMENTS ABOUT OUR AFFILIATES ARE NOT EITHER" ──
+    //
+    // Oliver, 19 Sep 2026, of the two partner-ads programmes. He asked on the
+    // 18th to "add the hotel and tip inside the how we're paid. I don't want to
+    // lie to people", and the page said nothing about either, because every row
+    // on it was generated from NAMED placements and neither banner is named.
+    //
+    // My reasoning was half right. A reader-facing BUTTON cannot exist without
+    // the advertiser's name, since the label could not say where it goes. This
+    // page is the other half: "we are signed up to a hotel programme and a gear
+    // programme, and neither is live" needs no merchant name, and leaving it out
+    // while the banners sit in config is an omission on the one page in this app
+    // whose whole job is to be complete about money.
+    {
+      const pending = M.partnerAdsPending();
+      is("both banners he gave are signed up and unnamed", pending.length, 2);
+      is("one of them is the hotel", pending.filter(p => p.slot === "stay").length, 1);
+      is("and one is the gear", pending.filter(p => p.slot === "gear").length, 1);
+
+      const row = roster.find(p => p.key === "partnerads-pending");
+      ok("so the public page carries a row for them", !!row);
+      ok("it names the network, which is a fact that needs no advertiser", /Partner Ads/.test(row.name));
+      ok("and says what the two programmes sell", /hotel/.test(row.sells) && /gear/.test(row.sells));
+      // NOT LIVE, said in the same size type as a row that pays. The dot on
+      // this page is driven by `earning` and nothing else.
+      is("it earns nothing, because nothing links to it", row.earning, false);
+      ok("and it says nothing on the site links there yet", /nothing on the site links/.test(row.why));
+      ok("with the reason a button cannot name it yet", /klikbanner/.test(row.why));
+      // A pending row must never be counted as a paying programme, or the
+      // sentence at the top of the page overstates by two.
+      is("and the count at the top does not count it", M.payingCount(), roster.filter(p => p.earning).length);
+      ok("which is the count of live ones only", !roster.filter(p => p.earning).some(p => p.key === "partnerads-pending"));
+
+      // ── AND IT GOES AWAY BY ITSELF ──────────────────────────────
+      // The day a banner is named, the pending row must not sit beside the
+      // named one saying the same programme is not live.
+      is("a named banner produces no pending row",
+         M.partnerAdsPendingRow([]).length, 0);
+      {
+        const half = M.partnerAdsPendingRow([{ banner: "112737", slot: "gear" }]);
+        is("one unnamed banner is one row", half.length, 1);
+        ok("in the singular", /One programme is signed up/.test(half[0].why));
+        ok("and it names only the slot that is waiting", /gear/.test(half[0].sells) && !/hotel/.test(half[0].sells));
+      }
+    }
+
+    // ── "THE TIPS ARE STILL NOT THERE" ────────────
+    //
+    // 19 Sep 2026, and he was right. He gave two banners on the 18th: "this is
+    // for travelling items. Put this on tips." The hotel got `featuredStayFor`
+    // and a render site in GuidePage that night. The gear one got a config
+    // constant, no function and NOWHERE TO APPEAR, while the roster row above
+    // described a Tips placement that did not exist. The handoff then told him
+    // the only blocker was naming the banner, which was true of one of the two.
+    {
+      const appT = readFileSync(join(root, "src/App.jsx"), "utf8");
+      ok("there is a function for the gear placement", typeof M.partnerAdsGear === "function");
+      is("and it answers nothing while the banner is unnamed", M.partnerAdsGear(), null);
+      // ── AND WHAT A NAMED BANNER PRODUCES ────────────────────────
+      // Asked of the function rather than of the source, because "the JSX
+      // mentions gear.merchant" and "the button works" are different claims.
+      {
+        const named = M.partnerAdsGear({ merchant: "Some Outdoor Shop", site: "https://shop.example" });
+        is("a named banner names its merchant", named.merchant, "Some Outdoor Shop");
+        ok("and links through partner-ads rather than to the shop direct",
+           /partner-ads\.com\/dk\/klikbanner\.php/.test(named.url));
+        ok("carrying the gear banner id he gave", named.url.includes("112737"));
+        ok("and his partner id", named.url.includes("57554"));
+        // The one door: the tracking link is disclosed wherever it is drawn.
+        ok("the link reads as a partner link everywhere else in the app", M.isPartnerLink(named.url));
+        ok("with a commission sentence of its own", /commission/.test(M.partnerDisclosure(named.url)));
+        // A row with a site and no merchant is still not a link this prints.
+        is("a banner with a site and no name is not enough",
+           M.partnerAdsGear({ merchant: "", site: "https://shop.example" }), null);
+        is("nor is a blank row", M.partnerAdsGear({}), null);
+      }
+      // THE RENDER SITE, on Tips and not on Essentials, which is where he put
+      // it: gear is bought before a trip rather than on a day of it.
+      const block = appT.slice(appT.indexOf("What To Bring"), appT.indexOf("{/* FAQ */}"));
+      ok("the block exists on the page", block.length > 400);
+      ok("gated on the Tips tab", /\{onTips && \(/.test(appT.slice(appT.indexOf("PUT THIS ON TIPS"), appT.indexOf("What To Bring"))));
+      ok("and it reaches for the placement", /const gear = partnerAdsGear\(\);/.test(block));
+      ok("with the link through the one door", /outboundLink\(gear\.url\)/.test(block));
+      ok("and the merchant named on the button rather than only in the small print",
+         /🎒 \{gear\.merchant\}/.test(block));
+      ok("with the commission said under it", /is a Gemlyx partner, so this link earns us a commission/.test(block));
+      ok("and the price promise that every other paid link here makes",
+         /you pay exactly what you would pay reaching the same page without it/.test(block));
+
+      // ── THE ADVICE IS NOT GATED ON THE PARTNER ──────────────────
+      //
+      // The half that matters most. A section that exists only when it can sell
+      // something is an ad with a heading, and it would also mean the Tips tab
+      // stays empty until an advertiser is named, which is the state he was
+      // complaining about. So the packing advice renders either way and only
+      // the BUTTON waits for the name.
+      const beforeGate = block.slice(0, block.indexOf("const gear = partnerAdsGear()"));
+      ok("the advice sits above the gate", beforeGate.includes("<li>"));
+      is("all five items are outside it", (beforeGate.match(/<li>/g) || []).length, 5);
+      ok("a rain shell among them", /rain shell/i.test(beforeGate));
+      ok("and nothing in the advice mentions a shop", !/partner|commission/i.test(beforeGate));
+    }
+
     is("and each has its own key", new Set(roster.map(p => p.key)).size, roster.length);
     // COUNTED, NEVER TYPED. "Some of the links here are paid" over a site where
     // none of them are is the sentence this file exists to prevent.
@@ -25962,7 +26066,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       const byName = { tiqets: "Tiqets", getyourguide: "GetYourGuide", ticketmaster: "Ticketmaster",
         wegotrip: "WeGoTrip", booking: "Booking.com", tripcom: "Trip.com", carhire: "Car hire",
         bajabikes: "Baja Bikes" };
+      // ── AND EVERY PARTNER-ADS ROW ANSWERS TO ONE PANEL ROW ───────
+      // 19 Sep 2026. The panel keeps ONE Partner-ads row counting named
+      // placements, and the public page has a row per named advertiser plus a
+      // pending row while none are named. So they are compared through the
+      // slot rather than one to one: the panel row is on when a placement is
+      // named, which must be exactly when a named row exists on the page and
+      // never when the pending one does.
+      const partnerPanel = panel.find(r => r.name === "Partner-ads");
+      ok("the panel has a partner-ads row at all", !!partnerPanel);
       const disagreed = roster.filter(p => {
+        if (String(p.key).startsWith("partnerads")) return partnerPanel.on !== p.earning;
         const row = panel.find(r => r.name === byName[p.key]);
         return !row || row.on !== p.earning;
       }).map(p => p.key);
@@ -49886,6 +50000,64 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is("an empty list has none", estimateFrom([]), null);
     is("and junk does not throw", estimateFrom(null), null);
     is("nor does the sentence for nothing", describeEstimate(null), "");
+    // ── AND THE ARITHMETIC CLOSES ──────────────
+    //
+    // 19 Sep 2026. A reader saw 145, 450, 160 and 110 on the list and 255 under
+    // it, with one sentence saying two lines were left out and not saying which.
+    // The unpriced ones were named directly underneath, which made the silence
+    // about these two read as a bug rather than a rule.
+    is("the refused lines are named", est.refusedNames.length, 2);
+    ok("with their prices, so the gap between list and total is checkable",
+       est.refusedNames.some(n => /Distortion \(450 DKK\)/.test(n)));
+    ok("and the sold out one too", est.refusedNames.some(n => /Louisiana \(160 DKK\)/.test(n)));
+    // A refused line with no price is nobody's business twice: it is not in the
+    // figure and it is not in a sentence about figures that were taken out.
+    is("an unpriced refusal is named nowhere",
+       estimateFrom([{ name: "R", price: "", refused: "x" }, { name: "A", price: "145 DKK" }]).refusedNames, []);
+
+    // ── "PER PERSON" IS NOT THE NUMBER A FAMILY WANTS ──────
+    //
+    // Every priced line here is per head, so the estimate is, and it said so and
+    // left the multiplication to the reader. A family of four reading 255 owes
+    // 1020.
+    {
+      const { partyOf, describeGroup } = M;
+      is("two adults", partyOf("2 adults").heads, 2);
+      is("two adults and two children is four heads", partyOf("2 adults and 2 kids").heads, 4);
+      is("and it knows there are children in it", partyOf("2 adults and 2 kids").hasKids, true);
+      is("a family of four", partyOf("family of 4").heads, 4);
+      is("a bare count, which is what the intake field mostly holds", partyOf("4").heads, 4);
+      is("said the other way", partyOf("we are 4").heads, 4);
+      is("solo is one", partyOf("just me").heads, 1);
+      // Danish, because the intake form is filled in Danish by his own tester.
+      is("Danish counts too", partyOf("2 voksne og 2 b\u00f8rn").heads, 4);
+      is("and children in Danish are children", partyOf("2 voksne og 2 b\u00f8rn").hasKids, true);
+
+      // ── AND A COUNT IT CANNOT READ IS REFUSED, NOT GUESSED ──────
+      //
+      // `_travelers` is free text somebody typed. A number in it is not always a
+      // headcount, and multiplying money by the wrong one is worse than printing
+      // no group figure at all.
+      is("a number about something else is not a headcount", partyOf("2 weeks with friends"), null);
+      is("nor is a party described in words", partyOf("me and my wife"), null);
+      is("a coach party is out of scope rather than multiplied", partyOf("30 people"), null);
+      is("nothing said is nothing answered", partyOf(""), null);
+      is("and junk does not throw", partyOf(null), null);
+
+      // ── THE SENTENCE ────────────────────────────────────────────
+      const four = describeGroup(est, partyOf("2 adults and 2 kids"));
+      ok("the group figure is the per-person one times heads", /from 1020 DKK/.test(four));
+      // A child's ticket is usually cheaper and sometimes free, so heads times
+      // an adult price OVERSTATES a family. A floor may not err upward quietly.
+      ok("and it says everybody was counted at the adult price", /adult price/.test(four));
+      ok("with the direction of the error named", /usually lower/.test(four));
+      ok("a party with no children gets no caveat it does not need",
+         !/adult price/.test(describeGroup(est, partyOf("2 adults"))));
+      is("one traveller gets no group line at all", describeGroup(est, partyOf("just me")), "");
+      is("nor does a party nobody could read", describeGroup(est, partyOf("2 weeks with friends")), "");
+      is("and no estimate means no group figure", describeGroup(null, { heads: 4 }), "");
+    }
+
     // The one case where a bed IS quoted, so the caveat must not be printed.
     {
       const e = estimateFrom([{ name: "Bed", price: "900 DKK", kind: COST_KIND.STAY }]);
@@ -51758,11 +51930,36 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // What is missing is NAMED. "and 2 more" is not a thing a reader can check.
     ok("the unpriced lines are named", r.says("Not in the figure"));
     ok("the bed among them", /Not in the figure[^.]*sleep/.test(r.text));
+    // AND SO ARE THE REFUSED ONES, with their prices, or the list adds up to
+    // more than the total under it and nothing on the page says why.
+    ok("the refused lines are named on screen", r.says("Left out, nothing to buy"));
+    ok("with the figure that was taken out", /Left out[^.]*Distortion \(450 DKK\)/.test(r.text));
 
     // The disclosure is printed from the links on the page, not typed.
     ok("a partner link brings its disclosure", /commission|partner link/i.test(r.text));
     // And a partner link is marked for crawlers, which is a legal edge, not taste.
     ok("and is marked sponsored", /rel="[^"]*sponsored/.test(r.html));
+  }
+
+  // ── AND A GROUP SEES WHAT THE GROUP PAYS ─────────────────────────
+  //
+  // 19 Sep 2026. `_travelers` is already on every guide, and the stay buttons
+  // have read a count out of it since Booking went in. The estimate was the one
+  // figure on the page leaving the multiplication to the reader.
+  {
+    const r = await draw({ guide: { ...GUIDE, _travelers: "2 adults and 2 kids" } });
+    ok("the group figure is printed", r.says("For 4 of you"));
+    ok("at four times the per-person floor", r.says("from 1020 DKK"));
+    ok("and says everyone was counted at the adult price", r.says("adult price"));
+    // The per-person figure stays, because it is the one that is measured.
+    ok("the per-person figure is still there", r.says("255 DKK") && r.says("per person"));
+  }
+  {
+    // The count this must not guess at. A guide whose traveller field says
+    // something unreadable prints no group line rather than a wrong one.
+    const r = await draw({ guide: { ...GUIDE, _travelers: "2 weeks with friends" } });
+    ok("an unreadable count prints no group figure", !r.says("of you that is from"));
+    ok("and the per-person figure is unaffected", r.says("255 DKK"));
   }
 
   // ── A TRIP WITH NOTHING TO PAY FOR DRAWS NOTHING ─────────────────

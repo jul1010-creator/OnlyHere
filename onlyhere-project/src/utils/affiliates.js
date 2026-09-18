@@ -309,6 +309,48 @@ export const partnerAdsPlacements = () =>
       site: String(row.site || "").trim(),
     }));
 
+// ── AND A BANNER THAT IS SIGNED UP AND NOT YET NAMED ────
+//
+// Oliver, 19 Sep 2026: "the legal documents about our affiliates are not
+// either", of the two partner-ads programmes.
+//
+// He is right and my reasoning was half wrong. A banner with no advertiser name
+// cannot carry a reader-facing BUTTON, because the label would not be able to
+// say where it goes. It can and must appear on the page that answers how this
+// site is paid: "we are signed up to a hotel programme and a gear programme" is
+// a true sentence that needs no merchant name, and leaving it off that page
+// while the banner sits in config is the omission he objected to.
+//
+// Driven by the banner ids being present rather than by a flag, so the day he
+// deletes a banner id the row goes with it.
+export const partnerAdsPending = () =>
+  [[PARTNER_ADS_STAY_BANNER, "stay"], [PARTNER_ADS_GEAR_BANNER, "gear"]]
+    .filter(([banner]) => String(banner || "").trim())
+    .filter(([banner]) => !String(((PARTNER_ADS_BANNERS || {})[banner] || {}).merchant || "").trim())
+    .map(([banner, slot]) => ({ banner: String(banner), slot }));
+
+// ── "THIS IS FOR TRAVELLING ITEMS. PUT THIS ON TIPS" ──────
+//
+// 18 Sep 2026, and it took until the 19th to have anywhere to render. The stay
+// banner had `featuredStayFor` and a render site in GuidePage the same night;
+// this one had neither, so "put it on tips" was answered with a config constant
+// and nothing else. The roster row even described a Tips placement that did not
+// exist. His words on the 19th: "the tips are still not there."
+//
+// No town and no route condition, unlike the hotel: gear is bought before a
+// trip rather than on a day of it, which is the same reason it sits under
+// advice rather than beside a place.
+// `row` is an argument for the same reason partnerAdsRows takes its placements:
+// the suite can see what a NAMED banner produces without a config constant
+// existing for it to flip, and a source regex is not an answer to "does the
+// button work", which is the question four wiring failures shipped through.
+export const partnerAdsGear = (row = (PARTNER_ADS_BANNERS || {})[PARTNER_ADS_GEAR_BANNER]) => {
+  if (!row || !String(row.merchant || "").trim()) return null;
+  const url = partnerAdsUrl(PARTNER_ADS_GEAR_BANNER);
+  if (!url) return null;
+  return { merchant: String(row.merchant).trim(), site: String(row.site || "").trim(), url };
+};
+
 export const featuredStayFor = (town) => {
   const row = PARTNER_ADS_BANNERS[PARTNER_ADS_STAY_BANNER];
   if (!row || !row.merchant || !row.town) return null;

@@ -231,7 +231,7 @@ import { briefThemes , essentialsForTrip, essentialsBlock, reservedEssential, ni
 // outboundLink, and no longer partnerDisclosure or linkLabel beside it: both
 // render sites on the Essentials card asked for those separately and one of
 // them forgot two of the four. See outboundLink in utils/affiliates.js.
-import { affiliateHref, outboundLink } from "./utils/affiliates";
+import { affiliateHref, outboundLink, partnerAdsGear } from "./utils/affiliates";
 import { sweepPlan, describeSweepPlan, ticketProposal, describeTicketFindings, affiliateWriteFor, agentLabel, FOUND as AFF_FOUND, RESWEEP_DAYS } from "./utils/affiliateSweep";
 import { wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO } from "./utils/wegotripMatch";
 import { CHECKED_ON as WEGO_CHECKED_ON, WEGOTRIP_SOURCE } from "./data/wegotrip";
@@ -27788,6 +27788,62 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65 }}>
                     Danes are famously reserved with strangers, and warm once you're in. Copenhagen's real culture, especially pub life, is something you mostly experience *with* Danes, not just around them. If you get the chance to join a local for a beer or a bar crawl, take it. It opens up a side of Denmark most tourists never see. Hostels with common bar areas, run clubs, and language exchange meetups (search "language cafe Copenhagen" on Facebook) are the easiest low-pressure ways in.
                   </div>
+                </div>
+              </div>
+              )}
+
+              {/* ── "THIS IS FOR TRAVELLING ITEMS. PUT THIS ON TIPS" ──────
+                  Oliver, 18 Sep 2026, of partner-ads banner 112737. On the 19th:
+                  "the tips are still not there." They were not. The hotel banner
+                  got `featuredStayFor` and a render site in GuidePage the same
+                  night and this one got a config constant and nowhere to appear,
+                  while the affiliates page described a Tips placement that did
+                  not exist. This is the render site.
+
+                  ── THE ADVICE IS NOT GATED ON THE PARTNER ────────
+                  The block is here whether or not a shop is named, because it is
+                  worth reading on its own and because a section that exists only
+                  when it can sell something is an ad with a heading. The BUTTON
+                  is what waits for the advertiser's name: a label that cannot say
+                  whose page it opens is not a link this site is willing to print.
+                  See partnerAdsGear in utils/affiliates.js. */}
+              {onTips && (
+              <div style={{ marginBottom: 20, scrollMarginTop: 90 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>What To Bring</div>
+                <div style={{ background: C.surface, borderRadius: 14, padding: "16px", border: `1px solid ${C.border}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                    <span style={{ fontSize: 22 }}>🎒</span>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>Packing for Danish weather</div>
+                  </div>
+                  <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65 }}>
+                    Five things worth having here, and none of them are exciting.
+                  </div>
+                  <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 13, color: C.light, lineHeight: 1.7 }}>
+                    <li><strong style={{ color: C.text }}>A rain shell you can walk in.</strong> Rain here tends to arrive sideways and leave again in ten minutes, and an umbrella is close to useless on a windy day by the water.</li>
+                    <li><strong style={{ color: C.text }}>Layers rather than one warm coat.</strong> Indoors runs warm and an evening by the sea can turn cold in the same day, in summer too.</li>
+                    <li><strong style={{ color: C.text }}>Shoes for cobbles.</strong> The old centres are cobbled, and a full day on them is its own kind of tired.</li>
+                    <li><strong style={{ color: C.text }}>A plug adapter, if you are coming from outside Europe.</strong> Sockets here are 230V and take the standard two round pins.</li>
+                    <li><strong style={{ color: C.text }}>Lights, if you are renting a bike.</strong> They are required after dark and a rental does not always come with them.</li>
+                  </ul>
+                  {(() => {
+                    const gear = partnerAdsGear();
+                    if (!gear) return null;
+                    const out = outboundLink(gear.url);
+                    if (!out.href) return null;
+                    return (
+                      <div>
+                        <a href={out.href} target="_blank" rel={out.rel}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 12, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 13px", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
+                          🎒 {gear.merchant} ↗
+                        </a>
+                        {/* Named in the block's own prose and not only in the
+                            small print. The Copenhagen Card rule, 16 Sep 2026. */}
+                        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4 }}>
+                          {gear.merchant} is a Gemlyx partner, so this link earns us a commission. Nothing about a trip changes if you buy none of this, which is why it sits under advice rather than beside a place, and you pay exactly what you would pay reaching the same page without it.
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
               )}
