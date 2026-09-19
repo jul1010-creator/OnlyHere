@@ -30,6 +30,7 @@
 // data/events.js already holds, and communityOnDay reads them without knowing
 // where they came from.
 import { fold } from "./danishNames";
+import { placesIn } from "./communityEvents";
 
 // ── THE ONE FACT A CALENDAR CANNOT BE TRUSTED FOR ───────────────────
 //
@@ -45,7 +46,7 @@ import { fold } from "./danishNames";
 // island this calendar belongs to. Every row takes it, unconditionally. The
 // address is kept as a venue, which is where in the village to go, and is never
 // allowed to decide which village.
-export const placeFor = (feedPlace) => String(feedPlace || "").trim();
+export const placeFor = (feedPlace) => placesIn(feedPlace)[0] || "";
 
 // ── UNFOLDING, WHICH ICS REQUIRES BEFORE ANYTHING ELSE ──────────────
 //
@@ -225,7 +226,8 @@ export const cleanTitle = (title) => {
 export const MOST_PER_PLACE = 40;
 
 export const communityRowsFrom = ({ events = [], place = "", source = "", today = new Date(), limit = MOST_PER_PLACE } = {}) => {
-  const town = placeFor(place);
+  const places = placesIn(place);
+  const town = places[0] || "";
   if (!town) return [];
   const from = dayKeyOf(today);
   return (Array.isArray(events) ? events : [])
@@ -239,6 +241,11 @@ export const communityRowsFrom = ({ events = [], place = "", source = "", today 
       name: cleanTitle(e.name),
       // FORCED, never read off the row. See placeFor above for the Horsens case.
       town,
+      // ── AND THE OTHER PLACE THIS SOURCE COVERS ────────────
+      // Oliver, 19 Sep 2026: "the Askø group covers Lilleø as well." Both on
+      // one row rather than two rows, so a day standing on both does not offer
+      // the same evening twice. See townsOf in utils/communityEvents.js.
+      towns: places,
       date: e.date,
       dateEnd: e.dateEnd || "",
       // The venue is where in the village to go and is never allowed to decide

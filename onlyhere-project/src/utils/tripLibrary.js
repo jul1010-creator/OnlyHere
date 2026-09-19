@@ -77,6 +77,14 @@ export const PERSONAL_FIELDS = [
   "_budget", "_gid", "_geo", "_fx", "_weatherFetchedAt", "_grounded", "_exactDurations",
   "_noRouteFound", "_onlyWalking", "_lightMode", "_testProfile", "_testPlan", "_planProblems",
   "essentials", "savedAt", "arrivalDate", "id",
+  // ── AND THE TWO THE FINDS BANNER ADDED, 19 SEP 2026 ───────────────
+  // `_findsTurnedDown` is a list of things THIS traveller said no to, which is
+  // a decision rather than content. `_community` is village events pinned to
+  // this trip's own days, which would be somebody else's stale calendar the
+  // moment the trip was published. Neither is in TRIP_KEEPS, so neither can
+  // reach a published trip today; this is the check that says so if the
+  // allowlist ever grows a door. See utils/guideFinds.js.
+  "_findsTurnedDown", "_community", "_stay",
 ];
 
 const walk = (value, at, out) => {

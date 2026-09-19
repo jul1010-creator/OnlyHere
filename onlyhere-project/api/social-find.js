@@ -38,6 +38,29 @@ import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src
 // linking a Facebook page has no text at all: the account is in the href and
 // nowhere else, so this is the one lookup in the app that wants the raw page.
 const RAW_TIMEOUT_MS = 12000;
+
+// ── "AVERNAKOE: API DIRECT DID NOT ANSWER IN TIME ON /POSTS" ────────
+//
+// Oliver, 19 Sep 2026, mid sweep. Not a bug in the reading: the call ran out of
+// time and said so, which is the right thing for it to do and the wrong amount
+// of time for it to do it in.
+//
+// TWO DIFFERENT CALLS SHARED ONE BUDGET. A name search returns a short list and
+// answers in a second or two; /v1/facebook/page/posts pulls a page of a page's
+// posts, which is the heaviest thing this route asks for, and twelve seconds is
+// a number that fits the first and not the second.
+//
+// AND THE FUNCTION ITSELF WAS THE TIGHTER LIMIT. This route set no maxDuration,
+// so it took Vercel's default, which on the Pro plan this runs on is fifteen
+// seconds. A twelve second inner budget inside that leaves three seconds of
+// headroom for everything else in the request, so the inner abort was firing
+// with almost nothing to spare and the ceiling was never stated anywhere.
+//
+// NO RETRY. API Direct bills per call, and a second attempt at an endpoint that
+// has already spent forty five seconds costs twice for the same wait. The
+// answer to a slow endpoint is enough time on the first try, not two tries.
+const POSTS_TIMEOUT_MS = 45000;
+const isPostsCall = (path) => /\/posts\b/.test(String(path || ""));
 const rawPage = async (url) => {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), RAW_TIMEOUT_MS);
@@ -89,7 +112,8 @@ const API_DIRECT = "https://apidirect.io";
 const askApiDirect = async (key, path, params) => {
   const qs = new URLSearchParams(params).toString();
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), RAW_TIMEOUT_MS);
+  const budget = isPostsCall(path) ? POSTS_TIMEOUT_MS : RAW_TIMEOUT_MS;
+  const t = setTimeout(() => ctrl.abort(), budget);
   try {
     const r = await fetch(`${API_DIRECT}${path}?${qs}`, {
       signal: ctrl.signal,
@@ -98,7 +122,10 @@ const askApiDirect = async (key, path, params) => {
     if (!r.ok) return { ok: false, why: `API Direct returned ${r.status} on ${path}` };
     return { ok: true, body: await r.json() };
   } catch (e) {
-    return { ok: false, why: e?.name === "AbortError" ? `API Direct did not answer in time on ${path}` : String(e?.message || e) };
+    // The number is IN the message, so a slow endpoint and a dead one read
+    // differently: "did not answer in 45s" is a finding and "did not answer" is
+    // a shrug.
+    return { ok: false, why: e?.name === "AbortError" ? `API Direct did not answer in ${Math.round(budget / 1000)}s on ${path}` : String(e?.message || e) };
   } finally { clearTimeout(t); }
 };
 
@@ -122,6 +149,13 @@ const settleByWebsite = async (key, candidate, website) => {
   const site = websiteInPageDetails(got.body);
   return site ? [site] : null;
 };
+
+// The function's own ceiling, stated rather than inherited. Vercel's default on
+// the Pro plan this runs on is fifteen seconds, which is under the budget the
+// posts call needs, so the inner timeout could never have been raised without
+// this line. Sixty rather than the maximum: a request that has been running a
+// minute is one nobody is still waiting for.
+export const config = { maxDuration: 60 };
 
 export default async function handler(req, res) {
   // Studio calls this and nothing else does, so it gets both halves of the

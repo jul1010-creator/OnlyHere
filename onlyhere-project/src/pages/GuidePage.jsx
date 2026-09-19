@@ -56,6 +56,11 @@ import { testTravelerLine, isFerryText, daysUntil, readerView } from "../utils/h
 import { aiDisclosureFor } from "../utils/aiDisclosure";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen, clampNote } from "../utils/guideReading";
 import { bedStateOf, needsABed } from "../utils/nightsOpen";
+import { moreOnLine } from "../utils/communityEvents";
+import { accessOf, accessNote } from "../utils/eventAccess";
+import { newFinds, findsLine, findDetail, withFind, withoutFind, wasTurnedDown } from "../utils/guideFinds";
+import { communityEvents } from "../data/events";
+import { namedIslandOf } from "../utils/geography";
 import { BOOKING_AFFILIATE_ID } from "../config";
 import { tiqetsBrowseUrl, partnerDisclosure, supportNote, partnerLinkCount, isPartnerLink, carRentalFits, stayDoorUrl, tripcomStayUrl, stayDisclosure, STAY_DISCLOSURE, outboundLink, featuredStayFor } from "../utils/affiliates";
 import { CostsBlock } from "../components/CostsBlock";
@@ -682,6 +687,23 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   // does not do, which is tell somebody who never opens the app.
   const [freshWeather, setFreshWeather] = useState(null);
   const [weatherMoved, setWeatherMoved] = useState([]);
+  // ── "AN EVENT NEARBY YOUR PATH WAS JUST DISCOVERED" ──────────────
+  //
+  // Oliver, 19 Sep 2026: "we have the live weather being rendered. I also
+  // believe we need these notifications added onto the guide."
+  //
+  // The same shape as weatherMoved directly above: a guide is not a document,
+  // it is a thing somebody opens again the week before they travel, and by then
+  // the world has moved. Computed on every render rather than fetched, because
+  // the community rows are a module array the live content loader already
+  // fills, so there is nothing to wait for. See utils/guideFinds.js for what
+  // counts as new and why it is the row reaching Gemlyx rather than the event.
+  const finds = useMemo(() => newFinds({
+    guide,
+    pool: communityEvents,
+    dayDateFor: (n) => tripDayDate(guide?._arrivalDate, n),
+    islandOf: (where) => namedIslandOf(lookupRealPlace(where)),
+  }).filter(r => !wasTurnedDown(guide, r)), [guide]);
   useEffect(() => {
     const days = guide?.days || [];
     if (!guide || !Array.isArray(days) || !days.length) return;
@@ -1445,6 +1467,51 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             <b style={{ color: "#FFB347" }}>{uiT("guide.forecastMoved", uiLang)}</b> {weatherMoved.join(". ")}.
           </div>
         )}
+        {/* ── AND WHAT TURNED UP SINCE THIS WAS WRITTEN ──────────
+            Oliver, 19 Sep 2026: "an event nearby your path was just
+            discovered! And then you can click it, and add or make slight
+            changes to your route."
+
+            UNDER THE WEATHER BANNER, because it is the same kind of thing: the
+            guide re-read the world on open and something moved. The claim is
+            exactly what it says and no more, which is that the row was not in
+            Gemlyx when this guide was written. Nothing here knows whether the
+            event is new.
+
+            ADDING ONE PINS IT TO ITS DAY rather than making it a stop. Nothing
+            in this tier has been checked the way a published entry is, and the
+            writer is told never to build a day around one, so a route change
+            would be the app acting on something it cannot stand behind. See
+            withFind in utils/guideFinds.js. */}
+        {finds.length > 0 && (
+          <div style={{ background: C.surface, border: `1px solid ${C.gold}66`, borderRadius: 12, padding: "12px 14px", marginBottom: 20 }}>
+            <div style={{ fontSize: 12, color: C.text, lineHeight: 1.6, marginBottom: 8 }}>
+              <b style={{ color: C.gold }}>Something turned up. </b>{findsLine(finds)}
+            </div>
+            {finds.map((r, i) => (
+              <div key={`${r.name}-${r.date}-${i}`} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "6px 0", borderTop: i ? `1px solid ${C.border}` : "none" }}>
+                <span style={{ fontSize: 12, color: C.light, flex: "1 1 200px", lineHeight: 1.5 }}>
+                  <b>{r.name}</b>
+                  <span style={{ color: C.muted }}>
+                    {" "}Day {r.day}{r.town ? `, ${r.town}` : ""}{findDetail(r) ? `, ${findDetail(r)}` : ""}
+                    {accessNote(accessOf(r), uiLang) ? ` (${accessNote(accessOf(r), uiLang)})` : ""}
+                  </span>
+                </span>
+                <button onClick={() => setGuide(withFind(guide, r))}
+                  style={{ background: C.gold, border: "none", borderRadius: 100, padding: "6px 13px", fontSize: 11.5, fontWeight: 700, color: C.onGold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  Put it on day {r.day}
+                </button>
+                <button onClick={() => setGuide(withoutFind(guide, r))}
+                  style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "6px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  Not for me
+                </button>
+              </div>
+            ))}
+            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
+              Off a village calendar, so nobody has checked it. Adding one puts it on that day and leaves your route alone.
+            </div>
+          </div>
+        )}
         {days.map((day, dayIdx) => {
           // Real coordinates for this guide (from geocodeStopsForGuide, baked onto
           // the guide object as _geo when the build handed off to this page — see
@@ -2152,6 +2219,66 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 );
               })}
             </div>
+            {/* ── SOMETHING LOCAL ON WHILE THEY ARE HERE ──────────
+                Oliver, 19 Sep 2026: "I'm put on Sejerø. So the Sejerø event
+                should be published, which I can't.."
+
+                It was a block in the writer's prompt and nothing else, which
+                made it an invitation the writer could decline, and it declined.
+                Printed from the guide's own data now, so a row that reached the
+                plan reaches the reader. The writer is told it is here and told
+                not to write it out again: one voice, the same rule the stay
+                card and the weather line already follow.
+
+                NOT A TICKET AND NOT A PLAN. These come off a village's own
+                calendar and nobody has checked them the way a published entry
+                is checked, so the line says what is on and where, and promises
+                nothing. See utils/communityEvents.js. */}
+            {((guide?._community?.[day.day || dayIdx + 1]?.rows) || guide?._community?.[day.day || dayIdx + 1] || []).length > 0 && (() => {
+              const cell = guide._community[day.day || dayIdx + 1];
+              const rows = Array.isArray(cell) ? cell : (cell?.rows || []);
+              const more = Array.isArray(cell) ? 0 : (cell?.more || 0);
+              return (
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 12, padding: "12px 14px", marginTop: 16 }}>
+                <span style={{ fontSize: 14, flexShrink: 0 }}>◆</span>
+                <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                  <span style={{ color: C.muted, fontWeight: 700 }}>On locally </span>
+                  {rows.map((r, i) => (
+                    <span key={`${r.name}-${i}`} style={{ color: C.light }}>
+                      {i > 0 ? " · " : ""}
+                      <b style={{ color: C.gold }}>{r.name}</b>
+                      {r.town ? `, ${r.town}` : ""}
+                      {r.time ? `, from ${r.time}` : ""}
+                      {r.venue ? `, at ${r.venue}` : ""}
+                      {/* ── AND WHETHER A VISITOR CAN WALK INTO IT ──
+                          Oliver, 19 Sep 2026: "these islands are going to
+                          depend on a lot on your language" and "Anything about
+                          'theater' should be a clear nono as a foreigner."
+                          Four words off the row's own wording, never a verdict:
+                          a members' dinner and an hour of spoken Danish are
+                          both real events and neither is one to send somebody
+                          to without saying so. See utils/eventAccess.js. */}
+                      {accessNote(accessOf(r), uiLang) && (
+                        <span style={{ color: C.muted }}> ({accessNote(accessOf(r), uiLang)})</span>
+                      )}
+                    </span>
+                  ))}
+                  {/* ── AND A DAY WITH MORE ON THAN IT CAN NAME ────
+                      Oliver, 19 Sep 2026, on Læsø's calendar: "We can't have a
+                      billion events popping up.. I guess we can do a 'multiple
+                      events' currently going on." Two named and the rest
+                      counted, so a busy island reads as busy rather than as a
+                      calendar. */}
+                  {more > 0 && (
+                    <span style={{ color: C.muted }}>, {moreOnLine(more, rows[0]?.town)}</span>
+                  )}
+                  <div style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>
+                    Off the village's own calendar. Worth checking it is still on before you plan an evening around it.
+                  </div>
+                </div>
+              </div>
+              );
+            })()}
             {day.glance?.accommodation && needsABed(day.day || dayIdx + 1, bedStateOf(guide)) && (() => {
               // ── "IT'S NOT EXACTLY A 'DAY-TRIP' FROM COPENHAGEN" ───
               // Oliver, 17 Aug 2026. The arithmetic for this was written that

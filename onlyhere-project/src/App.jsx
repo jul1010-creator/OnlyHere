@@ -232,8 +232,10 @@ import { ChatPlaceCards } from "./components/ChatPlaceCards";
 // utils/cardLine.js.
 import { cardLine } from "./utils/cardLine";
 import { seasonBlock } from "./utils/seasonFit";
+import { activityAcross, activityBlock, DEFAULT_DAYS as ACTIVITY_DAYS } from "./utils/placeActivity";
+import { communityEvents } from "./data/events";
 import { fixClock, clockNote, lateDays, lateDayNote } from "./utils/dayClock";
-import { communityOnDay, communityBlock } from "./utils/communityEvents";
+import { communityOnDay, communityDay, communityBlock, moreOnLine, noticeGroups, rolledHeadline, rolledBody } from "./utils/communityEvents";
 import { answerLengthBlock, depthBlock, answerTokens, readAnswerLength, storeAnswerLength, lengthLabel, SHORT as ANSWER_SHORT, LONG as ANSWER_LONG } from "./utils/answerLength";
 import { travelModeKey, withoutNonModes, overnightMove, dayStartsBeforeItCanArrive } from "./utils/routeOrder";
 import { buildChatReport, chatReportFilename } from "./utils/chatReport";
@@ -9754,9 +9756,6 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
   // fields each and no page per entry, so there is nothing to type in that box.
   // This panel is the other door. Everything it knows how to read lives in
   // utils/calendarFeed.js; this is the paste, the review and the add.
-  const [calOpen, setCalOpen] = useState(false);
-  const [calPlace, setCalPlace] = useState("");
-  const [calUrl, setCalUrl] = useState("");
   const [calBusy, setCalBusy] = useState(false);
   const [calError, setCalError] = useState("");
   const [calRows, setCalRows] = useState([]);
@@ -9767,40 +9766,38 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
   const [calPicked, setCalPicked] = useState([]);
   const [calAdded, setCalAdded] = useState("");
 
-  const readCalendar = async () => {
-    setCalBusy(true); setCalError(""); setCalRows([]); setCalNotes([]); setCalAdded("");
+  // ── ONE SOURCE, READ BY WHICHEVER READER ITS LINK EARNS ──────
+  //
+  // Oliver, 19 Sep 2026: "Just identify the link. If it's Facebook, go API
+  // direct, if it's calender, go for your calender." The Facebook half is the
+  // branch above this one in sweepFeeds. This is the other half, and the order
+  // inside it is structured first and the model last, because the model is the
+  // only one of the four that can be wrong about a date.
+  //
+  //   1  an .ics feed, if the link is one or carries a calendar's address
+  //   2  the site's own events API, when the page says The Events Calendar
+  //   3  the page's own schema.org markup, when it says Simple Calendar
+  //   4  the page as prose, with Firecrawl behind it, and a model to read it
+  //
+  // Returns rather than setting state, so the sweep can run it once per source
+  // and collect everything before it draws anything.
+  const readCalendarSource = async (feed) => {
+    const place = String(feed?.place || "").trim();
+    const source = String(feed?.url || "").trim();
+    if (!place) return { rows: [], notes: [], error: "No place set, so there is nothing to file these under. Put the island or village in the place box." };
+    let events = [], skipped = {}, notes = [];
     try {
-      // What he pasted, in the three shapes it comes in: the ics URL, a
-      // calendar address, or any event link off the embedded page. Endelave
-      // shows no feed URL anywhere, so the event link is the one that matters.
-      const feed = icsUrlFor(calUrl);
-      // ── AND THE CALENDARS WITH NO FEED BEHIND THEM ──────────
-      //
-      // Oliver: "you can perhaps attempt using firecrawl API." Endelave is a
-      // real Google Calendar and has an .ics. Sejerø is a WordPress list
-      // plugin: no feed, a page. api/scan-source already reads a page with a
-      // plain fetch and then Firecrawl when the plain fetch came back
-      // unreadable, which is the same route every other Studio scan uses, so
-      // the page path is that route plus one extraction.
-      let events = [], skipped = {}, source = feed || String(calUrl || "").trim();
-      if (feed) {
-        const res = await studioFetch(`/api/calendar?url=${encodeURIComponent(feed)}`);
+      const ics = icsUrlFor(source);
+      if (ics) {
+        const res = await studioFetch(`/api/calendar?url=${encodeURIComponent(ics)}`);
         const data = await res.json();
-        if (data.error && !data.text) { setCalError(data.error); return; }
+        if (data.error && !data.text) return { rows: [], notes: [], error: data.error };
         ({ events, skipped } = parseIcs(data.text));
-        if (data.error) setCalError(data.error);
-      } else if (/^https:\/\//i.test(source)) {
-        // ── STRUCTURED FIRST, THE MODEL LAST ──────────────────
-        //
-        // Read in his own Chrome, 19 Sep 2026: sejero.dk runs The Events
-        // Calendar, whose REST API is open and gives title, start, end and
-        // venue as clean JSON, and oenendelave.dk runs Simple Calendar, which
-        // puts schema.org markup in the page. Neither needs a model, and a
-        // model is the only one of these paths that can be wrong about a date.
-        //
-        // api/calendar returns the bytes unchanged, which is why the page is
-        // fetched through it rather than through scan-source: scan-source
-        // strips a page to prose and the markup is the thing being read.
+        notes.push("Read off the calendar's own feed.");
+      } else {
+        // api/calendar returns the bytes unchanged, which is why the page comes
+        // through it rather than through scan-source: scan-source strips a page
+        // to prose and the markup is the thing being read.
         const raw = await studioFetch(`/api/calendar?url=${encodeURIComponent(source)}`);
         const rawData = await raw.json();
         const html = String(rawData?.text || "");
@@ -9811,43 +9808,34 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
           const d2 = await r2.json();
           let j = null;
           try { j = JSON.parse(String(d2?.text || "")); } catch { /* falls through to the page read */ }
-          if (j) ({ events, skipped } = rowsFromTribe(j));
+          if (j) { ({ events, skipped } = rowsFromTribe(j)); notes.push("Read off the site's own events API."); }
         }
-        if (!events.length && kind === "simcal") ({ events, skipped } = rowsFromSimcal(html));
-        if (events.length) {
-          const rowsNow = communityRowsFrom({ events, place: calPlace, source, today: new Date() });
-          setCalRows(rowsNow); setCalPicked(rowsNow.map(() => true));
-          setCalNotes([...feedProblems({ place: calPlace, rows: rowsNow, skipped, events }),
-            kind === "simcal" ? "Read off the page's own markup, and that page shows one month. Change the month on their site and read it again for the rest." : "Read off the site's own events API."]);
-          return;
+        if (!events.length && kind === "simcal") {
+          ({ events, skipped } = rowsFromSimcal(html));
+          if (events.length) notes.push("Read off the page's own markup, and that page shows one month. Change the month on their site and sweep again for the rest.");
         }
-        // ── AND ONLY THEN THE MODEL ───────────────────────────
-        // Nothing structured in the page, so this is the last resort and it is
-        // what Firecrawl is behind: scan-source tries a plain fetch and then
-        // Firecrawl when the plain fetch came back unreadable.
-        const res = await studioFetch(`/api/scan-source?fresh=1&url=${encodeURIComponent(source)}`);
-        const data = await res.json();
-        const text = String(data?.text || "");
-        if (!text.trim()) { setCalError(data?.error || "Nothing readable came back from that page."); return; }
-        const pulled = await askOpenAI(PAGE_ROWS_PROMPT(calPlace.trim(), text.slice(0, 12000)), 2000);
-        if (pulled.error) { setCalError(`Could not read the entries off that page: ${pulled.error}`); return; }
-        let parsed = null;
-        try { parsed = JSON.parse(String(pulled.text || "").replace(/^```json\s*|\s*```$/g, "").trim()); } catch { /* handled below */ }
-        if (!parsed) { setCalError("The page was read but the entries could not be pulled out of it as dates."); return; }
-        ({ events, skipped } = rowsFromExtract(parsed));
-      } else {
-        setCalError("That is not a feed or a page this can read. Paste the calendar's .ics link, its address, any single event link off the calendar page, or the page's own https address.");
-        return;
+        if (!events.length) {
+          // The last resort, and what Firecrawl sits behind: scan-source tries
+          // a plain fetch and then Firecrawl when the plain fetch came back
+          // unreadable.
+          const res = await studioFetch(`/api/scan-source?fresh=1&url=${encodeURIComponent(source)}`);
+          const data = await res.json();
+          const text = String(data?.text || "");
+          if (!text.trim()) return { rows: [], notes: [], error: data?.error || "Nothing readable came back from that page." };
+          const pulled = await askOpenAI(PAGE_ROWS_PROMPT(place, text.slice(0, 12000)), 2000);
+          if (pulled.error) return { rows: [], notes: [], error: `Could not read the entries off that page: ${pulled.error}` };
+          let parsed = null;
+          try { parsed = JSON.parse(String(pulled.text || "").replace(/^```json\s*|\s*```$/g, "").trim()); } catch { /* handled below */ }
+          if (!parsed) return { rows: [], notes: [], error: "The page was read but the entries could not be pulled out of it as dates." };
+          ({ events, skipped } = rowsFromExtract(parsed));
+          notes.push("Nothing structured on that page, so its words were read. Check these dates before adding them.");
+        }
       }
-      const rows = communityRowsFrom({ events, place: calPlace, source, today: new Date() });
-      setCalRows(rows);
-      setCalPicked(rows.map(() => true));
-      setCalNotes(feedProblems({ place: calPlace, rows, skipped, events }));
     } catch (err) {
-      setCalError(`Could not read the feed: ${String(err?.message || err).slice(0, 180)}`);
-    } finally {
-      setCalBusy(false);
+      return { rows: [], notes: [], error: `Could not read it: ${String(err?.message || err).slice(0, 180)}` };
     }
+    const rows = communityRowsFrom({ events, place, source, today: new Date() });
+    return { rows, notes: [...feedProblems({ place, rows, skipped, events }), ...notes], error: "" };
   };
 
   // ── AND THEY GO THROUGH THE DOOR EVERY OTHER ROW GOES THROUGH ────
@@ -9861,12 +9849,15 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
     const picked = calRows.filter((_, i) => calPicked[i]);
     if (!picked.length) return;
     setCalBusy(true); setCalError(""); setCalAdded("");
-    let done = 0;
+    let done = 0, notices = 0, unplaced = 0;
     try {
       for (const r of picked) {
         const shaped = shapeForLive("festival", {
           name: r.name,
           town: r.town,
+          // The second place this source is the noticeboard for, when it named
+          // one. Oliver, 19 Sep 2026: "the Askø group covers Lilleø as well."
+          towns: r.towns || [],
           dateStart: r.date,
           dateEnd: r.dateEnd || "",
           // The venue and the time, which are where and when in the village. In
@@ -9886,8 +9877,70 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
         });
         if (!res.ok) throw new Error(`${res.status}: ${(await res.text()).slice(0, 160)}`);
         done += 1;
+        // ── AND THE SAME ROW AS A NOTICE ────────────────────────
+        //
+        // Oliver, 19 Sep 2026: "the notification does work. Well, keep that,
+        // but also include it as a notification at the profile frame, like the
+        // saved notes."
+        //
+        // Two different jobs off one Add, and they are not the same thing. The
+        // community row is for a PLAN: it reaches a traveller because a guide
+        // stands in that place on that day. The notice is for somebody STANDING
+        // there now, and it stops being returned the day after the event. A
+        // village calendar answers both questions and it would be odd to make
+        // him add the same evening twice.
+        //
+        // THE COORDINATE COMES FROM THE PLACE, same rule sendAsNotice has: a
+        // notice that cannot say where it is cannot make the one promise it
+        // exists to make. No coordinate is counted and reported rather than
+        // saved without one, because the community row went in either way and
+        // "it worked" would be half true.
       }
-      setCalAdded(`${done} added to ${calPlace}. They are guide only: nothing published shows them.`);
+      // ── AND THE NOTICES, GROUPED BY THE DAY THEY FALL ON ────────
+      //
+      // Oliver, 19 Sep 2026, with govisit.dk's Læsø calendar open: "We can't
+      // have a billion events popping up.. I guess we can do a 'multiple
+      // events' currently going on." Læsø has fifty seven of these and five or
+      // more on one Saturday, so one notice each would be five notices under
+      // Near you for one day. A day over the cap becomes ONE notice naming
+      // them. See noticeGroups in utils/communityEvents.js.
+      //
+      // AFTER the community rows, not beside them, because the grouping is a
+      // question about the whole batch rather than about one row.
+      for (const group of noticeGroups(picked)) {
+        const lead = group.rows[0];
+        const here = pretendPlaces.find(pl => pl.name.toLowerCase() === String(lead.town || "").toLowerCase());
+        // THE COORDINATE COMES FROM THE PLACE, the same rule sendAsNotice has: a
+        // notice that cannot say where it is cannot make the one promise it
+        // exists to make. Counted and reported rather than saved without one,
+        // because the community row went in either way.
+        if (!here) { unplaced += group.rows.length; continue; }
+        try {
+          await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_notices`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+            body: JSON.stringify({
+              headline: (group.rolled ? rolledHeadline(group.rows) : lead.name).slice(0, 120),
+              // The village's own words, and the venue under them, which is the
+              // one thing a person standing there needs that the name does not
+              // say. Nothing written in Gemlyx's voice: none of this is checked.
+              body: (group.rolled
+                ? rolledBody(group.rows)
+                : [lead.desc, lead.venue ? `Where: ${lead.venue}` : "", lead.time ? `Starts ${lead.time}` : ""].filter(Boolean).join(" ") || lead.name
+              ).slice(0, 400),
+              day: lead.date,
+              end_day: group.rolled ? lead.date : (lead.dateEnd || lead.date),
+              place: here.name,
+              lat: here.lat,
+              lon: here.lon,
+              source_url: lead.source || "",
+            }),
+          });
+          notices += 1;
+        } catch { unplaced += group.rows.length; }
+      }
+      setCalAdded(`${done} added, guide only, plus ${notices} under Near you.`
+        + (unplaced ? ` ${unplaced} could not be a notice: no coordinate on file for that place, so publish the place first.` : ""));
       setCalRows([]); setCalPicked([]);
     } catch (err) {
       setCalError(`Added ${done} of ${picked.length}, then stopped: ${String(err?.message || err).slice(0, 180)}`);
@@ -11095,7 +11148,10 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     if (problem) { setFeedError(problem); return; }
     const kind = feedKindOf(newFeedUrl);
     const handle = pageNameIn(newFeedUrl);
-    const url = kind === "group" ? `https://www.facebook.com/groups/${groupIdIn(newFeedUrl)}` : `https://www.facebook.com/${handle}`;
+    // A calendar keeps the address he typed. See feedKindOf: what KIND of
+    // reader it earns is decided when it is read, off the page's own markup.
+    const url = kind === "calendar" ? String(newFeedUrl).trim()
+      : kind === "group" ? `https://www.facebook.com/groups/${groupIdIn(newFeedUrl)}` : `https://www.facebook.com/${handle}`;
     if (feedRows.some(r => String(r.url || "").toLowerCase() === url.toLowerCase())) {
       setFeedError(`That is already on the list${feedRows.find(r => String(r.url || "").toLowerCase() === url.toLowerCase())?.name ? ` as ${feedRows.find(r => String(r.url || "").toLowerCase() === url.toLowerCase()).name}` : ""}.`);
       return;
@@ -11128,7 +11184,9 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
         method: "POST",
         headers: { "Content-Type": "application/json", Prefer: "return=representation" },
         body: JSON.stringify({
-          name: newFeedName.trim().slice(0, 80) || (kind === "page" ? handle : `Group ${groupId}`),
+          name: newFeedName.trim().slice(0, 80)
+            || (kind === "calendar" ? (() => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return "Calendar"; } })()
+              : kind === "page" ? handle : `Group ${groupId}`),
           kind,
           group_id: groupId,
           url,
@@ -11188,10 +11246,33 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     const today = new Date();
     const found = [];
     const failed = [];
+    // Calendar sources land here rather than in the candidate queue. See the
+    // branch in the loop for why the two are not the same kind of finding.
+    const calFound = [];
+    const calNotesAll = [];
+    setCalRows([]); setCalPicked([]); setCalNotes([]); setCalAdded("");
     for (let i = 0; i < live.length; i++) {
       const feed = live[i];
       setFeedSweep(s => ({ ...s, done: i, name: feed.name }));
       try {
+        // ── AND THE LINK DECIDES THE READER ─────────────────────
+        //
+        // Oliver, 19 Sep 2026: "Just identify the link. If it's Facebook, go
+        // API direct, if it's calender, go for your calender."
+        //
+        // A calendar source produces COMMUNITY ROWS rather than leads. The
+        // Facebook half of this panel finds a post that might be an event and
+        // hands it to the draft pipeline, which still has to find it on a page
+        // it may quote. A calendar is already the village saying what is on, at
+        // the trust level this tier is allowed to use, so it goes straight into
+        // the review list below and never into the draft queue.
+        if (feed.kind === "calendar") {
+          const got = await readCalendarSource(feed);
+          if (got.error) failed.push({ name: feed.name, why: got.error });
+          calFound.push(...got.rows);
+          calNotesAll.push(...got.notes.map(n => `${feed.name}: ${n}`));
+          continue;
+        }
         const res = await studioFetch(`/api/social-find?check=group-posts&kind=${feed.kind}&group=${encodeURIComponent(feed.groupId)}`);
         const data = await res.json().catch(() => null);
         if (!res.ok || data?.failed || data?.skipped) {
@@ -11210,6 +11291,9 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     const published = (manageItems || []).filter(r => r?.type === "festival").map(r => r.payload || {});
     const fresh = newCandidates(found, published);
     setFeedSweep({ running: false, done: live.length, total: live.length, found: fresh.length, failed, candidates: fresh });
+    setCalRows(calFound);
+    setCalPicked(calFound.map(() => true));
+    setCalNotes(calNotesAll);
     // The stamp, so the panel can say when each was last looked at. Best effort:
     // a sweep that found things and failed to write a date is still a sweep.
     // dayKey, never toISOString: a UTC day used as a local one is a day out for
@@ -16015,7 +16099,12 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       const guideBrief = readBrief({
         travellerText: saidByTravellerForGuide,
         travellerTurns: String(saidByTravellerForGuide || "").split("\n").filter(x => x.trim()),
-        intake: { arrival: intakeArrival, departure: intakeDeparture },
+        // danish: the tick box, because unlike the dates it is NOT in
+        // saidByTravellerForGuide as a sentence a reader can recover. The form
+        // writes "Language: speaks Danish" into the hidden turn, and readDanish
+        // reads that too, but a guide built from a conversation that never
+        // reached the form would otherwise lose it.
+        intake: { arrival: intakeArrival, departure: intakeDeparture, danish: intakeDanish },
         answering: guideAnswering,
         today: nowForDates,
       });
@@ -16247,6 +16336,15 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // The community block, when the plan stands somewhere with something on.
       // Declared beside the skeleton it is built from. See utils/communityEvents.js.
       let communityFound = "";
+      // The rows themselves, carried onto the finished guide. Oliver, 19 Sep
+      // 2026: "I'm put on Sejerø. So the Sejerø event should be published."
+      // A block in the writer's prompt is an invitation the writer may decline,
+      // and it declined. The day card prints these from the guide's own data,
+      // so a row that reached the plan reaches the reader.
+      let communityByDay = {};
+      // Declared beside the block it belongs with. Empty for every trip whose
+      // places have no calendar on file, which is most of them.
+      let activitySaysForGuide = "";
       let plannerStopNames = [];
       let planProblems = [];
       try {
@@ -16425,14 +16523,44 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
                 // of the country so nothing is unreachable on the attractions
                 // page, and a community row matched against "Zealand" would
                 // reach half the country. See communityOnDay.
-                const rows = communityOnDay({
+                // communityDay rather than communityOnDay: it names two and
+                // COUNTS the rest. Oliver, 19 Sep 2026, on govisit.dk's Læsø
+                // calendar: "læsø is clearly not a small community.. We can't
+                // have a billion events popping up.. I guess we can do a
+                // 'multiple events' currently going on." Capping silently would
+                // make a day on Læsø with seven things on look like a day on
+                // Sejerø with one.
+                const { rows, more } = communityDay({
                   stops: d.stops || [],
                   date: dayPlus(arrivalDate, i),
                   islandOf: (where) => namedIslandOf(lookupRealPlace(where)),
                 });
-                if (rows.length) byDay[i + 1] = rows;
+                if (rows.length) byDay[i + 1] = { rows, more };
               });
-              communityFound = communityBlock(byDay);
+              communityByDay = byDay;
+              communityFound = communityBlock(byDay, { danishSpeaker: guideBrief.known.danish?.speaks === true });
+              // ── AND WHAT IS ON ACROSS THE WHOLE TRIP ────────────
+              //
+              // The same reader the chat uses, over the plan's own towns and
+              // the islands they sit on. The chat is where this decides WHERE
+              // to go; here it decides which day carries what, and it is the
+              // only thing in this build that knows one island is having a
+              // week and another has one evening.
+              //
+              // Counted, never printed: the block forbids naming a number to a
+              // traveller, and forbids reading a low one as a quiet island. See
+              // utils/placeActivity.js.
+              const planPlaces = planDays.flatMap(d => (d.stops || []).flatMap(st => {
+                const town = String(st?.town || st?.name || "").trim();
+                return [town, namedIslandOf(lookupRealPlace(town))];
+              })).filter(Boolean);
+              activitySaysForGuide = activityBlock(
+                activityAcross(communityEvents, planPlaces, {
+                  from: arrivalDate,
+                  days: requestedDays || planDays.length || ACTIVITY_DAYS,
+                }),
+                { days: requestedDays || planDays.length || ACTIVITY_DAYS },
+              );
             }
           }
         }
@@ -16562,7 +16690,7 @@ CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stop
 CRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE ROUTE, NOT JUST EACH DAY INTERNALLY: this applies across the whole trip, not just within one day — Copenhagen/Zealand and Jutland are different regions connected only by a long bridge/ferry crossing or a flight, never a short hop. Don't send the trip deeper into one region for several days and then jump straight to the other with no bridging day (e.g. Day 1-2 further into Jutland, Day 3 suddenly Copenhagen). If a planning skeleton is provided below, its day-to-day order already accounts for this — follow it. If you're structuring the trip yourself (no skeleton, or it's missing this), order the days to move in one general direction across the country and minimize total region-crossings over the whole trip.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a real buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a real buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't mentioned just to fill a day.` : ""} Use only real place names mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${chosenEventsBlock}${chosenExtrasBlock}${ruledOutBlock}${bookedStayBlock}${homeStartsHere}${beenBlock}${essentialsFacts}${communityFound ? `\n${communityFound}` : ""}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't mentioned just to fill a day.` : ""} Use only real place names mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${chosenEventsBlock}${chosenExtrasBlock}${ruledOutBlock}${bookedStayBlock}${homeStartsHere}${beenBlock}${essentialsFacts}${communityFound ? `\n${communityFound}` : ""}${activitySaysForGuide ? `\n${activitySaysForGuide}` : ""}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
       // Guide-building is genuine multi-step reasoning (timing, geography, avoiding
       // duplicates, family-mode adjustments) — this is the one call in Detour worth
       // Opus's extra reasoning depth, and it already has a loading screen the person
@@ -17557,7 +17685,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         if (claims.length) planProblems = [...planProblems, guideClaimNote(claims)];
       }
 
-      setGuideModal({ _gid: gid, _fx: fxLine, _constraints: guideConstraints, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travellersSaid || String(partyKnown?.value || ""), _party: partyKnown && (partyKnown.adults != null || partyKnown.kids != null || partyKnown.total != null) ? { adults: partyKnown.adults ?? null, kids: partyKnown.kids ?? null, total: partyKnown.total ?? null, hasKids: !!partyKnown.hasKids } : null, _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, _stay: { booked: stayKnown.stay?.value === "booked" || !!bookedName, nights: bookedNights, name: bookedName || "" }, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
+      setGuideModal({ _gid: gid, _fx: fxLine, _constraints: guideConstraints, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travellersSaid || String(partyKnown?.value || ""), _party: partyKnown && (partyKnown.adults != null || partyKnown.kids != null || partyKnown.total != null) ? { adults: partyKnown.adults ?? null, kids: partyKnown.kids ?? null, total: partyKnown.total ?? null, hasKids: !!partyKnown.hasKids } : null, _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, _stay: { booked: stayKnown.stay?.value === "booked" || !!bookedName, nights: bookedNights, name: bookedName || "" }, _community: Object.keys(communityByDay).length ? communityByDay : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
       // A build that failed halfway still spent everything it spent up to that
       // point, and a meter that only counts successes reports a cost per guide
@@ -18138,6 +18266,9 @@ If the conversation only covers a single day or a few stops with no explicit day
   const [intakeBudgetText, setIntakeBudgetText] = useState("");
   const [intakeInterest, setIntakeInterest] = useState([]);
   const [intakeGemPref, setIntakeGemPref] = useState(null);
+  // Danish speaker, non speaker, or unanswered. See the panel for why it is
+  // here and not a question in the chat.
+  const [intakeDanish, setIntakeDanish] = useState(null);
   const [intakePlacePref, setIntakePlacePref] = useState(null);
   const [intakeTravelers, setIntakeTravelers] = useState("");
   const [intakeIncludeSaved, setIntakeIncludeSaved] = useState(false);
@@ -18257,6 +18388,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         interest: intakeInterest,
         transport: intakeTransport,
         budgetText: intakeBudgetText,
+        danish: intakeDanish,
       },
     });
   }, [aiMessages, todayKey, briefAsked, intakeStartPoint, intakeArrival, intakeDeparture,
@@ -19881,6 +20013,7 @@ If the conversation only covers a single day or a few stops with no explicit day
           interest: intakeInterest,
           transport: intakeTransport,
           budgetText: intakeBudgetText,
+          danish: intakeDanish,
         },
       });
 
@@ -19999,6 +20132,32 @@ If the conversation only covers a single day or a few stops with no explicit day
       // so the arrival advice is unchanged for the travellers it was written
       // for. See homeStartBlock in utils/tripBrief.js.
       const homeSays = homeStartBlock(brief);
+      // ── AND WHAT IS ON WHERE, WHILE THE CHOICE IS STILL OPEN ─────
+      //
+      // Oliver, 19 Sep 2026, on the Læsø calendar: "we get the AI to scan all
+      // of them and call out what Islands have more activities than others. The
+      // AI guide can then scan the islands whenever it builds a guide, and
+      // judge whether an Island is too 'dead' to be worth visiting at the
+      // current time."
+      //
+      // THE CHAT IS WHERE THIS IS WORTH MOST, because by the time a guide is
+      // built the islands have been chosen. These are the places in play, the
+      // same set the season warning reads, counted over the trip's own length.
+      //
+      // The block refuses to fire at all unless somewhere has a real number on
+      // it, and it forbids the inference it invites. See utils/placeActivity.js
+      // for why a low count may never be read as a quiet island.
+      const activityDays = Number.isFinite(Number(brief?.known?.days?.value)) ? Number(brief.known.days.value) : ACTIVITY_DAYS;
+      const activitySays = brief?.known?.when?.value
+        ? activityBlock(
+            activityAcross(
+              communityEvents,
+              inPlayNow.flatMap(t => [t.name, namedIslandOf(t)]).filter(Boolean),
+              { from: new Date(brief.known.when.value), days: activityDays },
+            ),
+            { days: activityDays },
+          )
+        : "";
 
       const HELD_TOWNS_IN_A_PROMPT = 3;
       const namedByThem = towns
@@ -20123,7 +20282,7 @@ ONE QUESTION PER TURN. Not two, whatever else is missing. Somebody asked two thi
 DO NOT COMPLIMENT THEIR CHOICE. "Great pick", "excellent choice", "you'll love it", "way underrated" said about a place they just named is the banned filler in a different costume: it is a sentence with no information in it, spent on making them feel approved of.
 
 GIVE BEFORE YOU ASK. Every turn puts one real thing on the table before its question: a fact about the place they named, an opinion about it, or a warning worth having. One thing, not three, and off the block below when there is one. A conversation where one side only asks is an intake form, and it puts the whole weight of the trip on somebody who came here so they would not have to carry it. This is also what makes a short answer workable: a traveller who types four words at a time is normal, and a turn that gives something is still a real turn when their half is thin.
-${heldBlock}${nightBlock}${seasonSays ? `\n${seasonSays}\n` : ""}${homeSays ? `\n${homeSays}\n` : ""}
+${heldBlock}${nightBlock}${seasonSays ? `\n${seasonSays}\n` : ""}${homeSays ? `\n${homeSays}\n` : ""}${activitySays ? `\n${activitySays}\n` : ""}
 ── THE TRIP BRIEF, AS MEASURED RATHER THAN AS YOU FEEL IT ──
 This block is computed from what the traveller has typed and from the form they filled in. It is not your impression of the conversation and it overrides your impression of the conversation. Never say you have everything you need unless this block says so, and never say a traveller has already told you something that is not listed as known here.
 
@@ -21883,10 +22042,7 @@ ${languageBlock()}`;
                           style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                           {factsPanelOpen ? "Hide" : "🎲 Facts"}
                         </button>
-                        <button onClick={() => setCalOpen(v => !v)}
-                          style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                          {calOpen ? "Hide" : "📅 Village calendar"}
-                        </button>
+
                 <button onClick={() => { setSourcesOpen(o => !o); if (!sourcesOpen) loadSources(); }}
                   style={{ background: sourcesOpen ? `${C.gold}22` : "none", border: `1px solid ${sourcesOpen ? C.gold : C.border}`, color: sourcesOpen ? C.gold : C.light, borderRadius: 100, padding: "6px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                   🔗 Research sources
@@ -22296,13 +22452,67 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           style={{ width: 170, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
                         <input value={newFeedPlace} onChange={e => setNewFeedPlace(e.target.value)}
                           onKeyDown={e => { if (e.key === "Enter") addFeed(); }}
-                          list="gemlyx-source-places" placeholder="where it covers"
+                          list="gemlyx-source-places" placeholder="where it covers, or two"
                           style={{ width: 150, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
                         <button onClick={addFeed} disabled={feedBusy || !newFeedUrl.trim()}
                           style={{ background: newFeedUrl.trim() && !feedBusy ? C.gold : C.bg, border: `1px solid ${C.border}`, color: newFeedUrl.trim() && !feedBusy ? "#000" : C.muted, borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, cursor: newFeedUrl.trim() ? "pointer" : "default", flexShrink: 0 }}>
                           {feedBusy ? "…" : "Add"}
                         </button>
                       </div>
+
+                      {/* ── WHAT THE CALENDAR SOURCES CAME BACK WITH ────
+                          Oliver, 19 Sep 2026: "Village Calender and Community
+                          events are the same shit.." He was right and this used
+                          to be a panel of its own.
+
+                          NOT IN THE CANDIDATE QUEUE ABOVE, and that is the one
+                          real difference between the two kinds of source. A
+                          Facebook post is a LEAD: it might be an event, and
+                          "Draft this" hands it to the pipeline that has to find
+                          it on a page it may quote before a reader sees it. A
+                          calendar row is already the village saying what is on,
+                          at the trust level this tier is allowed to use, so it
+                          goes in as it stands. */}
+                      {calRows.length > 0 && (
+                        <div style={{ marginTop: 11, background: C.bg, borderRadius: 8, padding: "10px 11px" }}>
+                          <div style={{ fontSize: 11, color: C.light, fontWeight: 700, marginBottom: 5 }}>
+                            From the calendars · {calRows.length} ahead
+                          </div>
+                          {calNotes.length > 0 && (
+                            <ul style={{ margin: "0 0 8px", paddingLeft: 15, fontSize: 10, color: C.muted, lineHeight: 1.55 }}>
+                              {calNotes.map((n, i) => <li key={i}>{n}</li>)}
+                            </ul>
+                          )}
+                          <div style={{ maxHeight: 240, overflowY: "auto", marginBottom: 9 }}>
+                            {calRows.map((r, i) => (
+                              <label key={`${r.town}-${r.date}-${i}`} style={{ display: "flex", gap: 7, alignItems: "flex-start", padding: "5px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                                <input type="checkbox" checked={!!calPicked[i]}
+                                  onChange={() => setCalPicked(prev => prev.map((v, j) => (j === i ? !v : v)))}
+                                  style={{ marginTop: 3, flexShrink: 0 }} />
+                                <span style={{ fontSize: 11, color: C.light, lineHeight: 1.5 }}>
+                                  <b>{r.name}</b>
+                                  <span style={{ color: C.muted }}>
+                                    {" "}{r.town} · {r.date}{r.dateEnd ? ` to ${r.dateEnd}` : ""}{r.time ? `, ${r.time}` : ""}
+                                    {r.venue ? ` · ${r.venue}` : ""}
+                                  </span>
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                          <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
+                            <button onClick={addCalendarRows} disabled={calBusy || !calPicked.some(Boolean)}
+                              style={{ background: C.gold, border: "none", borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, color: C.onGold, cursor: calBusy ? "default" : "pointer", opacity: calBusy || !calPicked.some(Boolean) ? 0.5 : 1, fontFamily: "'Inter', sans-serif" }}>
+                              {calBusy ? "Adding…" : `Add ${calPicked.filter(Boolean).length}`}
+                            </button>
+                            <button onClick={() => setCalPicked(prev => prev.map(() => !prev.every(Boolean)))}
+                              style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "7px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                              {calPicked.every(Boolean) ? "None" : "All"}
+                            </button>
+                            {calAdded && <span style={{ fontSize: 10.5, color: C.gold }}>{calAdded}</span>}
+                            {calError && <span style={{ fontSize: 10.5, color: "#FFB347" }}>{calError}</span>}
+                          </div>
+                        </div>
+                      )}
 
                       {/* ── AND THE GROUPS NOTHING CAN READ ──────────────
                           A private group is unreadable by anything on a server,
@@ -23559,89 +23769,6 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 </button>
                               </div>
                             ))}
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                    {/* ── A VILLAGE CALENDAR, 19 SEP 2026 ─────────────────
-                        Oliver: "I need to put them into the community link..
-                        but I can't." The box above drafts ONE subject from a
-                        name, and a village calendar is thirty things with four
-                        fields each and no page per entry.
-
-                        THE PLACE IS ASKED FOR SEPARATELY AND THAT IS THE POINT.
-                        Endelave's entries give their address as "8789 Horsens",
-                        which is the postal town, on the mainland, across a
-                        ferry. A row filed from its own address would reach
-                        somebody standing in Horsens and never once reach
-                        anybody on Endelave. The place is the one thing a person
-                        knows and a postcode does not.
-
-                        And nothing here is published: a Community row goes to
-                        an array the Events page, the month chips, the front
-                        page line and the chat prompt cannot reach. See
-                        utils/calendarFeed.js and utils/communityEvents.js. */}
-                    {calOpen && (
-                      <div style={{ marginBottom: 12, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px" }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>
-                          Village calendar · guide only
-                        </div>
-                        <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-                          <input value={calPlace} onChange={e => setCalPlace(e.target.value)}
-                            placeholder="Which island or village, e.g. Sejerø"
-                            style={{ flex: "1 1 180px", border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 12px", fontSize: 12.5, outline: "none", background: C.surface, color: C.text, fontFamily: "'Inter', sans-serif" }} />
-                          <input value={calUrl} onChange={e => setCalUrl(e.target.value)}
-                            onKeyDown={e => e.key === "Enter" && !calBusy && readCalendar()}
-                            placeholder="Calendar .ics link, its address, or any event link off the page"
-                            style={{ flex: "2 1 260px", border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 12px", fontSize: 12.5, outline: "none", background: C.surface, color: C.text, fontFamily: "'Inter', sans-serif" }} />
-                          <button onClick={readCalendar} disabled={calBusy || !calPlace.trim() || !calUrl.trim()}
-                            style={{ background: C.gold, border: "none", borderRadius: 10, padding: "9px 16px", fontSize: 12, fontWeight: 700, color: C.onGold, cursor: calBusy ? "default" : "pointer", opacity: calBusy || !calPlace.trim() || !calUrl.trim() ? 0.5 : 1, fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
-                            {calBusy ? "Reading…" : "Read it"}
-                          </button>
-                        </div>
-                        {calError && (
-                          <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.5, marginBottom: 8 }}>{calError}</div>
-                        )}
-                        {calAdded && (
-                          <div style={{ fontSize: 11, color: C.gold, lineHeight: 1.5, marginBottom: 8 }}>{calAdded}</div>
-                        )}
-                        {/* What was refused and why, before he presses add. A
-                            calendar is somebody else's noticeboard and nothing
-                            in it has been checked the way a drafted entry is. */}
-                        {calNotes.length > 0 && (
-                          <ul style={{ margin: "0 0 10px", paddingLeft: 16, fontSize: 10.5, color: C.muted, lineHeight: 1.6 }}>
-                            {calNotes.map((n, i) => <li key={i}>{n}</li>)}
-                          </ul>
-                        )}
-                        {calRows.length > 0 && (
-                          <>
-                            <div style={{ maxHeight: 280, overflowY: "auto", marginBottom: 10 }}>
-                              {calRows.map((r, i) => (
-                                <label key={`${r.date}-${i}`} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "6px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
-                                  <input type="checkbox" checked={!!calPicked[i]}
-                                    onChange={() => setCalPicked(prev => prev.map((v, j) => (j === i ? !v : v)))}
-                                    style={{ marginTop: 3, flexShrink: 0 }} />
-                                  <span style={{ fontSize: 11.5, color: C.light, lineHeight: 1.5 }}>
-                                    <b>{r.name}</b>
-                                    <span style={{ color: C.muted }}>
-                                      {" "}{r.date}{r.dateEnd ? ` to ${r.dateEnd}` : ""}{r.time ? `, ${r.time}` : ""}
-                                      {r.venue ? ` · ${r.venue}` : ""}
-                                    </span>
-                                  </span>
-                                </label>
-                              ))}
-                            </div>
-                            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                              <button onClick={addCalendarRows} disabled={calBusy || !calPicked.some(Boolean)}
-                                style={{ background: C.gold, border: "none", borderRadius: 10, padding: "9px 16px", fontSize: 12, fontWeight: 700, color: C.onGold, cursor: calBusy ? "default" : "pointer", opacity: calBusy || !calPicked.some(Boolean) ? 0.5 : 1, fontFamily: "'Inter', sans-serif" }}>
-                                {calBusy ? "Adding…" : `Add ${calPicked.filter(Boolean).length} to ${calPlace.trim() || "this place"}`}
-                              </button>
-                              <button onClick={() => setCalPicked(prev => prev.map(() => !prev.every(Boolean)))}
-                                style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "8px 13px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                                {calPicked.every(Boolean) ? "None" : "All"}
-                              </button>
-                            </div>
                           </>
                         )}
                       </div>
@@ -28299,8 +28426,23 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         required. The word Optional is doing the work here; the
                         second line says what it buys, so skipping it is an
                         informed choice rather than a guess. */}
-                    <span style={{ fontSize: 13, fontWeight: 700, color: C.gold }}>✦ Optional: fine-tune the plan</span>
-                    <span style={{ fontSize: 11, color: C.muted }}>skip it and Gemlyx still plans</span>
+                    {/* ── AND "OPTIONAL" IS NOT AN INSTRUCTION ────────
+                        Oliver, 19 Sep 2026: "the 'optional' button gotta be a
+                        little bit more clear.. like 'click here for advanced
+                        options'."
+
+                        This is the second time this control has been read
+                        wrong, and the two reports are about different halves of
+                        it. His father did not know it could be clicked, which
+                        the border and the chevron fixed. What is still missing
+                        is the VERB: "Optional: fine-tune the plan" names what
+                        is behind the door and never says to open it. A label
+                        that starts with "click here" cannot be read as a
+                        heading. The word optional stays, because it is the
+                        thing that makes skipping it an informed choice, and it
+                        moves to the line underneath where it belongs. */}
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.gold }}>✦ Click here for advanced options</span>
+                    <span style={{ fontSize: 11, color: C.muted }}>optional, skip it and Gemlyx still plans</span>
                     <span style={{ marginLeft: "auto", fontSize: 12, color: C.gold, transform: intakeMoreOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s ease", display: "inline-block" }}>▾</span>
                   </button>
 
@@ -28323,6 +28465,26 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
                   {["Bucket-list classics", "Relaxed", "Wander yourself"].map(g => (
                     <Pill key={g} label={g} active={intakeGemPref === g} onClick={() => setIntakeGemPref(intakeGemPref === g ? null : g)} />
+                  ))}
+                </div>
+
+                {/* ── DANISH SPEAKER, 19 SEP 2026 ──────────────────
+                    Oliver: "add an option called Danish-speaker and Non-Danish
+                    speaker. Because that can play a vital role in destinations
+                    for people."
+
+                    It is the difference between two products. A Dane reading
+                    Læsø's calendar sees a foredrag about seaweed, a revy and a
+                    læsekreds and can go to all three. A German reading the same
+                    calendar sees three evenings they would sit through
+                    understanding nothing, so the island is busier for one of
+                    them than the other. See utils/eventAccess.js, where this is
+                    the one flag a speaker cancels: a members' dinner turns a
+                    Dane away at the door too. */}
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Danish</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+                  {[["yes", "I speak Danish"], ["no", "No Danish"]].map(([v, label]) => (
+                    <Pill key={v} label={label} active={intakeDanish === v} onClick={() => setIntakeDanish(intakeDanish === v ? null : v)} />
                   ))}
                 </div>
 
@@ -28409,6 +28571,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       if (intakeBudgetText.trim()) parts.push(`Budget: ${intakeBudgetText.trim()}`);
                       if (intakeInterest.length) parts.push(`Interests: ${intakeInterest.join(", ")}`);
                       if (intakeGemPref) parts.push(`Travel style: ${intakeGemPref}`);
+                      if (intakeDanish) parts.push(intakeDanish === "yes" ? `Language: speaks Danish` : `Language: does not speak Danish`);
                       if (intakePlacePref) parts.push(`Preference: ${intakePlacePref}`);
                       if (intakeTravelers.trim()) parts.push(`Who's traveling: ${intakeTravelers.trim()}`);
                       if (intakeIncludeSaved && savedPlaces.length > 0) parts.push(`Also include these saved places: ${savedPlaces.map(p => p.town ? `${p.name} (${p.town})` : p.name).join(", ")}`);

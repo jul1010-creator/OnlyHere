@@ -160,6 +160,16 @@ export const BRIEF_SLOTS = [
   { key: "budget", label: "budget", tier: "optional",
     ask: "Roughly what are you happy to spend a day?",
     askDa: "Hvad vil du cirka bruge om dagen?" },
+  // ── AND WHETHER THEY SPEAK DANISH ────────────────────
+  //
+  // Optional, and never asked unprompted. It is a tick box on the advanced
+  // panel, and the ask exists for the one case where it would change an answer:
+  // somewhere with an island calendar that is mostly talks and theatre. The
+  // safe default without it is no Danish, which is the reading that cannot send
+  // anybody to an evening they cannot follow. See readDanish above.
+  { key: "danish", label: "whether they speak Danish", tier: "optional",
+    ask: "Do you speak Danish? It changes which local evenings are worth pointing you at.",
+    askDa: "Taler du dansk? Det afgør hvilke lokale aftener der er værd at pege på." },
 ];
 
 // ── EVERY TRIP NEEDS THESE, WHICH IS NOT THE SAME LIST ──────────────
@@ -1229,6 +1239,38 @@ const readTransport = (text, intakeTransport) => {
 };
 
 const BUDGET_RE = /\b(?:budget|cheap|tight|afford|splash|plenty of money|money is no|expensive|luxur|\d+\s*(?:dkk|kr|kroner|eur|usd|£|\$))\b/i;
+// ── WHETHER THEY SPEAK DANISH ─────────────────────────
+//
+// Oliver, 19 Sep 2026: "add an option called Danish-speaker and Non-Danish
+// speaker. Because that can play a vital role in destinations for people."
+//
+// It decides whether half of an island's calendar is worth pointing at. A
+// foredrag, a revy and a læsekreds are three good evenings to a Dane and three
+// hours of incomprehension to anybody else, so the same island is busier for
+// one traveller than the other. See utils/eventAccess.js.
+//
+// OPTIONAL, AND NOT A QUESTION THE CHAT ASKS. It is a tick box on the advanced
+// panel and it is read out of the conversation when they say it themselves.
+// Making it blocking would put a question about language in front of somebody
+// who came here to plan a holiday, and the safe default is already the right
+// one: without an answer, the app assumes no Danish, which is the reading that
+// cannot send anybody to an evening they cannot follow.
+const SPEAKS_DANISH = /\b(?:speaks? danish|i speak danish|we speak danish|jeg taler dansk|vi taler dansk|taler dansk|dansktalende|p\u00e5 dansk er fint|dansk er fint)\b/i;
+const NO_DANISH = /\b(?:no danish|don'?t speak danish|do not speak danish|does not speak danish|not a danish speaker|ingen dansk|taler ikke dansk|jeg taler ikke dansk)\b/i;
+
+export const readDanish = (text, intakeDanish) => {
+  const said = String(intakeDanish || "").trim().toLowerCase();
+  if (said === "yes") return { value: "speaks Danish", source: "intake", speaks: true };
+  if (said === "no") return { value: "no Danish", source: "intake", speaks: false };
+  const t = String(text || "");
+  // The refusal is read FIRST, because "I do not speak Danish" contains
+  // "speak danish" and a reader that asked the other question first would have
+  // answered the opposite of what was typed.
+  if (NO_DANISH.test(t)) return { value: "no Danish", source: "said", speaks: false };
+  if (SPEAKS_DANISH.test(t)) return { value: "speaks Danish", source: "said", speaks: true };
+  return null;
+};
+
 const readBudget = (text, intakeBudgetText) => {
   if (has(intakeBudgetText)) return { value: clean(intakeBudgetText), source: "intake" };
   return BUDGET_RE.test(String(text || "")) ? { value: ACKNOWLEDGED_VALUE, source: "said" } : null;
@@ -1276,6 +1318,7 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   // rule, same reason, as every other slot here.
   set("stayWhen", readStayNights(t, { arrival: known.when?.value || null, today }));
   set("budget", readBudget(t, intake.budgetText));
+  set("danish", readDanish(t, intake.danish));
 
   // ── AND THEN WHAT THEY SAID WHEN THEY WERE ASKED ──────────────────
   //

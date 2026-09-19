@@ -59,7 +59,18 @@ import { isPastDate } from "./eventDates";
 // numeric id. That is resolved once, when he adds it, through the page-details
 // call this codebase already uses, and stored on the row. A lookup per sweep
 // would be a second request every time for an answer that never changes.
-export const FEED_KINDS = ["group", "page"];
+// ── AND A CALENDAR IS A SOURCE LIKE ANY OTHER ───────────────
+//
+// Oliver, 19 Sep 2026: "Village Calender and Community events are the same
+// shit.." and then, plainly: "I should be able to put any link into community
+// events. Anything that can scan for an event. Just identify the link. If it's
+// Facebook, go API direct, if it's calender, go for your calender."
+//
+// He is right, and a separate panel for calendars was a second door to one
+// tier. A source is a LINK and a PLACE. What kind of link it is decides which
+// reader runs, and nothing else about it changes: same list, same place field,
+// same sweep, same queue.
+export const FEED_KINDS = ["group", "page", "calendar"];
 
 // Everything that is not a person, a group, or one of Facebook's own routes. A
 // profile URL and a page URL are the same shape, and the app cannot tell them
@@ -81,7 +92,14 @@ export const pageNameIn = (url) => {
 
 export const feedKindOf = (url) => {
   if (groupIdIn(url)) return "group";
-  return pageNameIn(url) ? "page" : "";
+  if (pageNameIn(url)) return "page";
+  // Anything else that is a real https address. Which READER it earns is
+  // decided later, off the page's own markup rather than off its domain: an
+  // .ics, a Google calendar address, The Events Calendar's API, Simple
+  // Calendar's markup, or a plain page as the last resort. See
+  // utils/calendarFeed.js. A facebook.com link that reached here is a Facebook
+  // link this cannot read, and feedUrlProblem says which.
+  return /^https:\/\/[^\s]+\.[^\s]/i.test(String(url || "").trim()) && !/facebook\.com|fb\.com/i.test(String(url || "")) ? "calendar" : "";
 };
 
 export const groupIdIn = (url) => {
@@ -102,14 +120,18 @@ export const feedUrlProblem = (url) => {
   }
   if (pageNameIn(raw)) return "";
   if (/facebook\.com/i.test(raw)) return "That is a Facebook link, but not a page or a group. A page looks like facebook.com/visitsamsoe and a group like facebook.com/groups/125246204312244.";
-  return "This reads Facebook pages and groups. A page looks like facebook.com/visitsamsoe and a group like facebook.com/groups/125246204312244.";
+  // Any other https address is a calendar or a page with events on it, and
+  // which reader it earns is worked out when it is read rather than now.
+  if (feedKindOf(raw)) return "";
+  if (/^http:\/\//i.test(raw)) return "That link is http. A source has to be https, because the server refuses to fetch anything else.";
+  return "Paste a Facebook page or group, or the address of a calendar or events page. A page looks like facebook.com/visitsamsoe, a group like facebook.com/groups/125246204312244, and a calendar like sejero.dk/arrangementer.";
 };
 
 export const cleanFeed = (row) => {
   const url = String(row?.url || row?.group_url || "").trim();
   const kind = feedKindOf(url);
   if (!kind) return null;
-  const groupId = kind === "group" ? groupIdIn(url) : String(row?.group_id || "").trim();
+  const groupId = kind === "group" ? groupIdIn(url) : kind === "calendar" ? "" : String(row?.group_id || "").trim();
   // A page keeps its readable address and carries the numeric id separately,
   // because the id is what the endpoint wants and the name is what he typed and
   // will recognise in a list. A page whose id has not been resolved yet is a
@@ -119,9 +141,13 @@ export const cleanFeed = (row) => {
     id: row?.id ?? null,
     kind,
     name: String(row?.name || "").trim().slice(0, 80),
-    url: kind === "group" ? `https://www.facebook.com/groups/${groupId}` : `https://www.facebook.com/${handle}`,
+    // A calendar keeps the address he typed. The two Facebook kinds are
+    // rebuilt from their id or handle, because the link he pastes carries a
+    // tracking tail and the canonical one is what the list is deduped on.
+    url: kind === "calendar" ? url : kind === "group" ? `https://www.facebook.com/groups/${groupId}` : `https://www.facebook.com/${handle}`,
     handle,
     groupId,
+    // A calendar needs no id: its address is the whole of it.
     needsId: kind === "page" && !/^\d{5,}$/.test(groupId),
     // The same scope vocabulary the research sources use, so "Sejerø" and the
     // Islands scope both mean here what they mean there. cleanPlace is applied

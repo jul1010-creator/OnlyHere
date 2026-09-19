@@ -233,6 +233,12 @@ writeFileSync(entry, `
   export { seasonOf, summerLeaning, monthNote, seasonWarning, seasonWarnings, seasonBlock, SUMMER_MONTHS, SHOULDER_MONTHS } from ${JSON.stringify(join(root, "src/utils/seasonFit.js"))};
   export { readClock, showClock, readStay, legMinutes, walkDay, fixDay, fixClock, clockNote, lateDays, lateDayNote, LATE_DAY_HOUR } from ${JSON.stringify(join(root, "src/utils/dayClock.js"))};
   export { samePlace, runsOn, communityOnDay, communityBlock, MOST_IN_A_DAY } from ${JSON.stringify(join(root, "src/utils/communityEvents.js"))};
+  export { placesIn, townsOf, MOST_PLACES } from ${JSON.stringify(join(root, "src/utils/communityEvents.js"))};
+  export { communityDay, moreOnLine, noticeGroups, rolledHeadline, rolledBody } from ${JSON.stringify(join(root, "src/utils/communityEvents.js"))};
+  export { activityIn, activityAcross, activityBlock, isLively, LIVELY, DEFAULT_DAYS as ACTIVITY_DAYS } from ${JSON.stringify(join(root, "src/utils/placeActivity.js"))};
+  export { newFinds, findsLine, findDetail, withFind, withoutFind, wasTurnedDown, builtAt, alreadyOn } from ${JSON.stringify(join(root, "src/utils/guideFinds.js"))};
+  export { accessOf, accessNote, accessLines, accessBlock, KEEP_THE_NAME } from ${JSON.stringify(join(root, "src/utils/eventAccess.js"))};
+  export { readDanish } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { nightsIn, bedState, needsABed, openNightsLine, bedStateOf } from ${JSON.stringify(join(root, "src/utils/nightsOpen.js"))};
   export { driedUpDays, weatherNoteNow } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { unplaceableStops, mapGapNote } from ${JSON.stringify(join(root, "src/utils/mapGaps.js"))};
@@ -1302,8 +1308,26 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("a named group has no id in it", groupIdIn("https://www.facebook.com/groups/sejeroe-nyt"), "");
   ok("and the message says what to paste instead",
     /Open the group, click About/.test(feedUrlProblem("https://www.facebook.com/groups/sejeroe-nyt")));
-  ok("a non-Facebook link says what it does read",
-    /This reads Facebook pages and groups/.test(feedUrlProblem("https://sejeroe.dk/kalender")));
+  // ── AND A LINK THAT IS NOT FACEBOOK IS A CALENDAR ─────────────
+  //
+  // Oliver, 19 Sep 2026: "I should be able to put any link into community
+  // events. Anything that can scan for an event. Just identify the link. If
+  // it's Facebook, go API direct, if it's calender, go for your calender."
+  // Until then this panel refused anything that was not a Facebook link, which
+  // is why the village calendars had a second panel of their own.
+  is("a village calendar is a source like any other", feedKindOf("https://sejeroe.dk/kalender"), "calendar");
+  is("and has no problem with it", feedUrlProblem("https://sejeroe.dk/kalender"), "");
+  is("so is an ics feed", feedKindOf("https://calendar.google.com/calendar/ical/x%40gmail.com/public/basic.ics"), "calendar");
+  // The two Facebook kinds still read as themselves and still get their own
+  // reader, which is the whole of what he asked for.
+  is("a group is still a group", feedKindOf("https://www.facebook.com/groups/125246204312244"), "group");
+  is("and a page still a page", feedKindOf("https://www.facebook.com/visitsamsoe"), "page");
+  // http is refused rather than treated as a calendar: the route that fetches
+  // one will not follow it, so accepting it here would store a row that can
+  // only ever fail.
+  ok("http is refused, and says why", /has to be https/.test(feedUrlProblem("http://sejeroe.dk/kalender")));
+  ok("and a Facebook link this cannot read still says which two it can",
+    /A page looks like facebook\.com\/visitsamsoe/.test(feedUrlProblem("https://www.facebook.com/events/123")));
   is("and a good one has no problem", feedUrlProblem("https://www.facebook.com/groups/125246204312244"), "");
   // Stored canonical, so the same group pasted two ways is one row.
   is("the stored url is the canonical one",
@@ -13024,7 +13048,15 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 {
   const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
 
-  ok("the panel says it is optional", /✦ Optional: fine-tune the plan/.test(appSrc));
+  // ── AND THE LABEL SAYS TO OPEN IT, 19 SEP 2026 ─────────────
+  // Oliver: "the 'optional' button gotta be a little bit more clear.. like
+  // 'click here for advanced options'." Second report on this one control. His
+  // father did not know it could be clicked, which the border and the chevron
+  // fixed; what was still missing is the VERB, because "Optional: fine-tune the
+  // plan" names what is behind the door and never says to open it.
+  ok("the panel says to click it", /✦ Click here for advanced options/.test(appSrc));
+  // The word stays, because it is what makes skipping it an informed choice.
+  ok("and still says it is optional", /optional, skip it and Gemlyx still plans/.test(appSrc));
   ok("and says what skipping it costs", /skip it and Gemlyx still plans/.test(appSrc));
 
   // Getting around asks how you MOVE. A tent is where you sleep.
@@ -56124,6 +56156,104 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
            communityOnDay({ stops: [{ town: "Sejerø" }], date: "2026-07-08", pool }), []);
         is("two is the most a day carries", MOST_IN_A_DAY, 2);
 
+        // ── AND A SOURCE CAN BE THE NOTICEBOARD FOR TWO ─────────────
+        //
+        // Oliver, 19 Sep 2026: "make it able to cover two places.. because the
+        // Askø group covers Lilleø as well." His own screenshot of that group
+        // says it in its own words: "For personer med tilknytning til Askø &
+        // Lilleø." One association, two islands joined by a causeway.
+        //
+        // NOT A REACH BAND. This is the source saying which places it is the
+        // noticeboard for, typed by a person, rather than this file working out
+        // that two islands are near each other.
+        {
+          const { placesIn, townsOf, MOST_PLACES } = M;
+          is("the four ways that group writes its own name",
+             ["Askø, Lilleø", "Askø/Lilleø", "Askø & Lilleø", "Askø og Lilleø"].map(placesIn),
+             [["Askø", "Lilleø"], ["Askø", "Lilleø"], ["Askø", "Lilleø"], ["Askø", "Lilleø"]]);
+          is("one place is one place", placesIn("Sejerø"), ["Sejerø"]);
+          is("and nothing is nothing", [placesIn(""), placesIn(null)], [[], []]);
+          // Two. A noticeboard for three islands is a region, and a region is
+          // what the published tiers are for.
+          is("a list of four is cut to two", placesIn("Askø, Lilleø, Fejø, Orø"), ["Askø", "Lilleø"]);
+          is("which is stated once", MOST_PLACES, 2);
+
+          // ── AND SOME ISLANDS ARE NOT VILLAGES ─────────────────────
+          //
+          // Oliver, 19 Sep 2026, with govisit.dk's Læsø calendar open: "læsø is
+          // clearly not a small community.. what to do about that? We can't
+          // have a billion events popping up.. I guess we can do a 'multiple
+          // events' currently going on."
+          //
+          // Read: fifty seven events on it, and five or more on one Saturday.
+          {
+            const { communityDay, moreOnLine, noticeGroups, rolledHeadline, rolledBody } = M;
+            const busy = ["Kulturarvsdage", "ULTRA sej dag", "Safaritur med Rønnerbussen", "10 ting", "Jagt i fortiden", "Tangtur"]
+              .map(n => ({ name: n, town: "Læsø", date: "2026-09-19" }));
+            const quiet = [{ name: "Havnefest", town: "Sejerø", date: "2026-09-19" }];
+            // The cap was already there and it stopped SILENTLY, so a day on
+            // Læsø with seven things on looked exactly like a day on Sejerø
+            // with one.
+            const l = communityDay({ stops: [{ town: "Læsø" }], date: "2026-09-19", pool: busy });
+            is("two are named", l.rows.map(r => r.name), ["Kulturarvsdage", "ULTRA sej dag"]);
+            is("and the rest are counted rather than dropped", l.more, 4);
+            is("which is what the day says", moreOnLine(l.more, "Læsø"), "and 4 more on in Læsø that day");
+            const q = communityDay({ stops: [{ town: "Sejerø" }], date: "2026-09-19", pool: quiet });
+            is("a quiet day has nothing left over", [q.rows.length, q.more], [1, 0]);
+            is("and says nothing about it", moreOnLine(0, "Sejerø"), "");
+            // The old reader is unchanged, because everything else calls it.
+            is("the capped reader still caps",
+               communityOnDay({ stops: [{ town: "Læsø" }], date: "2026-09-19", pool: busy }).length, MOST_IN_A_DAY);
+
+            // ── AND THE SAME PROBLEM ON THE NOTICE SIDE ─────────────
+            // A guide day is capped. A notice is not: adding Læsø's calendar
+            // would put five separate notices under Near you for one Saturday.
+            const groups = noticeGroups([...busy, ...quiet]);
+            is("a busy day is one notice and a quiet one is its own",
+               groups.map(g => `${g.rolled ? "rolled" : "single"}:${g.rows.length}`), ["rolled:6", "single:1"]);
+            is("the headline is the count and the place",
+               rolledHeadline(busy), "6 things on on Læsø today");
+            ok("and the body names them, because somebody standing there wants to know",
+               /Kulturarvsdage\. ULTRA sej dag/.test(rolledBody(busy)));
+            // Two days on one island are two notices, not one: a roll-up is
+            // about a DAY.
+            is("a second day is its own notice",
+               noticeGroups([...busy, { name: "Andet", town: "Læsø", date: "2026-09-20" }]).length, 2);
+            // Exactly at the cap is not rolled: two named beats "2 things on".
+            is("a day at the cap is left as it is",
+               noticeGroups(busy.slice(0, 2)).map(g => g.rolled), [false, false]);
+            is("nothing at all is nothing", [noticeGroups([]), noticeGroups(null)], [[], []]);
+            is("and a row with no date is not a notice", noticeGroups([{ name: "x", town: "Læsø" }]), []);
+            {
+              const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
+              ok("the build names two and counts the rest",
+                 /const \{ rows, more \} = communityDay\(\{/.test(appR) && /byDay\[i \+ 1\] = \{ rows, more \};/.test(appR));
+              ok("and the notices are grouped by the day they fall on",
+                 /for \(const group of noticeGroups\(picked\)\)/.test(appR)
+                 && /group\.rolled \? rolledHeadline\(group\.rows\) : lead\.name/.test(appR));
+            }
+            const DASH13 = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+            is("nothing it writes carries a dash or a banned word",
+               [moreOnLine(4, "Læsø"), rolledHeadline(busy), rolledBody(busy)]
+                 .filter(v => DASH13.test(v) || /\b(?:actually|truly|genuinely|genuine|simply|really|quite)\b/i.test(v)), []);
+          }
+          const both = { name: "Oktoberfest", town: "Askø", towns: ["Askø", "Lilleø"], date: "2026-10-10" };
+          is("a row answers for both", townsOf(both), ["Askø", "Lilleø"]);
+          is("and a row with one answers for one", townsOf({ town: "Sejerø" }), ["Sejerø"]);
+          const on = (t) => communityOnDay({ stops: [{ town: t }], date: "2026-10-10", pool: [both] }).map(r => r.name);
+          is("standing on either island finds it", [on("Askø"), on("Lilleø")], [["Oktoberfest"], ["Oktoberfest"]]);
+          is("a third island does not", on("Fejø"), []);
+          // ONE ROW, NOT TWO, so a day that stands on both does not offer the
+          // same evening twice.
+          is("and a day standing on both gets it once",
+             communityOnDay({ stops: [{ town: "Askø" }, { town: "Lilleø" }], date: "2026-10-10", pool: [both] }).length, 1);
+          {
+            const shaped = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+            ok("the second place survives being published",
+               /towns: Array\.isArray\(t\.towns\) \? t\.towns\.filter\(Boolean\)\.slice\(0, 2\) : \[\]/.test(shaped));
+          }
+        }
+
         // ── "BEING ON SEJERØ I DIDN'T GET NOTIFICATION", 19 SEP 2026 ─
         //
         // Oliver, testing his first imported calendars. Traced through the real
@@ -56183,16 +56313,22 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         const block = communityBlock({ 2: communityOnDay({ stops: [{ town: "Sejerø" }], date: "2026-07-04", pool }) });
         ok("the block says which day and which place", /Day 2, Sejerø: Havnefest/.test(block));
         ok("it says these are not published", /not published anywhere on Gemlyx/.test(block));
-        ok("one sentence, on that day", /MENTION IT IN ONE SENTENCE, ON THAT DAY/.test(block));
+        // ── AND THE PAGE PRINTS IT, NOT THE WRITER ──────────
+        // Oliver, 19 Sep 2026: "I'm put on Sejerø. So the Sejerø event should be
+        // published, which I can't.." It was a block in the prompt and nothing
+        // else, so it was an invitation the writer could decline, and it did.
+        ok("the day card prints it and the writer is told not to repeat it",
+           /THE GUIDE PAGE ALREADY PRINTS THESE ON THAT DAY, so do not write them out again/.test(block));
         // Scraped off a village's own page and never fact-checked the way a
         // published entry is, so the writer may repeat it and may not bank on it.
         ok("and it may not be built on, promised or priced",
-           /Never build the day around it, never promise it is on, and never give it a price or a ticket/.test(block));
+           /never build the day around it, promise it is on, or give it a price or a ticket/.test(block));
+        ok("nor contradicted", /Do not contradict one either/.test(block));
         // ── AND IT REACHES THE GUIDE, FOR THE DAY IT BELONGS TO ────
         {
           const appE = readFileSync(join(root, "src/App.jsx"), "utf8");
           ok("the guide writer is told about the day it stands in",
-             /communityOnDay\(\{\s*\n\s*stops: d\.stops \|\| \[\],\s*\n\s*date: dayPlus\(arrivalDate, i\),/.test(appE));
+             /communityDay\(\{\s*\n\s*stops: d\.stops \|\| \[\],\s*\n\s*date: dayPlus\(arrivalDate, i\),/.test(appE));
           ok("and the block goes into its prompt", /\$\{communityFound \? `\\n\$\{communityFound\}` : ""\}/.test(appE));
           // No date, no day, so nothing can be said to be on.
           ok("nothing at all on a trip with no arrival date", /if \(arrivalDate\) \{\s*\n\s*const byDay = \{\};/.test(appE));
@@ -56366,8 +56502,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // ── AND THE DOOR IT GOES THROUGH IS THE ONE EVERY ROW USES ───────
     {
       const appCal = readFileSync(join(root, "src/App.jsx"), "utf8");
-      ok("the panel forces the place rather than reading the address",
-         /communityRowsFrom\(\{ events, place: calPlace, source, today: new Date\(\) \}\)/.test(appCal));
+      ok("the sweep forces the source's own place rather than reading the address",
+         /const rows = communityRowsFrom\(\{ events, place, source, today: new Date\(\) \}\);/.test(appCal));
+      ok("and a source with no place is refused rather than filed somewhere",
+         /No place set, so there is nothing to file these under/.test(appCal));
       ok("and shapes the row the way the publish button does",
          /shapeForLive\("festival", \{/.test(appCal) && /scale: "Community",/.test(appCal));
       ok("through the same insert", /body: JSON\.stringify\(\{ type: "festival", payload: shaped, published: true \}\)/.test(appCal));
@@ -56378,6 +56516,34 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       // loop that added nine of thirty is the one report he cannot act on.
       ok("a run that stops half way says where it stopped",
          /Added \$\{done\} of \$\{picked\.length\}, then stopped/.test(appCal));
+
+      // ── AND THE SAME ROW REACHES THE PROFILE FRAME ────────────────
+      //
+      // Oliver, 19 Sep 2026: "the notification does work. Well, keep that, but
+      // also include it as a notification at the profile frame, like the saved
+      // notes."
+      //
+      // Two jobs off one Add, and they are not the same question. The community
+      // row is for a PLAN, and reaches somebody because a guide stands in that
+      // place on that day. The notice is for somebody STANDING there now, and
+      // it stops being returned the day after. A village calendar answers both.
+      ok("adding a calendar row also writes a notice",
+         /rest\/v1\/gemlyx_notices/.test(appCal)
+         && /headline: \(group\.rolled \? rolledHeadline\(group\.rows\) : lead\.name\)\.slice\(0, 120\)/.test(appCal));
+      ok("dated so it disappears when it is over",
+         /end_day: group\.rolled \? lead\.date : \(lead\.dateEnd \|\| lead\.date\),/.test(appCal));
+      // THE COORDINATE COMES FROM THE PLACE, the same rule sendAsNotice has: a
+      // notice that cannot say where it is cannot make the one promise it
+      // exists to make.
+      ok("and placed from the published place rather than saved without one",
+         /const here = pretendPlaces\.find\(pl => pl\.name\.toLowerCase\(\) === String\(lead\.town \|\| ""\)\.toLowerCase\(\)\);/.test(appCal)
+         && /if \(!here\) \{ unplaced \+= group\.rows\.length; continue; \}/.test(appCal));
+      // The community row went in either way, so "it worked" would be half
+      // true. Both numbers are said.
+      ok("the count says how many of each", /\$\{done\} added, guide only, plus \$\{notices\} under Near you/.test(appCal));
+      ok("and names what a missing coordinate costs", /could not be a notice: no coordinate on file/.test(appCal));
+      // Nothing written in Gemlyx's voice: none of this has been checked.
+      ok("the notice carries the village's own words", /\[lead\.desc, lead\.venue/.test(appCal));
     }
 
     // ── AND THE CALENDARS WITH NO FEED BEHIND THEM ──────────────────
@@ -56426,7 +56592,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       // ── AND THE PANEL TAKES THE PAGE ONLY WHEN THERE IS NO FEED ───
       {
         const appPage = readFileSync(join(root, "src/App.jsx"), "utf8");
-        ok("the feed is tried first", /const feed = icsUrlFor\(calUrl\);/.test(appPage));
+        ok("the feed is tried first", /const ics = icsUrlFor\(source\);/.test(appPage));
         ok("and the page is the fallback, through the route that has Firecrawl behind it",
            /\/api\/scan-source\?fresh=1&url=\$\{encodeURIComponent\(source\)\}/.test(appPage));
         ok("a page that came back empty says so rather than showing no rows",
@@ -56539,11 +56705,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         const appP = readFileSync(join(root, "src/App.jsx"), "utf8");
         ok("the page is read for its markup before anything else", /const kind = readerFor\(html\);/.test(appP));
         ok("the events API is tried when the page says that plugin", /if \(kind === "tribe"\)/.test(appP) && /rowsFromTribe\(j\)/.test(appP));
-        ok("the page's own markup when it says the other", /kind === "simcal"\) \(\{ events, skipped \} = rowsFromSimcal\(html\)\)/.test(appP));
+        ok("the page's own markup when it says the other", /\(\{ events, skipped \} = rowsFromSimcal\(html\)\);/.test(appP));
         // The model is the only one of these paths that can be wrong about a
         // date, so it runs only when nothing structured came back.
         ok("and the model only when neither found anything",
-           /if \(events\.length\) \{[\s\S]{0,600}?return;\s*\}[\s\S]{0,400}?scan-source/.test(appP));
+           /if \(!events\.length\) \{[\s\S]{0,500}?scan-source/.test(appP));
         // scan-source strips a page to prose, and the markup IS the thing being
         // read, so the raw path goes through the route that returns it unchanged.
         ok("the markup is fetched through the route that does not strip it",
@@ -57047,6 +57213,424 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
            [...unbackedClaims(HIS), ...unbackedClaims(CROWD)].map(c => c.why)
              .filter(w => DASH7.test(w) || /\b(?:actually|truly|genuinely|genuine|simply|really|quite)\b/i.test(w)), []);
       }
+
+
+
+
+  // ── "LÆSØ'S CALENDER DOESN'T SEEM VERY FOREIGNER FRIENDLY" ───────
+  //
+  // Oliver, 19 Sep 2026: "these islands are going to depend on a lot on your
+  // language. Læsø's calender doesn't seem very foreigner friendly.." and then,
+  // on the clearest case of it: "Anything about 'theater' should be a clear
+  // nono as a foreigner."
+  //
+  // Two problems sit inside that and only one is about translation.
+  {
+    const { accessOf, accessNote, accessLines, accessBlock, KEEP_THE_NAME } = M;
+
+    // ── THE NAME IS DANISH AND IT STAYS DANISH ────────────────────
+    //
+    // Translating it tells them something and then strands them: the poster,
+    // the door and the village's own page all say the Danish name, and nobody
+    // can ask for a "leaf and game evening" on Læsø. Same rule this app already
+    // applies to place names in readerLanguage.js.
+    ok("the name is kept and glossed rather than translated",
+       /KEEP EACH NAME EXACTLY AS IT IS WRITTEN, IN DANISH, AND EXPLAIN IT BESIDE ITSELF/.test(KEEP_THE_NAME));
+    ok("and it says what translating one costs",
+       /nobody can ask for a "leaf and game evening" on Læsø/.test(KEEP_THE_NAME));
+    ok("with nothing invented to fill the gloss",
+       /say what little you know rather than inventing the rest/.test(KEEP_THE_NAME));
+
+    // ── AND SOME OF THEM ARE NOT FOR A VISITOR AT ALL ─────────────
+    //
+    // His own Askø poster is the example: "beboerforening inviterer MEDLEMMER"
+    // and "Bindende tilmelding senest 3.oktober". A members' dinner with a
+    // signup deadline is not something to walk into, and pointing somebody at
+    // it is worse than silence: they turn up and are turned away.
+    const OKTOBER = { name: "Oktoberfest", desc: "Askø/Lilleø beboerforening inviterer medlemmer til Oktoberfest den 10. oktober kl 18. Bindende tilmelding senest 3.oktober" };
+    const a = accessOf(OKTOBER);
+    is("the members word is found and quoted", a.members, "medlemmer");
+    is("so is the deadline", [a.signUp, a.signUpByDate], ["Bindende tilmelding", true]);
+    ok("and it is not a thing to walk into", !a.open);
+
+    // ── THEATRE IS THE CLEAREST CASE OF THE LOT ───────────────────
+    //
+    // A village revy is two hours of jokes about people in that parish, in
+    // Danish, sung. Dilettant is the amateur company that puts it on.
+    is("every shape a village writes it in",
+       ["Sejerø Revy 2026", "Dilettantforestilling i forsamlingshuset", "Børneteater på havnen", "Teaterforestilling"]
+         .map(n => !!accessOf({ name: n }).danish), [true, true, true, true]);
+    // DANISH GLUES ITS WORDS TOGETHER. The first version had word boundaries on
+    // every entry and missed Børneteater and Dilettantforestilling, which are
+    // two of the three shapes a village actually writes.
+    is("a compound is still the word", accessOf({ name: "Foredragsaften om tang" }).danish, "Foredrag");
+    is("and so is an inflection", accessOf({ name: "Generalforsamlingen" }).danish, "Generalforsamling");
+
+    // ── AND THE FINDS THIS TIER EXISTS FOR ARE LEFT ALONE ─────────
+    //
+    // Banko is numbers, a koncert is music, a fællesspisning is a long table. A
+    // list that flags everything makes every row look closed and the writer
+    // stops reading it.
+    is("a harbour night, a market and a concert are open to anybody",
+       ["Havnefest", "Loppemarked", "Koncert med Keep it Simple", "Fællesspisning", "Banko i klubhuset", "Julemarked"]
+         .map(n => accessOf({ name: n }).open), [true, true, true, true, true, true]);
+
+    // ── EVIDENCE, NOT A VERDICT ───────────────────────────────────
+    //
+    // "Medlemmer" usually means members only and sometimes means members get in
+    // free, so the writer is told what the row SAID.
+    ok("the line quotes the word that raised it",
+       /Oktoberfest: its own words say "medlemmer", so it may be for members/.test(accessLines([OKTOBER])[0]));
+    is("a row that raised nothing has no line", accessLines([{ name: "Havnefest" }]), []);
+    is("and a block with nothing awkward in it is empty", accessBlock([{ name: "Havnefest" }]), "");
+    const block = accessBlock([OKTOBER, { name: "Foredrag om tang" }, { name: "Havnefest" }]);
+    ok("the block says what to do about them",
+       /Say so in the same breath as the thing, in the traveller's own language, or leave that one out/.test(block));
+    ok("and why it matters",
+       /has lost the evening and will blame this guide/.test(block));
+    ok("with the deadline rule on it",
+       /Never promise a place at anything that has to be booked by a date that has passed/.test(block));
+
+    // ── AND FOUR WORDS ON THE CARD ────────────────────────────────
+    // Worst first, because a members' dinner is the one that turns somebody
+    // away at the door.
+    is("the marker says which door it is",
+       [accessOf(OKTOBER), accessOf({ name: "Foredrag" }), accessOf({ name: "Tur, tilmelding senest fredag" }), accessOf({ name: "Havnefest" })]
+         .map(x => accessNote(x)),
+       ["looks like it is for members", "runs in Danish", "needs signing up in advance", ""]);
+    is("and in Danish", accessNote(accessOf({ name: "Revy" }), "da"), "foregår på dansk");
+    is("nothing at all is nothing", [accessNote(null), accessNote(accessOf({}))], ["", ""]);
+
+    // ── AND BOTH SURFACES CARRY IT ────────────────────────────────
+    {
+      const ce = readFileSync(join(root, "src/utils/communityEvents.js"), "utf8");
+      ok("the writer gets both rules", /\$\{KEEP_THE_NAME\}\\n\$\{accessBlock\(rows\(byDay\), opts\)\}/.test(ce));
+      const pageX = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+      ok("the day card wears the marker", /\{accessNote\(accessOf\(r\), uiLang\) && \(/.test(pageX));
+      ok("and so does the finds banner",
+         /\{accessNote\(accessOf\(r\), uiLang\) \? ` \(\$\{accessNote\(accessOf\(r\), uiLang\)\}\)` : ""\}/.test(pageX));
+    }
+    // ── "DANISH-SPEAKER AND NON-DANISH SPEAKER" ───────────────────
+    //
+    // Oliver, 19 Sep 2026: "add an option called Danish-speaker and Non-Danish
+    // speaker. Because that can play a vital role in destinations for people."
+    //
+    // It is the difference between two products. A Dane reading Læsø's
+    // calendar sees a foredrag about seaweed, a revy and a læsekreds and can go
+    // to all three. A German reading the same calendar sees three evenings they
+    // would sit through understanding nothing.
+    {
+      const { readDanish } = M;
+      is("the tick box answers it", [readDanish("", "yes")?.speaks, readDanish("", "no")?.speaks], [true, false]);
+      is("and so do their own words, in both languages",
+         ["I speak Danish", "Vi taler dansk", "dansktalende"].map(t => readDanish(t)?.speaks), [true, true, true]);
+      // THE REFUSAL IS READ FIRST, because "I do not speak Danish" contains
+      // "speak danish" and the other order answers the opposite of what was
+      // typed.
+      is("a refusal is a refusal and not its own opposite",
+         ["I don't speak Danish", "we do not speak Danish", "Jeg taler ikke dansk", "no Danish"].map(t => readDanish(t)?.speaks),
+         [false, false, false, false]);
+      is("saying nothing answers nothing", [readDanish("A trip to Denmark"), readDanish("", null)], [null, null]);
+      // The form writes its own line into the hidden turn, so a brief built
+      // from the conversation alone still finds it.
+      is("the form's own line is read back", readDanish("Language: speaks Danish")?.speaks, true);
+
+      // ── AND IT CANCELS EXACTLY ONE FLAG ─────────────────────────
+      const revy = { name: "Sejerø Revy 2026" };
+      is("a revue is three hours of nothing to a visitor", accessNote(accessOf(revy)), "runs in Danish");
+      is("and an evening out to a Dane", accessNote(accessOf(revy, { danishSpeaker: true })), "");
+      // A members' dinner turns a Dane away at the door too, and a deadline
+      // passes for everybody.
+      is("a members' dinner is still a members' dinner",
+         accessNote(accessOf({ name: "Oktoberfest", desc: "inviterer medlemmer" }, { danishSpeaker: true })),
+         "looks like it is for members");
+      is("and a deadline is still a deadline",
+         accessNote(accessOf({ name: "Tur", desc: "Bindende tilmelding senest fredag" }, { danishSpeaker: true })),
+         "needs signing up in advance");
+      // THE SAFE DEFAULT IS NO DANISH: without an answer, the reading that
+      // cannot send anybody to an evening they cannot follow.
+      is("no answer is read as no Danish", accessNote(accessOf(revy, {})), "runs in Danish");
+      {
+        const appD = readFileSync(join(root, "src/App.jsx"), "utf8");
+        ok("the advanced panel offers both",
+           /\[\["yes", "I speak Danish"\], \["no", "No Danish"\]\]/.test(appD));
+        ok("and the form says it in the hidden turn",
+           /Language: speaks Danish.*Language: does not speak Danish/s.test(appD));
+        ok("the brief reads it on both paths",
+           /intake: \{ arrival: intakeArrival, departure: intakeDeparture, danish: intakeDanish \}/.test(appD)
+           && /\s+danish: intakeDanish,\n\s+\},/.test(appD));
+        ok("and the community block is told",
+           /communityBlock\(byDay, \{ danishSpeaker: guideBrief\.known\.danish\?\.speaks === true \}\)/.test(appD));
+        // ── AND THE DOOR SAYS TO OPEN IT ──────────────────────────
+        // Oliver, same message: "the 'optional' button gotta be a little bit
+        // more clear.. like 'click here for advanced options'." Second report
+        // on this control: his father did not know it could be clicked, which
+        // the border fixed, and the label still never said to open it.
+        ok("the label starts with the verb", /✦ Click here for advanced options/.test(appD));
+        ok("and optional moves to the line under it, where it still says skipping is fine",
+           /optional, skip it and Gemlyx still plans/.test(appD));
+      }
+    }
+
+    const DASH16 = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+    is("nothing it writes carries a dash or a banned word",
+       [KEEP_THE_NAME, block, accessNote(accessOf(OKTOBER)), accessNote(accessOf(OKTOBER), "da")]
+         .filter(v => DASH16.test(v) || /\b(?:actually|truly|genuinely|genuine|simply|really|quite)\b/i.test(v)), []);
+  }
+
+  // ── "AVERNAKOE: API DIRECT DID NOT ANSWER IN TIME" ───────────────
+  //
+  // Oliver, 19 Sep 2026, mid sweep. Not a bug in the reading: the call ran out
+  // of time and said so, which is the right thing for it to do and the wrong
+  // amount of time for it to do it in.
+  {
+    const sf = readFileSync(join(root, "api/social-find.js"), "utf8");
+    // TWO DIFFERENT CALLS SHARED ONE BUDGET. A name search returns a short list
+    // and answers in a second or two; a page of a page's posts is the heaviest
+    // thing this route asks for.
+    ok("the posts call has a budget of its own",
+       /const POSTS_TIMEOUT_MS = 45000;/.test(sf) && /const budget = isPostsCall\(path\) \? POSTS_TIMEOUT_MS : RAW_TIMEOUT_MS;/.test(sf));
+    ok("and the light calls keep theirs", /const RAW_TIMEOUT_MS = 12000;/.test(sf));
+    // AND THE FUNCTION ITSELF WAS THE TIGHTER LIMIT: no maxDuration meant
+    // Vercel's default, fifteen seconds on the Pro plan this runs on, so a
+    // twelve second inner budget had three seconds of headroom and the ceiling
+    // was written down nowhere.
+    ok("the function's own ceiling is stated rather than inherited",
+       /export const config = \{ maxDuration: 60 \};/.test(sf));
+    ok("and it is above the budget it has to contain",
+       /POSTS_TIMEOUT_MS = 45000/.test(sf) && /maxDuration: 60/.test(sf));
+    // The number is IN the message, so a slow endpoint and a dead one read
+    // differently.
+    ok("a timeout says how long it waited",
+       /API Direct did not answer in \$\{Math\.round\(budget \/ 1000\)\}s on \$\{path\}/.test(sf));
+    // NO RETRY. API Direct bills per call, and a second attempt at an endpoint
+    // that has already spent forty five seconds costs twice for the same wait.
+    ok("and nothing retries it", /NO RETRY\. API Direct bills per call/.test(sf));
+  }
+
+  // ── "AN EVENT NEARBY YOUR PATH WAS JUST DISCOVERED" ──────────────
+  //
+  // Oliver, 19 Sep 2026: "we have the live weather being rendered. I also
+  // believe we need these notifications added onto the guide. Like 'an event
+  // nearby your path was just discovered!' And then you can click it, and add
+  // or make slight changes to your route."
+  //
+  // The weather half already exists and is the pattern: the page re-reads the
+  // world on open and a banner says what moved. A guide is not a document, it
+  // is a thing somebody opens again the week before they travel.
+  {
+    const { newFinds, findsLine, findDetail, withFind, withoutFind, wasTurnedDown, builtAt, alreadyOn } = M;
+    const BUILT = Date.parse("2026-06-01T10:00:00Z");
+    const guide = {
+      _gid: BUILT,
+      _arrivalDate: "2026-07-04",
+      days: [{ day: 1, stops: [{ town: "Sejerø" }] }, { day: 2, stops: [{ town: "Sejerby" }] }, { day: 3, stops: [{ town: "Kalundborg" }] }],
+      _community: { 1: { rows: [{ name: "Gammel ting", date: "2026-07-04", town: "Sejerø" }], more: 2 } },
+    };
+    const pool = [
+      { name: "Gammel ting", town: "Sejerø", date: "2026-07-04", fetchedAt: "2026-05-01T00:00:00Z" },
+      { name: "Havnefest", town: "Sejerø", date: "2026-07-04", fetchedAt: "2026-06-20T00:00:00Z" },
+      { name: "Loppemarked", town: "Sejerø", date: "2026-07-05", fetchedAt: "2026-06-25T00:00:00Z" },
+      { name: "Ingen stempel", town: "Sejerø", date: "2026-07-04" },
+      { name: "Andetsteds", town: "Fejø", date: "2026-07-04", fetchedAt: "2026-06-25T00:00:00Z" },
+      { name: "Efter turen", town: "Sejerø", date: "2026-08-01", fetchedAt: "2026-06-25T00:00:00Z" },
+    ];
+    const dayDateFor = (n) => ["2026-07-04", "2026-07-05", "2026-07-06"][n - 1];
+    const isle = (w) => (String(w) === "Sejerby" ? "Sejerø" : "");
+    const finds = newFinds({ guide, pool, dayDateFor, islandOf: isle });
+
+    // ── WHAT COUNTS AS JUST DISCOVERED ────────────────────────────
+    //
+    // Added to Gemlyx AFTER this guide was built. Not "on a day of the trip",
+    // which is every row the guide already carries, and not "new to the
+    // traveller", which nothing can know.
+    is("only what turned up since the guide was written", finds.map(f => `d${f.day} ${f.name}`),
+       ["d1 Havnefest", "d2 Loppemarked"]);
+    // The village event the guide already prints is not a find.
+    ok("what the guide already carries is not a find", !finds.some(f => f.name === "Gammel ting"));
+    // A row with no stamp is one this app cannot date, and calling it new would
+    // put an old harbour night under a banner saying it was just discovered.
+    ok("nor is a row nothing can date", !finds.some(f => f.name === "Ingen stempel"));
+    // STILL THE SAME NARROW DOOR. The day has to STAND there, which is the rule
+    // the whole tier turns on. "Nearby your path" means the path.
+    ok("nor one on an island this trip never reaches", !finds.some(f => f.name === "Andetsteds"));
+    ok("nor one after they have gone home", !finds.some(f => f.name === "Efter turen"));
+    // Day 2 stands in Sejerby, which is on Sejerø, the same scale fix the guide
+    // build got this afternoon.
+    is("a village on the island still finds the island's own evening", finds[1].day, 2);
+    // A guide from before _gid existed can have nothing called new, which is
+    // the safe answer rather than calling everything new.
+    is("a guide with no build time has no finds", newFinds({ guide: { ...guide, _gid: null }, pool, dayDateFor }), []);
+    is("and builtAt says so rather than guessing", [builtAt(guide), builtAt({}), builtAt({ _gid: 0 })], [BUILT, null, null]);
+    is("what the guide already has is read off both shapes",
+       [...alreadyOn({ _community: { 1: [{ name: "A", date: "2026-07-04" }], 2: { rows: [{ name: "B", date: "2026-07-05" }] } } })],
+       ["a|2026-07-04", "b|2026-07-05"]);
+
+    // ── AND WHAT THE BANNER SAYS ──────────────────────────────────
+    // The claim is exactly what it says and no more: the row was not in Gemlyx
+    // when this guide was written. Nothing here knows whether the event is new.
+    ok("one find is named with its day and place",
+       /Havnefest is on in Sejerø on day 1, and it was not in Gemlyx when this guide was written\./.test(findsLine(finds.slice(0, 1))));
+    ok("and several are counted rather than listed twice",
+       /2 things are on along this route that were not in Gemlyx when this guide was written\./.test(findsLine(finds)));
+    is("nothing found is nothing said", [findsLine([]), findsLine(null)], ["", ""]);
+    is("the detail line is what the name does not say",
+       findDetail({ time: "19:30", venue: "Havnen" }), "from 19:30, at Havnen");
+    is("and empty when there is nothing to add", findDetail({}), "");
+
+    // ── ACCEPTING ONE PINS IT, IT DOES NOT MOVE THE ROUTE ─────────
+    //
+    // Nothing in this tier has been checked the way a published entry is, and
+    // the writer is told never to build a day around one, so a route change
+    // would be the app acting on something it cannot stand behind.
+    const after = withFind(guide, finds[0]);
+    is("it lands on its own day", after._community[1].rows.map(r => r.name), ["Gammel ting", "Havnefest"]);
+    // It was one of the things that day was not naming, so the count of what is
+    // left over comes down by one.
+    is("and the day has one fewer left over", after._community[1].more, 1);
+    is("the stops are untouched", after.days, guide.days);
+    is("the guide it was given is untouched", guide._community[1].rows.length, 1);
+    is("adding it twice changes nothing", withFind(after, finds[0])._community[1].rows.length, 2);
+    is("and it stops being a find", newFinds({ guide: after, pool, dayDateFor, islandOf: isle }).map(f => f.name), ["Loppemarked"]);
+    is("a find with no day is refused", withFind(guide, { name: "x" }), guide);
+    // A find on a day the guide printed nothing for starts that day's list.
+    is("a find on an empty day starts it",
+       withFind(guide, finds[1])._community[2].rows.map(r => r.name), ["Loppemarked"]);
+
+    // ── AND TURNING ONE DOWN IS REMEMBERED ────────────────────────
+    // Or an opened guide offers the same thing every week.
+    const no = withoutFind(guide, finds[0]);
+    ok("it is remembered on the guide", wasTurnedDown(no, finds[0]));
+    ok("and only that one", !wasTurnedDown(no, finds[1]));
+    is("twice is once", withoutFind(no, finds[0])._findsTurnedDown.length, 1);
+
+    // ── AND NEITHER REACHES A PUBLISHED TRIP ──────────────────────
+    // `_findsTurnedDown` is a decision this traveller made and `_community` is
+    // a calendar that would be stale the moment it was published.
+    {
+      const { stripForLibrary, personalLeaks, PERSONAL_FIELDS } = M;
+      const stripped = stripForLibrary({ ...after, _findsTurnedDown: ["x|2026-07-04"] });
+      is("the allowlist drops both", personalLeaks(stripped), []);
+      ok("and the check names them if it ever grows a door",
+         PERSONAL_FIELDS.includes("_findsTurnedDown") && PERSONAL_FIELDS.includes("_community"));
+    }
+
+    // ── AND THE PAGE DRAWS IT UNDER THE WEATHER BANNER ────────────
+    {
+      const pageF = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+      ok("the finds are read on open from the live rows",
+         /const finds = useMemo\(\(\) => newFinds\(\{/.test(pageF) && /pool: communityEvents,/.test(pageF));
+      ok("with the page's own day-to-date reader rather than a second copy",
+         /dayDateFor: \(n\) => tripDayDate\(guide\?\._arrivalDate, n\)/.test(pageF));
+      ok("and the island a village sits on, same as the build",
+         /islandOf: \(where\) => namedIslandOf\(lookupRealPlace\(where\)\)/.test(pageF));
+      ok("anything turned down stays turned down", /\.filter\(r => !wasTurnedDown\(guide, r\)\)/.test(pageF));
+      ok("accepting one pins it to its day", /setGuide\(withFind\(guide, r\)\)/.test(pageF));
+      ok("and declining one is remembered", /setGuide\(withoutFind\(guide, r\)\)/.test(pageF));
+      // The reader is told what it is and what it is not.
+      ok("the card says nobody has checked it",
+         /Off a village calendar, so nobody has checked it\. Adding one puts it on that day and leaves your route alone\./.test(pageF));
+    }
+    const DASH15 = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+    is("nothing it writes carries a dash or a banned word",
+       [findsLine(finds), findsLine(finds.slice(0, 1)), findDetail({ time: "19:30", venue: "Havnen" })]
+         .filter(v => DASH15.test(v) || /\b(?:actually|truly|genuinely|genuine|simply|really|quite)\b/i.test(v)), []);
+  }
+
+  // ── "JUDGE WHETHER AN ISLAND IS TOO DEAD", 19 SEP 2026 ───────────
+  //
+  // Oliver, after seeing what govisit.dk holds for Læsø: "we get the AI to scan
+  // all of them and call out what Islands have more activities than others. The
+  // AI guide can then scan the islands whenever it builds a guide, and judge
+  // whether an Island is too 'dead' to be worth visiting at the current time."
+  //
+  // A community row on its own is a find on a day. Fifty across one island in
+  // one week is a fact about the island, and it is the fact a traveller
+  // choosing between Læsø and Sejerø in November most needs and can least look
+  // up. It also answers his own worry from the other side: counted rather than
+  // listed, fifty stops being noise and becomes the signal.
+  {
+    const { activityIn, activityAcross, activityBlock, isLively, LIVELY, ACTIVITY_DAYS } = M;
+    const pool = [
+      ...["Kulturarvsdage", "ULTRA sej dag", "Safaritur", "10 ting", "Jagt i fortiden"]
+        .map(n => ({ name: n, town: "Læsø", date: "2026-09-19" })),
+      { name: "Tangtur", town: "Læsø", date: "2026-09-21" },
+      { name: "Lang markedsuge", town: "Orø", date: "2026-09-19", dateEnd: "2026-09-21" },
+      { name: "Oktoberfest", town: "Askø", towns: ["Askø", "Lilleø"], date: "2026-09-20" },
+      { name: "Efter turen", town: "Læsø", date: "2026-10-30" },
+    ];
+    const when = { from: new Date("2026-09-19"), days: 7 };
+    const laeso = activityIn(pool, { ...when, place: "Læsø" });
+    is("a busy island counts what is on in the window", laeso.count, 6);
+    is("and says which day carries most of it", [laeso.busiest, laeso.busiestCount], ["2026-09-19", 5]);
+    // ONE EVENT IS COUNTED ONCE however many days it runs. A three day market
+    // is not three things to do, and counting it three times would make a quiet
+    // island look busier than a lively one.
+    is("a run of days is one thing on", activityIn(pool, { ...when, place: "Orø" }).count, 1);
+    // A source covering two islands answers for both, the same as everywhere
+    // else this tier is read.
+    is("a source covering two islands counts for both",
+       [activityIn(pool, { ...when, place: "Askø" }).count, activityIn(pool, { ...when, place: "Lilleø" }).count], [1, 1]);
+    is("and nothing outside the window is in it", laeso.byDay["2026-10-30"], undefined);
+    is("a place with no calendar counts nothing", activityIn(pool, { ...when, place: "Sejerø" }).count, 0);
+    is("and neither does a place nobody named", activityIn(pool, { ...when, place: "" }).count, 0);
+    is("busiest first", activityAcross(pool, ["Sejerø", "Orø", "Læsø"], when).map(r => r.place), ["Læsø", "Orø", "Sejerø"]);
+
+    // ══ A COUNT ABOVE ZERO IS EVIDENCE. A COUNT OF ZERO IS NOT. ════
+    //
+    // Gemlyx holds a calendar for the islands somebody added a source for.
+    // Sejerø with nothing on it means the island is quiet, OR nobody added its
+    // calendar, OR it has not been swept since August, and no count can tell
+    // those apart. Same shape as the transit rule in App.jsx, which has had to
+    // be restated three times: no transit itinerary is not no transit.
+    const block = activityBlock(activityAcross(pool, ["Læsø", "Sejerø", "Orø", "Lilleø"], when), { days: 7 });
+    ok("the busy island is named with its number", /Læsø: 6 things on, 5 of them on 2026-09-19/.test(block));
+    // AND THE QUIET ONES ARE NOT NAMED AT ALL. The first draft listed them, and
+    // naming them is what makes a model rank whatever the rule underneath says.
+    ok("and the quiet ones are not named", !/Sejerø/.test(block));
+    // It was also FALSE for a place holding one or two, which is neither lively
+    // nor nothing.
+    ok("nor is a place holding one thing called empty", !/Orø/.test(block) && !/Lilleø/.test(block));
+    ok("the rule is in capitals and it is the asymmetry",
+       /A HIGH COUNT IS EVIDENCE AND A LOW ONE IS NOT/.test(block));
+    ok("and it names every word it refuses",
+       /may NEVER be called quiet, dead, empty, closed, not worth it, or out of season/.test(block));
+    ok("it says why, in terms of Gemlyx's own coverage",
+       /holding none for an island says nothing whatever about the island/.test(block));
+    // The numbers are for deciding, never for printing: a traveller told "18
+    // things on" would be reading Gemlyx's source list as a guidebook.
+    ok("the numbers may not reach a reader",
+       /do not print them, and do not tell the traveller how many things are on anywhere/.test(block));
+
+    // ── AND IT REFUSES TO FIRE ON NOTHING ──────────────────────────
+    // Three in a week. Below that a count is a coincidence of which calendars
+    // somebody happened to add.
+    is("the bar is three", LIVELY, 3);
+    is("and it is asked of the row", [isLively({ count: 3 }), isLively({ count: 2 }), isLively(null)], [true, false, false]);
+    is("a trip where nowhere is busy gets no block at all",
+       activityBlock(activityAcross(pool, ["Sejerø", "Orø"], when), { days: 7 }), "");
+    is("and nothing at all is nothing", [activityBlock([]), activityBlock(null)], ["", ""]);
+    is("the default window is a week", ACTIVITY_DAYS, 7);
+    const DASH14 = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+    ok("nothing it writes carries a dash or a banned word",
+       !DASH14.test(block) && !/\b(?:actually|truly|genuinely|genuine|simply|really|quite)\b/i.test(block));
+
+    // ── AND BOTH SURFACES ASK IT ───────────────────────────────────
+    {
+      const appA = readFileSync(join(root, "src/App.jsx"), "utf8");
+      // THE CHAT IS WHERE IT IS WORTH MOST, because by the time a guide is
+      // built the islands have been chosen.
+      ok("the chat counts the places in play, over the trip's own length",
+         /activityAcross\(\s*\n\s*communityEvents,\s*\n\s*inPlayNow\.flatMap/.test(appA));
+      ok("and says nothing at all until the trip has a date",
+         /brief\?\.known\?\.when\?\.value\s*\n?\s*\? activityBlock\(/.test(appA));
+      ok("the guide counts the plan's own towns and their islands",
+         /activityAcross\(communityEvents, planPlaces, \{/.test(appA));
+      ok("and both blocks reach their prompt",
+         /\$\{activitySays \? `\\n\$\{activitySays\}\\n` : ""\}/.test(appA)
+         && /\$\{activitySaysForGuide \? `\\n\$\{activitySaysForGuide\}` : ""\}/.test(appA));
+    }
+  }
 
       // ── AND WHAT THE SEASON DOES TO WHAT IS BEING OFFERED ─────────
       //
