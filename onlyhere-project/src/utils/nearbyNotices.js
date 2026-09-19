@@ -68,6 +68,20 @@ export const cleanNotice = (row) => {
     // better than a summary of it would, and nothing here has checked anything,
     // so putting it in our own voice would be claiming more than we know.
     body: String(row?.body || "").trim().slice(0, 400),
+    // ── AND THE VILLAGE'S OWN DANISH, CARRIED BESIDE IT ───────────
+    // Oliver, 19 Sep 2026: "it might want to get translated." The two fields
+    // above hold the English a visitor reads; these hold the post exactly as
+    // it was written, so a Dane standing on Sejerø gets the village rather
+    // than a translation of it. Which of the two a reader sees is decided at
+    // render, by noticeText in utils/noticeVoice.js.
+    //
+    // CARRIED RATHER THAN CHOSEN HERE, because this function has no idea what
+    // language anybody is reading in and guessing would be worse than either
+    // answer. A row added before the translation existed has these empty and
+    // falls back to the other one, which is why noticeText never returns
+    // nothing.
+    headlineDa: String(row?.headline_da || row?.headlineDa || "").trim().slice(0, 120),
+    bodyDa: String(row?.body_da || row?.bodyDa || "").trim().slice(0, 400),
     day,
     // A range keeps its last day, so a three day festival is current on its
     // middle Saturday rather than expiring after the first evening.

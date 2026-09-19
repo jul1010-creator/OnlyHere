@@ -104,14 +104,32 @@ export const AffiliatesPage = () => {
           </ul>
         </Card>
 
+        {/* ── SAY WHAT IT COSTS AND WHAT IT BUYS ──────────────────
+            Oliver, 19 Sep 2026: "Please, can you stop telling users 'There is
+            no reason to use it'. When I say 'don't lie', I don't mean 'don't
+            use it.' I mean advertise differently. Like Tiqets might be 10 dkk
+            extra, but it's considered very convinient. Like Momondo is a third
+            party taking money, but it's convinient to use."
+
+            He is right, and this paragraph used to end by pointing readers at
+            a hotel's own website because it can undercut the one stay partner
+            on the page. Honest, and only half the sentence: a reseller costs a
+            few kroner and buys a checkout, a cancellation policy and a
+            reservation that does not depend on a hotel reading its email. Both
+            halves or neither. Naming the cost and leaving out what it pays for
+            is not neutrality, it is an argument against the link, printed by
+            the site that carries it. */}
         <p style={{ fontSize: 12.5, lineHeight: 1.7, color: C.muted, margin: "22px 0 0" }}>
           If you are booking something anyway, using a link here is the whole of how the site pays for itself.
-          Booking direct is always fine, and on most of these there is nothing to gain by it: where a partner is the
-          seller, which covers most concert tickets and every operator here that runs what it sells, the direct page
-          is the page the link already goes to. Where a partner is a reseller, the price is the one the venue set,
-          and where those two numbers differ the row keeps the price and drops the link rather than sending you to
-          the dearer shop. The one worth checking yourself is a hotel's own website, which is the seller not on this
-          list that can undercut the booking sites that are.
+          Where a partner is the seller, which covers most concert tickets and every operator here that runs what
+          it sells, the link goes to the same page you would have found on your own. Where a partner is a reseller,
+          the price is the one the venue set, give or take a few kroner, and those kroner buy one checkout, one
+          cancellation policy, and every ticket as a QR code on your phone instead of in five confirmation emails.
+          Where the two prices are far apart, the row keeps the price and drops the link rather than sending you to
+          the dearer shop. On rooms it runs the other way as often as not: a hotel's own site sometimes comes in
+          under the booking sites, and the booking sites give you somewhere to compare, a cancellation policy you
+          can read before you pay, and a reservation that stands whether or not the hotel answers its email. Both
+          are fine, and the price is on screen either way.
         </p>
         <p style={{ fontSize: 12.5, lineHeight: 1.7, color: C.muted, margin: "12px 0 0" }}>
           Questions about any of this: hello@gemlyxtravel.com

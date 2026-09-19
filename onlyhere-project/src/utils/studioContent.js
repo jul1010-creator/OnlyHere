@@ -845,6 +845,40 @@ export const shapeForLive = (type, t) => {
   if (t?.__language?.level && t.__language.level !== "unknown") {
     out = { ...out, __language: { level: t.__language.level, note: t.__language.note || "", at: t.__language.at || "" } };
   }
+  // ── AND WHAT THE ISLAND ITSELF LISTS ─────────────────────────────
+  //
+  // Oliver, 19 Sep 2026, on Avernakø Landhotel: "is a personal hotel
+  // recommended by Avernakø. Do you think that should be taken into
+  // consideration when booking hotels on other islands? Recommending the
+  // places that the islands themselves recommend?"
+  //
+  // Read off the island's own visitor page and stored on the island's own row,
+  // because there is no accommodation type in this Studio and a bed is not a
+  // town, a festival or a food entry. See utils/islandDirectory.js.
+  //
+  // DECLARED HERE IN THE SAME COMMIT that writes it, which is the rule this
+  // function has now been taught six times over: a field the pipeline computes
+  // and this allow-list does not name works perfectly until the row is
+  // redrafted, and then goes without a word.
+  //
+  // `said` IS THE ISLAND'S OWN SENTENCE and is stored exactly as the page
+  // wrote it. `at` and `source` are the whole reason it can be quoted at all:
+  // this is only worth anything while it is attributable and while it is not
+  // three years old, and a list of names with no page behind them is a
+  // recommendation Gemlyx would be making on its own authority.
+  if (t?.__islandSays?.source && Array.isArray(t.__islandSays.rows) && t.__islandSays.rows.length) {
+    const rows = t.__islandSays.rows
+      .filter(r => r && String(r.name || "").trim())
+      .slice(0, 16)
+      .map(r => ({ name: String(r.name).trim(), kind: String(r.kind || "").trim(), said: String(r.said || "").slice(0, 400) }));
+    if (rows.length) {
+      out = { ...out, __islandSays: {
+        source: String(t.__islandSays.source),
+        at: String(t.__islandSays.at || ""),
+        rows,
+      } };
+    }
+  }
   // ── A COORDINATE HE TYPED HAS TO SURVIVE THIS FUNCTION ────────────
   // Oliver, 17 Aug 2026, on a Pizza by WH draft: "Ithe Map hint won't let me
   // publish.." He could not, and no edit he made could have helped.

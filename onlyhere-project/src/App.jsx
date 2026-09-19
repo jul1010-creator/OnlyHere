@@ -170,6 +170,8 @@ import { unplaceableStops, mapGapNote } from "./utils/mapGaps";
 import { chipsFor, LOCATE } from "./utils/replyChips";
 import { icsUrlFor, parseIcs, communityRowsFrom, feedProblems, PAGE_ROWS_PROMPT, rowsFromExtract, readerFor, tribeApiFor, rowsFromTribe, rowsFromSimcal } from "./utils/calendarFeed";
 import { locateLabel, locateSentence, townFromReverse, countryFromReverse, isDenmark, reverseUrl } from "./utils/locateMe";
+import { directoryLinks, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, islandSaysBlock, ISLAND_SAYS } from "./utils/islandDirectory";
+import { readerBody, noticeAsk, sentencesIn, TRANSLATE_NOTICE, translatedNotice, noticeText } from "./utils/noticeVoice";
 import { homeStartBlock, readBrief, briefBlock, nextAsks, asksThisTurn, sharperAsk, buildBlockedNote, enoughToRecommend, unsureWhatTheyWant, namedStayIn, bookedDayNumbers } from "./utils/tripBrief";
 import { askedBeforeTurns, lastAskedOnScreen } from "./utils/directAnswer";
 import { briefConflicts } from "./utils/briefConflicts";
@@ -235,7 +237,7 @@ import { seasonBlock } from "./utils/seasonFit";
 import { activityAcross, activityBlock, DEFAULT_DAYS as ACTIVITY_DAYS } from "./utils/placeActivity";
 import { communityEvents } from "./data/events";
 import { fixClock, clockNote, lateDays, lateDayNote } from "./utils/dayClock";
-import { communityOnDay, communityDay, communityBlock, moreOnLine, noticeGroups, rolledHeadline, rolledBody } from "./utils/communityEvents";
+import { communityOnDay, communityDay, communityBlock, moreOnLine, noticeGroups, rolledHeadline, rolledBody, placesIn } from "./utils/communityEvents";
 import { answerLengthBlock, depthBlock, answerTokens, readAnswerLength, storeAnswerLength, lengthLabel, SHORT as ANSWER_SHORT, LONG as ANSWER_LONG } from "./utils/answerLength";
 import { travelModeKey, withoutNonModes, overnightMove, dayStartsBeforeItCanArrive } from "./utils/routeOrder";
 import { buildChatReport, chatReportFilename } from "./utils/chatReport";
@@ -815,6 +817,15 @@ const NOTICES_SQL = `create table if not exists gemlyx_notices (
   source_url text,
   created_at timestamptz default now()
 );
+-- ── AND THE VILLAGE'S OWN WORDS, BESIDE THE TRANSLATION ────────────
+-- Oliver, 19 Sep 2026, reading a Sejerø notice: "it might want to get
+-- translated." The headline and body columns hold what a visitor reads, which is
+-- English; these two hold the Danish exactly as the village wrote it, so a
+-- Dane standing on Sejerø gets the post rather than a round trip through
+-- another language. Added rather than replacing, because the original is the
+-- thing being quoted and a translation is a copy of it.
+alter table gemlyx_notices add column if not exists headline_da text;
+alter table gemlyx_notices add column if not exists body_da text;
 alter table gemlyx_notices enable row level security;
 
 drop policy if exists "read gemlyx_notices" on gemlyx_notices;
@@ -9765,6 +9776,33 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
   // the work should be unticking the two he does not want.
   const [calPicked, setCalPicked] = useState([]);
   const [calAdded, setCalAdded] = useState("");
+  // The errands a notice leaves behind, kept on screen rather than in a toast.
+  // Each one names the place, what came out of the notice and what to ask that
+  // group for. Declared here because BOTH notice paths write to it and this is
+  // the one above the other. See noticeFieldsFor.
+  const [noticeAsks, setNoticeAsks] = useState([]);
+
+  // ── AND WHAT THE ISLAND LISTS, WHICH IS THE OTHER HALF OF ITS SITE ──
+  //
+  // Oliver, 19 Sep 2026: "So I just found out about something Avernakø
+  // Landhotel is a personal hotel recommended by Avernakø. Do you think that
+  // should be taken into consideration when booking hotels on other islands?
+  // Recommending the places that the islands themselves recommend?"
+  //
+  // The same source he already pasted for the calendar. An island site is two
+  // things at once: a page of what is on, which the panel above reads, and a
+  // page of what is here, which nothing read until now. Beds, places to eat,
+  // the shop and the ferry, each with a sentence written by somebody who lives
+  // there, which is a higher authority on a nine room island than anything a
+  // search would return. See utils/islandDirectory.js.
+  const [dirBusy, setDirBusy] = useState(false);
+  const [dirError, setDirError] = useState("");
+  const [dirRows, setDirRows] = useState([]);
+  const [dirNotes, setDirNotes] = useState([]);
+  const [dirPicked, setDirPicked] = useState([]);
+  const [dirPlace, setDirPlace] = useState("");
+  const [dirSource, setDirSource] = useState("");
+  const [dirAdded, setDirAdded] = useState("");
 
   // ── ONE SOURCE, READ BY WHICHEVER READER ITS LINK EARNS ──────
   //
@@ -9850,6 +9888,9 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
     if (!picked.length) return;
     setCalBusy(true); setCalError(""); setCalAdded("");
     let done = 0, notices = 0, unplaced = 0;
+    // The errands. See noticeAsk: one line per notice that lost a sentence,
+    // naming the place and what to ask that group for.
+    const asks = [];
     try {
       for (const r of picked) {
         const shaped = shapeForLive("festival", {
@@ -9916,18 +9957,33 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
         // because the community row went in either way.
         if (!here) { unplaced += group.rows.length; continue; }
         try {
+          // The village's own words, and the venue under them, which is the one
+          // thing a person standing there needs that the name does not say.
+          // Nothing written in Gemlyx's voice: none of this is checked.
+          //
+          // THROUGH THE SAME READER sendAsNotice uses, so a calendar entry and
+          // a Facebook post reach a reader on the same terms: in their
+          // language, with nothing in it that can only be done inside
+          // Facebook. A ROLLED notice is skipped by that reader and goes in as
+          // it stands, because rolledHeadline and rolledBody are written by
+          // this app rather than copied from anybody, and there is nothing in
+          // them to strip and nothing to translate.
+          const said = group.rolled
+            ? { headline: rolledHeadline(group.rows).slice(0, 120), body: rolledBody(group.rows).slice(0, 400), headline_da: "", body_da: "", dropped: [], translated: true, empty: false }
+            : await noticeFieldsFor(
+                lead.name,
+                [lead.desc, lead.venue ? `Where: ${lead.venue}` : "", lead.time ? `Starts ${lead.time}` : ""].filter(Boolean).join(" ") || lead.name,
+              );
+          if (said.empty) { unplaced += group.rows.length; continue; }
+          if (said.dropped.length) asks.push(noticeAsk({ place: here.name, source: lead.source || "", dropped: said.dropped }));
           await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_notices`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
             body: JSON.stringify({
-              headline: (group.rolled ? rolledHeadline(group.rows) : lead.name).slice(0, 120),
-              // The village's own words, and the venue under them, which is the
-              // one thing a person standing there needs that the name does not
-              // say. Nothing written in Gemlyx's voice: none of this is checked.
-              body: (group.rolled
-                ? rolledBody(group.rows)
-                : [lead.desc, lead.venue ? `Where: ${lead.venue}` : "", lead.time ? `Starts ${lead.time}` : ""].filter(Boolean).join(" ") || lead.name
-              ).slice(0, 400),
+              headline: said.headline,
+              body: said.body,
+              headline_da: said.headline_da,
+              body_da: said.body_da,
               day: lead.date,
               end_day: group.rolled ? lead.date : (lead.dateEnd || lead.date),
               place: here.name,
@@ -9939,8 +9995,10 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
           notices += 1;
         } catch { unplaced += group.rows.length; }
       }
+      if (asks.length) setNoticeAsks(prev => [...prev, ...asks]);
       setCalAdded(`${done} added, guide only, plus ${notices} under Near you.`
-        + (unplaced ? ` ${unplaced} could not be a notice: no coordinate on file for that place, so publish the place first.` : ""));
+        + (unplaced ? ` ${unplaced} could not be a notice: no coordinate on file for that place, so publish the place first.` : "")
+        + (asks.length ? ` ${asks.length === 1 ? "One lost a line" : `${asks.length} lost a line`} that only works inside Facebook, listed below.` : ""));
       setCalRows([]); setCalPicked([]);
     } catch (err) {
       setCalError(`Added ${done} of ${picked.length}, then stopped: ${String(err?.message || err).slice(0, 180)}`);
@@ -9948,6 +10006,160 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
       setCalBusy(false);
     }
   };
+  // ── READING WHAT THE ISLAND LISTS ───────────────────────────────
+  //
+  // Three pages at most, and the FIRST is always the address he pasted,
+  // because on Avernakø that address IS the directory: /visit carries Ø-færgen,
+  // Spisning, Overnatning and Småbutikker on one page. On Sejerø it is a front
+  // page and the beds are a click in at /oplev-sejeroe/overnatning/, which is
+  // what directoryLinks is for.
+  //
+  // THE HEADING AND NEVER THE PATH. Written across the top of
+  // utils/islandDirectory.js and it is the whole reason this works on sites
+  // that agree about nothing else: no two of these islands put the same thing
+  // at the same address, and every one of them calls a bed Overnatning.
+  //
+  // Capped at three pages, which is a real limit rather than a tidy number: a
+  // model call and a Firecrawl fetch each, on a source he will re-read every
+  // time the island changes its opening hours.
+  const DIR_PAGES = 3;
+  const readIslandDirectory = async (feed) => {
+    // THE FIRST OF THEM, because a directory belongs to the island whose site
+    // this is. The Askø group covers Lilleø too and Lilleø has no site of its
+    // own, so asking for two here would file Askø's landhotel under both.
+    const place = placesIn(feed?.place)[0] || "";
+    const source = String(feed?.url || "").trim();
+    if (!place) return { rows: [], notes: [], error: "No place set on that source, so there is nothing to file these under. Put the island in the place box." };
+    if (!source) return { rows: [], notes: [], error: "That source has no address." };
+    const pages = [source];
+    const notes = [];
+    try {
+      // The raw bytes, for the same reason the calendar reader takes them: the
+      // markup is the thing being read, and scan-source strips a page to prose.
+      const raw = await studioFetch(`/api/calendar?url=${encodeURIComponent(source)}`);
+      const rawData = await raw.json().catch(() => null);
+      const html = String(rawData?.text || "");
+      if (!html.trim() && rawData?.error) notes.push(`The page itself could not be read for its links: ${rawData.error}`);
+      // Beds first, then somewhere to eat. Both are worth a page of the budget
+      // and neither the shop nor the ferry timetable is.
+      const links = directoryLinks(html, source).filter(l => l.kind === "stay" || l.kind === "eat");
+      const order = [...links.filter(l => l.kind === "stay"), ...links.filter(l => l.kind === "eat")];
+      for (const l of order) {
+        if (pages.length >= DIR_PAGES) break;
+        if (pages.some(u => u === l.url)) continue;
+        pages.push(l.url);
+      }
+    } catch (err) {
+      notes.push(`The page's own links could not be read: ${String(err?.message || err).slice(0, 120)}`);
+    }
+    const all = [];
+    let dropped = 0;
+    const failed = [];
+    for (const url of pages) {
+      try {
+        const res = await studioFetch(`/api/scan-source?fresh=1&url=${encodeURIComponent(url)}`);
+        const data = await res.json().catch(() => null);
+        const text = String(data?.text || "");
+        if (!text.trim()) { failed.push(`${url}: ${data?.error || "nothing readable came back"}`); continue; }
+        const pulled = await askOpenAI(DIRECTORY_PROMPT(place, text.slice(0, 12000)), 2000);
+        if (pulled.error) { failed.push(`${url}: ${pulled.error}`); continue; }
+        let parsed = null;
+        try { parsed = JSON.parse(String(pulled.text || "").replace(/^```json\s*|\s*```$/g, "").trim()); } catch { /* reported below */ }
+        if (!parsed) { failed.push(`${url}: the page was read but nothing could be pulled out of it as a list`); continue; }
+        const got = rowsFromDirectory(parsed, { place, source: url });
+        all.push(...got.rows);
+        dropped += got.dropped;
+      } catch (err) {
+        failed.push(`${url}: ${String(err?.message || err).slice(0, 120)}`);
+      }
+    }
+    // Across pages, not only within one: Sejerø's front page and its
+    // Overnatning page both name the same campsite, and a name listed twice is
+    // one place. rowsFromDirectory dedupes inside a page; this does it across.
+    const seen = new Set();
+    const rows = [];
+    for (const r of all) {
+      const key = `${r.kind}|${r.name.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push(r);
+    }
+    if (pages.length > 1) notes.push(`Read ${pages.length} pages of that site.`);
+    for (const f of failed) notes.push(`Could not read ${f}.`);
+    return { rows, notes: [...directoryProblems({ place, rows, dropped }), ...notes], error: rows.length || failed.length < pages.length ? "" : failed[0] || "Nothing could be read off that site." };
+  };
+
+  // The button on one source row, which is where he is standing when he thinks
+  // of it. State rather than a return, unlike the calendar reader: this runs on
+  // ONE source at a time and never inside the sweep, because it is a fact about
+  // a place rather than a thing happening this week, and re-asking a model
+  // about an island's hotel list every Monday buys nothing.
+  const readDirectoryFor = async (feed) => {
+    setDirBusy(true); setDirError(""); setDirAdded(""); setDirRows([]); setDirPicked([]); setDirNotes([]);
+    setDirPlace(String(feed?.place || "").trim());
+    setDirSource(String(feed?.url || "").trim());
+    try {
+      const got = await readIslandDirectory(feed);
+      setDirRows(got.rows);
+      setDirPicked(got.rows.map(() => true));
+      setDirNotes(got.notes);
+      setDirError(got.error);
+    } catch (err) {
+      setDirError(String(err?.message || err).slice(0, 200));
+    }
+    setDirBusy(false);
+  };
+
+  // ── AND ONTO THE ISLAND'S OWN ROW ───────────────────────────────
+  //
+  // Not a draft, and that is a decision rather than a shortcut. Studio drafts
+  // towns, islands, festivals, free entries, food, nightlife, workshops and
+  // essentials, and a bed is none of those: there is no accommodation type in
+  // this app, so a hotel has nowhere to be an entry. What it can be is a field
+  // ON THE ISLAND, which is the row a guide already looks up when it stands
+  // there, and which shapeForLive now carries. See utils/studioContent.js.
+  //
+  // THE PLACES TO EAT GO THE SAME WAY rather than becoming food drafts. A food
+  // entry is a page with a photograph, an address, a price and a tier somebody
+  // has judged, and none of that exists here: what exists is a name and one
+  // sentence the island wrote. Publishing that as an entry would put Gemlyx's
+  // name on a judgement nobody made, which is the failure the tier fallback in
+  // studioContent.js was removed for. They are the island quoting itself, so
+  // they live where the quote can be attributed.
+  const addDirectoryRows = async () => {
+    const picked = dirRows.filter((_, i) => dirPicked[i]);
+    if (!picked.length) return;
+    const place = dirPlace.trim();
+    // The island's own published row, by name. Refused rather than guessed: a
+    // row written onto the wrong island is a hotel recommended on an island it
+    // is not on, and there is no undo on a payload PATCH.
+    const row = (manageItems || []).find(r => r?.type === "island" && samePlaceName(r?.payload?.name, place));
+    if (!row) {
+      setDirError(`No published island called ${place || "that"} to put these on. Publish the island first, then read its list.`);
+      return;
+    }
+    setDirBusy(true); setDirError(""); setDirAdded("");
+    try {
+      const got = await patchRowPayload(row.id, {
+        __islandSays: {
+          source: dirSource,
+          at: new Date().toISOString(),
+          rows: picked.map(r => ({ name: r.name, kind: r.kind, said: r.said })),
+        },
+      });
+      if (!got.ok) { setDirError(`Could not write it onto ${place}: ${got.why}.`); setDirBusy(false); return; }
+      const beds = picked.filter(r => r.kind === "stay").length;
+      const food = picked.filter(r => r.kind === "eat").length;
+      setDirAdded(`${picked.length} on ${place}, replacing whatever was there before. `
+        + `${beds ? `${beds} for the where to stay line` : "None for the where to stay line"}, ${food ? `${food} for dinner on the island` : "none for dinner"}. `
+        + `A guide that sleeps there quotes them and says whose list it is.`);
+      setDirRows([]); setDirPicked([]);
+    } catch (err) {
+      setDirError(String(err?.message || err).slice(0, 200));
+    }
+    setDirBusy(false);
+  };
+
   const factCancelRef = useRef(false);
 
   // Every Studio write below needs the LOGGED-IN token, not the anon key.
@@ -10885,6 +11097,24 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   const [newFeedUrl, setNewFeedUrl] = useState("");
   const [newFeedName, setNewFeedName] = useState("");
   const [newFeedPlace, setNewFeedPlace] = useState("");
+  // ── "ASKØ OG LILLEØ" IS NOT A PLACE ─────────────────────────────
+  //
+  // Oliver, 19 Sep 2026: "'Askø og Lilleø' this doesn't work as a location.
+  // give a field called 'add location'."
+  //
+  // It does not, and one box was always going to end this way. placesIn splits
+  // on a comma, a slash and the word og, so the ROW came out with two places
+  // on it correctly; what did not was `place` itself, which cleanPlace
+  // canonicalised as one name, so the chip, the directory reader and every
+  // lookup that wants ONE island were handed "Askø og Lilleø" and found
+  // nothing called that.
+  //
+  // A SECOND FIELD RATHER THAN A CLEVERER SPLIT. He is the only person who
+  // types in this box and he knows whether the group covers one island or two.
+  // A parser guessing at "og" is a parser that will one day take Lyø og Avernakø
+  // apart correctly and Frederikssund og Omegn apart wrongly, silently, in a
+  // field nobody looks at again. Two boxes cannot be wrong about that.
+  const [newFeedPlace2, setNewFeedPlace2] = useState("");
   // null | { running, done, total, found, failed: [{name, why}], candidates: [] }
   const [feedSweep, setFeedSweep] = useState(null);
   // ── AND THE ONE FOR A GROUP NOTHING CAN READ ────────────────────
@@ -11190,13 +11420,16 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
           kind,
           group_id: groupId,
           url,
-          place: cleanPlace(newFeedPlace),
+          // Cleaned SEPARATELY and joined with a comma. Joining first and
+          // cleaning after is the bug this is fixing: cleanPlace would read
+          // "Askø, Lilleø" as one region name and canonicalise nothing.
+          place: [cleanPlace(newFeedPlace), cleanPlace(newFeedPlace2)].filter(Boolean).join(", "),
           enabled: true,
         }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) { setFeedError(feedsErrorFor(res.status, body, "add to")); setFeedBusy(false); return; }
-      setNewFeedUrl(""); setNewFeedName(""); setNewFeedPlace("");
+      setNewFeedUrl(""); setNewFeedName(""); setNewFeedPlace(""); setNewFeedPlace2("");
       await loadFeeds();
     } catch (e) { setFeedError(String(e.message || e)); }
     setFeedBusy(false);
@@ -11353,6 +11586,53 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   // THE COORDINATE COMES FROM THE PLACE, and no coordinate means no notice: a
   // notice that cannot say where it is cannot make the one promise it exists to
   // make. Refused with the reason rather than saved without one.
+  // ── WHAT A NOTICE SAYS, AND WHAT IT CANNOT SAY ──────────────────
+  //
+  // Oliver, 19 Sep 2026, on the Sejerø toast: "First off, it might want to get
+  // translated. Second, 'sign up in the comment section' should get removed.
+  // This should be reported to me, and I write a comment to the Facebook
+  // group."
+  //
+  // Both notice paths go through here, because they are one job: a village
+  // post is written in Danish for people already inside the thread, and a
+  // notice is read in whatever language by somebody standing outside it. See
+  // utils/noticeVoice.js for the rules and why each one is there.
+  //
+  // THE TRANSLATION IS BEST EFFORT AND THE STRIP IS NOT. A model that is down
+  // gives a Danish notice, which is what he has today and still worth sending.
+  // A dead end left in is a notice pointing at a comment thread nobody can
+  // reach, so the strip happens whether or not anything answers.
+  const noticeFieldsFor = async (headlineRaw, bodyRaw) => {
+    const h = readerBody(headlineRaw);
+    const b = readerBody(bodyRaw);
+    const dropped = [...h.dropped, ...b.dropped];
+    // A headline that was ITSELF the dead end falls back to the first sentence
+    // the body kept, rather than to the raw line: putting the stripped sentence
+    // back as a headline would undo the whole point one field along.
+    const daHeadline = (h.body || sentencesIn(b.body)[0] || "").trim();
+    const daBody = b.body;
+    let en = null;
+    if (daHeadline || daBody) {
+      try {
+        const got = await askOpenAI(TRANSLATE_NOTICE(daHeadline, daBody), 700);
+        if (!got.error) {
+          let parsed = null;
+          try { parsed = JSON.parse(String(got.text || "").replace(/^```json\s*|\s*```$/g, "").trim()); } catch { /* left untranslated below */ }
+          en = translatedNotice(parsed);
+        }
+      } catch { /* left untranslated below */ }
+    }
+    return {
+      headline: (en?.headline || daHeadline).slice(0, 120),
+      body: (en?.body || daBody).slice(0, 400),
+      headline_da: daHeadline.slice(0, 120),
+      body_da: daBody.slice(0, 400),
+      dropped,
+      translated: !!en,
+      empty: !daHeadline && !daBody,
+    };
+  };
+
   const [noticeSending, setNoticeSending] = useState("");
   const sendAsNotice = async (candidate) => {
     const place = String(candidate?.place || "").trim();
@@ -11366,6 +11646,15 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     setNoticeSending(candidate.postId || candidate.postUrl || candidate.date);
     setFeedError(null);
     try {
+      const said = await noticeFieldsFor(
+        String(candidate.text || "").split(/\n/)[0],
+        String(candidate.text || ""),
+      );
+      if (said.empty) {
+        setFeedError(`Nothing was left of that post once the parts that only work inside Facebook came out. ${noticeAsk({ place: found.name, source: candidate.postUrl || candidate.feedUrl || "", dropped: said.dropped })}`);
+        setNoticeSending("");
+        return;
+      }
       const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_notices`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Prefer: "return=representation" },
@@ -11373,8 +11662,12 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
           // The first line is the headline and the rest is the body. A village
           // post leads with what it is, and anything cleverer would be this app
           // naming an event nothing has checked.
-          headline: String(candidate.text || "").split(/\n/)[0].trim().slice(0, 120),
-          body: String(candidate.text || "").trim().slice(0, 400),
+          //
+          // Through noticeFieldsFor, which translates it and takes out the
+          // sentences that only work inside Facebook. Neither of those is
+          // "cleverer": one is the same words in the reader's language and the
+          // other is removing an instruction that cannot be followed from here.
+          ...said,
           day: candidate.date,
           end_day: candidate.dates?.length > 1 ? candidate.dates[candidate.dates.length - 1] : candidate.date,
           place: found.name,
@@ -11403,7 +11696,15 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
       // list in the same tick so he can see it without a reload.
       setNoticeRows(prev => [...prev, ...(Array.isArray(body) ? body : [])]);
       setFeedSweep(st => st ? { ...st, candidates: st.candidates.filter(c => c !== candidate), found: Math.max(0, st.found - 1) } : st);
-      showToast(`Sent. It is near ${found.name} until ${candidate.date}.`, 4000);
+      // ── AND THE ERRAND, SAID OUT LOUD ────────────────────────
+      // Oliver: "This should be reported to me, and I write a comment to the
+      // Facebook group." A toast is gone in four seconds, so the errand goes
+      // where he will still find it after he has sent three more, and the
+      // toast only says there is one.
+      if (said.dropped.length) {
+        setNoticeAsks(prev => [...prev, noticeAsk({ place: found.name, source: candidate.postUrl || candidate.feedUrl || "", dropped: said.dropped })]);
+      }
+      showToast(`Sent. It is near ${found.name} until ${candidate.date}.${said.dropped.length ? " One line came out of it, and there is a note below about what to ask the group." : ""}${said.translated ? "" : " It could not be translated, so it went in as it was written."}`, 4000);
     } catch (e) { setFeedError(String(e.message || e)); }
     setNoticeSending("");
   };
@@ -13939,6 +14240,40 @@ ${researchRules("festival", ev)}`
   // answered the question it was asked. `bookedNights` is the list of day
   // numbers that already have a bed; on those days this call is told to return
   // nothing rather than to recommend.
+  // ── WHICH ISLAND A STOP IS ON, INCLUDING WHEN IT IS THE ISLAND ──
+  //
+  // namedIslandOf alone answers the first half: it reads the published entry's
+  // own island field, which is how Sejerby is known to be on Sejerø. It does
+  // not answer the second, because an island's own row names the island in its
+  // `name` and need not repeat it in `island`, so a day whose stop IS Avernakø
+  // would find no island at all. Both are asked, in that order.
+  const islandNameFor = (where) => {
+    const real = lookupRealPlace(where);
+    if (!real) return "";
+    if (real._src === "island") return String(real.name || "").trim();
+    return namedIslandOf(real);
+  };
+
+  // ── AND WHAT THOSE ISLANDS SAY ABOUT THEMSELVES ─────────────────
+  //
+  // Read off the island's own published row, where the Studio put it. Empty
+  // for every trip that does not stand on an island whose list has been read,
+  // which is most of them today. See utils/islandDirectory.js.
+  const islandSaysForDay = (day) => {
+    const blocks = [];
+    const seen = new Set();
+    for (const st of (day?.stops || [])) {
+      const island = islandNameFor(String(st?.town || st?.name || "").trim());
+      if (!island || seen.has(island)) continue;
+      seen.add(island);
+      const says = lookupRealPlace(island)?.__islandSays;
+      if (!says || !Array.isArray(says.rows) || !says.rows.length) continue;
+      const block = islandSaysBlock(island, says.rows);
+      if (block) blocks.push(block);
+    }
+    return blocks.join("\n\n");
+  };
+
   const enrichGuideDays = async (days, travelMode, mixedModes, budgetSays = "", langBlock = "", bookedNights = [], bookedName = "") => {
     setGlancePending(days.length);
     const glances = new Array(days.length).fill(null);
@@ -13954,9 +14289,22 @@ ${researchRules("festival", ev)}`
           const sData = await sRes.json();
           context = ((sData.answer || "") + " " + (sData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 5).join(" ")).trim();
         } catch { /* search down, Claude will fall back to safe wording */ }
+        // ── AND THE ISLAND'S OWN LIST, WHICH OUTRANKS THE SEARCH ───
+        //
+        // This call is where the bed is chosen, so this is where the list has
+        // to arrive. It goes in as CONTEXT rather than as an instruction to
+        // recommend, because the three rules above it are what keep this field
+        // honest: recommendedStay may only name a place the context names, and
+        // an island's own visitor page naming its landhotel is the strongest
+        // context this pipeline has ever had for a nine room island, where a
+        // web search returns a booking aggregator with nothing on it.
+        const islandSays = islandSaysForDay(day);
         const enrichPrompt = `A traveler visits these stops in Denmark in this exact order: ${numbered}. Using ONLY the provided search context plus well-established Danish geography/transit knowledge, respond with ONLY strict JSON:
 {"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One specific sentence — name an actual area/neighbourhood to stay in if the context supports it (e.g. 'Stay near Koge harbour for an easy morning ride out'), not a generic 'stay overnight in [town]' with no reason given. CRITICAL: the place you suggest MUST be realistically close to where this day's stops are — never suggest a town in a different region or a different island just because it has good general transport links; proximity to THIS day's actual activities always wins over generic transit convenience. Only default to day-trip-from-Copenhagen phrasing if that is the better call for this specific day. RELOCATION DAYS ARE A SPECIFIC CASE, GET THIS RIGHT: if this day's OWN stops end with leaving for a new town (a departure/travel leg to somewhere the traveler will be based from for the following day(s)), the accommodation for THIS day must reflect where they'll be sleeping that night — the destination they're traveling to, not the town they started the day in. Never write something like "stay near central Copenhagen" for a day whose last stop is "Departure to Aarhus" — that's recommending accommodation in a city they've already left by evening. Say where they'll really be. ACCOMMODATION TYPE, grounded in the real prices in the search context (never invent a specific price, only use ones present in context) and the traveler's stated daily budget: central Copenhagen is expensive — a tight budget there realistically means a hostel or budget guesthouse, not a hotel; the same budget in a smaller town elsewhere in Denmark often comfortably covers a real hotel, since prices outside the capital are typically lower. Weave the TYPE (hostel/hotel/guesthouse) into this sentence when the budget context makes one clearly more realistic than the other; if the budget is generous or unclear, don't force a type. ONE TRIP, ONE KIND OF TRAVELER — and if a day departs from that, the sentence has to say why IN THE SENTENCE. Oliver, 9 Aug 2026, on a real guide: \"It suggests hostels, but then gives a specific hotel??? Odd.\" Day 1 said book a hostel near Norreport, Day 3 said a comfortable hotel base in Odense, and on one budget BOTH were correct, because Copenhagen costs far more per night than Odense does. The reader could not know that, because neither sentence said it. Each day is written by its own separate call that cannot see the others, so YOU are the only place this can be caught: if the type you are about to write differs from what the same budget would buy in the capital, name the reason in the same breath (\"your nightly budget goes much further here than in Copenhagen, so a real hotel in the centre is comfortably in range\"). An unexplained jump between hostel and hotel does not read as good local knowledge, it reads as the guide contradicting itself. And the type in this sentence MUST match recommendedStay below: never write hostel here and return a hotel there.", "stayArea": "Just the specific area/neighbourhood/town name from the accommodation sentence above, 2-5 words, no extra description — e.g. 'Koge harbour' or 'central Odense' — used to build a real search link, so it must be an actual, findable place name, never invented.", "recommendedStay": "A REAL, SPECIFIC hotel or hostel name — ONLY if one is explicitly present in the search context, exactly as named there. This is the same never-guess rule as everything else here: if the search context does not name a specific real property, leave this an empty string and let the traveler search themselves — do NOT invent a plausible-sounding hotel name, do NOT reuse a generic chain name unless the context specifically confirms one exists in this area. An empty string is the correct, expected answer most of the time; only fill this when supported."}
-Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommend somewhere that contradicts it, and never tell them to economise when they have said they are not counting. A real guide he read offered "a budget-friendly hostel-style option if watching costs" to a family who had just said they had plenty of money. If the honest answer happens to be a cheaper place anyway, give a reason that is about the place and not about their wallet. ` : `THEY HAVE SAID NOTHING ABOUT MONEY, SO YOU KNOW NOTHING ABOUT THEIR BUDGET. Do not describe it, do not guess at it, and do not write a sentence in the second person about what they can or cannot afford. "Your tight daily budget", "on a modest budget" and "out of reach for you" are all claims about a person who has not spoken. The paragraph above tells you what a tight budget buys in Copenhagen; that is background about the city, not a fact about them. Recommend an area for a reason about the PLACE, and if price is the point, say what the place costs rather than what they can afford. `}always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no real map data): use realistic speeds — walking ~5 km/h (roughly 12 min/km), cycling ~15 km/h, city driving ~30 km/h even accounting for a short trip. Never guess something like "1 min by car" for two stops that aren't at the same address — sharing a city name is NOT the same as being adjacent (a campsite on the edge of a city and a museum in its center are commonly several km apart even though both say "Aarhus"). If you're not confident of the real distance between two specific stops, say "Check the route" rather than guessing a number that could be wrong by an order of magnitude. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.`;
+Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommend somewhere that contradicts it, and never tell them to economise when they have said they are not counting. A real guide he read offered "a budget-friendly hostel-style option if watching costs" to a family who had just said they had plenty of money. If the honest answer happens to be a cheaper place anyway, give a reason that is about the place and not about their wallet. ` : `THEY HAVE SAID NOTHING ABOUT MONEY, SO YOU KNOW NOTHING ABOUT THEIR BUDGET. Do not describe it, do not guess at it, and do not write a sentence in the second person about what they can or cannot afford. "Your tight daily budget", "on a modest budget" and "out of reach for you" are all claims about a person who has not spoken. The paragraph above tells you what a tight budget buys in Copenhagen; that is background about the city, not a fact about them. Recommend an area for a reason about the PLACE, and if price is the point, say what the place costs rather than what they can afford. `}always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no real map data): use realistic speeds — walking ~5 km/h (roughly 12 min/km), cycling ~15 km/h, city driving ~30 km/h even accounting for a short trip. Never guess something like "1 min by car" for two stops that aren't at the same address — sharing a city name is NOT the same as being adjacent (a campsite on the edge of a city and a museum in its center are commonly several km apart even though both say "Aarhus"). If you're not confident of the real distance between two specific stops, say "Check the route" rather than guessing a number that could be wrong by an order of magnitude. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.${islandSays ? `
+
+${islandSays}
+THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list this trip has for that island: a name on it may be returned there, spelled exactly as the island spells it. A name that is NOT on it and NOT in the search context still may not be returned, and the accommodation sentence must carry the attribution the block asks for.` : ""}`;
         // RETRIED (Oliver, again: "no accommodation recommendations (Booking)"):
         // this single call is the only source of the Where to stay card and the
         // per-leg how-texts, and it previously got exactly one attempt — one
@@ -22422,13 +22770,29 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 word: a page is public by definition and a group
                                 may be closed tomorrow. */}
                             <span style={{ fontSize: 10, fontWeight: 700, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 100, padding: "2px 8px", flexShrink: 0 }}>
-                              {row.kind === "page" ? "page" : "group"}
+                              {row.kind === "page" ? "page" : row.kind === "calendar" ? "calendar" : "group"}
                             </span>
-                            {row.place && (
-                              <span style={{ fontSize: 10, fontWeight: 700, color: "#8AB4F8", background: "#8AB4F818", border: "1px solid #8AB4F844", borderRadius: 100, padding: "2px 9px", flexShrink: 0 }}>
-                                📍 {row.place}
-                              </span>
+                            {/* ── AND THE OTHER HALF OF THAT SITE ──────
+                                Only on a calendar source, because only an
+                                island's own site has a page of what is here to
+                                go with its page of what is on. One source, two
+                                readers, and this one is asked by hand rather
+                                than by the sweep: a hotel list is a fact about
+                                the place, not a thing happening this week. */}
+                            {row.kind === "calendar" && (
+                              <button onClick={() => readDirectoryFor(cleanFeed(row))} disabled={dirBusy || feedBusy}
+                                style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "3px 10px", fontSize: 10, fontWeight: 700, cursor: dirBusy ? "default" : "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
+                                {dirBusy && dirSource === row.url ? "Reading…" : "What it lists"}
+                              </button>
                             )}
+                            {/* ONE CHIP PER PLACE. A group that covers two
+                                islands covers two, and "Askø og Lilleø" on one
+                                chip reads as somewhere called that. */}
+                            {placesIn(row.place).map(pl => (
+                              <span key={pl} style={{ fontSize: 10, fontWeight: 700, color: "#8AB4F8", background: "#8AB4F818", border: "1px solid #8AB4F844", borderRadius: 100, padding: "2px 9px", flexShrink: 0 }}>
+                                📍 {pl}
+                              </span>
+                            ))}
                             {/* WHEN IT WAS LAST LOOKED AT, because a sweep that
                                 quietly stopped working looks exactly like a
                                 quiet month in the group. */}
@@ -22452,8 +22816,18 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           style={{ width: 170, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
                         <input value={newFeedPlace} onChange={e => setNewFeedPlace(e.target.value)}
                           onKeyDown={e => { if (e.key === "Enter") addFeed(); }}
-                          list="gemlyx-source-places" placeholder="where it covers, or two"
+                          list="gemlyx-source-places" placeholder="where it covers"
                           style={{ width: 150, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                        {/* ── AND THE SECOND ISLAND, IF THE GROUP COVERS ONE ──
+                            Oliver, 19 Sep 2026: "'Askø og Lilleø' this doesn't
+                            work as a location. give a field called 'add
+                            location'." Its own box rather than a second name
+                            in the first one, so nothing has to guess where one
+                            island's name stops. See the state declaration. */}
+                        <input value={newFeedPlace2} onChange={e => setNewFeedPlace2(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") addFeed(); }}
+                          list="gemlyx-source-places" placeholder="add location"
+                          style={{ width: 130, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
                         <button onClick={addFeed} disabled={feedBusy || !newFeedUrl.trim()}
                           style={{ background: newFeedUrl.trim() && !feedBusy ? C.gold : C.bg, border: `1px solid ${C.border}`, color: newFeedUrl.trim() && !feedBusy ? "#000" : C.muted, borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, cursor: newFeedUrl.trim() ? "pointer" : "default", flexShrink: 0 }}>
                           {feedBusy ? "…" : "Add"}
@@ -22510,6 +22884,104 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             </button>
                             {calAdded && <span style={{ fontSize: 10.5, color: C.gold }}>{calAdded}</span>}
                             {calError && <span style={{ fontSize: 10.5, color: "#FFB347" }}>{calError}</span>}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── THE ERRANDS A NOTICE LEFT BEHIND ────────────
+                          Oliver, 19 Sep 2026, on a Sejerø notice that ended
+                          "tilmeld dig gennem linket i kommentaren:":
+                          "'sign up in the comment section' should get removed.
+                          This should be reported to me, and I write a comment
+                          to the Facebook group."
+
+                          So the sentence is out of the notice and here
+                          instead, with the group's own post linked, because
+                          the village has the sign-up link and will give it to
+                          anybody who asks for it. */}
+                      {noticeAsks.length > 0 && (
+                        <div style={{ marginTop: 11, background: C.bg, border: `1px solid ${C.gold}33`, borderRadius: 8, padding: "10px 11px" }}>
+                          <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginBottom: 5 }}>
+                            Go and ask {noticeAsks.length === 1 ? "one group" : `${noticeAsks.length} groups`}
+                          </div>
+                          <ul style={{ margin: "0 0 8px", paddingLeft: 15, fontSize: 10.5, color: C.light, lineHeight: 1.6 }}>
+                            {noticeAsks.map((n, i) => <li key={i}>{n}</li>)}
+                          </ul>
+                          <button onClick={() => setNoticeAsks([])}
+                            style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 12px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                            Done with these
+                          </button>
+                        </div>
+                      )}
+
+                      {/* ── AND WHAT THAT SAME ISLAND LISTS ─────────────
+                          Oliver, 19 Sep 2026, on Avernakø Landhotel: "Do you
+                          think that should be taken into consideration when
+                          booking hotels on other islands? Recommending the
+                          places that the islands themselves recommend?"
+
+                          Yes, and ATTRIBUTED, which is the whole design. These
+                          do not become entries and they do not become a Gemlyx
+                          recommendation. They go onto the island's own row and
+                          the guide quotes them with the island's name on them,
+                          because "Avernakø's own visitor page points visitors
+                          at the Landhotel" is a stronger and more honest line
+                          than anything a model would write, and it is only
+                          stronger while it says whose list it is. */}
+                      {(dirRows.length > 0 || dirError || dirAdded) && (
+                        <div style={{ marginTop: 11, background: C.bg, borderRadius: 8, padding: "10px 11px" }}>
+                          <div style={{ fontSize: 11, color: C.light, fontWeight: 700, marginBottom: 5 }}>
+                            What {dirPlace || "the island"} lists{dirRows.length ? ` · ${dirRows.length} named` : ""}
+                          </div>
+                          {/* THE LINE A GUIDE WILL CARRY, shown before he
+                              saves rather than discovered on a built guide.
+                              This is the whole shape of the feature in one
+                              sentence: the island is the one recommending, and
+                              Gemlyx says so. */}
+                          {dirPlace && dirRows.length > 0 && (
+                            <div style={{ fontSize: 10, color: C.muted, marginBottom: 7, fontStyle: "italic" }}>{ISLAND_SAYS(dirPlace)}</div>
+                          )}
+                          {dirNotes.length > 0 && (
+                            <ul style={{ margin: "0 0 8px", paddingLeft: 15, fontSize: 10, color: C.muted, lineHeight: 1.55 }}>
+                              {dirNotes.map((n, i) => <li key={i}>{n}</li>)}
+                            </ul>
+                          )}
+                          {dirRows.length > 0 && (
+                            <div style={{ maxHeight: 240, overflowY: "auto", marginBottom: 9 }}>
+                              {dirRows.map((r, i) => (
+                                <label key={`${r.kind}-${r.name}-${i}`} style={{ display: "flex", gap: 7, alignItems: "flex-start", padding: "5px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                                  <input type="checkbox" checked={!!dirPicked[i]}
+                                    onChange={() => setDirPicked(prev => prev.map((v, j) => (j === i ? !v : v)))}
+                                    style={{ marginTop: 3, flexShrink: 0 }} />
+                                  <span style={{ fontSize: 11, color: C.light, lineHeight: 1.5 }}>
+                                    <span style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 100, padding: "1px 7px", marginRight: 6 }}>{r.kind}</span>
+                                    <b>{r.name}</b>
+                                    {/* THE ISLAND'S OWN SENTENCE, SHOWN AS A
+                                        QUOTE, so what he is about to publish
+                                        looks on screen exactly like what it is:
+                                        somebody else's words. */}
+                                    {r.said && <span style={{ color: C.muted }}> “{r.said}”</span>}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                          <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
+                            {dirRows.length > 0 && (
+                              <>
+                                <button onClick={addDirectoryRows} disabled={dirBusy || !dirPicked.some(Boolean)}
+                                  style={{ background: C.gold, border: "none", borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, color: C.onGold, cursor: dirBusy ? "default" : "pointer", opacity: dirBusy || !dirPicked.some(Boolean) ? 0.5 : 1, fontFamily: "'Inter', sans-serif" }}>
+                                  {dirBusy ? "Saving…" : `Put ${dirPicked.filter(Boolean).length} on ${dirPlace || "the island"}`}
+                                </button>
+                                <button onClick={() => setDirPicked(prev => prev.map(() => !prev.every(Boolean)))}
+                                  style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "7px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                  {dirPicked.every(Boolean) ? "None" : "All"}
+                                </button>
+                              </>
+                            )}
+                            {dirSource && <a href={dirSource} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: C.muted }}>the page ↗</a>}
+                            {dirAdded && <span style={{ fontSize: 10.5, color: C.gold }}>{dirAdded}</span>}
+                            {dirError && <span style={{ fontSize: 10.5, color: "#FFB347" }}>{dirError}</span>}
                           </div>
                         </div>
                       )}
@@ -28965,8 +29437,21 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     <span style={{ fontSize: 22 }}>🎒</span>
                     <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>Packing for Danish weather</div>
                   </div>
+                  {/* ── AND IT DOES NOT TALK THE GOODS DOWN ──────────
+                      Oliver, 19 Sep 2026, reading what this line used to say,
+                      "Five things worth having here, and none of them are
+                      exciting.": "I doubt my affiliate partner will be happy
+                      to hear that."
+
+                      He is right, and it was the first sentence a reader met
+                      above that partner's own button. The anti-hype was doing
+                      a real job, which is why the fix is not to swap it for
+                      enthusiasm: the point of the list is that these five are
+                      the ones the weather decides against, and saying THAT is
+                      the same honesty without calling somebody's stock dull on
+                      their behalf. Nothing below sells anything either. */}
                   <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65 }}>
-                    Five things worth having here, and none of them are exciting.
+                    Five things that decide whether a wet afternoon is fine or miserable.
                   </div>
                   <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 13, color: C.light, lineHeight: 1.7 }}>
                     <li><strong style={{ color: C.text }}>A rain shell you can walk in.</strong> Rain here tends to arrive sideways and leave again in ten minutes, and an umbrella is close to useless on a windy day by the water.</li>
@@ -30771,13 +31256,18 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", color: C.gold, marginBottom: 5 }}>
               {noticeTitle(noticeToShow)}
             </div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.4, marginBottom: 4 }}>{noticeToShow.headline}</div>
+            {/* IN THE READER'S LANGUAGE, and it is the same words either way.
+                Oliver, 19 Sep 2026, looking at a Danish notice on Sejerø: "it
+                might want to get translated." A Dane gets the village's own
+                post and everybody else gets the English written beside it when
+                it was added. Neither one is rewritten. See noticeText. */}
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.4, marginBottom: 4 }}>{noticeText(noticeToShow, uiLang).headline}</div>
             {/* THE TEXT UNDER, in the words it was posted in. Nothing here has
                 been checked by anything, so putting it in our own voice would
                 be claiming more than we know. */}
-            {noticeToShow.body && (
+            {noticeText(noticeToShow, uiLang).body && (
               <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.55, marginBottom: 6 }}>
-                {noticeToShow.body.length > 140 ? `${noticeToShow.body.slice(0, 140)}…` : noticeToShow.body}
+                {noticeText(noticeToShow, uiLang).body.length > 140 ? `${noticeText(noticeToShow, uiLang).body.slice(0, 140)}…` : noticeText(noticeToShow, uiLang).body}
               </div>
             )}
             <div style={{ fontSize: 10.5, color: C.muted }}>
@@ -31094,7 +31584,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         // Everything still on near this reader, dismissed or not: clicking the
         // pop-up takes it off the screen, not out of the list. What takes it out
         // of the list is the event finishing, which is a filter and not a job.
-        notices={noticesHere}
+        // Resolved HERE rather than inside the page, because this is where the
+        // reader's language lives and a component that has to be told which
+        // language to render is one more thing to forget. Same words, one of
+        // two languages. See noticeText.
+        notices={noticesHere.map(n => ({ ...n, ...noticeText(n, uiLang) }))}
         noticeRadiusKm={NOTICE_RADIUS_KM}
         hasLocation={isInDenmark(userCoords)}
         onAskLocation={requestLocation}

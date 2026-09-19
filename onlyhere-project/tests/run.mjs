@@ -249,6 +249,8 @@ writeFileSync(entry, `
   export { unfold, icsDate, icsTime, parseIcs, cleanTitle, communityRowsFrom, feedProblems, postalTownsIn, placeFor, icsUrlFor, calendarIdFromEid, ICS_FOR, MOST_PER_PLACE } from ${JSON.stringify(join(root, "src/utils/calendarFeed.js"))};
   export { PAGE_ROWS_PROMPT, rowsFromExtract } from ${JSON.stringify(join(root, "src/utils/calendarFeed.js"))};
   export { tribeApiFor, rowsFromTribe, rowsFromSimcal, readerFor } from ${JSON.stringify(join(root, "src/utils/calendarFeed.js"))};
+  export { SECTIONS as DIR_SECTIONS, kindOf as dirKindOf, directoryLinks, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
+  export { sentencesIn, readerBody, noticeAsk, noticeText, TRANSLATE_NOTICE, translatedNotice, DEAD_ENDS } from ${JSON.stringify(join(root, "src/utils/noticeVoice.js"))};
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { festivalScale } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
@@ -27406,11 +27408,35 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       // stays empty until an advertiser is named, which is the state he was
       // complaining about. So the packing advice renders either way and only
       // the BUTTON waits for the name.
-      const beforeGate = block.slice(0, block.indexOf("const gear = partnerAdsGear()"));
+      // ── COMMENTS BLANKED, AND IT HAD TO BE ─────────────────────
+      //
+      // The trap tdz.mjs has written across the top of itself: "the comment
+      // above a fix quotes the line it removed, so the scan finds the bug
+      // report and calls it the bug." Both assertions below fired on the note
+      // explaining the 19 Sep rewrite, which quotes the old copy and the word
+      // partner, against a page where neither is on screen. stripComments
+      // keeps the strings and the JSX text, which is where the copy lives, and
+      // blanks the argument about it.
+      const beforeGate = stripComments(block.slice(0, block.indexOf("const gear = partnerAdsGear()")));
       ok("the advice sits above the gate", beforeGate.includes("<li>"));
       is("all five items are outside it", (beforeGate.match(/<li>/g) || []).length, 5);
       ok("a rain shell among them", /rain shell/i.test(beforeGate));
       ok("and nothing in the advice mentions a shop", !/partner|commission/i.test(beforeGate));
+      // ── AND IT DOES NOT TALK THE GOODS DOWN ─────────────────────
+      //
+      // Oliver, 19 Sep 2026, on the line that opened this block: "'Five things
+      // worth having here, and none of them are exciting.' I doubt my affiliate
+      // partner will be happy to hear that."
+      //
+      // It was the first sentence above that partner's own button. The block
+      // still sells nothing and still promises nothing, and the anti-hype is
+      // kept: what it stopped doing is calling the merchant's stock dull on
+      // their behalf. The two assertions are a pair on purpose, because the
+      // fix fails in either direction: swapping it for enthusiasm would be the
+      // opposite failure and is what the rest of this block guards against.
+      ok("the opening says what the five are for", /decide whether a wet afternoon is fine or miserable/.test(beforeGate));
+      ok("and nothing above the button calls them unexciting",
+         !/\b(?:boring|dull|unexciting|not exciting|nothing exciting|none of them are exciting)\b/i.test(beforeGate));
     }
 
     is("and each has its own key", new Set(roster.map(p => p.key)).size, roster.length);
@@ -48649,6 +48675,27 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // with a town that lands on a front page.
     ok("and says so on the button", /Back to Legal/.test(aff));
     ok("rather than naming the whole app", !/Back to Gemlyx/.test(aff));
+    // ── AND IT DOES NOT ARGUE AGAINST ITS OWN LINKS ──────────────
+    //
+    // Oliver, 19 Sep 2026: "Please, can you stop telling users 'There is no
+    // reason to use it'. When I say 'don't lie', I don't mean 'don't use it.'
+    // I mean advertise differently. Like Tiqets might be 10 dkk extra, but
+    // it's considered very convinient."
+    //
+    // The page is still the place that admits every cost, and the rules above
+    // it are still enforced by code. What it stopped doing is naming the cost
+    // and leaving out what the cost pays for, which reads as the site telling
+    // you not to use the links it carries. Both halves or neither.
+    //
+    // stripComments, for the reason the What To Bring block now records: this
+    // file's note about the rewrite quotes the sentence it removed.
+    ok("a reseller's few kroner are named", /give or take a few kroner/.test(aff));
+    ok("and so is what they buy", /one checkout, one\s+cancellation policy/.test(aff));
+    ok("the page never says there is nothing to gain by a link",
+       !/nothing to gain|no reason to use|not worth using/i.test(aff));
+    // The honest half stays. A price the reader can check is the whole basis
+    // for trusting anything else on the page.
+    ok("and the price is still on screen either way", /the price is on screen either way/.test(aff));
   }
   {
     const sup = stripComments(readFileSync(join(root, "src/components/SupportPage.jsx"), "utf8"));
@@ -56230,7 +56277,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
                  /const \{ rows, more \} = communityDay\(\{/.test(appR) && /byDay\[i \+ 1\] = \{ rows, more \};/.test(appR));
               ok("and the notices are grouped by the day they fall on",
                  /for \(const group of noticeGroups\(picked\)\)/.test(appR)
-                 && /group\.rolled \? rolledHeadline\(group\.rows\) : lead\.name/.test(appR));
+                 && /rolledHeadline\(group\.rows\)\.slice\(0, 120\)/.test(appR));
+              // ── AND A ROLLED ONE IS NOT PUT THROUGH THE READER ────
+              // 19 Sep 2026, when notices started being translated and stripped.
+              // rolledHeadline and rolledBody are written by this app, not
+              // copied from a village, so there is nothing in them that only
+              // works inside Facebook and nothing to translate. A village's own
+              // line is the opposite on both counts. See utils/noticeVoice.js.
+              ok("a copied line goes through the notice reader and a written one does not",
+                 /group\.rolled\s*\n?\s*\?/.test(appR) && /: await noticeFieldsFor\(/.test(appR));
             }
             const DASH13 = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
             is("nothing it writes carries a dash or a banned word",
@@ -56529,7 +56584,19 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       // it stops being returned the day after. A village calendar answers both.
       ok("adding a calendar row also writes a notice",
          /rest\/v1\/gemlyx_notices/.test(appCal)
-         && /headline: \(group\.rolled \? rolledHeadline\(group\.rows\) : lead\.name\)\.slice\(0, 120\)/.test(appCal));
+         && /headline: said\.headline/.test(appCal) && /body: said\.body/.test(appCal));
+      // Oliver, 19 Sep 2026: "it might want to get translated." Both columns go
+      // in together or a Dane reads a translation of their own village.
+      ok("and the village's own Danish goes in beside the translation",
+         /headline_da: said\.headline_da/.test(appCal) && /body_da: said\.body_da/.test(appCal));
+      // "'sign up in the comment section' should get removed. This should be
+      // reported to me, and I write a comment to the Facebook group."
+      ok("a line that only works inside Facebook becomes an errand rather than a notice",
+         /if \(said\.dropped\.length\) asks\.push\(noticeAsk\(/.test(appCal)
+         && /if \(asks\.length\) setNoticeAsks/.test(appCal));
+      // A post that was nothing but the dead end has no notice in it, and a
+      // blank one would be worse than none.
+      ok("and nothing left means no notice at all", /if \(said\.empty\) \{ unplaced \+= group\.rows\.length; continue; \}/.test(appCal));
       ok("dated so it disappears when it is over",
          /end_day: group\.rolled \? lead\.date : \(lead\.dateEnd \|\| lead\.date\),/.test(appCal));
       // THE COORDINATE COMES FROM THE PLACE, the same rule sendAsNotice has: a
@@ -70638,6 +70705,196 @@ SOURCE: https://www.tripadvisor.com/whatever`;
      /Not evidence the date is wrong/.test(app));
   ok("nothing it finds is written onto the draft",
      !/__dateSource = \{ by: "search"/.test(app));
+}
+
+
+// ── WHAT THE ISLAND ITSELF LISTS ───────────────────────────────────
+//
+// Oliver, 19 Sep 2026: "So I just found out about something Avernakø
+// Landhotel is a personal hotel recommended by Avernakø. Do you think that
+// should be taken into consideration when booking hotels on other islands?
+// Recommending the places that the islands themselves recommend?"
+{
+  const { DIR_SECTIONS, dirKindOf, directoryLinks, DIRECTORY_PROMPT, rowsFromDirectory,
+          directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } = M;
+
+  // ── THE HEADINGS, FOLDED THE WAY fold ACTUALLY FOLDS ────────────
+  // The first draft of SECTIONS spelled these with a bare a, so Småbutikker
+  // and Ø-færgen matched nothing. fold maps æ to ae and å to aa, and those two
+  // headings are on the one page this feature was written from.
+  is("Overnatning is somewhere to sleep", dirKindOf("Overnatning"), "stay");
+  is("and so is ACCOMMODATION in capitals", dirKindOf("ACCOMMODATION"), "stay");
+  is("Småbutikker is a shop", dirKindOf("Småbutikker"), "shop");
+  is("Ø-færgen is the ferry", dirKindOf("Ø-færgen"), "ferry");
+  is("Spisning is somewhere to eat", dirKindOf("Spisning"), "eat");
+  // Sejerø's one heading covers both, and eat is first in SECTIONS on purpose.
+  is("Handels- og spisesteder reads as dining", dirKindOf("Handels- og spisesteder"), "eat");
+  is("Seværdigheder is something to see", dirKindOf("Seværdigheder"), "see");
+  is("Sådan kommer du hertil is the crossing", dirKindOf("Sådan kommer du hertil"), "ferry");
+  is("a news page is no section at all", dirKindOf("Nyheder"), "");
+  // "mad" was left off the eat list for exactly this: substring matching has to
+  // be safe against a Danish word living inside an English one.
+  is("and Made in Denmark is not somewhere to eat", dirKindOf("Made in Denmark"), "");
+  ok("every section is one of the five the app thinks in",
+     DIR_SECTIONS.every(x => ["stay", "eat", "shop", "ferry", "see"].includes(x.kind)));
+
+  // ── THE LINK TO THE PAGE, FROM EITHER SIDE ──────────────────────
+  // Avernakø's link says Besøg Avernakø and points at /visit, so the word is in
+  // the TEXT. Sejerø's points at /oplev-sejeroe/overnatning/, so it is in the
+  // PATH. Both are read.
+  const LINKS = directoryLinks(`
+    <a href="/visit">Besøg Avernakø</a>
+    <a href="https://visitdenmark.dk/oplev">Oplev mere</a>
+    <a href="#top">Overnatning til toppen</a>
+    <a href="mailto:a@b.dk">Overnatning skriv</a>
+    <a href="/oplev-sejeroe/overnatning/"><span>Sov</span> her</a>
+    <a href="/nyheder">Nyheder</a>
+    <a href="/visit">Besøg Avernakø</a>
+  `, "https://avernak.dk/");
+  is("it finds the page behind the link's own words and behind its path",
+     LINKS.map(l => `${l.kind}:${new URL(l.url).pathname}`),
+     ["see:/visit", "stay:/oplev-sejeroe/overnatning/"]);
+  // The whole authority of this source is that it IS the island's own site, so
+  // a tourist board's page about the island is not one.
+  ok("another site is never read as the island's own", !LINKS.some(l => l.url.includes("visitdenmark")));
+  ok("an anchor and a mail link are not pages", !LINKS.some(l => l.url.includes("#") || l.url.startsWith("mailto")));
+  is("and one page is one entry", LINKS.filter(l => l.url.endsWith("/visit")).length, 1);
+
+  // ── THE PROMPT MAY READ AND MAY NOT DECIDE ──────────────────────
+  const PROMPT = DIRECTORY_PROMPT("Avernakø", "Spisning\nAvernakø Landhotel");
+  ok("it asks for the page's own sentence word for word", /COPIED\. Do not translate it, do not tidy it/.test(PROMPT));
+  ok("it says why a rewritten sentence is worth nothing",
+     /somebody who lives there wrote it, and a rewritten sentence is worth nothing at all/.test(PROMPT));
+  ok("it refuses an invented business", /NEVER INVENT A BUSINESS AND NEVER INVENT A SENTENCE/.test(PROMPT));
+  ok("an empty list is a normal answer", /A page listing nothing comes back with an empty array, which is a normal answer/.test(PROMPT));
+  ok("the section is the page's and not the model's", /KIND IS WHAT THE PAGE PUT IT UNDER, not what you think it is/.test(PROMPT));
+
+  // ── AND WHAT COMES BACK ─────────────────────────────────────────
+  const GOT = rowsFromDirectory({ rows: [
+    { name: "Avernakø Landhotel", kind: "stay", said: "Har åbent året rundt, og her bor alt fra lystfiskere til børnefamilier." },
+    { name: "Avernakø Landhotel", kind: "eat", said: "Spisning i kroens stue." },
+    { name: "avernakø landhotel", kind: "stay", said: "the same one again" },
+    { name: "Skipperstedet", kind: "stay", said: "" },
+    { name: "", kind: "stay", said: "nameless" },
+    { name: "Kirken", kind: "church", said: "not a section this app has" },
+  ] }, { place: "Avernakø", source: "https://avernak.dk/visit" });
+  // A place listed under two headings is two rows, because it does two things.
+  is("a place under two headings is two rows",
+     GOT.rows.map(r => `${r.kind}:${r.name}`),
+     ["stay:Avernakø Landhotel", "eat:Avernakø Landhotel", "stay:Skipperstedet"]);
+  is("the same one twice under one heading is one row", GOT.rows.filter(r => r.kind === "stay" && /Landhotel/i.test(r.name)).length, 1);
+  is("a nameless row and an invented section are both dropped", GOT.dropped, 2);
+  ok("the island's own sentence is kept as written",
+     GOT.rows[0].said === "Har åbent året rundt, og her bor alt fra lystfiskere til børnefamilier.");
+  ok("and the page it came from travels with it", GOT.rows.every(r => r.source === "https://avernak.dk/visit" && r.place === "Avernakø"));
+
+  const PROBS = directoryProblems({ place: "Avernakø", rows: GOT.rows, dropped: GOT.dropped });
+  ok("he is told what was left out", PROBS.some(t => /2 rows were left out/.test(t)));
+  // A name with nothing written about it is not a quote, and saying so is the
+  // difference between the island recommending it and Gemlyx doing so.
+  ok("and which are a lead rather than a quote", PROBS.some(t => /Skipperstedet.*lead rather than a quote/.test(t)));
+  is("no island means nothing to file it under", directoryProblems({ place: "", rows: GOT.rows }).length, 1);
+
+  // ── AND WHAT THE GUIDE IS ALLOWED TO DO WITH IT ─────────────────
+  const BLOCK = islandSaysBlock("Avernakø", GOT.rows);
+  is("the beds are the stay rows", staysIn(GOT.rows).map(r => r.name), ["Avernakø Landhotel", "Skipperstedet"]);
+  is("and dinner is the eat rows", eatsIn(GOT.rows).map(r => r.name), ["Avernakø Landhotel"]);
+  ok("the block names the island's own page as the source",
+     /THESE ARE THE ISLAND'S WORDS AND NOT GEMLYX'S/.test(BLOCK));
+  ok("it tells the guide to say whose list it is", /name whose list it is/.test(BLOCK));
+  // THE WHOLE POINT. "Gemlyx recommends" would be this app borrowing somebody
+  // else's authority and dropping the one fact that makes it worth having.
+  ok("and forbids writing it as Gemlyx's own recommendation",
+     /Never write any of it as Gemlyx's own recommendation/.test(BLOCK));
+  ok("a name is never translated", /Do not translate a name/.test(BLOCK));
+  ok("and nothing is added to the list", /do not add a place that is not on the list above/.test(BLOCK));
+  // A list of one is not evidence that one is all there is.
+  ok("one entry is what the island lists and not what exists",
+     /that is what the island lists rather than what exists/.test(BLOCK));
+  is("no island, no block", islandSaysBlock("", GOT.rows), "");
+  is("and nothing to sleep in or eat at is no block either", islandSaysBlock("Avernakø", [{ kind: "see", name: "Kirken" }]), "");
+  ok("the card's line says whose page it is", /Avernakø's own visitor page/.test(ISLAND_SAYS("Avernakø")));
+}
+
+// ── A NOTICE IS READ BY SOMEBODY WHO IS NOT IN THE GROUP ───────────
+//
+// Oliver, 19 Sep 2026, on the Sejerø toast: "So first off, it might want to
+// get translated. Second, 'sign up in the comment section' should get removed.
+// This should be reported to me, and I write a comment to the Facebook group."
+{
+  const { sentencesIn, readerBody, noticeAsk, noticeText, TRANSLATE_NOTICE, translatedNotice, DEAD_ENDS, cleanNotice } = M;
+
+  // ── THE POST HE WAS LOOKING AT ──────────────────────────────────
+  const REAL = "Husk åben ø-dag for børnefamilier d. 19. september! 🌻🌻\nLæs mere og tilmeld dig gennem linket i kommentaren:";
+  is("a Danish date does not end a sentence",
+     sentencesIn("Husk åben ø-dag for børnefamilier d. 19. september!"),
+     ["Husk åben ø-dag for børnefamilier d. 19. september!"]);
+  // The one that was got wrong first time: guarding on the word BEFORE the
+  // period split at "kl." and put the TIME into the sentence that gets dropped.
+  is("and neither does a Danish time",
+     sentencesIn("Fællesspisning i forsamlingshuset kl. 18.00. Tilmelding i kommentarfeltet."),
+     ["Fællesspisning i forsamlingshuset kl. 18.00.", "Tilmelding i kommentarfeltet."]);
+  is("a colon ends one, because that is the shape this file is for",
+     sentencesIn("Læs mere og tilmeld dig gennem linket i kommentaren:").length, 1);
+
+  const R = readerBody(REAL);
+  is("what a reader is left with", R.body, "Husk åben ø-dag for børnefamilier d. 19. september! 🌻🌻");
+  is("and what came out of it", R.dropped.map(d => d.id), ["comments"]);
+  // NOT DELETED AND FORGOTTEN. "This should be reported to me, and I write a
+  // comment to the Facebook group."
+  const ASK = noticeAsk({ place: "Sejerø", source: "https://facebook.com/x/posts/1", dropped: R.dropped });
+  ok("the errand names the place", /^Sejerø:/.test(ASK));
+  ok("it says what to ask the group for", /paste the sign-up link/.test(ASK));
+  ok("and links the post he has to go and comment on", /https:\/\/facebook\.com\/x\/posts\/1/.test(ASK));
+  is("nothing dropped is no errand", noticeAsk({ place: "Sejerø", dropped: [] }), "");
+
+  // ── THE OTHER DEAD ENDS ─────────────────────────────────────────
+  // A time survives the strip, which is the whole reason the splitter was
+  // rewritten: it is the one fact a person standing there needs.
+  is("the time survives a sign-up line",
+     readerBody("Fællesspisning i forsamlingshuset kl. 18.00. Tilmelding i kommentarfeltet.").body,
+     "Fællesspisning i forsamlingshuset kl. 18.00.");
+  is("writing to the page is a dead end too",
+     readerBody("Loppemarked lørdag d. 4. oktober fra kl. 10. Skriv en PM til os for en stadeplads.").dropped.map(d => d.id),
+     ["inbox"]);
+  is("and so is the English of it",
+     readerBody("Open island day for families on 19 September. Sign up via the link in the comments.").dropped.map(d => d.id),
+     ["comments"]);
+  is("asking members to share means nothing to a visitor",
+     readerBody("Del gerne opslaget! Høstfest på havnen d. 27. september.").body,
+     "Høstfest på havnen d. 27. september.");
+  // A perfectly ordinary post loses nothing, which is the case that has to keep
+  // working: this file must never start improving somebody's writing.
+  is("an ordinary post is untouched", readerBody("Koncert i kirken kl. 19.30.").body, "Koncert i kirken kl. 19.30.");
+  is("and nothing is dropped from it", readerBody("Koncert i kirken kl. 19.30.").dropped, []);
+  // A post that is NOTHING but the dead end has no notice in it, and the caller
+  // is told rather than sending a blank one.
+  is("a post that is only a sign-up line comes back empty",
+     readerBody("Tilmeld dig gennem linket i kommentaren:").body, "");
+  ok("every dead end says what to ask for", DEAD_ENDS.every(d => d.what && d.ask));
+
+  // ── AND THE LANGUAGE ────────────────────────────────────────────
+  const T = TRANSLATE_NOTICE("Åben ø-dag", "Husk åben ø-dag for børnefamilier d. 19. september!");
+  ok("it refuses to translate a name", /NEVER TRANSLATE A NAME/.test(T));
+  // The reason it matters more here than anywhere else in the app.
+  ok("because the visitor is going to look for a sign with that name on it",
+     /look for a sign with that name on it/.test(T));
+  ok("and it may not add a time or a price that is not there", /NEVER ADD ANYTHING/.test(T));
+  ok("a date stays a date", /"d\. 19\. september" is 19 September/.test(T));
+  is("a reply with neither field is no translation", translatedNotice({ headline: "", body: "" }), null);
+
+  const ROW = { headline: "Open island day", body: "For families on 19 September.", headline_da: "Åben ø-dag", body_da: "For børnefamilier d. 19. september." };
+  is("a Dane gets the village's own words", noticeText(ROW, "da").headline, "Åben ø-dag");
+  is("and everybody else gets the English", noticeText(ROW, "en").headline, "Open island day");
+  // A notice added before any of this existed has only Danish on it, and a
+  // blank notice is a worse answer than one in the wrong language.
+  is("a notice with no translation still shows", noticeText({ headline_da: "Åben ø-dag", body_da: "Kun dansk." }, "en").headline, "Åben ø-dag");
+  is("and one with no Danish still shows to a Dane", noticeText({ headline: "Only English" }, "da").headline, "Only English");
+  // cleanNotice carries end_day and endDay both, and learned it the hard way.
+  // noticeText is called on a raw row by one surface and a clean one by another.
+  is("it reads the raw spelling and the clean one alike",
+     noticeText({ headlineDa: "Åben ø-dag" }, "da").headline, "Åben ø-dag");
+  is("and cleanNotice carries the Danish through", cleanNotice({ ...ROW, day: "2026-09-19" }).bodyDa, "For børnefamilier d. 19. september.");
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
