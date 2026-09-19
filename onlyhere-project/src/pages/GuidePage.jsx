@@ -56,7 +56,7 @@ import { testTravelerLine, isFerryText, daysUntil, readerView } from "../utils/h
 import { aiDisclosureFor } from "../utils/aiDisclosure";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen, clampNote } from "../utils/guideReading";
 import { BOOKING_AFFILIATE_ID } from "../config";
-import { tiqetsBrowseUrl, partnerDisclosure, supportNote, partnerLinkCount, isPartnerLink, carRentalFits, bookingUrl, tripcomStayUrl, stayDisclosure, STAY_DISCLOSURE, outboundLink, featuredStayFor } from "../utils/affiliates";
+import { tiqetsBrowseUrl, partnerDisclosure, supportNote, partnerLinkCount, isPartnerLink, carRentalFits, stayDoorUrl, tripcomStayUrl, stayDisclosure, STAY_DISCLOSURE, outboundLink, featuredStayFor } from "../utils/affiliates";
 import { CostsBlock } from "../components/CostsBlock";
 import { dayStart, dayKey, dayPlus } from "../utils/calendarDay";
 import { TripCalendarCard } from "../components/TripCalendarCard";
@@ -2230,62 +2230,36 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               // One builder now, and the town of the day's own stops goes in
               // with the name. See bookingUrl in utils/affiliates.js.
               const stayTown = (day.stops || []).map(x => x?.town).find(Boolean) || "";
-              const stayBookingUrl = bookingUrl({
-                area: searchTerm,
-                near: day.glance.recommendedStay ? (day.glance.stayArea || stayTown) : stayTown,
-                checkin: fmt(dayDate) || undefined,
-                checkout: fmt(dayDate) ? fmt(nextDate) : undefined,
-                adults,
-                // A LOOKUP, NOT A SEARCH, and that is the whole of this one's
-                // job now. An order parameter over one named hotel means
-                // nothing, and until 19 Sep this variable was ALSO the good
-                // slot, which is why a day with a named hostel offered a hostel
-                // and a budget search and no good hotel at all.
-                tier: "",
-              });
-              // ── "A GOOD HOTEL OR BUDGET HOTEL" ────────────
+              // ── AND THEN THERE WAS ONE ────────────────────────
               //
-              // Oliver, 18 Sep 2026: "everytime they can pick a hotel make a
-              // 'good hotel' or 'budget hotel'."
+              // Oliver, 19 Sep 2026: "I'm going a bit back and fourth on the
+              // 'budget' and 'good hotel'.. because it's really a long-shot to
+              // take. Perhaps stick to the area and then just put Booking.com
+              // front-page affiliate link. I think that's the best solution."
               //
-              // Two slots, and the budget one is always the AREA rather than
-              // the named property: a cheaper room is a different hotel, so
-              // sorting a search for one building by price answers nothing.
+              // Three doors stood here: the property the guide named, a good
+              // search and a budget search. Every one promised a specific
+              // landing and the programme does not deep link, so every one
+              // arrived at Booking's front page. Sorting a search for one
+              // building by price is the long shot he means, and he had already
+              // found the pair of them on a screenshot: "budget vs budget.. with
+              // no links on either."
+              //
+              // ONE DOOR, and the AREA stays in the sentence above it where the
+              // guide has always said where to sleep. stayDoorUrl returns the
+              // label's permission with the href, so the button cannot name a
+              // town the link will not show, and the day the programme allows
+              // deep links every stay door in the app becomes that town's own
+              // results from one word in config.js. See utils/affiliates.js.
               const stayAreaTerm = day.glance.stayArea || stayTown || searchTerm;
-              const stayBudgetUrl = bookingUrl({
+              const stayDoor = stayDoorUrl({
                 area: stayAreaTerm,
                 near: stayTown,
                 checkin: fmt(dayDate) || undefined,
                 checkout: fmt(dayDate) ? fmt(nextDate) : undefined,
                 adults,
-                tier: "budget",
-              });
-              // ── AND THE GOOD SLOT WAS NEVER DRAWN ────────────
-              //
-              // Oliver, 19 Sep 2026, of a screenshot of his own guide: "the last
-              // picture is budget vs budget.. with no links on either."
-              //
-              // He is right twice. This URL was computed on 18 Sep and rendered
-              // nowhere, so whenever the guide named a property the two doors on
-              // screen were that property and a budget search. The named one was
-              // a hostel, so both slots were the cheap end and the pair he asked
-              // for did not exist:
-              //
-              //   "everytime they can pick a hotel make a good hotel or budget
-              //    hotel."
-              //
-              // Three doors now, in one order, every day: the property the guide
-              // named if it named one, then good, then budget. The last two are
-              // always the AREA, because a cheaper or a better-reviewed room is a
-              // different building and sorting a search for one hotel answers
-              // nothing.
-              const stayGoodUrl = bookingUrl({
-                area: stayAreaTerm,
-                near: stayTown,
-                checkin: fmt(dayDate) || undefined,
-                checkout: fmt(dayDate) ? fmt(nextDate) : undefined,
-                adults,
-                tier: "good",
+                // Which surface earned it, when a commission arrives.
+                slot: "guide-stay",
               });
               const featuredStay = featuredStayFor(stayAreaTerm);
               // ── AND TRIP.COM, WHERE IT HAS A CITY ────────────────
@@ -2366,62 +2340,50 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                         18 Sep 2026, the day Booking.com started paying. This
                         href was the raw search URL and this rel was
                         "noreferrer", both correct while the link earned nothing
-                        and both wrong the moment it did: the CJ wrapper is
-                        added by affiliateHref at render, and a paid link
-                        without sponsored nofollow is what Google asks
-                        publishers not to do. outboundLink computes the href,
-                        the label, the sentence and the rel in one place, which
-                        is what it was written for. */}
-                    {stayBookingUrl && day.glance.recommendedStay && (
-                      <a href={outboundLink(stayBookingUrl).href || stayBookingUrl} target="_blank" rel={outboundLink(stayBookingUrl).rel}
+                        and both wrong the moment it did: a paid link without
+                        sponsored nofollow is what Google asks publishers not to
+                        do. outboundLink computes the href, the sentence and the
+                        rel in one place, which is what it was written for.
+
+                        ── AND ONE DOOR, NOT THREE ──
+                        Oliver, 19 Sep 2026: "stick to the area and then just
+                        put Booking.com front-page affiliate link. I think
+                        that's the best solution."
+
+                        Three stood here, each promising a landing the
+                        programme cannot deliver. The label now comes off
+                        stayDoorUrl's own answer, so it can never name a town
+                        the link will not show: today the door is the front page
+                        and the button says Booking.com, and the day deep links
+                        are allowed the same button becomes the area's results
+                        with the area on it. See utils/affiliates.js.
+
+                        The area is not lost by that. It is in the sentence
+                        above this, which is where the guide has always said
+                        where to sleep, and where a named property is named. */}
+                    {stayDoor && (
+                      <a href={outboundLink(stayDoor.href).href || stayDoor.href} target="_blank" rel={outboundLink(stayDoor.href).rel}
                         style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, marginRight: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
-                        {/* ONE THING PER DOOR. This one is the property the
-                            guide named, and the good and budget searches below
-                            are how a reader picks another, which is what he
-                            asked for in the same message: "make them able to
-                            pick another from Booking." */}
-                        🔎 See {day.glance.recommendedStay} on Booking.com ↗
+                        {stayDoor.area ? `🏨 Hotels in ${stayAreaTerm} ↗` : "🏨 Find a room on Booking.com ↗"}
                       </a>
                     )}
                     {/* ── AND THE INLINE COPY WAS DODGING THIS CHECK ──────
                         The suite sweeps every file for a link wrapper used
-                        without its disclosure, and this card never tripped it —
+                        without its disclosure, and this card never tripped it,
                         because it built its own Booking URL by hand instead of
-                        calling bookingUrl(), so the sweep had nothing to match.
-                        Reaching for the shared door made the rule fire on the
-                        first run, which is the argument for shared doors in one
-                        sentence. First day only: the sentence is the same on
-                        all seven and a reader learns to scroll past a repeat. */}
-                    {/* The same shape, so the two sit beside each other as a
-                        pair of doors rather than as a link and its follow-up,
-                        and wrap onto two lines on a phone. */}
-                    {/* The second slot. Same shape as the two beside it, so
-                        the three read as a row of doors rather than as a link
-                        and its footnotes. */}
-                    {/* THE GOOD SLOT, always, beside the budget one. Same size
-                        as each other and smaller than the named door above
-                        them, so the three read as one choice with a
-                        recommendation at the front rather than as three
-                        competing adverts. */}
-                    {stayGoodUrl && (
-                      <a href={outboundLink(stayGoodUrl).href || stayGoodUrl} target="_blank" rel={outboundLink(stayGoodUrl).rel}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, marginRight: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 13px", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
-                        ⭐ {(day.glance.recommendedStay || featuredStay) ? "Other good hotels" : "Good hotels"} in {stayAreaTerm} ↗
-                      </a>
-                    )}
-                    {stayBudgetUrl && (
-                      <a href={outboundLink(stayBudgetUrl).href || stayBudgetUrl} target="_blank" rel={outboundLink(stayBudgetUrl).rel}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, marginRight: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 13px", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
-                        💰 Budget hotels in {stayAreaTerm} ↗
-                      </a>
-                    )}
+                        calling the shared builder, so the sweep had nothing to
+                        match. Reaching for the shared door made the rule fire
+                        on the first run, which is the argument for shared doors
+                        in one sentence. First day only: the sentence is the same
+                        on all seven and a reader learns to scroll past a
+                        repeat. */}
                     {stayTripUrl && (
                       <a href={stayTripUrl} target="_blank" rel="noreferrer sponsored nofollow"
                         style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
                         🏨 Compare hotels on Trip.com ↗
                       </a>
                     )}
-                    {(stayGoodUrl || stayBudgetUrl || stayTripUrl) && dayIdx === 0 && (
+                    {(stayDoor || stayTripUrl) && dayIdx === 0 && (
                       <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4 }}>{stayDisclosure({ tripcom: !!stayTripUrl })}</div>
                     )}
                   </div>

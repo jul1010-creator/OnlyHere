@@ -42,6 +42,10 @@
 // getting none, and nobody has to remember this file exists.
 import { CONTENT_TYPES } from "./sourcePolicy";
 import { haversineKm } from "./helpers";
+// TYPES_WITH_A_DOOR is the Studio answer to "does this charge admission", and
+// the kind table below is derived from it rather than written out again. See
+// the door section further down for why it lives in this file.
+import { TYPES_WITH_A_DOOR } from "./entryPrice";
 
 export const JOURNEY_ORIGINS = ["origin", "town"];
 
@@ -95,6 +99,39 @@ export const journeyOriginForKind = (kind) => {
   return KIND_ORIGIN[k] || "town";
 };
 export const showsJourneyForKind = (kind) => !!journeyOriginForKind(kind);
+
+// ── AND WHICH KINDS HAVE A DOOR TO SELL A TICKET TO ─────────────────
+//
+// Oliver, 19 Sep 2026, on the town page still offering 🎫 Book tickets after
+// the costs list stopped: "A town shouldn't. There are the 'events coming up'
+// tap that one should be able to click on."
+//
+// Both halves are right. A town has no admission, and the way into a ticket
+// from a town page already exists and is better: the What's on rows are
+// buttons, each one opens that event's own page, and the ticket link lives
+// there beside the event's dates and its ticket status. A button on the town
+// itself can only ever sell a ticket to something that is not the town, which
+// is how Roskilde's town page came to offer Roskilde Festival.
+//
+// IT LIVES HERE because this file already owns the sentence "the render
+// vocabulary is not the Studio vocabulary" and already holds the kind table.
+// TYPES_WITH_A_DOOR is the Studio answer and entryPrice.js is explicit that
+// "every check that reasons about 'the ticket price' belongs to this list and
+// nothing else", so the kinds are DERIVED from it through the one place that
+// says which kind each type renders as. A hand-written list of kinds is the
+// mistake this file's own header was written about.
+export const KIND_OF_DOORED_TYPE = {
+  free: "free",       // an attraction, whose one admission is the point of the type
+  booking: "craft",   // a workshop or bookable experience
+  festival: "event",  // a festival, dated, with tickets of its own
+};
+
+export const KINDS_WITH_A_DOOR = TYPES_WITH_A_DOOR.map(t => KIND_OF_DOORED_TYPE[t]).filter(Boolean);
+
+// A page a reader can be sold admission to. Everything else is somewhere they
+// walk into, and it may carry no ticket button however a sweep or a hand edit
+// once filled its ticketUrl.
+export const showsTicketForKind = (kind) => KINDS_WITH_A_DOOR.includes(String(kind || "").trim());
 
 // ── AND A NEW TYPE HAS TO BE CLASSIFIED ─────────────────────────────
 //

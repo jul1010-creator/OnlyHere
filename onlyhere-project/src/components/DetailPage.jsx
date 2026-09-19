@@ -28,7 +28,7 @@ import { saveLabel, saveHint, planFromSavedLabel } from "../utils/savedTrip";
 import { HowWeKnow } from "./HowWeKnow";
 import { SocialSection } from "./SocialSection";
 import { JourneyCard } from "./JourneyCard";
-import { showsJourneyForKind, journeyOriginForKind } from "../utils/journeyScope";
+import { showsJourneyForKind, journeyOriginForKind, showsTicketForKind } from "../utils/journeyScope";
 import { arrivalGlanceRow } from "../utils/journey";
 import { audioLine } from "../utils/wegotripMatch";
 // ── AND THE WORDS ON THIS PAGE, IN THE READER'S LANGUAGE ────────────
@@ -218,8 +218,28 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
   const journeyOrigin = journeyOriginForKind(kind) === "origin"
     ? TRAVEL_ORIGIN
     : String(item?.__journey?.from || "").trim();
-  const ticketDest = String(item?.ticketUrl || "").trim()
-    || (isBookableTicketUrl(item?.__ticket?.url) ? String(item.__ticket.url).trim() : "");
+  // ── AND A TOWN HAS NO DOOR ─────────────────────────────────────
+  //
+  // Oliver, 19 Sep 2026, deciding this after the costs list stopped charging
+  // admission for a town: "A town shouldn't. There are the 'events coming up'
+  // tap that one should be able to click on."
+  //
+  // Both halves are his and both are right. Roskilde's town page offered 🎫
+  // Book tickets, pointing at Roskilde Festival, because this row picked up a
+  // ticketUrl and nothing here asked whether the PLACE has a way in. And the
+  // route he names already exists and is the better one: the What's on rows
+  // below are buttons, each opens that event's own page, and the ticket link
+  // lives there beside its dates and its ticket status.
+  //
+  // GATED AT THE RENDER, which fixes every row already in the database rather
+  // than needing a redraft each. The stored field is untouched, deliberately:
+  // a music venue published as `night` may really sell dated tickets, and
+  // dropping the value at publish would delete a working link from rows nobody
+  // has looked at. See showsTicketForKind in utils/journeyScope.js.
+  const ticketDest = !showsTicketForKind(kind)
+    ? ""
+    : String(item?.ticketUrl || "").trim()
+      || (isBookableTicketUrl(item?.__ticket?.url) ? String(item.__ticket.url).trim() : "");
   const ticketAgent = ticketAgentOf(ticketDest);
   const ticketHref = ticketAgent ? (affiliateHref(ticketDest) || ticketDest) : "";
   const ticketNote = ticketAgent ? affiliateNote(ticketDest, lang) : "";

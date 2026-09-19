@@ -64,14 +64,17 @@
 import { normaliseTicketStatus } from "./tickets";
 import { isBookableTicketUrl } from "./ticketLink";
 import { stopEventWhen } from "./guideReading";
-import { affiliateHref, isPartnerLink, carRentalFits, carRentalUrl, bookingUrl, isWegotripUrl } from "./affiliates";
+import { affiliateHref, isPartnerLink, carRentalFits, carRentalUrl, stayDoorUrl, isWegotripUrl } from "./affiliates";
 import { OPERATORS } from "./operators";
 import { isFerryText } from "./helpers";
 // One definition of each, read twice. priceLabel and pricesIn are how the price
 // was written down in the first place, and stampDay is how the provenance panel
 // already prints this same stamp.
 import { pricesIn, priceLabel } from "./entryAudit";
-import { PRICE_FIELDS, TYPES_WITH_A_DOOR } from "./entryPrice";
+import { PRICE_FIELDS } from "./entryPrice";
+// The door judgement, derived from TYPES_WITH_A_DOOR where the kind vocabulary
+// already lives, so this file and the town page cannot disagree about it.
+import { showsTicketForKind } from "./journeyScope";
 import { stampDay } from "./provenance";
 
 export const COST_KIND = {
@@ -109,24 +112,24 @@ export const COST_KIND = {
 //
 // WHY IT READS _src AND NOT type. A guide stop is a name, resolved by
 // lookupRealPlace, and what comes back is a pool entry stamped with the pool it
-// was found in. The published `type` does not survive that merge. So the door
-// set is the same TYPES_WITH_A_DOOR, mapped through the one table below saying
-// which pool each doored type lands in, and the suite asserts the table covers
-// every entry of that list: a fourth type added there and missing here fails
-// the suite instead of quietly printing a checkout over a town again.
-export const SRC_OF_DOORED_TYPE = {
-  free: "free",       // an attraction, whose one admission price is the whole point of the type
-  booking: "craft",   // a workshop or bookable experience; craftItemsFallback is the pool it merges into
-  festival: "event",  // events, majorEvents and vikingEvents all stamp _src "event"
-};
-
-export const SRC_WITH_A_DOOR = TYPES_WITH_A_DOOR.map(t => SRC_OF_DOORED_TYPE[t]).filter(Boolean);
-
-// A row a traveller can be charged admission to. Everything else on an
-// itinerary — a town, an island, a restaurant, a bar, a bar street — is a place
-// they walk into, and it may carry neither a price nor a ticket link here no
-// matter what a sweep or a hand edit once wrote onto it.
-export const stopHasADoor = (row) => SRC_WITH_A_DOOR.includes(String(row?._src || "").trim());
+// was found in. The published `type` does not survive that merge.
+//
+// ── AND THE TABLE MOVED OUT, 19 SEP 2026 ────────────────────────────
+//
+// This file held its own type-to-pool table for a few hours, and then the town
+// page needed the same judgement for its 🎫 Book tickets button. Two tables of
+// the same relation is the mistake journeyScope.js was written about in its own
+// words: "it was already a hand-written list copied from CONTENT_TYPES, which is
+// the exact shape of the bug recorded in regions.js."
+//
+// So it lives in journeyScope.js, which already owns "the render vocabulary is
+// not the Studio vocabulary" and already held the kind table, and it is derived
+// there from TYPES_WITH_A_DOOR. The three doored pools this file resolves to
+// (free, craft, event) are the same three names that file calls render kinds,
+// which is a coincidence worth CHECKING rather than assuming: the assertions
+// name every pool on both sides, so a vocabulary that drifts fails the suite
+// rather than silently printing a checkout over a town again.
+export const stopHasADoor = (row) => showsTicketForKind(String(row?._src || "").trim());
 
 // ── WHY A LINE MAY NOT CARRY A BUY LINK ─────────────────────────────
 // One reason string per refusal, written for a traveller rather than for a log,
@@ -496,15 +499,31 @@ export const costLines = ({
   const openNights = days.filter(d => d?.glance?.stayArea || d?.glance?.recommendedStay).length;
   if (openNights) {
     const area = days.find(d => d?.glance?.stayArea)?.glance?.stayArea || "";
-    const href = bookingUrl({ area });
+    // ── THROUGH THE ONE STAY DOOR ──────────────────────────────────
+    //
+    // Oliver, 19 Sep 2026: "stick to the area and then just put Booking.com
+    // front-page affiliate link. I think that's the best solution."
+    //
+    // stayDoorUrl, not a search this line builds, and for the reason it exists:
+    // the programme does not deep link, so a search URL lands on the front page
+    // and the row would be promising a listing for this area that nobody gets.
+    // The door answers with what it may be labelled, and this row's `forWhat`
+    // says the area only when the link will show it.
+    const door = stayDoorUrl({ area, slot: "costs-stay" });
+    const href = door?.href || "";
     out.push({
       kind: COST_KIND.STAY,
       name: "Somewhere to sleep",
       day: 1,
-      forWhat: `${openNights} night${openNights === 1 ? "" : "s"} in the plan with no bed booked yet.`,
+      // The area, because the plan chose it and a reader budgeting for a bed
+      // wants to know where. NOT a sentence about what the link does: his
+      // standing rule is that nothing explains a control to a reader, and the
+      // button's own label already says where it goes.
+      forWhat: `${openNights} night${openNights === 1 ? "" : "s"} in the plan with no bed booked yet.`
+        + (area ? ` The plan puts you in ${area}.` : ""),
       price: "",
       priceFrom: null,
-      href: href || "",
+      href,
       partner: !!href && isPartnerLink(href),
       refused: "",
       bookAhead: true,

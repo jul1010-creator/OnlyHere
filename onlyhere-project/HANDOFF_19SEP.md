@@ -1,5 +1,12 @@
 # Handoff, 19 September 2026
 
+> **THERE IS A PART THREE, AND IT REVERSES TWO THINGS BELOW.** It is
+> `HANDOFF_19SEP_PART3.md`, it is written for a fresh chat, and it is the one to
+> read first. Two decisions Oliver made after this file was written change the
+> answers here: a town page no longer offers a ticket button, and the three stay
+> doors became one Booking.com front-page link. Section 3 of this file and
+> section 8 of part two are both superseded on the Booking question.
+
 Written for the next session, and for Oliver in the morning. He set this one to
 run overnight and went to bed.
 

@@ -65,7 +65,7 @@ writeFileSync(entry, `
   export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, partnerMerchant, destinationIn, linkLabel, outboundLink, affiliateHref, affiliateNote, isAffiliateHref, isGetyourguideUrl, isGetyourguideProductUrl, getyourguideUrl, getyourguideActive, getyourguideDisclosure, bikeRentalFits, tourMerchant, isBajabikesUrl, isBajabikesProductUrl, isBajabikesRental, bajabikesSlug, bajabikesUrl, bajabikesActive, bajabikesDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isWegotripUrl, wegotripUrl, wegotripBrowseUrl, wegotripActive, wegotripDisclosure, tripcomActive } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
-  export { bookingEarns, bookingCjUrl, partnerAdsUrl, partnerAdsBanner, partnerAdsMerchant, partnerAdsPlacements, partnerAdsPending, partnerAdsGear, partnerAdsSlot, featuredStayFor, stayDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
+  export { bookingEarns, bookingCjUrl, stayDoorUrl, partnerAdsUrl, partnerAdsBanner, partnerAdsMerchant, partnerAdsPlacements, partnerAdsPending, partnerAdsGear, partnerAdsSlot, featuredStayFor, stayDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { TOWN_TYPES, townNameOf, audioFor, audioLine, ticketFor, unmatchedProducts, wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO, TICKET as WEGO_TICKET } from ${JSON.stringify(join(root, "src/utils/wegotripMatch.js"))};
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
   export { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
@@ -131,7 +131,7 @@ writeFileSync(entry, `
   export { briefBlock as briefBlockC } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { withoutCorrectionLead, directAnswers, askedBeforeTurns, lastAskedOnScreen, isRefusal, looksLikePlaceAnswer, daysAnswer, transportAnswer, stayAnswer, partyAnswer, partyLine, widestMode, isKnownPlace } from ${JSON.stringify(join(root, "src/utils/directAnswer.js"))};
   export { readableOn, contrastRatio, overlay, parseHex, luminance, READABLE_MIN, MAX_INK_SATURATION, PILL_ALPHA } from ${JSON.stringify(join(root, "src/utils/readableColor.js"))};
-  export { journeyOriginFor, showsJourney, journeyOriginForKind, showsJourneyForKind, TYPES_WITH_A_JOURNEY, TYPES_WITHOUT_A_JOURNEY, TYPES_MEASURED_FROM_THE_ORIGIN, TYPES_MEASURED_FROM_THEIR_TOWN, journeyOriginPoint, IS_THE_CENTRE_KM, TRAVEL_ORIGIN } from ${JSON.stringify(join(root, "src/utils/journeyScope.js"))};
+  export { journeyOriginFor, showsJourney, journeyOriginForKind, showsJourneyForKind, showsTicketForKind, KINDS_WITH_A_DOOR, KIND_OF_DOORED_TYPE, TYPES_WITH_A_JOURNEY, TYPES_WITHOUT_A_JOURNEY, TYPES_MEASURED_FROM_THE_ORIGIN, TYPES_MEASURED_FROM_THEIR_TOWN, journeyOriginPoint, IS_THE_CENTRE_KM, TRAVEL_ORIGIN } from ${JSON.stringify(join(root, "src/utils/journeyScope.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
   export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType, geocodePostcode, geocodeIsASettlement, LONG_WALK_MINUTES } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
@@ -177,7 +177,7 @@ writeFileSync(entry, `
   export { DETOUR_PATH, ME_PATH, LEGAL_PATH, TAB_HASH as TAB_HASH_WORDS } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
   export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, LABEL_CLASS, LABEL_SIDES, LABEL_GAP, labelBox, labelSides, SPOT_PIN_ZOOM, isSpotPin, spotsShowAt, PHONE_MAP_PINS, phoneMapShows } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
   export { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE, cameraArrive, cameraLanded, frameFor, SLIDE_HOLD_MS, makeCamera, unplayedBeat } from ${JSON.stringify(join(root, "src/utils/mapDirections.js"))};
-  export { costLines, byUrgency, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND, estimateFrom, describeEstimate, partyOf, partyFrom, describeGroup, stopHasADoor, SRC_WITH_A_DOOR, SRC_OF_DOORED_TYPE } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
+  export { costLines, byUrgency, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND, estimateFrom, describeEstimate, partyOf, partyFrom, describeGroup, stopHasADoor } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { freeButPriced, moneyProblems, LODGING_FLOOR_DKK } from ${JSON.stringify(join(root, "src/utils/moneyClaims.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
@@ -7970,43 +7970,45 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ok("and it is what the wrapper asks before wrapping",
        /bookingCjUrl = \(url, \{ on = BOOKING_CJ_DEEP_LINKS_WORK \} = \{\}\) =>/.test(aff2)
        && /if \(!BOOKING_CJ_LINK \|\| !on\) return raw;/.test(aff2));
-    // THE SAME CONSTANT ON BOTH SIDES. bookingEarns asked the presence of the
-    // CJ link alone, so with the wrapper off it would have gone on telling a
-    // reader that a plain, unmarked search URL may pay us.
-    ok("and the same switch decides whether the disclosure claims it pays",
-       /bookingEarns = \(\) => !!\(BOOKING_AFFILIATE_ID \|\| \(BOOKING_CJ_LINK && BOOKING_CJ_DEEP_LINKS_WORK\)\)/.test(aff2));
+    // ── AND IT IS NO LONGER WHAT DECIDES WHETHER ANYTHING PAYS ─────
+    //
+    // For a few hours on 19 Sep it was, because the stay buttons were unwrapped
+    // searches and a disclosure over one would have been a false statement about
+    // money. stayDoorUrl ended that: the door is the front page through the
+    // click link, which earns and lands where its label says, so this switch
+    // decides how much the LABEL may promise. Both tracked branches of
+    // stayDoorUrl are tracked either way, which is why bookingEarns stopped
+    // reading it. Asserted so the two cannot be rewired together by accident.
+    ok("and the switch governs the promise rather than the payment",
+       /if \(BOOKING_CJ_LINK && BOOKING_CJ_DEEP_LINKS_WORK && search\)/.test(aff2)
+       && /bookingEarns = \(\) => !!\(BOOKING_AFFILIATE_ID \|\| BOOKING_CJ_LINK\)/.test(aff2));
     // The test he has to run is written where the switch is, because a switch
     // with no test beside it is a coin flip with a comment on it.
     ok("the one test that settles it is written down beside the switch",
        /arrives at Booking's Aarhus results/.test(conf2) && /arrives at Booking's front page/.test(conf2));
   }
-  // ── AND WITH THE SWITCH OFF, THEY SAY IT DOES NOT ─────────────────
+  // ── AND IT PAYS AGAIN, BECAUSE THE DOOR CHANGED ───────────────────
   //
-  // The point of routing bookingEarns through the same constant as the wrapper.
-  // A disclosure reading "Booking.com links may earn Gemlyx a small commission"
-  // over a plain, unmarked search URL would be a false statement about money,
-  // which is the one class of sentence this app exists not to make. So while the
-  // stay links are honest and unpaid, the sentences say so.
+  // This read the deep-link switch for a few hours on 19 Sep, while the stay
+  // buttons were unwrapped searches carrying no marker: a disclosure claiming a
+  // commission over one of those would have been a false statement about money.
   //
-  // WHEN HE FLIPS IT, these four fail and the next three lines pass. That is
-  // right: it is a deliberate act, the assertions should notice, and the
-  // sentences for both states are pinned so neither can be wrong in silence.
-  ok("Booking does not pay while its links are not wrapped", !M.bookingEarns());
-  ok("and the affiliates page does not call the programme live", !M.affiliateActive());
-  ok("the stay card does not claim a commission it cannot earn",
-     !/Booking\.com links may earn/.test(M.stayDisclosure({ tripcom: false })));
-  // Trip.com is a different programme and is unaffected: the sentence still has
-  // to name the one that does pay, and only that one.
-  ok("and Trip.com keeps its own disclosure",
-     /Trip\.com/.test(M.stayDisclosure({ tripcom: true }))
-     && !/Booking\.com and Trip\.com links may earn/.test(M.stayDisclosure({ tripcom: true })));
-  // THE SENTENCES FOR THE OTHER STATE, pinned by reading the source rather than
-  // by calling it, so turning the switch on cannot find them missing.
+  // stayDoorUrl removed that state rather than patching it. The door is the
+  // front page THROUGH the click link, which earns and lands exactly where its
+  // label says, so the switch now decides how much the LABEL may promise and
+  // not whether anything is paid. Both tracked branches of stayDoorUrl are
+  // tracked on either setting.
+  ok("Booking pays, because the door is a tracked link on either setting", M.bookingEarns());
+  ok("the affiliates page says the programme is live", M.affiliateActive());
+  ok("and the stay card says which link pays", /Booking\.com links may earn/.test(M.stayDisclosure({ tripcom: false })));
+  ok("both of them when Trip.com is on screen too", /Booking\.com and Trip\.com links may earn/.test(M.stayDisclosure({ tripcom: true })));
+  // AND THE SWITCH IS NOT WHAT DECIDES IT ANY MORE, which is the thing worth
+  // pinning: a future reader wiring the disclosure back to the deep-link flag
+  // would be saying the front-page link earns nothing, and it does.
   {
-    const aff3 = readFileSync(join(root, "src/utils/affiliates.js"), "utf8");
-    ok("the paid sentence still exists for the day it is true",
-       /Booking\.com links may earn Gemlyx a small commission at no cost to you/.test(aff3));
-    ok("and the joint one with Trip.com", /Booking\.com and Trip\.com links may earn/.test(aff3));
+    const aff3 = stripComments(readFileSync(join(root, "src/utils/affiliates.js"), "utf8"));
+    ok("the disclosure does not read the deep-link switch",
+       /bookingEarns = \(\) => !!\(BOOKING_AFFILIATE_ID \|\| BOOKING_CJ_LINK\)/.test(aff3));
   }
 
   // ── PARTNER-ADS, THE NETWORK THAT CANNOT BE ASKED ─────────────────
@@ -8130,59 +8132,92 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the card reads the day's own town",
      /const stayAreaTerm = day\.glance\.stayArea \|\| stayTown \|\| searchTerm;/.test(guide)
      && /const featuredStay = featuredStayFor\(stayAreaTerm\);/.test(guide));
-  ok("and the Booking button goes through the door", /href=\{outboundLink\(stayBookingUrl\)\.href \|\| stayBookingUrl\}/.test(guide));
-  ok("with the rel that comes with it", /rel=\{outboundLink\(stayBookingUrl\)\.rel\}/.test(guide));
-  ok("and no raw rel is left on a link that now pays", !/href=\{stayBookingUrl\} target="_blank" rel="noreferrer"/.test(guide));
+  ok("and the Booking button goes through the door", /href=\{outboundLink\(stayDoor\.href\)\.href \|\| stayDoor\.href\}/.test(guide));
+  ok("with the rel that comes with it", /rel=\{outboundLink\(stayDoor\.href\)\.rel\}/.test(guide));
+  ok("and no raw rel is left on a link that now pays", !/href=\{stayDoor\.href\} target="_blank" rel="noreferrer"/.test(guide));
 
-  // ── "BUDGET VS BUDGET.. WITH NO LINKS ON EITHER" ──────
+  // ── "STICK TO THE AREA AND JUST PUT THE FRONT-PAGE LINK" ──────────
   //
-  // Oliver, 19 Sep 2026, of a screenshot of his own guide. Two doors on screen,
-  // a named hostel and a budget search, and the good slot he had asked for the
-  // day before nowhere at all:
+  // Oliver, 19 Sep 2026, ending an argument he had been having with himself:
   //
-  //   "everytime they can pick a hotel make a good hotel or budget hotel."
+  //   "I'm going a bit back and fourth on the 'budget' and 'good hotel'..
+  //    because it's really a long-shot to take. Perhaps stick to the area and
+  //    then just put Booking.com front-page affiliate link. I think that's the
+  //    best solution."
   //
-  // Two causes, both in this file. `stayBookingUrl` was the named lookup AND the
-  // good slot, so naming a property took the good search off the screen, and the
-  // named property was a hostel. And `stayGoodUrl` was computed on 18 Sep and
-  // rendered nowhere, which no assertion could see because a variable with no
-  // reader looks exactly like a variable with one.
+  // He is right, and it resolves the deep-link problem rather than working
+  // round it. Three doors stood here the day before: the property the guide
+  // named, a good search and a budget search. Each promised a specific landing
+  // and the programme does not deep link, so each arrived at the front page.
+  // Sorting a search for ONE BUILDING by price is the long shot he means.
+  //
+  // The assertions that pinned those three are gone with them. What replaces
+  // them is the rule that makes the reversal safe: the LABEL IS DERIVED FROM
+  // THE LINK, so a button can never name a town the link will not show.
   {
     const src = stripComments(guide);
-    // THREE DOORS, and each one drawn.
-    ok("the named property has a door", /\{stayBookingUrl && day\.glance\.recommendedStay && \(/.test(src));
-    ok("the good search has one", /\{stayGoodUrl && \(/.test(src));
-    ok("and the budget search has one", /\{stayBudgetUrl && \(/.test(src));
-    // IN ONE ORDER, every day: the recommendation first, then the two searches.
-    const at = (re) => src.search(re);
-    ok("the named one comes first",
-       at(/\{stayBookingUrl && day\.glance\.recommendedStay/) < at(/\{stayGoodUrl &&/));
-    ok("then good, then budget", at(/\{stayGoodUrl &&/) < at(/\{stayBudgetUrl &&/));
-    // The lookup is no longer sorted, because an order over one hotel is noise.
-    ok("the named lookup asks for no sort order", /\/\/ A LOOKUP, NOT A SEARCH[\s\S]{0,600}tier: "",/.test(guide));
-    ok("the good search asks for the good order", /const stayGoodUrl = bookingUrl\(\{[\s\S]{0,400}tier: "good",/.test(src));
-    ok("and the budget one for price", /const stayBudgetUrl = bookingUrl\(\{[\s\S]{0,400}tier: "budget",/.test(src));
-    // Both searches are the AREA, not the property: a cheaper room is a
-    // different building.
-    ok("both searches look at the area", (src.match(/area: stayAreaTerm,/g) || []).length >= 2);
-    // AND THE LABEL SAYS WHICH SLOT IT IS, with "other" once something is
-    // already recommended above it.
-    ok("the good label yields to a recommendation",
-       /\(day\.glance\.recommendedStay \|\| featuredStay\) \? "Other good hotels" : "Good hotels"/.test(src));
-    ok("and the budget label names the area", /💰 Budget hotels in \{stayAreaTerm\}/.test(src));
-    // Every one of them goes through the one door, so each carries its own rel
-    // and the disclosure below them is counted rather than typed.
-    for (const v of ["stayBookingUrl", "stayGoodUrl", "stayBudgetUrl"]) {
-      ok(`${v} is wrapped at render`, new RegExp(`outboundLink\\(${v}\\)\\.href`).test(src));
-      ok(`${v} carries the rel that comes with it`, new RegExp(`rel=\\{outboundLink\\(${v}\\)\\.rel\\}`).test(src));
-    }
-    // The disclosure is drawn off the doors that are always there, or a day
-    // with no named property loses the sentence under its paid links.
-    ok("the disclosure follows the searches rather than the recommendation",
-       /\(stayGoodUrl \|\| stayBudgetUrl \|\| stayTripUrl\) && dayIdx === 0/.test(src));
+    const aff2 = readFileSync(join(root, "src/utils/affiliates.js"), "utf8");
+    // ONE DOOR, through the one function that decides what it may promise.
+    ok("there is one Booking door on the stay card", /\{stayDoor && \(/.test(src));
+    is("and only one", (src.match(/\{stayDoor && \(/g) || []).length, 1);
+    ok("built by the shared decider rather than by a search here",
+       /const stayDoor = stayDoorUrl\(\{/.test(src));
+    ok("and the three that used to stand here are gone",
+       !/stayGoodUrl/.test(src) && !/stayBudgetUrl/.test(src) && !/stayBookingUrl/.test(src));
+    // THE LABEL FOLLOWS THE LINK. This is the whole safety property: the button
+    // names the area only when stayDoorUrl says the link will show it.
+    ok("the label is chosen by what the link can keep",
+       /\{stayDoor\.area \? `🏨 Hotels in \$\{stayAreaTerm\} ↗` : "🏨 Find a room on Booking\.com ↗"\}/.test(src));
+    // The area is not lost. It is in the sentence the guide has always used to
+    // say where to sleep, one element up, and that is where he put it.
+    ok("the area is still read for the card", /const stayAreaTerm = day\.glance\.stayArea \|\| stayTown \|\| searchTerm;/.test(src));
+    ok("and handed to the door", /area: stayAreaTerm,/.test(src));
+    // WHICH SURFACE EARNED IT. CJ lifts `sid` off the click URL, and with one
+    // door everywhere it is the only way a commission can be attributed.
+    ok("the guide's door names itself in the click", /slot: "guide-stay",/.test(src));
+    ok("and the costs list names its own",
+       /slot: "costs-stay"/.test(readFileSync(join(root, "src/utils/costLedger.js"), "utf8")));
+    // The disclosure follows the door that is always there.
+    ok("the disclosure follows the door", /\(stayDoor \|\| stayTripUrl\) && dayIdx === 0/.test(src));
+
+    // ── AND THE DOOR ITSELF, ON BOTH SETTINGS ───────────────────────
+    //
+    // Today: the front page, through the click link, which earns and lands
+    // where the label says. The `url=` deep link is what does not work, and a
+    // front page needs none.
+    const door = M.stayDoorUrl({ area: "Indre By", near: "Copenhagen", adults: 7, slot: "guide-stay" });
+    ok("the door is a tracked link", M.isPartnerLink(door.href));
+    ok("and it earns", door.paid);
+    ok("it does not claim to show the area", !door.area);
+    ok("and it carries the slot so a commission can be traced to it", /[?&]sid=guide-stay\b/.test(door.href));
+    // NO DESTINATION TO READ, so the merchant had to learn the configured click
+    // id. Without that the button read "Partner site" over a link to
+    // Booking.com, which is vaguer than it needs to be and hides who is paid.
+    is("the button still names Booking", M.linkLabel(door.href), "Book on Booking.com");
+    is("and the disclosure is the paid one", M.outboundLink(door.href).rel, "noreferrer sponsored nofollow");
+    // A DIFFERENT CJ LINK IS NOT BOOKING. kqzyfj.com issues click links for
+    // every advertiser CJ has, so the host names nobody and only the id does.
+    is("another CJ click id names nobody", M.partnerMerchant("https://www.kqzyfj.com/click-9999999-8888888?sid=x"), "");
+    // A slot is a surface name and nothing about a reader, and a junk one falls
+    // back rather than riding into a URL handed to two other companies.
+    ok("a junk slot falls back to a plain name", /[?&]sid=stay\b/.test(M.stayDoorUrl({ area: "Aarhus", slot: "../../etc" }).href));
+
+    // AND WITH THE SWITCH ON, the same door becomes the area's own results and
+    // the label is allowed to say so. One word in config.js changes both.
+    const aff3 = stripComments(aff2);
+    ok("the deep-link branch is the area's search, wrapped",
+       /if \(BOOKING_CJ_LINK && BOOKING_CJ_DEEP_LINKS_WORK && search\) \{\s*return \{ href: bookingCjUrl\(search\), area: true, paid: true \};/.test(aff3));
+    ok("and it is the first branch, so it wins when it is available",
+       aff3.indexOf("BOOKING_CJ_DEEP_LINKS_WORK && search") < aff3.indexOf('sid=${slotName}'));
+    // WITH NO PROGRAMME AT ALL the honest link is the search and it earns
+    // nothing, which is the state this app shipped in for six weeks.
+    ok("with no programme the door is the search and is not paid",
+       /return search \? \{ href: search, area: true, paid: false \} : null;/.test(aff3));
   }
-  // ── AND THE TWO ORDERS ARE DIFFERENT ORDERS ─────────────────────
-  // The pair means nothing if Booking is handed the same sort key twice.
+  // ── AND THE TWO ORDERS ARE STILL DIFFERENT ORDERS ───────────────
+  // bookingUrl keeps its tiers: the day deep links are allowed, stayDoorUrl
+  // hands it a search again, and a sort key that had quietly become the same
+  // key twice would be found by a reader rather than by this.
   {
     const good = M.bookingUrl({ area: "Aarhus", tier: "good" });
     const budget = M.bookingUrl({ area: "Aarhus", tier: "budget" });
@@ -50965,7 +51000,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // The guide's version stays, and the difference is the whole argument: it
     // sends a real date and the day's own stay area.
     const guide = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
-    ok("the guide still books a stay", /bookingUrl\(/.test(guide) && /tripcomStayUrl\(/.test(guide));
+    ok("the guide still books a stay", /stayDoorUrl\(/.test(guide) && /tripcomStayUrl\(/.test(guide));
     ok("and its link knows which nights it is asking about", /checkin/.test(guide));
 
     // ── AND THE GUIDED TOUR SITS ABOVE THE SELF-GUIDED ONE ─────────
@@ -51330,7 +51365,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // pool each type merges into, and these assertions are what makes a fourth
   // doored type a test failure rather than a town selling tickets again.
   {
-    const { stopHasADoor, SRC_WITH_A_DOOR, SRC_OF_DOORED_TYPE, TYPES_WITH_A_DOOR } = M;
+    const { stopHasADoor, KINDS_WITH_A_DOOR, KIND_OF_DOORED_TYPE, TYPES_WITH_A_DOOR } = M;
     ok("an attraction has a door", stopHasADoor({ _src: "free" }));
     ok("a festival has a door", stopHasADoor({ _src: "event" }));
     ok("a bookable workshop has a door", stopHasADoor({ _src: "craft" }));
@@ -51344,14 +51379,22 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("and a row with no pool stamp on it does not", !stopHasADoor({}) && !stopHasADoor(null));
     // THE DRIFT ASSERTION. Every doored type must name the pool it lands in, or
     // the map silently drops it and that type stops being able to sell.
-    is("every doored type is mapped to a pool", SRC_WITH_A_DOOR.length, TYPES_WITH_A_DOOR.length);
-    ok("and each mapping is a real pool name rather than a placeholder",
-       TYPES_WITH_A_DOOR.every(t => typeof SRC_OF_DOORED_TYPE[t] === "string" && SRC_OF_DOORED_TYPE[t].length > 1));
-    // And the derivation is real rather than a second list that happens to agree.
+    is("every doored type is mapped to a kind", KINDS_WITH_A_DOOR.length, TYPES_WITH_A_DOOR.length);
+    ok("and each mapping is a real name rather than a placeholder",
+       TYPES_WITH_A_DOOR.every(t => typeof KIND_OF_DOORED_TYPE[t] === "string" && KIND_OF_DOORED_TYPE[t].length > 1));
+    // ── AND ONE TABLE, NOT TWO ────────────────────────────────────
+    // This file held its own copy for a few hours on 19 Sep, and then the town
+    // page needed the same judgement for its Book tickets button. Two tables of
+    // one relation is the mistake journeyScope.js was written about in its own
+    // words, so the table lives there and this reads it.
     const ledgerSrc = stripComments(readFileSync(join(root, "src/utils/costLedger.js"), "utf8"));
-    ok("the set is derived from TYPES_WITH_A_DOOR rather than restated",
-       /SRC_WITH_A_DOOR = TYPES_WITH_A_DOOR\.map/.test(ledgerSrc)
-       && !/SRC_WITH_A_DOOR = \[/.test(ledgerSrc));
+    ok("the costs list reads the shared judgement rather than its own",
+       /stopHasADoor = \(row\) => showsTicketForKind\(String\(row\?\._src \|\| ""\)\.trim\(\)\)/.test(ledgerSrc)
+       && !/SRC_OF_DOORED_TYPE/.test(ledgerSrc));
+    const scopeSrc = stripComments(readFileSync(join(root, "src/utils/journeyScope.js"), "utf8"));
+    ok("and the shared one is derived from TYPES_WITH_A_DOOR rather than restated",
+       /KINDS_WITH_A_DOOR = TYPES_WITH_A_DOOR\.map/.test(scopeSrc)
+       && !/KINDS_WITH_A_DOOR = \[/.test(scopeSrc));
     // ── AND THE GATE IS ON THE RENDER, NOT ON THE STORAGE ──────────
     //
     // Deliberately. shapeForLive still stores a validated ticket link on any
@@ -53244,11 +53287,113 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // check fire on the first run.
   {
     const gp = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
-    ok("the guide calls the one builder", /bookingUrl\(\{/.test(gp));
+    // ── THROUGH stayDoorUrl SINCE 19 SEP ────────────────────────────
+    // One step further than the shared builder: the card no longer chooses a
+    // Booking URL at all, it asks for the door and is told what the label may
+    // say. bookingUrl is still the builder underneath, reached by stayDoorUrl,
+    // so the drift this block was written about is closed twice over.
+    ok("the guide calls the one decider", /stayDoorUrl\(\{/.test(gp));
+    ok("and does not build a Booking search of its own", !/bookingUrl\(\{/.test(gp));
     ok("and no longer hand-rolls a Booking search",
       !/booking\.com\/searchresults\.html\?ss=\$\{encodeURIComponent/.test(gp));
-    ok("and it passes the town it knows", /near: day\.glance\.recommendedStay \? \(day\.glance\.stayArea \|\| stayTown\) : stayTown/.test(gp));
+    ok("and it passes the town it knows", /near: stayTown,/.test(gp));
+    // The builder is still reached, one file over, so its tiers and its town
+    // handling stay live for the day deep links are allowed.
+    const affS = stripComments(readFileSync(join(root, "src/utils/affiliates.js"), "utf8"));
+    ok("and the door reaches the builder", /const search = bookingUrl\(\{ area, near, checkin, checkout, adults \}\);/.test(affS));
   }
+}
+
+
+// ── "A TOWN SHOULDN'T", 19 SEP 2026 ────────────────────────────────
+//
+// Oliver, deciding the half of the Roskilde flaw the costs list could not fix:
+//
+//   "A town shouldn't. There are the 'events coming up' tap that one should be
+//    able to click on."
+//
+// Both halves are his and both are right. The costs list stopped charging
+// admission for a town that morning, and the TOWN PAGE went on offering 🎫 Book
+// tickets, pointing at Roskilde Festival, because the row had picked up a
+// ticketUrl and nothing in DetailPage asked whether the place has a way in.
+//
+// And the route he names already exists and is the better one, which is why
+// removing the button costs nothing: the What's on rows are buttons, each one
+// opens that event's own page, and the ticket link lives there beside the
+// event's dates and its ticket status.
+{
+  const { showsTicketForKind, KINDS_WITH_A_DOOR, KIND_OF_DOORED_TYPE, TYPES_WITH_A_DOOR } = M;
+  const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  const detailCode = stripComments(detail);
+
+  // ── WHICH PAGES MAY SELL A TICKET ────────────────────────────────
+  ok("an attraction page may", showsTicketForKind("free"));
+  ok("an event page may", showsTicketForKind("event"));
+  ok("a workshop page may", showsTicketForKind("craft"));
+  ok("a town page may not", !showsTicketForKind("town"));
+  ok("an island page may not", !showsTicketForKind("island"));
+  // Their prices are per dish and per pint, which entryPrice.js says in as many
+  // words, so there is no single admission to sell.
+  ok("a restaurant page may not", !showsTicketForKind("food"));
+  ok("a bar page may not", !showsTicketForKind("nightlife"));
+  ok("and a kind nobody registered may not", !showsTicketForKind("") && !showsTicketForKind("nonsense"));
+
+  // ── DERIVED, BECAUSE THIS FILE HAS THE SCAR ──────────────────────
+  //
+  // journeyScope.js's own header: "it was already a hand-written list copied
+  // from CONTENT_TYPES, which is the exact shape of the bug recorded in
+  // regions.js." The kinds come from TYPES_WITH_A_DOOR through one table, so a
+  // fourth doored type is a test failure rather than a page that quietly cannot
+  // sell what it sells.
+  is("every doored type names the kind it renders as", KINDS_WITH_A_DOOR.length, TYPES_WITH_A_DOOR.length);
+  ok("and each one is a real kind rather than a placeholder",
+     TYPES_WITH_A_DOOR.every(t => typeof KIND_OF_DOORED_TYPE[t] === "string" && KIND_OF_DOORED_TYPE[t].length > 1));
+  {
+    const scopeSrc = stripComments(readFileSync(join(root, "src/utils/journeyScope.js"), "utf8"));
+    ok("the kinds are derived rather than restated",
+       /KINDS_WITH_A_DOOR = TYPES_WITH_A_DOOR\.map/.test(scopeSrc) && !/KINDS_WITH_A_DOOR = \[/.test(scopeSrc));
+  }
+
+  // ── AND THE PAGE ASKS BEFORE IT RESOLVES A TICKET ────────────────
+  //
+  // Gated where the destination is READ, not where the button is drawn, so the
+  // At a Glance row, the book row and the button all go dark together: three
+  // readers of one value, and gating one of them is how a town page keeps a
+  // ticket row under a missing button.
+  ok("the ticket destination is refused on a page with no door",
+     /const ticketDest = !showsTicketForKind\(kind\)/.test(detailCode));
+  ok("and the gate is imported rather than rewritten here",
+     /showsTicketForKind/.test(detailCode) && !/TYPES_WITH_A_DOOR/.test(detailCode));
+  // AT THE RENDER, which fixes every row already in the database rather than
+  // needing a redraft each. The stored field is deliberately untouched: a music
+  // venue published as `night` may really sell dated tickets.
+  ok("nothing was dropped at publish to achieve it",
+     !/TYPES_WITH_A_DOOR/.test(stripComments(readFileSync(join(root, "src/utils/studioContent.js"), "utf8"))));
+
+  // ── AND THE ROUTE HE NAMED IS REALLY THERE ───────────────────────
+  //
+  // This is what makes removing the button a fix rather than a loss, so it is
+  // asserted rather than assumed.
+  ok("a town page lists what is on in it", /What's on in \$\{item\.name\}/.test(detail));
+  ok("and each event is a button rather than a line of text",
+     /onClick=\{\(\) => onOpenEvent && onOpenEvent\(e\)\} disabled=\{!onOpenEvent\}/.test(detailCode));
+  ok("with a chevron saying it opens something", /onOpenEvent && <span[^>]*>›<\/span>/.test(detailCode));
+  // Nearby events too, which is the other half of that section.
+  ok("nearby events open the same way",
+     (detailCode.match(/onOpenEvent && onOpenEvent\(e\)/g) || []).length >= 2);
+  // AND THE HANDLER IS WIRED, on the town page and on the island page, or the
+  // rows are disabled and the route he named is a dead end.
+  {
+    const appD = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the town page is given a way to open an event",
+       /kind="town"[\s\S]{0,900}?onOpenEvent=\{\(e\) => \{ setTownDetail\(null\); setEventDetail\(e\); \}\}/.test(appD));
+    ok("and so is the island page",
+       /kind="island"[\s\S]{0,900}?onOpenEvent=\{\(e\) => \{ setIslandDetail\(null\); setEventDetail\(e\); \}\}/.test(appD));
+  }
+  // The count is on the row whether or not it is open, which is the difference
+  // between folding something away and hiding it. His own decision, 10 Sep.
+  ok("the section says how many there are before it is opened",
+     /townEvents\.length \+ townNearby\.length === 1 \? "1 event"/.test(detailCode));
 }
 
 

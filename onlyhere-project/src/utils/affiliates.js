@@ -173,13 +173,17 @@ export const airbnbUrl = ({ area, country = "Denmark", checkin, checkout, adults
 // arrived as a CJ click link rather than as an aid number, and every sentence
 // below that asked about the aid alone would have gone on telling a reader that
 // a link which now pays does not. Either one means Booking pays.
-// ── AND A LINK THAT IS NOT WRAPPED DOES NOT EARN ────────────────
-// The CJ link alone is no longer the answer: with the deep-link switch off,
-// bookingCjUrl hands back the plain search URL and nothing in the chain carries
-// a marker. A disclosure saying that link may pay us would be a false statement
-// about money, on a sentence whose whole reason for existing is that this app
-// does not make those. So the switch is asked here as well as there.
-export const bookingEarns = () => !!(BOOKING_AFFILIATE_ID || (BOOKING_CJ_LINK && BOOKING_CJ_DEEP_LINKS_WORK));
+// ── AND THE CJ LINK EARNS AGAIN, BECAUSE THE DOOR CHANGED ───────
+//
+// This asked the deep-link switch for a few hours on 19 Sep, while the stay
+// buttons were unwrapped searches carrying no marker and a disclosure claiming
+// a commission would have been a false statement about money.
+//
+// stayDoorUrl removed that state. The door is now the front page THROUGH the
+// click link, which earns and lands exactly where its label says, so the switch
+// decides how much the label may promise and not whether anything is paid. Both
+// branches of stayDoorUrl above the last one are tracked links.
+export const bookingEarns = () => !!(BOOKING_AFFILIATE_ID || BOOKING_CJ_LINK);
 
 export const STAY_DISCLOSURE = bookingEarns()
   ? "Booking.com links may earn Gemlyx a small commission at no cost to you. The Airbnb link earns nothing."
@@ -283,6 +287,53 @@ export const bookingCjUrl = (url, { on = BOOKING_CJ_DEEP_LINKS_WORK } = {}) => {
   if (!h || !BOOKING_HOSTS.some(d => h === d || h.endsWith(`.${d}`))) return raw;
   // sid before url, which is the order CJ's own examples use.
   return `${BOOKING_CJ_LINK}?sid=${cjSid(raw)}&url=${encodeURIComponent(raw)}`;
+};
+
+// ── ONE STAY DOOR, AND IT CANNOT PROMISE MORE THAN IT KEEPS ─────────
+//
+// Oliver, 19 Sep 2026, settling a thing he had been turning over: "I'm going a
+// bit back and fourth on the 'budget' and 'good hotel'.. because it's really a
+// long-shot to take. Perhaps stick to the area and then just put Booking.com
+// front-page affiliate link. I think that's the best solution."
+//
+// He is right, and it resolves the deep-link problem rather than working around
+// it. A guide day had three Booking doors on it: the property the guide named, a
+// good search and a budget search. All three promised a specific landing, and
+// the programme does not deep link, so all three arrived at the front page.
+// Sorting a search for one building by price was the long shot he means: a
+// cheaper room is a different hotel.
+//
+// So there is one door. The AREA stays where it belongs, in the guide's own
+// sentence about where to sleep, and the link goes where the label says.
+//
+// ── THE LABEL IS DERIVED FROM THE LINK, WHICH IS THE POINT ──────────
+//
+// `area` is returned rather than left to the caller, so a button cannot name a
+// town the link will not show. That is the failure this whole file keeps
+// circling: costLedger.js has it in capitals about ticket links, and a stay
+// button reading "Budget hotels in Indre By" that lands on a front page is the
+// same broken promise with better manners.
+//
+// Today it is false and the button says Booking.com. The day the programme
+// allows deep links, BOOKING_CJ_DEEP_LINKS_WORK becomes true and every stay
+// door in the app turns into the area's own results with the area named on it,
+// from one word in config.js, because the label follows the link rather than
+// the other way round.
+//
+// `slot` rides on CJ's `sid`, which their label lifts through
+// `clkid-{url(query('sid'))}`. It is the one field in the chain that can answer
+// which surface earned a commission, and it reports nothing but the surface.
+export const stayDoorUrl = ({ area = "", near = "", checkin, checkout, adults = 2, slot = "stay" } = {}) => {
+  const slotName = /^[a-z][a-z0-9-]{0,23}$/i.test(String(slot)) ? String(slot) : "stay";
+  const search = bookingUrl({ area, near, checkin, checkout, adults });
+  // The best link available, in order of how much it can honestly promise.
+  if (BOOKING_CJ_LINK && BOOKING_CJ_DEEP_LINKS_WORK && search) {
+    return { href: bookingCjUrl(search), area: true, paid: true };
+  }
+  if (BOOKING_CJ_LINK) return { href: `${BOOKING_CJ_LINK}?sid=${slotName}`, area: false, paid: true };
+  if (BOOKING_AFFILIATE_ID) return { href: `https://www.booking.com/?aid=${BOOKING_AFFILIATE_ID}`, area: false, paid: true };
+  // No programme at all: the search is the honest link and it earns nothing.
+  return search ? { href: search, area: true, paid: false } : null;
 };
 
 // ─ PARTNER-ADS: THE LINK, AND THE NAME THAT MUST COME WITH IT ─────
@@ -1172,6 +1223,21 @@ export const partnerMerchant = (url) => {
   // that knows, and an unnamed banner gets "" rather than a guess.
   const viaBanner = partnerAdsMerchant(url);
   if (viaBanner) return viaBanner;
+  // ─ AND THE CLICK LINK WITH NO DESTINATION IN IT ──────────────────
+  //
+  // 19 Sep 2026, and it is the same shape as the partner-ads case above: a CJ
+  // click link carries no destination once stayDoorUrl stops adding one, so
+  // both lookups below answer "" and the button reads "Partner site" over a
+  // link to Booking.com. Vaguer than it needs to be, and it hides which
+  // company is being paid, which is the opposite of what every disclosure in
+  // this file is for.
+  //
+  // THE CONFIGURED PREFIX, NOT ANY CJ LINK. kqzyfj.com issues click links for
+  // every advertiser CJ has, so the host names nobody. BOOKING_CJ_LINK is one
+  // specific click id, his, for Booking.com, and that id is the fact worth
+  // reading. A different CJ link falls through to the lookups below and gets
+  // the honest generic label rather than being called Booking.
+  if (BOOKING_CJ_LINK && String(url || "").trim().startsWith(BOOKING_CJ_LINK)) return "Booking.com";
   const first = h.split(".")[0].toLowerCase();
   if (PARTNER_MERCHANTS[first]) return PARTNER_MERCHANTS[first];
   const dest = destinationIn(url);
