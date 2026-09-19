@@ -620,6 +620,13 @@ export const UI_STRINGS = {
   // that puts the pin back. A place silently dropped is indistinguishable from
   // a place Gemlyx does not have, which is Layla's whole problem.
   "map.leftOut":      { en: "Left out:", da: "Udeladt:", de: "Weggelassen:" },
+  // ── THE PHONE ASKS FOR THE MAP RATHER THAN BEING GIVEN IT ──────────
+  // Oliver, 19 Sep 2026: "on phone, we gotta have a 'show map' button." A
+  // fifth of a small screen taken by something nobody asked for is the reason
+  // the map was kept off phones at all until 13 Sep; a button is the version
+  // that costs one line until somebody wants it.
+  "map.show":         { en: "Show map", da: "Vis kort", de: "Karte zeigen" },
+  "map.hide":         { en: "Hide map", da: "Skjul kort", de: "Karte ausblenden" },
 
   // The two search boxes that are not the header's. header.search covers that
   // one already, and these say what they search rather than repeating "Søg".

@@ -319,6 +319,15 @@ export const briefLines = (brief) =>
 // difference between a progress bar and a next step. When several are open it
 // stays a count, because listing four things is the wall of questions the whole
 // intake design is trying not to be.
+// The two slots that can be filled and still too loose to build on, in the
+// words to use once they have already answered. Only these two can be vague
+// today, and a slot with no phrase falls back to its label rather than
+// disappearing, so adding a third vague slot cannot silently print nothing.
+const LOOSE_PHRASE = {
+  when: "the exact date",
+  party: "how many adults are coming",
+};
+
 export const briefProgress = (brief) => {
   // openBlocking/blockingTotal, not BLOCKING_SLOTS: the list drops every slot
   // with a `needs` predicate, so a booking with no nights named read as nothing
@@ -340,6 +349,19 @@ export const briefProgress = (brief) => {
   // question that happens to agree today is how two readers come to disagree
   // later — which is the failure this whole file keeps finding elsewhere.
   const stillOpen = openBlocking(brief);
+  // ── AND THE ANSWER THAT IS THERE AND TOO LOOSE TO USE ────────────
+  //
+  // 19 Sep 2026. Every blocking slot was filled, so `stillOpen` was empty and
+  // this counted seven of seven, while the brief was not ready because
+  // "start December" is a month. The count was right and the sentence beside
+  // it said nothing at all: "7 of 7" over a reply asking which day.
+  //
+  // `loose` is what is holding the build when nothing is open. Read off the
+  // brief's own lists rather than re-derived here, so this cannot disagree with
+  // ready. percentLine, four rules below, has said this sentence since 21 Aug
+  // and this line could not.
+  const loose = [...(brief?.vagueToAsk || []), ...(brief?.unreadOpen || [])]
+    .filter((k, i, all) => all.indexOf(k) === i);
   return {
     done: ready ? total : Math.max(0, total - stillOpen.length),
     total,
@@ -347,6 +369,13 @@ export const briefProgress = (brief) => {
     open: stillOpen,
     // The label of the one thing left, or "" when it is none or many.
     last: stillOpen.length === 1 ? (slotOf(stillOpen[0])?.label || "") : "",
+    // What to say about the answer that is too loose to build on, or "".
+    //
+    // Its own words rather than the slot label, because the labels are written
+    // for a LIST ("when", "who is coming") and this sentence is written for a
+    // person who has already answered that question once. "I still need when"
+    // reads as though they never said anything.
+    loose: loose.length ? (LOOSE_PHRASE[loose[0]] || slotOf(loose[0])?.label || "") : "",
   };
 };
 
@@ -366,6 +395,10 @@ export const progressLine = (progress) => {
   if (p.ready) return `Everything I need, ${p.total} of ${p.total}`;
   const n = Math.max(0, Number(p.done) || 0);
   if (p.last) return `${n} of ${p.total}, and I still need ${p.last}`;
+  // Nothing is empty and something is too loose to build on. Named, because a
+  // count that has stopped moving with no reason given is the progress bar he
+  // objected to on 26 Aug wearing a number.
+  if (p.loose) return `${n} of ${p.total}, and I still need ${p.loose}`;
   const left = Array.isArray(p.open) ? p.open.length : 0;
   if (!left) return `${n} of ${p.total}`;
   // ── AND THEN HE ASKED FOR A HYPHEN BACK ───────────────────────────

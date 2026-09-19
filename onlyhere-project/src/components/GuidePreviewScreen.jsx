@@ -114,6 +114,35 @@ const CATEGORY_SECTIONS = [
 // reason about categories too (see wantedCategories) and two copies of "craft
 // shows under Attractions" would drift the first time one of them moved.
 const groupKey = groupKeyOf;
+
+// ── THE FRAME OPENS IT, AND NOTHING SAYS SO IN WORDS ────────────────
+//
+// Oliver, 19 Sep 2026: "remove all the 'read more'. They should still be able
+// to click the frame and read more, but remove the text."
+//
+// Four rows on this screen carried a Read more button on the right, and on
+// every one of them the button was the row's only action. A row with one action
+// and a control announcing it is the row drawn twice, and it is the same note
+// he gave in August about a sentence under a form field: a label and the thing
+// is the whole of it.
+//
+// THE WORDS COME OFF THE SCREEN, NOT OFF THE CARD. Role, name and the key that
+// presses it are what a button is, and the text was standing in for all three,
+// so they are spelled out here instead. One factory rather than four copies,
+// because four rows reading "a press opens this" four different ways is how
+// three of them end up not keyboard reachable.
+const opens = (place, open) => ({
+  onClick: () => open(place),
+  onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(place); } },
+  role: "button",
+  tabIndex: 0,
+  title: place?.name || "",
+  "aria-label": place?.name || "",
+});
+// A row that carries buttons of its own (Ask, or an event's tick) needs those
+// presses to stop before they reach the frame, or every tick would also open a
+// page over the thing it just ticked.
+const notTheFrame = (fn) => (e) => { e.stopPropagation(); fn(); };
 // What an empty section is called when the brief did not ask for it. The label
 // is a category name; this is the invitation.
 const ADD_LABEL = { free: "Add attractions", food: "Add places to eat", nightlife: "Add nightlife" };
@@ -723,7 +752,7 @@ export const GuidePreviewScreen = ({
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {cat.items.map(place => (
-                <div key={`${place._src}-${place.id}`} style={{ display: "flex", gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 12, alignItems: "center" }}>
+                <div key={`${place._src}-${place.id}`} {...opens(place, openStopDetail)} style={{ display: "flex", gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 12, alignItems: "center", cursor: "pointer" }}>
                   <div style={{ width: 64, height: 64, borderRadius: 10, overflow: "hidden", flexShrink: 0, background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {place.photo ? (
                       <img src={place.photo} alt={place.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -807,10 +836,6 @@ export const GuidePreviewScreen = ({
                       the whole story and falls back to this exact clip. */}
                   <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{cardLine(place)}</div>
                   </div>
-                  <button onClick={() => openStopDetail(place)}
-                    style={{ flexShrink: 0, background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                    Read more
-                  </button>
                 </div>
               ))}
             </div>
@@ -831,7 +856,7 @@ export const GuidePreviewScreen = ({
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {cat.consider.map(place => (
-                    <div key={`consider-${place._src}-${place.id}`} style={{ display: "flex", gap: 10, alignItems: "center", background: "none", border: `1px dashed ${C.border}`, borderRadius: 12, padding: 10 }}>
+                    <div key={`consider-${place._src}-${place.id}`} {...opens(place, openStopDetail)} style={{ display: "flex", gap: 10, alignItems: "center", background: "none", border: `1px dashed ${C.border}`, borderRadius: 12, padding: 10, cursor: "pointer" }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{place.name}</div>
                         <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 2 }}>
@@ -839,10 +864,6 @@ export const GuidePreviewScreen = ({
                           {(place._considerWhy || []).length > 0 && ` Here because you said ${(place._considerWhy || []).join(" and ")}.`}
                         </div>
                       </div>
-                      <button onClick={() => openStopDetail(place)}
-                        style={{ flexShrink: 0, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                        Read more
-                      </button>
                     </div>
                   ))}
                 </div>
@@ -907,8 +928,8 @@ export const GuidePreviewScreen = ({
                 {cat.picks.map(({ place, reason }) => {
                   const on = (pickedExtras || []).includes(place.name);
                   return (
-                    <div key={`x-${place._src}-${place.id}`} style={{ display: "flex", gap: 12, background: C.surface, border: `1px solid ${on ? `${C.gold}66` : C.border}`, borderRadius: 14, padding: 12, alignItems: "center" }}>
-                      <button onClick={() => toggleExtra(place.name)}
+                    <div key={`x-${place._src}-${place.id}`} {...opens(place, openStopDetail)} style={{ cursor: "pointer", display: "flex", gap: 12, background: C.surface, border: `1px solid ${on ? `${C.gold}66` : C.border}`, borderRadius: 14, padding: 12, alignItems: "center" }}>
+                      <button onClick={notTheFrame(() => toggleExtra(place.name))}
                         aria-label={on ? `Remove ${place.name} from the trip` : `Add ${place.name} to the trip`}
                         style={{ flexShrink: 0, width: 26, height: 26, borderRadius: 8, cursor: "pointer", background: on ? C.gold : "transparent", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.muted, fontSize: 13, fontWeight: 800, lineHeight: 1, fontFamily: "'Inter', sans-serif" }}>
                         {on ? "✓" : ""}
@@ -925,13 +946,9 @@ export const GuidePreviewScreen = ({
                         )}
                         <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{cardLine(place)}</div>
                       </div>
-                      <button onClick={() => setAskItem(place)}
+                      <button onClick={notTheFrame(() => setAskItem(place))}
                         style={{ flexShrink: 0, background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "6px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                         Ask
-                      </button>
-                      <button onClick={() => openStopDetail(place)}
-                        style={{ flexShrink: 0, background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                        Read more
                       </button>
                     </div>
                   );
@@ -974,8 +991,8 @@ export const GuidePreviewScreen = ({
                 const on = picked.includes(place.name);
                 const blocked = !row.tickable || (!on && atLimit);
                 return (
-                  <div key={`event-${place.id}`}
-                    style={{ display: "flex", gap: 12, background: C.surface, border: `1px solid ${on ? `${C.gold}88` : C.border}`, borderRadius: 14, padding: 12, alignItems: "center", opacity: row.tickable ? 1 : 0.62 }}>
+                  <div key={`event-${place.id}`} {...opens(place, openStopDetail)}
+                    style={{ cursor: "pointer", display: "flex", gap: 12, background: C.surface, border: `1px solid ${on ? `${C.gold}88` : C.border}`, borderRadius: 14, padding: 12, alignItems: "center", opacity: row.tickable ? 1 : 0.62 }}>
                     <div style={{ width: 64, height: 64, borderRadius: 10, overflow: "hidden", flexShrink: 0, background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       {place.photo ? (
                         <img src={place.photo} alt={place.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -997,12 +1014,8 @@ export const GuidePreviewScreen = ({
                         {getEventDate(place.date, place.dateEnd)}{place.town ? ` · ${place.town}` : ""}
                         {row.note ? ` · ${row.note}` : ""}
                       </div>
-                      <button onClick={() => openStopDetail(place)}
-                        style={{ background: "none", border: "none", padding: 0, marginTop: 5, color: C.gold, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                        Read more
-                      </button>
                     </div>
-                    <button onClick={() => { if (!blocked || on) toggleEvent(place.name); }}
+                    <button onClick={notTheFrame(() => { if (!blocked || on) toggleEvent(place.name); })}
                       disabled={blocked && !on}
                       aria-pressed={on}
                       aria-label={on ? `Remove ${place.name} from the trip` : `Add ${place.name} to the trip`}

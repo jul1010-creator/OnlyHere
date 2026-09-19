@@ -56,6 +56,50 @@ const LONG_BLOCK = `ANSWER LENGTH: FULL. The traveller has chosen the longer ans
 
 export const answerLengthBlock = (mode) => (cleanLength(mode) === SHORT ? SHORT_BLOCK : LONG_BLOCK);
 
+// ── AND THE RULE THAT WAS ARGUING WITH IT ───────────────────────────
+//
+// Oliver, 19 Sep 2026, after using the two settings on the same conversation:
+// "the short and full versions are no different.. short should be no details,
+// while full should be the current."
+//
+// He is right and the block above was never going to win on its own. Thirty
+// lines before it the prompt said, unconditionally: "BE HELPFUL, NOT JUST
+// BRIEF: a short, thin answer wastes their time more than a slightly longer,
+// useful one does", and then asked for a DKK figure, a season warning, a
+// transit quirk and a trade-off. One paragraph asking for brevity against
+// forty asking for substance is not a rule, and "this outranks every other
+// instruction" is a claim the surrounding text kept contradicting.
+//
+// So the depth paragraph moves in here and becomes one of the two settings. The
+// long one is his current reply, word for word, because that half is what he
+// wants kept. The short one asks for the same honesty about what matters and
+// gives it one sentence to happen in.
+//
+// WHAT SURVIVES ON SHORT IS THE ONE REAL THING, which is what he chose when
+// asked: "Keep it, cut everything else." A turn that gives nothing is the
+// intake form this app has been pulling away from since August, so the thing
+// given stays and the tip, the reasoning, the aside and the closing offer go.
+const LONG_DEPTH = `BE HELPFUL, NOT JUST BRIEF: people planning a Denmark trip are often spending real money to get here, and a short, thin answer wastes their time more than a slightly longer, useful one does. "Concise" means no padding or filler, not "as few words as possible." When you answer, give the specific detail that changes what someone does: realistic costs (actual DKK figures, not just "moderate"), a heads-up if the season/weather makes something worth reconsidering, a transit quirk, a real trade-off between two options. Depth here means more real information, not more adjectives or enthusiasm. The "kill the brochure fluff" rule still fully applies to HOW you write, just not to how much you are willing to tell someone.`;
+
+const SHORT_DEPTH = `BE USEFUL IN ONE SENTENCE. They have asked for short answers, so depth is one detail that changes what they do, not four. Pick the single most useful thing you know about what they just said, say it plainly, and stop: a price if the price is the thing, a closing time if that is the thing, one trade-off if that is. Never stack them. Everything else you know stays unsaid until they ask for it, and a reply that covers three things well is a failure here.`;
+
+export const depthBlock = (mode) => (cleanLength(mode) === SHORT ? SHORT_DEPTH : LONG_DEPTH);
+
+// ── AND THE CEILING, BECAUSE A RULE WITH NO EDGE IS A PREFERENCE ────
+//
+// Both settings ran on the same 8192 token budget, so nothing but the model's
+// own judgement separated them, and its judgement was being formed by the forty
+// lines above. Three sentences is a few hundred tokens with room to spare; the
+// cap is not the rule and is not meant to be hit, it is the thing that makes the
+// rule cost something when it is ignored.
+//
+// Generous enough that a route across several days, which the short block
+// explicitly allows two paragraphs for, still finishes its sentence. A reply cut
+// off mid word is worse than a long one, and this project has shipped that bug
+// once already.
+export const SHORT_REPLY_TOKENS = 1200;
+export const answerTokens = (mode, full) => (cleanLength(mode) === SHORT ? SHORT_REPLY_TOKENS : full);
+
 // What the two buttons say. "Short" and "Full" rather than "Short" and "Long",
 // because nobody picks the option labelled long.
 export const LENGTH_LABEL = { [SHORT]: "Short", [LONG]: "Full" };

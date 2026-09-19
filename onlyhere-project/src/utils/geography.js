@@ -346,3 +346,67 @@ export const islandsPresent = (entries, islandOfEntry = () => "") => {
   }
   return [...found].sort(daCompare);
 };
+
+// ── AND WHEN THE WHOLE TRIP IS ON ONE OF THEM ───────────────────────
+//
+// Oliver, 19 Sep 2026: "if the AI concludes that it is going to make a
+// Zealand-only or a Jutland-only trip, then it should zoom into a zealand-only
+// map or a jutland-only map."
+//
+// The map has opened on the whole of Denmark since 12 Sep, which was his call
+// and is right for a conversation that has not decided anything yet. It stops
+// being right the moment the trip has: a week on Zealand drawn on a map running
+// from Sylt to Bornholm puts every stop in a quarter of the picture and spends
+// the rest on water nobody is crossing.
+//
+// EVERY LANDMASS, NOT THE TWO HE NAMED. He named the two big ones because they
+// are the two that come up; a week on Funen or on Bornholm is the same trip
+// shape and would be the same mistake. Naming Zealand and Jutland in the code
+// would mean a Bornholm trip quietly kept the country frame, and nothing on
+// screen would say why.
+//
+// FROM THE OUTLINES ALREADY HERE, so the box and the landmass a place belongs to
+// are answered by one set of shapes. A hand-typed box per part would be a second
+// instrument, and the first thing it would do is disagree about Fanø.
+const partBoxes = new Map(LANDMASSES.map(m => {
+  let south = Infinity, west = Infinity, north = -Infinity, east = -Infinity;
+  for (const [la, lo] of m.poly) {
+    if (la < south) south = la;
+    if (la > north) north = la;
+    if (lo < west) west = lo;
+    if (lo > east) east = lo;
+  }
+  return [m.name, { south, west, north, east }];
+}));
+
+export const partBox = (name) => {
+  const box = partBoxes.get(String(name || ""));
+  return box ? { ...box } : null;
+};
+
+// The one landmass every point is on, or "" when they disagree or when any of
+// them cannot be placed. UNPLACEABLE IS A DISAGREEMENT, deliberately: a pin with
+// no landmass is a pin this frame might cut off, and the country frame shows
+// everything.
+export const onePartFor = (points) => {
+  let found = "";
+  for (const p of Array.isArray(points) ? points : []) {
+    const part = partOfCountry(p);
+    if (!part) return "";
+    if (!found) found = part;
+    else if (part !== found) return "";
+  }
+  return found;
+};
+
+// TWO PINS, NOT ONE. Oliver, 12 Sep 2026: "Have the map default as a map of
+// Denmark from start." A lone town gets the country, which is that rule and is
+// also the honest picture, because one stop is not a trip that has decided
+// anything. The second stop is where a shape appears.
+export const PART_FRAME_MIN_PINS = 2;
+export const partFrameFor = (points) => {
+  const list = (Array.isArray(points) ? points : [])
+    .filter(p => Number.isFinite(Number(p?.lat)) && Number.isFinite(Number(p?.lon)));
+  if (list.length < PART_FRAME_MIN_PINS) return null;
+  return partBox(onePartFor(list));
+};

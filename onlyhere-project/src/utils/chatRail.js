@@ -196,7 +196,28 @@ export const MAP_PIN_CAP = 12;
 // coordsFor in particular must be placeCoords and not a fresh `__lat ?? lat`
 // read. Six copies of that read have been found in this codebase and five of
 // them were wrong; a seventh written here would be the same bug in a new file.
-export const mapPlaces = ({ messages = [], placesFor, rejectsFor, correctsFor, coordsFor, cap = MAP_PIN_CAP } = {}) => {
+// ── CONFIRMED, OR ONLY ON THE TABLE ─────────────────────────────────
+//
+// Oliver, 19 Sep 2026, looking at a map carrying Gilleleje. He had never said
+// the word: Gemlyx named it once, inside a question about the children's ages,
+// as the gentle alternative to Legoland. It arrived with the same red pin as
+// Copenhagen, which he had flown into.
+//
+// His rule: "the pointer on maps should only be if it's confirmed. The places
+// that are being considered should be green dots instead. We need to prevent
+// the map from looking like a mess."
+//
+// So a pin is a claim and a dot is an offer, and the line between them is the
+// one he drew when asked: a place is confirmed when THEY named it, or when they
+// said yes to it. Everything Gemlyx has put forward and they have not picked up
+// is still being considered, and a map that says so is telling the truth about
+// a conversation rather than flattening it.
+//
+// READ FROM THE WALK RATHER THAN FROM A SECOND PASS over the transcript, because
+// the walk already knows which turn named what, and it already knows the one
+// thing a fresh reader would get wrong: a refusal lifted by a later turn of
+// theirs is them naming it, and that is a confirmation.
+export const mapPlaces = ({ messages = [], placesFor, rejectsFor, correctsFor, coordsFor, cap = MAP_PIN_CAP, picked = [] } = {}) => {
   const none = { pins: [], dropped: 0 };
   if (typeof placesFor !== "function" || typeof coordsFor !== "function") return none;
   const list = Array.isArray(messages) ? messages : [];
@@ -232,6 +253,11 @@ export const mapPlaces = ({ messages = [], placesFor, rejectsFor, correctsFor, c
   // and reading it as one is the same mistake as reading the brief out of
   // Gemlyx's own replies.
   const refused = new Set();
+  // Their own words, plus the places they tapped Yes on. A Yes is a decision
+  // nobody typed, so the walk cannot read it out of the text, which is the same
+  // reason withoutExcluded exists for the No.
+  const confirmed = new Set((Array.isArray(picked) ? picked : [])
+    .map(p => String(p?.name || p || "").trim().toLowerCase()).filter(Boolean));
   for (const m of list) {
     if (!m || m.isError) continue;
     const text = String(m.text || "");
@@ -275,6 +301,10 @@ export const mapPlaces = ({ messages = [], placesFor, rejectsFor, correctsFor, c
       if (refused.has(key)) continue;
       here.add(key);
       added.push(key);
+      // A place the TRAVELLER names is theirs, whoever said it first. Marked on
+      // the way past rather than counted afterwards, so a name they typed in a
+      // turn whose pin was capped away still counts if it comes back.
+      if (m.role === "user") confirmed.add(key);
       if (!byKey.has(key)) order.push(key);
       byKey.set(key, { key, place: p, lat: at.lat, lon: at.lon });
     }
@@ -323,6 +353,10 @@ export const mapPlaces = ({ messages = [], placesFor, rejectsFor, correctsFor, c
         // that both names and turns down a place lands on the refusal.
         if (refusedHere.has(n.key)) continue;
         refused.delete(n.key);
+        // And changing their mind about a place is naming it. This branch only
+        // runs on a turn of THEIRS, so the pin it restores is a confirmed one
+        // rather than the offer they had turned down.
+        confirmed.add(n.key);
         // Back on the map, where the rest of this loop would have put it had it
         // never been refused: at the end of the order, as the newest thing.
         if (byKey.has(n.key)) continue;
@@ -339,7 +373,7 @@ export const mapPlaces = ({ messages = [], placesFor, rejectsFor, correctsFor, c
   // pins that just appeared, which is the half he is looking at.
   const kept = all.slice(Math.max(0, all.length - Math.max(0, cap)));
   return {
-    pins: kept.map(pin => ({ ...pin, latest: newest.has(pin.key) })),
+    pins: kept.map(pin => ({ ...pin, latest: newest.has(pin.key), confirmed: confirmed.has(pin.key) })),
     // Said rather than swallowed, so the caption can admit the map is not the
     // whole conversation instead of quietly being a different trip.
     dropped: all.length - kept.length,
@@ -396,6 +430,23 @@ export const MAP_CLASS = "chat-rail-map";
 export const PHONE_MAP_PINS = 2;
 export const phoneMapShows = (pins) => (Array.isArray(pins) ? pins : []).length >= PHONE_MAP_PINS;
 
+// ── AND ON A PHONE IT IS ASKED FOR, 19 SEP 2026 ─────────────────────
+//
+// Oliver: "on phone, we gotta have a 'show map' button."
+//
+// The map arrived on phones on 13 Sep and took its 190 pixels the moment there
+// were two pins, whatever the person was doing. On a 844 pixel screen that is a
+// fifth of everything, spent without being asked, on the turn somebody is
+// reading. A button is the same map one tap away and nothing until then.
+//
+// TWO QUESTIONS, NOT ONE, and they are different: phoneMapShows is whether
+// there is a map worth offering, which is what decides whether the button
+// appears at all, and this is whether it is open. The class on the rail, the
+// component that builds the map and the button's own label all read this one,
+// so a map that is open and a rail that is not is not a state that exists.
+export const phoneMapOpen = (pins, open) => phoneMapShows(pins) && !!open;
+export const MAP_TOGGLE_CLASS = "chat-map-toggle";
+
 // The whole of the side column, which is what he picked on 8 Sep: "The
 // sidepanel is primarily for the map." Only at the rail breakpoint: below it
 // there is no column to put a map in, and a map stacked into a phone panel
@@ -404,6 +455,17 @@ export const POPUP_CLASS = "gemlyx-chat-popup";
 // Every pin carries one of these, always. labelSides at the foot of this file
 // decides where each one goes and says why it is a label rather than the card.
 export const LABEL_CLASS = "gemlyx-pin-label";
+// ── THE MARKS A CONSIDERED PLACE GETS ───────────────────────────────
+//
+// Named here rather than in the component for the reason every other class on
+// this map is: the CSS that draws them is here, the component that asks for
+// them is there, and a string spelled out in both is how a rename half lands.
+// DOT_GREEN is the same value ChatMiniMap draws the dot itself with, and the
+// suite holds the two to each other.
+export const DOT_CLASS = "gemlyx-chat-dot";
+export const DOT_PULSE = "gemlyx-dot-pulse";
+export const CORNER_CLASS = "gemlyx-map-corner";
+export const DOT_GREEN = "#3FBF6A";
 
 // ── THE POPUP IS THE CARD, SO LEAFLET'S CHROME HAS TO GET OUT ───────
 //
@@ -432,6 +494,16 @@ export const railMapCss = (C = {}) => `
              is the thing it does. */
           .${RAIL_CLASS} .leaflet-control-zoom { display: none; }
         }
+        /* ── AND THE BUTTON THAT OPENS IT, ON PHONES ONLY ─────────
+           Above the breakpoint the map is the side column and is always there,
+           so a control offering to show it would be offering something already
+           on screen. Hidden by default and shown in the phone query, rather
+           than the reverse, so a viewport this file does not know about gets
+           the desktop behaviour it already had. */
+        .${MAP_TOGGLE_CLASS} { display: none; }
+        @media (max-width: ${RAIL_BREAKPOINT_PX - 1}px) {
+          .${MAP_TOGGLE_CLASS} { display: inline-flex; }
+        }
         @media (min-width: ${RAIL_BREAKPOINT_PX}px) {
           /* ── ELASTIC, WITH A FLOOR ───────────────────────────────
              flex rather than a height, so the map takes what the rail has
@@ -458,6 +530,57 @@ export const railMapCss = (C = {}) => `
           pointer-events: none;
         }
         .${LABEL_CLASS}::before { display: none; }
+        /* ── THE DOT THAT IS STILL BEING CONSIDERED ───────────────
+           Oliver, 19 Sep 2026: "what about the dot becomes a little blinking
+           greendot". Blinking rather than steady because the two marks answer
+           two different questions: a pin is a place in the trip and it sits
+           there, a dot is a place waiting for an answer.
+
+           A PULSE, NOT A BLINK. Something that switches off and on at this size
+           reads as a fault, and on a map with three of them it is a strobe. The
+           opacity floor is 0.45, so the dot is on the map the whole time and
+           what moves is how much it is asking.
+
+           AND IT STOPS FOR ANYBODY WHO ASKED IT TO. Two seconds of movement
+           that never ends, in the corner of a page somebody is reading, is the
+           exact thing prefers-reduced-motion exists for. The dot stays, at full
+           strength, which is the half carrying the meaning. */
+        @keyframes ${DOT_PULSE} {
+          0%, 100% { opacity: 1; }
+          50% { opacity: .45; }
+        }
+        .${DOT_CLASS} { animation: ${DOT_PULSE} 1.9s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          .${DOT_CLASS} { animation: none; opacity: 1; }
+        }
+        /* ── AND THE NAME OF THE ONE BEING OFFERED ────────────────
+           "the suggested place shows in the left corner of the map."
+
+           The dots carry no label of their own, so this is where a suggestion
+           gets named. Top left, out of the way of the zoom control at the
+           bottom right and of the labels that sit above the pins. Nothing at
+           all when nothing is being considered, because a box reading "nothing
+           yet" is furniture. */
+        .${CORNER_CLASS} {
+          position: absolute; top: 8px; left: 8px; z-index: 500;
+          display: flex; align-items: center; gap: 6px;
+          max-width: calc(100% - 70px);
+          background: rgba(10,15,30,.86); border: 1px solid ${C.border};
+          color: ${C.text}; border-radius: 8px; padding: 4px 8px;
+          font-family: 'Inter', sans-serif; font-size: 10.5px; line-height: 1.3;
+          box-shadow: 0 2px 8px rgba(0,0,0,.5);
+          pointer-events: none;
+        }
+        .${CORNER_CLASS} .corner-dot {
+          width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+          background: ${DOT_GREEN};
+          animation: ${DOT_PULSE} 1.9s ease-in-out infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .${CORNER_CLASS} .corner-dot { animation: none; }
+        }
+        .${CORNER_CLASS} .corner-name { font-weight: 700; }
+        .${CORNER_CLASS} .corner-more { color: ${C.muted}; }
         .${LABEL_CLASS} .pin-name { display: block; font-weight: 700; }
         /* The themes ARE the answer to "what is it for", so they are readable
            rather than a whisper, and gold because that is the colour this app

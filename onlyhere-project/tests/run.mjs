@@ -78,7 +78,7 @@ writeFileSync(entry, `
   export { parsePretend, cleanPretend, readPretend, writePretend, pretendBanner, findPlace, PRETEND_KEY } from ${JSON.stringify(join(root, "src/utils/pretendLocation.js"))};
   export { groupIdIn, pageNameIn, feedKindOf, FEED_KINDS, feedUrlProblem, cleanFeed, postsIn, postedDay, datesInPost, timeInPost, candidatesIn, dedupeCandidates, alreadyPublished, newCandidates, sweepCost, PAGES_PER_FEED, CENTS_PER_PAGE } from ${JSON.stringify(join(root, "src/utils/communityFeeds.js"))};
   export { scopeTier, ISLANDS_SCOPE, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
-  export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM, islandOf, statedIsland, namedIslandOf, islandsPresent, ISLAND_BY_KOMMUNE, ISLAND_LABEL } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
+  export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partBox, onePartFor, partFrameFor, PART_FRAME_MIN_PINS, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM, islandOf, statedIsland, namedIslandOf, islandsPresent, ISLAND_BY_KOMMUNE, ISLAND_LABEL } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES, distinctThemes } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { tierBadge, TIER_TONE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { withoutNonModes, travelModeKey as travelModeKeyForTest } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
@@ -229,7 +229,7 @@ writeFileSync(entry, `
   export { DATE_TIER, DATE_TIER_LABEL, canSetADate, dateTierOf, reconcileDate, dateAuthorityProblems, probeWindow, readProbe, probeNote, eventCheckProblems, PROBE_PAD_DAYS } from ${JSON.stringify(join(root, "src/utils/dateAuthority.js"))};
   export { ldDay, ldBlocks, eventsInPage, eventForName, claimFromEvent } from ${JSON.stringify(join(root, "src/utils/eventLd.js"))};
   export { socialOf, socialAge, askFor, socialVerdict, socialPlan, describeSocialPlan, socialWriteFor, canWrite as socialCanWrite, preTicked as socialPreTicked, describeFinding as describeSocialFinding, HOW_WORDS as SOCIAL_HOW_WORDS, ACCOUNT_FRESH_DAYS, NOTHING_FOUND_DAYS, REQUESTS_PER_SEARCH, HAVE as SOCIAL_HAVE, ASK_PAGE as SOCIAL_ASK_PAGE, ASK_SEARCH as SOCIAL_ASK_SEARCH, ASKED as SOCIAL_ASKED, CANNOT as SOCIAL_CANNOT } from ${JSON.stringify(join(root, "src/utils/socialSweep.js"))};
-  export { cleanLength, answerLengthBlock, lengthLabel, ANSWER_LENGTHS, DEFAULT_LENGTH, SHORT as ANSWER_SHORT, LONG as ANSWER_LONG } from ${JSON.stringify(join(root, "src/utils/answerLength.js"))};
+  export { cleanLength, answerLengthBlock, depthBlock, answerTokens, SHORT_REPLY_TOKENS, lengthLabel, ANSWER_LENGTHS, DEFAULT_LENGTH, SHORT as ANSWER_SHORT, LONG as ANSWER_LONG } from ${JSON.stringify(join(root, "src/utils/answerLength.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, RESERVED_THEME, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
@@ -6155,6 +6155,36 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 
   // NULL IS NOT A BUCKET. An entry this cannot place must stay visible under
   // All and be counted, never quietly filtered out of every view.
+  // ── AND THE FRAME A ONE LANDMASS TRIP GETS, 19 SEP 2026 ──────────
+  //
+  // Oliver: "if the AI concludes that it is going to make a Zealand-only or a
+  // Jutland-only trip, then it should zoom into a zealand-only map or a
+  // jutland-only map."
+  {
+    const { partBox, onePartFor, partFrameFor, PART_FRAME_MIN_PINS } = M;
+    const CPH = { lat: 55.6761, lon: 12.5683 };
+    const ROSKILDE = { lat: 55.6415, lon: 12.0803 };
+    const GILLELEJE = { lat: 56.1235, lon: 12.3106 };
+    const AARHUS = { lat: 56.1629, lon: 10.2039 };
+    is("three Zealand stops are a Zealand trip", onePartFor([CPH, ROSKILDE, GILLELEJE]), "Zealand");
+    is("one of them in Jutland is not", onePartFor([CPH, ROSKILDE, AARHUS]), "");
+    is("and a point nothing can place is a disagreement", onePartFor([CPH, { lat: 48.85, lon: 2.35 }]), "");
+    // EVERY landmass, not the two he named: a week on Bornholm is the same trip
+    // shape, and naming two in the code is how the third quietly keeps the
+    // country frame with nothing on screen saying why.
+    const box = partBox("Zealand");
+    ok("Zealand has a box of its own", box && box.north > box.south && box.east > box.west);
+    ok("and it does not reach Jutland", box.west > 10.5);
+    ok("every landmass has one", RESOLVED_PARTS.every(n => !!partBox(n)));
+    is("a name nothing knows has none", partBox("Atlantis"), null);
+    // A lone town keeps the whole country, which is his 12 Sep rule: one stop is
+    // not a trip that has decided anything.
+    is("two pins is where a shape appears", PART_FRAME_MIN_PINS, 2);
+    is("so one Zealand pin still gets the country", partFrameFor([CPH]), null);
+    ok("and two get Zealand", !!partFrameFor([CPH, ROSKILDE]));
+    is("a trip across the belt gets the country", partFrameFor([CPH, AARHUS]), null);
+    is("and pins with no coordinates are not counted", partFrameFor([CPH, { name: "Nowhere" }]), null);
+  }
   is("no coordinate means no answer", partOfCountry({ name: "Somewhere" }), null);
   is("nor does half a coordinate", partOfCountry({ __lat: 55.5 }), null);
   is("nor a coordinate that is not a number", partOfCountry({ __lat: "north", __lon: "east" }), null);
@@ -33011,12 +33041,22 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
          !/"OUR PAGE"|VORES SIDE|UNSERE SEITE|"CHECKED"|TJEKKET/.test(code));
       ok("and the vocabulary behind it went with it", !/oursLabel/.test(code));
     }
-    // What survives is the line saying what pressing it gets you, which is what
-    // the badge was reaching for. "Read more" since 9 Sep, in his words.
-    ok("the line under the name says what pressing it gets you",
-       /da: "Læs mere"/.test(cards) && /\|\| "Read more"/.test(cards));
-    ok("and it follows the language the conversation is in",
-       /de: "Mehr lesen"/.test(cards) && /sv: "Läs mer"/.test(cards));
+    // ── AND THEN THE WORDS CAME OFF TOO, 19 SEP 2026 ──────────────
+    //
+    // Oliver: "remove all the 'read more'. They should still be able to click
+    // the frame and read more, but remove the text."
+    //
+    // The label outlived the badge by ten days and went the same way and for
+    // the same reason: it described the card to somebody already looking at it.
+    // What it was carrying that the picture cannot is the part a screen reader
+    // needs, so that is what it turned into.
+    ok("no card tells a reader what pressing it gets them",
+       !/Read more|Læs mere|Mehr lesen|Läs mer|Les mer|Lees meer/.test(cards));
+    ok("and the vocabulary went with it", !/openLabel|OPEN_IT/.test(cards));
+    ok("but the frame is still a button, with a name and a key",
+       /role: "button"/.test(cards) && /tabIndex: 0/.test(cards)
+       && /"aria-label": place\.name/.test(cards)
+       && /e\.key === "Enter" \|\| e\.key === " "/.test(cards));
   }
 
   // ── AND IT IS ACTUALLY WIRED, UNDER ASSISTANT MESSAGES ONLY ─────
@@ -51219,6 +51259,67 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       (dodged.unanswered || []).every(k => !dodged.known[k]));
   }
 
+  // ── HIS OWN TRANSCRIPT, 19 SEP 2026 ──────────────────────────────
+  //
+  // Replayed off the export he sent, turn for turn, because the screenshot is
+  // the whole finding: "Everything I need, 7 of 7" and the build card, above a
+  // reply reading "What dates exactly are you thinking within December?"
+  //
+  // Oliver: "It needed an exact date. Which is correct. The card should not
+  // have been generated in the first place."
+  {
+    const TURNS = [
+      "Hi! I want to go to Denmark!",
+      "I'm flying into Copenhagne",
+      "Yes, I meant Copenhagen. My keyboard sucks.",
+      "I'm thinking of staying 10 days.. so i'm trying to figure out ideas to properly explore the country",
+      "my wife and 3 kids",
+      "they're 8-14",
+      "yes 8, 11 and 14",
+      "We go around by public transport, but some cycling in Copenhagen",
+      "continue",
+      "We're going around start December.",
+    ];
+    const ANSWERING = [[], ["origin"], ["days"], ["when"], ["party"], ["party:sharper"], ["interests"], ["transport"], ["transport"], ["stay"]];
+    const ASKED = ["origin", "days", "when", "party", "party:sharper", "interests", "transport", "stay"];
+    const his = readBrief({
+      travellerText: TURNS.join("\n"), travellerTurns: TURNS, answering: ANSWERING,
+      asked: ASKED, intake: {}, today: new Date("2026-09-19"),
+    });
+    ok("December is read, so nothing is missing", !his.missing.length);
+    ok("and it is read as a month rather than a day", his.vague.includes("when"));
+    ok("so the build is not offered", !his.ready);
+    const p = briefProgress(his);
+    ok("and the count no longer says everything is in", !/Everything I need/.test(progressLine(p)));
+    ok("it names something it is still waiting for", /I still need/.test(progressLine(p)));
+    // And when the hotel question is the only one left open, the loose date is
+    // what the line names, which is the sentence that was missing entirely.
+    is("a loose date has words of its own",
+       progressLine({ total: 7, done: 7, open: [], loose: "the exact date" }),
+       "7 of 7, and I still need the exact date");
+    // The turn after, where Gemlyx put the sharpening question and he answered
+    // "2nd of deecember". The typo means nothing reads it, so the question is
+    // still open and the card still is not offered.
+    const TYPO = [...TURNS, "I'm thinking the 2nd of deecember?"];
+    const afterTypo = readBrief({
+      travellerText: TYPO.join("\n"), travellerTurns: TYPO,
+      answering: [...ANSWERING, ["when:sharper"]],
+      asked: [...ASKED, "when:sharper"], intake: {}, today: new Date("2026-09-19"),
+    });
+    ok("an answer nothing could read leaves the date loose", afterTypo.vague.includes("when"));
+    ok("and the build is still not offered over it", !afterTypo.ready);
+    // And the way out, which is the same turn with the month spelled properly.
+    const FIXED = [...TURNS, "2 December"];
+    const afterFix = readBrief({
+      travellerText: FIXED.join("\n"), travellerTurns: FIXED,
+      answering: [...ANSWERING, ["when:sharper"]],
+      asked: [...ASKED, "when:sharper"], intake: {}, today: new Date("2026-09-19"),
+    });
+    is("a readable date is read to the day", afterFix.known.when?.precision, "day");
+    ok("and then it is ready", afterFix.ready);
+    ok("and the count says so", /Everything I need/.test(progressLine(briefProgress(afterFix))));
+  }
+
   // ── AND IT IS ON THE SCREEN ──────────────────────────────────────
   //
   // briefPanel.js sat in this repository with zero callers for three days, which
@@ -54328,11 +54429,22 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // the other, `const shown = wide` in ChatMiniMap, said never, so the rail
   // shipped as a blank 190px strip. Both now read phoneMapShows, and the rail
   // is rendered by the walk that has the pins.
-  ok("and it only appears once there are two pins to relate",
-     /className=\{`\$\{RAIL_CLASS\}\$\{phoneMapShows\(onMap\.pins\) \? " has-map" : ""\}`\}/.test(appR));
+  // ── AND ON A PHONE IT IS ASKED FOR, 19 SEP 2026 ─────────────────
+  //
+  // Oliver: "on phone, we gotta have a 'show map' button." Two pins is still
+  // what makes a map worth offering, and it is now what makes the BUTTON
+  // appear. Whether the rail opens is the button's answer, phoneMapOpen, which
+  // is the two-pin rule and the tap together.
+  ok("and it only opens once there are two pins to relate and somebody asked",
+     /className=\{`\$\{RAIL_CLASS\}\$\{phoneMapOpen\(onMap\.pins, phoneMapOn\) \? " has-map" : ""\}`\}/.test(appR));
   ok("read off the pins this render walked, not the ref the last one wrote",
-     /pinsRef\.current = onMap\.pins;\s*return \(\s*<div className=\{`\$\{RAIL_CLASS\}\$\{phoneMapShows\(onMap\.pins\)/.test(appR)
+     /pinsRef\.current = onMap\.pins;\s*return \(\s*<div className=\{`\$\{RAIL_CLASS\}\$\{phoneMapOpen\(onMap\.pins, phoneMapOn\)/.test(appR)
      && !/pinsRef\.current \|\| \[\]\)\.length >= 2/.test(appR));
+  // The button itself: phone only, and only when there is a map to offer.
+  ok("a phone gets a button for it", /className=\{MAP_TOGGLE_CLASS\}/.test(appR));
+  ok("shown only when two pins make a map worth offering", /\{phoneMapShows\(pinsRef\.current\) && \(/.test(appR));
+  ok("and it says which way it goes", /uiT\(phoneMapOn \? "map\.hide" : "map\.show", uiLang\)/.test(appR));
+  ok("the desktop never sees it", /\.\$\{MAP_TOGGLE_CLASS\} \{ display: none; \}/.test(readFileSync(join(root, "src/utils/chatRail.js"), "utf8")));
   {
     const { PHONE_MAP_PINS, phoneMapShows } = M;
     is("the phone's number is two, for the reason the rail has argued since it was written", PHONE_MAP_PINS, 2);
@@ -54341,7 +54453,54 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("and nothing is not", !phoneMapShows([]) && !phoneMapShows(null) && !phoneMapShows(undefined));
     // Neither reader keeps a copy of the number.
     const miniSrc = readFileSync(join(root, "src/components/ChatMiniMap.jsx"), "utf8");
-    ok("the component reads the same rule", /const shown = wide \|\| phoneMapShows\(list\);/.test(miniSrc));
+    // ── THE DOT, THE PIN AND THE THREAD BETWEEN THEM, 19 SEP 2026 ──
+    //
+    // "The places that are being considered should be green dots instead. We
+    // need to prevent the map from looking like a mess. That could also make us
+    // draw a line between the pointers as a 'route'."
+    ok("a considered place is drawn as a dot rather than a pin",
+       /const dot = isConsidered\(p\);/.test(miniSrc)
+       && /const pin = dot \? consideredDot\(r, p\.latest\) : pushPin\(/.test(miniSrc));
+    ok("and there is one reader of which is which", /export const isConsidered = \(pin\) => !pin\?\.confirmed;/.test(miniSrc));
+    // ONE GREEN. The dot is drawn here and pulsed and echoed in the corner by
+    // the CSS in chatRail.js, so the value lives there and this file reads it.
+    // Two greens meaning one thing is how the mark and its label drift apart.
+    ok("the dot is green and the pin stays red",
+       /DOT_GREEN/.test(miniSrc) && !/const DOT_GREEN =/.test(miniSrc) && /const PIN_RED = "#E8232A";/.test(miniSrc));
+    ok("and the green is spelled once, beside the CSS that pulses it",
+       /export const DOT_GREEN = "#3FBF6A";/.test(readFileSync(join(root, "src/utils/chatRail.js"), "utf8")));
+    // ── THE PULSE AND THE CORNER, 19 SEP 2026 ──────────────────────
+    //
+    // "What about the dot becomes a little blinking greendot, and then the
+    // suggested place shows in the left corner of the map?"
+    {
+      const railSrc = readFileSync(join(root, "src/utils/chatRail.js"), "utf8");
+      ok("a considered dot carries the class the pulse is on",
+         /className: dot \? "gemlyx-chat-pin gemlyx-chat-dot" : "gemlyx-chat-pin"/.test(miniSrc));
+      ok("and the pulse is a pulse rather than a strobe",
+         /@keyframes \$\{DOT_PULSE\}/.test(railSrc) && /50% \{ opacity: \.45; \}/.test(railSrc));
+      ok("and it stops for anybody who asked for less movement",
+         /@media \(prefers-reduced-motion: reduce\) \{\s*\.\$\{DOT_CLASS\} \{ animation: none; opacity: 1; \}/.test(railSrc));
+      // The dots carry no label of their own, which is the half that keeps the
+      // map from being a mess. Everything else about a dot still happens.
+      ok("a dot gets no label beside it", /if \(!dot\) \{\s*const nameHtml/.test(miniSrc));
+      ok("but it keeps its card and its question",
+         !/if \(dot\) return;/.test(miniSrc));
+      ok("the corner names the newest suggestion", /const newestDot = dots\.filter\(p => p\.latest\)/.test(miniSrc));
+      ok("and counts the rest rather than listing them", /more: Math\.max\(0, dots\.length - 1\)/.test(miniSrc));
+      ok("it is nothing at all when nothing is being considered", /\{corner && \(/.test(miniSrc));
+      ok("and it sits in the left corner, clear of the zoom control",
+         /\.\$\{CORNER_CLASS\} \{\s*position: absolute; top: 8px; left: 8px;/.test(railSrc));
+      ok("it cannot take a press meant for the map", /\.\$\{CORNER_CLASS\} \{[\s\S]{0,700}?pointer-events: none;/.test(railSrc));
+    }
+    // A dot turning into a pin has to reach the redraw, or the turn where they
+    // say yes changes nothing on screen.
+    ok("confirming a place redraws the map", /\$\{p\?\.confirmed \? "!" : ""\}/.test(miniSrc));
+    ok("the route line joins only the confirmed ones",
+       /const walked = list\.filter\(p => !isConsidered\(p\)\);/.test(miniSrc)
+       && /L\.polyline\(walked\.map\(p => \[p\.lat, p\.lon\]\)/.test(miniSrc));
+    ok("and it is drawn as a thread rather than a road", /dashArray: "4 5"/.test(miniSrc));
+    ok("the component reads the same rule", /const shown = wide \|\| phoneMapOpen\(list, phoneOpen\);/.test(miniSrc));
     ok("and neither reader holds its own two", !/length >= 2/.test(miniSrc) && !/PHONE_MAP_PINS/.test(appR.slice(appR.indexOf("chat-with-rail"), appR.indexOf("chat-with-rail") + 60000)));
   }
   // The rail is inside the flex row, not floating after it.
@@ -54437,6 +54596,36 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // off, if anybody ever put numbers on these pins.
     is("in the order they were first named", names(run([...trip, { role: "assistant", text: "Ribe again, then." }])),
        ["Ribe", "Aarhus", "Skagen"]);
+
+    // ── A PIN IS A CLAIM, A DOT IS AN OFFER, 19 SEP 2026 ─────────────
+    //
+    // Oliver, on a map carrying Gilleleje, a town he had never typed: "the
+    // pointer on maps should only be if it's confirmed. The places that are
+    // being considered should be green dots instead."
+    //
+    // Nothing in `trip` above was named by the traveller, which is the state
+    // the old map drew three identical pins for.
+    {
+      const confirmedIn = (r) => r.pins.filter(p => p.confirmed).map(p => p.place.name);
+      is("a place only Gemlyx has named is not confirmed", confirmedIn(run(trip)), []);
+      const theirs = [...trip, { role: "user", text: "Skagen sounds right" }];
+      is("and naming it themselves confirms it", confirmedIn(run(theirs)), ["Skagen"]);
+      ok("without confirming the ones they said nothing about",
+         run(theirs).pins.filter(p => !p.confirmed).map(p => p.place.name).sort().join() === "Aarhus,Ribe");
+      // A Yes on a card is a decision with no words in it, so the walk cannot
+      // read it and the caller hands it in. Same list the guide build reads.
+      is("a place they tapped Yes on is confirmed too",
+         mapPlaces({ messages: trip, placesFor: named, rejectsFor: turned, coordsFor: coords, picked: ["Aarhus"] })
+           .pins.filter(p => p.confirmed).map(p => p.place.name), ["Aarhus"]);
+      // And the one the refusal machinery already had right: changing their
+      // mind about a place is them naming it.
+      const backOn = [
+        { role: "user", text: "not Ribe please" },
+        { role: "assistant", text: "Fair enough. Aarhus then." },
+        { role: "user", text: "second thoughts, Ribe is back on" },
+      ];
+      is("lifting their own refusal confirms it", confirmedIn(run(backOn)), ["Ribe"]);
+    }
     is("and a place named twice is one pin", run([...trip, { role: "assistant", text: "Ribe again, then." }]).pins.length, 3);
     // BOTH SIDES OF THE CONVERSATION, unlike the rail: a map that leaves out
     // the town they said they were flying into is wrong about the trip.
@@ -55225,6 +55414,45 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       is("neither block carries a dash", [short, long].filter(b => DASH.test(b)), []);
       is("nor a banned word", [short, long].filter(b => BANNED.test(b)), []);
 
+      // ── AND THE RULE THAT WAS ARGUING WITH IT, 19 SEP 2026 ────────
+      //
+      // Oliver, having used both settings on one conversation: "the short and
+      // full versions are no different.. short should be no details, while full
+      // should be the current."
+      //
+      // The block above claims to outrank every other instruction, and thirty
+      // lines before it the prompt asked, unconditionally, for a DKK figure, a
+      // season warning, a transit quirk and a trade-off, under a heading saying
+      // a thin answer wastes their time. The claim could not survive that, so
+      // the depth paragraph became the second half of the same setting.
+      {
+        const { depthBlock, answerTokens, SHORT_REPLY_TOKENS } = M;
+        const shortDepth = depthBlock(ANSWER_SHORT);
+        const longDepth = depthBlock(ANSWER_LONG);
+        ok("the full setting keeps the paragraph he wants kept",
+           /BE HELPFUL, NOT JUST BRIEF/.test(longDepth) && /actual DKK figures/.test(longDepth));
+        ok("and the short setting does not ask for four things at once",
+           /BE USEFUL IN ONE SENTENCE/.test(shortDepth) && /Never stack them/.test(shortDepth));
+        ok("it still gives one real thing rather than nothing", /the single most useful thing/.test(shortDepth));
+        ok("the two settings say different things", shortDepth !== longDepth);
+        is("neither depth block carries a dash", [shortDepth, longDepth].filter(b => DASH.test(b)), []);
+        is("nor a banned word", [shortDepth, longDepth].filter(b => BANNED.test(b)), []);
+        // A rule with no edge is a preference. Both settings ran on one budget.
+        is("short has a ceiling of its own", answerTokens(ANSWER_SHORT, 8192), SHORT_REPLY_TOKENS);
+        is("and full keeps the full budget", answerTokens(ANSWER_LONG, 8192), 8192);
+        ok("the ceiling is well clear of three sentences", SHORT_REPLY_TOKENS > 600);
+        const app2 = readFileSync(join(root, "src/App.jsx"), "utf8");
+        ok("the depth paragraph is the setting rather than a fixed line",
+           /\$\{depthBlock\(answerLength\)\}/.test(app2)
+           && !/BE HELPFUL, NOT JUST BRIEF: people planning/.test(app2));
+        ok("and the budget reaches the request", /const CHAT_TOKENS = answerTokens\(answerLength, 8192\);/.test(app2));
+        // Last word but one. The language rule keeps the final position, which
+        // it has argued for since 25 Aug; the length rule sits directly above it
+        // rather than forty lines up among the things it has to outrank.
+        ok("the length rule is read after the rules it outranks",
+           /\$\{answerLengthBlock\(answerLength\)\}\n\n\$\{languageBlock\(\)\}`;/.test(app2));
+      }
+
       // ── AND IT HAS TO REACH THE MODEL AND THE SCREEN ──────────────
       {
         const app = readFileSync(join(root, "src/App.jsx"), "utf8");
@@ -55910,8 +56138,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // there is anything on it; a phone has no column to keep open, so there it
   // renders when the rail does, from two pins, through the rule App.jsx puts
   // the has-map class on.
-  ok("the wide column renders on width alone, not on having a pin, and the phone on two pins",
-     /const shown = wide \|\| phoneMapShows\(list\);/.test(chatCode));
+  ok("the wide column renders on width alone, and the phone on two pins and a tap",
+     /const shown = wide \|\| phoneMapOpen\(list, phoneOpen\);/.test(chatCode));
+  ok("and a phone that has not asked gets no map", /phoneOpen = false \}\) => \{/.test(chatCode));
   ok("and it mounts on the same condition", /if \(!shown \|\| !holderRef\.current \|\| mapRef\.current\) return;/.test(chatCode));
   ok("a narrow screen still gets no map", /if \(!shown\) return null;/.test(chatCode));
   // No line under an empty map: there is nothing to tap yet, and a sentence
@@ -56326,8 +56555,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // reaches Leaflet unless the div it measures grows too: a fixed height here
   // puts the old 220px box back inside a 460px column, which is the "the map is
   // not given enough space" half of the complaint on its own.
+  // ── AND THE CORNER SITS OVER IT, 19 SEP 2026 ────────────────────
+  // The floor moved one level out, onto the relative box the corner label and
+  // the Leaflet container share. Same numbers, same flex, one div further up,
+  // because the overlay has to be a sibling of the map rather than a child of
+  // it: Leaflet owns everything inside its own container.
   ok("the map's own box grows with its column",
-     /style=\{\{ flex: "1 1 auto", minHeight: wide \? height : 0,/.test(chatCode));
+     /style=\{\{ position: "relative", display: "flex", flex: "1 1 auto", minHeight: wide \? height : 0 \}\}/.test(chatCode));
+  ok("and the Leaflet container fills it", /ref=\{holderRef\}[\s\S]{0,600}?style=\{\{ flex: "1 1 auto", minHeight: 0,/.test(chatCode));
   // The floor is the wide column's. On a phone the rail says how tall it is
   // (190px in chatRail.js), and a 220px floor inside a 190px box was a map
   // spilling over the input bar; measured after: holder 169px, map 356 by 167.
@@ -56350,7 +56585,19 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // appears zoomed into a field, rather than 'Map of Denmark' -> 'Zoom into
   // destination'." So the country is the STARTING frame and the place is the
   // destination, and the journey between them is what answers "where is this".
-  ok("the map opens on Denmark", /\}\)\.fitBounds\(DENMARK, \{ padding: \[6, 6\] \}\);/.test(chatCode));
+  // ── AND ON ONE LANDMASS WHEN THE TRIP IS ON ONE, 19 SEP 2026 ─────
+  //
+  // Oliver: "if the AI concludes that it is going to make a Zealand-only or a
+  // Jutland-only trip, then it should zoom into a zealand-only map or a
+  // jutland-only map." The country is still the frame for a conversation that
+  // has not decided anything, which is what partFrameFor returns null for, and
+  // wideBounds falls back to DENMARK when it does. What the assertion pins is
+  // that all three framings ask ONE reader, which is what the constant was
+  // standing in for.
+  ok("the map opens on the wide frame", /\}\)\.fitBounds\(wideBounds\(list\), \{ padding: \[6, 6\] \}\);/.test(chatCode));
+  ok("and the wide frame is the country until the trip is on one landmass",
+     /const box = partFrameFor\(pins\);/.test(chatCode)
+     && /return box \? \[\[box\.south, box\.west\], \[box\.north, box\.east\]\] : DENMARK;/.test(chatCode));
   // ── AND THEN THE PINS STOPPED CHOOSING HOW CLOSE ─────────────────
   //
   // 13 Sep 2026. The four assertions that stood here pinned a lone pin flying
@@ -56390,14 +56637,18 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("nothing else flies the map", (chatCode.match(/map\.flyTo\(/g) || []).length, 1);
   is("nor fits it", (chatCode.match(/flyToBounds\(/g) || []).length, 1);
   is("and both live in the one function the camera calls", (chatCode.match(/const applyMove = \(map, move\) => \{[\s\S]*?flyTo\([\s\S]*?flyToBounds\(/g) || []).length, 1);
-  // The country it opens on is the country a fit returns to, read off the one
-  // constant, so the two frames cannot drift apart.
-  ok("a fit to the country reads the same frame the map opened on",
-     /country: \{ south: DENMARK\[0\]\[0\], west: DENMARK\[0\]\[1\], north: DENMARK\[1\]\[0\], east: DENMARK\[1\]\[1\] \}/.test(chatCode));
+  // The frame it opens on is the frame a fit returns to and the box frameFor
+  // measures the view against, read off the one function, so the three cannot
+  // drift apart. They could before by being three copies of one constant; they
+  // could now by being three copies of one rule, which is worse, because the
+  // rule has an argument in it.
+  is("three framings, one reader", (chatCode.match(/wideBounds\(/g) || []).length, 3);
+  ok("a fit to the wide frame reads the same one the map opened on",
+     /const w = wideBounds\(pinsNowRef\.current\);\s*return \{ south: w\[0\]\[0\], west: w\[0\]\[1\], north: w\[1\]\[0\], east: w\[1\]\[1\] \};/.test(chatCode));
   ok("and a cluster fit is padded and capped, as the old refit was",
      /L\.latLngBounds\(pinsNowRef\.current\.map\(p => \[p\.lat, p\.lon\]\)\)\.pad\(0\.35\)/.test(chatCode) && /maxZoom: CLUSTER_ZOOM/.test(chatCode));
   ok("a lone pin's frame is the country, not a street plan", /const wide = move\.kind === "out" \|\| move\.frame !== "cluster";/.test(chatCode));
-  ok("and out lands where the map opened", /\}\)\.fitBounds\(DENMARK, \{ padding: \[6, 6\] \}\);/.test(chatCode) && /const opts = wide \? \{ padding: \[6, 6\] \}/.test(chatCode));
+  ok("and out lands where the map opened", /\}\)\.fitBounds\(wideBounds\(list\), \{ padding: \[6, 6\] \}\);/.test(chatCode) && /const opts = wide \? \{ padding: \[6, 6\] \}/.test(chatCode));
   // ONE NUMBER, TWO CALLERS, still. A reply asks for FOCUS_ZOOM by name when it
   // says [[MAP_IN:...]], and a second copy is how "close" starts to disagree.
   ok("and that cap is shared with the reply-driven camera", /const FOCUS_ZOOM = 12;/.test(chatCode));
@@ -56487,12 +56738,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       const flat = rowed.html.replace(/\s/g, "");
       ok("the picture is a column rather than a strip", /flex-direction:column/.test(flat));
       ok("and it carries the assistant bubble's own corner", /border-radius:14px14px14px4px/.test(flat));
-      // ── AND WHAT PRESSING IT GETS YOU ────────────────────────────
-      // "Read more" since 9 Sep, Oliver's own words, replacing "Tap to read
-      // it". It says what you GET rather than what to do with your finger,
-      // which is also the right words on a desktop where nobody taps.
-      ok("and it says what pressing it gets you", /Readmore/.test(flat));
-      ok("and not what to do with a finger", !/Taptoreadit/.test(flat));
+      // ── AND IT SAYS NOTHING ABOUT ITSELF, 19 SEP 2026 ───────────
+      // "Read more" sat under every card from 9 Sep until Oliver took it off:
+      // "They should still be able to click the frame and read more, but
+      // remove the text." A picture, a name and a line of description, and the
+      // frame opens. Nothing on it describes the frame.
+      ok("nothing under the picture describes the picture", !/Readmore/.test(flat));
+      ok("nor what to do with a finger", !/Taptoreadit/.test(flat));
       // ── AND THE BADGE IS GONE ────────────────────────────────────
       // Oliver, 9 Sep 2026: "Do you really think we need the 'our page' badge?"
       // It distinguished a Gemlyx page from the other things that can appear in
@@ -60914,8 +61166,24 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is("one question is left, and it is which nights the lodge covers", b.missing, ["stayWhen"]);
     ok("and nothing in this conversation was swallowed as a refusal",
        Object.keys(b.known).length >= 7 && !b.declined.length);
+    // ── AND A MONTH IS NOT A DATE, 19 SEP ─────────────────────────
+    //
+    // "It's in december" fills `when` and does not answer it. Until tonight
+    // that was enough for ready, and Oliver read the result on his own screen:
+    // "Everything I need, 7 of 7" over a reply asking which day in December.
+    // The sharpening question now comes first. Answering it is not required,
+    // asking it is, which is the bargain `vague` has carried since 21 Aug.
+    const allAsked = ["origin", "days", "when", "party", "interests", "transport", "stay", "stayWhen"];
+    ok("a month on its own is not ready, because nothing has asked which day",
+       !hisBrief({ asked: allAsked }).ready);
+    is("and that is the one thing still loose", hisBrief({ asked: allAsked }).vagueToAsk, ["when"]);
     ok("and the brief is ready on facts rather than on silence",
-       hisBrief({ asked: ["origin", "days", "when", "party", "interests", "transport", "stay", "stayWhen"] }).ready);
+       hisBrief({ asked: [...allAsked, "when:sharper"] }).ready);
+    // The half that stops it deadlocking: the question is asked once, the month
+    // is still a month, and the trip goes ahead. Refusing to build on a loose
+    // answer forever would be the intake form he has objected to twice.
+    ok("and a month that has been queried once stops holding the build",
+       hisBrief({ asked: [...allAsked, "when:sharper"] }).vague.includes("when"));
   }
 
   // ── AND EIGHT CHILDREN ARE EIGHT CHILDREN ─────────────────────────
@@ -61362,8 +61630,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       const { briefBlock } = M;
       const unreadOf = (turn, key) => readBrief({ travellerText: turn, travellerTurns: [turn],
         answering: [[key]], asked: [key], today: T }).unread || [];
+      // `turn` rides along because the build gate reads it: an answer nothing
+      // could read holds the build only while it is the last thing said. See
+      // unreadOpen in tripBrief.js.
       is("a turn that tried and landed nowhere is recorded with their own words",
-         unreadOf("public transpor", "transport"), [{ key: "transport", said: "public transpor" }]);
+         unreadOf("public transpor", "transport"), [{ key: "transport", said: "public transpor", turn: 0 }]);
       // THE THREE GUARDS, and each is a turn that must not be queried. Getting
       // any of these wrong turns a helpful question into a pestering one.
       is("a refusal is a clear answer and is never queried", unreadOf("not sure yet", "transport"), []);
@@ -65761,7 +66032,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
        /sayWhatFor=\{unsureWhatTheyWant\(liveIntakeBrief\)\}/.test(app));
     ok("no second test was invented for it", !/enoughToRecommend\(liveIntakeBrief\)/.test(app.slice(app.indexOf("<ChatMiniMap"), app.indexOf("<ChatMiniMap") + 900)));
     ok("the map takes the three props and decides none of it",
-       /focus = null, ask = null, turnedDown = \[\], onRestore = null \}\) => \{/.test(mini));
+       /focus = null, ask = null, turnedDown = \[\], onRestore = null, phoneOpen = false \}\) => \{/.test(mini));
     // Only a place inside a town. Towns are drawn at every zoom and never ask.
     ok("only a place inside a town carries the question", /const asks = asking && isSpotPin\(p\);/.test(mini));
     // The gate is part of what a pin IS, so the effect redraws when it flips.
@@ -65836,7 +66107,14 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and that is the line on the card", asked.says(cardLine(withShot)));
     ok("not the founding date the paragraph opens with", !asked.says("opened in 1843"));
     ok("the licence credit is untouched by the question", asked.says("Bahnfrend") && asked.says("CC BY-SA 4.0"));
-    ok("and the door into the entry is still there", asked.says("Read more"));
+    // The door is the frame itself as of 19 Sep, so what is asserted is that it
+    // is reachable rather than that it is labelled. Rendered WITH an onOpen,
+    // because a card with nowhere to go is not a button and must not claim to
+    // be one: that is the half a blanket role would have got wrong.
+    const openable = await card({ places: [withShot], ask, onOpen: () => {} });
+    ok("and the door into the entry is the frame", /role="button"/.test(openable.html) && /tabindex="0"/i.test(openable.html));
+    ok("carrying the place's own name for anybody who cannot see it", new RegExp(`aria-label="${withShot.name}"`).test(openable.html));
+    ok("and a card with nowhere to go does not pretend to be a button", !/role="button"/.test(asked.html));
     // The same reader. A second sentence-picker here would be how the map and
     // the preview come to describe one place two ways.
     const cardsSrc = readFileSync(join(root, "src/components/ChatPlaceCards.jsx"), "utf8");
@@ -65854,7 +66132,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // No usable text is the name and the question and nothing invented.
     const bareCard = await card({ places: [bare], ask });
     is("a row with no text gets no sentence made up for it", cardLine(bare), "");
-    is("so the card is the name, the question, the answers and the door", bareCard.text, "Moesgaard Is this interesting? Yes No Read more");
+    is("so the card is the name, the question and the answers, and nothing about itself", bareCard.text, "Moesgaard Is this interesting? Yes No");
 
     // Decided is not asked again. A Yes shows as its state, and the state is a
     // button that undoes it.

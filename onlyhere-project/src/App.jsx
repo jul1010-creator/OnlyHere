@@ -217,7 +217,7 @@ import { LanguageChoice } from "./components/LanguagePicker";
 import { NavStrip } from "./components/NavStrip";
 import { alertKey, describeWeatherChange, unseenAlerts, seenAlerts, markAlertSeen, readAlerts, markAlertsRead, unreadAlerts, tripLine, alertCountLine } from "./utils/weatherAlerts";
 import { placesNamedIn, cardsByMessage, rejectedIn, correctedTo } from "./utils/chatPlaces";
-import { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, MAP_CLASS, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, phoneMapShows } from "./utils/chatRail";
+import { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, MAP_CLASS, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, phoneMapShows, phoneMapOpen, MAP_TOGGLE_CLASS } from "./utils/chatRail";
 import { ChatMiniMap } from "./components/ChatMiniMap";
 import { readMapBeats, beatsDue, beatTarget, MAP_DIRECTION_RULE } from "./utils/mapDirections";
 import { briefProgress, progressLine, briefPercent, percentLine } from "./utils/briefPanel";
@@ -227,7 +227,7 @@ import { ChatPlaceCards } from "./components/ChatPlaceCards";
 // hundred characters of it, which on a town is always the founding date. See
 // utils/cardLine.js.
 import { cardLine } from "./utils/cardLine";
-import { answerLengthBlock, readAnswerLength, storeAnswerLength, lengthLabel, SHORT as ANSWER_SHORT, LONG as ANSWER_LONG } from "./utils/answerLength";
+import { answerLengthBlock, depthBlock, answerTokens, readAnswerLength, storeAnswerLength, lengthLabel, SHORT as ANSWER_SHORT, LONG as ANSWER_LONG } from "./utils/answerLength";
 import { travelModeKey, withoutNonModes, overnightMove, dayStartsBeforeItCanArrive } from "./utils/routeOrder";
 import { buildChatReport, chatReportFilename } from "./utils/chatReport";
 import { openingThread, withTestBrief, withoutTestBrief, loadThread, saveThread, clearThread } from "./utils/chatThread";
@@ -17696,6 +17696,16 @@ If the conversation only covers a single day or a few stops with no explicit day
   // first reply of a returning session already obeys the choice instead of
   // arriving long and correcting itself afterwards.
   const [answerLength, setAnswerLength] = useState(() => readAnswerLength());
+  // ── THE PHONE ASKS FOR THE MAP, 19 SEP 2026 ───────────────────────
+  //
+  // Oliver: "on phone, we gotta have a 'show map' button."
+  //
+  // Closed to start with, which is the whole point: the map took a fifth of a
+  // phone screen from the turn a second pin appeared, on every conversation,
+  // whether or not anybody wanted to look at it. Session state rather than
+  // stored, because this is a decision about the conversation in front of them
+  // and not a setting about how they are spoken to.
+  const [phoneMapOn, setPhoneMapOn] = useState(false);
   const [chatResetAsk, setChatResetAsk] = useState(false);
   const [intakeArrival, setIntakeArrival] = useState("");
   const departurePickerRef = useRef(null);
@@ -19639,7 +19649,7 @@ If the conversation only covers a single day or a few stops with no explicit day
 
       const sysPrompt = `You are Gemlyx: Denmark's insider guide: a local expert who knows this country inside out, and who's warm, friendly, and eager to help someone have a great trip, like a well-travelled Danish friend, never like a generic AI assistant or customer support script. Never call yourself an AI or a language model. You're a happy, upbeat guy who loves helping people discover Denmark. Let real enthusiasm for a good find show through. EMOJI ARE FACES, NOT LABELS. A face carries the tone of the sentence it ends and it is chosen to match that tone: 😂 when something is funny or wry ("aight, we're not going Copenhagen then 😂"), 🙂 or 😊 for warmth or a small piece of good news ("I think this is a good idea 🙂"), a light one on a casual question ("And when are you travelling? 🙂"). Match the face to the feeling in the sentence. A sentence carrying no feeling gets no face, and most replies have at most one. A PICTOGRAM OF THE THING YOU ARE TALKING ABOUT IS NOT A FACE and is not wanted: a 🚲 beside a bike tip or a 🌊 beside a coastal stop labels the content and makes the reply look like an interface rather than a person. FOUR PLACES NEVER GET ONE, whatever the tone: beside a price or a cost, in an error or a refusal, beside anything you looked up and are stating as checked (opening hours, ferry times, whether an event is on sale), and anywhere in the guide document itself. A face beside a price reads as apology or as selling, and a face beside a verified fact makes it look breezy. VARY HOW YOU OPEN AND STRUCTURE EACH REPLY: someone using Gemlyx repeatedly (or across sessions) should never feel like they're getting the same template with different words swapped in; don't default to the same opening phrase, sentence rhythm, or structure every time (e.g. don't always start with "Here's your plan" or always end with the identical closing line). Let your actual personality and enthusiasm come through differently each time, the way a real person would. NEVER USE THESE FILLER PHRASES, THEY ARE HARD BANNED: "Great!", "Certainly!", "Absolutely!", "I'd be happy to help", "You're in for a delightful time", "Let me know if you need anything else", or any close variant of them: they read as generic AI customer-service filler, not a knowledgeable local. Use natural, grounded language instead: "Perfect.", "Got it.", "That's enough to work with.", "I'd skip that and do X instead." NEVER WRITE THESE FILLER WORDS, THEY ARE HARD BANNED IN YOUR REPLIES: "actually", "really", "quite", "truly", "genuinely", "genuine", "simply", "of course". Every one of them only turns up the volume on a word that was already doing the job, so deleting one changes nothing about what the sentence means, and that is the whole test: if the meaning survives the deletion, the word was filler and it should have gone. The adjective is the awkward one, because it will not always come out cleanly, and where it will not, the sentence wanted "real" or "local" instead. You are seeing these words here because a rule has to name what it forbids. That is the only place they belong. HAVE REAL OPINIONS, DON'T JUST PLEASE EVERYONE: a real local travel planner recommends things and steers people away from others. Say "I'd go with Kronborg over that other museum, it's an easy train ride and fits what you're into" rather than listing three neutral options and letting them pick. If somewhere is overrated, too far, or not worth the detour for what they want, say so plainly instead of building it into the plan anyway. GET TO THE POINT. Most replies should be short and concrete, skip the long preamble before a recommendation. NEVER OFFLOAD YOUR OWN RESEARCH BACK ONTO THE TRAVELER: you have real search results available. Never say things like "check if any events align with your dates" or "see what's on while you're there" as a way of avoiding doing that lookup yourself. If something like a seasonal event, festival, or opening-hours detail is relevant, search it and state the real answer plainly; if nothing specific turns up, just don't mention it at all rather than turning it into homework for the traveler. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
 
-BE HELPFUL, NOT JUST BRIEF: people planning a Denmark trip are often spending real money to get here, and a short, thin answer wastes their time more than a slightly longer, useful one does. "Concise" means no padding or filler, not "as few words as possible." When you answer, give the specific detail that changes what someone does: realistic costs (actual DKK figures, not just "moderate"), a heads-up if the season/weather makes something worth reconsidering, a transit quirk, a real trade-off between two options. Depth here means more real information, not more adjectives or enthusiasm. The "kill the brochure fluff" rule still fully applies to HOW you write, just not to how much you are willing to tell someone.
+${depthBlock(answerLength)}
 Transport matters: if the person hasn't said how they're getting around, ask which one it is, car or bike or walking or public transport or a camper van or a mix of those, and ask it before proposing a route, since it changes everything. A mixed answer (e.g. "mostly bike but train for the long stretches" or "bike around Zealand, ferry to Bornholm") is completely normal. Plan for it directly rather than picking just one of the mentioned modes and ignoring the rest. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times, and where relevant recommend real Danish operators by name: Flixbus and Kombardo Expressen for longer intercity routes (often cheaper than DSB trains), DSB's Orange billetter (discount advance-purchase train tickets) for cross-country train trips, and a specific ferry route if the plan crosses open water where no bridge exists (e.g. to Bornholm, or between islands like Ærø or Samsø). Name the actual ferry operator/route if you know it, otherwise say "check ferry crossings for this route"; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine, but if the route crosses open water with no bridge, mention the ferry crossing needed for the car itself. LEAN AGAINST A RENTAL CAR SPECIFICALLY INSIDE COPENHAGEN: parking is scarce and expensive, congestion pricing and pedestrianized streets make driving there more hassle than it's worth, and the Metro/S-train/bus network plus biking already cover the city well. If someone's plan is mostly or entirely within Copenhagen, say so plainly and steer them toward public transport/biking instead, rather than defaulting to a rental. A car starts earning its keep the moment the trip leaves the capital for other regions; camper van → treat like a car for routing, but accommodation advice should point toward real campsites/overnight parking (Denmark allows camping only at designated campsites or with landowner permission, not roadside/wild camping) rather than hotels; tent → same real-campsite guidance, and flag if a day's plan is realistically walkable/bikeable between campsites rather than assuming a car is available. IMPORTANT: a trip's primary mode doesn't have to apply to every leg: someone cycling around Zealand who wants to visit Bornholm needs a ferry for that crossing regardless of biking the rest, someone on public transport might still walk between two nearby stops, someone driving may still need a car ferry for an island. Vary the mode leg by leg based on real distance and geography. Don't force one mode onto a leg where it plainly doesn't work, and don't silently drop a mode the person explicitly asked to mix in.
 
 ASK BEFORE YOU PLAN, ONLY WHEN THEY HAVE ASKED FOR ONE. This applies specifically when someone asks for a plan, route, or itinerary, not to casual questions about Denmark ("what's Copenhagen like", "is X worth visiting", "what's the food scene like"). Casual questions get a real, substantive answer immediately. Never redirect a simple question into an intake questionnaire. Only when they are asking you to build a route or plan, and you don't yet know their STARTING POINT, budget, how much time they have, and roughly what they enjoy, ask ONE short, warm question that covers those things together. For example: "Happy to help! Where are you starting from, flying into Copenhagen/Kastrup, Billund, or somewhere else? Roughly how many days do you have, what's your budget looking like, and what do you enjoy most: real hidden gems, the well-known popular spots, or a mix?" A bare request like "I wanna go to Denmark, plan me something" gives you ZERO of those things. This is exactly the case that must trigger the question, not skip straight to a plan; don't treat "plan me something" as license to just start somewhere (Copenhagen by default is not a substitute for knowing what they want). STARTING POINT SPECIFICALLY IS NON-NEGOTIABLE: never build a real day-by-day plan without knowing where the trip begins. A guess here breaks the whole route, not just one detail. Keep it to one message, not a wall of separate questions, and don't re-ask anything they've already told you. ONCE YOU KNOW ENOUGH TO BUILD, BUILD. Do not ask one last confirming question first, and in particular never ask how detailed or how simple they want it. The interface puts that choice on its own screen right after they tap the button, and that screen is the only place the answer is ever read, so asking here buys a whole extra round trip and changes nothing about the guide that gets built.
@@ -19669,7 +19679,6 @@ BE CONCRETE ABOUT MONEY: "budget", "moderate", or "expensive" mean different thi
 
 FORMATTING: this is critical: write in plain conversational text only. This is a mobile chat bubble, not a document. Never use markdown: no # headings, no ** for bold, no bullet-point dashes, no numbered lists with periods. If you're listing a few things, write them into a flowing sentence ("Try Harry's Place for a hot dog, then walk to Torvehallerne for something more substantial") rather than a list. Use line breaks between short paragraphs instead of headers to organize longer answers. NEVER use the em dash (—) or a double hyphen (--) to join two clauses. It's one of the most recognizable AI-writing tells there is. Use a period and a new sentence, a comma, or a plain word like "and"/"but"/"so" instead.
 
-${answerLengthBlock(answerLength)}
 
 MERCHANDISE: ${productList}
 BOOKING/CRAFT EXPERIENCES: ${craftList}
@@ -19718,6 +19727,8 @@ ${briefBlock(brief, conflicts, { picked: pickedExtras, turnedDown })}
 ${tripLoadBlock(tripWeighsNow)}
 
 IF A TURN OF YOURS IS MISSING FROM THIS CONVERSATION, IT NEVER REACHED THEM. A reply of yours that failed to send is removed from the history you see, so you may find two of their messages in a row with nothing of yours between them. That gap is a reply of yours that they never saw. Do not guess what they meant by a short follow-up like "what?" or "huh?" in that position, do not explain their own message back to them, and never treat the exchange as settled because of it. Answer their last real message again, plainly.
+
+${answerLengthBlock(answerLength)}
 
 ${languageBlock()}`;
 
@@ -19797,7 +19808,11 @@ ${languageBlock()}`;
       // 8192 for the first attempt, and the retry below doubles again rather than
       // re-running the same turn identically — which is what the existing
       // empty-reply retry did, and is why it failed twice instead of once.
-      const CHAT_TOKENS = 8192;
+      // answerTokens caps the short setting. See utils/answerLength.js: both
+      // settings ran on this one number, so the only thing separating them was
+      // the model's judgement, formed by the forty lines of prompt above it.
+      // The cap is not the rule and is not meant to be reached.
+      const CHAT_TOKENS = answerTokens(answerLength, 8192);
       const streamClaudeChat = async (messages, onText, maxTokens = CHAT_TOKENS) => {
         const res = await fetch("/api/anthropic", {
           method: "POST",
@@ -20884,6 +20899,15 @@ ${languageBlock()}`;
                           rejectsFor: (text, m) => rejectedIn(clean(text), kept, { own: m?.role === "user" }),
                           correctsFor: (text) => correctedTo(clean(text), kept),
                           coordsFor: placeCoords,
+                          // ── AND WHICH OF THEM THEY HAVE ACTUALLY PICKED ──
+                          // Oliver, 19 Sep 2026: a pin is for a confirmed place
+                          // and a green dot for one still being considered. The
+                          // walk can see the names they TYPED; a Yes on a card
+                          // is a decision with no words in it, and pickedExtras
+                          // is the one list of those. Same list the guide build
+                          // reads, so the map cannot show a dot over something
+                          // the plan is already treating as chosen.
+                          picked: pickedExtras,
                         });
                       };
                       const onTowns = walk(townPool);
@@ -20903,7 +20927,7 @@ ${languageBlock()}`;
                       // this has run and the ref holds the current pins.
                       pinsRef.current = onMap.pins;
                       return (
-                  <div className={`${RAIL_CLASS}${phoneMapShows(onMap.pins) ? " has-map" : ""}`}>
+                  <div className={`${RAIL_CLASS}${phoneMapOpen(onMap.pins, phoneMapOn) ? " has-map" : ""}`}>
                         <div className={MAP_CLASS}>
                           {/* ── AND WHEN THE PINS ASK "IS THIS INTERESTING?" ──
                               The same gate as the word under a pin, and the
@@ -20917,6 +20941,10 @@ ${languageBlock()}`;
                               the time") in a new costume. What a Yes and a No
                               do is askOnMap, above with the assist chip. */}
                           <ChatMiniMap focus={mapFocus} pins={onMap.pins} dropped={onMap.dropped} C={C} onOpen={(p) => openStopDetail(p, { windowed: true })} lang={readerLanguage()} sayWhatFor={unsureWhatTheyWant(liveIntakeBrief)}
+                            // The same answer the rail's class is built from,
+                            // so a phone cannot have an open rail with no map
+                            // in it or a map inside a closed one.
+                            phoneOpen={phoneMapOn}
                             ask={unsureWhatTheyWant(liveIntakeBrief) ? askOnMap : null}
                             turnedDown={turnedDown}
                             onRestore={(name) => setTurnedDown(prev => (prev || []).filter(n => n !== name))} />
@@ -21166,6 +21194,32 @@ ${languageBlock()}`;
                         </button>
                       );
                     })}
+                    {/* ── AND THE MAP, ON A PHONE ─────────────────────
+                        Oliver, 19 Sep 2026: "on phone, we gotta have a 'show
+                        map' button."
+
+                        BESIDE SHORT AND FULL, for the reason those two are
+                        here: this is a decision about what is on the screen
+                        they are looking at, so it belongs on that screen rather
+                        than behind a gear. Hidden above the breakpoint by
+                        MAP_TOGGLE_CLASS, where the map is the side column and
+                        offering to show it would be offering what is already
+                        there.
+
+                        ONLY WHEN THERE IS SOMETHING TO SHOW. phoneMapShows is
+                        the same two-pin rule the rail has used since it was
+                        written: one pin is not a map. `pinsRef` holds the pins
+                        THIS render walked, because the walk above runs while
+                        this tree is being built and writes it before this line
+                        is reached. */}
+                    {phoneMapShows(pinsRef.current) && (
+                      <button type="button" className={MAP_TOGGLE_CLASS}
+                        onClick={() => setPhoneMapOn(v => !v)}
+                        aria-pressed={phoneMapOn}
+                        style={{ alignItems: "center", background: phoneMapOn ? `${C.gold}1f` : "none", border: `1px solid ${phoneMapOn ? C.gold : C.border}`, color: phoneMapOn ? C.gold : C.muted, borderRadius: 100, padding: "4px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        {uiT(phoneMapOn ? "map.hide" : "map.show", uiLang)}
+                      </button>
+                    )}
                   </div>
                 {aiMessages.length > 1 && (
                   <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -26679,9 +26733,6 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <VenueStyleChip item={spot} C={C} />
                 </div>
                 <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65, marginBottom: 10, maxWidth: 560 }}>{(spot.desc || "").slice(0, 100)}{(spot.desc || "").length > 100 ? "…" : ""}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 13, fontWeight: 700 }}>
-                  Read more <span style={{ fontSize: 15 }}>›</span>
-                </div>
               </div>
             );
 
@@ -27081,9 +27132,6 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <CardChips town={town} />
                     <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
                         <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{(town.desc || "").slice(0, 90)}{(town.desc || "").length > 90 ? "…" : ""}</div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.text, fontSize: 12, fontWeight: 700, padding: "10px 0 2px" }}>
-                          Read more <span style={{ fontSize: 14 }}>›</span>
-                        </div>
                       </div>
                     ))}
                   </div>
@@ -27253,9 +27301,6 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
                     <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{(town.desc || "").slice(0, 90)}{(town.desc || "").length > 90 ? "…" : ""}</div>
                     {town.gemlyxFind && <div style={{ fontSize: 11, color: C.gold, lineHeight: 1.5, marginTop: 5 }}><b>✦ Gemlyx Find:</b> {town.gemlyxFind.slice(0, 80)}{town.gemlyxFind.length > 80 ? "…" : ""}</div>}
-                    <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.text, fontSize: 12, fontWeight: 700, padding: "10px 0 2px" }}>
-                      Read more <span style={{ fontSize: 14 }}>›</span>
-                    </div>
                   </div>
                 ))}
               </div>
@@ -27344,9 +27389,6 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               <CardChips town={town} />
                     <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
                               <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{(town.desc || "").slice(0, 90)}{(town.desc || "").length > 90 ? "…" : ""}</div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.text, fontSize: 12, fontWeight: 700, padding: "10px 0 2px" }}>
-                                Read more <span style={{ fontSize: 14 }}>›</span>
-                              </div>
                             </div>
                           ))}
                         </div>
@@ -29753,8 +29795,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           call, so it appears instantly rather than after another wait. Each
           match uses that place's own already-written real description (same
           voice/rules as everywhere else in the app — never generic/robotic
-          by the app's own standing content rules) and "Read more" opens the
-          exact same real DetailPage the rest of the app uses. Ends with the
+          by the app's own standing content rules) and pressing the card opens
+          the exact same real DetailPage the rest of the app uses. Ends with the
           same "continue" step that used to be the very first thing shown —
           this doesn't touch the choosing/generateGuide flow at all, it's a
           new step inserted in front of it.

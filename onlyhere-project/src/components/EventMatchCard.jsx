@@ -73,8 +73,16 @@ export const EventMatchCard = ({ intakeArrival, intakeDeparture, intakeInterest,
   return (
     <>
       {matchedEvent && (
-        <div onClick={e => e.stopPropagation()}
-          style={{ position: "fixed", top: 90, right: 20, width: 240, background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 14, padding: 14, zIndex: 951, boxShadow: "0 12px 30px rgba(0,0,0,0.45)" }}
+        // ── THE FRAME IS THE BUTTON, 19 SEP 2026 ───────────────────
+        // Oliver: "remove all the 'read more'. They should still be able to
+        // click the frame and read more, but remove the text." This card had
+        // one action and a button saying so across its whole width, which is
+        // the card outlined twice. The stopPropagation stays: it is what keeps
+        // a press on this card from reaching whatever is underneath it.
+        <div onClick={e => { e.stopPropagation(); setEventDetail(matchedEvent); }}
+          role="button" tabIndex={0} title={matchedEvent.name} aria-label={matchedEvent.name}
+          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEventDetail(matchedEvent); } }}
+          style={{ position: "fixed", top: 90, right: 20, width: 240, background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 14, padding: 14, zIndex: 951, boxShadow: "0 12px 30px rgba(0,0,0,0.45)", cursor: "pointer" }}
           className="gxa-event-match-card">
           <div style={{ fontSize: 9.5, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 }}>✦ Worth knowing</div>
           <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
@@ -90,10 +98,6 @@ export const EventMatchCard = ({ intakeArrival, intakeDeparture, intakeInterest,
           <div style={{ fontSize: 11, color: C.light, lineHeight: 1.5, marginBottom: 10 }}>
             {matchedEvent.town} · {getEventDate(matchedEvent.date, matchedEvent.dateEnd)} · happening while you're there.
           </div>
-          <button onClick={() => setEventDetail(matchedEvent)}
-            style={{ width: "100%", background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "6px 0", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-            Read more
-          </button>
         </div>
       )}
       <style>{`

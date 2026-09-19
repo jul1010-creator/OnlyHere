@@ -3,10 +3,11 @@ import { createPortal } from "react-dom";
 import L from "leaflet";
 import { addTileLayer } from "../utils/mapTiles";
 import { ChatPlaceCards, showablePhoto } from "./ChatPlaceCards";
-import { POPUP_CLASS, RAIL_BREAKPOINT_PX, LABEL_CLASS, labelSides, isSpotPin, spotsShowAt, phoneMapShows } from "../utils/chatRail";
+import { POPUP_CLASS, RAIL_BREAKPOINT_PX, LABEL_CLASS, CORNER_CLASS, DOT_GREEN, labelSides, isSpotPin, spotsShowAt, phoneMapOpen } from "../utils/chatRail";
 import { distinctThemes, THEME_LABEL } from "../utils/placeThemes";
 import { entryWord } from "../utils/entryWords";
 import { makeCamera, unplayedBeat } from "../utils/mapDirections";
+import { partFrameFor } from "../utils/geography";
 import { t as uiT } from "../utils/uiLanguage";
 
 // ── THE MAP UNDER THE CHAT ──────────────────────────────────────────
@@ -39,6 +40,23 @@ import { t as uiT } from "../utils/uiLanguage";
 // fitBounds rather than by a hand-picked zoom, so a 210px column and a 300px
 // one both get the country instead of one of them getting Jutland.
 const DENMARK = [[54.5, 8.0], [57.8, 15.3]];
+
+// ── UNLESS THE WHOLE TRIP IS ON ONE LANDMASS ────────────────────────
+//
+// Oliver, 19 Sep 2026: "if the AI concludes that it is going to make a
+// Zealand-only or a Jutland-only trip, then it should zoom into a zealand-only
+// map or a jutland-only map."
+//
+// One reader, called from the three places that ask "how wide is wide": the
+// frame the map opens on, the frame a pull-back lands on, and the box frameFor
+// compares the view against. Those three disagreeing is how the camera ends up
+// pulling back to a picture it then decides is wrong and pulling back again.
+// partFrameFor is in geography.js, off the same outlines that decide which
+// landmass a place is on.
+const wideBounds = (pins) => {
+  const box = partFrameFor(pins);
+  return box ? [[box.south, box.west], [box.north, box.east]] : DENMARK;
+};
 
 // How close the map gets to ONE place, whether the pins asked for it or the
 // reply did. At 55.7 degrees this is about 21 metres a pixel, so a 490 pixel
@@ -128,6 +146,43 @@ const pushPin = (r, latest, id) => {
       + `</g></svg>` };
 };
 
+// ── AND THE ONE THAT IS ONLY BEING CONSIDERED ───────────────────────
+//
+// Oliver, 19 Sep 2026: "the pointer on maps should only be if it's confirmed.
+// The places that are being considered should be green dots instead. We need to
+// prevent the map from looking like a mess."
+//
+// A DOT RATHER THAN A SMALLER PIN, which was the other way to draw this and is
+// the wrong one. The pin's whole argument, written above at length, is that its
+// TIP sits on the coordinate and its body stands above it: it points at a spot
+// somebody chose. A smaller pin says the same thing more quietly, and what this
+// has to say is different in kind rather than in degree. A dot sits ON the map
+// and claims nothing beyond being there, which is exactly what a place Gemlyx
+// has mentioned and nobody has picked up amounts to.
+//
+// GREEN, his word, and it carries on a dark map without competing with the red:
+// the two are the furthest apart the eye has, and neither is the site's gold.
+// The value is in chatRail.js beside the CSS that pulses it and paints the same
+// green in the corner label, because a dot drawn here in one green and named
+// over there in another is two greens meaning one thing.
+//
+// Centred on its coordinate, unlike the pin, because a dot has no tip.
+const DOT_PX = 7;
+const consideredDot = (r, latest) => {
+  const pad = Math.ceil(r * 0.9);
+  const w = Math.ceil(r * 2 + pad * 2), c = w / 2;
+  return { w, h: w, cx: c, tip: c, above: Math.round(r + pad),
+    svg: `<svg width="${w}" height="${w}" viewBox="0 0 ${w} ${w}" style="display:block;overflow:visible;`
+      + `filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.55));${latest ? "" : "opacity:.8;"}">`
+      + `<circle cx="${c}" cy="${c}" r="${r}" fill="${DOT_GREEN}" fill-opacity=".92"`
+      + ` stroke="#0A0F1E" stroke-width="${(r * 0.22).toFixed(2)}" stroke-opacity=".55"/>`
+      + `</svg>` };
+};
+
+// A pin is a claim, a dot is an offer. One reader, so the marker, the route line
+// and anything that comes later cannot disagree about which is which.
+export const isConsidered = (pin) => !pin?.confirmed;
+
 // ── "IS THIS INTERESTING?" ────────────────────────────────────────
 //
 // Oliver, 13 Sep 2026: "Is it possible that when it zooms in, it can [show] a
@@ -162,7 +217,7 @@ const pushPin = (r, latest, id) => {
 // 380px map is a wall. A card that opened itself on the newest pin was
 // considered and rejected for both reasons: it breaks the 12 Sep rule, and
 // choosing WHICH pin to open is the app choosing the trip.
-export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, height = 220, sayWhatFor = false, focus = null, ask = null, turnedDown = [], onRestore = null }) => {
+export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, height = 220, sayWhatFor = false, focus = null, ask = null, turnedDown = [], onRestore = null, phoneOpen = false }) => {
   // ── THE READER'S LANGUAGE, ONCE ─────────────────────────────────
   //
   // `lang` is readerLanguage()'s OBJECT, not a two letter code. Handing the
@@ -309,7 +364,11 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   // key is "the same pins, the same way, is no change", and the same pins
   // with a different card are not the same pins the same way.
   const asking = !!ask;
-  const pinKey = list.map(p => `${p?.key}@${p?.lat},${p?.lon}${p?.latest ? "*" : ""}`).join("|") + (asking ? "|ask" : "");
+  // `confirmed` is in the key because a green dot turning into a pin is a
+  // redraw. Left out, the marker would keep its old shape until some other
+  // change happened to move the key, and the turn where they say yes is exactly
+  // the turn somebody is watching.
+  const pinKey = list.map(p => `${p?.key}@${p?.lat},${p?.lon}${p?.latest ? "*" : ""}${p?.confirmed ? "!" : ""}`).join("|") + (asking ? "|ask" : "");
   // ── THE MAP IS THERE BEFORE THERE IS ANYTHING ON IT ───────────────
   // Oliver, 8 Sep 2026: "I think map should already be shown from start."
   // It was gated on having a pin, so the panel was empty until Gemlyx happened
@@ -322,7 +381,29 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   // map appears with the rail, from two pins: the same rule, phoneMapShows,
   // that App.jsx puts the has-map class on, so the box and the map in it
   // cannot disagree about whether there is one.
-  const shown = wide || phoneMapShows(list);
+  // ── AND ON A PHONE IT IS OPENED RATHER THAN GIVEN, 19 SEP 2026 ──
+  //
+  // Oliver: "on phone, we gotta have a 'show map' button." phoneMapOpen is the
+  // same reader App.jsx puts the has-map class on, so the box and the map in it
+  // still cannot disagree, which is the whole reason phoneMapShows was written
+  // here rather than in two places. `phoneOpen` defaults to false, so a caller
+  // that has not been taught about the button gets no map on a phone rather
+  // than a map nobody asked for.
+  const shown = wide || phoneMapOpen(list, phoneOpen);
+
+  // ── WHAT THE CORNER SAYS ────────────────────────────────────────
+  //
+  // The newest thing being considered, and how many others there are. `latest`
+  // is the flag mapPlaces already sets on whatever the last turn named, so the
+  // corner follows the conversation rather than the order the pins happen to be
+  // in. Nothing named in the last turn leaves the most recently added dot,
+  // which is the end of the list: `order` in mapPlaces is first-mention order,
+  // so the last dot is the newest suggestion still standing.
+  const dots = list.filter(isConsidered);
+  const newestDot = dots.filter(p => p.latest).slice(-1)[0] || dots.slice(-1)[0] || null;
+  const corner = newestDot
+    ? { name: newestDot.place?.name || "", more: Math.max(0, dots.length - 1) }
+    : null;
 
   // ── THE MOVES THEMSELVES ─────────────────────────────────────────
   //
@@ -348,7 +429,7 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     }
     const wide = move.kind === "out" || move.frame !== "cluster";
     const b = wide
-      ? L.latLngBounds(DENMARK)
+      ? L.latLngBounds(wideBounds(pinsNowRef.current))
       : L.latLngBounds(pinsNowRef.current.map(p => [p.lat, p.lon])).pad(0.35);
     const opts = wide ? { padding: [6, 6] } : { maxZoom: CLUSTER_ZOOM };
     const seconds = move.kind === "out" ? OUT_SECONDS : FIT_SECONDS;
@@ -362,7 +443,13 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     return {
       pins: pinsNowRef.current,
       view: { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() },
-      country: { south: DENMARK[0][0], west: DENMARK[0][1], north: DENMARK[1][0], east: DENMARK[1][1] },
+      // THE SAME BOX THE PULL-BACK USES. frameFor asks "is the view already
+      // holding everything", and answering that against the country while the
+      // camera lands on Zealand would have it ask for a frame it just made.
+      country: (() => {
+        const w = wideBounds(pinsNowRef.current);
+        return { south: w[0][0], west: w[0][1], north: w[1][0], east: w[1][1] };
+      })(),
     };
   };
 
@@ -400,7 +487,10 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     //
     // Bounds rather than a fixed zoom, so it frames the same thing at 240
     // pixels wide and at 380, instead of being right at one of them.
-    }).fitBounds(DENMARK, { padding: [6, 6] });
+    // AND THE SAME READER AT MOUNT, so a map built while the conversation is
+    // already three Zealand stops in opens on Zealand rather than opening on
+    // the country and then correcting itself in front of somebody.
+    }).fitBounds(wideBounds(list), { padding: [6, 6] });
     addTileLayer(L, map);
     L.control.zoom({ position: "bottomright" }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);
@@ -477,7 +567,38 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // The newest ones last, so they are drawn on top of anything they overlap.
     // Not numbered: mention order is not itinerary order, and a numbered pin
     // asserts a route nobody has agreed to. mapPlaces says why at length.
-    const ordered = [...list].sort((a, b) => Number(!!a.latest) - Number(!!b.latest));
+    // And the dots go under the pins, for the same reason the towns go under
+    // the attractions: where the two land on top of each other, the one that
+    // says more should be the one you can see.
+    const ordered = [...list].sort((a, b) =>
+      (Number(!!a.confirmed) - Number(!!b.confirmed)) || (Number(!!a.latest) - Number(!!b.latest)));
+    // ── AND THE LINE BETWEEN THE ONES THEY HAVE PICKED ──────────────
+    //
+    // Oliver, 19 Sep 2026, in the same breath as the dots: "That could also
+    // make us draw a line between the pointers as a 'route'."
+    //
+    // CONFIRMED ONLY, which is what makes it drawable at all. A line through
+    // everything Gemlyx has ever mentioned would be the mess the dots exist to
+    // prevent, redrawn in one stroke.
+    //
+    // AND DASHED, THIN, UNDER EVERYTHING. The note above `ordered` has said
+    // since 8 Sep that mention order is not itinerary order and that a numbered
+    // pin asserts a route nobody has agreed to. That is still true and it is the
+    // reason for the weight: this joins the places they have named, in the order
+    // they named them, and it is drawn as a thread rather than as a road so it
+    // cannot be read as day one to day two. The real answer is routeOrder.js
+    // once an arrival anchor exists, and the preview screen already orders its
+    // towns that way.
+    // `> 1` because a line needs two ends, which is geometry rather than a
+    // threshold. The phone's two-pin rule is PHONE_MAP_PINS and lives in
+    // chatRail.js, and the suite holds this file to not keeping a copy of it.
+    const walked = list.filter(p => !isConsidered(p));
+    if (walked.length > 1) {
+      L.polyline(walked.map(p => [p.lat, p.lon]), {
+        color: PIN_RED, weight: 1.5, opacity: 0.5, dashArray: "4 5",
+        interactive: false, className: "gemlyx-chat-route",
+      }).addTo(layer);
+    }
     // Collected as the markers are made and laid out once at the end: a side
     // chosen while the map is still flying is the wrong side when it lands.
     const labelled = [];
@@ -528,11 +649,20 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       // TILTED, because a pin somebody pushed in is never upright, and the
       // shadow falls down and to the right so it sits ON the map rather than
       // printed on it.
-      const r = (p.latest ? PIN_HEAD_PX * 1.36 : PIN_HEAD_PX) / 2;
-      const pin = pushPin(r, p.latest, `p${pinSeq++}`);
+      const dot = isConsidered(p);
+      const r = dot
+        ? (p.latest ? DOT_PX * 1.3 : DOT_PX) / 2
+        : (p.latest ? PIN_HEAD_PX * 1.36 : PIN_HEAD_PX) / 2;
+      const pin = dot ? consideredDot(r, p.latest) : pushPin(r, p.latest, `p${pinSeq++}`);
       const h = pin.above;   // what stands above the coordinate, for the labels
       const icon = L.divIcon({
-        className: "gemlyx-chat-pin",
+        // ── AND THE DOT BREATHES, 19 SEP 2026 ────────────────────
+        // Oliver: "what about the dot becomes a little blinking greendot".
+        // A pin is a thing somebody pushed in and it sits still; a dot is a
+        // thing being offered, and the pulse is what says it is waiting for an
+        // answer rather than being part of the plan. The animation is in
+        // railMapCss so it can be turned off for reduced motion in one place.
+        className: dot ? "gemlyx-chat-pin gemlyx-chat-dot" : "gemlyx-chat-pin",
         html: pin.svg,
         iconSize: [pin.w, pin.h], iconAnchor: [pin.cx, pin.tip],
       });
@@ -604,16 +734,33 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       // layOut chose for it and grows in place, and it is measured with the
       // name alone, which is the size it has on every pin but the one under
       // the cursor.
-      const nameHtml = `<span class="pin-name">${esc(p.place?.name || "")}</span>`;
-      marker.bindTooltip(nameHtml,
-        { permanent: true, direction: "top", className: LABEL_CLASS,
-          opacity: 1, interactive: false, offset: [0, -h] });
-      if (best) {
-        const withWord = nameHtml + `<span class="pin-best">${esc(best)}</span>`;
-        marker.on("mouseover", () => marker.getTooltip()?.setContent(withWord));
-        marker.on("mouseout", () => marker.getTooltip()?.setContent(nameHtml));
+      // ── AND A DOT CARRIES NO LABEL, 19 SEP 2026 ───────────────
+      //
+      // "the suggested place shows in the left corner of the map. We need to
+      // prevent the map from looking like a mess."
+      //
+      // Which is the other half of the dot. Six labels on a 380px map is the
+      // mess, and the labels that have to stay are the ones on places somebody
+      // has actually chosen. A suggestion still gets named, once, in the corner
+      // below, where one line of text costs nothing wherever the dot happens to
+      // be sitting.
+      //
+      // THE LABEL ONLY. Everything under this still happens to a dot: the card,
+      // the question on it and the press that opens the entry are the whole
+      // point of a place being offered, and an early return here would have
+      // taken all three away with the label.
+      if (!dot) {
+        const nameHtml = `<span class="pin-name">${esc(p.place?.name || "")}</span>`;
+        marker.bindTooltip(nameHtml,
+          { permanent: true, direction: "top", className: LABEL_CLASS,
+            opacity: 1, interactive: false, offset: [0, -h] });
+        if (best) {
+          const withWord = nameHtml + `<span class="pin-best">${esc(best)}</span>`;
+          marker.on("mouseover", () => marker.getTooltip()?.setContent(withWord));
+          marker.on("mouseout", () => marker.getTooltip()?.setContent(nameHtml));
+        }
+        labelled.push({ key: p.key, ph: h, marker });
       }
-      labelled.push({ key: p.key, ph: h, marker });
 
       // ── A POPUP ONLY WHERE THERE IS A PICTURE TO PUT IN IT ──────
       // showablePhoto is the same check the cards make, licence rule and all,
@@ -988,15 +1135,40 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // list. `height` stays a prop and stays the floor, because a caller with no
     // flex parent (the suite renders one) still needs a box with a size.
     <div style={{ display: "flex", flexDirection: "column", minHeight: 0, height: "100%" }}>
-      <div
-        ref={holderRef}
-        // ── THE FLOOR IS THE COLUMN'S, NOT THE PHONE'S ──────────────
-        // On the phone the rail says how tall it is (190px, in chatRail.js)
-        // and a 220px floor inside a 190px box is a map spilling over the
-        // input bar under it. There the box takes what the rail has, and the
-        // floor is the wide column's alone.
-        style={{ flex: "1 1 auto", minHeight: wide ? height : 0, borderRadius: 12, overflow: "hidden", border: `1px solid ${C?.border || "#2A3350"}` }}
-      />
+      {/* ── THE MAP, AND THE ONE LINE OVER ITS CORNER ─────────────────
+          The overlay is a SIBLING of the Leaflet container rather than a child
+          of it. Leaflet owns everything inside that div and moves it around on
+          every pan; a React node in there is a node React and Leaflet both
+          think they are responsible for. So the two share a relative box and
+          neither touches the other's children. */}
+      <div style={{ position: "relative", display: "flex", flex: "1 1 auto", minHeight: wide ? height : 0 }}>
+        <div
+          ref={holderRef}
+          // ── THE FLOOR IS THE COLUMN'S, NOT THE PHONE'S ──────────────
+          // On the phone the rail says how tall it is (190px, in chatRail.js)
+          // and a 220px floor inside a 190px box is a map spilling over the
+          // input bar under it. There the box takes what the rail has, and the
+          // floor is the wide column's alone.
+          style={{ flex: "1 1 auto", minHeight: 0, borderRadius: 12, overflow: "hidden", border: `1px solid ${C?.border || "#2A3350"}` }}
+        />
+        {/* ── "THE SUGGESTED PLACE SHOWS IN THE LEFT CORNER" ──────────
+            Oliver, 19 Sep 2026, in the same message as the blinking dot.
+
+            THE NEWEST ONE, and a count for the rest. A list of every place
+            Gemlyx has ever floated is the mess the dots were drawn to prevent,
+            moved into a box; the one being offered right now is the one the
+            reply is about, and the count says the others are still there
+            without spending a line each on them.
+
+            Nothing at all when nothing is being considered. */}
+        {corner && (
+          <div className={CORNER_CLASS}>
+            <span className="corner-dot" />
+            <span className="corner-name">{corner.name}</span>
+            {corner.more > 0 && <span className="corner-more">{`+${corner.more}`}</span>}
+          </div>
+        )}
+      </div>
       {hosts.map(h => createPortal(
         <ChatPlaceCards
           layout="pin"

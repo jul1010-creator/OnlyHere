@@ -38,15 +38,10 @@ import { t as uiT } from "../utils/uiLanguage";
 // where the badge used to be. The line under the name carries the useful half
 // and the rule lives in chatPlaces.js, where it always did.
 //
-// Two languages here rather than six, for the reason readerLanguage.js gives
-// about its own Danish block: a word nobody in this project can read is a word
-// nobody can correct.
-const OPEN_IT = {
-  da: "Læs mere", de: "Mehr lesen",
-  nl: "Lees meer", sv: "Läs mer", no: "Les mer",
-};
+// The card's own words are gone as of 19 Sep (see the note where the label
+// used to be), so what is left of this is the language key the badge and the
+// ask buttons still read.
 const langKey = (lang) => String(lang?.tag || "").split("-")[0].toLowerCase();
-const openLabel = (lang) => OPEN_IT[langKey(lang)] || "Read more";
 
 // ── AND IT ARRIVES THE WAY A PICTURE ARRIVES ────────────────────────
 //
@@ -291,6 +286,19 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
         <div
           key={`${place._src || "row"}-${place.name}`}
           onClick={() => onOpen && onOpen(place)}
+          // ── AND WITHOUT THE WORDS IT STILL HAS TO BE A BUTTON ─────
+          // The label under the card was the only thing announcing that it
+          // opens, and it was also the only thing a screen reader had. Taking
+          // the words off the screen is not taking them off the card: the role,
+          // the name and the key that presses it are what a button IS, and the
+          // text was standing in for all three.
+          {...(onOpen ? {
+            role: "button",
+            tabIndex: 0,
+            title: place.name,
+            "aria-label": place.name,
+            onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(place); } },
+          } : {})}
           // Staggered, so two pictures read as two things being shown one after
           // the other rather than as a gallery finishing its load.
           className={rail ? undefined : "gx-shared-photo"}
@@ -412,17 +420,21 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
                 )}
               </div>
             )}
-            {/* Says what tapping does, which is the whole of what the badge
-                above it was reaching for. A picture that opens something has to
-                say so, or it is a picture.
+            {/* ── AND THEN THE WORDS CAME OFF, 19 SEP 2026 ──────────
+                Oliver: "remove all the 'read more'. They should still be able
+                to click the frame and read more, but remove the text."
 
-                "Read more" since 9 Sep, Oliver's own words, replacing "Tap to
-                read it". Shorter, and it says what you GET rather than what to
-                do with your finger, which is also the right words on a desktop
-                where nobody taps anything. */}
-            <div style={{ fontSize: 9.5, color: C.muted, marginTop: 2, fontWeight: 600 }}>
-              {openLabel(lang)}
-            </div>
+                The label was here because a picture that opens something has to
+                say so. What it turned out to be is the same clutter as a
+                sentence under a form field explaining why the field exists: the
+                card is a frame with a photograph, a name and a line of
+                description, on a screen where every other card opens. Two words
+                under each of three cards is six words of interface saying what
+                the interface already looks like.
+
+                THE FRAME STILL OPENS, and it is the whole frame rather than the
+                words: onClick is on the card above, the cursor says pointer,
+                and the title carries the name for anybody reading it aloud. */}
             {shot && creditLine(shot.credit) && (
               // WRAPS, never truncates. An ellipsis through "CC BY-SA 3.0"
               // leaves an attribution that names the photographer and not the

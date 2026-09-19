@@ -1309,8 +1309,10 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
     if (filledSomething(said)) return;
     // LAST ONE WINS, per slot. If they tried twice, the words to quote back are
     // the ones they typed most recently.
+    // `turn` is carried because the build gate needs to know WHEN it was said,
+    // not only that it was said. See unreadOpen below.
     const at = unread.findIndex(u => u.key === key);
-    const row = { key, said: said.replace(/\s+/g, " ").slice(0, 120) };
+    const row = { key, said: said.replace(/\s+/g, " ").slice(0, 120), turn: i };
     if (at >= 0) unread[at] = row; else unread.push(row);
   });
 
@@ -1398,7 +1400,34 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   // Asked, unanswered, and required anyway. Kept apart from `missing` so the
   // asking cadence is unchanged and only the BUILD is gated.
   const unanswered = HARD_SLOTS.filter(k => !known[k] && wasAsked.has(k));
-  return { known, missing, declined, vague, vagueToAsk, unanswered, unread, cappedDays, ready: missing.length === 0 && unanswered.length === 0 };
+  // ── AND AN ANSWER NOTHING COULD READ IS NOT AN ANSWER ─────────────
+  //
+  // `unread` is keyed by the question that was put, so a sharpening question
+  // carries `when:sharper` and there is no `known["when:sharper"]` to clear it
+  // against. Left alone it would sit in the list for the rest of the
+  // conversation, including after a later turn answered the same question
+  // properly, because that turn returns early rather than replacing the row.
+  //
+  // So two things narrow it, and both are needed.
+  //
+  // THE BASE SLOT DECIDES whether it still matters. An unreadable answer counts
+  // only while the slot it was about is still loose. Once `when` reads as a
+  // day, the stale row means nothing.
+  //
+  // AND IT HAS TO BE THE THING THEY JUST SAID. Without that this deadlocks, and
+  // the deadlock is not hypothetical: in his own 19 Sep transcript "they're
+  // 8-14" leaves an unreadable row against the party question, the party reads
+  // as children with no adult counted, and `vague` holds `party` for the rest
+  // of the conversation. That would have blocked the build for good, over a
+  // sentence eight turns back that Gemlyx had already moved on from. An answer
+  // nothing could read holds the build for one turn, which is the turn the
+  // question gets asked again in.
+  const baseSlotOf = (key) => String(key || "").replace(/:sharper$/, "");
+  const lastTurnAt = turns.reduce((last, t, i) => (String(t || "").trim() ? i : last), -1);
+  const unreadOpen = [...new Set(unread.filter(u => u.turn === lastTurnAt).map(u => baseSlotOf(u.key)))]
+    .filter(k => vague.includes(k));
+  const brief = { known, missing, declined, vague, vagueToAsk, unanswered, unread, unreadOpen, cappedDays };
+  return { ...brief, ready: briefReady(brief) };
 };
 
 // The key a sharpening question is recorded under. Exported because App.jsx
@@ -1407,7 +1436,40 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
 // both.
 export const sharperAsk = (key) => `${key}:sharper`;
 
-export const briefReady = (brief) => !!brief && brief.missing.length === 0 && !(brief.unanswered || []).length;
+// ── READY, AND THE DATE HAS TO BE A DATE ────────────────────────────
+//
+// Oliver, 19 Sep 2026, reading his own transcript. The traveller had said
+// "start December", the screen said "Everything I need, 7 of 7" with the build
+// card under it, and Gemlyx in the same breath asked "What dates exactly are
+// you thinking within December?"
+//
+// His words: "It needed an exact date. Which is correct. The card should not
+// have been generated in the first place. The card knew it was december, but
+// the AI didn't know when in December. That's why it was considered
+// fulfilled."
+//
+// That is the hole exactly. `vague` has always been TRUE about the brief and
+// has never been allowed to mean anything: a month filled the slot, `missing`
+// emptied, and ready went true over an eight day window that no event, no
+// opening hour and no ferry time can be checked against.
+//
+// AND IT IS `vagueToAsk`, NOT `vague`, so nothing deadlocks. A month blocks the
+// build until the sharpening question has been PUT. Answer it and the brief
+// sharpens; ignore it or answer it loosely and the build opens anyway, which is
+// the bargain `vague` was written under on 21 Aug ("asks once, and lets the trip
+// go ahead either way") and the one the party check got on 6 Sep. The only
+// change is that the one question now comes BEFORE the card rather than beside
+// it.
+//
+// ONE DEFINITION. readBrief used to carry its own copy of this expression and
+// this function carried the other. Two readers of "is it ready" is how the
+// screen came to say 7 of 7 over a question, and it is the failure this file's
+// own comments name about four other pairs.
+export const briefReady = (brief) => !!brief
+  && brief.missing.length === 0
+  && !(brief.unanswered || []).length
+  && !(brief.vagueToAsk || []).length
+  && !(brief.unreadOpen || []).length;
 
 // ── WHAT TO ASK NEXT, AND HOW MANY ──────────────────────────────────
 // Two at a time, hard. The conversation he read asked three things in one
